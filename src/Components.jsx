@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { C, FONT, Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty } from './Shared.jsx';
-import { buildEngine, DISTRIBUTIONS } from './engine.js';
+import { buildEngine, DISTRIBUTIONS } from './Engine.js';
 
 const EntityTypeEditor=({types,onChange})=>{
   const add=()=>onChange([...types,{id:"et"+Date.now(),name:"",role:"customer",count:"",attrs:"",description:""}]);
