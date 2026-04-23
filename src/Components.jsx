@@ -1,7 +1,7 @@
 // components.jsx — Model editors, detail view, cards
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { C, FONT, Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty } from './shared.jsx';
+import { C, FONT, Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty } from './Shared.jsx';
 import { buildEngine, DISTRIBUTIONS } from './engine.js';
 
 const EntityTypeEditor=({types,onChange})=>{
