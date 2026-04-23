@@ -347,7 +347,7 @@ function buildEngine(model) {
 import { createClient } from '@supabase/supabase-js';
 const sb=createClient(
   'https://znkknldzdfajcrpabtmg.supabase.co',
-  'YOUR_ANON_KEY'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpua2tubGR6ZGZhamNycGFidG1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NTIyMzMsImV4cCI6MjA4OTMyODIzM30.2puQY_UNe3bOBT88Uyo2rtFU3AIUp3wgCNxcAVtw2ng'
 );
 const norm=(r)=>({
   id:r.id,name:r.name,description:r.description||'',
