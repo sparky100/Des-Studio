@@ -920,8 +920,8 @@ const CEventEditor=({events, onChange, bEvents=[]})=>{
   );
 };
 
-const ModelDetail=({modelId,onBack,onRefresh,overrides={}})=>{
-  const [model,setModel]=useState(()=>overrides.getModel?overrides.getModel(modelId):null);
+const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
+  const [model,setModel]=useState(()=>modelData||null);
   const [tab,setTab]=useState("overview");
   const [dirty,setDirty]=useState(false);
   const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
@@ -1125,11 +1125,11 @@ export default function App(){
       <div style={{background:C.bg,minHeight:'100vh'}}>
         <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         <ModelDetail modelId={openId}
+          modelData={models.find(m=>m.id===openId)||null}
           onBack={()=>{setOpenId(null);loadData()}}
           onRefresh={loadData}
           overrides={{
             isOwner,canEdit,profiles,
-            getModel:(id)=>models.find(m=>m.id===id)||null,
             onSave:async(m)=>{await dbSave(m,uid);await loadData()},
             onDelete:async(id)=>{await dbDelete(id)},
             onSetVisibility:dbSetVis,
