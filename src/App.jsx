@@ -774,6 +774,7 @@ const VisualView=({snap})=>{
 // ═══════════════════════════════════════════════════════════════════════════════
 const ExecutePanel=({model})=>{
   const [mode,setMode]=useState("idle"); // idle | stepping | done
+  const [execStatus,setExecStatus]=useState(""); // checkpoint messages
   const [currentSnap,setCurrentSnap]=useState(null);
   const [log,setLog]=useState([]);
   const [cycleLog,setCycleLog]=useState([]);
@@ -788,14 +789,22 @@ const ExecutePanel=({model})=>{
   const canRun=(model.bEvents||[]).filter(b=>parseFloat(b.scheduledTime)<900).length>0;
 
   const initEngine=useCallback(()=>{
-    engineRef.current=buildEngine(model);
-    const s=engineRef.current.getSnap();
-    setCurrentSnap(s);
-    setLog([{phase:"INIT",time:0,message:"Engine initialised — click Step or Run All"}]);
-    setCycleLog([]);
-    setFelSize(engineRef.current.getFelSize());
-    setMode("stepping");
-    setSummary(null);
+    try{
+      setExecStatus("Step 1: calling buildEngine...");
+      engineRef.current=buildEngine(model);
+      setExecStatus("Step 2: buildEngine OK — calling getSnap...");
+      const s=engineRef.current.getSnap();
+      setExecStatus("Step 3: getSnap OK — setting state...");
+      setCurrentSnap(s);
+      setLog([{phase:"INIT",time:0,message:"Engine initialised — click Step or Run All"}]);
+      setCycleLog([]);
+      setFelSize(engineRef.current.getFelSize());
+      setMode("stepping");
+      setSummary(null);
+      setExecStatus("Step 4: Engine ready");
+    }catch(e){
+      setExecStatus("ERROR in initEngine: "+e.message);
+    }
   },[model]);
 
   const doStep=useCallback(()=>{
@@ -809,15 +818,25 @@ const ExecutePanel=({model})=>{
   },[mode]);
 
   const doRunAll=useCallback(()=>{
-    stopAuto();
-    engineRef.current=buildEngine(model);
-    const r=engineRef.current.runAll();
-    setCurrentSnap(r.snap);
-    setLog(r.log||[]);
-    setCycleLog([]);
-    setFelSize(0);
-    setMode("done");
-    setSummary(r.summary);
+    try{
+      setExecStatus("RunAll Step 1: buildEngine...");
+      stopAuto();
+      engineRef.current=buildEngine(model);
+      setExecStatus("RunAll Step 2: calling runAll()...");
+      const r=engineRef.current.runAll();
+      setExecStatus("RunAll Step 3: runAll() OK — setting snap...");
+      setCurrentSnap(r.snap);
+      setExecStatus("RunAll Step 4: setting log...");
+      setLog(r.log||[]);
+      setCycleLog([]);
+      setFelSize(0);
+      setExecStatus("RunAll Step 5: setting mode done...");
+      setMode("done");
+      setSummary(r.summary);
+      setExecStatus("RunAll complete");
+    }catch(e){
+      setExecStatus("ERROR in doRunAll: "+e.message);
+    }
   },[model]);
 
   const stopAuto=()=>{if(autoRef.current){clearInterval(autoRef.current);autoRef.current=null;setAutoRunning(false);}};
@@ -863,10 +882,11 @@ const ExecutePanel=({model})=>{
         <div style={{flex:1}}/>
         <Btn variant="ghost" onClick={doRunAll} disabled={!canRun}>⚡ Run All</Btn>
         {/* Status */}
-        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
           <Tag label={mode==="idle"?"ready":mode==="done"?"complete":"stepping"} color={mode==="done"?C.green:mode==="stepping"?C.amber:C.muted}/>
           {mode!=="idle"&&<span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>FEL: {felSize} events</span>}
           {currentSnap&&<span style={{fontSize:11,color:C.purple,fontFamily:FONT}}>t={parseFloat(currentSnap.clock).toFixed(3)}</span>}
+          {execStatus&&<span style={{fontSize:11,color:execStatus.startsWith("ERROR")?C.red:C.green,fontFamily:FONT,fontWeight:600}}>{execStatus}</span>}
         </div>
       </div>
 
@@ -1309,7 +1329,17 @@ const CEventEditor=({events, onChange, bEvents=[]})=>{
 };
 
 const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
-  const [model,setModel]=useState(()=>modelData||null);
+  const [model,setModel]=useState(()=>{
+    if(!modelData) return null;
+    return {
+      ...modelData,
+      entityTypes:   modelData.entityTypes   || [],
+      stateVariables:modelData.stateVariables || [],
+      bEvents:       modelData.bEvents        || [],
+      cEvents:       modelData.cEvents        || [],
+      access:        modelData.access         || {},
+    };
+  });
   const [tab,setTab]=useState("overview");
   const [dirty,setDirty]=useState(false);
   const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
@@ -1324,7 +1354,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
 
-  if(!model)return null;
+  if(!model)return(
+    <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',
+      justifyContent:'center',color:C.red,fontFamily:FONT,fontSize:13}}>
+      Error: model not found
+    </div>
+  );
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:C.bg}}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 20px",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,flexWrap:"wrap"}}>
