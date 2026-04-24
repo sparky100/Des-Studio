@@ -59,6 +59,7 @@ function buildEngine(model) {
   const entities = [];
   _debugLines.push("entityTypes: "+JSON.stringify((model.entityTypes||[]).map(e=>({name:e.name,role:e.role,count:e.count}))));
   (model.entityTypes||[]).forEach(et => {
+    et = {...et, name:(et.name||"").trim()}; // trim whitespace from names
     if (et.role === "server") {
       const n = parseInt(et.count)||1;
       for (let i=0;i<n;i++) {
@@ -76,9 +77,9 @@ function buildEngine(model) {
     return o;
   }
 
-  const waitingOf  = (type) => entities.filter(e=>e.type===type&&e.status==="waiting").sort((a,b)=>a.arrivalTime-b.arrivalTime);
-  const idleOf     = (type) => entities.filter(e=>e.type===type&&e.status==="idle");
-  const busyOf     = (type) => entities.filter(e=>e.type===type&&(e.status==="busy"||e.status==="serving"));
+  const waitingOf  = (type) => entities.filter(e=>e.type.trim()===type.trim()&&e.status==="waiting").sort((a,b)=>a.arrivalTime-b.arrivalTime);
+  const idleOf     = (type) => entities.filter(e=>e.type.trim()===type.trim()&&e.status==="idle");
+  const busyOf     = (type) => entities.filter(e=>e.type.trim()===type.trim()&&(e.status==="busy"||e.status==="serving"));
 
   let _lastCustId=null, _lastSrvId=null;
 
