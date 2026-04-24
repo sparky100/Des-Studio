@@ -749,6 +749,30 @@ const ExecutePanel=({model})=>{
 
   const canRun=(model.bEvents||[]).filter(b=>parseFloat(b.scheduledTime)<900).length>0;
 
+  const validate=()=>{
+    const issues=[];
+    const typeNames=(model.entityTypes||[]).map(e=>e.name.trim().toLowerCase());
+    if((model.entityTypes||[]).length===0) issues.push("No entity types defined");
+    if((model.bEvents||[]).filter(b=>parseFloat(b.scheduledTime)<900).length===0)
+      issues.push("No B-events with t<900 — nothing seeds the FEL");
+    (model.bEvents||[]).forEach(b=>{
+      const m=(b.effect||'').match(/ARRIVE\((\w+)\)/i);
+      if(m&&!typeNames.includes(m[1].toLowerCase()))
+        issues.push(`B-event "${b.name}": ARRIVE(${m[1]}) — type not defined`);
+    });
+    (model.cEvents||[]).forEach(c=>{
+      const m=(c.effect||'').match(/ASSIGN\((\w+)\s*,\s*(\w+)\)/i);
+      if(m){
+        if(!typeNames.includes(m[1].toLowerCase()))
+          issues.push(`C-event "${c.name}": customer type "${m[1]}" not defined`);
+        if(!typeNames.includes(m[2].toLowerCase()))
+          issues.push(`C-event "${c.name}": server type "${m[2]}" not defined`);
+      }
+    });
+    return issues;
+  };
+  const validationIssues=validate();
+
   const initEngine=useCallback(()=>{
     try{
       setExecStatus("Step 1: calling buildEngine...");
@@ -825,7 +849,7 @@ const ExecutePanel=({model})=>{
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
       {/* Controls */}
       <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-        <Btn variant="primary" onClick={initEngine} disabled={!canRun}>⟳ Reset</Btn>
+        <Btn variant="primary" onClick={initEngine} disabled={!canRun||validationIssues.length>0}>⟳ Reset</Btn>
         <Btn variant="success" onClick={()=>{if(mode==="idle")initEngine();else doStep();}} disabled={!canRun||mode==="done"}>
           ⏭ Step
         </Btn>
@@ -852,6 +876,17 @@ const ExecutePanel=({model})=>{
       </div>
 
 
+      {/* Validation warnings */}
+      {validationIssues.length>0&&(
+        <div style={{background:C.amber+'18',border:`1px solid ${C.amber}44`,borderRadius:6,padding:12}}>
+          <div style={{fontSize:10,color:C.amber,fontFamily:FONT,letterSpacing:1.5,marginBottom:8,fontWeight:700}}>
+            ⚠ MODEL ISSUES — fix before executing
+          </div>
+          {validationIssues.map((issue,i)=>(
+            <div key={i} style={{fontSize:12,color:C.amber,fontFamily:FONT,marginBottom:4}}>• {issue}</div>
+          ))}
+        </div>
+      )}
       {/* Summary when done */}
       {summary&&(
         <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
@@ -1364,8 +1399,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
         )}
         {tab==="entities"&&<div style={{maxWidth:800}}><EntityTypeEditor types={model.entityTypes||[]} onChange={canEdit?v=>setField("entityTypes",v):()=>{}}/></div>}
         {tab==="state"&&<div style={{maxWidth:750}}><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>}
-        {tab==="bevents"&&<div style={{maxWidth:880}}><BEventEditor events={model.bEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
-        {tab==="cevents"&&<div style={{maxWidth:860}}><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
+        {tab==="bevents"&&<div style={{maxWidth:880}}><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
+        {tab==="cevents"&&<div style={{maxWidth:860}}><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
         {tab==="execute"&&<div style={{maxWidth:1080}}><ExecutePanel model={model}/></div>}
         {tab==="access"&&isOwner&&(
           <div style={{maxWidth:480,display:"flex",flexDirection:"column",gap:14}}>
