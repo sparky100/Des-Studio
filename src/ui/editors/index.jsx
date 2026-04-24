@@ -1,12 +1,206 @@
-// components.jsx — Model editors, detail view, cards
+// ui/editors/index.jsx — All model editor components
+import { useState } from "react";
+import { C, FONT, normTypeName } from "../shared/tokens.js";
+import { Tag, Btn, Field, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { DISTRIBUTIONS } from "../../engine/distributions.js";
+import { buildConditionTokens } from "../../engine/conditions.js";
 
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { C, FONT, Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty } from './Shared.jsx';
-import { buildEngine, DISTRIBUTIONS } from './Engine.js';
+// ── UI Polish Helpers ─────────────────────────────────────────────────────────
+const toTitleCase = s => s.trim().replace(/\b\w/g, c => c.toUpperCase());
+
+const conditionOptions = (entityTypes) => {
+  const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
+  const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
+  const opts = [{label:'— select condition —',value:''}];
+  custs.forEach(c=>{
+    opts.push({label:`queue(${c}).length > 0`,value:`queue(${c}).length > 0`});
+    opts.push({label:`queue(${c}).length == 0`,value:`queue(${c}).length == 0`});
+  });
+  servers.forEach(s=>{
+    opts.push({label:`idle(${s}).count > 0`,value:`idle(${s}).count > 0`});
+    opts.push({label:`busy(${s}).count > 0`,value:`busy(${s}).count > 0`});
+  });
+  if(custs.length>0&&servers.length>0){
+    const c=custs[0],s=servers[0];
+    opts.push({label:`queue(${c}).length > 0 AND idle(${s}).count > 0`,
+               value:`queue(${c}).length > 0 AND idle(${s}).count > 0`});
+  }
+  opts.push({label:'served > 0',value:'served > 0'});
+  opts.push({label:'reneged > 0',value:'reneged > 0'});
+  opts.push({label:'Custom...',value:'__custom__'});
+  return opts;
+};
+
+const assignOptions = (entityTypes, stateVariables=[]) => {
+  const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
+  const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
+  const opts = [{label:'— select effect —',value:''}];
+  // ASSIGN combinations
+  if(custs.length>0&&servers.length>0){
+    opts.push({label:'── ASSIGN ──',value:'',disabled:true});
+    custs.forEach(c=>servers.forEach(s=>{
+      opts.push({label:`ASSIGN(${c}, ${s})`,value:`ASSIGN(${c}, ${s})`});
+    }));
+  }
+  // Scalar effects on state variables
+  const svNames = (stateVariables||[]).map(sv=>sv.name).filter(Boolean);
+  if(svNames.length>0){
+    opts.push({label:'── Scalar effects ──',value:'',disabled:true});
+    svNames.forEach(v=>{
+      opts.push({label:`${v}++`,value:`${v}++`});
+      opts.push({label:`${v}--`,value:`${v}--`});
+      opts.push({label:`${v} += 1`,value:`${v} += 1`});
+      opts.push({label:`${v} = 0`,value:`${v} = 0`});
+    });
+  }
+  opts.push({label:'Custom...',value:'__custom__'});
+  return opts;
+};
+
+const bEffectOptions = (entityTypes) => {
+  const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
+  const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
+  const opts = [{label:'— select effect —',value:''}];
+  custs.forEach(c=>{
+    opts.push({label:`ARRIVE(${c})`,value:`ARRIVE(${c})`});
+    opts.push({label:`ARRIVE(${c}); totalArrived++`,value:`ARRIVE(${c}); totalArrived++`});
+  });
+  opts.push({label:'COMPLETE()',value:'COMPLETE()'});
+  opts.push({label:'RENEGE(ctx)',value:'RENEGE(ctx)'});
+  custs.forEach(c=>{
+    opts.push({label:`RENEGE_OLDEST(${c})`,value:`RENEGE_OLDEST(${c})`});
+  });
+  if(servers.length>0){
+    opts.push({label:'── Release server ──',value:'',disabled:true});
+    servers.forEach(s=>{
+      opts.push({label:`RELEASE(${s})`,value:`RELEASE(${s})`});
+    });
+  }
+  if(servers.length>0){
+    opts.push({label:'── Release server ──',value:'',disabled:true});
+    servers.forEach(s=>{
+      opts.push({label:`RELEASE(${s})`,value:`RELEASE(${s})`});
+    });
+  }
+  opts.push({label:'Custom...',value:'__custom__'});
+  return opts;
+};
+
+// Dropdown + optional custom free-text
+const DropField = ({value, onChange, options, color, placeholder}) => {
+  const matched = options.some(o=>o.value===value&&o.value!=='__custom__'&&o.value!=='');
+  const [custom, setCustom] = useState(!matched&&!!value);
+  const col = color||C.green;
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:4,flex:1}}>
+      <select value={custom?'__custom__':(value||'')}
+        onChange={e=>{
+          if(e.target.value==='__custom__'){setCustom(true);}
+          else{setCustom(false);onChange(e.target.value);}
+        }}
+        style={{background:C.bg,border:`1px solid ${col}55`,borderRadius:4,
+          color:col,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
+        {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      {custom&&(
+        <input value={value||''} onChange={e=>onChange(e.target.value)}
+          placeholder={placeholder||'Enter custom value'}
+          style={{background:'transparent',border:`1px solid ${col}44`,borderRadius:4,
+            color:col,fontFamily:FONT,fontSize:12,padding:'5px 8px',outline:'none',
+            width:'100%',boxSizing:'border-box'}}/>
+      )}
+    </div>
+  );
+};
+
+
+// ── Attribute Definition Editor ───────────────────────────────────────────────
+// Each attribute: { id, name, dist, distParams }
+// For servers: dist is typically Fixed (deterministic serviceTime)
+// For customers: dist can be any distribution (sampled fresh per ARRIVE)
+
+const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
+  const add = () => onChange([...attrs, {
+    id:'a'+Date.now(), name:'', dist:'Fixed', distParams:{value:'1'}
+  }]);
+  const upd = (i, patch) => {
+    const n=[...attrs]; n[i]={...n[i],...patch}; onChange(n);
+  };
+  const rem = (i) => onChange(attrs.filter((_,idx)=>idx!==i));
+
+  const inpStyle = (color) => ({
+    background:'transparent', border:`1px solid ${color||C.border}`,
+    borderRadius:4, color:C.text, fontFamily:FONT, fontSize:11,
+    padding:'4px 7px', outline:'none',
+  });
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>
+          ATTRIBUTES {role==='customer'?'(sampled per arrival)':'(fixed per server)'}
+        </span>
+        <Btn small variant="ghost" onClick={add}>+ Add Attr</Btn>
+      </div>
+      {attrs.length===0&&(
+        <span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
+          No attributes. {role==='customer'
+            ? 'Add e.g. patience with Uniform distribution for reneging.'
+            : 'Add e.g. serviceTime=3 (Fixed) for service duration.'}
+        </span>
+      )}
+      {attrs.map((a,i)=>{
+        const dd = DISTRIBUTIONS[a.dist||'Fixed']||DISTRIBUTIONS.Fixed;
+        return (
+          <div key={a.id} style={{background:C.surface,borderRadius:6,padding:'8px 10px',
+            border:`1px solid ${role==='server'?C.server+'33':C.cEvent+'33'}`,
+            display:'flex',flexDirection:'column',gap:6}}>
+            {/* Row 1: name + distribution */}
+            <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+              <input value={a.name} onChange={e=>upd(i,{name:e.target.value})}
+                placeholder="attrName" style={{...inpStyle(C.amber),width:110}}/>
+              <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>~</span>
+              <select value={a.dist||'Fixed'} onChange={e=>upd(i,{dist:e.target.value,distParams:{}})}
+                style={{...inpStyle(C.accent),flex:1}}>
+                {Object.entries(DISTRIBUTIONS).map(([k,v])=>(
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+              <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+            </div>
+            {/* Row 2: distribution params */}
+            <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',paddingLeft:4}}>
+              {dd.params.map(p=>(
+                <div key={p} style={{display:'flex',alignItems:'center',gap:4}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{p}:</span>
+                  <input value={(a.distParams||{})[p]||''}
+                    onChange={e=>upd(i,{distParams:{...(a.distParams||{}),[p]:e.target.value}})}
+                    style={{...inpStyle(C.amber),width:60}}/>
+                </div>
+              ))}
+              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
+                {dd.hint}
+              </span>
+            </div>
+            {/* Preview */}
+            {a.name&&(
+              <div style={{fontSize:10,color:C.muted,fontFamily:FONT}}>
+                → <span style={{color:C.accent}}>{a.name}</span> sampled from{' '}
+                <span style={{color:C.amber}}>{a.dist||'Fixed'}({Object.values(a.distParams||{}).join(', ')})</span>
+                {' '}on each {role==='customer'?'arrival':'server creation'}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 const EntityTypeEditor=({types,onChange})=>{
   const add=()=>onChange([...types,{id:"et"+Date.now(),name:"",role:"customer",count:"",attrs:"",description:""}]);
   const upd=(i,f,v)=>{const n=[...types];n[i]={...n[i],[f]:v};onChange(n);};
+  const blurName=(i,v)=>{const n=[...types];n[i]={...n[i],name:normTypeName(v)};onChange(n);};
   const rem=(i)=>onChange(types.filter((_,idx)=>idx!==i));
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -23,7 +217,7 @@ const EntityTypeEditor=({types,onChange})=>{
           borderLeft:`3px solid ${et.role==="server"?C.server:C.cEvent}`,borderRadius:6,padding:12,display:"flex",flexDirection:"column",gap:8}}>
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <Tag label={et.role||"customer"} color={et.role==="server"?C.server:C.cEvent}/>
-            <input value={et.name} onChange={e=>upd(i,"name",e.target.value)} placeholder="TypeName"
+            <input value={et.name} onChange={e=>upd(i,"name",e.target.value)} onBlur={e=>blurName(i,e.target.value)} placeholder="TypeName"
               style={{width:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
             <select value={et.role||"customer"} onChange={e=>upd(i,"role",e.target.value)}
               style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
@@ -37,11 +231,11 @@ const EntityTypeEditor=({types,onChange})=>{
             </>}
             <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
           </div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:50}}>attrs:</span>
-            <input value={et.attrs||""} onChange={e=>upd(i,"attrs",e.target.value)} placeholder="serviceTime=3, priority=HIGH"
-              style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
-          </div>
+          <AttrEditor
+            attrs={Array.isArray(et.attrDefs)?et.attrDefs:[]}
+            role={et.role||'customer'}
+            onChange={v=>upd(i,'attrDefs',v)}
+          />
           <input value={et.description||""} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
             style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",width:"100%",boxSizing:"border-box"}}/>
         </div>
@@ -79,7 +273,7 @@ const StateVarEditor=({vars,onChange})=>{
   );
 };
 
-const BEventEditor=({events,onChange})=>{
+const BEventEditor=({events,onChange,entityTypes=[]})=>{
   const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:"",schedules:[],description:""}]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
   const rem=(i)=>onChange(events.filter((_,idx)=>idx!==i));
@@ -111,8 +305,9 @@ const BEventEditor=({events,onChange})=>{
             </div>
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
               <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:46}}>effect:</span>
-              <input value={ev.effect} onChange={e=>upd(i,"effect",e.target.value)} placeholder="ARRIVE(Customer); totalArrived++ or COMPLETE()"
-                style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.green,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+              <DropField value={ev.effect} onChange={v=>upd(i,'effect',v)}
+                options={bEffectOptions(entityTypes)} color={C.green}
+                placeholder="e.g. ARRIVE(Customer); totalArrived++"/>
             </div>
             <input value={ev.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
               style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",width:"100%",boxSizing:"border-box"}}/>
@@ -151,7 +346,176 @@ const BEventEditor=({events,onChange})=>{
   );
 };
 
-const CEventEditor=({events, onChange, bEvents=[]})=>{
+
+// ── Condition Builder ─────────────────────────────────────────────────────────
+// Builds a validated condition string from structured rows.
+// Each row: { id, token, operator, value, join } 
+// join = 'AND' | 'OR' (ignored on first row)
+
+const buildConditionStr = (rows) => {
+  return rows.map((r,i) => {
+    const clause = `${r.token} ${r.operator} ${r.value}`;
+    return i===0 ? clause : `${r.join} ${clause}`;
+  }).join(' ');
+};
+
+const parseConditionStr = (str, tokens) => {
+  // Try to parse existing condition string back into rows
+  // Supports: TOKEN OP VALUE (AND|OR TOKEN OP VALUE)*
+  if(!str||!str.trim()) return [];
+  const parts = str.trim().split(/\b(AND|OR)\b/i);
+  const rows = [];
+  let join = 'AND';
+  parts.forEach(part => {
+    part = part.trim();
+    if(part.toUpperCase()==='AND'||part.toUpperCase()==='OR'){
+      join = part.toUpperCase(); return;
+    }
+    const m = part.match(/^(.+?)\s*(>=|<=|==|!=|>|<)\s*(.+)$/);
+    if(m){
+      const token = m[1].trim();
+      const op    = m[2].trim();
+      const val   = m[3].trim();
+      const knownToken = tokens.find(t=>t.value===token);
+      rows.push({
+        id: 'r'+Date.now()+Math.random(),
+        token: knownToken ? token : (tokens[0]?.value||''),
+        operator: ['>=','<=','==','!=','>','<'].includes(op) ? op : '>',
+        value: val||'0',
+        join,
+      });
+      join = 'AND';
+    }
+  });
+  return rows;
+};
+
+const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[]}) => {
+  // Build token list from entity types and state variables
+  const tokens = [
+    ...(entityTypes||[]).filter(e=>e.role==='customer').map(e=>({
+      label: `queue(${normTypeName(e.name)}).length  — customers waiting`,
+      value: `queue(${normTypeName(e.name)}).length`,
+      valueType: 'number',
+    })),
+    ...(entityTypes||[]).filter(e=>e.role==='server').map(e=>([
+      { label:`idle(${normTypeName(e.name)}).count  — idle servers`,
+        value:`idle(${normTypeName(e.name)}).count`, valueType:'number' },
+      { label:`busy(${normTypeName(e.name)}).count  — busy servers`,
+        value:`busy(${normTypeName(e.name)}).count`, valueType:'number' },
+    ])).flat(),
+    { label:'served  — cumulative customers served', value:'served', valueType:'number' },
+    { label:'reneged  — cumulative customers reneged', value:'reneged', valueType:'number' },
+    ...(stateVariables||[]).filter(sv=>sv.name).map(sv=>({
+      label: `${sv.name}  — ${sv.description||'state variable'}`,
+      value: sv.name,
+      valueType: 'number',
+    })),
+  ];
+
+  const OPERATORS = ['>', '>=', '<', '<=', '==', '!='];
+
+  const [rows, setRows] = useState(()=>parseConditionStr(value, tokens));
+
+  // Sync rows → condition string whenever rows change
+  const updateRows = (newRows) => {
+    setRows(newRows);
+    onChange(buildConditionStr(newRows));
+  };
+
+  const addRow = () => {
+    const defaultToken = tokens[0]?.value||'';
+    updateRows([...rows, {
+      id:'r'+Date.now(), token:defaultToken,
+      operator:'>', value:'0', join:'AND',
+    }]);
+  };
+
+  const removeRow = (idx) => updateRows(rows.filter((_,i)=>i!==idx));
+
+  const updRow = (idx, patch) => {
+    const n = [...rows];
+    n[idx] = {...n[idx], ...patch};
+    updateRows(n);
+  };
+
+  const sel = (extra={}) => ({
+    background:C.bg, border:`1px solid ${C.cEvent}55`, borderRadius:4,
+    color:C.cEvent, fontFamily:FONT, fontSize:12,
+    padding:'6px 8px', outline:'none', ...extra,
+  });
+
+  if(tokens.length===0) return (
+    <div style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:'italic',padding:'6px 0'}}>
+      Define entity types and state variables first — they appear here as condition tokens.
+    </div>
+  );
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:8}}>
+      {rows.length===0 && (
+        <div style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
+          No conditions yet — tap + Add Clause to build a condition.
+        </div>
+      )}
+      {rows.map((row,idx)=>(
+        <div key={row.id} style={{display:'flex',flexDirection:'column',gap:6}}>
+          {/* AND/OR join (not shown for first row) */}
+          {idx>0&&(
+            <div style={{display:'flex',gap:6,paddingLeft:8}}>
+              {['AND','OR'].map(j=>(
+                <button key={j} onClick={()=>updRow(idx,{join:j})} style={{
+                  background: row.join===j ? C.cEvent+'33' : 'transparent',
+                  border:`1px solid ${row.join===j ? C.cEvent : C.border}`,
+                  borderRadius:4, color:row.join===j?C.cEvent:C.muted,
+                  fontFamily:FONT, fontSize:11, fontWeight:700,
+                  padding:'3px 12px', cursor:'pointer',
+                }}>{j}</button>
+              ))}
+            </div>
+          )}
+          {/* Clause row: token + operator + value + remove */}
+          <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',
+            background:C.bg,border:`1px solid ${C.cEvent}22`,
+            borderRadius:6,padding:'8px 10px'}}>
+            {/* Token dropdown */}
+            <select value={row.token} onChange={e=>updRow(idx,{token:e.target.value})}
+              style={{...sel(),flex:2,minWidth:180}}>
+              {tokens.map(t=>(
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+            {/* Operator dropdown */}
+            <select value={row.operator} onChange={e=>updRow(idx,{operator:e.target.value})}
+              style={{...sel(),width:60}}>
+              {OPERATORS.map(op=><option key={op} value={op}>{op}</option>)}
+            </select>
+            {/* Value input */}
+            <input type="number" value={row.value}
+              onChange={e=>updRow(idx,{value:e.target.value})}
+              style={{width:60,background:'transparent',border:`1px solid ${C.border}`,
+                borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,
+                padding:'5px 8px',outline:'none'}}/>
+            {/* Remove */}
+            <Btn small variant="danger" onClick={()=>removeRow(idx)}>✕</Btn>
+          </div>
+        </div>
+      ))}
+      {/* Add clause + preview */}
+      <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+        <Btn small variant="ghost" onClick={addRow}>+ Add Clause</Btn>
+        {rows.length>0&&(
+          <div style={{fontSize:11,color:C.muted,fontFamily:FONT,
+            background:C.surface,borderRadius:4,padding:'4px 10px',flex:1}}>
+            <span style={{color:C.cEvent}}>{buildConditionStr(rows)||'—'}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[]})=>{
   // A C-event has:
   //   name, condition  — as before
   //   effect           — only ASSIGN macro(s), no SCHEDULE needed here
@@ -195,8 +559,9 @@ const CEventEditor=({events, onChange, bEvents=[]})=>{
         <strong style={{color:C.cEvent}}>Condition tokens:</strong>{" "}
         <code>queue(Type).length</code> · <code>idle(Type).count</code> · <code>busy(Type).count</code> ·{" "}
         <code>attr(Type,attrName)</code> · <code>served</code> · <code>reneged</code><br/>
-        <strong style={{color:C.cEvent}}>Effect — use ASSIGN only:</strong>{" "}
-        <code>ASSIGN(CustomerType, ServerType)</code> — matches oldest waiting customer to idle server.<br/>
+        <strong style={{color:C.cEvent}}>Effect macros:</strong>{" "}
+        <code>ASSIGN(CustomerType, ServerType)</code> — match customer to server.{" "}
+        <strong>Scalar effects</strong> also supported: <code>VAR++</code> · <code>VAR--</code> · <code>VAR += N</code> · <code>VAR = value</code><br/>
         <strong style={{color:C.green}}>B-event scheduling</strong> is defined below in the <em>Schedules</em> section —
         select the B-event, distribution, and whether to carry the matched entity context (customer + server IDs).
       </InfoBox>
@@ -218,23 +583,22 @@ const CEventEditor=({events, onChange, bEvents=[]})=>{
           </div>
 
           {/* Condition */}
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:72}}>condition:</span>
-            <input value={ev.condition} onChange={e=>upd(i,"condition",e.target.value)}
-              placeholder="queue(Customer).length > 0 AND idle(Server).count > 0"
-              style={{flex:1,background:"transparent",border:`1px solid ${C.cEvent}66`,
-              borderRadius:4,color:C.cEvent,fontFamily:FONT,fontSize:12,
-              padding:"5px 8px",outline:"none"}}/>
+          <div style={{display:"flex",flexDirection:'column',gap:6}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>CONDITION</span>
+            <ConditionBuilder
+              value={ev.condition}
+              onChange={v=>upd(i,'condition',v)}
+              entityTypes={entityTypes}
+              stateVariables={stateVariables}
+            />
           </div>
 
           {/* Effect — ASSIGN only */}
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:72}}>effect:</span>
-            <input value={ev.effect} onChange={e=>upd(i,"effect",e.target.value)}
-              placeholder="ASSIGN(Customer, Server)"
-              style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,
-              borderRadius:4,color:C.green,fontFamily:FONT,fontSize:12,
-              padding:"5px 8px",outline:"none"}}/>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:72}}>effect(s):</span>
+            <DropField value={ev.effect} onChange={v=>upd(i,'effect',v)}
+              options={assignOptions(entityTypes, stateVariables)} color={C.green}
+              placeholder="e.g. ASSIGN(Customer, Server); totalServed++"/>
           </div>
 
           {/* Structured B-event schedules */}
@@ -343,143 +707,10 @@ const CEventEditor=({events, onChange, bEvents=[]})=>{
   );
 };
 
-const ModelDetail=({modelId,onBack,onRefresh})=>{
-  const [model,setModel]=useState(()=>DB.get(modelId));
-  const [tab,setTab]=useState("overview");
-  const [dirty,setDirty]=useState(false);
-  const isOwner=DB.isOwner(modelId);
-  const canEdit=DB.canEdit(modelId);
-  const setField=(f,v)=>{setModel(m=>({...m,[f]:v}));setDirty(true);};
-  const save=()=>{DB.save(model);setDirty(false);onRefresh();};
 
-  const TABS=[
-    {id:"overview",label:"Overview"},{id:"entities",label:"Entity Types"},
-    {id:"state",label:"State Vars"},{id:"bevents",label:"B-Events"},
-    {id:"cevents",label:"C-Events"},{id:"execute",label:"▶ Execute"},
-    ...(isOwner?[{id:"access",label:"Access"}]:[]),
-  ];
-
-  if(!model)return null;
-  return (
-    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:C.bg}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 20px",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,flexWrap:"wrap"}}>
-        <Btn small variant="ghost" onClick={onBack}>← Back</Btn>
-        <div style={{flex:1,fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT}}>{model.name}</div>
-        <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
-        <Tag label="v6" color={C.purple}/>
-        {canEdit&&dirty&&<Btn small variant="primary" onClick={save}>Save</Btn>}
-      </div>
-      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.surface,paddingLeft:20,flexShrink:0,overflowX:"auto"}}>
-        {TABS.map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
-            borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",
-            color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400}}>{t.label}</button>
-        ))}
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:20}}>
-        {tab==="overview"&&(
-          <div style={{maxWidth:700,display:"flex",flexDirection:"column",gap:14}}>
-            <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null}/>
-            <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4}/>
-            <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:14}}>
-              <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,marginBottom:12}}>MODEL STRUCTURE</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
-                {[
-                  {label:"Entity Types",value:(model.entityTypes||[]).length,color:C.server},
-                  {label:"State Vars",  value:(model.stateVariables||[]).length,color:C.purple},
-                  {label:"B-Events",    value:(model.bEvents||[]).length,color:C.bEvent},
-                  {label:"C-Events",    value:(model.cEvents||[]).length,color:C.cEvent},
-                  {label:"Runs",        value:model.stats?.runs||0,color:C.green},
-                ].map(s=>(
-                  <div key={s.label} style={{background:C.bg,borderRadius:6,border:`1px solid ${s.color}33`,padding:"12px 14px"}}>
-                    <div style={{fontSize:22,fontWeight:700,color:s.color,fontFamily:FONT}}>{s.value}</div>
-                    <div style={{fontSize:11,color:C.muted,fontFamily:FONT}}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-        {tab==="entities"&&<div style={{maxWidth:800}}><EntityTypeEditor types={model.entityTypes||[]} onChange={canEdit?v=>setField("entityTypes",v):()=>{}}/></div>}
-        {tab==="state"&&<div style={{maxWidth:750}}><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>}
-        {tab==="bevents"&&<div style={{maxWidth:880}}><BEventEditor events={model.bEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
-        {tab==="cevents"&&<div style={{maxWidth:860}}><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
-        {tab==="execute"&&<div style={{maxWidth:1080}}><ExecutePanel model={model}/></div>}
-        {tab==="access"&&isOwner&&(
-          <div style={{maxWidth:480,display:"flex",flexDirection:"column",gap:14}}>
-            <div style={{display:"flex",gap:8}}>
-              <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{DB.setVisibility(modelId,"private");setModel({...DB.get(modelId)});onRefresh();}} small>🔒 Private</Btn>
-              <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{DB.setVisibility(modelId,"public");setModel({...DB.get(modelId)});onRefresh();}} small>🌐 Public</Btn>
-            </div>
-            {DB.allUsers().filter(u=>u.id!==model.owner).map(u=>(
-              <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
-                <Avatar u={u} size={26}/>
-                <span style={{flex:1,fontSize:12,color:C.text,fontFamily:FONT}}>{u.name}</span>
-                <select value={model.access?.[u.id]||"none"} onChange={e=>{DB.setAccess(modelId,u.id,e.target.value);setModel({...DB.get(modelId)});}}
-                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
-                  <option value="none">No access</option><option value="viewer">Viewer</option><option value="editor">Editor</option>
-                </select>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+export {
+  AttrEditor, EntityTypeEditor, StateVarEditor,
+  BEventEditor, CEventEditor, ConditionBuilder,
+  toTitleCase, normTypeName, conditionOptions, assignOptions, bEffectOptions, DropField
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// LIBRARY
-// ═══════════════════════════════════════════════════════════════════════════════
-const ModelCard=({model,onOpen})=>{
-  const owner=DB.getUser(model.owner);
-  const fmtDate=iso=>new Date(iso).toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"});
-  const hasRenege=(model.bEvents||[]).some(ev=>(ev.schedules||[]).some(s=>s.isRenege));
-  const srvTypes=(model.entityTypes||[]).filter(et=>et.role==="server");
-  return (
-    <div onClick={onOpen} style={{background:C.panel,border:`1px solid ${C.border}`,borderLeft:`3px solid ${model.visibility==="public"?C.green:C.accent}`,borderRadius:8,padding:16,cursor:"pointer",display:"flex",flexDirection:"column",gap:10}}
-      onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
-      onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-        <div style={{fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT,lineHeight:1.3}}>{model.name}</div>
-        <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap"}}>
-          <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
-          {hasRenege&&<Tag label="reneging" color={C.reneged}/>}
-          {srvTypes.length>0&&<Tag label={srvTypes.map(s=>`${s.count||1}× ${s.name}`).join(", ")} color={C.server}/>}
-        </div>
-      </div>
-      <div style={{fontSize:12,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>{model.description}</div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <Tag label={`${(model.entityTypes||[]).length} types`} color={C.server}/>
-        <Tag label={`${(model.bEvents||[]).length} B-events`} color={C.bEvent}/>
-        <Tag label={`${(model.cEvents||[]).length} C-events`} color={C.cEvent}/>
-        {model.stats?.runs&&<Tag label={`${model.stats.runs} runs`} color={C.green}/>}
-      </div>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{display:"flex",alignItems:"center",gap:7}}>
-          {owner&&<Avatar u={owner} size={22}/>}
-          <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>{owner?.name}</span>
-        </div>
-        <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>{fmtDate(model.updatedAt)}</span>
-      </div>
-    </div>
-  );
-};
-
-const NewModelModal=({onClose,onCreate})=>{
-  const [name,setName]=useState(""); const [desc,setDesc]=useState("");
-  const create=()=>{if(!name.trim())return;const m=DB.save({name:name.trim(),description:desc.trim()});onCreate(m.id);onClose();};
-  return (
-    <div style={{position:"fixed",inset:0,background:"#000000cc",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>
-      <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:28,width:420,fontFamily:FONT,display:"flex",flexDirection:"column",gap:14}}>
-        <div style={{fontSize:15,fontWeight:700,color:C.text}}>New DES Model</div>
-        <Field label="Name" value={name} onChange={setName} placeholder="e.g. Queue with Reneging"/>
-        <Field label="Description" value={desc} onChange={setDesc} multiline rows={3}/>
-        <div style={{display:"flex",gap:10}}><Btn variant="ghost" onClick={onClose} full>Cancel</Btn><Btn variant="primary" onClick={create} disabled={!name.trim()} full>Create</Btn></div>
-      </div>
-    </div>
-  );
-};
-
-
-export { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, ModelDetail, ModelCard, NewModelModal };

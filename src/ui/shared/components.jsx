@@ -1,14 +1,6 @@
-// Shared.jsx — Design tokens and reusable micro-components
-
-const C={
-  bg:"#080c10",surface:"#0d1117",panel:"#111820",border:"#1e2d3d",
-  accent:"#06b6d4",text:"#cdd9e5",muted:"#5c7a99",
-  green:"#3fb950",amber:"#f0883e",red:"#f85149",purple:"#8b5cf6",
-  bEvent:"#f59e0b",cEvent:"#06b6d4",server:"#a78bfa",
-  phaseA:"#8b5cf6",phaseB:"#f59e0b",phaseC:"#06b6d4",
-  waiting:"#f0883e",serving:"#06b6d4",served:"#3fb950",reneged:"#f85149",idle:"#3fb950",busy:"#f59e0b",
-};
-const FONT="'JetBrains Mono','Fira Code',monospace";
+// ui/shared/components.jsx — Reusable micro-components
+import { useState } from "react";
+import { C, FONT } from "./tokens.js";
 
 const Tag=({label,color=C.muted})=>(
   <span style={{background:color+"18",border:`1px solid ${color}44`,color,borderRadius:3,padding:"2px 7px",fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",fontFamily:FONT}}>{label}</span>
@@ -51,4 +43,39 @@ const Empty=({icon,msg})=>(
   </div>
 );
 
-export { C, FONT, Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty };
+// ═══════════════════════════════════════════════════════════════════════════════
+// DISTRIBUTION PICKER — reusable widget used by both B-event schedules and C-events
+// ═══════════════════════════════════════════════════════════════════════════════
+const DistPicker=({value,onChange,compact})=>{
+  // value: { dist:"Exponential", distParams:{ mean:"3" } }
+  const v=value||{dist:"Exponential",distParams:{}};
+  const dd=DISTRIBUTIONS[v.dist||"Fixed"]||DISTRIBUTIONS.Fixed;
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <select value={v.dist||"Exponential"} onChange={e=>onChange({...v,dist:e.target.value,distParams:{}})}
+          style={{width:compact?160:200,background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+          {Object.keys(DISTRIBUTIONS).map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
+        </select>
+        {dd.params.map(param=>(
+          <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
+            <input value={(v.distParams||{})[param]||""} onChange={e=>onChange({...v,distParams:{...(v.distParams||{}),[param]:e.target.value}})}
+              style={{width:60,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}/>
+          </div>
+        ))}
+      </div>
+      <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>{dd.hint}</span>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VISUAL SIMULATION VIEW
+// ═══════════════════════════════════════════════════════════════════════════════
+const TOKEN_COLORS=["#06b6d4","#f59e0b","#8b5cf6","#3fb950","#f87171","#a78bfa","#34d399","#fbbf24"];
+const tokenColor=(id)=>TOKEN_COLORS[(id-1)%TOKEN_COLORS.length];
+
+
+export { Tag, Btn, Field, SH, InfoBox, Empty };
+
