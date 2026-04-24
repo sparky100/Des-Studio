@@ -57,6 +57,7 @@ function buildEngine(model) {
 
   // Pre-create server entities
   const entities = [];
+  _debugLines.push("entityTypes: "+JSON.stringify((model.entityTypes||[]).map(e=>({name:e.name,role:e.role,count:e.count}))));
   (model.entityTypes||[]).forEach(et => {
     if (et.role === "server") {
       const n = parseInt(et.count)||1;
