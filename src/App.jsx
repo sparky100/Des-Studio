@@ -1,7 +1,7 @@
 // AppFull.jsx — Full DES Studio with engine
 // ANON KEY is on line 9
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
 // ── Supabase — update YOUR_ANON_KEY below ──────────────────
