@@ -1,15 +1,16 @@
 // AppFull.jsx — Full DES Studio with engine
-// ANON KEY is on line 9
+// Credentials via Cloudflare env vars: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-// ── Supabase — update YOUR_ANON_KEY below ──────────────────
-const SUPABASE_URL  = 'https://znkknldzdfajcrpabtmg.supabase.co'
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpua2tubGR6ZGZhamNycGFidG1nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NTIyMzMsImV4cCI6MjA4OTMyODIzM30.2puQY_UNe3bOBT88Uyo2rtFU3AIUp3wgCNxcAVtw2ng'
+// ── Supabase — set these in Cloudflare Pages environment variables ──
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
 
 // ── Simulation Engine ───────────────────────────────────────
+const _debugLines = [];
 // ═══════════════════════════════════════════════════════════════════════════════
 // DISTRIBUTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -217,9 +218,9 @@ function buildEngine(model) {
         expr=expr.replace(new RegExp(`\\b${k}\\b`,"g"),typeof state[k]==="string"?`"${state[k]}"`:String(state[k]));});
       expr=expr.replace(/\bAND\b/gi,"&&").replace(/\bOR\b/gi,"||");
       // Safe evaluator — replaces new Function
-      console.log("evalCond expr:", expr);
+      _debugLines.push("expr: "+expr);
       const result = safeEval(expr);
-      console.log("evalCond result:", result);
+      _debugLines.push("→ "+result);
       return result
     }catch{return false;}
   }
@@ -778,6 +779,7 @@ const VisualView=({snap})=>{
 const ExecutePanel=({model})=>{
   const [mode,setMode]=useState("idle"); // idle | stepping | done
   const [execStatus,setExecStatus]=useState(""); // checkpoint messages
+  const [debugLog,setDebugLog]=useState([]); // on-screen debug
   const [currentSnap,setCurrentSnap]=useState(null);
   const [log,setLog]=useState([]);
   const [cycleLog,setCycleLog]=useState([]);
@@ -805,6 +807,7 @@ const ExecutePanel=({model})=>{
       setMode("stepping");
       setSummary(null);
       setExecStatus("Step 4: Engine ready");
+      setDebugLog([..._debugLines]);
     }catch(e){
       setExecStatus("ERROR in initEngine: "+e.message);
     }
@@ -818,6 +821,7 @@ const ExecutePanel=({model})=>{
     setLog(prev=>[...prev,...(r.cycleLog||[])]);
     setFelSize(r.felSize||0);
     if(r.done){setMode("done");setSummary(r.summary);}
+    setDebugLog([..._debugLines].slice(-20));
   },[mode]);
 
   const doRunAll=useCallback(()=>{
@@ -893,6 +897,13 @@ const ExecutePanel=({model})=>{
         </div>
       </div>
 
+      {/* Debug output */}
+      {debugLog.length>0&&(
+        <div style={{background:"#0a0a0a",border:`1px solid ${C.purple}44`,borderRadius:6,padding:12,fontFamily:"monospace",fontSize:11,color:C.purple,maxHeight:120,overflowY:"auto"}}>
+          <div style={{color:C.muted,fontSize:10,marginBottom:6}}>CONDITION EVALUATOR DEBUG</div>
+          {debugLog.map((l,i)=><div key={i}>{l}</div>)}
+        </div>
+      )}
       {/* Summary when done */}
       {summary&&(
         <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
