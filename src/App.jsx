@@ -77,9 +77,10 @@ function buildEngine(model) {
     return o;
   }
 
-  const waitingOf  = (type) => entities.filter(e=>e.type.trim()===type.trim()&&e.status==="waiting").sort((a,b)=>a.arrivalTime-b.arrivalTime);
-  const idleOf     = (type) => entities.filter(e=>e.type.trim()===type.trim()&&e.status==="idle");
-  const busyOf     = (type) => entities.filter(e=>e.type.trim()===type.trim()&&(e.status==="busy"||e.status==="serving"));
+  const matchType  = (a,b) => a.trim().toLowerCase()===b.trim().toLowerCase();
+  const waitingOf  = (type) => entities.filter(e=>matchType(e.type,type)&&e.status==="waiting").sort((a,b)=>a.arrivalTime-b.arrivalTime);
+  const idleOf     = (type) => entities.filter(e=>matchType(e.type,type)&&e.status==="idle");
+  const busyOf     = (type) => entities.filter(e=>matchType(e.type,type)&&(e.status==="busy"||e.status==="serving"));
 
   let _lastCustId=null, _lastSrvId=null;
 
@@ -127,7 +128,7 @@ function buildEngine(model) {
 
       // ARRIVE(Type)
       const mArr=part.match(/^ARRIVE\((\w+)\)$/i);
-      if(mArr){ const et=(model.entityTypes||[]).find(e=>e.name===mArr[1]); entitySeq++;
+      if(mArr){ const et=(model.entityTypes||[]).find(e=>e.name.trim().toLowerCase()===mArr[1].trim().toLowerCase()); entitySeq++;
         const ent={id:entitySeq,type:mArr[1],role:et?.role||"customer",status:"waiting",
           attrs:parseAttrs(et?.attrs||""),arrivalTime:clock};
         entities.push(ent); _lastCustId=ent.id;
