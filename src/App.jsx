@@ -217,7 +217,10 @@ function buildEngine(model) {
         expr=expr.replace(new RegExp(`\\b${k}\\b`,"g"),typeof state[k]==="string"?`"${state[k]}"`:String(state[k]));});
       expr=expr.replace(/\bAND\b/gi,"&&").replace(/\bOR\b/gi,"||");
       // Safe evaluator — replaces new Function
-      return safeEval(expr)
+      console.log("evalCond expr:", expr);
+      const result = safeEval(expr);
+      console.log("evalCond result:", result);
+      return result
     }catch{return false;}
   }
 
