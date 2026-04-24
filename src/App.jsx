@@ -10,7 +10,6 @@ const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
 
 // ── Simulation Engine ───────────────────────────────────────
-const _debugLines = [];
 // ═══════════════════════════════════════════════════════════════════════════════
 // DISTRIBUTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -57,7 +56,6 @@ function buildEngine(model) {
 
   // Pre-create server entities
   const entities = [];
-  _debugLines.push("entityTypes: "+JSON.stringify((model.entityTypes||[]).map(e=>({name:e.name,role:e.role,count:e.count}))));
   (model.entityTypes||[]).forEach(et => {
     et = {...et, name:(et.name||"").trim()}; // trim whitespace from names
     if (et.role === "server") {
@@ -132,7 +130,6 @@ function buildEngine(model) {
         const ent={id:entitySeq,type:mArr[1],role:et?.role||"customer",status:"waiting",
           attrs:parseAttrs(et?.attrs||""),arrivalTime:clock};
         entities.push(ent); _lastCustId=ent.id;
-        _debugLines.push(`ARRIVE: #${ent.id} type="${ent.type}" status="${ent.status}" waitingOf=${waitingOf(mArr[1]).length} allEntities=${entities.length}`);
         msgs.push(`Entity #${ent.id} (${mArr[1]}) arrived → waiting [queue: ${waitingOf(mArr[1]).length}]`); return; }
 
       // ASSIGN(CustomerType, ServerType)
@@ -222,14 +219,12 @@ function buildEngine(model) {
         expr=expr.replace(new RegExp(`\\b${k}\\b`,"g"),typeof state[k]==="string"?`"${state[k]}"`:String(state[k]));});
       expr=expr.replace(/\bAND\b/gi,"&&").replace(/\bOR\b/gi,"||");
       // Safe evaluator — replaces new Function
-      _debugLines.push("expr: "+expr);
       // Use Function constructor — safe in this context (no user input reaches here)
       // eslint-disable-next-line no-new-func
       const fn = new Function("return ("+expr+")");
       const result = !!fn();
-      _debugLines.push("\u2192 "+result);
       return result;
-    }catch(e){_debugLines.push("evalCond error: "+e.message);return false;}
+    }catch{return false;}
   }
 
   function snap(clock) {
@@ -252,7 +247,6 @@ function buildEngine(model) {
 
   // Step function: run ONE full Phase A→B→C cycle, return {done, cycleLog, snap}
   function step() {
-    _debugLines.push("FEL size:"+fel.length+" items:"+JSON.stringify(fel.slice(0,3).map(e=>({name:e.name,t:e.scheduledTime}))));
     if (fel.length===0) {
       log.push({phase:"END",time:clock,message:"FEL empty — simulation complete",snap:snap(clock)});
       return {done:true, cycleLog:[{phase:"END",time:clock,message:"FEL empty — simulation complete"}], snap:snap(clock)};
@@ -742,7 +736,6 @@ const VisualView=({snap})=>{
 const ExecutePanel=({model})=>{
   const [mode,setMode]=useState("idle"); // idle | stepping | done
   const [execStatus,setExecStatus]=useState(""); // checkpoint messages
-  const [debugLog,setDebugLog]=useState([]); // on-screen debug
   const [currentSnap,setCurrentSnap]=useState(null);
   const [log,setLog]=useState([]);
   const [cycleLog,setCycleLog]=useState([]);
@@ -770,7 +763,6 @@ const ExecutePanel=({model})=>{
       setMode("stepping");
       setSummary(null);
       setExecStatus("Step 4: Engine ready");
-      setDebugLog([..._debugLines]);
     }catch(e){
       setExecStatus("ERROR in initEngine: "+e.message);
     }
@@ -784,7 +776,6 @@ const ExecutePanel=({model})=>{
     setLog(prev=>[...prev,...(r.cycleLog||[])]);
     setFelSize(r.felSize||0);
     if(r.done){setMode("done");setSummary(r.summary);}
-    setDebugLog([..._debugLines].slice(-20));
   },[mode]);
 
   const doRunAll=useCallback(()=>{
@@ -860,13 +851,7 @@ const ExecutePanel=({model})=>{
         </div>
       </div>
 
-      {/* Debug output */}
-      {debugLog.length>0&&(
-        <div style={{background:"#0a0a0a",border:`1px solid ${C.purple}44`,borderRadius:6,padding:12,fontFamily:"monospace",fontSize:11,color:C.purple,maxHeight:120,overflowY:"auto"}}>
-          <div style={{color:C.muted,fontSize:10,marginBottom:6}}>CONDITION EVALUATOR DEBUG</div>
-          {debugLog.map((l,i)=><div key={i}>{l}</div>)}
-        </div>
-      )}
+
       {/* Summary when done */}
       {summary&&(
         <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
