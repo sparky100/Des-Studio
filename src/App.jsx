@@ -131,6 +131,7 @@ function buildEngine(model) {
         const ent={id:entitySeq,type:mArr[1],role:et?.role||"customer",status:"waiting",
           attrs:parseAttrs(et?.attrs||""),arrivalTime:clock};
         entities.push(ent); _lastCustId=ent.id;
+        _debugLines.push(`ARRIVE: #${ent.id} type="${ent.type}" status="${ent.status}" waitingOf=${waitingOf(mArr[1]).length} allEntities=${entities.length}`);
         msgs.push(`Entity #${ent.id} (${mArr[1]}) arrived → waiting [queue: ${waitingOf(mArr[1]).length}]`); return; }
 
       // ASSIGN(CustomerType, ServerType)
@@ -250,6 +251,7 @@ function buildEngine(model) {
 
   // Step function: run ONE full Phase A→B→C cycle, return {done, cycleLog, snap}
   function step() {
+    _debugLines.push("FEL size:"+fel.length+" items:"+JSON.stringify(fel.slice(0,3).map(e=>({name:e.name,t:e.scheduledTime}))));
     if (fel.length===0) {
       log.push({phase:"END",time:clock,message:"FEL empty — simulation complete",snap:snap(clock)});
       return {done:true, cycleLog:[{phase:"END",time:clock,message:"FEL empty — simulation complete"}], snap:snap(clock)};
