@@ -1,5 +1,5 @@
-// AppEditors.jsx — Full model editor, no engine
-// ANON KEY is on line 8
+// AppFull.jsx — Full DES Studio with engine
+// ANON KEY is on line 9
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
@@ -10,8 +10,6 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON)
 
 // ── Simulation Engine ───────────────────────────────────────
-import { useState, useRef, useCallback, useEffect } from "react";
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // DISTRIBUTIONS
 // ═══════════════════════════════════════════════════════════════════════════════
