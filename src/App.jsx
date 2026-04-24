@@ -1036,13 +1036,28 @@ const conditionOptions = (entityTypes) => {
   return opts;
 };
 
-const assignOptions = (entityTypes) => {
+const assignOptions = (entityTypes, stateVariables=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const opts = [{label:'— select effect —',value:''}];
-  custs.forEach(c=>servers.forEach(s=>{
-    opts.push({label:`ASSIGN(${c}, ${s})`,value:`ASSIGN(${c}, ${s})`});
-  }));
+  // ASSIGN combinations
+  if(custs.length>0&&servers.length>0){
+    opts.push({label:'── ASSIGN ──',value:'',disabled:true});
+    custs.forEach(c=>servers.forEach(s=>{
+      opts.push({label:`ASSIGN(${c}, ${s})`,value:`ASSIGN(${c}, ${s})`});
+    }));
+  }
+  // Scalar effects on state variables
+  const svNames = (stateVariables||[]).map(sv=>sv.name).filter(Boolean);
+  if(svNames.length>0){
+    opts.push({label:'── Scalar effects ──',value:'',disabled:true});
+    svNames.forEach(v=>{
+      opts.push({label:`${v}++`,value:`${v}++`});
+      opts.push({label:`${v}--`,value:`${v}--`});
+      opts.push({label:`${v} += 1`,value:`${v} += 1`});
+      opts.push({label:`${v} = 0`,value:`${v} = 0`});
+    });
+  }
   opts.push({label:'Custom...',value:'__custom__'});
   return opts;
 };
@@ -1536,8 +1551,9 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         <strong style={{color:C.cEvent}}>Condition tokens:</strong>{" "}
         <code>queue(Type).length</code> · <code>idle(Type).count</code> · <code>busy(Type).count</code> ·{" "}
         <code>attr(Type,attrName)</code> · <code>served</code> · <code>reneged</code><br/>
-        <strong style={{color:C.cEvent}}>Effect — use ASSIGN only:</strong>{" "}
-        <code>ASSIGN(CustomerType, ServerType)</code> — matches oldest waiting customer to idle server.<br/>
+        <strong style={{color:C.cEvent}}>Effect macros:</strong>{" "}
+        <code>ASSIGN(CustomerType, ServerType)</code> — match customer to server.{" "}
+        <strong>Scalar effects</strong> also supported: <code>VAR++</code> · <code>VAR--</code> · <code>VAR += N</code> · <code>VAR = value</code><br/>
         <strong style={{color:C.green}}>B-event scheduling</strong> is defined below in the <em>Schedules</em> section —
         select the B-event, distribution, and whether to carry the matched entity context (customer + server IDs).
       </InfoBox>
@@ -1571,10 +1587,10 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
 
           {/* Effect — ASSIGN only */}
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:72}}>effect:</span>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:72}}>effect(s):</span>
             <DropField value={ev.effect} onChange={v=>upd(i,'effect',v)}
-              options={assignOptions(entityTypes)} color={C.green}
-              placeholder="e.g. ASSIGN(Customer, Server)"/>
+              options={assignOptions(entityTypes, stateVariables)} color={C.green}
+              placeholder="e.g. ASSIGN(Customer, Server); totalServed++"/>
           </div>
 
           {/* Structured B-event schedules */}
