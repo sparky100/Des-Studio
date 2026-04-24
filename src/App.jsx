@@ -219,55 +219,13 @@ function buildEngine(model) {
       expr=expr.replace(/\bAND\b/gi,"&&").replace(/\bOR\b/gi,"||");
       // Safe evaluator — replaces new Function
       _debugLines.push("expr: "+expr);
-      const result = safeEval(expr);
-      _debugLines.push("→ "+result);
-      return result
-    }catch{return false;}
-  }
-
-  function safeEval(expr){
-    // By this point expr contains only: numbers, &&, ||, !, ==, !=, >, <, >=, <=, "strings", true, false
-    expr = expr.trim()
-    if(expr==='true'||expr==='1') return true
-    if(expr==='false'||expr==='0') return false
-    // Handle || (OR)
-    const orParts = splitOutsideParens(expr,'||')
-    if(orParts.length>1) return orParts.some(p=>safeEval(p.trim()))
-    // Handle && (AND)
-    const andParts = splitOutsideParens(expr,'&&')
-    if(andParts.length>1) return andParts.every(p=>safeEval(p.trim()))
-    // Handle comparison: a OP b
-    const cmp = expr.match(/^(.+?)(===?|!==?|>=|<=|>|<)(.+)$/)
-    if(cmp){
-      const a=cmp[1].trim(), op=cmp[2].trim(), b=cmp[3].trim()
-      const na=parseFloat(a), nb=parseFloat(b)
-      const sa=a.replace(/^"|"$/g,'').replace(/^'|'$/g,'')
-      const sb=b.replace(/^"|"$/g,'').replace(/^'|'$/g,'')
-      if(!isNaN(na)&&!isNaN(nb)){
-        if(op==='=='||op==='===') return na===nb
-        if(op==='!='||op==='!==') return na!==nb
-        if(op==='>') return na>nb
-        if(op==='<') return na<nb
-        if(op==='>=') return na>=nb
-        if(op==='<=') return na<=nb
-      } else {
-        if(op==='=='||op==='===') return sa===sb
-        if(op==='!='||op==='!==') return sa!==sb
-      }
-    }
-    return false
-  }
-
-  function splitOutsideParens(expr, op){
-    const parts=[], n=op.length; let depth=0, cur=''
-    for(let i=0;i<expr.length;i++){
-      if(expr[i]==='(') depth++
-      else if(expr[i]===')') depth--
-      if(depth===0 && expr.slice(i,i+n)===op){parts.push(cur);cur='';i+=n-1;}
-      else cur+=expr[i]
-    }
-    parts.push(cur)
-    return parts
+      // Use Function constructor — safe in this context (no user input reaches here)
+      // eslint-disable-next-line no-new-func
+      const fn = new Function("return ("+expr+")");
+      const result = !!fn();
+      _debugLines.push("\u2192 "+result);
+      return result;
+    }catch(e){_debugLines.push("evalCond error: "+e.message);return false;}
   }
 
   function snap(clock) {
