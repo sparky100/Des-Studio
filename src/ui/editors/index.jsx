@@ -76,12 +76,6 @@ const bEffectOptions = (entityTypes) => {
       opts.push({label:`RELEASE(${s})`,value:`RELEASE(${s})`});
     });
   }
-  if(servers.length>0){
-    opts.push({label:'── Release server ──',value:'',disabled:true});
-    servers.forEach(s=>{
-      opts.push({label:`RELEASE(${s})`,value:`RELEASE(${s})`});
-    });
-  }
   opts.push({label:'Custom...',value:'__custom__'});
   return opts;
 };
@@ -113,6 +107,32 @@ const DropField = ({value, onChange, options, color, placeholder}) => {
   );
 };
 
+
+// Distribution picker — used by BEventEditor schedule rows
+const DistPicker = ({value, onChange, compact}) => {
+  const v = value||{dist:"Exponential",distParams:{}};
+  const dd = DISTRIBUTIONS[v.dist||"Fixed"]||DISTRIBUTIONS.Fixed;
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <select value={v.dist||"Exponential"} onChange={e=>onChange({...v,dist:e.target.value,distParams:{}})}
+          style={{width:compact?160:200,background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+            color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+          {Object.keys(DISTRIBUTIONS).map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
+        </select>
+        {dd.params.map(param=>(
+          <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
+            <input value={(v.distParams||{})[param]||""} onChange={e=>onChange({...v,distParams:{...(v.distParams||{}),[param]:e.target.value}})}
+              style={{width:60,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,
+                color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}/>
+          </div>
+        ))}
+      </div>
+      <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>{dd.hint}</span>
+    </div>
+  );
+};
 
 // ── Attribute Definition Editor ───────────────────────────────────────────────
 // Each attribute: { id, name, dist, distParams }
