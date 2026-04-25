@@ -1,8 +1,12 @@
 // ui/execute/index.jsx — CustomerToken, VisualView, ExecutePanel
-import { useState, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { C, FONT } from "../shared/tokens.js";
-import { Tag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildEngine } from "../../engine/index.js";
+import { saveSimulationRun } from "../../db/models.js";
+
+const TOKEN_COLORS=["#06b6d4","#f59e0b","#8b5cf6","#3fb950","#f87171","#a78bfa","#34d399","#fbbf24"];
+const tokenColor=(id)=>TOKEN_COLORS[(id-1)%TOKEN_COLORS.length];
 
 const CustomerToken=({entity,size=36,showId=true})=>{
   const col=tokenColor(entity.id);
@@ -185,10 +189,19 @@ const VisualView=({snap})=>{
   );
 };
 
+// ── Aggregate stats helper ────────────────────────────────────────────────────
+function computeAgg(results) {
+  const vals=k=>results.map(r=>r.summary?.[k]).filter(v=>v!=null&&!isNaN(v));
+  const mean=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
+  const std=arr=>{if(arr.length<2)return 0;const m=mean(arr);return Math.sqrt(arr.reduce((s,x)=>s+(x-m)**2,0)/(arr.length-1));};
+  const stat=k=>{const a=vals(k);return{mean:mean(a),std:std(a)};};
+  return{n:results.length,served:stat('served'),reneged:stat('reneged'),avgWait:stat('avgWait'),avgSojourn:stat('avgSojourn')};
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // EXECUTE PANEL — with step-through, run-all, visual, and log views
 // ═══════════════════════════════════════════════════════════════════════════════
-const ExecutePanel=({model})=>{
+const ExecutePanel=({model,modelId,userId})=>{
   const [mode,setMode]=useState("idle"); // idle | stepping | done
   const [execStatus,setExecStatus]=useState(""); // checkpoint messages
   const [currentSnap,setCurrentSnap]=useState(null);
@@ -199,8 +212,13 @@ const ExecutePanel=({model})=>{
   const [autoSpeed,setAutoSpeed]=useState(400);
   const [autoRunning,setAutoRunning]=useState(false);
   const [summary,setSummary]=useState(null);
+  const [reps,setReps]=useState(1);
+  const [aggStats,setAggStats]=useState(null);
+  const [toast,setToast]=useState(null);
   const engineRef=useRef(null);
   const autoRef=useRef(null);
+
+  const showToast=(msg,color=C.green)=>{setToast({msg,color});setTimeout(()=>setToast(null),2000);};
 
   const canRun=(model.bEvents||[]).filter(b=>parseFloat(b.scheduledTime)<900).length>0;
 
@@ -257,27 +275,37 @@ const ExecutePanel=({model})=>{
     if(r.done){setMode("done");setSummary(r.summary);}
   },[mode]);
 
-  const doRunAll=useCallback(()=>{
+  const doRunAll=useCallback(async()=>{
     try{
-      setExecStatus("RunAll Step 1: buildEngine...");
+      setExecStatus("Running...");
       stopAuto();
-      engineRef.current=buildEngine(model);
-      setExecStatus("RunAll Step 2: calling runAll()...");
-      const r=engineRef.current.runAll();
-      setExecStatus("RunAll Step 3: runAll() OK — setting snap...");
-      setCurrentSnap(r.snap);
-      setExecStatus("RunAll Step 4: setting log...");
-      setLog(r.log||[]);
-      setCycleLog([]);
-      setFelSize(0);
-      setExecStatus("RunAll Step 5: setting mode done...");
-      setMode("done");
-      setSummary(r.summary);
-      setExecStatus("RunAll complete");
-    }catch(e){
-      setExecStatus("ERROR in doRunAll: "+e.message);
-    }
-  },[model]);
+      const t0=Date.now();
+      if(reps<=1){
+        engineRef.current=buildEngine(model);
+        const r=engineRef.current.runAll();
+        const ms=Date.now()-t0;
+        setCurrentSnap(r.snap);setLog(r.log||[]);setCycleLog([]);setFelSize(0);
+        setMode("done");setSummary(r.summary);setAggStats(null);setExecStatus("Complete");
+        if(modelId&&userId){
+          try{await saveSimulationRun(modelId,userId,r,{replications:1,durationMs:ms});showToast("✓ Saved");}
+          catch(e){showToast("⚠ Save failed",C.red);}
+        }
+      }else{
+        const results=[];
+        for(let i=0;i<reps;i++){engineRef.current=buildEngine(model);results.push(engineRef.current.runAll());}
+        const ms=Date.now()-t0;
+        const last=results[results.length-1];
+        setCurrentSnap(last.snap);setLog(last.log||[]);setCycleLog([]);setFelSize(0);
+        setMode("done");setSummary(last.summary);setAggStats(computeAgg(results));setExecStatus("Complete");
+        if(modelId&&userId){
+          try{
+            await Promise.all(results.map(r=>saveSimulationRun(modelId,userId,r,{replications:reps,durationMs:Math.round(ms/reps)})));
+            showToast(`✓ Saved (${reps} reps)`);
+          }catch(e){showToast("⚠ Save failed",C.red);}
+        }
+      }
+    }catch(e){setExecStatus("ERROR in doRunAll: "+e.message);}
+  },[model,reps,modelId,userId]);
 
   const stopAuto=()=>{if(autoRef.current){clearInterval(autoRef.current);autoRef.current=null;setAutoRunning(false);}};
 
@@ -302,6 +330,11 @@ const ExecutePanel=({model})=>{
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {toast&&(
+        <div style={{position:"fixed",bottom:24,right:24,background:toast.color+"22",border:`1px solid ${toast.color}`,borderRadius:6,padding:"8px 18px",fontFamily:FONT,fontSize:12,fontWeight:700,color:toast.color,zIndex:999,pointerEvents:"none"}}>
+          {toast.msg}
+        </div>
+      )}
       {/* Controls */}
       <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
         <Btn variant="primary" onClick={initEngine} disabled={!canRun||validationIssues.length>0}>⟳ Reset</Btn>
@@ -320,6 +353,12 @@ const ExecutePanel=({model})=>{
           <span style={{fontSize:10,color:C.amber,fontFamily:FONT}}>{Math.round(1000/autoSpeed*10)/10} step/s</span>
         </div>
         <div style={{flex:1}}/>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Reps:</span>
+          <input type="number" min="1" max="20" value={reps}
+            onChange={e=>setReps(Math.min(20,Math.max(1,parseInt(e.target.value)||1)))}
+            style={{width:48,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none",textAlign:"center"}}/>
+        </div>
         <Btn variant="ghost" onClick={doRunAll} disabled={!canRun}>⚡ Run All</Btn>
         {/* Status */}
         <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
@@ -359,6 +398,29 @@ const ExecutePanel=({model})=>{
               <div style={{fontSize:18,fontWeight:700,color:s.color,fontFamily:FONT}}>{s.value}</div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Aggregate stats (multi-rep) */}
+      {aggStats&&(
+        <div style={{background:C.surface,border:`1px solid ${C.purple}44`,borderRadius:8,padding:14}}>
+          <div style={{fontSize:10,color:C.purple,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:10}}>
+            AGGREGATE — {aggStats.n} REPLICATIONS
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+            {[
+              {label:"Served",      s:aggStats.served,     color:C.served,  unit:""},
+              {label:"Reneged",     s:aggStats.reneged,    color:C.reneged, unit:""},
+              {label:"Avg Wait",    s:aggStats.avgWait,    color:C.amber,   unit:" t"},
+              {label:"Avg Sojourn", s:aggStats.avgSojourn, color:C.server,  unit:" t"},
+            ].map(({label,s,color,unit})=>(
+              <div key={label} style={{background:C.bg,border:`1px solid ${color}33`,borderRadius:6,padding:"10px 12px"}}>
+                <div style={{fontSize:9,color:C.muted,fontFamily:FONT,marginBottom:4}}>{label}</div>
+                <div style={{fontSize:16,fontWeight:700,color,fontFamily:FONT}}>{s.mean.toFixed(2)}{unit}</div>
+                <div style={{fontSize:10,color:C.muted,fontFamily:FONT}}>± {s.std.toFixed(2)}{unit}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

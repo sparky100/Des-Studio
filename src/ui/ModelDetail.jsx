@@ -1,9 +1,10 @@
 // ui/ModelDetail.jsx — ModelDetail, ModelCard, NewModelModal
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { C, FONT } from "./shared/tokens.js";
-import { Tag, Btn, Field, SH, InfoBox, Empty } from "./shared/components.jsx";
+import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty } from "./shared/components.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor } from "./editors/index.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
+import { fetchRunHistory } from "../db/models.js";
 
 const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   const [model,setModel]=useState(()=>{
@@ -19,6 +20,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   });
   const [tab,setTab]=useState("overview");
   const [dirty,setDirty]=useState(false);
+  const [historyRows,setHistoryRows]=useState([]);
+  const [historyLoading,setHistoryLoading]=useState(false);
+  const [historyError,setHistoryError]=useState("");
   const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
   const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
   const setField=(f,v)=>{setModel(m=>({...m,[f]:v}));setDirty(true);};
@@ -28,8 +32,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     {id:"overview",label:"Overview"},{id:"entities",label:"Entity Types"},
     {id:"state",label:"State Vars"},{id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},{id:"execute",label:"▶ Execute"},
+    {id:"history",label:"History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
+
+  useEffect(()=>{
+    if(tab!=="history")return;
+    setHistoryLoading(true);setHistoryError("");
+    fetchRunHistory(modelId)
+      .then(rows=>setHistoryRows(rows))
+      .catch(e=>setHistoryError(e.message))
+      .finally(()=>setHistoryLoading(false));
+  },[tab,modelId]);
 
   if(!model)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',
@@ -81,7 +95,48 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
         {tab==="state"&&<div style={{maxWidth:750}}><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>}
         {tab==="bevents"&&<div style={{maxWidth:880}}><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
         {tab==="cevents"&&<div style={{maxWidth:860}}><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
-        {tab==="execute"&&<div style={{maxWidth:1080}}><ExecutePanel model={model}/></div>}
+        {tab==="execute"&&<div style={{maxWidth:1080}}><ExecutePanel model={model} modelId={modelId} userId={overrides.userId}/></div>}
+        {tab==="history"&&(
+          <div style={{maxWidth:960}}>
+            <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:14}}>RUN HISTORY (LAST 20)</div>
+            {historyLoading&&<div style={{color:C.muted,fontFamily:FONT,fontSize:12}}>Loading...</div>}
+            {historyError&&<div style={{color:C.red,fontFamily:FONT,fontSize:12}}>{historyError}</div>}
+            {!historyLoading&&!historyError&&historyRows.length===0&&(
+              <Empty icon="📊" msg="No runs yet. Run the simulation from the Execute tab."/>
+            )}
+            {!historyLoading&&historyRows.length>0&&(
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FONT,fontSize:11}}>
+                  <thead>
+                    <tr>{["Date / Time","Arrived","Served","Reneged","Renege %","Avg Wait","Avg Sojourn","Duration (ms)"].map(h=>(
+                      <th key={h} style={{textAlign:"left",padding:"6px 12px",color:C.muted,borderBottom:`1px solid ${C.border}`,fontSize:10,letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
+                    ))}</tr>
+                  </thead>
+                  <tbody>
+                    {historyRows.map((row,i)=>{
+                      const dt=new Date(row.ran_at);
+                      const dateStr=dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+                      const timeStr=dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+                      const renPct=row.total_arrived>0?((row.total_reneged/row.total_arrived)*100).toFixed(1):"—";
+                      return(
+                        <tr key={row.id} style={{background:i%2===0?C.surface+"60":"transparent"}}>
+                          <td style={{padding:"6px 12px",color:C.muted,whiteSpace:"nowrap"}}>{dateStr} {timeStr}</td>
+                          <td style={{padding:"6px 12px",color:C.accent,fontWeight:700}}>{row.total_arrived}</td>
+                          <td style={{padding:"6px 12px",color:C.served,fontWeight:700}}>{row.total_served}</td>
+                          <td style={{padding:"6px 12px",color:C.reneged,fontWeight:700}}>{row.total_reneged}</td>
+                          <td style={{padding:"6px 12px",color:row.total_reneged>0?C.reneged:C.muted}}>{renPct}{renPct!=="—"?"%":""}</td>
+                          <td style={{padding:"6px 12px",color:C.amber}}>{row.avg_wait_time!=null?row.avg_wait_time.toFixed(2)+" t":"—"}</td>
+                          <td style={{padding:"6px 12px",color:C.server}}>{row.avg_service_time!=null?row.avg_service_time.toFixed(2)+" t":"—"}</td>
+                          <td style={{padding:"6px 12px",color:C.muted}}>{row.duration_ms!=null?row.duration_ms:"—"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
         {tab==="access"&&isOwner&&(
           <div style={{maxWidth:480,display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",gap:8}}>

@@ -101,24 +101,36 @@ export async function setAccess(id, access) {
   if (error) throw error;
 }
 
-// ── Simulation run history (future: save results) ─────────────────────────────
+// ── Simulation run history ────────────────────────────────────────────────────
+
 export async function saveSimulationRun(modelId, userId, result, config = {}) {
+  const s = result.summary || {};
   const { error } = await supabase.from("simulation_runs").insert({
     model_id:            modelId,
     run_by:              userId,
     replications:        config.replications || 1,
     max_simulation_time: config.maxTime      || 500,
     seed:                config.seed         || null,
-    total_arrived:       result.summary?.total    || 0,
-    total_served:        result.summary?.served   || 0,
-    total_reneged:       result.summary?.reneged  || 0,
-    avg_wait_time:       result.summary?.avgWait  || null,
-    avg_service_time:    result.summary?.avgSvc   || null,
-    renege_rate:         result.summary?.total
-      ? (result.summary.reneged / result.summary.total)
-      : 0,
-    results_json:        result,
+    total_arrived:       s.total    || 0,
+    total_served:        s.served   || 0,
+    total_reneged:       s.reneged  || 0,
+    avg_wait_time:       s.avgWait  ?? null,
+    avg_service_time:    s.avgSojourn ?? null,
+    renege_rate:         s.total ? (s.reneged / s.total) : 0,
+    results_json:        { summary: s, clock: result.snap?.clock },
+    duration_ms:         config.durationMs || null,
   });
   if (error) throw error;
+}
+
+export async function fetchRunHistory(modelId) {
+  const { data, error } = await supabase
+    .from("simulation_runs")
+    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, results_json")
+    .eq("model_id", modelId)
+    .order("ran_at", { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return data || [];
 }
 

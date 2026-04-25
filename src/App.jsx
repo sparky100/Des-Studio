@@ -138,7 +138,7 @@ export default function App(){
           onBack={()=>{setOpenId(null);loadData()}}
           onRefresh={loadData}
           overrides={{
-            isOwner,canEdit,profiles,
+            isOwner,canEdit,profiles,userId:uid,
             onSave:async(m)=>{await saveModel(m,uid);await loadData()},
             onDelete:async(id)=>{await deleteModel(id)},
             onSetVisibility:setVisibility,
