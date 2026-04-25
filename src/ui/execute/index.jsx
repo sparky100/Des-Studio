@@ -1,8 +1,12 @@
 // ui/execute/index.jsx — CustomerToken, VisualView, ExecutePanel
-import { useState, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { C, FONT } from "../shared/tokens.js";
-import { Tag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildEngine } from "../../engine/index.js";
+import { saveSimulationRun } from "../../db/models.js";
+
+const TOKEN_COLORS=["#06b6d4","#f59e0b","#8b5cf6","#3fb950","#f87171","#a78bfa","#34d399","#fbbf24"];
+const tokenColor=(id)=>TOKEN_COLORS[(id-1)%TOKEN_COLORS.length];
 
 const CustomerToken=({entity,size=36,showId=true})=>{
   const col=tokenColor(entity.id);
@@ -188,7 +192,7 @@ const VisualView=({snap})=>{
 // ═══════════════════════════════════════════════════════════════════════════════
 // EXECUTE PANEL — with step-through, run-all, visual, and log views
 // ═══════════════════════════════════════════════════════════════════════════════
-const ExecutePanel=({model})=>{
+const ExecutePanel=({model,modelId,userId})=>{
   const [mode,setMode]=useState("idle"); // idle | stepping | done
   const [execStatus,setExecStatus]=useState(""); // checkpoint messages
   const [currentSnap,setCurrentSnap]=useState(null);
@@ -199,8 +203,11 @@ const ExecutePanel=({model})=>{
   const [autoSpeed,setAutoSpeed]=useState(400);
   const [autoRunning,setAutoRunning]=useState(false);
   const [summary,setSummary]=useState(null);
+  const [toast,setToast]=useState(null);
   const engineRef=useRef(null);
   const autoRef=useRef(null);
+
+  const showToast=(msg,color=C.green)=>{setToast({msg,color});setTimeout(()=>setToast(null),2000);};
 
   const canRun=(model.bEvents||[]).filter(b=>parseFloat(b.scheduledTime)<900).length>0;
 
@@ -257,27 +264,31 @@ const ExecutePanel=({model})=>{
     if(r.done){setMode("done");setSummary(r.summary);}
   },[mode]);
 
-  const doRunAll=useCallback(()=>{
+  const doRunAll=useCallback(async()=>{
     try{
-      setExecStatus("RunAll Step 1: buildEngine...");
+      setExecStatus("Running...");
       stopAuto();
+      const t0=Date.now();
       engineRef.current=buildEngine(model);
-      setExecStatus("RunAll Step 2: calling runAll()...");
       const r=engineRef.current.runAll();
-      setExecStatus("RunAll Step 3: runAll() OK — setting snap...");
+      const ms=Date.now()-t0;
       setCurrentSnap(r.snap);
-      setExecStatus("RunAll Step 4: setting log...");
       setLog(r.log||[]);
       setCycleLog([]);
       setFelSize(0);
-      setExecStatus("RunAll Step 5: setting mode done...");
       setMode("done");
       setSummary(r.summary);
-      setExecStatus("RunAll complete");
+      setExecStatus("Complete");
+      if(modelId&&userId){
+        try{
+          await saveSimulationRun(modelId,userId,r,{replications:1,durationMs:ms});
+          showToast("✓ Saved");
+        }catch(e){showToast("⚠ Save failed",C.red);}
+      }
     }catch(e){
       setExecStatus("ERROR in doRunAll: "+e.message);
     }
-  },[model]);
+  },[model,modelId,userId]);
 
   const stopAuto=()=>{if(autoRef.current){clearInterval(autoRef.current);autoRef.current=null;setAutoRunning(false);}};
 
@@ -302,6 +313,11 @@ const ExecutePanel=({model})=>{
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      {toast&&(
+        <div style={{position:"fixed",bottom:24,right:24,background:toast.color+"22",border:`1px solid ${toast.color}`,borderRadius:6,padding:"8px 18px",fontFamily:FONT,fontSize:12,fontWeight:700,color:toast.color,zIndex:999,pointerEvents:"none"}}>
+          {toast.msg}
+        </div>
+      )}
       {/* Controls */}
       <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
         <Btn variant="primary" onClick={initEngine} disabled={!canRun||validationIssues.length>0}>⟳ Reset</Btn>

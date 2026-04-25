@@ -1,7 +1,7 @@
 // ui/ModelDetail.jsx — ModelDetail, ModelCard, NewModelModal
 import { useState } from "react";
 import { C, FONT } from "./shared/tokens.js";
-import { Tag, Btn, Field, SH, InfoBox, Empty } from "./shared/components.jsx";
+import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty } from "./shared/components.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor } from "./editors/index.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
 
@@ -81,7 +81,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
         {tab==="state"&&<div style={{maxWidth:750}}><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>}
         {tab==="bevents"&&<div style={{maxWidth:880}}><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
         {tab==="cevents"&&<div style={{maxWidth:860}}><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
-        {tab==="execute"&&<div style={{maxWidth:1080}}><ExecutePanel model={model}/></div>}
+        {tab==="execute"&&<div style={{maxWidth:1080}}><ExecutePanel model={model} modelId={modelId} userId={overrides.userId}/></div>}
         {tab==="access"&&isOwner&&(
           <div style={{maxWidth:480,display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",gap:8}}>
