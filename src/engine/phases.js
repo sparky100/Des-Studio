@@ -31,6 +31,8 @@ export function applyEffect(effect, ctx) {
     setLastCustId: (id) => { lastCustId = id; },
     setLastSrvId:  (id) => { lastSrvId  = id; },
     scheduleEvent: (entry) => felEntries.push(entry),
+    peakQueueLength: ctx.peakQueueLength,
+    queueProcessed:  ctx.queueProcessed,
     msgs,
   };
 

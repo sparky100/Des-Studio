@@ -15,7 +15,28 @@ import { fireBEvent, fireCEvent }              from "./phases.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
+/**
+ * Auto-generate queues for models that predate named queues.
+ * For each customer entity type, creates a default queue named TypeName + "Queue".
+ */
+export function migrateModel(model) {
+  if (model.queues && model.queues.length > 0) return model;
+  const queues = (model.entityTypes || [])
+    .filter(et => et.role === "customer")
+    .map(et => ({
+      id:          "q_" + et.name,
+      name:        et.name + "Queue",
+      accepts:     et.name,
+      discipline:  "FIFO",
+      maxLength:   null,
+    }));
+  return { ...model, queues };
+}
+
 export function buildEngine(model, maxCycles = 800) {
+  // Ensure queues are populated (transparent migration for old models)
+  model = migrateModel(model);
+
   // ── Initialise scalar state ───────────────────────────────────────────────
   const state = { __served: 0, __reneged: 0 };
   for (const sv of model.stateVariables || []) {
@@ -36,6 +57,21 @@ export function buildEngine(model, maxCycles = 800) {
 
   const helpers = () => makeHelpers(entities);
 
+  // ── Queue statistics tracking ─────────────────────────────────────────────
+  const peakQueueLength = {};  // { [queueName]: number }
+  const queueProcessed  = {};  // { [queueName]: number } — entities that left the queue
+  const queueLengthSum  = {};  // for approximate time-weighted avg
+  const queueLengthSamples = {};
+
+  function sampleQueueLengths() {
+    const h = makeHelpers(entities);
+    for (const qName of h.allQueues()) {
+      const len = h.queueLength(qName);
+      queueLengthSum[qName]     = (queueLengthSum[qName]     || 0) + len;
+      queueLengthSamples[qName] = (queueLengthSamples[qName] || 0) + 1;
+    }
+  }
+
   // ── Snapshot ──────────────────────────────────────────────────────────────
   function snap(clock) {
     const h = makeHelpers(entities);
@@ -49,6 +85,28 @@ export function buildEngine(model, maxCycles = 800) {
         total:   entities.filter(e => e.type === t).length,
       };
     });
+
+    // Per-queue stats
+    const allQueueNames = [...new Set([
+      ...h.allQueues(),
+      ...Object.keys(peakQueueLength),
+    ])];
+    const queues = {};
+    for (const qName of allQueueNames) {
+      const inQueue = entities.filter(
+        e => e.currentQueue === qName && e.status === "waiting"
+      );
+      const avgWaitTime = inQueue.length
+        ? inQueue.reduce((s, e) => s + (clock - (e.queueEntryTime || clock)), 0) / inQueue.length
+        : 0;
+      queues[qName] = {
+        length:      inQueue.length,
+        entities:    inQueue.map(e => ({ ...e, attrs: { ...e.attrs } })),
+        avgWaitTime: +avgWaitTime.toFixed(4),
+        peakLength:  peakQueueLength[qName] || inQueue.length,
+      };
+    }
+
     return {
       clock:    clock || 0,
       served:   state.__served  || 0,
@@ -58,6 +116,7 @@ export function buildEngine(model, maxCycles = 800) {
         Object.entries(state).filter(([k]) => !k.startsWith("__"))
       ),
       byType,
+      queues,
     };
   }
 
@@ -81,6 +140,8 @@ export function buildEngine(model, maxCycles = 800) {
     felRef,
     helpers: makeHelpers(entities),
     nextId,
+    peakQueueLength,
+    queueProcessed,
     _lastCustId: null,
     _lastSrvId:  null,
   });
@@ -98,6 +159,9 @@ export function buildEngine(model, maxCycles = 800) {
     clock = fel[0].scheduledTime;
     cycleLog.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}` });
     log.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}`, snap: snap(clock) });
+
+    // Sample queue lengths each clock advance (for avgLength approximation)
+    sampleQueueLengths();
 
     // Phase B — fire all due events
     const due = fel.filter(ev => Math.abs(ev.scheduledTime - clock) < 1e-9);
@@ -122,7 +186,7 @@ export function buildEngine(model, maxCycles = 800) {
       cFired = false; cPass++;
       for (const ev of model.cEvents || []) {
         const h = makeHelpers(entities);
-        if (!evalCondition(ev.condition, h, state, clock)) continue;
+        if (!evalCondition(ev.condition, h, state, clock, model.queues || [])) continue;
         const ctx = makeCtx(null);
         ctx.clock = clock;
         const { msgs, felEntries } = fireCEvent(ev, ctx);
@@ -167,6 +231,21 @@ export function buildEngine(model, maxCycles = 800) {
     const avgSojourn   = withSojourn.length ? withSojourn.reduce((s, e) => s + e.sojournTime, 0) / withSojourn.length : null;
     const maxSojourn   = withSojourn.length ? Math.max(...withSojourn.map(e => e.sojournTime)) : null;
 
+    // Per-queue summary stats
+    const allQueueNames = [...new Set([
+      ...Object.keys(peakQueueLength),
+      ...Object.keys(queueProcessed),
+    ])];
+    const queueStats = {};
+    for (const qName of allQueueNames) {
+      const samples = queueLengthSamples[qName] || 1;
+      queueStats[qName] = {
+        peakLength:     peakQueueLength[qName] || 0,
+        avgLength:      +((queueLengthSum[qName] || 0) / samples).toFixed(4),
+        totalProcessed: queueProcessed[qName]  || 0,
+      };
+    }
+
     return {
       finalTime: clock,
       log,
@@ -180,6 +259,7 @@ export function buildEngine(model, maxCycles = 800) {
         avgSojourn: avgSojourn!= null ? +avgSojourn.toFixed(4): null,
         maxSojourn: maxSojourn!= null ? +maxSojourn.toFixed(4): null,
       },
+      queueStats,
       entitySummary: entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
     };
   }
@@ -191,4 +271,3 @@ export function buildEngine(model, maxCycles = 800) {
     getFelSize: () => fel.length,
   };
 }
-

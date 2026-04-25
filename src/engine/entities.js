@@ -39,14 +39,17 @@ export const nextId   = () => ++_seq;
  */
 export function createCustomer(typeName, role, attrs, clock) {
   return {
-    id:          nextId(),
-    type:        typeName,
-    role:        role || "customer",
-    status:      "waiting",
+    id:             nextId(),
+    type:           typeName,
+    role:           role || "customer",
+    status:         "waiting",
     attrs,
-    arrivalTime: clock,
-    stages:      [],
+    arrivalTime:    clock,
+    stages:         [],
     lastStageStart: null,
+    currentQueue:   null,
+    queueEntryTime: null,
+    queuePosition:  null,
   };
 }
 
@@ -80,10 +83,30 @@ export function makeHelpers(entities) {
   const match = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
   return {
+    // @deprecated — use waitingIn(queueName) for named-queue models
     waitingOf: (type) =>
       entities
         .filter(e => match(e.type, type) && e.status === "waiting")
         .sort((a, b) => (a.arrivalTime || 0) - (b.arrivalTime || 0)),
+
+    waitingIn: (queueName) =>
+      entities
+        .filter(e => e.currentQueue != null &&
+          e.currentQueue.trim().toLowerCase() === queueName.trim().toLowerCase() &&
+          e.status === "waiting")
+        .sort((a, b) => (a.queueEntryTime || 0) - (b.queueEntryTime || 0)),
+
+    queueLength: (queueName) =>
+      entities.filter(e => e.currentQueue != null &&
+        e.currentQueue.trim().toLowerCase() === queueName.trim().toLowerCase() &&
+        e.status === "waiting").length,
+
+    allQueues: () =>
+      [...new Set(
+        entities
+          .filter(e => e.currentQueue != null && e.status === "waiting")
+          .map(e => e.currentQueue)
+      )],
 
     idleOf: (type) =>
       entities.filter(e => match(e.type, type) && e.status === "idle"),

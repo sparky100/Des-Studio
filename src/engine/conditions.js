@@ -8,7 +8,7 @@
  * Evaluate a condition string against current simulation state.
  *
  * Supported tokens:
- *   queue(Type).length    — number of waiting entities of Type
+ *   queue(Name).length    — entities waiting in named queue (or type, backward compat)
  *   idle(Type).count      — number of idle servers of Type
  *   busy(Type).count      — number of busy servers of Type
  *   attr(Type, attrName)  — attribute value of first idle server of Type
@@ -18,19 +18,25 @@
  *   <varName>             — any custom scalar state variable
  *   AND / OR              — logical connectives
  *
- * @param {string} condition - Condition expression string
- * @param {object} helpers   - { waitingOf, idleOf, busyOf }
- * @param {object} state     - Scalar state { __served, __reneged, ...vars }
- * @param {number} clock     - Current simulation time
+ * @param {string}   condition  - Condition expression string
+ * @param {object}   helpers    - { waitingOf, waitingIn, queueLength, idleOf, busyOf }
+ * @param {object}   state      - Scalar state { __served, __reneged, ...vars }
+ * @param {number}   clock      - Current simulation time
+ * @param {Array}    queues     - model.queues array for named-queue detection
  */
-export function evalCondition(condition, helpers, state, clock) {
+export function evalCondition(condition, helpers, state, clock, queues = []) {
   if (!condition || !condition.trim()) return false;
   try {
     let expr = condition;
 
-    // queue(Type).length
-    expr = expr.replace(/queue\((\w+)\)\.length/g,
-      (_, t) => String(helpers.waitingOf(t).length));
+    // queue(Name).length — check named queue first, fall back to waitingOf for backward compat
+    expr = expr.replace(/queue\((\w+)\)\.length/g, (_, name) => {
+      const isNamedQueue = queues.some(
+        q => q.name.trim().toLowerCase() === name.trim().toLowerCase()
+      );
+      if (isNamedQueue) return String(helpers.queueLength(name));
+      return String(helpers.waitingOf(name).length);
+    });
 
     // idle(Type).count
     expr = expr.replace(/idle\((\w+)\)\.count/g,
@@ -74,30 +80,42 @@ export function evalCondition(condition, helpers, state, clock) {
 
 /**
  * Build the list of valid condition tokens for the ConditionBuilder UI.
- * Derived from the model's entity types and state variables.
+ * Derived from the model's queues (shown first), entity types, and state variables.
  */
-export function buildConditionTokens(entityTypes = [], stateVariables = []) {
+export function buildConditionTokens(entityTypes = [], stateVariables = [], queues = []) {
   const tokens = [];
 
+  // Named queue tokens — shown first
+  for (const q of queues) {
+    const name = q.name?.trim() || "";
+    if (!name) continue;
+    tokens.push({
+      label:     `queue(${name}).length — entities in ${name}`,
+      value:     `queue(${name}).length`,
+      valueType: "number",
+    });
+  }
+
+  // Entity type tokens (backward compat)
   for (const et of entityTypes) {
     const name = et.name?.trim() || "";
     if (!name) continue;
     if (et.role === "customer") {
       tokens.push({
-        label: `queue(${name}).length  — customers waiting`,
-        value: `queue(${name}).length`,
+        label:     `queue(${name}).length  — customers waiting`,
+        value:     `queue(${name}).length`,
         valueType: "number",
       });
     }
     if (et.role === "server") {
       tokens.push({
-        label: `idle(${name}).count  — idle servers`,
-        value: `idle(${name}).count`,
+        label:     `idle(${name}).count  — idle servers`,
+        value:     `idle(${name}).count`,
         valueType: "number",
       });
       tokens.push({
-        label: `busy(${name}).count  — busy servers`,
-        value: `busy(${name}).count`,
+        label:     `busy(${name}).count  — busy servers`,
+        value:     `busy(${name}).count`,
         valueType: "number",
       });
     }
@@ -118,4 +136,3 @@ export function buildConditionTokens(entityTypes = [], stateVariables = []) {
 
   return tokens;
 }
-

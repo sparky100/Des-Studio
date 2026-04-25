@@ -6,63 +6,103 @@
 //   3. apply:    function(match, ctx) => void
 //      ctx contains: { entities, state, helpers, clock, felRef,
 //                      setLastCustId, setLastSrvId, getLastCustId, getLastSrvId,
-//                      scheduleEvent, msgs }
+//                      scheduleEvent, msgs, peakQueueLength, queueProcessed }
 //   3. No changes needed anywhere else
 
 import { sampleAttrs } from "./distributions.js";
 
 export const MACROS = [
 
-  // ── ARRIVE(Type) ───────────────────────────────────────────────────────────
+  // ── ARRIVE(Type[, QueueName]) ─────────────────────────────────────────────
+  // QueueName optional — defaults to TypeName + "Queue"
   {
     name:    "ARRIVE",
-    pattern: /^ARRIVE\((\w+)\)$/i,
+    pattern: /^ARRIVE\((\w+)(?:,\s*(\w+))?\)$/i,
     apply(match, ctx) {
-      const typeName = match[1];
-      const { entities, model, clock, helpers, setLastCustId, msgs } = ctx;
+      const typeName  = match[1];
+      const queueName = match[2] || (typeName + "Queue");
+      const { entities, model, clock, helpers, setLastCustId, peakQueueLength, msgs } = ctx;
       const et = (model.entityTypes || []).find(
         e => e.name.trim().toLowerCase() === typeName.trim().toLowerCase()
       );
       const id = ctx.nextId();
       const ent = {
         id,
-        type:        typeName,
-        role:        et?.role || "customer",
-        status:      "waiting",
-        attrs:       sampleAttrs(et?.attrDefs || et?.attrs || ""),
-        arrivalTime: clock,
-        stages:      [],
+        type:           typeName,
+        role:           et?.role || "customer",
+        status:         "waiting",
+        attrs:          sampleAttrs(et?.attrDefs || et?.attrs || ""),
+        arrivalTime:    clock,
+        stages:         [],
         lastStageStart: null,
+        currentQueue:   queueName,
+        queueEntryTime: clock,
+        queuePosition:  null,
       };
       entities.push(ent);
       setLastCustId(id);
-      msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${helpers.waitingOf(typeName).length}]`);
+
+      // Update peak queue length
+      if (peakQueueLength) {
+        const qLen = entities.filter(
+          e => e.currentQueue === queueName && e.status === "waiting"
+        ).length;
+        if (qLen > (peakQueueLength[queueName] || 0)) peakQueueLength[queueName] = qLen;
+      }
+
+      msgs.push(`#${id} (${typeName}) arrived → waiting in ${queueName} [queue: ${helpers.waitingIn(queueName).length}]`);
     },
   },
 
-  // ── ASSIGN(CustomerType, ServerType) ───────────────────────────────────────
+  // ── ASSIGN(QueueNameOrType, ServerType) ───────────────────────────────────
+  // match[1]: queue name (if it matches model.queues) or entity type (backward compat)
   {
     name:    "ASSIGN",
     pattern: /^ASSIGN\((\w+)\s*,\s*(\w+)\)$/i,
     apply(match, ctx) {
-      const [, cType, sType] = match;
-      const { helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
-      const cust = helpers.waitingOf(cType)[0];
+      const [, first, sType] = match;
+      const { helpers, model, clock, setLastCustId, setLastSrvId, queueProcessed, msgs } = ctx;
+
+      // Detect if first arg is a queue name
+      const modelQueues = model.queues || [];
+      const isQueueName = modelQueues.some(
+        q => q.name.trim().toLowerCase() === first.trim().toLowerCase()
+      );
+
+      const cust = isQueueName
+        ? helpers.waitingIn(first)[0]
+        : helpers.waitingOf(first)[0];
       const srv  = helpers.idleOf(sType)[0];
+
       if (cust && srv) {
-        cust.status       = "serving";
-        cust.serviceStart = clock;
-        cust.serverId     = srv.id;
-        srv.status        = "busy";
-        srv.currentCustId = cust.id;
+        const prevQueue = cust.currentQueue;
+
+        cust.status        = "serving";
+        cust.serviceStart  = clock;
+        cust.serverId      = srv.id;
+        cust.currentQueue  = null;
+        cust.queueEntryTime = null;
+        cust.queuePosition  = null;
+        srv.status         = "busy";
+        srv.currentCustId  = cust.id;
+
         setLastCustId(cust.id);
         setLastSrvId(srv.id);
+
+        // Track processed count for the queue this entity was in
+        if (queueProcessed && prevQueue) {
+          queueProcessed[prevQueue] = (queueProcessed[prevQueue] || 0) + 1;
+        }
+
         msgs.push(
-          `#${cust.id} (${cType}) → serving by #${srv.id} (${sType}) ` +
+          `#${cust.id} (${cust.type}) → serving by #${srv.id} (${sType}) ` +
           `[waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
         );
       } else {
-        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${helpers.waitingOf(cType).length} idle=${helpers.idleOf(sType).length}`);
+        const queueLen = isQueueName
+          ? helpers.waitingIn(first).length
+          : helpers.waitingOf(first).length;
+        msgs.push(`ASSIGN(${first},${sType}): no match — queue=${queueLen} idle=${helpers.idleOf(sType).length}`);
       }
     },
   },
@@ -87,7 +127,7 @@ export const MACROS = [
             : 0).toFixed(4),
           stageService: +(clock - (cust.serviceStart || clock)).toFixed(4),
         });
-        cust.status        = "done";
+        cust.status         = "done";
         cust.completionTime = clock;
         cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
         state.__served      = (state.__served || 0) + 1;
@@ -101,14 +141,56 @@ export const MACROS = [
     },
   },
 
-  // ── RELEASE(ServerType) ────────────────────────────────────────────────────
-  // Frees server, returns customer to waiting — preserves arrivalTime for sojourn
+  // ── COMPLETE(ServerType) ───────────────────────────────────────────────────
+  // Finds the busy server of the given type and completes its customer.
   {
-    name:    "RELEASE",
-    pattern: /^RELEASE\((\w+)\)$/i,
+    name:    "COMPLETE_TYPE",
+    pattern: /^COMPLETE\((\w+)\)$/i,
     apply(match, ctx) {
       const srvType = match[1];
-      const { entities, clock, getLastCustId, getLastSrvId, felRef, msgs } = ctx;
+      const { entities, state, clock, msgs } = ctx;
+      const srv  = entities.find(e =>
+        e.type.trim().toLowerCase() === srvType.trim().toLowerCase() &&
+        e.role === "server" && e.status === "busy"
+      );
+      const cust = srv ? entities.find(e => e.id === srv.currentCustId) : null;
+
+      if (cust && (cust.status === "serving" || cust.status === "waiting")) {
+        if (!cust.stages) cust.stages = [];
+        cust.stages.push({
+          serverType:   srv.type,
+          stageWait:    +(cust.serviceStart != null
+            ? (cust.serviceStart - (cust.lastStageStart ?? cust.arrivalTime))
+            : 0).toFixed(4),
+          stageService: +(clock - (cust.serviceStart || clock)).toFixed(4),
+        });
+        cust.status         = "done";
+        cust.completionTime = clock;
+        cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
+        state.__served      = (state.__served || 0) + 1;
+        msgs.push(`#${cust.id} done via COMPLETE(${srvType}) [sojourn ${cust.sojournTime.toFixed(2)} t]`);
+      }
+      if (srv) {
+        srv.status = "idle";
+        delete srv.currentCustId;
+        msgs.push(`Server #${srv.id} (${srvType}) → idle`);
+      }
+      if (!srv) {
+        msgs.push(`COMPLETE(${srvType}): no busy server found`);
+      }
+    },
+  },
+
+  // ── RELEASE(ServerType[, TargetQueue]) ────────────────────────────────────
+  // Frees server, returns customer to waiting — preserves arrivalTime for sojourn.
+  // TargetQueue optional — defaults to "DefaultQueue" for backward compat.
+  {
+    name:    "RELEASE",
+    pattern: /^RELEASE\((\w+)(?:,\s*(\w+))?\)$/i,
+    apply(match, ctx) {
+      const srvType    = match[1];
+      const targetQueue = match[2] || "DefaultQueue";
+      const { entities, clock, getLastCustId, getLastSrvId, felRef, peakQueueLength, msgs } = ctx;
       const custId = felRef?._contextCustId ?? getLastCustId();
       const srvId  = felRef?._contextSrvId  ?? getLastSrvId();
       const srv    = entities.find(e => e.id === srvId && e.role === "server")
@@ -128,11 +210,22 @@ export const MACROS = [
         });
         cust.lastStageStart = clock;
         cust.status         = "waiting";
+        cust.currentQueue   = targetQueue;
+        cust.queueEntryTime = clock;
         delete cust.serviceStart;
         delete cust.serverId;
         srv.status = "idle";
         delete srv.currentCustId;
-        msgs.push(`#${cust.id} released → waiting [stage ${cust.stages.length} done, srv #${srv.id} idle]`);
+
+        // Update peak queue length
+        if (peakQueueLength) {
+          const qLen = entities.filter(
+            e => e.currentQueue === targetQueue && e.status === "waiting"
+          ).length;
+          if (qLen > (peakQueueLength[targetQueue] || 0)) peakQueueLength[targetQueue] = qLen;
+        }
+
+        msgs.push(`#${cust.id} released → waiting in ${targetQueue} [stage ${cust.stages.length} done, srv #${srv.id} idle]`);
       } else {
         msgs.push(`RELEASE(${srvType}): no busy server+customer pair found`);
       }
@@ -209,4 +302,3 @@ export function applyScalar(part, state, clock) {
   }
   return false;
 }
-

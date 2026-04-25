@@ -2,6 +2,9 @@
 //
 // All functions are async and throw on error.
 // The norm() function translates snake_case Supabase rows → camelCase model objects.
+//
+// Schema note: the des_models table requires a queues JSONB column:
+//   -- ALTER TABLE des_models ADD COLUMN IF NOT EXISTS queues jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 import { supabase } from "./supabase.js";
 
@@ -17,6 +20,7 @@ export function norm(r) {
     stateVariables: r.state_variables  || [],
     bEvents:        r.b_events         || [],
     cEvents:        r.c_events         || [],
+    queues:         r.queues           || [],
     owner_id:       r.owner_id,
     owner:          r.owner_id,
     createdAt:      r.created_at,
@@ -35,6 +39,7 @@ function toRow(model, userId) {
     state_variables: model.stateVariables || [],
     b_events:        model.bEvents        || [],
     c_events:        model.cEvents        || [],
+    queues:          model.queues         || [],
     owner_id:        userId,
   };
 }
