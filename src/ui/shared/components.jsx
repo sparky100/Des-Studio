@@ -77,5 +77,5 @@ const TOKEN_COLORS=["#06b6d4","#f59e0b","#8b5cf6","#3fb950","#f87171","#a78bfa",
 const tokenColor=(id)=>TOKEN_COLORS[(id-1)%TOKEN_COLORS.length];
 
 
-export { Tag, Btn, Field, SH, InfoBox, Empty };
+export { Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty };
 
