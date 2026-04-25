@@ -8,10 +8,20 @@ import { buildConditionTokens } from "../../engine/conditions.js";
 // ── UI Polish Helpers ─────────────────────────────────────────────────────────
 const toTitleCase = s => s.trim().replace(/\b\w/g, c => c.toUpperCase());
 
-const conditionOptions = (entityTypes) => {
+const conditionOptions = (entityTypes, stateVariables=[], queues=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
+  const queueNames = (queues||[]).map(q=>q.name).filter(Boolean);
   const opts = [{label:'— select condition —',value:''}];
+  // Queue-specific tokens (shown first, highlighted)
+  if(queueNames.length>0){
+    opts.push({label:'── Queue conditions ──',value:'',disabled:true});
+    queueNames.forEach(q=>{
+      opts.push({label:`queue(${q}).length — entities waiting in ${q}`,value:`queue(${q}).length`});
+      opts.push({label:`queue(${q}).length > 0`,value:`queue(${q}).length > 0`});
+      opts.push({label:`queue(${q}).length == 0`,value:`queue(${q}).length == 0`});
+    });
+  }
   custs.forEach(c=>{
     opts.push({label:`queue(${c}).length > 0`,value:`queue(${c}).length > 0`});
     opts.push({label:`queue(${c}).length == 0`,value:`queue(${c}).length == 0`});
@@ -31,13 +41,21 @@ const conditionOptions = (entityTypes) => {
   return opts;
 };
 
-const assignOptions = (entityTypes, stateVariables=[]) => {
+const assignOptions = (entityTypes, stateVariables=[], queues=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
+  const queueNames = (queues||[]).map(q=>q.name).filter(Boolean);
   const opts = [{label:'— select effect —',value:''}];
-  // ASSIGN combinations
+  // Queue-based ASSIGN (shown first)
+  if(queueNames.length>0&&servers.length>0){
+    opts.push({label:'── ASSIGN from queue ──',value:'',disabled:true});
+    queueNames.forEach(q=>servers.forEach(s=>{
+      opts.push({label:`ASSIGN(${q}, ${s})`,value:`ASSIGN(${q}, ${s})`});
+    }));
+  }
+  // Standard ASSIGN combinations (backward compat)
   if(custs.length>0&&servers.length>0){
-    opts.push({label:'── ASSIGN ──',value:'',disabled:true});
+    opts.push({label:'── ASSIGN (entity type) ──',value:'',disabled:true});
     custs.forEach(c=>servers.forEach(s=>{
       opts.push({label:`ASSIGN(${c}, ${s})`,value:`ASSIGN(${c}, ${s})`});
     }));
@@ -57,10 +75,21 @@ const assignOptions = (entityTypes, stateVariables=[]) => {
   return opts;
 };
 
-const bEffectOptions = (entityTypes) => {
+const bEffectOptions = (entityTypes, queues=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
+  const queueNames = (queues||[]).map(q=>q.name).filter(Boolean);
   const opts = [{label:'— select effect —',value:''}];
+  // Queue-aware ARRIVE
+  if(queueNames.length>0){
+    opts.push({label:'── ARRIVE with queue ──',value:'',disabled:true});
+    custs.forEach(c=>{
+      queueNames.forEach(q=>{
+        opts.push({label:`ARRIVE(${c}, ${q})`,value:`ARRIVE(${c}, ${q})`});
+      });
+    });
+  }
+  // Standard ARRIVE (backward compat)
   custs.forEach(c=>{
     opts.push({label:`ARRIVE(${c})`,value:`ARRIVE(${c})`});
     opts.push({label:`ARRIVE(${c}); totalArrived++`,value:`ARRIVE(${c}); totalArrived++`});
@@ -72,6 +101,15 @@ const bEffectOptions = (entityTypes) => {
   });
   if(servers.length>0){
     opts.push({label:'── Release server ──',value:'',disabled:true});
+    // Queue-aware RELEASE
+    if(queueNames.length>0){
+      servers.forEach(s=>{
+        queueNames.forEach(q=>{
+          opts.push({label:`RELEASE(${s}, ${q})`,value:`RELEASE(${s}, ${q})`});
+        });
+      });
+    }
+    // Standard RELEASE (backward compat)
     servers.forEach(s=>{
       opts.push({label:`RELEASE(${s})`,value:`RELEASE(${s})`});
     });
@@ -293,7 +331,94 @@ const StateVarEditor=({vars,onChange})=>{
   );
 };
 
-const BEventEditor=({events,onChange,entityTypes=[]})=>{
+const QueueEditor=({queues=[], entityTypes=[], onChange})=>{
+  const add=()=>onChange([...queues,{id:"q"+Date.now(),name:"",accepts:"",discipline:"FIFO",maxLength:null,description:""}]);
+  const upd=(i,f,v)=>{const n=[...queues];n[i]={...n[i],[f]:v};onChange(n);};
+  const rem=(i)=>onChange(queues.filter((_,idx)=>idx!==i));
+
+  const blurQueueName=(i,v)=>{
+    const raw=v.trim();
+    if(!raw){upd(i,"name","");return;}
+    const prefix=raw.replace(/\s*queue$/i,"").trim();
+    const base=prefix||raw;
+    const pascal=base.split(/\s+/).filter(Boolean)
+      .map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join("");
+    upd(i,"name",pascal?""+pascal+"Queue":"Queue");
+  };
+
+  const customerTypes=(entityTypes||[]).filter(e=>e.role==="customer");
+  const col=C.waiting;
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <SH label="Queues" color={col}><Btn small variant="ghost" onClick={add}>+ Add Queue</Btn></SH>
+      <InfoBox color={col}>
+        Queues are holding areas between process steps.{" "}
+        Each <code>ARRIVE()</code> and <code>RELEASE()</code> places an entity into a named queue.{" "}
+        <code>ASSIGN()</code> pulls from a specific queue.{" "}
+        Use <code>queue(QueueName).length</code> in conditions to check queue sizes.
+      </InfoBox>
+      {queues.length===0&&<Empty icon="📥" msg="No queues defined."/>}
+      {queues.map((q,i)=>(
+        <div key={q.id} style={{background:C.bg,border:`1px solid ${col}33`,
+          borderLeft:`3px solid ${col}`,borderRadius:6,padding:12,
+          display:"flex",flexDirection:"column",gap:8}}>
+          {/* Row 1: name, accepts, discipline, remove */}
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <input value={q.name} onChange={e=>upd(i,"name",e.target.value)}
+              onBlur={e=>blurQueueName(i,e.target.value)}
+              placeholder="TriageQueue"
+              style={{flex:1,minWidth:120,background:"transparent",
+                border:`1px solid ${col}55`,borderRadius:4,color:C.text,
+                fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+            <select value={q.accepts||""} onChange={e=>upd(i,"accepts",e.target.value)}
+              style={{flex:1,minWidth:100,background:C.bg,
+                border:`1px solid ${C.cEvent}55`,borderRadius:4,color:C.text,
+                fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}>
+              <option value="">— accepts type —</option>
+              {customerTypes.map(et=>(
+                <option key={et.id} value={normTypeName(et.name)}>{normTypeName(et.name)}</option>
+              ))}
+            </select>
+            <select value={q.discipline||"FIFO"} onChange={e=>upd(i,"discipline",e.target.value)}
+              style={{background:C.bg,border:`1px solid ${C.accent}55`,borderRadius:4,
+                color:C.accent,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+              <option value="FIFO">FIFO (First In First Out)</option>
+              <option value="Priority">Priority (highest priority first)</option>
+              <option value="LIFO">LIFO (Last In First Out — stack)</option>
+            </select>
+            <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+          </div>
+          {/* Row 2: max length + description */}
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Max length:</span>
+            <select value={q.maxLength===null?"unlimited":"limited"}
+              onChange={e=>upd(i,"maxLength",e.target.value==="unlimited"?null:10)}
+              style={{background:C.bg,border:`1px solid ${C.purple}55`,borderRadius:4,
+                color:C.purple,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+              <option value="unlimited">Unlimited</option>
+              <option value="limited">Limited</option>
+            </select>
+            {q.maxLength!==null&&(
+              <input type="number" min="1" value={q.maxLength||10}
+                onChange={e=>upd(i,"maxLength",parseInt(e.target.value)||1)}
+                style={{width:70,background:"transparent",
+                  border:`1px solid ${C.amber}55`,borderRadius:4,color:C.amber,
+                  fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+            )}
+            <input value={q.description||""} onChange={e=>upd(i,"description",e.target.value)}
+              placeholder="Description"
+              style={{flex:1,background:"transparent",
+                border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,
+                fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const BEventEditor=({events,onChange,entityTypes=[],queues=[]})=>{
   const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:"",schedules:[],description:""}]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
   const rem=(i)=>onChange(events.filter((_,idx)=>idx!==i));
@@ -326,7 +451,7 @@ const BEventEditor=({events,onChange,entityTypes=[]})=>{
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
               <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:46}}>effect:</span>
               <DropField value={ev.effect} onChange={v=>upd(i,'effect',v)}
-                options={bEffectOptions(entityTypes)} color={C.green}
+                options={bEffectOptions(entityTypes,queues)} color={C.green}
                 placeholder="e.g. ARRIVE(Customer); totalArrived++"/>
             </div>
             <input value={ev.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
@@ -410,9 +535,15 @@ const parseConditionStr = (str, tokens) => {
   return rows;
 };
 
-const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[]}) => {
-  // Build token list from entity types and state variables
+const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], queues=[]}) => {
+  // Build token list from queues (first), entity types, and state variables
   const tokens = [
+    // Named queue tokens shown first
+    ...(queues||[]).filter(q=>q.name).map(q=>({
+      label: `queue(${q.name}).length — entities waiting in ${q.name}`,
+      value: `queue(${q.name}).length`,
+      valueType: 'number',
+    })),
     ...(entityTypes||[]).filter(e=>e.role==='customer').map(e=>({
       label: `queue(${normTypeName(e.name)}).length  — customers waiting`,
       value: `queue(${normTypeName(e.name)}).length`,
@@ -535,7 +666,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[]}) 
   );
 };
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[]})=>{
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[]})=>{
   // A C-event has:
   //   name, condition  — as before
   //   effect           — only ASSIGN macro(s), no SCHEDULE needed here
@@ -610,6 +741,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               onChange={v=>upd(i,'condition',v)}
               entityTypes={entityTypes}
               stateVariables={stateVariables}
+              queues={queues}
             />
           </div>
 
@@ -617,7 +749,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:72}}>effect(s):</span>
             <DropField value={ev.effect} onChange={v=>upd(i,'effect',v)}
-              options={assignOptions(entityTypes, stateVariables)} color={C.green}
+              options={assignOptions(entityTypes, stateVariables, queues)} color={C.green}
               placeholder="e.g. ASSIGN(Customer, Server); totalServed++"/>
           </div>
 
@@ -729,7 +861,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
 
 
 export {
-  AttrEditor, EntityTypeEditor, StateVarEditor,
+  AttrEditor, EntityTypeEditor, StateVarEditor, QueueEditor,
   BEventEditor, CEventEditor, ConditionBuilder,
   toTitleCase, normTypeName, conditionOptions, assignOptions, bEffectOptions, DropField
 };

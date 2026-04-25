@@ -1,3 +1,9 @@
+/*
+ * MIGRATION REQUIRED IN SUPABASE:
+ * Run this SQL in Supabase SQL Editor if not already done:
+ * ALTER TABLE des_models ADD COLUMN IF NOT EXISTS queues jsonb NOT NULL DEFAULT '[]'::jsonb;
+ */
+
 // db/models.js — All Supabase database operations
 //
 // All functions are async and throw on error.
@@ -15,6 +21,7 @@ export function norm(r) {
     access:         r.access      || {},
     entityTypes:    r.entity_types     || [],
     stateVariables: r.state_variables  || [],
+    queues:         r.queues           || [],
     bEvents:        r.b_events         || [],
     cEvents:        r.c_events         || [],
     owner_id:       r.owner_id,
@@ -33,6 +40,7 @@ function toRow(model, userId) {
     access:          model.access         || {},
     entity_types:    model.entityTypes    || [],
     state_variables: model.stateVariables || [],
+    queues:          model.queues         || [],
     b_events:        model.bEvents        || [],
     c_events:        model.cEvents        || [],
     owner_id:        userId,

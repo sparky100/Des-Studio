@@ -244,6 +244,35 @@ const ExecutePanel=({model,modelId,userId})=>{
           issues.push(`C-event "${c.name}": server type "${m[2]}" not defined`);
       }
     });
+    // Check ARRIVE() queue references exist
+    (model.bEvents||[]).forEach(b=>{
+      const m=(b.effect||'').match(/ARRIVE\((\w+),\s*(\w+)\)/i);
+      if(m){
+        const queueName=m[2];
+        if(!(model.queues||[]).find(q=>q.name===queueName))
+          issues.push(`B-event "${b.name}": ARRIVE references queue "${queueName}" which is not defined`);
+      }
+    });
+    // Check ASSIGN() queue references exist
+    (model.cEvents||[]).forEach(c=>{
+      const m=(c.effect||'').match(/ASSIGN\((\w+),/i);
+      if(m){
+        const firstName=m[1];
+        const isQueue=(model.queues||[]).find(q=>q.name===firstName);
+        const isType=(model.entityTypes||[]).find(e=>e.name.toLowerCase()===firstName.toLowerCase());
+        if(!isQueue&&!isType)
+          issues.push(`C-event "${c.name}": ASSIGN references "${firstName}" which is not a queue or entity type`);
+      }
+    });
+    // Check RELEASE() queue references exist
+    (model.bEvents||[]).forEach(b=>{
+      const m=(b.effect||'').match(/RELEASE\((\w+),\s*(\w+)\)/i);
+      if(m){
+        const queueName=m[2];
+        if(!(model.queues||[]).find(q=>q.name===queueName))
+          issues.push(`B-event "${b.name}": RELEASE references queue "${queueName}" which is not defined`);
+      }
+    });
     return issues;
   };
   const validationIssues=validate();
