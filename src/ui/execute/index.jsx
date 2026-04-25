@@ -217,6 +217,8 @@ const ExecutePanel=({model,modelId,userId})=>{
   const [toast,setToast]=useState(null);
   const engineRef=useRef(null);
   const autoRef=useRef(null);
+  const hasSaved=useRef(false);
+  const startTimeRef=useRef(null);
 
   const showToast=(msg,color=C.green)=>{setToast({msg,color});setTimeout(()=>setToast(null),2000);};
 
@@ -257,6 +259,8 @@ const ExecutePanel=({model,modelId,userId})=>{
       setLog([{phase:"INIT",time:0,message:"Engine initialised — click Step or Run All"}]);
       setCycleLog([]);
       setFelSize(engineRef.current.getFelSize());
+      hasSaved.current=false;
+      startTimeRef.current=Date.now();
       setMode("stepping");
       setSummary(null);
       setExecStatus("Step 4: Engine ready");
@@ -285,6 +289,7 @@ const ExecutePanel=({model,modelId,userId})=>{
         const r=engineRef.current.runAll();
         const ms=Date.now()-t0;
         setCurrentSnap(r.snap);setLog(r.log||[]);setCycleLog([]);setFelSize(0);
+        hasSaved.current=true; // useEffect watches mode→done; doRunAll saves here instead
         setMode("done");setSummary(r.summary);setAggStats(null);setExecStatus("Complete");
         if(modelId&&userId){
           try{await saveSimulationRun(modelId,userId,r,{replications:1,durationMs:ms});showToast("✓ Saved");}
@@ -296,6 +301,7 @@ const ExecutePanel=({model,modelId,userId})=>{
         const ms=Date.now()-t0;
         const last=results[results.length-1];
         setCurrentSnap(last.snap);setLog(last.log||[]);setCycleLog([]);setFelSize(0);
+        hasSaved.current=true; // useEffect watches mode→done; doRunAll saves all reps here instead
         setMode("done");setSummary(last.summary);setAggStats(computeAgg(results));setExecStatus("Complete");
         if(modelId&&userId){
           try{
@@ -325,6 +331,25 @@ const ExecutePanel=({model,modelId,userId})=>{
   };
 
   useEffect(()=>()=>stopAuto(),[]);
+
+  // Save whenever simulation reaches "done" regardless of how it got there.
+  // hasSaved.current prevents double-save when doRunAll already saved.
+  useEffect(()=>{
+    if(mode!=="done"||!summary||hasSaved.current||!modelId||!userId)return;
+    hasSaved.current=true;
+    let unmounted=false;
+    const durationMs=startTimeRef.current?Date.now()-startTimeRef.current:null;
+    const result={summary,snap:currentSnap};
+    (async()=>{
+      try{
+        await saveSimulationRun(modelId,userId,result,{replications:1,durationMs});
+        if(!unmounted)showToast("✓ Saved");
+      }catch{
+        if(!unmounted)showToast("⚠ Save failed",C.red);
+      }
+    })();
+    return()=>{unmounted=true;};
+  },[mode,summary,modelId,userId]);
 
   const statusColor={waiting:C.waiting,serving:C.serving,done:C.served,reneged:C.reneged,idle:C.green,busy:C.amber};
 
