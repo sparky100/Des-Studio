@@ -115,13 +115,14 @@ export const MACROS = [
     },
   },
 
-  // ── RELEASE(ServerType) ────────────────────────────────────────────────────
+  // ── RELEASE(ServerType[, TargetQueue]) ────────────────────────────────────
   // Frees server, returns customer to waiting — preserves arrivalTime for sojourn
   {
     name:    "RELEASE",
-    pattern: /^RELEASE\((\w+)\)$/i,
+    pattern: /^RELEASE\((\w+)(?:\s*,\s*(\w+))?\)$/i,
     apply(match, ctx) {
-      const srvType = match[1];
+      const srvType     = match[1];
+      const targetQueue = match[2] || null;
       const { entities, clock, getLastCustId, getLastSrvId, felRef, msgs } = ctx;
       const custId = felRef?._contextCustId ?? getLastCustId();
       const srvId  = felRef?._contextSrvId  ?? getLastSrvId();
@@ -142,11 +143,12 @@ export const MACROS = [
         });
         cust.lastStageStart = clock;
         cust.status         = "waiting";
+        if (targetQueue) cust.queue = targetQueue;
         delete cust.serviceStart;
         delete cust.serverId;
         srv.status = "idle";
         delete srv.currentCustId;
-        msgs.push(`#${cust.id} released → waiting [stage ${cust.stages.length} done, srv #${srv.id} idle]`);
+        msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done, srv #${srv.id} idle]`);
       } else {
         msgs.push(`RELEASE(${srvType}): no busy server+customer pair found`);
       }
