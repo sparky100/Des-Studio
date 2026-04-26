@@ -120,7 +120,9 @@ export function buildEngine(model, maxCycles = 800) {
     let cFired = true, cPass = 0;
     while (cFired && cPass < 100) {
       cFired = false; cPass++;
+      const firedThisPass = new Set();
       for (const ev of model.cEvents || []) {
+        if (firedThisPass.has(ev.id)) continue;
         const h = makeHelpers(entities);
         if (!evalCondition(ev.condition, h, state, clock)) continue;
         const ctx = makeCtx(null);
@@ -128,6 +130,7 @@ export function buildEngine(model, maxCycles = 800) {
         const { msgs, felEntries } = fireCEvent(ev, ctx);
         for (const entry of felEntries) fel.push(entry);
         if (felEntries.length) fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
+        firedThisPass.add(ev.id);
         cFired = true;
         const msg = [`C: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
         cycleLog.push({ phase: "C", time: clock, message: msg });
