@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { C, FONT } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty } from "./shared/components.jsx";
-import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor } from "./editors/index.jsx";
+import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
 import { fetchRunHistory } from "../db/models.js";
 
@@ -15,6 +15,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
       stateVariables:modelData.stateVariables || [],
       bEvents:       modelData.bEvents        || [],
       cEvents:       modelData.cEvents        || [],
+      queues:        modelData.queues         || [],
       access:        modelData.access         || {},
     };
   });
@@ -31,7 +32,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   const TABS=[
     {id:"overview",label:"Overview"},{id:"entities",label:"Entity Types"},
     {id:"state",label:"State Vars"},{id:"bevents",label:"B-Events"},
-    {id:"cevents",label:"C-Events"},{id:"execute",label:"▶ Execute"},
+    {id:"cevents",label:"C-Events"},{id:"queues",label:"Queues"},
+    {id:"execute",label:"▶ Execute"},
     {id:"history",label:"History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
@@ -95,6 +97,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
         {tab==="state"&&<div style={{maxWidth:750}}><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>}
         {tab==="bevents"&&<div style={{maxWidth:880}}><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
         {tab==="cevents"&&<div style={{maxWidth:860}}><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
+        {tab==="queues"&&<div style={{maxWidth:800}}><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?v=>setField("queues",v):()=>{}}/></div>}
         {tab==="execute"&&<div style={{maxWidth:1080}}><ExecutePanel model={model} modelId={modelId} userId={overrides.userId}/></div>}
         {tab==="history"&&(
           <div style={{maxWidth:960}}>
