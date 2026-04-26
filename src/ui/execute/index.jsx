@@ -136,29 +136,124 @@ const VisualView=({snap})=>{
         </div>
       )}
 
-      {/* Queue lane */}
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>
-          QUEUE  ({waiting.length} waiting)
+      {/* Queue Lanes — one per named queue */}
+      {Object.keys(snap.queues||{}).length > 0 ? (
+
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {Object.entries(snap.queues||{}).map(([qName, qData])=>{
+
+            // Is this a bottleneck?
+            const allLengths = Object.values(snap.queues).map(q=>q.length);
+            const avgLength  = allLengths.reduce((s,n)=>s+n,0) / (allLengths.length||1);
+            const isBottleneck = qData.length > 2 && qData.length > avgLength * 1.5;
+
+            return (
+              <div key={qName} style={{
+                background: C.surface,
+                border: `1px solid ${isBottleneck ? C.amber : C.border}`,
+                borderLeft: `3px solid ${isBottleneck ? C.amber : C.cEvent}`,
+                borderRadius: 8,
+                padding: 12,
+              }}>
+                {/* Queue header */}
+                <div style={{display:'flex',justifyContent:'space-between',
+                  alignItems:'center',marginBottom:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:11,fontWeight:700,color:C.cEvent,
+                      fontFamily:FONT,letterSpacing:1}}>{qName}</span>
+                    {isBottleneck && (
+                      <span style={{fontSize:9,background:C.amber+'22',
+                        border:`1px solid ${C.amber}55`,color:C.amber,
+                        borderRadius:3,padding:'1px 6px',fontFamily:FONT,
+                        fontWeight:700}}>⚠ BOTTLENECK</span>
+                    )}
+                  </div>
+                  <span style={{fontSize:13,fontWeight:700,
+                    color:isBottleneck?C.amber:C.text,fontFamily:FONT}}>
+                    {qData.length}
+                  </span>
+                </div>
+
+                {/* Entity tokens */}
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',minHeight:36}}>
+                  {qData.length === 0 ? (
+                    <span style={{fontSize:11,color:C.muted,fontFamily:FONT,
+                      fontStyle:'italic'}}>empty</span>
+                  ) : (
+                    <>
+                      {(qData.entities||[]).slice(0,8).map(e=>{
+                        const waited = snap.clock - (e.queueEntryTime||e.arrivalTime||0);
+                        const avgW   = qData.avgWaitTime||0;
+                        const tokenColor = waited > avgW*2 ? C.red
+                                         : waited > avgW   ? C.amber
+                                         : C.green;
+                        return (
+                          <div key={e.id} title={`#${e.id} | waiting ${waited.toFixed(1)} t`}
+                            style={{width:32,height:32,borderRadius:'50%',
+                              background:tokenColor+'22',
+                              border:`2px solid ${tokenColor}`,
+                              display:'flex',alignItems:'center',justifyContent:'center',
+                              fontSize:10,fontWeight:700,color:tokenColor,
+                              fontFamily:FONT}}>
+                            {e.id}
+                          </div>
+                        );
+                      })}
+                      {qData.length > 8 && (
+                        <div style={{display:'flex',alignItems:'center',
+                          fontSize:11,color:C.muted,fontFamily:FONT}}>
+                          +{qData.length - 8} more
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Queue stats */}
+                <div style={{display:'flex',gap:16,marginTop:8}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>
+                    avg wait: {(qData.avgWaitTime||0).toFixed(1)} t
+                  </span>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>
+                    peak: {qData.peakLength||qData.length}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
-        <div style={{background:C.panel,border:`1px solid ${C.waiting}33`,borderRadius:10,padding:14,minHeight:72,
-          display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",position:"relative"}}>
-          {waiting.length===0&&(
-            <div style={{fontSize:12,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>Queue empty</div>
-          )}
-          {/* Entrance arrow */}
-          {waiting.length>0&&<div style={{fontSize:14,color:C.muted}}>→</div>}
-          {waiting.slice().reverse().map(e=>(
-            <div key={e.id} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <CustomerToken entity={e} size={40}/>
-              <span style={{fontSize:9,color:C.muted,fontFamily:FONT}}>
-                t={e.arrivalTime?.toFixed?.(1)}
+
+      ) : (
+
+        // Fallback: old single queue display for models without named queues
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,
+          borderRadius:8,padding:12}}>
+          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,
+            letterSpacing:1.5,marginBottom:8}}>QUEUE</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',minHeight:36}}>
+            {(snap.entities||[])
+              .filter(e=>e.status==='waiting'&&e.role!=='server')
+              .sort((a,b)=>(a.arrivalTime||0)-(b.arrivalTime||0))
+              .slice(0,8)
+              .map(e=>(
+                <div key={e.id}
+                  style={{width:32,height:32,borderRadius:'50%',
+                    background:C.waiting+'22',border:`2px solid ${C.waiting}`,
+                    display:'flex',alignItems:'center',justifyContent:'center',
+                    fontSize:10,fontWeight:700,color:C.waiting,fontFamily:FONT}}>
+                  {e.id}
+                </div>
+              ))
+            }
+            {(snap.entities||[]).filter(e=>e.status==='waiting'&&e.role!=='server').length===0 && (
+              <span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
+                empty
               </span>
-            </div>
-          ))}
-          {waiting.length>0&&<div style={{fontSize:14,color:C.muted}}>→ servers</div>}
+            )}
+          </div>
         </div>
-      </div>
+
+      )}
 
       {/* Done / reneged row */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
