@@ -735,6 +735,7 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
 
   const add = () => onChange([...queues, {
     id: 'q'+Date.now(),
+    name: '',
     customerType: customerTypes[0]||'',
     capacity: '',
     discipline: 'FIFO',
@@ -743,6 +744,12 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
 
   const upd = (i, f, v) => { const n=[...queues]; n[i]={...n[i],[f]:v}; onChange(n); };
   const rem = (i) => onChange(queues.filter((_,idx)=>idx!==i));
+
+  const inpStyle = (color) => ({
+    background:'transparent', border:`1px solid ${color||C.border}`,
+    borderRadius:4, color:C.text, fontFamily:FONT, fontSize:12,
+    padding:'6px 8px', outline:'none', width:'100%', boxSizing:'border-box',
+  });
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
@@ -756,37 +763,58 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
       {queues.map((q,i)=>(
         <div key={q.id} style={{background:C.bg,border:`1px solid ${C.cEvent}33`,
           borderLeft:`3px solid ${C.cEvent}`,borderRadius:6,padding:12,
-          display:'flex',flexDirection:'column',gap:8}}>
-          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-            <Tag label="queue" color={C.cEvent}/>
-            <select value={q.customerType||''} onChange={e=>upd(i,'customerType',e.target.value)}
-              style={{flex:1,background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
-                color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'5px 8px',outline:'none'}}>
-              <option value=''>— select customer type —</option>
-              {customerTypes.map(c=><option key={c} value={c}>{c}</option>)}
-            </select>
-            <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+          display:'flex',flexDirection:'column',gap:10}}>
+
+          {/* Row 1: Queue Name — full width */}
+          <div style={{display:'flex',flexDirection:'column',gap:4}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>QUEUE NAME</span>
+            <input value={q.name||''} onChange={e=>upd(i,'name',e.target.value)}
+              placeholder="e.g. TriageQueue"
+              style={{...inpStyle(C.cEvent+'88'),color:C.text}}/>
           </div>
+
+          {/* Row 2: Accepts dropdown + Discipline dropdown + ✕ */}
           <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>capacity:</span>
-            <input value={q.capacity||''} onChange={e=>upd(i,'capacity',e.target.value)}
-              placeholder="unlimited"
-              style={{width:100,background:'transparent',border:`1px solid ${C.border}`,
-                borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,padding:'5px 8px',outline:'none'}}/>
-            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>discipline:</span>
-            <select value={q.discipline||'FIFO'} onChange={e=>upd(i,'discipline',e.target.value)}
-              style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
-                color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}>
-              <option value='FIFO'>FIFO</option>
-              <option value='LIFO'>LIFO</option>
-              <option value='Priority'>Priority</option>
-            </select>
+            <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:140}}>
+              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>ACCEPTS</span>
+              <select value={q.customerType||''} onChange={e=>upd(i,'customerType',e.target.value)}
+                style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+                  color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
+                <option value=''>— select customer type —</option>
+                {customerTypes.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:120}}>
+              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>DISCIPLINE</span>
+              <select value={q.discipline||'FIFO'} onChange={e=>upd(i,'discipline',e.target.value)}
+                style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                  color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
+                <option value='FIFO'>FIFO</option>
+                <option value='LIFO'>LIFO</option>
+                <option value='Priority'>Priority</option>
+              </select>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:4,justifyContent:'flex-end'}}>
+              <span style={{fontSize:10,color:'transparent',fontFamily:FONT}}>&nbsp;</span>
+              <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+            </div>
           </div>
-          <input value={q.description||''} onChange={e=>upd(i,'description',e.target.value)}
-            placeholder="Description"
-            style={{background:'transparent',border:`1px solid ${C.border}40`,borderRadius:4,
-              color:C.muted,fontFamily:FONT,fontSize:11,padding:'5px 8px',outline:'none',
-              width:'100%',boxSizing:'border-box'}}/>
+
+          {/* Row 3: Max length + Description */}
+          <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:120}}>
+              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>MAX LENGTH</span>
+              <input value={q.capacity||''} onChange={e=>upd(i,'capacity',e.target.value)}
+                placeholder="unlimited"
+                style={{...inpStyle(C.border),color:C.amber,width:120}}/>
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:160}}>
+              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>DESCRIPTION</span>
+              <input value={q.description||''} onChange={e=>upd(i,'description',e.target.value)}
+                placeholder="Description"
+                style={{...inpStyle(C.border+'40'),color:C.muted}}/>
+            </div>
+          </div>
         </div>
       ))}
     </div>

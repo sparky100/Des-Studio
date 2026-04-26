@@ -17,6 +17,7 @@ export function norm(r) {
     stateVariables: r.state_variables  || [],
     bEvents:        r.b_events         || [],
     cEvents:        r.c_events         || [],
+    queues:         r.queues           || [],
     owner_id:       r.owner_id,
     owner:          r.owner_id,
     createdAt:      r.created_at,
@@ -35,6 +36,7 @@ function toRow(model, userId) {
     state_variables: model.stateVariables || [],
     b_events:        model.bEvents        || [],
     c_events:        model.cEvents        || [],
+    queues:          model.queues         || [],
     owner_id:        userId,
   };
 }
@@ -47,6 +49,12 @@ export async function fetchModels() {
     .select("*")
     .order("updated_at", { ascending: false });
   if (error) throw error;
+  if (data && data.length > 0 && data[0].queues === undefined) {
+    console.warn(
+      "Supabase des_models table missing queues column. " +
+      "Run: ALTER TABLE des_models ADD COLUMN IF NOT EXISTS queues jsonb NOT NULL DEFAULT '[]'::jsonb;"
+    );
+  }
   return (data || []).map(norm);
 }
 
