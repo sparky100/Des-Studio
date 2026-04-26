@@ -728,9 +728,75 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
 };
 
 
+const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
+  const customerTypes = (entityTypes||[])
+    .filter(e=>e.role==='customer')
+    .map(e=>e.name.trim());
+
+  const add = () => onChange([...queues, {
+    id: 'q'+Date.now(),
+    customerType: customerTypes[0]||'',
+    capacity: '',
+    discipline: 'FIFO',
+    description: '',
+  }]);
+
+  const upd = (i, f, v) => { const n=[...queues]; n[i]={...n[i],[f]:v}; onChange(n); };
+  const rem = (i) => onChange(queues.filter((_,idx)=>idx!==i));
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+      <SH label="Queues" color={C.cEvent}><Btn small variant="ghost" onClick={add}>+ Add Queue</Btn></SH>
+      <InfoBox color={C.cEvent}>
+        Configure per-customer-type queue properties. Each <strong style={{color:C.cEvent}}>customer</strong> type
+        automatically has an implicit queue. Set <em>capacity</em> for bounded queues (blank = unlimited).{' '}
+        <strong>Discipline:</strong> FIFO (default), LIFO, or Priority.
+      </InfoBox>
+      {queues.length===0&&<Empty icon="🗂️" msg="No explicit queue configuration — all customer queues default to FIFO with unlimited capacity."/>}
+      {queues.map((q,i)=>(
+        <div key={q.id} style={{background:C.bg,border:`1px solid ${C.cEvent}33`,
+          borderLeft:`3px solid ${C.cEvent}`,borderRadius:6,padding:12,
+          display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+            <Tag label="queue" color={C.cEvent}/>
+            <select value={q.customerType||''} onChange={e=>upd(i,'customerType',e.target.value)}
+              style={{flex:1,background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
+                color:C.cEvent,fontFamily:FONT,fontSize:12,padding:'5px 8px',outline:'none'}}>
+              <option value=''>— select customer type —</option>
+              {customerTypes.map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+            <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+          </div>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>capacity:</span>
+            <input value={q.capacity||''} onChange={e=>upd(i,'capacity',e.target.value)}
+              placeholder="unlimited"
+              style={{width:100,background:'transparent',border:`1px solid ${C.border}`,
+                borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,padding:'5px 8px',outline:'none'}}/>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>discipline:</span>
+            <select value={q.discipline||'FIFO'} onChange={e=>upd(i,'discipline',e.target.value)}
+              style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}>
+              <option value='FIFO'>FIFO</option>
+              <option value='LIFO'>LIFO</option>
+              <option value='Priority'>Priority</option>
+            </select>
+          </div>
+          <input value={q.description||''} onChange={e=>upd(i,'description',e.target.value)}
+            placeholder="Description"
+            style={{background:'transparent',border:`1px solid ${C.border}40`,borderRadius:4,
+              color:C.muted,fontFamily:FONT,fontSize:11,padding:'5px 8px',outline:'none',
+              width:'100%',boxSizing:'border-box'}}/>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 export {
   AttrEditor, EntityTypeEditor, StateVarEditor,
   BEventEditor, CEventEditor, ConditionBuilder,
+  QueueEditor,
   toTitleCase, normTypeName, conditionOptions, assignOptions, bEffectOptions, DropField
 };
 
