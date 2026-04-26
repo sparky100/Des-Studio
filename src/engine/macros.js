@@ -42,15 +42,27 @@ export const MACROS = [
     },
   },
 
-  // ── ASSIGN(CustomerType, ServerType) ───────────────────────────────────────
+  // ── ASSIGN(CustomerType|QueueName, ServerType) ────────────────────────────
   {
     name:    "ASSIGN",
     pattern: /^ASSIGN\((\w+)\s*,\s*(\w+)\)$/i,
     apply(match, ctx) {
       const [, cType, sType] = match;
-      const { helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
-      const cust = helpers.waitingOf(cType)[0];
-      const srv  = helpers.idleOf(sType)[0];
+      const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
+
+      // First try by entity type; if empty, treat cType as a queue name
+      let cust = helpers.waitingOf(cType)[0];
+      if (!cust) {
+        const inQueue = entities.filter(e =>
+          e.queue &&
+          e.queue.trim().toLowerCase() === cType.trim().toLowerCase() &&
+          e.status === "waiting"
+        ).sort((a, b) => (a.arrivalTime || 0) - (b.arrivalTime || 0));
+        cust = inQueue[0];
+      }
+
+      const srv = helpers.idleOf(sType)[0];
+
       if (cust && srv) {
         cust.status       = "serving";
         cust.serviceStart = clock;
