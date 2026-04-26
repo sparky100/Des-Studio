@@ -1,226 +1,364 @@
-// engine/index.js — Public API
-//
-// Usage:
-//   import { buildEngine } from './engine/index.js'
-//   const engine = buildEngine(model)
-//   const result = engine.runAll()        // run to completion
-//   const step   = engine.step()          // one Phase A→B→C cycle
-//   const snap   = engine.getSnap()       // current state snapshot
-//   const felSz  = engine.getFelSize()    // events in FEL
+// ui/execute/index.jsx — CustomerToken, VisualView, ExecutePanel
+import { useState, useEffect, useRef, useCallback } from "react";
+import { C, FONT } from "../shared/tokens.js";
+import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { buildEngine } from "../../engine/index.js";
+import { saveSimulationRun } from "../../db/models.js";
 
-import { DISTRIBUTIONS, sample, sampleAttrs } from "./distributions.js";
-import { makeHelpers, createServerEntities }   from "./entities.js";
-import { evalCondition }                        from "./conditions.js";
-import { fireBEvent, fireCEvent }              from "./phases.js";
+const TOKEN_COLORS=["#06b6d4","#f59e0b","#8b5cf6","#3fb950","#f87171","#a78bfa","#34d399","#fbbf24"];
+const tokenColor=(id)=>TOKEN_COLORS[(id-1)%TOKEN_COLORS.length];
 
-export { DISTRIBUTIONS, sample, sampleAttrs };
-
-export function buildEngine(model, maxCycles = 800) {
-  // ── Initialise scalar state ───────────────────────────────────────────────
-  const state = { __served: 0, __reneged: 0 };
-  for (const sv of model.stateVariables || []) {
-    try   { state[sv.name] = JSON.parse(sv.initialValue); }
-    catch { state[sv.name] = sv.initialValue; }
-  }
-
-  // ── Entity pool ─────────────────────────────────────────────────────────────
-  let _seq = 0;
-  const nextId = () => ++_seq;
-
-  const entities = createServerEntities(
-    model.entityTypes || [],
-    (attrDefs) => sampleAttrs(attrDefs)
+const CustomerToken=({entity,size=36,showId=true})=>{
+  const col=tokenColor(entity.id);
+  const statusBorder={waiting:C.waiting,serving:C.serving,done:C.served,reneged:C.reneged,idle:C.green,busy:C.amber}[entity.status]||C.muted;
+  return (
+    <div title={`#${entity.id} ${entity.type} — ${entity.status}\narrived t=${entity.arrivalTime?.toFixed?.(2)}`}
+      style={{width:size,height:size,borderRadius:"50%",background:col+"22",border:`2.5px solid ${statusBorder}`,
+        display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FONT,fontSize:size*0.28,
+        fontWeight:700,color:col,flexShrink:0,cursor:"default",transition:"all .2s",
+        boxShadow:entity.status==="serving"?`0 0 8px ${col}66`:"none"}}>
+      {showId?`#${entity.id}`:""}
+    </div>
   );
-  // Assign IDs to pre-created servers
-  for (const e of entities) e.id = nextId();
+};
 
-  const helpers = () => makeHelpers(entities);
+const ServerBay=({server,customers})=>{
+  const servingCust=customers.find(e=>e.id===server.currentCustId);
+  const isB=server.status==="busy";
+  const borderCol=isB?C.busy:C.idle;
+  return (
+    <div style={{background:C.panel,border:`2px solid ${borderCol}44`,borderRadius:10,padding:14,
+      display:"flex",flexDirection:"column",gap:10,minWidth:160,position:"relative"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:12,color:C.server,fontFamily:FONT}}>Server #{server.id}</div>
+          <div style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{server.type}</div>
+        </div>
+        <Tag label={server.status} color={isB?C.amber:C.green}/>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:12,justifyContent:"center"}}>
+        <div style={{width:48,height:48,borderRadius:8,background:C.server+"18",border:`2px solid ${C.server}55`,
+          display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="3" y="6" width="18" height="4" rx="1" stroke={C.server} strokeWidth="1.5"/>
+            <rect x="3" y="13" width="18" height="4" rx="1" stroke={C.server} strokeWidth="1.5"/>
+            <circle cx="6.5" cy="8" r="1" fill={isB?C.amber:C.green}/>
+            <circle cx="6.5" cy="15" r="1" fill={isB?C.amber:C.green}/>
+          </svg>
+        </div>
+        {servingCust && (
+          <>
+            <div style={{fontSize:18,color:C.muted}}>→</div>
+            <CustomerToken entity={servingCust} size={44}/>
+          </>
+        )}
+        {!servingCust && (
+          <div style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>idle</div>
+        )}
+      </div>
+      <div style={{fontSize:10,color:C.muted,fontFamily:FONT,borderTop:`1px solid ${C.border}`,paddingTop:6}}>
+        {Object.entries(server.attrs||{}).map(([k,v])=>(
+          <span key={k} style={{marginRight:8}}><span style={{color:C.server}}>{k}</span>={v}</span>
+        ))}
+      </div>
+    </div>
+  );
+};
 
-  // ── Snapshot ──────────────────────────────────────────────────────────────
-  function snap(clock) {
-    const h = makeHelpers(entities);
-    const types = [...new Set(entities.map(e => e.type))];
-    const byType = {};
-    types.forEach(t => {
-      byType[t] = {
-        waiting: h.waitingOf(t).length,
-        idle:    h.idleOf(t).length,
-        busy:    h.busyOf(t).length,
-        total:   entities.filter(e => e.type === t).length,
-      };
-    });
-    
-    // ── Build snap.queues by grouping waiting customers by their queue field ──
-    const queues = {};
-    const waitingCustomers = entities.filter(e => e.role !== 'server' && e.status === 'waiting');
-    
-    waitingCustomers.forEach(cust => {
-      const qName = cust.queue || (cust.type + 'Queue');
-      if (!queues[qName]) {
-        queues[qName] = { 
-          length: 0, 
-          entities: [], 
-          totalWaitTime: 0, 
-          peakLength: 0 
-        };
-      }
-      const waitTime = clock - (cust.queueEntryTime || cust.arrivalTime || 0);
-      queues[qName].entities.push(cust);
-      queues[qName].totalWaitTime += waitTime;
-      queues[qName].length++;
-    });
-    
-    // Compute avgWaitTime for each queue
-    Object.keys(queues).forEach(qName => {
-      queues[qName].avgWaitTime = queues[qName].length > 0 
-        ? queues[qName].totalWaitTime / queues[qName].length 
-        : 0;
-      delete queues[qName].totalWaitTime;
-    });
-    
-    return {
-      clock:    clock || 0,
-      served:   state.__served  || 0,
-      reneged:  state.__reneged || 0,
-      entities: entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
-      scalars:  Object.fromEntries(
-        Object.entries(state).filter(([k]) => !k.startsWith("__"))
-      ),
-      byType,
-      queues,
-    };
-  }
+const VisualView=({snap, model})=>{
+  if(!snap) return <Empty icon="▶" msg="Run or step the simulation to see the visual view."/>;
 
-  // ── Build initial FEL ─────────────────────────────────────────────────────
-  let clock = 0;
-  const log = [];
+  const allEntities=snap.entities||[];
+  const servers=allEntities.filter(e=>e.role==="server");
+  const customers=allEntities.filter(e=>e.role!=="server");
+  const waiting=customers.filter(e=>e.status==="waiting");
+  
+  [span_2](start_span)// Use model definitions to ensure UI stability[span_2](end_span)
+  const definedQueues = model.queues || [];
 
-  let fel = (model.bEvents || [])
-    .filter(ev => parseFloat(ev.scheduledTime) < 900)
-    .map(ev => ({ ...ev, scheduledTime: parseFloat(ev.scheduledTime) || 0 }))
-    .sort((a, b) => a.scheduledTime - b.scheduledTime);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:16,alignItems:"start"}}>
+        <div style={{background:C.panel,border:`2px solid ${C.purple}44`,borderRadius:12,padding:"20px 28px",textAlign:"center",minWidth:140}}>
+          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:2,marginBottom:6}}>SIM CLOCK</div>
+          <div style={{fontSize:40,fontWeight:700,color:C.purple,fontFamily:FONT,lineHeight:1}}>
+            {parseFloat(snap.clock).toFixed(2)}
+          </div>
+          <div style={{fontSize:11,color:C.muted,fontFamily:FONT,marginTop:4}}>time units</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+            {[
+              {label:"Arrived",  value:customers.length,     color:C.accent},
+              {label:"Served",   value:snap.served||0,       color:C.served},
+              {label:"Reneged",  value:snap.reneged||0,      color:C.reneged},
+              {label:"Waiting",  value:waiting.length,       color:C.waiting},
+            ].map(s=>(
+              <div key={s.label} style={{background:C.panel,border:`1px solid ${s.color}33`,borderRadius:8,padding:"10px 12px"}}>
+                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginBottom:2}}>{s.label}</div>
+                <div style={{fontSize:26,fontWeight:700,color:s.color,fontFamily:FONT}}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
-  log.push({ phase: "INIT", time: 0, message: "Engine initialised", snap: snap(0) });
+      {servers.length>0&&(
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>SERVER BAYS</div>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+            {servers.map(srv=>(
+              <ServerBay key={srv.id} server={srv} customers={customers}/>
+            ))}
+          </div>
+        </div>
+      )}
 
-  // ── Shared execution context ──────────────────────────────────────────────
-  const makeCtx = (felRef = null) => ({
-    entities,
-    state,
-    model,
-    clock,
-    felRef,
-    helpers: makeHelpers(entities),
-    nextId,
-    _lastCustId: null,
-    _lastSrvId:  null,
-  });
+      [span_3](start_span){/* Primary Queue Display: Driven by Model Definitions[span_3](end_span) */}
+      {definedQueues.length > 0 ? (
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {definedQueues.map((qDef) => {
+            const qName = qDef.name;
+            const qData = (snap.queues && snap.queues[qName]) || { length: 0, entities: [], avgWaitTime: 0 };
 
-  // ── step(): one Phase A → B → C cycle ────────────────────────────────────
-  function step() {
-    if (fel.length === 0) {
-      log.push({ phase: "END", time: clock, message: "FEL empty — simulation complete", snap: snap(clock) });
-      return { done: true, cycleLog: [{ phase: "END", time: clock, message: "FEL empty" }], snap: snap(clock) };
-    }
+            const allLengths = Object.values(snap.queues || {}).map(q => q.length || 0);
+            const avgLength = allLengths.length ? allLengths.reduce((s, n) => s + n, 0) / allLengths.length : 0;
+            const isBottleneck = qData.length > 2 && qData.length > avgLength * 1.5;
 
-    const cycleLog = [];
+            return (
+              <div key={qName} style={{
+                background: C.surface,
+                border: `1px solid ${isBottleneck ? C.amber : C.border}`,
+                borderLeft: `3px solid ${isBottleneck ? C.amber : C.cEvent}`,
+                borderRadius: 8,
+                padding: 12,
+              }}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:11,fontWeight:700,color:C.cEvent,fontFamily:FONT,letterSpacing:1}}>
+                      {qName}
+                    </span>
+                    {isBottleneck && (
+                      <span style={{fontSize:9,background:C.amber+'22',border:`1px solid ${C.amber}55`,color:C.amber,borderRadius:3,padding:'1px 6px',fontFamily:FONT,fontWeight:700}}>
+                        ⚠ BOTTLENECK
+                      </span>
+                    )}
+                  </div>
+                  <span style={{fontSize:13,fontWeight:700,color:isBottleneck?C.amber:C.text,fontFamily:FONT}}>
+                    {qData.length}
+                  </span>
+                </div>
 
-    // Phase A — advance clock
-    clock = fel[0].scheduledTime;
-    cycleLog.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}` });
-    log.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}`, snap: snap(clock) });
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',minHeight:36}}>
+                  {qData.length === 0 ? (
+                    <span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>empty</span>
+                  ) : (
+                    <>
+                      {(qData.entities||[]).slice(0, 8).map(e => (
+                        <div key={e.id} style={{width:32,height:32,borderRadius:'50%',background:C.waiting+'22',border:`2px solid ${C.waiting}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:C.waiting,fontFamily:FONT}}>
+                          {e.id}
+                        </div>
+                      ))}
+                      {qData.length > 8 && <div style={{fontSize:11,color:C.muted,fontFamily:FONT,display:'flex',alignItems:'center'}}>+{qData.length - 8} more</div>}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        [span_4](start_span)/* Fallback for models without specific queue definitions[span_4](end_span) */
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:12}}>
+          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,marginBottom:8}}>QUEUE</div>
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',minHeight:36}}>
+            {waiting.length === 0 ? (
+              <span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>empty</span>
+            ) : (
+              waiting.slice(0, 8).map(e => (
+                <div key={e.id} style={{width:32,height:32,borderRadius:'50%',background:C.waiting+'22',border:`2px solid ${C.waiting}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:C.waiting,fontFamily:FONT}}>
+                  {e.id}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
-    // Phase B — fire all due events
-    const due = fel.filter(ev => Math.abs(ev.scheduledTime - clock) < 1e-9);
-    fel       = fel.filter(ev => Math.abs(ev.scheduledTime - clock) >= 1e-9);
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          <div style={{fontSize:10,color:C.served,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>SERVED ({snap.entities?.filter(e=>e.status==='done').length || 0})</div>
+          <div style={{background:C.panel,border:`1px solid ${C.served}22`,borderRadius:8,padding:10,display:"flex",gap:6,flexWrap:"wrap",minHeight:52,alignItems:"center"}}>
+             {snap.entities?.filter(e=>e.status==='done').map(e=><CustomerToken key={e.id} entity={e} size={32} showId={false}/>)}
+          </div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          <div style={{fontSize:10,color:C.reneged,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>RENEGED ({snap.entities?.filter(e=>e.status==='reneged').length || 0})</div>
+          <div style={{background:C.panel,border:`1px solid ${C.reneged}22`,borderRadius:8,padding:10,display:"flex",gap:6,flexWrap:"wrap",minHeight:52,alignItems:"center"}}>
+             {snap.entities?.filter(e=>e.status==='reneged').map(e=><CustomerToken key={e.id} entity={e} size={32} showId={false}/>)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-    for (const ev of due) {
-      const ctx = makeCtx(ev);
-      ctx.clock = clock;
-      const { msgs, felEntries, skipped } = fireBEvent(ev, ctx);
-
-      for (const entry of felEntries) fel.push(entry);
-      fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
-
-      const msg = [`B: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
-      cycleLog.push({ phase: "B", time: clock, message: msg, skipped });
-      log.push({ phase: "B", time: clock, message: msg, snap: snap(clock), skipped });
-    }
-
-    // Phase C — evaluate conditionals until stable
-    let cFired = true, cPass = 0;
-    while (cFired && cPass < 100) {
-      cFired = false; cPass++;
-      const firedThisPass = new Set();
-      for (const ev of model.cEvents || []) {
-        if (firedThisPass.has(ev.id)) continue;
-        const h = makeHelpers(entities);
-        if (!evalCondition(ev.condition, h, state, clock)) continue;
-        const ctx = makeCtx(null);
-        ctx.clock = clock;
-        const { msgs, felEntries } = fireCEvent(ev, ctx);
-        for (const entry of felEntries) fel.push(entry);
-        if (felEntries.length) fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
-        firedThisPass.add(ev.id);
-        cFired = true;
-        const msg = [`C: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
-        cycleLog.push({ phase: "C", time: clock, message: msg });
-        log.push({ phase: "C", time: clock, message: msg, snap: snap(clock) });
-      }
-      if (!cFired) {
-        cycleLog.push({ phase: "C", time: clock, message: "No C-events can fire → Phase A" });
-        log.push({ phase: "C", time: clock, message: "No C-events can fire → Phase A", snap: snap(clock) });
-      }
-    }
-
-    return { done: false, cycleLog, snap: snap(clock), felSize: fel.length };
-  }
-
-  // ── runAll(): run to completion ───────────────────────────────────────────
-  function runAll() {
-    let c = 0;
-    while (fel.length > 0 && c < maxCycles) {
-      c++;
-      const r = step();
-      if (r.done) break;
-    }
-    log.push({ phase: "END", time: clock, message: "Simulation complete", snap: snap(clock) });
-
-    const customers    = entities.filter(e => e.role !== "server");
-    const served       = customers.filter(e => e.status === "done");
-    const reneged      = customers.filter(e => e.status === "reneged");
-
-    const avgWait = served.length
-      ? served.reduce((s, e) => s + ((e.serviceStart || 0) - e.arrivalTime), 0) / served.length
-      : null;
-    const avgSvc = served.filter(e => e.completionTime != null && e.serviceStart != null).length
-      ? served.filter(e => e.completionTime != null && e.serviceStart != null)
-          .reduce((s, e) => s + (e.completionTime - e.serviceStart), 0) / served.length
-      : null;
-    const withSojourn  = customers.filter(e => e.sojournTime != null);
-    const avgSojourn   = withSojourn.length ? withSojourn.reduce((s, e) => s + e.sojournTime, 0) / withSojourn.length : null;
-    const maxSojourn   = withSojourn.length ? Math.max(...withSojourn.map(e => e.sojournTime)) : null;
-
-    return {
-      finalTime: clock,
-      log,
-      snap:      snap(clock),
-      summary: {
-        total:      customers.length,
-        served:     served.length,
-        reneged:    reneged.length,
-        avgWait:    avgWait   != null ? +avgWait.toFixed(4)   : null,
-        avgSvc:     avgSvc    != null ? +avgSvc.toFixed(4)    : null,
-        avgSojourn: avgSojourn!= null ? +avgSojourn.toFixed(4): null,
-        maxSojourn: maxSojourn!= null ? +maxSojourn.toFixed(4): null,
-      },
-      entitySummary: entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
-    };
-  }
-
-  return {
-    step,
-    runAll,
-    getSnap:    () => snap(clock),
-    getFelSize: () => fel.length,
-  };
+// ── Aggregate stats helper ────────────────────────────────────────────────────
+function computeAgg(results) {
+  const vals=k=>results.map(r=>r.summary?.[k]).filter(v=>v!=null&&!isNaN(v));
+  const mean=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
+  const std=arr=>{if(arr.length<2)return 0;const m=mean(arr);return Math.sqrt(arr.reduce((s,x)=>s+(x-m)**2,0)/(arr.length-1));};
+  const stat=k=>{const a=vals(k);return{mean:mean(a),std:std(a)};};
+  return{n:results.length,served:stat('served'),reneged:stat('reneged'),avgWait:stat('avgWait'),avgSojourn:stat('avgSojourn')};
 }
+
+const ExecutePanel=({model,modelId,userId})=>{
+  const [mode,setMode]=useState("idle");
+  const [execStatus,setExecStatus]=useState("");
+  const [currentSnap,setCurrentSnap]=useState(null);
+  const [log,setLog]=useState([]);
+  const [cycleLog,setCycleLog]=useState([]);
+  const [felSize,setFelSize]=useState(0);
+  const [view,setView]=useState("visual");
+  const [autoSpeed,setAutoSpeed]=useState(400);
+  const [autoRunning,setAutoRunning]=useState(false);
+  const [summary,setSummary]=useState(null);
+  const [reps,setReps]=useState(1);
+  const [aggStats,setAggStats]=useState(null);
+  const [toast,setToast]=useState(null);
+  const engineRef=useRef(null);
+  const autoRef=useRef(null);
+  const hasSaved=useRef(false);
+  const startTimeRef=useRef(null);
+
+  const showToast=(msg,color=C.green)=>{setToast({msg,color});setTimeout(()=>setToast(null),2000);};
+
+  const canRun=(model.bEvents||[]).filter(b=>parseFloat(b.scheduledTime)<900).length>0;
+
+  const validate=()=>{
+    const issues=[];
+    const typeNames=(model.entityTypes||[]).map(e=>e.name.trim().toLowerCase());
+    if((model.entityTypes||[]).length===0) issues.push("No entity types defined");
+    if((model.bEvents||[]).filter(b=>parseFloat(b.scheduledTime)<900).length===0)
+      issues.push("No B-events with t<900 — nothing seeds the FEL");
+    return issues;
+  };
+  const validationIssues=validate();
+
+  const initEngine=useCallback(()=>{
+    try{
+      engineRef.current=buildEngine(model);
+      const s=engineRef.current.getSnap();
+      setCurrentSnap(s);
+      setLog([{phase:"INIT",time:0,message:"Engine initialised"}]);
+      setCycleLog([]);
+      setFelSize(engineRef.current.getFelSize());
+      hasSaved.current=false;
+      startTimeRef.current=Date.now();
+      setMode("stepping");
+      setSummary(null);
+    }catch(e){
+      setExecStatus("ERROR: "+e.message);
+    }
+  },[model]);
+
+  const doStep=useCallback(()=>{
+    if(!engineRef.current||mode==="done")return;
+    const r=engineRef.current.step();
+    setCurrentSnap(r.snap);
+    setCycleLog(r.cycleLog||[]);
+    setLog(prev=>[...prev,...(r.cycleLog||[])]);
+    setFelSize(r.felSize||0);
+    if(r.done){setMode("done");setSummary(r.summary);}
+  },[mode]);
+
+  const doRunAll=useCallback(async()=>{
+    try{
+      stopAuto();
+      const t0=Date.now();
+      if(reps<=1){
+        engineRef.current=buildEngine(model);
+        const r=engineRef.current.runAll();
+        const ms=Date.now()-t0;
+        setCurrentSnap(r.snap);setLog(r.log||[]);setCycleLog([]);setFelSize(0);
+        setMode("done");setSummary(r.summary);setAggStats(null);
+        if(modelId&&userId) await saveSimulationRun(modelId,userId,r,{replications:1,durationMs:ms});
+      }else{
+        const results=[];
+        for(let i=0;i<reps;i++){engineRef.current=buildEngine(model);results.push(engineRef.current.runAll());}
+        const ms=Date.now()-t0;
+        const last=results[results.length-1];
+        setCurrentSnap(last.snap);setLog(last.log||[]);setCycleLog([]);setFelSize(0);
+        setMode("done");setSummary(last.summary);setAggStats(computeAgg(results));
+        if(modelId&&userId) await Promise.all(results.map(r=>saveSimulationRun(modelId,userId,r,{replications:reps,durationMs:Math.round(ms/reps)})));
+      }
+    }catch(e){setExecStatus("ERROR: "+e.message);}
+  },[model,reps,modelId,userId]);
+
+  const stopAuto=()=>{if(autoRef.current){clearInterval(autoRef.current);autoRef.current=null;setAutoRunning(false);}};
+
+  const toggleAuto=()=>{
+    if(autoRunning){stopAuto();return;}
+    if(mode==="idle")initEngine();
+    setAutoRunning(true);
+    autoRef.current=setInterval(()=>{
+      if(!engineRef.current){stopAuto();return;}
+      const r=engineRef.current.step();
+      setCurrentSnap(r.snap);
+      setCycleLog(r.cycleLog||[]);
+      setLog(prev=>[...prev,...(r.cycleLog||[])]);
+      setFelSize(r.felSize||0);
+      if(r.done){stopAuto();setMode("done");setSummary(r.summary);}
+    },autoSpeed);
+  };
+
+  useEffect(()=>()=>stopAuto(),[]);
+
+  const statusColor={waiting:C.waiting,serving:C.serving,done:C.served,reneged:C.reneged,idle:C.green,busy:C.amber};
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+        <Btn variant="primary" onClick={initEngine} disabled={!canRun||validationIssues.length>0}>⟳ Reset</Btn>
+        <Btn variant="success" onClick={()=>{if(mode==="idle")initEngine();else doStep();}} disabled={!canRun||mode==="done"}>⏭ Step</Btn>
+        <Btn variant={autoRunning?"danger":"amber"} onClick={()=>{if(mode==="idle")initEngine();toggleAuto();}} disabled={!canRun||mode==="done"}>
+          {autoRunning?"Stop Auto":"Auto"}
+        </Btn>
+        <input type="range" min="50" max="1000" step="50" value={1050-autoSpeed} onChange={e=>setAutoSpeed(1050-parseInt(e.target.value))} style={{width:80,accentColor:C.amber}}/>
+        <div style={{flex:1}}/>
+        <Btn variant="ghost" onClick={doRunAll} disabled={!canRun}>⚡ Run All</Btn>
+      </div>
+
+      <div style={{display:"flex",gap:8,borderBottom:`1px solid ${C.border}`}}>
+        {[["visual","🗺 Visual"],["log","📋 Log"],["entities","👥 Entities"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setView(id)} style={{background:"none",border:"none",borderBottom:view===id?`2px solid ${C.accent}`:"2px solid transparent",color:view===id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"8px 14px",cursor:"pointer",fontWeight:view===id?700:400}}>{label}</button>
+        ))}
+      </div>
+
+      [span_5](start_span){/* Passing model here to VisualView to fix UI failing[span_5](end_span) */}
+      {view==="visual"&&<VisualView snap={currentSnap} model={model}/>}
+
+      {view==="log" && (
+        <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:14,maxHeight:400,overflowY:'auto'}}>
+          {log.map((r,i)=>(<div key={i} style={{fontSize:11,fontFamily:FONT,padding:'2px 0'}}><PhaseTag phase={r.phase}/> t={r.time?.toFixed(2)}: {r.message}</div>))}
+        </div>
+      )}
+
+      {view==="entities" && currentSnap && (
+        <div style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:14}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FONT,fontSize:11}}>
+             <thead><tr>{["#","Type","Status"].map(h=><th key={h} style={{textAlign:'left'}}>{h}</th>)}</tr></thead>
+             <tbody>
+               {currentSnap.entities?.map(e=>(
+                 <tr key={e.id}><td>#{e.id}</td><td>{e.type}</td><td><Tag label={e.status} color={statusColor[e.status]}/></td></tr>
+               ))}
+             </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export { CustomerToken, VisualView, ExecutePanel };
+[cite_start]
