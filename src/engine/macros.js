@@ -13,12 +13,13 @@ import { sampleAttrs } from "./distributions.js";
 
 export const MACROS = [
 
-  // ── ARRIVE(Type) ───────────────────────────────────────────────────────────
+  // ── ARRIVE(Type[, QueueName]) ──────────────────────────────────────────────
   {
     name:    "ARRIVE",
-    pattern: /^ARRIVE\((\w+)\)$/i,
+    pattern: /^ARRIVE\((\w+)(?:\s*,\s*(\w+))?\)$/i,
     apply(match, ctx) {
-      const typeName = match[1];
+      const typeName  = match[1];
+      const queueName = match[2] || (typeName + "Queue");
       const { entities, model, clock, helpers, setLastCustId, msgs } = ctx;
       const et = (model.entityTypes || []).find(
         e => e.name.trim().toLowerCase() === typeName.trim().toLowerCase()
@@ -26,17 +27,18 @@ export const MACROS = [
       const id = ctx.nextId();
       const ent = {
         id,
-        type:        typeName,
-        role:        et?.role || "customer",
-        status:      "waiting",
-        attrs:       sampleAttrs(et?.attrDefs || et?.attrs || ""),
-        arrivalTime: clock,
-        stages:      [],
+        type:           typeName,
+        role:           et?.role || "customer",
+        status:         "waiting",
+        queue:          queueName,
+        attrs:          sampleAttrs(et?.attrDefs || et?.attrs || ""),
+        arrivalTime:    clock,
+        stages:         [],
         lastStageStart: null,
       };
       entities.push(ent);
       setLastCustId(id);
-      msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${helpers.waitingOf(typeName).length}]`);
+      msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${queueName}, depth: ${helpers.waitingOf(typeName).length}]`);
     },
   },
 
