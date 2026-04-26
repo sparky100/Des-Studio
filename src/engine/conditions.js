@@ -28,9 +28,16 @@ export function evalCondition(condition, helpers, state, clock) {
   try {
     let expr = condition;
 
-    // queue(Type).length
-    expr = expr.replace(/queue\((\w+)\)\.length/g,
-      (_, t) => String(helpers.waitingOf(t).length));
+    // queue(Type).length — check by queue field first, fall back to entity type
+    expr = expr.replace(/queue\((\w+)\)\.length/g, (_, name) => {
+      const inQueue = helpers.entities
+        ? helpers.entities.filter(e =>
+            e.queue?.toLowerCase() === name.toLowerCase() && e.status === 'waiting'
+          ).length
+        : 0;
+      const byType = helpers.waitingOf(name).length;
+      return String(inQueue > 0 ? inQueue : byType);
+    });
 
     // idle(Type).count
     expr = expr.replace(/idle\((\w+)\)\.count/g,

@@ -80,6 +80,7 @@ export function makeHelpers(entities) {
   const match = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
   return {
+    entities,
     waitingOf: (type) =>
       entities
         .filter(e => match(e.type, type) && e.status === "waiting")
