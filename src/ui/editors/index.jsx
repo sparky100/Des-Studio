@@ -8,10 +8,28 @@ import { buildConditionTokens } from "../../engine/conditions.js";
 // ── UI Polish Helpers ─────────────────────────────────────────────────────────
 const toTitleCase = s => s.trim().replace(/\b\w/g, c => c.toUpperCase());
 
-const conditionOptions = (entityTypes) => {
+const conditionOptions = (entityTypes, stateVariables=[], queues=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const opts = [{label:'— select condition —',value:''}];
+  if(queues.length > 0) {
+    opts.push({label:'── Queue lengths ──', value:'', disabled:true});
+    queues.forEach(q => {
+      opts.push({label:`queue(${q.name}).length > 0`, value:`queue(${q.name}).length > 0`});
+      opts.push({label:`queue(${q.name}).length == 0`, value:`queue(${q.name}).length == 0`});
+    });
+  }
+  if(queues.length > 0 && servers.length > 0) {
+    opts.push({label:'── Queue + Server combinations ──', value:'', disabled:true});
+    queues.forEach(q => {
+      servers.forEach(s => {
+        opts.push({
+          label: `queue(${q.name}).length > 0 AND idle(${s}).count > 0`,
+          value: `queue(${q.name}).length > 0 AND idle(${s}).count > 0`,
+        });
+      });
+    });
+  }
   custs.forEach(c=>{
     opts.push({label:`queue(${c}).length > 0`,value:`queue(${c}).length > 0`});
     opts.push({label:`queue(${c}).length == 0`,value:`queue(${c}).length == 0`});
@@ -31,10 +49,19 @@ const conditionOptions = (entityTypes) => {
   return opts;
 };
 
-const assignOptions = (entityTypes, stateVariables=[]) => {
+const assignOptions = (entityTypes, stateVariables=[], queues=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const opts = [{label:'— select effect —',value:''}];
+  // Queue-based ASSIGN combinations
+  if(queues.length > 0) {
+    opts.push({label:'── ASSIGN from queue ──', value:'', disabled:true});
+    queues.forEach(q => {
+      servers.forEach(s => {
+        opts.push({label:`ASSIGN(${q.name}, ${s})`, value:`ASSIGN(${q.name}, ${s})`});
+      });
+    });
+  }
   // ASSIGN combinations
   if(custs.length>0&&servers.length>0){
     opts.push({label:'── ASSIGN ──',value:'',disabled:true});
@@ -57,7 +84,7 @@ const assignOptions = (entityTypes, stateVariables=[]) => {
   return opts;
 };
 
-const bEffectOptions = (entityTypes) => {
+const bEffectOptions = (entityTypes, queues=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const opts = [{label:'— select effect —',value:''}];
@@ -65,6 +92,15 @@ const bEffectOptions = (entityTypes) => {
     opts.push({label:`ARRIVE(${c})`,value:`ARRIVE(${c})`});
     opts.push({label:`ARRIVE(${c}); totalArrived++`,value:`ARRIVE(${c}); totalArrived++`});
   });
+  if(queues.length > 0) {
+    opts.push({label:'── ARRIVE into queue ──', value:'', disabled:true});
+    custs.forEach(c => {
+      queues.forEach(q => {
+        opts.push({label:`ARRIVE(${c}, ${q.name})`, value:`ARRIVE(${c}, ${q.name})`});
+        opts.push({label:`ARRIVE(${c}, ${q.name}); totalArrived++`, value:`ARRIVE(${c}, ${q.name}); totalArrived++`});
+      });
+    });
+  }
   opts.push({label:'COMPLETE()',value:'COMPLETE()'});
   opts.push({label:'RENEGE(ctx)',value:'RENEGE(ctx)'});
   custs.forEach(c=>{
@@ -74,6 +110,15 @@ const bEffectOptions = (entityTypes) => {
     opts.push({label:'── Release server ──',value:'',disabled:true});
     servers.forEach(s=>{
       opts.push({label:`RELEASE(${s})`,value:`RELEASE(${s})`});
+    });
+  }
+  if(queues.length > 0) {
+    opts.push({label:'── RELEASE to queue ──', value:'', disabled:true});
+    servers.forEach(s => {
+      queues.forEach(q => {
+        opts.push({label:`RELEASE(${s}, ${q.name})`, value:`RELEASE(${s}, ${q.name})`});
+        opts.push({label:`RELEASE(${s}, ${q.name}); totalTriaged++`, value:`RELEASE(${s}, ${q.name}); totalTriaged++`});
+      });
     });
   }
   opts.push({label:'Custom...',value:'__custom__'});
@@ -293,7 +338,7 @@ const StateVarEditor=({vars,onChange})=>{
   );
 };
 
-const BEventEditor=({events,onChange,entityTypes=[]})=>{
+const BEventEditor=({events,onChange,entityTypes=[],queues=[]})=>{
   const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:"",schedules:[],description:""}]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
   const rem=(i)=>onChange(events.filter((_,idx)=>idx!==i));
@@ -326,7 +371,7 @@ const BEventEditor=({events,onChange,entityTypes=[]})=>{
             <div style={{display:"flex",gap:8,alignItems:"center"}}>
               <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:46}}>effect:</span>
               <DropField value={ev.effect} onChange={v=>upd(i,'effect',v)}
-                options={bEffectOptions(entityTypes)} color={C.green}
+                options={bEffectOptions(entityTypes, queues)} color={C.green}
                 placeholder="e.g. ARRIVE(Customer); totalArrived++"/>
             </div>
             <input value={ev.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
@@ -410,27 +455,39 @@ const parseConditionStr = (str, tokens) => {
   return rows;
 };
 
-const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[]}) => {
-  // Build token list from entity types and state variables
-  const tokens = [
-    ...(entityTypes||[]).filter(e=>e.role==='customer').map(e=>({
-      label: `queue(${normTypeName(e.name)}).length  — customers waiting`,
-      value: `queue(${normTypeName(e.name)}).length`,
-      valueType: 'number',
-    })),
-    ...(entityTypes||[]).filter(e=>e.role==='server').map(e=>([
-      { label:`idle(${normTypeName(e.name)}).count  — idle servers`,
-        value:`idle(${normTypeName(e.name)}).count`, valueType:'number' },
-      { label:`busy(${normTypeName(e.name)}).count  — busy servers`,
-        value:`busy(${normTypeName(e.name)}).count`, valueType:'number' },
-    ])).flat(),
+const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], queues=[]}) => {
+  // Build token list from queues, entity types and state variables
+  const queueTokens = (queues||[]).map(q => ({
+    label: `queue(${q.name}).length — entities in ${q.name}`,
+    value: `queue(${q.name}).length`,
+    valueType: 'number',
+  }));
+  const entityTypeTokens = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>({
+    label: `queue(${normTypeName(e.name)}).length  — customers waiting`,
+    value: `queue(${normTypeName(e.name)}).length`,
+    valueType: 'number',
+  }));
+  const serverTokens = (entityTypes||[]).filter(e=>e.role==='server').map(e=>([
+    { label:`idle(${normTypeName(e.name)}).count  — idle servers`,
+      value:`idle(${normTypeName(e.name)}).count`, valueType:'number' },
+    { label:`busy(${normTypeName(e.name)}).count  — busy servers`,
+      value:`busy(${normTypeName(e.name)}).count`, valueType:'number' },
+  ])).flat();
+  const builtInTokens = [
     { label:'served  — cumulative customers served', value:'served', valueType:'number' },
     { label:'reneged  — cumulative customers reneged', value:'reneged', valueType:'number' },
-    ...(stateVariables||[]).filter(sv=>sv.name).map(sv=>({
-      label: `${sv.name}  — ${sv.description||'state variable'}`,
-      value: sv.name,
-      valueType: 'number',
-    })),
+  ];
+  const stateVarTokens = (stateVariables||[]).filter(sv=>sv.name).map(sv=>({
+    label: `${sv.name}  — ${sv.description||'state variable'}`,
+    value: sv.name,
+    valueType: 'number',
+  }));
+  const tokens = [
+    ...queueTokens,
+    ...entityTypeTokens,
+    ...serverTokens,
+    ...builtInTokens,
+    ...stateVarTokens,
   ];
 
   const OPERATORS = ['>', '>=', '<', '<=', '==', '!='];
@@ -535,7 +592,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[]}) 
   );
 };
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[]})=>{
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[]})=>{
   // A C-event has:
   //   name, condition  — as before
   //   effect           — only ASSIGN macro(s), no SCHEDULE needed here
@@ -610,6 +667,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               onChange={v=>upd(i,'condition',v)}
               entityTypes={entityTypes}
               stateVariables={stateVariables}
+              queues={queues}
             />
           </div>
 
@@ -617,7 +675,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:72}}>effect(s):</span>
             <DropField value={ev.effect} onChange={v=>upd(i,'effect',v)}
-              options={assignOptions(entityTypes, stateVariables)} color={C.green}
+              options={assignOptions(entityTypes, stateVariables, queues)} color={C.green}
               placeholder="e.g. ASSIGN(Customer, Server); totalServed++"/>
           </div>
 
