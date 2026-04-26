@@ -62,12 +62,10 @@ const VisualView=({snap, model})=>{
   const servers=allEntities.filter(e=>e.role==="server");
   const customers=allEntities.filter(e=>e.role!=="server");
   const waiting=customers.filter(e=>e.status==="waiting");
-  
   const definedQueues = model.queues || [];
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      {/* Simulation Header */}
       <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:16,alignItems:"start"}}>
         <div style={{background:"#111",border:`2px solid #a855f744`,borderRadius:12,padding:"20px 28px",textAlign:"center",minWidth:140}}>
           <div style={{fontSize:10,color:"#9ca3af",fontFamily:FONT,letterSpacing:2,marginBottom:6}}>SIM CLOCK</div>
@@ -90,20 +88,16 @@ const VisualView=({snap, model})=>{
         </div>
       </div>
 
-      {/* Servers */}
       <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
         {servers.map(srv=><ServerBay key={srv.id} server={srv} customers={customers}/>)}
       </div>
 
-      {/* Queue Lanes - Using a robust matching logic */}
       <div style={{display:'flex',flexDirection:'column',gap:12}}>
         <div style={{fontSize:10,color:"#9ca3af",fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>QUEUE LANES</div>
-        
         {definedQueues.length > 0 ? (
           definedQueues.map((qDef, idx) => {
             const qName = qDef.name;
-            // Get entities that explicitly belong to this queue OR 
-            // if it's the first queue, include any waiting entities that have no queue assignment
+            // Robust matching: include entities with this queue name, OR if first lane, include unassigned waiting entities
             const qEntities = waiting.filter(e => e.queue === qName || (idx === 0 && !e.queue));
 
             return (
@@ -113,18 +107,14 @@ const VisualView=({snap, model})=>{
                   <span style={{fontSize:13,fontWeight:700,color:qEntities.length > 0 ? "#f59e0b" : "#fff",fontFamily:FONT}}>{qEntities.length}</span>
                 </div>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap',minHeight:40}}>
-                  {qEntities.length === 0 ? (
-                    <span style={{fontSize:11,color:"#444",fontStyle:"italic"}}>empty</span>
-                  ) : (
-                    qEntities.map(e => <CustomerToken key={e.id} entity={e} size={32} />)
-                  )}
+                  {qEntities.length === 0 ? <span style={{fontSize:11,color:"#444",fontStyle:"italic"}}>empty</span> : qEntities.map(e => <CustomerToken key={e.id} entity={e} size={32} />)}
                 </div>
               </div>
             );
           })
         ) : (
           <div style={{background: "#111", border:`1px solid #333`, borderRadius:8, padding:12}}>
-            <div style={{fontSize:11,color:"#f59e0b",fontWeight:700,marginBottom:8}}>DEFAULT QUEUE</div>
+            <div style={{fontSize:11,color:"#f59e0b",fontWeight:700,marginBottom:8}}>GENERAL QUEUE</div>
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{waiting.map(e => <CustomerToken key={e.id} entity={e} size={32} />)}</div>
           </div>
         )}
@@ -138,7 +128,10 @@ const ExecutePanel=({model,modelId,userId})=>{
   const [currentSnap,setCurrentSnap]=useState(null);
   const [log,setLog]=useState([]);
   const [view,setView]=useState("visual");
+  const [autoSpeed,setAutoSpeed] = useState(400);
+  const [autoRunning,setAutoRunning] = useState(false);
   const engineRef=useRef(null);
+  const autoRef=useRef(null);
 
   const initEngine=useCallback(()=>{
     engineRef.current=buildEngine(model);
@@ -152,15 +145,41 @@ const ExecutePanel=({model,modelId,userId})=>{
     const r=engineRef.current.step();
     setCurrentSnap(r.snap);
     setLog(prev=>[...prev,...(r.cycleLog||[])]);
-    if(r.done) setMode("done");
+    if(r.done) {
+        setMode("done");
+        stopAuto();
+    }
   },[]);
+
+  const doRunAll = async () => {
+    stopAuto();
+    const engine = buildEngine(model);
+    const result = engine.runAll();
+    setCurrentSnap(result.snap);
+    setLog(result.log || []);
+    setMode("done");
+  };
+
+  const stopAuto=()=>{ if(autoRef.current){clearInterval(autoRef.current);autoRef.current=null;setAutoRunning(false);}};
+  const toggleAuto=()=>{
+    if(autoRunning){stopAuto();return;}
+    if(mode==="idle")initEngine();
+    setAutoRunning(true);
+    autoRef.current=setInterval(()=>doStep(), autoSpeed);
+  };
+
+  useEffect(()=>()=>stopAuto(),[]);
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:14}}>
-      <div style={{background:"#1a1a1a",border:`1px solid #333`,borderRadius:8,padding:14,display:"flex",gap:10}}>
+      <div style={{background:"#1a1a1a",border:`1px solid #333`,borderRadius:8,padding:14,display:"flex",gap:10,alignItems:"center"}}>
         <Btn variant="primary" onClick={initEngine}>⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode==="done"}>⏭ Step</Btn>
+        <Btn variant={autoRunning?"danger":"amber"} onClick={toggleAuto}>{autoRunning?"Stop Auto":"Auto Run"}</Btn>
+        <Btn variant="ghost" onClick={doRunAll}>⚡ Run All</Btn>
+        
         <div style={{flex:1}}/>
+        
         <div style={{display:"flex",background:"#000",borderRadius:6,padding:2}}>
           {["visual","log","entities"].map(v => (
             <button key={v} onClick={()=>setView(v)} style={{padding:"6px 12px", background:view===v?"#333":"transparent", border:"none", color:view===v?"#fff":"#888", borderRadius:4, cursor:"pointer", fontSize:11, fontWeight:700, textTransform:"uppercase"}}>{v}</button>
@@ -172,11 +191,13 @@ const ExecutePanel=({model,modelId,userId})=>{
 
       {view==="log" && (
         <div style={{background:"#050505", border:`1px solid #333`, borderRadius:6, padding:14, maxHeight:400, overflowY:'auto'}}>
-          {log.map((r,i)=>(
-            <div key={i} style={{fontSize:12, fontFamily:"monospace", color:"#10b981", borderBottom:"1px solid #1a1a1a", padding:"4px 0"}}>
-              <span style={{color:"#666"}}>[t={r.time?.toFixed(2)}]</span> <PhaseTag phase={r.phase}/> {r.message}
-            </div>
-          ))}
+          {log.length === 0 ? <div style={{color:"#444", fontSize:12}}>Log empty. Run simulation to see events.</div> : 
+            log.map((r,i)=>(
+              <div key={i} style={{fontSize:12, fontFamily:"monospace", color:"#10b981", borderBottom:"1px solid #1a1a1a", padding:"4px 0"}}>
+                <span style={{color:"#666"}}>[t={r.time?.toFixed(2)}]</span> <PhaseTag phase={r.phase}/> {r.message}
+              </div>
+            ))
+          }
         </div>
       )}
 
@@ -184,8 +205,8 @@ const ExecutePanel=({model,modelId,userId})=>{
         <div style={{background:"#050505", border:`1px solid #333`, borderRadius:6, padding:14}}>
           <table style={{width:"100%", borderCollapse:"collapse", color:"#fff", fontSize:12, textAlign:"left"}}>
             <thead>
-              <tr style={{color:"#666", borderBottom:"2px solid #333"}}>
-                <th style={{padding:8}}>Entity</th><th style={{padding:8}}>Type</th><th style={{padding:8}}>Status</th><th style={{padding:8}}>Wait Time</th>
+              <tr style={{color:"#888", borderBottom:"2px solid #333"}}>
+                <th style={{padding:8}}>Entity</th><th style={{padding:8}}>Type</th><th style={{padding:8}}>Status</th><th style={{padding:8}}>Queue</th>
               </tr>
             </thead>
             <tbody>
@@ -194,7 +215,7 @@ const ExecutePanel=({model,modelId,userId})=>{
                   <td style={{padding:8, color:"#38bdf8"}}>#{e.id}</td>
                   <td style={{padding:8}}>{e.type}</td>
                   <td style={{padding:8}}><Tag label={e.status} color={e.status==='waiting'?"#f59e0b":"#10b981"}/></td>
-                  <td style={{padding:8, color:"#666"}}>{(currentSnap.clock - (e.arrivalTime||0)).toFixed(1)}t</td>
+                  <td style={{padding:8, color:"#666"}}>{e.queue || "None"}</td>
                 </tr>
               ))}
             </tbody>
