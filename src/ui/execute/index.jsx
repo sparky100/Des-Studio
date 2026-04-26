@@ -73,11 +73,13 @@ const VisualView=({snap, model})=>{
   const customers=allEntities.filter(e=>e.role!=="server");
   const waiting=customers.filter(e=>e.status==="waiting");
   
-  [span_2](start_span)// Use model definitions to ensure UI stability[span_2](end_span)
+  // FIX: Identify if we should use Multi-Queue mode based on the MODEL definition
+  // This prevents the UI from flipping back to "Single Queue" when the simulation is idle.
   const definedQueues = model.queues || [];
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      {/* Clock + counters */}
       <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:16,alignItems:"start"}}>
         <div style={{background:C.panel,border:`2px solid ${C.purple}44`,borderRadius:12,padding:"20px 28px",textAlign:"center",minWidth:140}}>
           <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:2,marginBottom:6}}>SIM CLOCK</div>
@@ -103,6 +105,7 @@ const VisualView=({snap, model})=>{
         </div>
       </div>
 
+      {/* Server bays */}
       {servers.length>0&&(
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>SERVER BAYS</div>
@@ -114,11 +117,13 @@ const VisualView=({snap, model})=>{
         </div>
       )}
 
-      [span_3](start_span){/* Primary Queue Display: Driven by Model Definitions[span_3](end_span) */}
+      {/* Queue Lanes: Always show multiple lanes if they are defined in the model */}
       {definedQueues.length > 0 ? (
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>QUEUE LANES</div>
           {definedQueues.map((qDef) => {
             const qName = qDef.name;
+            // Get data from simulation snapshot, or default to empty
             const qData = (snap.queues && snap.queues[qName]) || { length: 0, entities: [], avgWaitTime: 0 };
 
             const allLengths = Object.values(snap.queues || {}).map(q => q.length || 0);
@@ -136,7 +141,7 @@ const VisualView=({snap, model})=>{
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontSize:11,fontWeight:700,color:C.cEvent,fontFamily:FONT,letterSpacing:1}}>
-                      {qName}
+                      {qName.toUpperCase()}
                     </span>
                     {isBottleneck && (
                       <span style={{fontSize:9,background:C.amber+'22',border:`1px solid ${C.amber}55`,color:C.amber,borderRadius:3,padding:'1px 6px',fontFamily:FONT,fontWeight:700}}>
@@ -155,47 +160,58 @@ const VisualView=({snap, model})=>{
                   ) : (
                     <>
                       {(qData.entities||[]).slice(0, 8).map(e => (
-                        <div key={e.id} style={{width:32,height:32,borderRadius:'50%',background:C.waiting+'22',border:`2px solid ${C.waiting}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:C.waiting,fontFamily:FONT}}>
-                          {e.id}
-                        </div>
+                         <CustomerToken key={e.id} entity={e} size={32} showId={true} />
                       ))}
-                      {qData.length > 8 && <div style={{fontSize:11,color:C.muted,fontFamily:FONT,display:'flex',alignItems:'center'}}>+{qData.length - 8} more</div>}
+                      {qData.length > 8 && (
+                        <div style={{display:'flex',alignItems:'center',fontSize:11,color:C.muted,fontFamily:FONT}}>
+                           +{qData.length - 8} more
+                        </div>
+                      )}
                     </>
                   )}
+                </div>
+                <div style={{display:'flex',gap:16,marginTop:8}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>
+                    avg wait: {(qData.avgWaitTime||0).toFixed(1)} t
+                  </span>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>
+                    peak: {qData.peakLength||qData.length}
+                  </span>
                 </div>
               </div>
             );
           })}
         </div>
       ) : (
-        [span_4](start_span)/* Fallback for models without specific queue definitions[span_4](end_span) */
+        /* Fallback: Standard queue for models without specific definitions */
         <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:12}}>
           <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,marginBottom:8}}>QUEUE</div>
           <div style={{display:'flex',gap:6,flexWrap:'wrap',minHeight:36}}>
             {waiting.length === 0 ? (
               <span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>empty</span>
             ) : (
-              waiting.slice(0, 8).map(e => (
-                <div key={e.id} style={{width:32,height:32,borderRadius:'50%',background:C.waiting+'22',border:`2px solid ${C.waiting}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:C.waiting,fontFamily:FONT}}>
-                  {e.id}
-                </div>
+              waiting.slice(0, 12).map(e => (
+                <CustomerToken key={e.id} entity={e} size={32} showId={true} />
               ))
             )}
           </div>
         </div>
       )}
 
+      {/* Done / reneged row */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          <div style={{fontSize:10,color:C.served,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>SERVED ({snap.entities?.filter(e=>e.status==='done').length || 0})</div>
+          <div style={{fontSize:10,color:C.served,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>SERVED ({snap.served||0})</div>
           <div style={{background:C.panel,border:`1px solid ${C.served}22`,borderRadius:8,padding:10,display:"flex",gap:6,flexWrap:"wrap",minHeight:52,alignItems:"center"}}>
-             {snap.entities?.filter(e=>e.status==='done').map(e=><CustomerToken key={e.id} entity={e} size={32} showId={false}/>)}
+            {allEntities.filter(e=>e.status==='done').length===0 && <span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>None yet</span>}
+            {allEntities.filter(e=>e.status==='done').map(e=><CustomerToken key={e.id} entity={e} size={32} showId={false}/>)}
           </div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          <div style={{fontSize:10,color:C.reneged,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>RENEGED ({snap.entities?.filter(e=>e.status==='reneged').length || 0})</div>
+          <div style={{fontSize:10,color:C.reneged,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>RENEGED ({snap.reneged||0})</div>
           <div style={{background:C.panel,border:`1px solid ${C.reneged}22`,borderRadius:8,padding:10,display:"flex",gap:6,flexWrap:"wrap",minHeight:52,alignItems:"center"}}>
-             {snap.entities?.filter(e=>e.status==='reneged').map(e=><CustomerToken key={e.id} entity={e} size={32} showId={false}/>)}
+            {allEntities.filter(e=>e.status==='reneged').length===0 && <span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>None yet</span>}
+            {allEntities.filter(e=>e.status==='reneged').map(e=><CustomerToken key={e.id} entity={e} size={32} showId={false}/>)}
           </div>
         </div>
       </div>
@@ -237,7 +253,6 @@ const ExecutePanel=({model,modelId,userId})=>{
 
   const validate=()=>{
     const issues=[];
-    const typeNames=(model.entityTypes||[]).map(e=>e.name.trim().toLowerCase());
     if((model.entityTypes||[]).length===0) issues.push("No entity types defined");
     if((model.bEvents||[]).filter(b=>parseFloat(b.scheduledTime)<900).length===0)
       issues.push("No B-events with t<900 — nothing seeds the FEL");
@@ -335,7 +350,6 @@ const ExecutePanel=({model,modelId,userId})=>{
         ))}
       </div>
 
-      [span_5](start_span){/* Passing model here to VisualView to fix UI failing[span_5](end_span) */}
       {view==="visual"&&<VisualView snap={currentSnap} model={model}/>}
 
       {view==="log" && (
@@ -361,4 +375,3 @@ const ExecutePanel=({model,modelId,userId})=>{
 };
 
 export { CustomerToken, VisualView, ExecutePanel };
-[cite_start]
