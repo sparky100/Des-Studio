@@ -238,10 +238,20 @@ const ExecutePanel=({model,modelId,userId})=>{
     (model.cEvents||[]).forEach(c=>{
       const m=(c.effect||'').match(/ASSIGN\((\w+)\s*,\s*(\w+)\)/i);
       if(m){
-        if(!typeNames.includes(m[1].toLowerCase()))
-          issues.push(`C-event "${c.name}": customer type "${m[1]}" not defined`);
-        if(!typeNames.includes(m[2].toLowerCase()))
-          issues.push(`C-event "${c.name}": server type "${m[2]}" not defined`);
+        const firstName  = m[1].trim();
+        const secondName = m[2].trim();
+        const queueNames = (model.queues||[]).map(q=>q.name.toLowerCase());
+
+        // First arg can be a queue name OR a customer entity type
+        const firstValid = queueNames.includes(firstName.toLowerCase())
+          || typeNames.includes(firstName.toLowerCase());
+        if(!firstValid)
+          issues.push(`C-event "${c.name}": ASSIGN first argument "${firstName}" is not a defined queue or customer type`);
+
+        // Second arg must be a server entity type
+        const serverNames = (model.entityTypes||[]).map(e=>e.name.trim().toLowerCase());
+        if(!serverNames.includes(secondName.toLowerCase()))
+          issues.push(`C-event "${c.name}": server type "${secondName}" not defined`);
       }
     });
     return issues;
