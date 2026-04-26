@@ -76,6 +76,47 @@ describe('ARRIVE(Customer)', () => {
   });
 });
 
+// ── ARRIVE with explicit queue name ───────────────────────────────────────────
+describe('ARRIVE(Patient, TriageQueue)', () => {
+  test('creates entity with queue=TriageQueue', () => {
+    const entities = [];
+    const model = {
+      entityTypes: [{ name: 'Patient', role: 'customer', attrDefs: [] }],
+      bEvents: [], cEvents: [],
+    };
+    const ctx = makeCtx(entities, {}, model, 0);
+    applyEffect('ARRIVE(Patient, TriageQueue)', ctx);
+    expect(entities.length).toBe(1);
+    expect(entities[0].queue).toBe('TriageQueue');
+    expect(entities[0].type).toBe('Patient');
+    expect(entities[0].status).toBe('waiting');
+  });
+
+  test('defaults queue to TypeQueue when no queue arg given', () => {
+    const entities = [];
+    const ctx = makeCtx(entities, {}, baseModel, 0);
+    applyEffect('ARRIVE(Customer)', ctx);
+    expect(entities[0].queue).toBe('CustomerQueue');
+  });
+
+  test('pattern matches with spaces around comma', () => {
+    const macro = MACROS.find(m => m.name === 'ARRIVE');
+    expect(macro.pattern.test('ARRIVE(Patient , TriageQueue)')).toBe(true);
+    expect(macro.pattern.test('ARRIVE(Patient,TriageQueue)')).toBe(true);
+  });
+
+  test('pattern still matches single-arg form', () => {
+    const macro = MACROS.find(m => m.name === 'ARRIVE');
+    expect(macro.pattern.test('ARRIVE(Customer)')).toBe(true);
+  });
+
+  test('pattern does not match unknown format', () => {
+    const macro = MACROS.find(m => m.name === 'ARRIVE');
+    expect(macro.pattern.test('ARRIVE()')).toBe(false);
+    expect(macro.pattern.test('ARRIVE(A, B, C)')).toBe(false);
+  });
+});
+
 // ── ASSIGN ────────────────────────────────────────────────────────────────────
 describe('ASSIGN(Customer, Server)', () => {
   let entities, customer, server;
