@@ -80,9 +80,7 @@ const VisualView=({snap, model})=>{
             {label:"Reneged",  value:snap.reneged||0,      color:"#ef4444"},
             {label:"Waiting",  value:waiting.length,       color:"#f59e0b"},
           ].map(s=>(
-            <div key={s.label} style={{background:"#1a1a1a",border:`1px solid ${s.color}33`,borderRadius:8,padding:"10px 12px"}}>
-              <div style={{fontSize:10,color:"#9ca3af",fontFamily:FONT,marginBottom:2}}>{s.label}</div>
-              <div style={{fontSize:26,fontWeight:700,color:s.color,fontFamily:FONT}}>{s.value}</div>
+            <div key={s.label} style={{background:"#1a1a1a",border:`1,fontWeight:700>{s.value}</div>
             </div>
           ))}
         </div>
@@ -97,7 +95,6 @@ const VisualView=({snap, model})=>{
         {definedQueues.length > 0 ? (
           definedQueues.map((qDef, idx) => {
             const qName = qDef.name;
-            // Robust matching: include entities with this queue name, OR if first lane, include unassigned waiting entities
             const qEntities = waiting.filter(e => e.queue === qName || (idx === 0 && !e.queue));
 
             return (
@@ -130,6 +127,7 @@ const ExecutePanel=({model,modelId,userId})=>{
   const [view,setView]=useState("visual");
   const [autoSpeed,setAutoSpeed] = useState(400);
   const [autoRunning,setAutoRunning] = useState(false);
+  const [saveStatus,setSaveStatus]=useState(null);
   const engineRef=useRef(null);
   const autoRef=useRef(null);
 
@@ -138,6 +136,7 @@ const ExecutePanel=({model,modelId,userId})=>{
     setCurrentSnap(engineRef.current.getSnap());
     setLog([{phase:"INIT",time:0,message:"Simulation Initialized"}]);
     setMode("stepping");
+    setSaveStatus(null);
   },[model]);
 
   const doStep=useCallback(()=>{
@@ -160,26 +159,144 @@ const ExecutePanel=({model,modelId,userId})=>{
               avgSojourn: r.snap?.avgSojourn,
             },
           };
-          console.log("Saving stepped simulation run...", {modelId, userId});
+          setSaveStatus({ state: 'saving', message: 'Saving simulation results...' });
+          console.log("📊 Saving stepped simulation run...", {modelId, userId, summary: fullResult.summary});
           saveSimulationRun(modelId, userId, fullResult)
-            .then(() => console.log("✓ Simulation run saved successfully"))
-            .catch(e => console.error("✗ Failed to save simulation run:", e));
+            .then(() => {
+              setSaveStatus({ state: 'success', message: '✓ Simulation results saved successfully!' });
+              console.log("✓ Simulation run saved successfully");
+            })
+            .catch(e => {
+              const errorMsg = e?.message || e?.toString() || 'Unknown error';
+              setSaveStatus({ state: 'error', message: `✗ Failed to save: ${errorMsg}` });
+              console.error("✗ Failed to save simulation run:", e);
+            });
+        } else {
+          setSaveStatus({ state: 'error', message: `✗ Cannot save: ${!userId ? 'No userId' : ''} ${!modelId ? 'No modelId' : ''}`.trim() });
+          console.error("Cannot save simulation: missing userId or modelId", {userId, modelId});
         }
     }
   },[userId, modelId]);
 
   const doRunAll = useCallback(async () => {
     stopAuto();
-    const engine = buildEngine(model);
-    const result = engine.runAll();
-    setCurrentSnap(result.snap);
-    setLog(result.log || []);
+    if(!userId || !modelId) {
+      setSaveStatus({ state: 'error', message: `✗ Cannot save: ${!userId ? 'No userId' : ''} ${!modelId ? 'No modelId' : ''}`.trim() });
+      console.error("Cannot save simulation: missing userId or modelId", {userId, modelId});
+      ]);
     setMode("done");
     
-    // Save the simulation results when run all completes
-    if(userId && modelId) {
-      try {
-        console.log("Saving full simulation run...", {modelId, userId, resultHasSnap: !!result.snap});
-        await saveSimulationRun(modelId, userId, result, {
-          replications: 1,
-          durationMs: result.durationMs,
+    setSaveStatus({ state: 'saving', message: 'Saving simulation results...' });
+    try {
+      console.log("📊 Saving full simulation run...", {
+        modelId, 
+        userId, 
+        resultHasSnap: !!result.snap,
+        summary: result.summary,
+      });
+      await saveSimulationRun(modelId, userId, result, {
+        replications: 1,
+        durationMs: result.durationMs,
+      });
+      setSaveStatus({ state: 'success', message: '✓ Simulation results saved successfully!' });
+      console.log("✓ Full simulation run saved successfully");
+    } catch (e) {
+      const errorMsg = e?.message || e?.toString() || 'Unknown error';
+      const errorDetails = JSON.stringify(e, null, 2);
+      setSaveStatus({ state: 'error', message: `✗ Failed to save: ${errorMsg}` });
+      console.error("✗ Failed to save full simulation run:", e);
+      console.error("Error details:", errorDetails);
+    }
+  }, [model, userId, modelId]);
+
+  const stopAuto=()=>{ if(autoRef.current){clearInterval(autoRef.current);autoRef.current=null;setAutoRunning(false);}};
+  const toggleAuto=()=>{
+    if(autoRunning){stopAuto();return;}
+    if(mode==="idle")initEngine();
+    setAutoRunning(true);
+    autoRef.current=setInterval(()=>doStep(), autoSpeed);
+  };
+
+  useEffect(()=>()=>stopAuto(),[]);
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{background:"#1a1a1a",border:`1px solid #333`,borderRadius:8,padding:14,display:"flex",gap:10,alignItems:"center"}}>
+        <Btn variant="primary" onClick={initEngine}>⟳ Reset</Btn>
+        <Btn variant="success" onClick={doStep} disabled={mode==="done"}>⏭ Step</Btn>
+        <Btn variant={autoRunning?"danger":"amber"} onClick={toggleAuto}>{autoRunning?"Stop Auto":"Auto Run"}</Btn>
+        <Btn variant="ghost" onClick={doRunAll}>⚡ Run All</Btn>
+        
+        <div style={{flex:1}}/>
+        
+        <div style={{display:"flex",background:"#000",borderRadius:6,padding:2}}>
+          {["visual","log","entities"].map(v => (
+            <button key={v} onClick={()=>setView(v)} style={{padding:"6px 12px", background:view===v?"#333":"transparent", border:"none", color:view===v?"#fff":"#888", borderRadius:4, cursor:"pointer", fontSize:12}}>
+              {v.charAt(0).toUpperCase() + v.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {saveStatus && (
+        <div style={{
+          background: saveStatus.state === 'error' ? '#7f1d1d' : saveStatus.state === 'success' ? '#1b4332' : '#1f2937',
+          border: `1px solid ${saveStatus.state === 'error' ? '#dc2626' : saveStatus.state === 'success' ? '#31a24c' : '#4b5563'}`,
+          borderRadius: 6,
+          padding: 12,
+          color: saveStatus.state === 'error' ? '#fca5a5' : saveStatus.state === 'success' ? '#86efac' : '#e5e7eb',
+          fontSize: 12,
+          fontFamily: FONT,
+        }}>
+          {saveStatus.message}
+        </div>
+      )}
+
+      {view==="visual" && <VisualView snap={currentSnap} model={model}/>}
+
+      {view==="log" && (
+        <div style={{background:"#050505", border:`1px solid #333`, borderRadius:6, padding:14}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, paddingBottom:10, borderBottom:`1px solid #333`}}>
+            <div style={{fontSize:10,color:"#9ca3af",fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>SIMULATION LOG</div>
+            <div style={{fontSize:12,fontWeight:700,color:"#a78bfa",fontFamily:FONT}}>
+              Steps: {log.length} | Clock: {currentSnap?.clock?.toFixed(2) || '—'}
+            </div>
+          </div>
+          <div style={{maxHeight:350, overflowY:'auto'}}>
+            {log.length === 0 ? <div style={{color:"#444", fontSize:12}}>Log empty. Run simulation to see events.</div> : 
+              log.map((r,i)=>(
+                <div key={i} style={{fontSize:12, fontFamily:"monospace", color:"#10b981", borderBottom:"1px solid #1a1a1a", padding:"4px 0"}}>
+                  <span style={{color:"#666"}}>[t={r.time?.toFixed(2)}]</span> <PhaseTag phase={r.phase}/> {r.message}
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      )}
+
+      {view==="entities" && currentSnap && (
+        <div style={{background:"#050505", border:`1px solid #333`, borderRadius:6, padding:14}}>
+          <table style={{width:"100%", borderCollapse:"collapse", color:"#fff", fontSize:12, textAlign:"left"}}>
+            <thead>
+              <tr style={{color:"#888", borderBottom:"2px solid #333"}}>
+                <th style={{padding:8}}>Entity</th><th style={{padding:8}}>Type</th><th style={{padding:8}}>Status</th><th style={{padding:8}}>Queue</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentSnap.entities.map(e => (
+                <tr key={e.id} style={{borderBottom:"1px solid #1a1a1a"}}>
+                  <td style={{padding:8, color:"#38bdf8"}}>#{e.id}</td>
+                  <td style={{padding:8}}>{e.type}</td>
+                  <td style={{padding:8}}><Tag label={e.status} color={e.status==='waiting'?"#f59e0b":"#10b981"}/></td>
+                  <td style={{padding:8, color:"#666"}}>{e.queue || "None"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export { CustomerToken, VisualView, ExecutePanel };
