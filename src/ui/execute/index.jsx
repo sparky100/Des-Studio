@@ -167,7 +167,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           },
         };
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
-        setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation history..." }]);
+        setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
         
         saveSimulationRun(modelId, userId, fullResult)
           .then(() => {
@@ -190,19 +190,19 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     }
 
     const engine = buildEngine(model);
-    const result = engine.runAll(); // FIXED: using engine's runAll method
+    const result = engine.runAll(); 
     
     setCurrentSnap(result.snap);
     setLog(result.log);
     setMode("done");
     
     setSaveStatus({ state: 'saving', message: 'Saving results...' });
-    setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing full run to database..." }]);
+    setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing simulation history to database..." }]);
     
     try {
       await saveSimulationRun(modelId, userId, result);
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
-      setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Simulation history recorded." }]);
+      setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
     } catch (e) {
       setSaveStatus({ state: 'error', message: `✗ Failed to save: ${e.message}` });
       setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
@@ -251,14 +251,14 @@ const ExecutePanel = ({ model, modelId, userId }) => {
       {view === "log" && (
         <div style={{ background: "#050505", border: `1px solid #333`, borderRadius: 6, padding: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid #333` }}>
-            <div style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>SIMULATION LOG</div>
+            <div style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>SIMULATION LOG (NEWEST FIRST)</div>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#a78bfa", fontFamily: FONT }}>
               Steps: {log.length} | Clock: {currentSnap?.clock?.toFixed(2) || '—'}
             </div>
           </div>
           <div style={{ maxHeight: 350, overflowY: 'auto' }}>
             {log.length === 0 ? <div style={{ color: "#444", fontSize: 12 }}>Log empty. Run simulation to see events.</div> :
-              log.map((r, i) => (
+              [...log].reverse().map((r, i) => (
                 <div key={i} style={{ fontSize: 12, fontFamily: "monospace", color: "#10b981", borderBottom: "1px solid #1a1a1a", padding: "4px 0" }}>
                   <span style={{ color: "#666" }}>[t={r.time?.toFixed(2)}]</span> <PhaseTag phase={r.phase} /> {r.message}
                 </div>
