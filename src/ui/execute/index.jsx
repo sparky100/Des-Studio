@@ -5,10 +5,7 @@ import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx
 import { buildEngine } from "../../engine/index.js";
 import { saveSimulationRun } from "../../db/models.js";
 
-const TOKEN_COLORS=["#06b6d4","#f59e0b","#8b5cf6","#3fb950","#f87171","#a78bfa","#34d399","#fbbf24"];
-const tokenColor=(id)=>TOKEN_COLORS[(id-1)%TOKEN_COLORS.length];
-
-const CustomerToken=({entity,size=36,showId=true})=>{
+const TOKEN_COLORS=["#06b6d4","#f59e0b","#8b5cf6","#3fb950","#f87171","#a78bfa","#34entity,size=36,showId=true})=>{
   const col=tokenColor(entity.id);
   const statusBorder={waiting:C.waiting,serving:C.serving,done:C.served,reneged:C.reneged,idle:C.green,busy:C.amber}[entity.status]||C.muted;
   return (
@@ -148,8 +145,25 @@ const ExecutePanel=({model,modelId,userId})=>{
     if(r.done) {
         setMode("done");
         stopAuto();
+        // Save the simulation results when stepping completes
+        if(userId && modelId && engineRef.current) {
+          const engine = engineRef.current;
+          const fullResult = {
+            snap: r.snap,
+            summary: {
+              total: engine.state?.entities?.filter(e => e.role !== 'server').length || 0,
+              served: r.snap?.served || 0,
+              reneged: r.snap?.reneged || 0,
+              avgWait: r.snap?.avgWait,
+              avgSojourn: r.snap?.avgSojourn,
+            },
+            log: log,
+          };
+          saveSimulationRun(modelId, userId, fullResult)
+            .catch(e => console.error("Failed to save simulation run:", e));
+        }
     }
-  },[]);
+  },[userId, modelId, log]);
 
   const doRunAll = async () => {
     stopAuto();
@@ -158,6 +172,18 @@ const ExecutePanel=({model,modelId,userId})=>{
     setCurrentSnap(result.snap);
     setLog(result.log || []);
     setMode("done");
+    
+    // Save the simulation results when run all completes
+    if(userId && modelId && result) {
+      try {
+        await saveSimulationRun(modelId, userId, result, {
+          replications: 1,
+          durationMs: result.durationMs,
+        });
+      } catch (e) {
+        console.error("Failed to save simulation run:", e);
+      }
+    }
   };
 
   const stopAuto=()=>{ if(autoRef.current){clearInterval(autoRef.current);autoRef.current=null;setAutoRunning(false);}};
@@ -182,7 +208,9 @@ const ExecutePanel=({model,modelId,userId})=>{
         
         <div style={{display:"flex",background:"#000",borderRadius:6,padding:2}}>
           {["visual","log","entities"].map(v => (
-            <button key={v} onClick={()=>setView(v)} style={{padding:"6px 12px", background:view===v?"#333":"transparent", border:"none", color:view===v?"#fff":"#888", borderRadius:4, cursor:"pointer", fontSize:11, fontWeight:700, textTransform:"uppercase"}}>{v}</button>
+            <button key={v} onClick={()=>setView(v)} style={{padding:"6px 12px", background:view===v?"#333":"transparent", border:"none", color:view===v?"#fff":"#888", borderRadius:4, cursor:"pointer", fontSize:12}}>
+              {v.charAt(0).toUpperCase() + v.slice(1)}
+            </button>
           ))}
         </div>
       </div>
