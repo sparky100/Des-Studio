@@ -39,6 +39,7 @@ Claude Code must read the relevant existing files before touching anything.
 | 1.1 | 2026-05-01 | Post-Sprint 1 update — sprint status recorded; Sprint 1 completion gate results noted |
 | 1.2 | 2026-05-03 | Added Sprint 6 (LLM Integration & Results Analysis), Sprint 7 (Dynamic Distributions & Time-Varying Resources), and Sprint 8 (LLM Chat Model Builder). Features derived from design sessions in chats "LLM model integration and results analysis", "dynamic sampling distributions and time varying resources", and "Building models through LLM chat interface". Absent-feature register updated. |
 | 1.3 | 2026-05-03 | Sprint 2 complete — 215 tests passing (14 files), build 3.29s. Sprint 3 started. |
+| 1.4 | 2026-05-03 | Added F5.9 — model delete UI with owner-only guard. Identified gap: no UI surface for model deletion existed in any prior sprint. |
 
 ---
 
@@ -1403,6 +1404,7 @@ See DES_Studio_Build_Plan.md for complete prompt text.)*
 | F5.6 — Fix avg_service_time column (C9) | ~ (mismatch) | Fix: `db/models.js:127` |
 | F5.7 — Keyboard navigation + ARIA | ✗ (not implemented) | Extend: all UI components |
 | F5.8 — First-run onboarding | ✗ (not implemented) | New: welcome panel + sample model |
+| F5.9 — Model delete | ✗ (deleteModel() exists in db/models.js — no UI surface anywhere) | New: owner-only Delete button on ModelCard + user_id ownership guard |
 
 ### Sprint 5 Planning Prompt *(run in claude.ai)*
 
@@ -1423,6 +1425,9 @@ Features:
   F5.6 — avg_service_time column fix (C9)
   F5.7 — Keyboard navigation and ARIA labels (extend all existing components)
   F5.8 — First-run onboarding (new — welcome panel + pre-built M/M/1 model)
+  F5.9 — Model delete: owner-only Delete button on ModelCard,
+          confirmation dialog, deleteModel() user_id guard,
+          cascade behaviour documented
 
 Definition of done:
   - Zero console errors in any workflow path
@@ -1434,6 +1439,62 @@ Definition of done:
 ```
 
 *(Full per-feature prompts follow the same structure as earlier sprints.)*
+
+---
+
+### F5.9 — Model Delete (Owner Only)
+
+**Audit status:** ✗ (deleteModel() exists in db/models.js — no UI surface anywhere)
+**Existing code:** `App.jsx` (ModelCard), `src/db/models.js`
+**Action:** New UI affordance + ownership guard
+**Status:** ⬜ | **Completed:** —
+Task F5.9 of Sprint 5.
+Read src/App.jsx — find ModelCard and how models are listed.
+Read src/db/models.js — find the existing deleteModel() function.
+Add a Delete button to ModelCard:
+
+Visible only when model.user_id === currentUser.id
+Not rendered on public models owned by other users
+On click: show confirmation dialog
+"Delete '[model name]'? This cannot be undone."
+On confirm: call deleteModel(model.id, userId)
+On success: remove model from local state without page reload
+On error: display error banner
+
+Extend deleteModel() in db/models.js:
+
+Add .eq('user_id', userId) to the delete query
+Ensures ownership is enforced at the application layer
+in addition to Supabase RLS policy
+If no row deleted (id + user_id mismatch): return structured error
+
+Document cascade behaviour:
+
+Read schema.sql — confirm whether simulation_runs has
+ON DELETE CASCADE from models table
+If yes: note this in a code comment in deleteModel()
+If no: raise as a finding — orphaned run records are a data integrity risk
+
+Write a UI test (add to tests/ui/):
+
+Owner sees Delete button on their own model
+Non-owner does not see Delete button on a public model
+Confirmation dialog appears before delete executes
+deleteModel() is NOT called if user cancels
+
+Write a DB layer test (add to tests/db/models.test.js):
+
+deleteModel() query includes .eq('user_id', userId)
+deleteModel() called without userId does not execute
+
+
+**Completion checklist:**
+- [ ] Delete button visible to owner only
+- [ ] Confirmation dialog shown before delete
+- [ ] `deleteModel()` includes `user_id` ownership guard
+- [ ] Cascade behaviour confirmed and documented
+- [ ] UI test passes (owner/non-owner visibility + cancel guard)
+- [ ] DB layer test passes (user_id filter asserted)
 
 ---
 
