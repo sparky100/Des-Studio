@@ -38,6 +38,7 @@ Claude Code must read the relevant existing files before touching anything.
 | 1.0 | 2026-04-30 | Initial plan from audit findings |
 | 1.1 | 2026-05-01 | Post-Sprint 1 update — sprint status recorded; Sprint 1 completion gate results noted |
 | 1.2 | 2026-05-03 | Added Sprint 6 (LLM Integration & Results Analysis), Sprint 7 (Dynamic Distributions & Time-Varying Resources), and Sprint 8 (LLM Chat Model Builder). Features derived from design sessions in chats "LLM model integration and results analysis", "dynamic sampling distributions and time varying resources", and "Building models through LLM chat interface". Absent-feature register updated. |
+| 1.3 | 2026-05-03 | Sprint 2 complete — 215 tests passing (14 files), build 3.29s. Sprint 3 started. |
 
 ---
 
@@ -574,7 +575,7 @@ Questions:
 All existing editors (EntityTypeEditor, BEventEditor, CEventEditor, QueueEditor, ConditionBuilder)
 remain in place — this sprint extends them.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-03 | **Completed:** 2026-05-03
 **Prerequisite:** Sprint 1 exit gate passed.
 
 ---
@@ -985,12 +986,12 @@ Both are cosmetic. No engine or logic changes. No new files.
 ### Sprint 2 Completion Gate
 
 ```bash
-npm test -- --run                      # All tests pass (engine + new UI)
-npm test -- ui                         # UI test suite passes
-npm test -- predicate-builder          # Type-safety tests pass
-npm test -- c-event-editor             # Priority + token refresh tests pass
-npm test -- dist-picker                # DistPicker tests pass
-npm run build                          # Succeeds
+✅ npm test -- --run              # 215 tests passing, 14 files
+✅ npm test -- ui                 # 30 tests passing, 5 files
+✅ npm test -- predicate-builder  # 11 tests passing
+✅ npm test -- c-event-editor     # 7 tests passing — duplicate empty-string key warning, non-blocking
+✅ npm test -- dist-picker        # 7 tests passing
+✅ npm run build                  # 3.29s
 ```
 
 ---
@@ -1000,7 +1001,7 @@ npm run build                          # Succeeds
 **Goal:** Implement warm-up period, termination conditions, and unified
 experiment panel. All changes extend existing engine and UI files.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** 🔄 In progress | **Started:** 2026-05-03 | **Completed:** —
 **Prerequisite:** Sprint 2 exit gate passed.
 
 > **Key audit finding:** `max_simulation_time` column already exists in the DB schema.
