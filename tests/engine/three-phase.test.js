@@ -110,19 +110,19 @@ describe('Phase C — C-scan restart rule', () => {
     ],
     cEvents: [
       {
-        id: 'c1', name: 'P1-HighPriority',
+        id: 'c1', name: 'P1-HighPriority', priority: 1,
         condition: 'trigger > 0 AND a == 0',
         effect:    'a = 1; trigger = 0',
         cSchedules: [],
       },
       {
-        id: 'c2', name: 'P2-MidPriority',
+        id: 'c2', name: 'P2-MidPriority', priority: 2,
         condition: 'a == 0 AND b == 0 AND trigger == 0',
         effect:    'trigger = 1',
         cSchedules: [],
       },
       {
-        id: 'c3', name: 'P3-LowPriority',
+        id: 'c3', name: 'P3-LowPriority', priority: 3,
         condition: 'trigger > 0 AND b == 0',
         effect:    'b = 1; trigger = 0',
         cSchedules: [],

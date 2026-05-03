@@ -1,9 +1,8 @@
 // ui/editors/index.jsx — All model editor components
-import { useState } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { C, FONT, normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, Field, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
-import { buildConditionTokens } from "../../engine/conditions.js";
 
 // ── UI Polish Helpers ─────────────────────────────────────────────────────────
 const toTitleCase = s => s.trim().replace(/\b\w/g, c => c.toUpperCase());
@@ -131,7 +130,7 @@ const DropField = ({value, onChange, options, color}) => {
         onChange={e => onChange(e.target.value)}
         style={{background:C.bg,border:`1px solid ${col}55`,borderRadius:4,
           color:col,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
-        {options.map(o=><option key={o.value} value={o.value} disabled={!!o.disabled}>{o.label}</option>)}
+        {options.map((o,i)=><option key={i} value={o.value} disabled={!!o.disabled}>{o.label}</option>)}
       </select>
     </div>
   );
@@ -417,6 +416,24 @@ const buildConditionStr = (rows) => {
   }).join(' ');
 };
 
+// Convert flat rows to compound predicate JSON structure
+const rowsToCompoundPredicate = (rows) => {
+  if(!rows || rows.length === 0) return null;
+  if(rows.length === 1) {
+    const r = rows[0];
+    return { variable: r.token, operator: r.operator, value: r.value };
+  }
+  // Multiple rows — build compound with AND/OR
+  const clauses = rows.map(r => ({
+    variable: r.token,
+    operator: r.operator,
+    value: r.value,
+  }));
+  // Get the primary connector (first join, or AND if only one clause)
+  const primaryOp = rows.length > 1 ? rows[1].join : 'AND';
+  return { operator: primaryOp, clauses };
+};
+
 const parseConditionStr = (str, tokens) => {
   // Try to parse existing condition string back into rows
   // Supports: TOKEN OP VALUE (AND|OR TOKEN OP VALUE)*
@@ -449,43 +466,62 @@ const parseConditionStr = (str, tokens) => {
 };
 
 const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], queues=[]}) => {
-  // Build token list from queues, entity types and state variables
-  const queueTokens = (queues||[]).map(q => ({
-    label: `queue(${q.name}).length — entities in ${q.name}`,
-    value: `queue(${q.name}).length`,
-    valueType: 'number',
-  }));
-  const entityTypeTokens = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>({
-    label: `queue(${normTypeName(e.name)}).length  — customers waiting`,
-    value: `queue(${normTypeName(e.name)}).length`,
-    valueType: 'number',
-  }));
-  const serverTokens = (entityTypes||[]).filter(e=>e.role==='server').map(e=>([
-    { label:`idle(${normTypeName(e.name)}).count  — idle servers`,
-      value:`idle(${normTypeName(e.name)}).count`, valueType:'number' },
-    { label:`busy(${normTypeName(e.name)}).count  — busy servers`,
-      value:`busy(${normTypeName(e.name)}).count`, valueType:'number' },
-  ])).flat();
-  const builtInTokens = [
-    { label:'served  — cumulative customers served', value:'served', valueType:'number' },
-    { label:'reneged  — cumulative customers reneged', value:'reneged', valueType:'number' },
-  ];
-  const stateVarTokens = (stateVariables||[]).filter(sv=>sv.name).map(sv=>({
-    label: `${sv.name}  — ${sv.description||'state variable'}`,
-    value: sv.name,
-    valueType: 'number',
-  }));
-  const tokens = [
-    ...queueTokens,
-    ...entityTypeTokens,
-    ...serverTokens,
-    ...builtInTokens,
-    ...stateVarTokens,
-  ];
+  // useMemo ensures dropdown rebuilds whenever entityTypes, stateVariables, or queues change (C8 fix)
+  const tokens = useMemo(() => {
+    const queueTokens = (queues||[]).map(q => ({
+      label: `queue(${q.name}).length — entities in ${q.name}`,
+      value: `queue(${q.name}).length`,
+      valueType: 'number',
+    }));
+    const entityTypeTokens = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>({
+      label: `queue(${normTypeName(e.name)}).length  — customers waiting`,
+      value: `queue(${normTypeName(e.name)}).length`,
+      valueType: 'number',
+    }));
+    const serverTokens = (entityTypes||[]).filter(e=>e.role==='server').flatMap(e=>{
+      const name = normTypeName(e.name);
+      return [
+        { label:`idle(${name}).count  — idle servers`, value:`idle(${name}).count`, valueType:'number' },
+        { label:`busy(${name}).count  — busy servers`, value:`busy(${name}).count`, valueType:'number' },
+        ...(e.attrDefs||[]).filter(a=>a.name).map(a=>({
+          label: `attr(${name}, ${a.name})  — ${a.name} of idle ${name}`,
+          value: `attr(${name}, ${a.name})`,
+          valueType: a.valueType||'number',
+        })),
+      ];
+    });
+    const builtInTokens = [
+      { label:'served  — cumulative customers served', value:'served', valueType:'number' },
+      { label:'reneged  — cumulative customers reneged', value:'reneged', valueType:'number' },
+    ];
+    const stateVarTokens = (stateVariables||[]).filter(sv=>sv.name).map(sv=>({
+      label: `${sv.name}  — ${sv.description||'state variable'}`,
+      value: sv.name,
+      valueType: 'number',
+    }));
+    return [...queueTokens, ...entityTypeTokens, ...serverTokens, ...builtInTokens, ...stateVarTokens];
+  }, [entityTypes, stateVariables, queues]);
 
-  const OPERATORS = ['>', '>=', '<', '<=', '==', '!='];
+  // Filter operators by valueType
+  const getOperatorsForType = (valueType) => {
+    switch(valueType) {
+      case 'number': return ['==', '!=', '<', '>', '<=', '>='];
+      case 'string': return ['==', '!='];
+      case 'boolean': return ['==', '!='];
+      default: return ['==', '!='];
+    }
+  };
 
   const [rows, setRows] = useState(()=>parseConditionStr(value, tokens));
+
+  // Revalidate existing rows when token list changes (entity class added/removed/renamed).
+  // Rows referencing a deleted token fall back to the first available token.
+  useEffect(() => {
+    setRows(prev => prev.map(row => ({
+      ...row,
+      token: tokens.find(t => t.value === row.token) ? row.token : (tokens[0]?.value || ''),
+    })));
+  }, [tokens]);
 
   // Sync rows → condition string whenever rows change
   const updateRows = (newRows) => {
@@ -495,9 +531,11 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
 
   const addRow = () => {
     const defaultToken = tokens[0]?.value||'';
+    const defaultType = tokens[0]?.valueType||'number';
+    const defaultOperator = getOperatorsForType(defaultType)[0];
     updateRows([...rows, {
       id:'r'+Date.now(), token:defaultToken,
-      operator:'>', value:'0', join:'AND',
+      operator:defaultOperator, value:'', join:'AND',
     }]);
   };
 
@@ -505,6 +543,15 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
 
   const updRow = (idx, patch) => {
     const n = [...rows];
+    const selectedToken = tokens.find(t=>t.value===patch.token) || tokens.find(t=>t.value===n[idx].token);
+    const newType = selectedToken?.valueType || 'number';
+    const allowedOps = getOperatorsForType(newType);
+
+    // If changing token and operator isn't valid for new type, reset to first valid operator
+    if(patch.token && !allowedOps.includes(n[idx].operator)) {
+      patch.operator = allowedOps[0];
+    }
+
     n[idx] = {...n[idx], ...patch};
     updateRows(n);
   };
@@ -528,7 +575,12 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
           No conditions yet — tap + Add Clause to build a condition.
         </div>
       )}
-      {rows.map((row,idx)=>(
+      {rows.map((row,idx)=>{
+        const selectedToken = tokens.find(t=>t.value===row.token);
+        const valueType = selectedToken?.valueType || 'number';
+        const allowedOps = getOperatorsForType(valueType);
+
+        return (
         <div key={row.id} style={{display:'flex',flexDirection:'column',gap:6}}>
           {/* AND/OR join (not shown for first row) */}
           {idx>0&&(
@@ -555,22 +607,43 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
-            {/* Operator dropdown */}
+            {/* Operator dropdown — filtered by valueType */}
             <select value={row.operator} onChange={e=>updRow(idx,{operator:e.target.value})}
               style={{...sel(),width:60}}>
-              {OPERATORS.map(op=><option key={op} value={op}>{op}</option>)}
+              {allowedOps.map(op=><option key={op} value={op}>{op}</option>)}
             </select>
-            {/* Value input */}
-            <input type="number" value={row.value}
-              onChange={e=>updRow(idx,{value:e.target.value})}
-              style={{width:60,background:'transparent',border:`1px solid ${C.border}`,
-                borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,
-                padding:'5px 8px',outline:'none'}}/>
+            {/* Value input — widget depends on valueType */}
+            {valueType==='number' && (
+              <input type="number" value={row.value}
+                onChange={e=>updRow(idx,{value:e.target.value})}
+                placeholder="0"
+                style={{width:60,background:'transparent',border:`1px solid ${C.border}`,
+                  borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,
+                  padding:'5px 8px',outline:'none'}}/>
+            )}
+            {valueType==='string' && (
+              <input type="text" value={row.value}
+                onChange={e=>updRow(idx,{value:e.target.value})}
+                placeholder="value"
+                style={{width:100,background:'transparent',border:`1px solid ${C.border}`,
+                  borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,
+                  padding:'5px 8px',outline:'none'}}/>
+            )}
+            {valueType==='boolean' && (
+              <select value={row.value} onChange={e=>updRow(idx,{value:e.target.value})}
+                style={{width:80,background:C.bg,border:`1px solid ${C.border}`,
+                  borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,
+                  padding:'5px 8px',outline:'none'}}>
+                <option value="true">true</option>
+                <option value="false">false</option>
+              </select>
+            )}
             {/* Remove */}
             <Btn small variant="danger" onClick={()=>removeRow(idx)}>✕</Btn>
           </div>
         </div>
-      ))}
+      );
+      })}
       {/* Add clause + preview */}
       <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
         <Btn small variant="ghost" onClick={addRow}>+ Add Clause</Btn>
@@ -578,6 +651,181 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
           <div style={{fontSize:11,color:C.muted,fontFamily:FONT,
             background:C.surface,borderRadius:4,padding:'4px 10px',flex:1}}>
             <span style={{color:C.cEvent}}>{buildConditionStr(rows)||'—'}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── Entity Filter Builder ─────────────────────────────────────────────────────
+// Builds a predicate JSON filter restricted to Entity.* variables (entity attributes).
+// Only customer entity type attributes are exposed — no queue, resource, or state var tokens.
+// Serialises to: null (no filter) | { variable, operator, value } | { operator, clauses }
+
+const _parseFilterValue = (s) => {
+  if (s === 'true') return true;
+  if (s === 'false') return false;
+  const n = Number(s);
+  return s !== '' && !isNaN(n) ? n : s;
+};
+
+const _predicateToFilterRows = (pred) => {
+  if (!pred) return [];
+  if (pred.operator === 'AND' || pred.operator === 'OR') {
+    const join = pred.operator;
+    return (pred.clauses || []).map((c, idx) => ({
+      id: 'ef' + idx,
+      variable: c.variable || '',
+      operator: c.operator || '==',
+      value: String(c.value ?? ''),
+      join: idx === 0 ? 'AND' : join,
+    }));
+  }
+  return [{ id: 'ef0', variable: pred.variable || '', operator: pred.operator || '==', value: String(pred.value ?? ''), join: 'AND' }];
+};
+
+const _rowsToFilterPredicate = (rows) => {
+  if (!rows || rows.length === 0) return null;
+  if (rows.length === 1) {
+    const r = rows[0];
+    return { variable: r.variable, operator: r.operator, value: _parseFilterValue(r.value) };
+  }
+  const join = rows[1]?.join || 'AND';
+  return {
+    operator: join,
+    clauses: rows.map(r => ({ variable: r.variable, operator: r.operator, value: _parseFilterValue(r.value) })),
+  };
+};
+
+const _getFilterOps = (valueType) => {
+  if (valueType === 'boolean' || valueType === 'string') return ['==', '!='];
+  return ['==', '!=', '<', '>', '<=', '>='];
+};
+
+const EntityFilterBuilder = ({ entityTypes = [], value, onChange }) => {
+  const tokens = (entityTypes || [])
+    .filter(e => e.role === 'customer')
+    .flatMap(e => (e.attrDefs || [])
+      .filter(a => a.name)
+      .map(a => ({
+        label:     `Entity.${a.name}`,
+        variable:  `Entity.${a.name}`,
+        valueType: a.valueType || 'number',
+      }))
+    );
+
+  const [rows, setRows] = useState(() => _predicateToFilterRows(value));
+
+  const updateRows = (newRows) => {
+    setRows(newRows);
+    onChange(_rowsToFilterPredicate(newRows));
+  };
+
+  const addRow = () => {
+    const defVar  = tokens[0]?.variable || '';
+    const defType = tokens[0]?.valueType || 'number';
+    updateRows([...rows, { id: 'ef' + Date.now(), variable: defVar, operator: _getFilterOps(defType)[0], value: '', join: 'AND' }]);
+  };
+
+  const removeRow = (idx) => updateRows(rows.filter((_, i) => i !== idx));
+
+  const updRow = (idx, patch) => {
+    const n = [...rows];
+    if (patch.variable) {
+      const tok  = tokens.find(t => t.variable === patch.variable);
+      const ops  = _getFilterOps(tok?.valueType || 'number');
+      if (!ops.includes(n[idx].operator)) patch.operator = ops[0];
+    }
+    n[idx] = { ...n[idx], ...patch };
+    updateRows(n);
+  };
+
+  const selSt = (extra = {}) => ({
+    background: C.bg, border: `1px solid ${C.cEvent}55`, borderRadius: 4,
+    color: C.cEvent, fontFamily: FONT, fontSize: 12, padding: '5px 8px', outline: 'none',
+    ...extra,
+  });
+
+  if (tokens.length === 0) {
+    return (
+      <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: 'italic' }}>
+        Define customer entity types with attributes to enable entity filtering.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {rows.length === 0 && (
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: 'italic' }}>
+          No filter — all entities in queue are eligible. Add a clause to restrict.
+        </div>
+      )}
+      {rows.map((row, idx) => {
+        const tok  = tokens.find(t => t.variable === row.variable) || tokens[0];
+        const ops  = _getFilterOps(tok?.valueType || 'number');
+        const vt   = tok?.valueType || 'number';
+        return (
+          <div key={row.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {idx > 0 && (
+              <div style={{ display: 'flex', gap: 6, paddingLeft: 8 }}>
+                {['AND', 'OR'].map(j => (
+                  <button key={j} onClick={() => updRow(idx, { join: j })} style={{
+                    background: row.join === j ? C.cEvent + '33' : 'transparent',
+                    border: `1px solid ${row.join === j ? C.cEvent : C.border}`,
+                    borderRadius: 4, color: row.join === j ? C.cEvent : C.muted,
+                    fontFamily: FONT, fontSize: 11, fontWeight: 700,
+                    padding: '3px 12px', cursor: 'pointer',
+                  }}>{j}</button>
+                ))}
+              </div>
+            )}
+            <div style={{
+              display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
+              background: C.bg, border: `1px solid ${C.cEvent}22`,
+              borderRadius: 6, padding: '8px 10px',
+            }}>
+              <select value={row.variable} onChange={e => updRow(idx, { variable: e.target.value })}
+                style={{ ...selSt(), flex: 2, minWidth: 160 }}
+                aria-label="Entity attribute">
+                {tokens.map(t => (
+                  <option key={t.variable} value={t.variable}>{t.label}</option>
+                ))}
+              </select>
+              <select value={row.operator} onChange={e => updRow(idx, { operator: e.target.value })}
+                style={{ ...selSt(), width: 60 }}
+                aria-label="Operator">
+                {ops.map(op => <option key={op} value={op}>{op}</option>)}
+              </select>
+              {vt === 'boolean' ? (
+                <select value={row.value} onChange={e => updRow(idx, { value: e.target.value })}
+                  style={{ ...selSt({ color: C.amber }), width: 80 }}>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              ) : vt === 'string' ? (
+                <input type="text" value={row.value} onChange={e => updRow(idx, { value: e.target.value })}
+                  placeholder="value"
+                  style={{ width: 100, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: '5px 8px', outline: 'none' }}/>
+              ) : (
+                <input type="number" value={row.value} onChange={e => updRow(idx, { value: e.target.value })}
+                  placeholder="0"
+                  style={{ width: 70, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: '5px 8px', outline: 'none' }}/>
+              )}
+              <Btn small variant="danger" onClick={() => removeRow(idx)}>✕</Btn>
+            </div>
+          </div>
+        );
+      })}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Btn small variant="ghost" onClick={addRow}>+ Add Filter Clause</Btn>
+        {rows.length > 0 && (
+          <Btn small variant="ghost" onClick={() => { setRows([]); onChange(null); }}>Clear Filter</Btn>
+        )}
+        {rows.length > 0 && (
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, background: C.surface, borderRadius: 4, padding: '4px 10px', flex: 1 }}>
+            <span style={{ color: C.cEvent }}>{rows.map((r, i) => (i > 0 ? ` ${r.join} ` : '') + `${r.variable} ${r.operator} ${r.value || '?'}`).join('')}</span>
           </div>
         )}
       </div>
@@ -594,10 +842,28 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
   //   description
 
   const blank=()=>({id:"c"+Date.now(),name:"",condition:"",effect:"",
-    cSchedules:[],description:""});
+    cSchedules:[],description:"",priority:events.length+1});
   const add=()=>onChange([...events,blank()]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
-  const rem=(i)=>onChange(events.filter((_,idx)=>idx!==i));
+  const rem=(i)=>{
+    const remaining=events.filter((_,idx)=>idx!==i);
+    onChange(remaining.map((ev,idx)=>({...ev,priority:idx+1})));
+  };
+
+  // Drag-to-reorder state
+  const dragIdx=useRef(null);
+  const [dragOverIdx,setDragOverIdx]=useState(null);
+
+  const handleDrop=(targetIdx)=>{
+    const from=dragIdx.current;
+    if(from===null||from===targetIdx){dragIdx.current=null;setDragOverIdx(null);return;}
+    const reordered=[...events];
+    const [moved]=reordered.splice(from,1);
+    reordered.splice(targetIdx,0,moved);
+    onChange(reordered.map((ev,idx)=>({...ev,priority:idx+1})));
+    dragIdx.current=null;
+    setDragOverIdx(null);
+  };
 
   // cSchedules helpers
   const addSched=(i)=>{
@@ -637,12 +903,32 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
       </InfoBox>
       {events.length===0&&<Empty icon="🔀" msg="No C-events yet."/>}
       {events.map((ev,i)=>(
-        <div key={ev.id} style={{background:C.bg,border:`1px solid ${C.cEvent}33`,
-          borderLeft:`3px solid ${C.cEvent}`,borderRadius:6,padding:12,
-          display:"flex",flexDirection:"column",gap:10}}>
+        <div key={ev.id}
+          style={{background:C.bg,
+            border:`1px solid ${dragOverIdx===i?C.cEvent:C.cEvent+'33'}`,
+            borderLeft:`3px solid ${C.cEvent}`,borderRadius:6,padding:12,
+            display:"flex",flexDirection:"column",gap:10,
+            transition:'border-color 0.1s'}}
+          onDragOver={e=>{e.preventDefault();e.dataTransfer.dropEffect='move';setDragOverIdx(i);}}
+          onDragLeave={()=>setDragOverIdx(null)}
+          onDrop={e=>{e.preventDefault();handleDrop(i);}}
+          onDragEnd={()=>{dragIdx.current=null;setDragOverIdx(null);}}>
 
           {/* Header row */}
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {/* Priority badge — drag grip */}
+            <div
+              draggable="true"
+              onDragStart={e=>{dragIdx.current=i;e.dataTransfer.effectAllowed='move';}}
+              title="Drag to reorder"
+              style={{cursor:'grab',userSelect:'none',flexShrink:0,display:'flex',alignItems:'center'}}>
+              <span aria-label={`Priority ${ev.priority||i+1}`} style={{
+                background:C.cEvent+'22',border:`1px solid ${C.cEvent}55`,
+                borderRadius:4,color:C.cEvent,fontFamily:FONT,
+                fontSize:11,fontWeight:700,padding:'3px 8px',
+                minWidth:32,textAlign:'center',display:'inline-block',
+              }}>P{ev.priority||i+1}</span>
+            </div>
             <Tag label="C-event" color={C.cEvent}/>
             <input value={ev.name} onChange={e=>upd(i,"name",e.target.value)}
               placeholder="Event name"
@@ -661,6 +947,19 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               entityTypes={entityTypes}
               stateVariables={stateVariables}
               queues={queues}
+            />
+          </div>
+
+          {/* Entity Filter (optional) */}
+          <div style={{display:"flex",flexDirection:'column',gap:6}}>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>ENTITY FILTER</span>
+              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>optional — restricts which entities from the queue SEIZE can match</span>
+            </div>
+            <EntityFilterBuilder
+              entityTypes={entityTypes}
+              value={ev.entityFilter||null}
+              onChange={v=>upd(i,'entityFilter',v)}
             />
           </div>
 
@@ -874,7 +1173,7 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
 
 export {
   AttrEditor, EntityTypeEditor, StateVarEditor,
-  BEventEditor, CEventEditor, ConditionBuilder,
+  BEventEditor, CEventEditor, ConditionBuilder, EntityFilterBuilder,
   QueueEditor,
   toTitleCase, normTypeName, conditionOptions, assignOptions, bEffectOptions, DropField
 };

@@ -5,6 +5,10 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'node',
+    environmentMatchGlobs: [
+      ['tests/ui/**', 'jsdom'],
+    ],
     globals: true,
+    setupFiles: ['tests/setup.js'],
   },
 })

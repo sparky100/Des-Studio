@@ -27,6 +27,7 @@ export function applyEffect(effect, ctx) {
     entities, state, model, clock, felRef, helpers,
     nextId: ctx.nextId,
     rng:    ctx.rng,
+    entityFilter: ctx.entityFilter ?? null,
     getLastCustId: () => lastCustId,
     getLastSrvId:  () => lastSrvId,
     setLastCustId: (id) => { lastCustId = id; },
@@ -117,7 +118,7 @@ export function fireBEvent(ev, ctx) {
 // ── Phase C: fire one conditional event ──────────────────────────────────────
 export function fireCEvent(ev, ctx) {
   const { clock, model } = ctx;
-  const effectCtx = { ...ctx, felRef: null };
+  const effectCtx = { ...ctx, felRef: null, entityFilter: ev.entityFilter ?? null };
   const { msgs, felEntries } = applyEffect(ev.effect, effectCtx);
 
   // Process structured cSchedules

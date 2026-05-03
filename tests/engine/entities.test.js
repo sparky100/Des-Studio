@@ -97,6 +97,45 @@ describe('waitingOf — PRIORITY discipline', () => {
   });
 });
 
+describe('waitingOf — filterFn applied before discipline', () => {
+  test('entity filter excludes non-matching entities before queue rule is applied', () => {
+    // id=40 arrived earlier (FIFO would pick first) but priority=5 is excluded by filter
+    // id=41 arrived later, priority=2 passes filter (priority < 4)
+    const ents = [
+      { id: 40, type: 'Job', role: 'customer', status: 'waiting', arrivalTime: 5,  attrs: { priority: 5 } },
+      { id: 41, type: 'Job', role: 'customer', status: 'waiting', arrivalTime: 10, attrs: { priority: 2 } },
+    ];
+    const h = makeHelpers(ents);
+    const result = h.waitingOf('Job', 'FIFO', (e) => e.attrs.priority < 4);
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(41);
+  });
+
+  test('waitingOf returns empty array when no entities pass the filter', () => {
+    const ents = [
+      { id: 50, type: 'Task', role: 'customer', status: 'waiting', arrivalTime: 5, attrs: { urgent: false } },
+    ];
+    const h = makeHelpers(ents);
+    const result = h.waitingOf('Task', 'FIFO', (e) => e.attrs.urgent === true);
+    expect(result).toHaveLength(0);
+  });
+
+  test('entity filter applied before PRIORITY sort — filtered set is sorted correctly', () => {
+    // id=60 priority=1 excluded, id=61 priority=2 included, id=62 priority=3 included
+    // PRIORITY on filtered set picks id=61 (priority=2 wins over priority=3)
+    const ents = [
+      { id: 60, type: 'Job', role: 'customer', status: 'waiting', arrivalTime: 5,  attrs: { priority: 1 } },
+      { id: 61, type: 'Job', role: 'customer', status: 'waiting', arrivalTime: 10, attrs: { priority: 2 } },
+      { id: 62, type: 'Job', role: 'customer', status: 'waiting', arrivalTime: 15, attrs: { priority: 3 } },
+    ];
+    const h = makeHelpers(ents);
+    const result = h.waitingOf('Job', 'PRIORITY', (e) => e.attrs.priority >= 2);
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe(61);
+    expect(result[1].id).toBe(62);
+  });
+});
+
 describe('waitingOf — entity type filter applied before discipline', () => {
   test('filter excludes non-matching types before LIFO sort is applied', () => {
     // Two entity types in the same entities array.

@@ -10,6 +10,7 @@
 //   3. No changes needed anywhere else
 
 import { sampleAttrs } from "./distributions.js";
+import { evaluatePredicate } from "./conditions.js";
 
 // ── Safe scalar expression evaluator (replaces new Function in applyScalar) ──
 
@@ -128,14 +129,21 @@ export const MACROS = [
       });
       const discipline = matchedQ?.discipline || 'FIFO';
 
+      // Build entity filter function from predicate JSON if present
+      const filterFn = ctx.entityFilter
+        ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
+        : null;
+
       // First try by entity type with discipline; if empty treat cType as queue name
-      let cust = helpers.waitingOf(cType, discipline)[0];
+      let cust = helpers.waitingOf(cType, discipline, filterFn)[0];
       if (!cust) {
-        const inQueue = entities.filter(e =>
+        let inQueue = entities.filter(e =>
           e.queue &&
           e.queue.trim().toLowerCase() === cType.trim().toLowerCase() &&
           e.status === "waiting"
-        ).sort((a, b) => {
+        );
+        if (filterFn) inQueue = inQueue.filter(filterFn);
+        inQueue = inQueue.sort((a, b) => {
           if (discipline.toUpperCase() === 'LIFO')
             return (b.arrivalTime || 0) - (a.arrivalTime || 0);
           if (discipline.toUpperCase() === 'PRIORITY') {

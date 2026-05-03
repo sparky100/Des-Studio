@@ -182,12 +182,12 @@ export default function App(){
         {tab==='my'&&(myModels.length===0
           ?<Empty icon="📐" msg="No models yet. Create your first DES model."/>
           :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:14}}>
-            {myModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>setOpenId(m.id)}/>)}
+            {myModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>setOpenId(m.id)} profiles={profiles}/>)}
           </div>)}
         {tab==='public'&&(pubModels.length===0
           ?<Empty icon="🌐" msg="No public models available."/>
           :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:14}}>
-            {pubModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>setOpenId(m.id)}/>)}
+            {pubModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>setOpenId(m.id)} profiles={profiles}/>)}
           </div>)}
       </div>
       {showNew&&(

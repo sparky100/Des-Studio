@@ -1,5 +1,6 @@
 // ui/ModelDetail.jsx — ModelDetail, ModelCard, NewModelModal
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import pkg from '../../package.json';
 import { C, FONT } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty } from "./shared/components.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
@@ -22,13 +23,66 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   });
   const [tab,setTab]=useState("overview");
   const [dirty,setDirty]=useState(false);
+  const [past,setPast]=useState([]);    // undo stack — model snapshots, capped at 20
+  const [future,setFuture]=useState([]); // redo stack
   const [historyRows,setHistoryRows]=useState([]);
   const [historyLoading,setHistoryLoading]=useState(false);
   const [historyError,setHistoryError]=useState("");
   const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
   const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
-  const setField=(f,v)=>{setModel(m=>({...m,[f]:v}));setDirty(true);};
+
+  const setField=(f,v)=>{
+    setPast(p=>[...p.slice(-19),model]); // push snapshot before change, cap at 20
+    setFuture([]);                        // new edit clears redo stack
+    setModel(m=>({...m,[f]:v}));
+    setDirty(true);
+  };
+  const undo=()=>{
+    if(!past.length)return;
+    const prev=past[past.length-1];
+    setFuture(f=>[model,...f.slice(0,19)]);
+    setPast(p=>p.slice(0,-1));
+    setModel(prev);
+    setDirty(true);
+  };
+  const redo=()=>{
+    if(!future.length)return;
+    const next=future[0];
+    setPast(p=>[...p.slice(-19),model]);
+    setFuture(f=>f.slice(1));
+    setModel(next);
+    setDirty(true);
+  };
+
+  // Ref keeps keyboard handler current without re-registering on every render
+  const _ur=useRef({undo,redo});
+  _ur.current={undo,redo};
+  useEffect(()=>{
+    const onKey=(e)=>{
+      if(!(e.ctrlKey||e.metaKey))return;
+      if(e.key==='z'&&!e.shiftKey){e.preventDefault();_ur.current.undo();}
+      if((e.key==='z'&&e.shiftKey)||e.key==='y'){e.preventDefault();_ur.current.redo();}
+    };
+    document.addEventListener('keydown',onKey);
+    return()=>document.removeEventListener('keydown',onKey);
+  },[]);
+
   const save=async()=>{if(overrides.onSave)await overrides.onSave(model);setDirty(false);onRefresh();};
+
+  const handleBack=()=>{
+    if(dirty&&!window.confirm('You have unsaved changes. Leave without saving?'))return;
+    onBack();
+  };
+
+  useEffect(()=>{
+    const onBeforeUnload=(e)=>{
+      if(!dirty)return;
+      e.preventDefault();
+      e.returnValue=''; // Chrome requires this to show the native dialog
+    };
+    window.addEventListener('beforeunload',onBeforeUnload);
+    return()=>window.removeEventListener('beforeunload',onBeforeUnload);
+  },[dirty]);
 
   const validation = useMemo(() => model ? validateModel(model) : { errors: [], warnings: [] }, [model]);
 
@@ -81,10 +135,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:C.bg}}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 20px",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,flexWrap:"wrap"}}>
-        <Btn small variant="ghost" onClick={onBack}>← Back</Btn>
+        <Btn small variant="ghost" onClick={handleBack}>← Back</Btn>
         <div style={{flex:1,fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT}}>{model.name}</div>
         <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
-        <Tag label="v6" color={C.purple}/>
+        <Tag label={`v${pkg.version}`} color={C.purple}/>
+        {canEdit&&<Btn small variant="ghost" onClick={undo} disabled={!past.length} title="Undo (Ctrl+Z)">↩ Undo</Btn>}
+        {canEdit&&<Btn small variant="ghost" onClick={redo} disabled={!future.length} title="Redo (Ctrl+Shift+Z)">↪ Redo</Btn>}
         {canEdit&&dirty&&<Btn small variant="primary" onClick={save}>Save</Btn>}
       </div>
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.surface,paddingLeft:20,flexShrink:0,overflowX:"auto"}}>
@@ -191,8 +247,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
 // ═══════════════════════════════════════════════════════════════════════════════
 // LIBRARY
 // ═══════════════════════════════════════════════════════════════════════════════
-const ModelCard=({model,onOpen})=>{
-  const owner=null;
+const ModelCard=({model,onOpen,profiles=[]})=>{
+  const owner=(profiles||[]).find(p=>p.id===model.owner_id)||null;
   const fmtDate=iso=>{ try{ return new Date(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){return '';} };
   const hasRenege=(model.bEvents||[]).some(ev=>(ev.schedules||[]).some(s=>s.isRenege));
   const srvTypes=(model.entityTypes||[]).filter(et=>et.role==="server");
@@ -218,7 +274,7 @@ const ModelCard=({model,onOpen})=>{
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{display:"flex",alignItems:"center",gap:7}}>
           {owner&&<Avatar u={owner} size={22}/>}
-          <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>{owner?.name}</span>
+          <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>{owner?.full_name}</span>
         </div>
         <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>{fmtDate(model.updatedAt)}</span>
       </div>

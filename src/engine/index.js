@@ -121,12 +121,14 @@ export function buildEngine(model, seed, maxCycles = 500) {
     }
 
     // Phase C — evaluate conditionals until stable
+    // Sort by ev.priority ascending (lower integer = higher priority, missing = last).
+    const sortedCEvents = (model.cEvents || []).slice()
+      .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999));
+
     let cFired = true, cPass = 0;
     while (cFired && cPass < 500) {
       cFired = false; cPass++;
-      const firedThisPass = new Set();
-      for (const ev of model.cEvents || []) {
-        if (firedThisPass.has(ev.id)) continue;
+      for (const ev of sortedCEvents) {
         const h = makeHelpers(entities);
         if (!evalCondition(ev.condition, h, state, clock)) continue;
         const ctx = makeCtx(null);
@@ -134,7 +136,6 @@ export function buildEngine(model, seed, maxCycles = 500) {
         const { msgs, felEntries } = fireCEvent(ev, ctx);
         for (const entry of felEntries) fel.push(entry);
         if (felEntries.length) fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
-        firedThisPass.add(ev.id);
         cFired = true;
         const msg = [`C: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
         cycleLog.push({ phase: "C", time: clock, message: msg });

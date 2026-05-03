@@ -77,6 +77,16 @@ export const DISTRIBUTIONS = {
       return -Math.log(Math.max(1e-15, prod)) / (k / m);
     },
   },
+  Empirical: {
+    params: [],
+    label: "Empirical (CSV)",
+    hint: "Samples uniformly from an imported values list",
+    sample: (p, rng) => {
+      const vals = Array.isArray(p.values) ? p.values : [];
+      if (!vals.length) return 0;
+      return vals[Math.floor(rng() * vals.length)];
+    },
+  },
   ServerAttr: {
     params: ["attr"],
     label:  "Server attribute",
@@ -92,10 +102,10 @@ export const DISTRIBUTIONS = {
  * Sample a delay value from a named distribution.
  * @param {string} dist - Distribution name (key of DISTRIBUTIONS)
  * @param {object} params - Distribution parameters (string values from UI)
- * @param {function} rng - Seeded PRNG (defaults to mulberry32(0) — pass buildEngine's rng for reproducibility)
+ * @param {function} rng - Seeded PRNG — must be provided (use buildEngine's rng)
  * @param {object|null} serverAttrs - Server entity attributes (for ServerAttr)
  */
-export function sample(dist, params = {}, rng = mulberry32(0), serverAttrs = null) {
+export function sample(dist, params = {}, rng, serverAttrs = null) {
   const def = DISTRIBUTIONS[dist];
   if (!def) return parseFloat(params.value) || 0;
   return def.sample(params, rng, serverAttrs);
@@ -105,7 +115,7 @@ export function sample(dist, params = {}, rng = mulberry32(0), serverAttrs = nul
  * Sample all attrDefs for a new entity instance.
  * attrDefs: array of { name, dist, distParams } OR legacy string "k=v,k2=v2"
  */
-export function sampleAttrs(attrDefs, rng = mulberry32(0)) {
+export function sampleAttrs(attrDefs, rng) {
   if (!attrDefs) return {};
   // Legacy string format
   if (typeof attrDefs === "string") {

@@ -81,8 +81,11 @@ export function makeHelpers(entities) {
 
   return {
     entities,
-    waitingOf: (type, discipline = 'FIFO') => {
-      const waiting = entities.filter(e => match(e.type, type) && e.status === 'waiting');
+    waitingOf: (type, discipline = 'FIFO', filterFn = null) => {
+      let waiting = entities.filter(e => match(e.type, type) && e.status === 'waiting');
+      if (filterFn) {
+        waiting = waiting.filter(filterFn);
+      }
       switch ((discipline || 'FIFO').toUpperCase()) {
         case 'LIFO':
           return waiting.sort((a, b) => (b.arrivalTime || 0) - (a.arrivalTime || 0));
