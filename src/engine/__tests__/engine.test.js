@@ -241,7 +241,10 @@ describe('two-stage model (TriageNurse + Doctor)', () => {
 });
 
 describe('seed reproducibility', () => {
-  // TODO: engine uses Math.random (no seeded RNG). Two runs will not be identical.
-  // When seeded RNG support is added, test that same seed → same summary.served.
-  test.todo('two runs with same seed produce identical summary.served (engine does not yet support seeded RNG)');
+  test('two runs with the same seed produce identical summary.served', () => {
+    const r1 = buildEngine(mm1Model, 42).runAll();
+    const r2 = buildEngine(mm1Model, 42).runAll();
+    expect(r1.summary.served).toBe(r2.summary.served);
+    expect(r1.summary.served).toBeGreaterThan(0);
+  });
 });

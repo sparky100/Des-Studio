@@ -81,10 +81,22 @@ export function makeHelpers(entities) {
 
   return {
     entities,
-    waitingOf: (type) =>
-      entities
-        .filter(e => match(e.type, type) && e.status === "waiting")
-        .sort((a, b) => (a.arrivalTime || 0) - (b.arrivalTime || 0)),
+    waitingOf: (type, discipline = 'FIFO') => {
+      const waiting = entities.filter(e => match(e.type, type) && e.status === 'waiting');
+      switch ((discipline || 'FIFO').toUpperCase()) {
+        case 'LIFO':
+          return waiting.sort((a, b) => (b.arrivalTime || 0) - (a.arrivalTime || 0));
+        case 'PRIORITY':
+          return waiting.sort((a, b) => {
+            const pa = Number(a.attrs?.priority ?? Infinity);
+            const pb = Number(b.attrs?.priority ?? Infinity);
+            if (pa !== pb) return pa - pb;
+            return (a.arrivalTime || 0) - (b.arrivalTime || 0); // FIFO tiebreaker
+          });
+        default: // FIFO
+          return waiting.sort((a, b) => (a.arrivalTime || 0) - (b.arrivalTime || 0));
+      }
+    },
 
     idleOf: (type) =>
       entities.filter(e => match(e.type, type) && e.status === "idle"),

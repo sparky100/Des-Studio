@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-04-30 | Reflects: Audit findings + Sprint Plan v2.0 + Addition 1 v1.0 + ADR-001*
+*Last updated: 2026-05-03 | Reflects: Sprint 1 complete + Sprint 2 plan + ADR-003/004/005*
 
 ---
 
@@ -82,6 +82,34 @@ project root
 - `src/ui/` components never import engine internals directly, except `buildEngine()` which is called only from `execute/index.jsx`.
 - All Supabase access goes through `src/db/models.js` or `src/db/supabase.js`. Never query Supabase directly from a UI component.
 - `tokens.js` is the single source of truth for all colours, spacing, and font sizes. Never hardcode style values.
+
+---
+
+## 3a. Build-On Rule — Read Before Changing
+
+This project has an **existing working application**. Claude Code must never rewrite a working component from scratch. The correct approach for every task is:
+
+1. **READ** the target file and show the relevant current code
+2. **IDENTIFY** what already works and must be preserved
+3. **EXTEND or FIX** only what the audit says is wrong
+4. **CONFIRM** the change is minimal — not a rewrite
+
+If Claude Code finds itself rewriting a file that the audit marked as working (✓), stop and flag it. The correct action is always extension or targeted fix.
+
+**Working components that must not be replaced — only extended:**
+
+| File | What works | What is wrong |
+|---|---|---|
+| `src/engine/index.js` | Three-Phase A/B/C loop structure | C-scan restart granularity (fix in place) |
+| `src/engine/macros.js` | All five macros correct | Nothing — preserve entirely |
+| `src/engine/entities.js` | FIFO discipline correct | LIFO/Priority never read (extend waitingOf) |
+| `src/engine/conditions.js` | Condition evaluation structure | new Function() call (replace with safe eval) |
+| `src/engine/distributions.js` | All sampler functions | Math.random() (add seeded RNG) |
+| `src/ui/editors/index.jsx` | All five editors work | Operator filtering, priority field, token staleness |
+| `src/ui/execute/index.jsx` | VisualView, StepLog, EntityTable, run history | No validation, no seed field, silent truncation |
+| `src/db/models.js` | Multi-user CRUD wrappers | avg_service_time column mismatch (Sprint 5) |
+| `src/App.jsx` | Auth listener, model library shell | Back button discards silently (Sprint 2) |
+| `tests/` | ~120 engine tests passing | UI and DB layers untested |
 
 ---
 
@@ -526,17 +554,21 @@ These are open defects from the audit. Do not work around them — fix them.
 
 | # | Severity | File | Issue | Sprint |
 |---|---|---|---|---|
-| C1 | **Critical** | `conditions.js:76`, `macros.js:220` | `new Function()` eval on effect strings — XSS on public models | Sprint 1 |
-| C2 | **Critical** | `entities.js:84–88` | LIFO and Priority queue disciplines ignored by engine | Sprint 1 |
-| C3 | **High** | `engine/index.js:121–142` | C-scan restart is pass-granularity not event-granularity | Sprint 1 |
-| C4 | **High** | `engine/index.js:121` | Phase C truncation at 100 passes is silent — no warning | Sprint 1 |
-| C5 | **High** | `execute/index.jsx:141–147` | No pre-run model validation — invalid models run silently | Sprint 1 |
-| C6 | **Medium** | `phases.js:91,125` | Stale B-Event references after deletion become silent no-ops | Sprint 1 |
-| C7 | **Medium** | `distributions.js:84` | No seeded RNG — `Math.random()` throughout | Sprint 1 |
+| C1 | **Critical** | `conditions.js:76`, `macros.js:220` | `new Function()` eval on effect strings — XSS on public models | Sprint 1 ✓ |
+| C2 | **Critical** | `entities.js:84–88` | LIFO and Priority queue disciplines ignored by engine | Sprint 1 ✓ |
+| C3 | **High** | `engine/index.js:121–142` | C-scan restart is pass-granularity not event-granularity | Sprint 1 ✓ |
+| C4 | **High** | `engine/index.js:121` | Phase C truncation at 100 passes is silent — no warning | Sprint 1 ✓ |
+| C5 | **High** | `execute/index.jsx:141–147` | No pre-run model validation — invalid models run silently | Sprint 1 ✓ |
+| C6 | **Medium** | `phases.js:91,125` | Stale B-Event references after deletion become silent no-ops | Sprint 1 ✓ |
+| C7 | **Medium** | `distributions.js:84` | No seeded RNG — `Math.random()` throughout | Sprint 1 ✓ |
 | C8 | **Low** | `editors/index.jsx:495` | ConditionBuilder token list stale after prop change | Sprint 2 |
 | C9 | **Low** | `db/models.js:127` | `avg_service_time` DB column written with `avgSojourn` value | Sprint 2 |
-| C10 | **Low** | `editors/index.jsx:171,241,731` | Distribution parameter inputs missing `type="number"` | Sprint 1 |
-| C11 | **Low** | `components.jsx` | `DistPicker` references `DISTRIBUTIONS` which is never imported — latent `ReferenceError` | Sprint 1 |
+| C10 | **Low** | `editors/index.jsx:171,241,731` | Distribution parameter inputs missing `type="number"` | Sprint 1 ✓ |
+| C11 | **Low** | `components.jsx` | `DistPicker` references `DISTRIBUTIONS` which is never imported — latent `ReferenceError` | Sprint 1 ✓ |
+| G1 | **Medium** | `engine/macros.js:121–132` | Queue discipline lookup uses entity type name match — silently falls back to FIFO if queue name ≠ type name | Sprint 2 |
+| G2 | **Medium** | `conditions.js:154`, `macros.js:272` | `waitingOf()` called without discipline in `evalCondition` and RENEGE macro — always FIFO regardless of configuration | Sprint 2 |
+| G3 | **Low** | `engine/index.js:127` | `firedThisPass` Set in Phase C is dead code — set is reset each pass and break fires before it can have effect | Sprint 2 |
+| G4 | **Low** | `engine/distributions.js:98,108` | `mulberry32(0)` default in `sample()` / `sampleAttrs()` silently uses seed 0 when `rng` is omitted rather than erroring | Sprint 2 |
 
 ---
 
@@ -1139,8 +1171,41 @@ This prevents silent architectural drift — the most common way AI-assisted pro
 
 | ADR | Title | Status | Sprint | CLAUDE.md Sections Affected |
 |---|---|---|---|---|
-| ADR-001 | Multi-user auth model and public model rules | Accepted | Pre-Sprint 1 | §14 |
-| ADR-002 | Public model run permissions | Proposed | Defer to Sprint 3 retro | §14.5 |
+| ADR-001 | Multi-user auth model and public model rules | Accepted | Pre-Sprint 1 | §16 |
+| ADR-002 | Public model run permissions | Proposed | Defer to Sprint 3 retro | §16.5 |
+| ADR-003 | Safe expression evaluator strategy (C1 fix) | Accepted | Sprint 1 | §5.2, §18 |
+| ADR-004 | mulberry32 as the seeded PRNG (C7 fix) | Accepted | Sprint 1 | §9, §18 |
+| ADR-005 | Queue discipline lookup by entity type name | Accepted — interim | Sprint 1/2 | §6, §10 |
+
+---
+
+### 17.6 Key Decisions — Sprint 1
+
+These decisions were made during Sprint 1 and must not be reversed without a new ADR.
+
+**ADR-003 — Safe evaluator (no `new Function`)** ([full ADR](docs/decisions/ADR-003-safe-evaluator-strategy.md))
+
+All condition evaluation and scalar arithmetic in the engine uses hand-written pure-JS parsers (`safeEvalExpr`, `safeArithmetic`, `evaluatePredicate`). No dynamic code execution. The expression grammar is closed — extending it requires modifying the parsers, not adding a dependency.
+
+**Rule:** Never introduce `new Function()`, `eval()`, or any dynamic code execution in the engine or UI, regardless of perceived safety measures. The `Custom...` escape hatch has been removed and must not be recreated under any name.
+
+---
+
+**ADR-004 — mulberry32 PRNG** ([full ADR](docs/decisions/ADR-004-mulberry32-prng.md))
+
+`mulberry32(seed)` is the sole PRNG for all simulation sampling. It is implemented in `distributions.js` and threaded through `buildEngine` via `ctx.rng`. No call site may use `Math.random()`.
+
+**Rule:** `Math.random()` is prohibited in all engine code. `buildEngine(model, seed, maxCycles)` must always receive an explicit seed. When adding a new distribution or macro, receive `rng` from `ctx.rng` — do not default to `Math.random`.
+
+**Known gap (G4):** `sample()` and `sampleAttrs()` use `mulberry32(0)` as a default parameter fallback. This is deterministic but silent — a missing `rng` arg does not error. Fix in Sprint 2 by removing the default and requiring explicit `rng` at all call sites.
+
+---
+
+**ADR-005 — Queue discipline lookup (interim)** ([full ADR](docs/decisions/ADR-005-queue-discipline-lookup.md))
+
+The SEIZE macro currently finds queue discipline by matching the customer entity type name against `model.queues[].name` (case-insensitive). This was an interim choice to unblock Sprint 1 without a model schema change.
+
+**Rule for Sprint 2:** Replace the name-match heuristic with an explicit `queueId` reference on the C-Event action. Until this is done, LIFO and PRIORITY queue discipline will silently fall back to FIFO if the queue name does not match the entity type name exactly (G1). The `evalCondition` queue-length token and the RENEGE macro also always use FIFO for entity selection (G2).
 
 ---
 
@@ -1199,68 +1264,92 @@ UI / UX
 |---|---|---|
 | Entity model, action vocabulary, distributions, validation rules | `docs/addition1_entity_model.md` | **Every Sprint 1, 2, 3 session** |
 | Multi-user auth and public model rules | `docs/decisions/ADR-001-auth-model.md` | When modifying any DB query, auth flow, or model sharing feature |
-| Public model run permissions (open) | `docs/decisions/ADR-002-public-model-runs.md` | Sprint 3 retrospective — before building run history features |
-| Sprint plan and feature scope | Project Files (claude.ai) | Sprint planning sessions in claude.ai |
-| Audit findings | Project Files (claude.ai) | When investigating a known issue |
+| Public model run permissions (open) | `docs/decisions/ADR-002-public-model-runs.md` | Sprint 3 — before building run history or replication features |
+| Safe evaluator strategy | `docs/decisions/ADR-003-safe-evaluator-strategy.md` | Before any change to condition evaluation or expression parsing |
+| Seeded PRNG choice | `docs/decisions/ADR-004-mulberry32-prng.md` | Before changing the RNG or adding sampling call sites |
+| Queue discipline lookup (interim) | `docs/decisions/ADR-005-queue-discipline-lookup.md` | Sprint 2 Task 1 — must be read before touching SEIZE or waitingOf |
+| Build plan with sprint features and prompts | `docs/DES_Studio_Build_Plan.md` | Start of every sprint — read current sprint section |
+| Full codebase audit findings | `docs/AUDIT.md` | When investigating a known issue — check audit ref before changing |
 
 ---
 
 ## 20. Current Sprint
 
-**Sprint 1 — Engine Safety & Correctness**
+**Sprint 2 — Queue Discipline Correctness + Run Controls**
 
-Goal: Every issue that causes incorrect or misleading simulation results must be fixed before new features are added. The exit gate is a passing M/M/1 benchmark.
+Goal: Fix the broken queue discipline bindings uncovered in the Sprint 1 retrospective (G1, G2), then add the run controls — termination criteria, warm-up, and multi-replication — that real-world models require. The exit gate is a passing multi-replication M/M/1 test with mean ± 95% CI within 5% of the analytical value.
 
 ### Task Order (strict — do not reorder)
 
-**Task 1 — Remove `new Function()` eval (C1)**
-- Replace `new Function()` in `conditions.js` and `macros.js` with the safe expression evaluator
-- Remove the `Custom...` option from `DropField` in `editors/index.jsx`
-- Write a test confirming no path from model input reaches `new Function()` or `eval()`
+**Task 1 — Formalise queue-to-event binding (G1, G2 — ADR-005)**
+- Add a `queueId` field to C-Event action rows in the model schema
+- Update the C-Event editor to show a queue picker when the action is SEIZE
+- Replace the name-match heuristic in `macros.js` with a direct `queueId` lookup
+- Fix `waitingOf()` call in `evalCondition()` (conditions.js:154) to pass the correct discipline
+- Fix `waitingOf()` call in the RENEGE macro (macros.js:272) to pass the correct discipline
+- Remove the `firedThisPass` dead-code Set from Phase C (G3)
+- Write tests confirming LIFO and PRIORITY are applied correctly end-to-end
 
-**Task 2 — Fix C-Scan restart rule (C3)**
-- Add `break` inside the C-Event `for` loop when a C-Event fires (see Section 4.1)
-- Write a unit test that fails on the current code and passes after the fix:
-  - Model with two C-Events: Priority 1 fires and changes state; Priority 2 should then fire on restart
-  - Current code incorrectly skips Priority 2 in the same pass
+**Task 2 — Time-based and condition-based termination**
+- Add `maxSimTime` parameter to `buildEngine` — engine stops when `clock >= maxSimTime`
+- Add `stopCondition` parameter — a condition string evaluated each Phase A; engine stops when true
+- Expose both fields in the Execute panel UI
+- Update validation: if neither `maxSimTime` nor a natural FEL-empty termination exists, warn the modeller
+- Write engine tests for both termination modes
 
-**Task 3 — Implement queue discipline in engine (C2)**
-- Read `q.discipline` in `waitingOf()` in `entities.js`
-- Implement LIFO (sort descending by `arrivalTime`)
-- Implement PRIORITY (sort ascending by `Entity.priority`; FIFO tiebreaker)
-- Write unit tests for each discipline
+**Task 3 — Seeded multi-replication runner**
+- Add a `replications` field to the Execute panel (integer ≥ 1, default 1)
+- When replications > 1, run `buildEngine(model, baseSeed + i, maxCycles)` for `i = 0..N-1`
+- Collect per-replication `avgWait`, `avgSvc`, `served` into a results array
+- Compute mean and 95% CI (t-distribution, `n-1` degrees of freedom) for each summary stat
+- Display results table: per-replication column + mean ± CI row
+- Persist the full replication results array to `runs.results_json`; persist `seed` as `baseSeed` and `replications` count
+- Write a test confirming 10 replications of the M/M/1 fixture produce a mean within 5% of the analytical value
 
-**Task 4 — Add seeded RNG (C7)**
-- Implement `mulberry32` in `distributions.js` (or equivalent seedable PRNG)
-- Thread `seed` parameter through `buildEngine(model, seed, maxCycles)`
-- Replace every `Math.random()` call in engine files with the seeded PRNG
-- Write a test confirming two runs with the same seed produce identical FEL event sequences
+**Task 4 — Warm-up period**
+- Add `warmupTime` parameter to `buildEngine` (default 0 — no warm-up)
+- At `clock >= warmupTime`, reset all stats collectors (`__served`, `__reneged`, per-entity sojourn accumulation) without clearing entity state or the FEL
+- Expose `warmupTime` field in Execute panel UI alongside `maxSimTime`
+- Write a test confirming that stats recorded before `warmupTime` are excluded from summary output
 
-**Task 5 — Add pre-run model validation (C5, C6, C10)**
-- Implement validation rules V1–V11 (see Section 8 and `docs/addition1_entity_model.md` Section 7)
-- Surface blocking errors inline in the editor tabs — not just as a banner on the run panel
-- Block `buildEngine()` call until validation passes
-- Fix `type="number"` on distribution parameter inputs (C10)
+**Task 5 — C-Event priority as explicit integer field**
+- Add a `priority` integer field to each C-Event in the model schema (default: position in array, 1-indexed)
+- Display and edit the priority field in `CEventEditor` as a numbered input
+- `engine/index.js` Phase C: sort `model.cEvents` by `ev.priority` ascending before the scan (lower = higher priority)
+- Add drag-to-reorder to the C-Event list in the editor; priority numbers update automatically on reorder
+- Update the relevant engine test: restart rule test must use explicit priority values, not array order
 
-**Task 6 — Surface Phase C truncation (C4)**
-- Raise cap from 100 to 500 passes
-- Add a log entry when cap is hit
-- Display a visible warning banner in the execute panel
-- Fix `DistPicker` missing import in `components.jsx` (C11)
+**Task 6 — ConditionBuilder token staleness (C8)**
+- Fix `editors/index.jsx:495`: add `entityTypes` and `stateVariables` to the `useMemo` / `useEffect` dependency array for the token list in `ConditionBuilder`
+- Write a UI test confirming that adding an entity type while the C-Event editor is open immediately makes the new type's tokens available in the condition picker
 
-**Task 7 — M/M/1 benchmark exit gate**
-- File: `tests/mm1_benchmark.js` (create if absent)
-- Run: M/M/1 queue, λ=0.9, μ=1.0 (ρ=0.9), 10,000 arrivals
-- Analytical mean wait: ρ / (μ × (1 − ρ)) = 9.0 time units
-- Pass criteria: simulated mean wait within 5% of 9.0
-- Sprint 1 is not complete until this test passes
+**Task 7 — Remove `mulberry32(0)` default parameter (G4)**
+- Remove the default `= mulberry32(0)` from `sample()` and `sampleAttrs()` in `distributions.js`
+- Make the `rng` parameter required (no default)
+- Any call site that currently relies on the default must be updated to pass an explicit RNG
+- Confirm `grep -rn "mulberry32(0)" src/engine/` returns nothing after the fix
 
-### Out of Scope for Sprint 1
+### Completion Gate
 
-- Undo/redo, drag-to-reorder C-events, visual DAG canvas
-- Multi-replication, parallel workers, warm-up period, CI calculation
-- UI polish, error boundaries, export features
-- Any new feature not listed above
+```bash
+npm test -- --run                    # All tests pass (182 + new Sprint 2 tests)
+npm test -- ui                       # UI test suite passes (Sprint 2 adds jsdom tests)
+node tests/engine/mm1_benchmark.js   # Still exits 0
+npm run build                        # Succeeds
+# M/M/1 multi-replication gate (new):
+# Run 10 replications of M/M/1 (λ=0.9, μ=1.0) via the UI or a script
+# Mean wait across replications must be within 5% of 9.0 time units
+# 95% CI must include 9.0
+```
+
+### Out of Scope for Sprint 2
+
+- Undo/redo history stack
+- Visual DAG canvas (React Flow)
+- Export features (CSV, JSON)
+- Parallel web worker replications
+- `avg_service_time` DB column fix (C9) — deferred to Sprint 3
+- Public model run permissions (ADR-002) — deferred to Sprint 3
 
 ---
 

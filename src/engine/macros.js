@@ -11,6 +11,74 @@
 
 import { sampleAttrs } from "./distributions.js";
 
+// ── Safe scalar expression evaluator (replaces new Function in applyScalar) ──
+
+// Recursive descent parser for arithmetic on number literals: + - * / ()
+function safeArithmetic(s) {
+  let i = 0;
+  function skipWS() { while (i < s.length && s[i] === ' ') i++; }
+  function parseNumber() {
+    skipWS();
+    let str = '';
+    if (i < s.length && s[i] === '-') { str += '-'; i++; }
+    while (i < s.length && /[\d.]/.test(s[i])) str += s[i++];
+    return str ? parseFloat(str) : NaN;
+  }
+  function parsePrimary() {
+    skipWS();
+    if (i < s.length && s[i] === '(') {
+      i++;
+      const v = parseAddSub();
+      skipWS();
+      if (i < s.length && s[i] === ')') i++;
+      return v;
+    }
+    return parseNumber();
+  }
+  function parseMulDiv() {
+    let result = parsePrimary();
+    skipWS();
+    while (i < s.length && (s[i] === '*' || s[i] === '/')) {
+      const op = s[i++];
+      const right = parsePrimary();
+      result = op === '*' ? result * right : (right !== 0 ? result / right : NaN);
+      skipWS();
+    }
+    return result;
+  }
+  function parseAddSub() {
+    let result = parseMulDiv();
+    skipWS();
+    while (i < s.length && (s[i] === '+' || s[i] === '-')) {
+      const op = s[i++];
+      const right = parseMulDiv();
+      result = op === '+' ? result + right : result - right;
+      skipWS();
+    }
+    return result;
+  }
+  const result = parseAddSub();
+  skipWS();
+  return i === s.length ? result : NaN;
+}
+
+// Evaluate a scalar RHS expression after state variable substitution.
+// Returns a number, boolean, string, or raw string fallback — never executes code.
+function safeEvalScalar(v) {
+  const s = v.trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))
+    return s.slice(1, -1);
+  if (s === 'true')  return true;
+  if (s === 'false') return false;
+  if (/^[\d\s+\-*/.()]+$/.test(s)) {
+    const n = safeArithmetic(s);
+    if (!isNaN(n)) return n;
+  }
+  const n = Number(s);
+  if (!isNaN(n) && s !== '') return n;
+  return s; // raw string fallback — matches previous behaviour for unresolved identifiers
+}
+
 export const MACROS = [
 
   // ── ARRIVE(Type[, QueueName]) ──────────────────────────────────────────────
@@ -31,7 +99,7 @@ export const MACROS = [
         role:           et?.role || "customer",
         status:         "waiting",
         queue:          queueName,
-        attrs:          sampleAttrs(et?.attrDefs || et?.attrs || ""),
+        attrs:          sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
         arrivalTime:    clock,
         stages:         [],
         lastStageStart: null,
@@ -50,14 +118,33 @@ export const MACROS = [
       const [, cType, sType] = match;
       const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
 
-      // First try by entity type; if empty, treat cType as a queue name
-      let cust = helpers.waitingOf(cType)[0];
+      // Look up queue discipline for this entity type or queue name
+      const queues = ctx.model?.queues || [];
+      const matchedQ = queues.find(q => {
+        const n = q.name?.trim().toLowerCase();
+        const t = q.customerType?.trim().toLowerCase();
+        const c = cType.trim().toLowerCase();
+        return n === c || t === c;
+      });
+      const discipline = matchedQ?.discipline || 'FIFO';
+
+      // First try by entity type with discipline; if empty treat cType as queue name
+      let cust = helpers.waitingOf(cType, discipline)[0];
       if (!cust) {
         const inQueue = entities.filter(e =>
           e.queue &&
           e.queue.trim().toLowerCase() === cType.trim().toLowerCase() &&
           e.status === "waiting"
-        ).sort((a, b) => (a.arrivalTime || 0) - (b.arrivalTime || 0));
+        ).sort((a, b) => {
+          if (discipline.toUpperCase() === 'LIFO')
+            return (b.arrivalTime || 0) - (a.arrivalTime || 0);
+          if (discipline.toUpperCase() === 'PRIORITY') {
+            const pa = Number(a.attrs?.priority ?? Infinity);
+            const pb = Number(b.attrs?.priority ?? Infinity);
+            if (pa !== pb) return pa - pb;
+          }
+          return (a.arrivalTime || 0) - (b.arrivalTime || 0);
+        });
         cust = inQueue[0];
       }
 
@@ -215,12 +302,7 @@ export function applyScalar(part, state, clock) {
         typeof state[k] === "string" ? `"${state[k]}"` : String(state[k]));
     });
     v = v.replace(/\bclock\b/g, String(clock));
-    try {
-      // eslint-disable-next-line no-new-func
-      state[r5[1]] = new Function(`return (${v})`)();
-    } catch {
-      state[r5[1]] = r5[2].trim();
-    }
+    state[r5[1]] = safeEvalScalar(v);
     return true;
   }
   return false;

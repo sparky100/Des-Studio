@@ -8,14 +8,17 @@
 //   const snap   = engine.getSnap()       // current state snapshot
 //   const felSz  = engine.getFelSize()    // events in FEL
 
-import { DISTRIBUTIONS, sample, sampleAttrs } from "./distributions.js";
+import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32 } from "./distributions.js";
 import { makeHelpers, createServerEntities }   from "./entities.js";
 import { evalCondition }                        from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
-export function buildEngine(model, maxCycles = 800) {
+export function buildEngine(model, seed, maxCycles = 500) {
+  // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
+  const rng = mulberry32(seed ?? 0);
+
   // ── Initialise scalar state ───────────────────────────────────────────────
   const state = { __served: 0, __reneged: 0 };
   for (const sv of model.stateVariables || []) {
@@ -29,7 +32,7 @@ export function buildEngine(model, maxCycles = 800) {
 
   const entities = createServerEntities(
     model.entityTypes || [],
-    (attrDefs) => sampleAttrs(attrDefs)
+    (attrDefs) => sampleAttrs(attrDefs, rng)
   );
   // Assign IDs to pre-created servers
   for (const e of entities) e.id = nextId();
@@ -81,6 +84,7 @@ export function buildEngine(model, maxCycles = 800) {
     felRef,
     helpers: makeHelpers(entities),
     nextId,
+    rng,
     _lastCustId: null,
     _lastSrvId:  null,
   });
@@ -118,7 +122,7 @@ export function buildEngine(model, maxCycles = 800) {
 
     // Phase C — evaluate conditionals until stable
     let cFired = true, cPass = 0;
-    while (cFired && cPass < 100) {
+    while (cFired && cPass < 500) {
       cFired = false; cPass++;
       const firedThisPass = new Set();
       for (const ev of model.cEvents || []) {
@@ -135,6 +139,7 @@ export function buildEngine(model, maxCycles = 800) {
         const msg = [`C: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
         cycleLog.push({ phase: "C", time: clock, message: msg });
         log.push({ phase: "C", time: clock, message: msg, snap: snap(clock) });
+        break; // restart from Priority 1 — Three-Phase restart rule
       }
       if (!cFired) {
         cycleLog.push({ phase: "C", time: clock, message: "No C-events can fire → Phase A" });
@@ -142,15 +147,25 @@ export function buildEngine(model, maxCycles = 800) {
       }
     }
 
-    return { done: false, cycleLog, snap: snap(clock), felSize: fel.length };
+    // cFired=true at loop exit means the cap stopped an in-progress scan — truncated
+    const phaseCTruncated = cFired;
+    if (phaseCTruncated) {
+      const truncMsg = `Phase C truncated after 500 passes at t=${clock.toFixed(3)} — model may have an unstable condition`;
+      cycleLog.push({ phase: "C", time: clock, message: truncMsg });
+      log.push({ phase: "C", time: clock, message: truncMsg, snap: snap(clock) });
+    }
+
+    return { done: false, cycleLog, snap: snap(clock), felSize: fel.length, phaseCTruncated };
   }
 
   // ── runAll(): run to completion ───────────────────────────────────────────
   function runAll() {
     let c = 0;
+    let anyPhaseCTruncated = false;
     while (fel.length > 0 && c < maxCycles) {
       c++;
       const r = step();
+      if (r.phaseCTruncated) anyPhaseCTruncated = true;
       if (r.done) break;
     }
     log.push({ phase: "END", time: clock, message: "Simulation complete", snap: snap(clock) });
@@ -175,13 +190,14 @@ export function buildEngine(model, maxCycles = 800) {
       log,
       snap:      snap(clock),
       summary: {
-        total:      customers.length,
-        served:     served.length,
-        reneged:    reneged.length,
-        avgWait:    avgWait   != null ? +avgWait.toFixed(4)   : null,
-        avgSvc:     avgSvc    != null ? +avgSvc.toFixed(4)    : null,
-        avgSojourn: avgSojourn!= null ? +avgSojourn.toFixed(4): null,
-        maxSojourn: maxSojourn!= null ? +maxSojourn.toFixed(4): null,
+        total:             customers.length,
+        served:            served.length,
+        reneged:           reneged.length,
+        avgWait:           avgWait   != null ? +avgWait.toFixed(4)   : null,
+        avgSvc:            avgSvc    != null ? +avgSvc.toFixed(4)    : null,
+        avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
+        maxSojourn:        maxSojourn!= null ? +maxSojourn.toFixed(4): null,
+        phaseCTruncated:   anyPhaseCTruncated,
       },
       entitySummary: entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
     };

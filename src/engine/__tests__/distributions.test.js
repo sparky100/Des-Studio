@@ -1,7 +1,7 @@
 import { describe, test, expect } from 'vitest';
-import { DISTRIBUTIONS, sample, sampleAttrs } from '../distributions.js';
+import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32 } from '../distributions.js';
 
-const rng = Math.random;
+const rng = mulberry32(42);
 
 describe('Fixed', () => {
   test('returns exactly the value param', () => {

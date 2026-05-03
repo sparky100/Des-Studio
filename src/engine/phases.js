@@ -26,6 +26,7 @@ export function applyEffect(effect, ctx) {
   const macroCtx = {
     entities, state, model, clock, felRef, helpers,
     nextId: ctx.nextId,
+    rng:    ctx.rng,
     getLastCustId: () => lastCustId,
     getLastSrvId:  () => lastSrvId,
     setLastCustId: (id) => { lastCustId = id; },
@@ -90,7 +91,7 @@ export function fireBEvent(ev, ctx) {
   for (const sched of ev.schedules || []) {
     const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);
     if (!tmpl) continue;
-    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, Math.random));
+    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng));
     let renegeTarget;
     if (sched.isRenege) {
       // Tag the newest waiting customer
@@ -133,7 +134,7 @@ export function fireCEvent(ev, ctx) {
       delay = Math.max(0, parseFloat(srv?.attrs?.[attrName]) || 1);
       msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [server.${attrName}=${delay}]`);
     } else {
-      delay = Math.max(0, sample(cs.dist || "Fixed", cs.distParams || {}, Math.random));
+      delay = Math.max(0, sample(cs.dist || "Fixed", cs.distParams || {}, ctx.rng));
       msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${cs.dist}(${delay.toFixed(3)})]`);
     }
 

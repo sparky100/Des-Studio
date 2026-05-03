@@ -45,7 +45,6 @@ const conditionOptions = (entityTypes, stateVariables=[], queues=[]) => {
   }
   opts.push({label:'served > 0',value:'served > 0'});
   opts.push({label:'reneged > 0',value:'reneged > 0'});
-  opts.push({label:'Custom...',value:'__custom__'});
   return opts;
 };
 
@@ -80,7 +79,6 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[]) => {
       opts.push({label:`${v} = 0`,value:`${v} = 0`});
     });
   }
-  opts.push({label:'Custom...',value:'__custom__'});
   return opts;
 };
 
@@ -121,33 +119,20 @@ const bEffectOptions = (entityTypes, queues=[]) => {
       });
     });
   }
-  opts.push({label:'Custom...',value:'__custom__'});
   return opts;
 };
 
-// Dropdown + optional custom free-text
-const DropField = ({value, onChange, options, color, placeholder}) => {
-  const matched = options.some(o=>o.value===value&&o.value!=='__custom__'&&o.value!=='');
-  const [custom, setCustom] = useState(!matched&&!!value);
-  const col = color||C.green;
+// Dropdown — structured options only, no free-text escape hatch (audit C1)
+const DropField = ({value, onChange, options, color}) => {
+  const col = color || C.green;
   return (
     <div style={{display:'flex',flexDirection:'column',gap:4,flex:1}}>
-      <select value={custom?'__custom__':(value||'')}
-        onChange={e=>{
-          if(e.target.value==='__custom__'){setCustom(true);}
-          else{setCustom(false);onChange(e.target.value);}
-        }}
+      <select value={value || ''}
+        onChange={e => onChange(e.target.value)}
         style={{background:C.bg,border:`1px solid ${col}55`,borderRadius:4,
           color:col,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
-        {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+        {options.map(o=><option key={o.value} value={o.value} disabled={!!o.disabled}>{o.label}</option>)}
       </select>
-      {custom&&(
-        <input value={value||''} onChange={e=>onChange(e.target.value)}
-          placeholder={placeholder||'Enter custom value'}
-          style={{background:'transparent',border:`1px solid ${col}44`,borderRadius:4,
-            color:col,fontFamily:FONT,fontSize:12,padding:'5px 8px',outline:'none',
-            width:'100%',boxSizing:'border-box'}}/>
-      )}
     </div>
   );
 };
@@ -168,7 +153,7 @@ const DistPicker = ({value, onChange, compact}) => {
         {dd.params.map(param=>(
           <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
-            <input value={(v.distParams||{})[param]||""} onChange={e=>onChange({...v,distParams:{...(v.distParams||{}),[param]:e.target.value}})}
+            <input type="number" value={(v.distParams||{})[param]||""} onChange={e=>onChange({...v,distParams:{...(v.distParams||{}),[param]:e.target.value}})}
               style={{width:60,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,
                 color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}/>
           </div>
@@ -238,7 +223,7 @@ const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
               {dd.params.map(p=>(
                 <div key={p} style={{display:'flex',alignItems:'center',gap:4}}>
                   <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{p}:</span>
-                  <input value={(a.distParams||{})[p]||''}
+                  <input type="number" value={(a.distParams||{})[p]||''}
                     onChange={e=>upd(i,{distParams:{...(a.distParams||{}),[p]:e.target.value}})}
                     style={{...inpStyle(C.amber),width:60}}/>
                 </div>
@@ -338,10 +323,18 @@ const StateVarEditor=({vars,onChange})=>{
   );
 };
 
-const BEventEditor=({events,onChange,entityTypes=[],queues=[]})=>{
+const BEventEditor=({events,onChange,entityTypes=[],queues=[],cEvents=[]})=>{
   const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:"",schedules:[],description:""}]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
-  const rem=(i)=>onChange(events.filter((_,idx)=>idx!==i));
+  const rem=(i)=>{
+    const ev=events[i];
+    const refs=cEvents.filter(c=>(c.cSchedules||[]).some(s=>s.eventId===ev.id));
+    if(refs.length>0){
+      const names=refs.map(c=>`'${c.name||c.id}'`).join(', ');
+      if(!window.confirm(`B-Event '${ev.name||ev.id}' is referenced by C-Event${refs.length>1?'s':''} ${names}.\n\nDeleting it will leave a stale reference. Delete anyway?`))return;
+    }
+    onChange(events.filter((_,idx)=>idx!==i));
+  };
   const addS=(i)=>{const n=[...events];n[i]={...n[i],schedules:[...(n[i].schedules||[]),{eventId:"",dist:"Exponential",distParams:{mean:"1"},isRenege:false}]};onChange(n);};
   const updS=(i,j,p)=>{const n=[...events];const s=[...n[i].schedules];s[j]={...s[j],...p};n[i]={...n[i],schedules:s};onChange(n);};
   const remS=(i,j)=>{const n=[...events];n[i]={...n[i],schedules:n[i].schedules.filter((_,idx)=>idx!==j)};onChange(n);};
@@ -728,7 +721,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                     {distDef.params.map(param=>(
                       <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
                         <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
-                        <input value={(s.distParams||{})[param]||""}
+                        <input type="number" value={(s.distParams||{})[param]||""}
                           onChange={e=>updSched(i,j,{distParams:{...(s.distParams||{}),[param]:e.target.value}})}
                           style={{width:72,background:"transparent",border:`1px solid ${C.border}`,
                           borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,

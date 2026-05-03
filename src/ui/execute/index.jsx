@@ -1,9 +1,10 @@
 // ui/execute/index.jsx — CustomerToken, VisualView, ExecutePanel
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildEngine } from "../../engine/index.js";
 import { saveSimulationRun } from "../../db/models.js";
+import { validateModel } from "../../engine/validation.js";
 
 const TOKEN_COLORS = ["#06b6d4", "#f59e0b", "#8b5cf6", "#3fb950", "#f87171", "#a78bfa", "#34d399", "#fbbf24"];
 const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
@@ -135,16 +136,25 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   const [autoSpeed, setAutoSpeed] = useState(400);
   const [autoRunning, setAutoRunning] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
+  const [phaseCTruncated, setPhaseCTruncated] = useState(false);
+  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
+  const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
   const autoRef = useRef(null);
 
+  const validation = useMemo(() => validateModel(model), [model]);
+  const hasErrors = validation.errors.length > 0;
+
   const initEngine = useCallback(() => {
-    engineRef.current = buildEngine(model);
+    if (hasErrors) return;
+    runSeedRef.current = seed;
+    engineRef.current = buildEngine(model, seed);
     setCurrentSnap(engineRef.current.getSnap());
-    setLog([{ phase: "INIT", time: 0, message: "Simulation Initialized" }]);
+    setLog([{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed})` }]);
     setMode("stepping");
     setSaveStatus(null);
-  }, [model]);
+    setPhaseCTruncated(false);
+  }, [model, seed, hasErrors]);
 
   const stopAuto = () => { if (autoRef.current) { clearInterval(autoRef.current); autoRef.current = null; setAutoRunning(false); } };
 
@@ -153,6 +163,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     const r = engineRef.current.step();
     setCurrentSnap(r.snap);
     setLog(prev => [...prev, ...(r.cycleLog || [])]);
+    if (r.phaseCTruncated) setPhaseCTruncated(true);
 
     if (r.done) {
       setMode("done");
@@ -169,7 +180,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
         
-        saveSimulationRun(modelId, userId, fullResult)
+        saveSimulationRun(modelId, userId, fullResult, { seed: runSeedRef.current })
           .then(() => {
             setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
@@ -184,30 +195,33 @@ const ExecutePanel = ({ model, modelId, userId }) => {
 
   const doRunAll = useCallback(async () => {
     stopAuto();
+    if (hasErrors) return;
     if (!userId || !modelId) {
       setSaveStatus({ state: 'error', message: '✗ Missing User/Model ID' });
       return;
     }
 
-    const engine = buildEngine(model);
-    const result = engine.runAll(); 
-    
+    const runSeed = seed;
+    const engine = buildEngine(model, runSeed);
+    const result = engine.runAll();
+
     setCurrentSnap(result.snap);
     setLog(result.log);
     setMode("done");
-    
+    if (result.summary?.phaseCTruncated) setPhaseCTruncated(true);
+
     setSaveStatus({ state: 'saving', message: 'Saving results...' });
     setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing simulation history to database..." }]);
-    
+
     try {
-      await saveSimulationRun(modelId, userId, result);
+      await saveSimulationRun(modelId, userId, result, { seed: runSeed });
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
     } catch (e) {
       setSaveStatus({ state: 'error', message: `✗ Failed to save: ${e.message}` });
       setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
     }
-  }, [model, userId, modelId]);
+  }, [model, userId, modelId, seed, hasErrors]);
 
   const toggleAuto = () => {
     if (autoRunning) { stopAuto(); return; }
@@ -221,11 +235,23 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 14, display: "flex", gap: 10, alignItems: "center" }}>
-        <Btn variant="primary" onClick={initEngine}>⟳ Reset</Btn>
-        <Btn variant="success" onClick={doStep} disabled={mode === "done"}>⏭ Step</Btn>
-        <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
-        <Btn variant="ghost" onClick={doRunAll}>⚡ Run All</Btn>
+        <Btn variant="primary" onClick={initEngine} disabled={hasErrors}>⟳ Reset</Btn>
+        <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors}>⏭ Step</Btn>
+        <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
+        <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors}>⚡ Run All</Btn>
         <div style={{ flex: 1 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ fontSize: 10, color: "#666", fontFamily: FONT }}>seed:</span>
+          <input
+            type="number"
+            value={seed}
+            onChange={e => setSeed(parseInt(e.target.value) || 0)}
+            style={{ width: 80, background: "transparent", border: "1px solid #333",
+              borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 11,
+              padding: "4px 6px", outline: "none" }}
+          />
+          <Btn small variant="ghost" onClick={() => setSeed(Math.floor(Math.random() * 1e9))}>rand</Btn>
+        </div>
         <div style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2 }}>
           {["visual", "log", "entities"].map(v => (
             <button key={v} onClick={() => setView(v)} style={{ padding: "6px 12px", background: view === v ? "#333" : "transparent", border: "none", color: view === v ? "#fff" : "#888", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
@@ -234,6 +260,44 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           ))}
         </div>
       </div>
+
+      {validation.errors.length > 0 && (
+        <div style={{ background: '#7f1d1d', border: '1px solid #dc2626', borderRadius: 6,
+          padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#fca5a5', fontFamily: FONT, marginBottom: 4 }}>
+            Model has {validation.errors.length} blocking error{validation.errors.length > 1 ? 's' : ''} — fix before running:
+          </div>
+          {validation.errors.map((e, i) => (
+            <div key={i} style={{ fontSize: 12, color: '#fca5a5', fontFamily: FONT }}>
+              [{e.code}] {e.message}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {validation.errors.length === 0 && validation.warnings.length > 0 && (
+        <div style={{ background: '#78350f', border: '1px solid #d97706', borderRadius: 6, padding: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#fde68a', fontFamily: FONT, marginBottom: 4 }}>
+            {validation.warnings.length} warning{validation.warnings.length > 1 ? 's' : ''} — run will proceed:
+          </div>
+          {validation.warnings.map((w, i) => (
+            <div key={i} style={{ fontSize: 12, color: '#fde68a', fontFamily: FONT }}>
+              [{w.code}] {w.message}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {phaseCTruncated && (
+        <div style={{ background: '#78350f', border: '1px solid #d97706', borderRadius: 6, padding: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: '#fde68a', fontFamily: FONT }}>
+            Phase C scan hit the 500-pass cap — model may have an unstable or conflicting C-event condition
+          </div>
+          <div style={{ fontSize: 11, color: '#fde68a', fontFamily: FONT, marginTop: 4, opacity: 0.8 }}>
+            Check your C-event conditions for cycles or conditions that never become false.
+          </div>
+        </div>
+      )}
 
       {saveStatus && (
         <div style={{

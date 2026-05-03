@@ -5,6 +5,20 @@
 //   2. It automatically appears in every distribution picker in the UI
 //   3. No other changes needed anywhere in the codebase
 
+/**
+ * Mulberry32 — fast, seedable 32-bit PRNG.
+ * Returns a function that produces values in [0, 1) from a fixed seed.
+ * Every call to mulberry32(seed) starts an independent identical sequence.
+ */
+export function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
 export const DISTRIBUTIONS = {
   Fixed: {
     params: ["value"],
@@ -78,10 +92,10 @@ export const DISTRIBUTIONS = {
  * Sample a delay value from a named distribution.
  * @param {string} dist - Distribution name (key of DISTRIBUTIONS)
  * @param {object} params - Distribution parameters (string values from UI)
- * @param {function} rng - Random function (defaults to Math.random)
+ * @param {function} rng - Seeded PRNG (defaults to mulberry32(0) — pass buildEngine's rng for reproducibility)
  * @param {object|null} serverAttrs - Server entity attributes (for ServerAttr)
  */
-export function sample(dist, params = {}, rng = Math.random, serverAttrs = null) {
+export function sample(dist, params = {}, rng = mulberry32(0), serverAttrs = null) {
   const def = DISTRIBUTIONS[dist];
   if (!def) return parseFloat(params.value) || 0;
   return def.sample(params, rng, serverAttrs);
@@ -91,7 +105,7 @@ export function sample(dist, params = {}, rng = Math.random, serverAttrs = null)
  * Sample all attrDefs for a new entity instance.
  * attrDefs: array of { name, dist, distParams } OR legacy string "k=v,k2=v2"
  */
-export function sampleAttrs(attrDefs, rng = Math.random) {
+export function sampleAttrs(attrDefs, rng = mulberry32(0)) {
   if (!attrDefs) return {};
   // Legacy string format
   if (typeof attrDefs === "string") {

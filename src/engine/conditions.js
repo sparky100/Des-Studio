@@ -1,8 +1,124 @@
-// engine/conditions.js — Condition string evaluator
+// engine/conditions.js — Condition evaluator
 //
-// EXTENDING: To add a new condition token (e.g. priority(Type).max):
+// Two public evaluators are exported:
+//   evaluatePredicate(predicate, state) — safe evaluator for Addition 1 §4 JSON predicates
+//   evalCondition(conditionStr, helpers, state, clock) — legacy string evaluator (no new Function)
+//
+// EXTENDING evalCondition tokens:
 //   1. Add a replacement rule in evalCondition below
 //   2. Add it to the token list in ConditionBuilder.jsx UI component
+
+// ── Safe helpers for legacy string evaluator ─────────────────────────────────
+
+function parseVal(s) {
+  s = s.trim();
+  if (s.startsWith('"') && s.endsWith('"')) return s.slice(1, -1);
+  if (s === 'true') return true;
+  if (s === 'false') return false;
+  const n = Number(s);
+  return isNaN(n) ? s : n;
+}
+
+function evalAtom(atom) {
+  const m = atom.trim().match(/^(.+?)\s*(>=|<=|==|!=|>|<)\s*(.+)$/);
+  if (!m) return false;
+  const left  = parseVal(m[1]);
+  const op    = m[2];
+  const right = parseVal(m[3]);
+  switch (op) {
+    case '==': return left == right;  // loose equality for legacy compat
+    case '!=': return left != right;
+    case '>':  return left > right;
+    case '<':  return left < right;
+    case '>=': return left >= right;
+    case '<=': return left <= right;
+    default:   return false;
+  }
+}
+
+// Evaluates a substituted numeric expression like "3 > 0 && 1 > 0" without new Function.
+function safeEvalExpr(expr) {
+  if (!expr || !expr.trim()) return false;
+  const segments = [];
+  const re = /\s*(&&|\|\|)\s*/g;
+  let last = 0, m;
+  while ((m = re.exec(expr)) !== null) {
+    segments.push({ type: 'clause', text: expr.slice(last, m.index).trim() });
+    segments.push({ type: 'op',     text: m[1] });
+    last = re.lastIndex;
+  }
+  segments.push({ type: 'clause', text: expr.slice(last).trim() });
+
+  let result = null;
+  let pendingOp = null;
+  for (const seg of segments) {
+    if (seg.type === 'op') { pendingOp = seg.text; continue; }
+    if (!seg.text) continue;
+    const val = evalAtom(seg.text);
+    if (result === null) {
+      result = val;
+    } else {
+      result = pendingOp === '&&' ? (result && val) : (result || val);
+    }
+    pendingOp = null;
+  }
+  return !!result;
+}
+
+// ── Safe evaluator for Addition 1 §4 predicate JSON ──────────────────────────
+
+function resolveVariable(ref, state) {
+  const parts = ref.split('.');
+  if (parts[0] === 'Entity') {
+    // Entity.<attributeName>
+    return state.currentEntity?.attrs?.[parts[1]];
+  }
+  if (parts[0] === 'Resource') {
+    // Resource.<id>.<property>
+    return state.resources?.[parts[1]]?.[parts[2]];
+  }
+  if (parts[0] === 'Queue') {
+    // Queue.<id>.<property>
+    return state.queues?.[parts[1]]?.[parts[2]];
+  }
+  if (parts.length === 1) {
+    // Plain user-defined state variable
+    return state[ref];
+  }
+  throw new Error(`Unknown variable namespace in predicate: '${ref}'`);
+}
+
+function applyOperator(left, operator, right) {
+  switch (operator) {
+    case '==': return left === right;
+    case '!=': return left !== right;
+    case '<':  return left < right;
+    case '>':  return left > right;
+    case '<=': return left <= right;
+    case '>=': return left >= right;
+    default:   throw new Error(`Unknown predicate operator: '${operator}'`);
+  }
+}
+
+/**
+ * Evaluate a predicate JSON object (Addition 1 §4) against simulation state.
+ * Never calls eval, new Function, or any dynamic code execution.
+ *
+ * @param {object} predicate - Single: { variable, operator, value }
+ *                             Compound: { operator: 'AND'|'OR', clauses: [...] }
+ * @param {object} state     - { currentEntity, resources, queues, ...userVars }
+ */
+export function evaluatePredicate(predicate, state) {
+  if (!predicate) return false;
+  if (predicate.operator === 'AND') {
+    return (predicate.clauses || []).every(c => evaluatePredicate(c, state));
+  }
+  if (predicate.operator === 'OR') {
+    return (predicate.clauses || []).some(c => evaluatePredicate(c, state));
+  }
+  const left = resolveVariable(predicate.variable, state);
+  return !!applyOperator(left, predicate.operator, predicate.value);
+}
 
 /**
  * Evaluate a condition string against current simulation state.
@@ -72,8 +188,7 @@ export function evalCondition(condition, helpers, state, clock) {
     // AND / OR → && / ||
     expr = expr.replace(/\bAND\b/gi, "&&").replace(/\bOR\b/gi, "||");
 
-    // eslint-disable-next-line no-new-func
-    return !!new Function(`return (${expr})`)();
+    return safeEvalExpr(expr);
   } catch {
     return false;
   }

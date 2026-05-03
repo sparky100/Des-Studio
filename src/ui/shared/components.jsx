@@ -1,6 +1,7 @@
 // ui/shared/components.jsx — Reusable micro-components
 import { useState } from "react";
 import { C, FONT } from "./tokens.js";
+import { DISTRIBUTIONS } from "../../engine/distributions.js";
 
 const Tag=({label,color=C.muted})=>(
   <span style={{background:color+"18",border:`1px solid ${color}44`,color,borderRadius:3,padding:"2px 7px",fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",fontFamily:FONT}}>{label}</span>
@@ -60,7 +61,7 @@ const DistPicker=({value,onChange,compact})=>{
         {dd.params.map(param=>(
           <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
-            <input value={(v.distParams||{})[param]||""} onChange={e=>onChange({...v,distParams:{...(v.distParams||{}),[param]:e.target.value}})}
+            <input type="number" value={(v.distParams||{})[param]||""} onChange={e=>onChange({...v,distParams:{...(v.distParams||{}),[param]:e.target.value}})}
               style={{width:60,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}/>
           </div>
         ))}
@@ -77,5 +78,5 @@ const TOKEN_COLORS=["#06b6d4","#f59e0b","#8b5cf6","#3fb950","#f87171","#a78bfa",
 const tokenColor=(id)=>TOKEN_COLORS[(id-1)%TOKEN_COLORS.length];
 
 
-export { Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty };
+export { Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty, DistPicker };
 
