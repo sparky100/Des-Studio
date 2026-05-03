@@ -175,17 +175,17 @@ export function validateModel(model) {
       'bevents');
   }
 
-  // ── V9: C-Event conditions must reference defined entity types ───────────────
-  const etNamesLower = new Set(
-    entityTypes.map(e => (e.name || '').trim().toLowerCase()).filter(Boolean)
+  // ── V9: C-Event conditions must reference defined queues ────────────────────
+  const queueNamesLower = new Set(
+    queues.map(q => (q.name || '').trim().toLowerCase()).filter(Boolean)
   );
   cEvents.forEach(c => {
     if (!c.condition) return;
-    const typeRefs = [...c.condition.matchAll(/queue\((\w+)\)/gi)].map(m => m[1].toLowerCase());
-    typeRefs.forEach(ref => {
-      if (!etNamesLower.has(ref)) {
+    const queueRefs = [...c.condition.matchAll(/queue\((\w+)\)/gi)].map(m => m[1].toLowerCase());
+    queueRefs.forEach(ref => {
+      if (!queueNamesLower.has(ref)) {
         err('V9',
-          `C-Event '${c.name || c.id}' condition references unknown entity type '${ref}'.`,
+          `C-Event '${c.name || c.id}' condition references unknown queue '${ref}'.`,
           'cevents');
       }
     });
