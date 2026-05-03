@@ -36,7 +36,8 @@ Claude Code must read the relevant existing files before touching anything.
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 2026-04-30 | Initial plan from audit findings |
-| 1.1 | 2026-05-03 | Sprint 1 complete; Sprint 2 scope revised from audit plan |
+| 1.1 | 2026-05-01 | Post-Sprint 1 update — sprint status recorded; Sprint 1 completion gate results noted |
+| 1.2 | 2026-05-03 | Added Sprint 6 (LLM Integration & Results Analysis), Sprint 7 (Dynamic Distributions & Time-Varying Resources), and Sprint 8 (LLM Chat Model Builder). Features derived from design sessions in chats "LLM model integration and results analysis", "dynamic sampling distributions and time varying resources", and "Building models through LLM chat interface". Absent-feature register updated. |
 
 ---
 
@@ -113,6 +114,20 @@ Claude Code must never rewrite a working component — only extend or fix it.
 | Results export | S5 |
 | Keyboard navigation / ARIA | S5 |
 | First-run onboarding | S5 |
+| LLM-powered results analysis (natural language KPI interpretation) | S6 |
+| LLM results comparison (scenario A vs B narrative) | S6 |
+| LLM-generated sensitivity commentary | S6 |
+| AI assistant panel (inline, collapsible) | S6 |
+| Piecewise inter-arrival distribution (time-of-day rates) | S7 |
+| NHPP (Non-Homogeneous Poisson Process) arrival scheduler | S7 |
+| Resource shift schedule (capacity change B-Events) | S7 |
+| Time-varying distribution picker UI | S7 |
+| Shift schedule editor (capacity steps by time band) | S7 |
+| LLM chat model builder — intent parsing to model JSON | S8 |
+| LLM model builder — entity class suggestion from description | S8 |
+| LLM model builder — iterative clarification loop | S8 |
+| LLM model builder — diff-preview before apply | S8 |
+| LLM model builder — validation integration | S8 |
 
 ---
 
@@ -159,7 +174,7 @@ Report the result of each check. Flag anything that blocks Sprint 1.
 All fixes operate on existing files — no new architecture.
 **Exit gate:** M/M/1 benchmark exits 0. All ~120 existing tests still pass.
 
-**Status:** ✅ Complete | **Started:** 2026-04-30 | **Completed:** 2026-05-03
+**Status:** ⬜ Not started | **Started:** — | **Completed:** —
 
 > **Rule for this sprint:** Read the target file before proposing any change.
 > Every task modifies existing code. None creates new files except test files.
@@ -559,21 +574,8 @@ Questions:
 All existing editors (EntityTypeEditor, BEventEditor, CEventEditor, QueueEditor, ConditionBuilder)
 remain in place — this sprint extends them.
 
-**Status:** 🔄 In progress | **Started:** 2026-05-03 | **Completed:** —
-**Prerequisite:** Sprint 1 exit gate passed. ✅
-
-> **Scope note (revised from audit plan):** Sprint 1 retrospective identified G1/G2 queue
-> discipline gaps and pulled termination + replication forward from S3/S4. Undo/redo,
-> drag-to-reorder, CSV import, and unsaved-change warning are deferred to Sprint 3+.
-
-| Feature | Audit Status | Action |
-|---|---|---|
-| F2.1 — Fix G1/G2: formalise queue-to-C-event binding via queueId | G1/G2 (new) | Extend: `macros.js`, `conditions.js`, model schema |
-| F2.2 — Fix G3/G4: remove dead code, throw on missing rng | G3/G4 (new) | Fix: `engine/index.js`, `distributions.js` |
-| F2.3 — Time-based termination (maxSimulationTime) | ✗ (was S3) | New: `engine/index.js`, `execute/index.jsx` |
-| F2.4 — Seeded multi-replication runner | ✗ (was S4) | New: `engine/index.js`, `execute/index.jsx` |
-| F2.5 — Warm-up period (warmupTime, time-based) | ✗ (was S3) | New: `engine/index.js`, `execute/index.jsx` |
-| F2.6 — ConditionBuilder token staleness (C8) | ~ (was S2) | Fix: `editors/index.jsx` |
+**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Prerequisite:** Sprint 1 exit gate passed.
 
 ---
 
@@ -1434,6 +1436,1015 @@ Definition of done:
 
 ---
 
+---
+
+## Sprint 6 — LLM Integration & Results Analysis
+
+**Goal:** Embed an AI assistant panel into the Execute view that interprets simulation results in natural language, compares scenarios, and provides sensitivity commentary. All LLM calls use the Anthropic API (claude-sonnet model) from within the browser — no backend changes required.
+
+**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Prerequisite:** Sprint 5 exit gate passed. Results export (F5.4) must produce structured JSON that can be passed to the LLM prompt.
+
+| Feature | Audit Status | Action |
+|---|---|---|
+| F6.1 — AI assistant panel | ✗ | New: collapsible right-hand panel in Execute view |
+| F6.2 — KPI narrative generation | ✗ | New: prompt builder + Anthropic API call from browser |
+| F6.3 — Scenario comparison (A vs B) | ✗ | New: multi-run selector + comparative prompt |
+| F6.4 — Sensitivity commentary | ✗ | New: replication variance summary fed to LLM |
+| F6.5 — Streaming response display | ✗ | New: streamed token display in assistant panel |
+
+### Design Principles for Sprint 6
+
+The LLM integration must never modify the model or engine. It is read-only and advisory. All calls are made client-side using the Anthropic `/v1/messages` endpoint with `claude-sonnet-4-20250514`. The results JSON passed to the LLM is the same structured object produced by `buildEngine()` — no intermediate transformation layer is required.
+
+Context injected into every prompt:
+- Model name and description
+- Experiment configuration (warm-up, run duration, replications, seed)
+- KPI summary: mean wait times per queue, resource utilisation, throughput, renege rates
+- Confidence intervals (if N > 1 replications)
+- (For comparison prompts) side-by-side KPIs for two named runs
+
+### Sprint 6 Planning Prompt *(run in claude.ai)*
+
+```
+We are starting Sprint 6 of DES Studio.
+
+Sprint 6 adds an LLM-powered AI assistant panel to the Execute view.
+The assistant interprets simulation results, compares scenarios, and
+provides sensitivity commentary using the Anthropic API (claude-sonnet).
+
+Completed in Sprints 1–5: [paste]
+
+Features:
+  F6.1 — Collapsible AI assistant panel (right of Execute view)
+  F6.2 — KPI narrative: LLM reads results JSON, returns plain-English interpretation
+  F6.3 — Scenario comparison: user selects two runs; LLM produces A-vs-B narrative
+  F6.4 — Sensitivity commentary: replication CI data fed to LLM for variance analysis
+  F6.5 — Streaming response display using Anthropic streaming API
+
+CRITICAL:
+  - LLM never modifies model or engine state — read-only, advisory
+  - API key must NOT be embedded in client code — use Supabase Edge Function as proxy
+  - Prompt templates must be versioned in src/llm/prompts.js (new file)
+  - All LLM calls are cancellable — user can interrupt streaming response
+  - If Anthropic API is unavailable, panel shows graceful fallback (no crash)
+
+Definition of done:
+  - User runs a model, opens AI panel, clicks "Explain results" — receives narrative
+  - User selects two saved runs, clicks "Compare" — receives A-vs-B analysis
+  - Streaming tokens appear progressively (not batch-loaded at end)
+  - npm test -- --run passes (new unit tests for prompt builder)
+  - npm run build succeeds
+```
+
+---
+
+### F6.1 — AI Assistant Panel
+
+**Audit status:** ✗ (not implemented)
+**Action:** New collapsible panel — extends `execute/index.jsx`
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F6.1 of Sprint 6.
+
+Read src/ui/execute/index.jsx — understand the current panel layout.
+
+Add a collapsible AI assistant panel to the right side of the Execute view:
+  - Toggle button: "AI Insights" (shows/hides panel)
+  - Panel width: 320px, full height of Execute view
+  - Initial state: collapsed (does not affect existing layout)
+  - When expanded: existing Execute content shrinks to fill remaining width
+  - Panel header: "AI Assistant" with a close (×) button
+  - Panel body: three sections
+      1. "Explain results" button (active only after a run completes)
+      2. "Compare runs" — dropdown to select a second run from run history
+      3. Response area: scrollable text with streaming token display
+
+No LLM calls in this task. This task builds the UI shell only.
+The response area shows a placeholder: "Run the model to generate insights."
+
+Write a UI test: panel toggles correctly; buttons disabled before run.
+```
+
+**Completion checklist:**
+- [ ] AI panel renders and toggles without affecting existing Execute layout
+- [ ] Buttons disabled before first run completes
+- [ ] Placeholder text shown in response area
+- [ ] UI test passes
+
+---
+
+### F6.2 — KPI Narrative Generation
+
+**Audit status:** ✗ (not implemented)
+**Action:** New `src/llm/` directory — `prompts.js` + `apiClient.js`
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F6.2 of Sprint 6.
+
+Create src/llm/prompts.js (new file):
+  Export buildNarrativePrompt(model, experimentConfig, results):
+    - System prompt: "You are an expert simulation analyst. Interpret
+      the following discrete-event simulation results for a non-specialist
+      audience. Be concise — 150–200 words. Use plain English."
+    - User message: structured JSON block containing:
+        model.name, model.description
+        experiment: { warmup, runDuration, replications, seed }
+        kpis: { queues: [{name, meanWait, maxWait, renegeRate}],
+                resources: [{name, utilisation, busyCount}],
+                throughput, totalEntities }
+    - Instruction: "Highlight the most significant findings. Flag any
+      queues where mean wait exceeds 2 × service time (possible overload)."
+
+Create src/llm/apiClient.js (new file):
+  Export streamNarrative(prompt, onToken, onComplete, onError):
+    - POST to /functions/v1/llm-proxy (Supabase Edge Function — see below)
+    - Handle SSE streaming: call onToken(text) for each chunk
+    - Call onComplete() when stream ends
+    - Call onError(err) on failure
+
+Create supabase/functions/llm-proxy/index.ts (new Supabase Edge Function):
+  - Receives { messages, model, max_tokens } from client
+  - Forwards to Anthropic API using ANTHROPIC_API_KEY secret (server-side)
+  - Streams response back to client
+  - Validates that model is claude-sonnet-4-20250514 only (no other models)
+  - Rate-limits: max 10 requests per user per hour (uses Supabase user JWT)
+
+In the AI panel (F6.1): wire "Explain results" button to streamNarrative().
+Display streaming tokens in the response area as they arrive.
+
+Unit tests (tests/llm/prompts.test.js):
+  - buildNarrativePrompt returns valid JSON in user message
+  - Overloaded queue (meanWait > 2× serviceTime) is flagged in prompt
+  - Prompt does not exceed 2000 tokens (count words × 1.3 heuristic)
+```
+
+**Completion checklist:**
+- [ ] `src/llm/prompts.js` with `buildNarrativePrompt()` exported
+- [ ] `src/llm/apiClient.js` with `streamNarrative()` exported
+- [ ] Supabase Edge Function `llm-proxy` deployed
+- [ ] API key never appears in client-side code
+- [ ] Streaming tokens display progressively in panel
+- [ ] Unit tests pass
+
+---
+
+### F6.3 — Scenario Comparison (A vs B)
+
+**Audit status:** ✗ (not implemented)
+**Action:** Extend `src/llm/prompts.js`; extend AI panel
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F6.3 of Sprint 6.
+
+Read src/llm/prompts.js (from F6.2).
+
+Add buildComparisonPrompt(modelName, runA, runB) to prompts.js:
+  runA and runB are results objects from two different simulation runs.
+  Each has: experimentConfig, kpis, run label (user-assigned or timestamp).
+
+  System prompt: "You are an expert simulation analyst. Compare the two
+  simulation runs below and explain the key differences to a non-specialist.
+  Be concise — 200–250 words. Use a Before/After or Option A/Option B frame."
+
+  User message: structured JSON with runA and runB side by side.
+
+In the AI panel:
+  - "Compare runs" section: primary run is the most recent completed run
+  - Dropdown: select a second run from run history (last 20 runs)
+  - "Compare" button: builds comparison prompt and calls streamNarrative()
+  - Response replaces the narrative area content
+
+Unit tests (add to tests/llm/prompts.test.js):
+  - buildComparisonPrompt includes both run labels in output
+  - Produces valid JSON structure
+```
+
+**Completion checklist:**
+- [ ] `buildComparisonPrompt()` exported from `prompts.js`
+- [ ] Comparison prompt includes both run KPIs side by side
+- [ ] AI panel dropdown populated from run history
+- [ ] Streaming narrative displayed for comparison
+- [ ] Unit tests pass
+
+---
+
+### F6.4 — Sensitivity Commentary
+
+**Audit status:** ✗ (not implemented)
+**Action:** Extend `src/llm/prompts.js`; extend AI panel
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F6.4 of Sprint 6.
+
+This feature is only available when N >= 5 replications have been run
+(confidence intervals are meaningful only with sufficient sample size).
+
+Add buildSensitivityPrompt(modelName, experimentConfig, ciResults) to prompts.js:
+  ciResults: array of KPIs with { name, mean, ci95Lower, ci95Upper, stdDev }
+
+  System prompt: "You are an expert simulation analyst. Explain the
+  statistical uncertainty in the following simulation results. Identify
+  which KPIs have wide confidence intervals and what this implies for
+  decision-making. Be concise — 150–200 words."
+
+In the AI panel:
+  - "Sensitivity" button: shown only when N >= 5 replications exist
+  - Calls buildSensitivityPrompt and streamNarrative()
+
+Unit test: sensitivity button disabled when replications < 5.
+```
+
+**Completion checklist:**
+- [ ] `buildSensitivityPrompt()` exported from `prompts.js`
+- [ ] Sensitivity button disabled when N < 5
+- [ ] CI data correctly structured in prompt
+- [ ] Unit test passes
+
+---
+
+### F6.5 — Streaming Response Display
+
+**Audit status:** ✗ (not implemented)
+**Action:** Extend AI panel component; extend `apiClient.js`
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F6.5 of Sprint 6.
+
+Ensure the streaming response in the AI panel meets production quality:
+  - Tokens appear character-by-character (or chunk-by-chunk per SSE event)
+  - A "Stop" button cancels the in-flight request using AbortController
+  - A loading spinner appears while waiting for first token
+  - If the stream errors: display "Analysis unavailable — try again" (amber banner)
+  - Copy-to-clipboard button appears after stream completes
+  - Response is formatted: markdown bold/italic rendered (use a lightweight
+    markdown renderer — dangerouslySetInnerHTML is NOT permitted;
+    use a safe renderer like marked with sanitisation)
+
+Unit test: onError callback triggered when fetch rejects; panel shows error banner.
+```
+
+**Completion checklist:**
+- [ ] Streaming tokens display progressively
+- [ ] Stop button cancels stream via `AbortController`
+- [ ] Loading spinner shown before first token
+- [ ] Error banner shown on failure (no crash)
+- [ ] Copy button present after completion
+- [ ] Markdown rendered safely (no `dangerouslySetInnerHTML`)
+- [ ] Unit test passes
+
+---
+
+### Sprint 6 Completion Gate
+
+```bash
+npm test -- --run                      # Zero failures
+npm test -- llm                        # LLM prompt builder tests pass
+npm test -- ui                         # AI panel toggle test passes
+npm run build                          # Succeeds
+# Manual: open Execute panel, run model, click "AI Insights", verify narrative appears
+# Manual: select two runs, click Compare, verify comparison narrative appears
+```
+
+---
+
+## Sprint 7 — Dynamic Distributions & Time-Varying Resources
+
+**Goal:** Enable modellers to represent systems where arrival rates and resource capacity change over simulated time. This is essential for realistic models of emergency departments, call centres, and any system with diurnal or shift-based patterns.
+
+**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Prerequisite:** Sprint 5 exit gate passed. Sprint 7 does not depend on Sprint 6 and can proceed in parallel.
+
+**Architectural constraint:** All time-varying logic is scheduled as B-Events. No new Phase types are introduced. The Three-Phase engine (`engine/index.js`) is not restructured — it is extended via the existing B-Event mechanism.
+
+| Feature | Audit Status | Action |
+|---|---|---|
+| F7.1 — Piecewise inter-arrival distribution schema | ✗ | New: extend `distributions.js` registry |
+| F7.2 — NHPP arrival B-Event scheduler | ✗ | New: extend `phases.js` ARRIVE logic |
+| F7.3 — Resource shift schedule schema | ✗ | New: extend entity model (new node property) |
+| F7.4 — Shift change B-Event handler | ✗ | New: extend `phases.js` |
+| F7.5 — Time-varying distribution picker UI | ✗ | New: extend `DistPicker` in `shared/components.jsx` |
+| F7.6 — Shift schedule editor UI | ✗ | New: extend Resource configuration in editors |
+| F7.7 — Engine validation for time-varying params | ✗ | New: extend `validateModel()` in `validation.js` |
+
+### Design Principles for Sprint 7
+
+**Piecewise inter-arrival rates.** The modeller defines an ordered list of `{ startTime, distribution }` pairs. At each transition time, the engine schedules a `RATE_CHANGE` B-Event that replaces the active inter-arrival distribution for the relevant Source. The engine then schedules the next arrival using the new distribution. This mechanism requires no changes to Phase B or Phase C — only the ARRIVE B-Event scheduling logic.
+
+```
+PIECEWISE DISTRIBUTION SCHEMA
+{ "type": "piecewise",
+  "periods": [
+    { "startTime": 0,   "distribution": { "type": "exponential", "rate": 0.5 } },
+    { "startTime": 480, "distribution": { "type": "exponential", "rate": 1.5 } },
+    { "startTime": 960, "distribution": { "type": "exponential", "rate": 0.8 } }
+  ]
+}
+```
+
+**Resource shift schedules.** The modeller defines capacity steps on a Resource node: `{ time, capacity }` pairs. Each step is pre-scheduled as a `SHIFT_CHANGE` B-Event at model initialisation. When it fires, `Resource.<id>.capacity` is updated. C-Event conditions referencing `Resource.<id>.busyCount` automatically reflect the new capacity on the next scan.
+
+```
+SHIFT SCHEDULE SCHEMA (on Resource node)
+{ "shiftSchedule": [
+    { "time": 0,    "capacity": 3 },
+    { "time": 480,  "capacity": 6 },
+    { "time": 960,  "capacity": 2 }
+  ]
+}
+```
+
+### Sprint 7 Planning Prompt *(run in claude.ai)*
+
+```
+We are starting Sprint 7 of DES Studio.
+
+Sprint 7 adds time-varying arrival rates and resource shift schedules.
+Both features are implemented as pre-scheduled B-Events — no new Phase
+types or engine restructuring.
+
+Completed in Sprints 1–5: [paste]
+
+Features:
+  F7.1 — Piecewise distribution type: new registry entry in distributions.js
+  F7.2 — NHPP arrival scheduler: RATE_CHANGE B-Events scheduled at model init
+  F7.3 — Shift schedule schema: new shiftSchedule[] property on Resource nodes
+  F7.4 — Shift change B-Event handler: updates Resource.capacity at scheduled time
+  F7.5 — Time-varying distribution picker UI: extends existing DistPicker
+  F7.6 — Shift schedule editor: extends existing Resource configuration panel
+  F7.7 — Validation: piecewise periods must be time-ordered; shift times must be
+          within run duration; capacity values must be positive integers
+
+CRITICAL:
+  - The Three-Phase engine loop is NOT restructured
+  - RATE_CHANGE and SHIFT_CHANGE B-Events are scheduled at buildEngine() init
+  - Resource.capacity changes take effect on the next Phase C scan (correct behaviour)
+  - Seeded RNG must be used for all sampling in piecewise distributions
+  - A piecewise distribution with a single period is equivalent to a static distribution
+    (no special-casing needed)
+  - Warm-up reset does NOT reset piecewise period or shift schedule position
+    (the schedule is time-indexed, not statistics-indexed)
+
+Definition of done:
+  - M/M/1 with time-varying arrival passes: high-rate period produces longer queues
+  - Shift schedule test: capacity drops from 3 to 1 at T=500, queue grows correctly
+  - All existing engine tests still pass
+  - npm test -- --run passes
+```
+
+---
+
+### F7.1 — Piecewise Distribution Schema
+
+**Audit status:** ✗ (distributions.js supports 7 types — piecewise is absent)
+**Action:** Extend `distributions.js` registry — no other engine files change
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F7.1 of Sprint 7.
+
+Read src/engine/distributions.js — show me the registerDistribution() pattern
+and the full list of currently registered types.
+
+Register a new 'piecewise' distribution type:
+  Schema: { "type": "piecewise", "periods": [{ "startTime": number, "distribution": Distribution }] }
+
+  Validation function (runs at validateModel() time):
+    - periods must be a non-empty array
+    - periods must be sorted ascending by startTime
+    - periods[0].startTime must be 0 (simulation must have a rate from T=0)
+    - each period.distribution must be a valid registered distribution
+    - periods must not overlap (guaranteed by sort + uniqueness check on startTime)
+
+  Sample function (accepts T_now from engine context):
+    - Identify the active period: largest startTime <= T_now
+    - Delegate to the active period's distribution sampler
+    - The 'piecewise' sampler does NOT itself schedule RATE_CHANGE events —
+      that is the NHPP scheduler's responsibility (F7.2)
+
+Add to tests/engine/distributions.test.js:
+  - Piecewise with two periods returns correct distribution for each time range
+  - Piecewise with period[0].startTime != 0 fails validation
+  - Piecewise with unsorted periods fails validation
+  - Sample at T_now in period 1 uses period 1 distribution
+```
+
+**Completion checklist:**
+- [ ] `piecewise` registered in `distributions.js`
+- [ ] Validation: startTime=0, sorted, non-overlapping
+- [ ] Sampler delegates to active period by T_now
+- [ ] All new distribution tests pass
+- [ ] Existing distribution tests unchanged
+
+---
+
+### F7.2 — NHPP Arrival B-Event Scheduler
+
+**Audit status:** ✗ (ARRIVE always uses a static distribution)
+**Action:** Extend `phases.js` ARRIVE handler and `engine/index.js` init
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F7.2 of Sprint 7.
+
+Read src/engine/phases.js — show me the ARRIVE handler in full.
+Read src/engine/index.js — show me the engine initialisation block.
+
+The ARRIVE handler currently samples from a static distribution.
+For piecewise distributions, the handler must additionally schedule
+RATE_CHANGE B-Events at period transition times.
+
+Extend engine initialisation in buildEngine():
+  For each Source node with a piecewise interArrivalDist:
+    For each period transition (periods[i].startTime where i > 0):
+      Schedule a RATE_CHANGE B-Event at startTime
+      Payload: { sourceId, newDistribution: periods[i].distribution }
+
+Add RATE_CHANGE B-Event handler to phases.js:
+  When fired: update the active distribution reference on the source node
+  No other state changes — the next ARRIVE B-Event will use the new distribution
+
+Write a unit test:
+  - Model: single source, piecewise dist with period at T=0 (rate=0.5) and T=100 (rate=2.0)
+  - Run to T=200
+  - Assert: mean inter-arrival in [0,100) is close to 1/0.5 = 2.0
+  - Assert: mean inter-arrival in [100,200) is close to 1/2.0 = 0.5
+  - Tolerance: 10% (stochastic — use large N)
+```
+
+**Completion checklist:**
+- [ ] RATE_CHANGE B-Events scheduled at `buildEngine()` init for piecewise sources
+- [ ] RATE_CHANGE handler updates active distribution on source node
+- [ ] ARRIVE handler uses the currently-active distribution at time of sampling
+- [ ] Unit test demonstrates rate change effect
+- [ ] All existing engine tests pass
+
+---
+
+### F7.3 — Resource Shift Schedule Schema
+
+**Audit status:** ✗ (Resource nodes have no shiftSchedule property)
+**Action:** Extend entity model schema; extend `docs/addition1_entity_model.md`
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F7.3 of Sprint 7.
+
+Read docs/addition1_entity_model.md Section 3.1 (Resource State Variables).
+
+Add shiftSchedule as an optional property on Resource nodes:
+  Schema: { "shiftSchedule": [{ "time": number, "capacity": number }] }
+  Default: absent (no shift schedule = static capacity throughout run)
+
+Update addition1_entity_model.md Section 3.1 to document shiftSchedule.
+
+Update the model JSON schema (if a formal schema file exists — check docs/).
+
+Validation rules to add to validateModel() (F7.7):
+  V12 — If shiftSchedule is present:
+    - periods must be sorted ascending by time
+    - periods[0].time must be 0
+    - all capacity values must be positive integers
+    - all times must be within run duration (if run duration is set)
+    - the first period sets the initial Resource.capacity (overrides the static
+      capacity field if shiftSchedule[0] is present)
+
+No engine or UI changes in this task — schema and validation spec only.
+```
+
+**Completion checklist:**
+- [ ] `shiftSchedule` schema documented in `addition1_entity_model.md`
+- [ ] Validation rules V12 added to `validateModel()` spec in `addition1_entity_model.md`
+- [ ] Model JSON schema updated (if applicable)
+
+---
+
+### F7.4 — Shift Change B-Event Handler
+
+**Audit status:** ✗ (no SHIFT_CHANGE B-Event exists)
+**Action:** Extend `phases.js` and `engine/index.js` init
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F7.4 of Sprint 7.
+
+Read src/engine/phases.js and src/engine/index.js.
+
+Extend buildEngine() initialisation:
+  For each Resource node with a shiftSchedule:
+    For each period in shiftSchedule:
+      Schedule a SHIFT_CHANGE B-Event at period.time
+      Payload: { resourceId, newCapacity: period.capacity }
+
+Add SHIFT_CHANGE B-Event handler to phases.js:
+  When fired:
+    1. Update Resource.<resourceId>.capacity to newCapacity
+    2. If new capacity < current busyCount (impossible — capacity cannot drop below
+       in-service entities): add a warning to the results object (do not halt)
+    3. Write a StepLog entry: "SHIFT_CHANGE: Resource <id> capacity → <newCapacity>"
+
+Write unit tests:
+  - Single server, shift at T=500: capacity 3 → 1
+  - Assert: Resource.capacity == 3 before T=500
+  - Assert: Resource.capacity == 1 after T=500
+  - Assert: StepLog contains SHIFT_CHANGE entry at T=500
+  - Capacity-below-busyCount edge case: warning in results, run continues
+```
+
+**Completion checklist:**
+- [ ] SHIFT_CHANGE B-Events scheduled at `buildEngine()` init
+- [ ] SHIFT_CHANGE handler updates `Resource.<id>.capacity`
+- [ ] StepLog entry written on each capacity change
+- [ ] Warning (not halt) if new capacity < current busyCount
+- [ ] Unit tests pass
+
+---
+
+### F7.5 — Time-Varying Distribution Picker UI
+
+**Audit status:** ✗ (DistPicker does not support piecewise type)
+**Action:** Extend `src/ui/shared/components.jsx` (DistPicker)
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F7.5 of Sprint 7.
+
+Read src/ui/shared/components.jsx — find the DistPicker component.
+Confirm the list of distribution types currently shown.
+
+Extend DistPicker (do not replace) to support the piecewise type:
+  - Add "Time-varying (piecewise)" to the distribution type dropdown
+  - On select: show a period table editor:
+      Columns: Start Time | Distribution Type | Parameters | [Delete]
+      Add Period button: appends a new row with defaults
+      Period 0 start time is always locked to 0 (cannot be changed by user)
+      Periods are auto-sorted ascending by startTime on save
+  - Each period row uses a nested DistPicker (excluding piecewise — no recursion)
+  - Validates inline: unsorted times highlighted in red; warns if last period
+    ends before run duration
+
+Write a UI test (add to tests/ui/shared/dist-picker.test.jsx):
+  - Selecting piecewise shows period table
+  - Adding a period inserts a new row
+  - Period 0 start time field is disabled
+  - Unsorted start times show validation error
+```
+
+**Completion checklist:**
+- [ ] Piecewise type in existing `DistPicker` dropdown
+- [ ] Period table editor: add, edit, delete rows
+- [ ] Period 0 start time locked to 0
+- [ ] Nested `DistPicker` per period (no recursion)
+- [ ] Inline sort validation
+- [ ] UI test passes
+
+---
+
+### F7.6 — Shift Schedule Editor
+
+**Audit status:** ✗ (Resource configuration has no shift schedule panel)
+**Action:** Extend Resource configuration in `editors/index.jsx`
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F7.6 of Sprint 7.
+
+Read src/ui/editors/index.jsx — find the Resource (or entity type) configuration
+section. Show me the current fields rendered for a Resource node.
+
+Extend the Resource configuration panel (do not replace):
+  Add a "Shift Schedule" section (collapsed by default):
+    - Toggle: "Use shift schedule" (checkbox)
+    - When enabled: show a schedule table
+        Columns: Start Time | Capacity | [Delete]
+        Add Shift button: appends a new row
+        Row 0 time locked to 0 (defines initial capacity)
+    - When disabled: show the existing static Capacity field only
+    - Inline validation: times must be sorted; capacity must be a positive integer
+
+  On save: if shift schedule enabled, write shiftSchedule[] to model_json.
+           Static capacity field is ignored when shiftSchedule[0] is present.
+
+Write a UI test:
+  - Enabling shift schedule shows the table; disabling restores static capacity field
+  - Adding a row increments table row count
+  - Non-integer capacity value shows validation error
+```
+
+**Completion checklist:**
+- [ ] Shift schedule section in existing Resource editor
+- [ ] Toggle enables/disables shift table vs static capacity field
+- [ ] Row 0 time locked to 0
+- [ ] Inline validation: sorted times, positive integer capacity
+- [ ] `shiftSchedule[]` written to model_json when enabled
+- [ ] UI test passes
+
+---
+
+### F7.7 — Validation for Time-Varying Parameters
+
+**Audit status:** ✗ (validateModel() does not cover piecewise or shiftSchedule)
+**Action:** Extend `src/engine/validation.js`
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F7.7 of Sprint 7.
+
+Read src/engine/validation.js — show me the full validateModel() function
+and the existing V1–V11 rule set.
+
+Add validation rules V12–V15 to the existing validateModel():
+
+  V12 — Piecewise distribution: periods[0].startTime must be 0. (Blocking)
+  V13 — Piecewise distribution: periods must be sorted ascending by startTime. (Blocking)
+  V14 — Shift schedule: shiftSchedule[0].time must be 0. (Blocking)
+  V15 — Shift schedule: all shift times must be within run duration if run
+          duration is configured. (Warning — run proceeds with amber banner)
+
+Error message patterns:
+  V12: "Source '{name}' piecewise distribution must start at time 0."
+  V13: "Source '{name}' piecewise periods are not sorted by start time."
+  V14: "Resource '{name}' shift schedule must begin at time 0."
+  V15: "Resource '{name}' has shift times beyond run duration — later shifts will not fire."
+
+Add to tests/engine/validation.test.js (extend existing file):
+  - V12: model with piecewise period[0].startTime != 0 returns blocking error
+  - V13: unsorted piecewise periods return blocking error
+  - V14: shift schedule without time=0 period returns blocking error
+  - V15: shift time beyond run duration returns warning (not blocking)
+  - Valid piecewise + shift model passes validation
+```
+
+**Completion checklist:**
+- [ ] V12–V15 added to existing `validateModel()`
+- [ ] V12, V13, V14 are blocking — run prevented
+- [ ] V15 is a warning — run proceeds with banner
+- [ ] Error messages identify the specific node by name
+- [ ] Five new validation tests pass
+- [ ] Existing V1–V11 tests unaffected
+
+---
+
+### Sprint 7 Completion Gate
+
+```bash
+npm test -- --run                      # Zero failures
+npm test -- distributions              # Piecewise distribution tests pass
+npm test -- engine                     # NHPP + shift change tests pass
+npm test -- validation                 # V12–V15 tests pass
+npm test -- ui                         # Shift editor + DistPicker UI tests pass
+node tests/[benchmark-filename]        # M/M/1 benchmark still exits 0
+npm run build                          # Succeeds
+```
+
+---
+
+## Sprint 8 — LLM Chat Model Builder
+
+**Goal:** Allow a modeller to describe a system in natural language and receive a partially- or fully-configured DES model. The LLM acts as a model-construction assistant: it parses the description, asks clarifying questions, proposes entity classes, queues, B-Events, C-Events, and distributions, and writes the result directly into the model editor. The modeller reviews a diff-preview before any changes are applied.
+
+**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Prerequisite:** Sprint 6 (LLM API proxy infrastructure) must be complete. Sprint 8 depends on the Supabase Edge Function `llm-proxy` deployed in F6.2.
+
+**Architectural constraint:** The LLM produces a model JSON object conforming to the existing `addition1_entity_model.md` schema. It is validated by `validateModel()` before being applied. The engine, macros, and database schema are not modified. The LLM cannot bypass validation.
+
+| Feature | Audit Status | Action |
+|---|---|---|
+| F8.1 — Chat model builder panel | ✗ | New: panel in model editor (alongside existing tab editors) |
+| F8.2 — Intent parser prompt + LLM schema | ✗ | New: `src/llm/model-builder-prompts.js` |
+| F8.3 — Iterative clarification loop | ✗ | New: multi-turn conversation in builder panel |
+| F8.4 — Diff-preview before apply | ✗ | New: structured diff view between current and proposed model |
+| F8.5 — Validation integration | ✗ | Reuse: `validateModel()` called on proposed model before apply |
+| F8.6 — Partial model apply | ✗ | New: allow applying only selected sections of proposed model |
+
+### Design Principles for Sprint 8
+
+The LLM is constrained to produce only valid model JSON. The system prompt is extensive and encodes the full entity model schema (addition1_entity_model.md Section 2–7) as constraints on LLM output. The LLM must not invent macros, distribution types, or field names outside the documented schema.
+
+The builder operates in three modes:
+
+**Describe → Build:** User writes a free-text description of the system (e.g., "An emergency department with triage, nurse assessment, and doctor consultation. Patients arrive at exponential rate 0.3, triage takes 5–10 minutes uniformly..."). The LLM returns a complete model JSON proposal.
+
+**Refine:** User types a refinement request against the current model (e.g., "Add a second doctor and a priority queue for critical patients"). The LLM produces a diff — only the changed elements.
+
+**Explain:** User asks "What does this C-Event do?" — the LLM returns a plain-English explanation of the selected model element.
+
+All three modes route through the same `llm-proxy` Edge Function. The mode is encoded in the system prompt.
+
+### Sprint 8 Planning Prompt *(run in claude.ai)*
+
+```
+We are starting Sprint 8 of DES Studio.
+
+Sprint 8 adds an LLM-powered chat interface for building simulation models
+from natural language descriptions.
+
+Completed in Sprints 1–6: [paste — note: Sprint 6 must be complete]
+
+Features:
+  F8.1 — Chat model builder panel: new panel in model editor view
+  F8.2 — Intent parser prompt: system prompt encoding full entity model schema
+  F8.3 — Iterative clarification loop: multi-turn conversation state
+  F8.4 — Diff-preview: structured diff between current and proposed model
+  F8.5 — Validation integration: validateModel() on proposed model before apply
+  F8.6 — Partial apply: user selects which sections of proposed model to accept
+
+CRITICAL:
+  - LLM output is ALWAYS validated before being applied — no exceptions
+  - LLM cannot produce macros, fields, or distribution types outside the schema
+  - The existing model (if any) is included in the LLM context — the builder
+    refines, not replaces, unless the user explicitly requests a full rebuild
+  - Conversation history is stored in React state only — not persisted to Supabase
+  - The builder panel is additive — existing tab editors remain fully functional
+  - Maximum conversation turns before auto-summary: 10 (prevents context overflow)
+
+Definition of done:
+  - User types "a post office with 2 clerks, FIFO queue, exponential arrivals at rate 0.5"
+  - LLM proposes model JSON, user sees diff-preview, clicks Apply
+  - Model loads into existing editors correctly and passes validateModel()
+  - User types "add a priority queue for express customers"
+  - LLM proposes diff, user applies only that section
+  - npm test -- --run passes
+```
+
+---
+
+### F8.1 — Chat Model Builder Panel
+
+**Audit status:** ✗ (model editor has no chat interface)
+**Action:** New panel alongside existing `editors/index.jsx` tab structure
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F8.1 of Sprint 8.
+
+Read src/ui/editors/index.jsx — understand the existing tab structure.
+
+Add a new "Build with AI" tab to the existing model editor tab bar:
+  - Position: first tab (leftmost) — it is the entry point for new models
+  - Tab label: "✦ Build with AI"
+  - Panel structure:
+      Top: conversation history (scrollable, message bubbles)
+      Bottom: text input + Send button
+      Right: model proposal panel (hidden until first LLM response)
+  - Message bubble types: user (right-aligned), assistant (left-aligned),
+    system notices (centred, muted — e.g., "Applying proposal...")
+  - Conversation history is React state — not persisted
+
+The tab must not affect any existing tab (entity types, state vars, etc.).
+Write a UI test: "Build with AI" tab renders; other tabs unaffected.
+```
+
+**Completion checklist:**
+- [ ] "Build with AI" tab added as first tab in existing editor
+- [ ] Existing tabs unaffected
+- [ ] Conversation history renders as message bubbles
+- [ ] Text input + Send button present
+- [ ] UI test passes
+
+---
+
+### F8.2 — Intent Parser Prompt & LLM Schema
+
+**Audit status:** ✗ (not implemented)
+**Action:** New `src/llm/model-builder-prompts.js`
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F8.2 of Sprint 8.
+
+Create src/llm/model-builder-prompts.js (new file).
+
+Export buildModelBuilderSystemPrompt():
+  Returns a system prompt that:
+    1. Identifies the LLM as a DES Studio model construction assistant
+    2. Encodes the complete entity model schema as constraints:
+         - Entity classes: name (string), attributes (name, valueType, defaultValue, mutable)
+         - B-Events: name, scheduleRows (macro: ARRIVE, parameters)
+         - C-Events: priority (1..N), condition (predicate JSON), actions (macro rows)
+         - Queues: name, discipline (FIFO|LIFO|PRIORITY)
+         - State variables: name, valueType: number, initialValue, resetOnWarmup
+         - Macros: ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE (exact signatures)
+         - Distributions: exponential, uniform, normal, triangular, fixed, lognormal, empirical
+    3. Instructs the LLM to respond ONLY in JSON:
+         {
+           "intent": "build" | "refine" | "clarify",
+           "questions": ["..."] | null,  // if intent is clarify
+           "proposedModel": { ...model_json... } | null,  // if intent is build/refine
+           "explanation": "..."  // always present — plain-English summary
+         }
+    4. Instructs the LLM to ask at most 2 clarifying questions before proposing a model
+    5. Forbids the LLM from inventing fields, macros, or distribution types
+       outside the documented schema
+
+Export buildModelBuilderUserMessage(description, currentModel, conversationHistory):
+  Returns the user message for the current turn, including:
+    - Current model JSON (if any — the LLM refines, not replaces)
+    - Conversation history (last 10 turns)
+    - Current user description or refinement request
+
+Unit tests (tests/llm/model-builder-prompts.test.js):
+  - System prompt contains all five macro names
+  - System prompt contains all seven distribution types
+  - buildModelBuilderUserMessage includes currentModel in output when model is non-empty
+  - Response JSON schema: intent + proposedModel + explanation keys present
+```
+
+**Completion checklist:**
+- [ ] `buildModelBuilderSystemPrompt()` exported
+- [ ] `buildModelBuilderUserMessage()` exported
+- [ ] System prompt encodes complete schema (macros, distributions, field types)
+- [ ] Response format constrained to intent/questions/proposedModel/explanation JSON
+- [ ] Unit tests pass
+
+---
+
+### F8.3 — Iterative Clarification Loop
+
+**Audit status:** ✗ (not implemented)
+**Action:** Extend chat panel (F8.1); extend `src/llm/apiClient.js`
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F8.3 of Sprint 8.
+
+Read src/llm/apiClient.js (from F6.2).
+
+Extend apiClient.js to support multi-turn model builder calls:
+  Export callModelBuilder(systemPrompt, messages, onComplete, onError):
+    - Non-streaming (model builder requires full JSON, not streaming tokens)
+    - POST to llm-proxy Edge Function with full conversation history
+    - On success: parse response JSON (intent + proposedModel + explanation)
+    - On error: call onError with user-friendly message
+
+In the chat panel (F8.1):
+  State: conversationHistory (array of {role, content} turns)
+  On Send:
+    1. Append user message to conversationHistory
+    2. Call callModelBuilder with full history
+    3. Parse response:
+       - If intent == "clarify": display assistant bubble with questions;
+         wait for user response (next Send)
+       - If intent == "build" or "refine": display explanation bubble;
+         show model proposal panel (F8.4)
+    4. Append assistant response to conversationHistory
+    5. If conversationHistory.length >= 20 turns: show notice
+       "Conversation is long — consider starting a new session"
+
+Cap: after 10 assistant turns without a proposal, auto-inject a system message:
+  "Please now produce a model proposal based on the discussion so far."
+```
+
+**Completion checklist:**
+- [ ] `callModelBuilder()` exported from `apiClient.js`
+- [ ] Multi-turn conversation state managed in React state
+- [ ] Clarification questions render as assistant bubbles
+- [ ] Proposal displayed when intent is build/refine
+- [ ] 20-turn length warning shown
+- [ ] 10-turn auto-proposal injection
+
+---
+
+### F8.4 — Diff-Preview Before Apply
+
+**Audit status:** ✗ (not implemented)
+**Action:** New `src/ui/editors/ModelDiffPreview.jsx`
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F8.4 of Sprint 8.
+
+When the LLM returns a proposedModel (intent: build or refine), display
+a structured diff view before the user can apply it.
+
+Create src/ui/editors/ModelDiffPreview.jsx (new file):
+  Receives: currentModel (model_json), proposedModel (model_json)
+  Renders a diff panel with sections:
+    Entity Classes: [Added] [Modified] [Removed] [Unchanged]
+    B-Events: [Added] [Modified] [Removed] [Unchanged]
+    C-Events: [Added] [Modified] [Removed] [Unchanged]
+    Queues: [Added] [Modified] [Removed] [Unchanged]
+    State Variables: [Added] [Modified] [Removed] [Unchanged]
+
+  Each changed element shows the old and new value side by side.
+  Unchanged elements are collapsed (expandable on click).
+
+  Buttons:
+    "Apply All" — replaces currentModel with proposedModel in app state
+    "Apply Selected" — opens section-level checkboxes; applies only checked sections
+    "Discard" — closes the proposal panel without applying
+
+  Applying triggers validateModel(proposedModel):
+    If blocking errors: show error list; do not apply; keep diff panel open
+    If warnings only: apply with amber banner listing warnings
+
+Write a unit test: ModelDiffPreview correctly identifies one added entity class
+and one removed queue in a known diff.
+```
+
+**Completion checklist:**
+- [ ] `ModelDiffPreview.jsx` created
+- [ ] Diff correctly identifies added/modified/removed/unchanged elements
+- [ ] Apply All replaces model in app state
+- [ ] Apply Selected applies only checked sections
+- [ ] Discard closes panel without changes
+- [ ] `validateModel()` called before apply — blocking errors prevent apply
+- [ ] Unit test passes
+
+---
+
+### F8.5 — Validation Integration
+
+**Audit status:** ~ (validateModel() exists — must be called on proposed model)
+**Action:** Reuse existing `validation.js` — no new code
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F8.5 of Sprint 8.
+
+This task has no new implementation — it is a verification task.
+
+Confirm that ModelDiffPreview (F8.4) correctly calls validateModel()
+on the proposedModel before applying.
+
+Also confirm:
+  - Blocking errors (V1–V14) prevent apply and show error list in diff panel
+  - Warning (V11, V15) allow apply with amber banner
+  - Error messages identify specific nodes by name (existing behaviour)
+
+Write an integration test:
+  - Proposed model with a missing entity class name (V1 violation)
+  - Assert: Apply All is disabled; error list shown; diff panel stays open
+  - Proposed model with valid content
+  - Assert: Apply All proceeds; model updated in app state
+```
+
+**Completion checklist:**
+- [ ] `validateModel()` called on proposed model before apply
+- [ ] Blocking errors disable Apply; show list
+- [ ] Warnings allow Apply with banner
+- [ ] Integration test passes
+
+---
+
+### F8.6 — Partial Model Apply
+
+**Audit status:** ✗ (not implemented)
+**Action:** Extend `ModelDiffPreview.jsx`
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F8.6 of Sprint 8.
+
+Extend ModelDiffPreview (F8.4) to support section-level partial apply:
+
+When user clicks "Apply Selected":
+  Show checkboxes at section level (Entity Classes, B-Events, etc.)
+  Each section checkbox controls all elements in that section
+  "Apply Selected" button applies only checked sections
+
+Merge logic:
+  For each checked section: replace that section in currentModel with
+  the corresponding section from proposedModel.
+  Unchecked sections retain their currentModel values.
+
+After merge: run validateModel() on the merged model.
+  If blocking errors: show errors; do not apply.
+  If valid: apply and close diff panel.
+
+Unit test:
+  - Apply only "Queues" section from proposedModel
+  - Assert: entity classes unchanged; queues updated; no other sections changed
+```
+
+**Completion checklist:**
+- [ ] Section-level checkboxes in `ModelDiffPreview`
+- [ ] Apply Selected merges only checked sections
+- [ ] `validateModel()` called on merged model
+- [ ] Unit test passes
+
+---
+
+### Sprint 8 Completion Gate
+
+```bash
+npm test -- --run                      # Zero failures
+npm test -- llm                        # Model builder prompt tests pass
+npm test -- ui                         # Chat panel + diff preview UI tests pass
+npm run build                          # Succeeds
+# Manual: type "a bank with 3 tellers, FIFO queue, arrivals at rate 0.4"
+# Verify: LLM proposes model; diff-preview shows new elements; Apply creates valid model
+# Manual: "add a second queue for priority customers"
+# Verify: LLM proposes diff; partial apply works; validate passes
+```
+
+---
+
 ## Deferred Features Register
 
 | Feature | Original sprint | Deferred to | Reason | Status |
@@ -1447,10 +2458,10 @@ Definition of done:
 | ADR | Question | Needed by | Status |
 |---|---|---|---|
 | ADR-002 | Public model run permissions | Sprint 3 F3.8 | ⬜ Open |
-| ADR-003 | Safe evaluator strategy | Decided Sprint 1 | ✅ Closed |
-| ADR-004 | PRNG algorithm (mulberry32) | Decided Sprint 1 | ✅ Closed |
-| ADR-005 | Queue discipline lookup by name | Decided Sprint 1 | ✅ Closed — revisit G1/G2 Sprint 2 |
-| ADR-006 | Warm-up by time vs entity count | Sprint 2 F2.x | ⬜ Open |
+| ADR-003 | LLM API key handling — client-side vs Edge Function proxy | Sprint 6 F6.2 | ⬜ Open — recommend Supabase Edge Function proxy; no API key in client bundle |
+| ADR-004 | LLM conversation persistence — session only vs Supabase | Sprint 8 F8.3 | ⬜ Open — initial design: session only (React state) |
+| ADR-005 | Piecewise distribution: warm-up interaction — does warm-up reset the period position? | Sprint 7 F7.2 | ⬜ Open — initial decision: no reset; schedule is time-indexed |
+| *(add rows as new questions arise)* | | | |
 
 ---
 
@@ -1458,21 +2469,17 @@ Definition of done:
 
 | # | Severity | Finding | File | Sprint | Status |
 |---|---|---|---|---|---|
-| C1 | Critical | `new Function()` eval — XSS | `conditions.js:76`, `macros.js:220` | S1 F1.1 | ✅ |
-| C2 | Critical | LIFO/Priority ignored by engine | `entities.js:84–88` | S1 F1.3 | ✅ |
-| C3 | High | C-scan restart pass-granularity | `engine/index.js:121–142` | S1 F1.2 | ✅ |
-| C4 | High | Phase C truncation silent | `engine/index.js:121` | S1 F1.6 | ✅ |
-| C5 | High | No pre-run validation | `execute/index.jsx:141–147` | S1 F1.5 | ✅ |
-| C6 | Medium | Stale B-Event refs after delete | `phases.js:91,125` | S1 F1.5 | ✅ |
-| C7 | Medium | No seeded RNG | `distributions.js:84` | S1 F1.4 | ✅ |
+| C1 | Critical | `new Function()` eval — XSS | `conditions.js:76`, `macros.js:220` | S1 F1.1 | ⬜ |
+| C2 | Critical | LIFO/Priority ignored by engine | `entities.js:84–88` | S1 F1.3 | ⬜ |
+| C3 | High | C-scan restart pass-granularity | `engine/index.js:121–142` | S1 F1.2 | ⬜ |
+| C4 | High | Phase C truncation silent | `engine/index.js:121` | S1 F1.6 | ⬜ |
+| C5 | High | No pre-run validation | `execute/index.jsx:141–147` | S1 F1.5 | ⬜ |
+| C6 | Medium | Stale B-Event refs after delete | `phases.js:91,125` | S1 F1.5 | ⬜ |
+| C7 | Medium | No seeded RNG | `distributions.js:84` | S1 F1.4 | ⬜ |
 | C8 | Low | ConditionBuilder tokens stale | `editors/index.jsx:495` | S2 F2.6 | ⬜ |
 | C9 | Low | avg_service_time column mismatch | `db/models.js:127` | S5 F5.6 | ⬜ |
-| C10 | Low | Distribution inputs missing type=number | `editors/index.jsx:171,241,731` | S1 F1.5 | ✅ |
-| C11 | Low | DistPicker ReferenceError | `components.jsx` | S1 F1.6 | ✅ |
-| G1 | Medium | Queue discipline name-match heuristic; silent FIFO fallback | `engine/macros.js:121-132` | S2 | ⬜ |
-| G2 | Medium | RENEGE and evalCondition() ignore configured discipline | `conditions.js:154`, `macros.js:272` | S2 | ⬜ |
-| G3 | Low | firedThisPass Set is dead code in Phase C | `engine/index.js:127` | S2 | ⬜ |
-| G4 | Low | sample() silently uses seed 0 if rng omitted | `engine/distributions.js:98,108` | S2 | ⬜ |
+| C10 | Low | Distribution inputs missing type=number | `editors/index.jsx:171,241,731` | S1 F1.5 | ⬜ |
+| C11 | Low | DistPicker ReferenceError | `components.jsx` | S1 F1.6 | ⬜ |
 
 ---
 
