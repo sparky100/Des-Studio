@@ -1182,30 +1182,23 @@ This prevents silent architectural drift — the most common way AI-assisted pro
 ### 17.6 Key Decisions — Sprint 1
 
 These decisions were made during Sprint 1 and must not be reversed without a new ADR.
+Full ADR files: `docs/decisions/ADR-003`, `ADR-004`, `ADR-005`.
 
-**ADR-003 — Safe evaluator (no `new Function`)** ([full ADR](docs/decisions/ADR-003-safe-evaluator-strategy.md))
+### ADR-003 — Safe evaluator strategy (Sprint 1)
 
-All condition evaluation and scalar arithmetic in the engine uses hand-written pure-JS parsers (`safeEvalExpr`, `safeArithmetic`, `evaluatePredicate`). No dynamic code execution. The expression grammar is closed — extending it requires modifying the parsers, not adding a dependency.
+`new Function()` was replaced with hand-written pure-JS parsers: `safeEvalExpr()` for condition strings, `safeArithmetic()` for arithmetic, `evaluatePredicate()` for JSON predicates.
+- **Rationale:** zero new dependencies; closed grammar (no exponentiation or function calls needed); auditable for public model security.
+- **Consequence:** extending the expression language requires modifying the parsers directly.
 
-**Rule:** Never introduce `new Function()`, `eval()`, or any dynamic code execution in the engine or UI, regardless of perceived safety measures. The `Custom...` escape hatch has been removed and must not be recreated under any name.
+### ADR-004 — mulberry32 as PRNG (Sprint 1)
 
----
+`mulberry32` selected over `xorshift128`. Both are seedable and fast; mulberry32 is simpler code. All call sites use the `rng` function interface so PRNG substitution is mechanical if a future sprint requires split-mix or crypto quality.
+- **Consequence:** parallel reproducibility not guaranteed with this PRNG — revisit if split-stream replication is needed.
 
-**ADR-004 — mulberry32 PRNG** ([full ADR](docs/decisions/ADR-004-mulberry32-prng.md))
+### ADR-005 — Queue discipline lookup by entity type name (Sprint 1)
 
-`mulberry32(seed)` is the sole PRNG for all simulation sampling. It is implemented in `distributions.js` and threaded through `buildEngine` via `ctx.rng`. No call site may use `Math.random()`.
-
-**Rule:** `Math.random()` is prohibited in all engine code. `buildEngine(model, seed, maxCycles)` must always receive an explicit seed. When adding a new distribution or macro, receive `rng` from `ctx.rng` — do not default to `Math.random`.
-
-**Known gap (G4):** `sample()` and `sampleAttrs()` use `mulberry32(0)` as a default parameter fallback. This is deterministic but silent — a missing `rng` arg does not error. Fix in Sprint 2 by removing the default and requiring explicit `rng` at all call sites.
-
----
-
-**ADR-005 — Queue discipline lookup (interim)** ([full ADR](docs/decisions/ADR-005-queue-discipline-lookup.md))
-
-The SEIZE macro currently finds queue discipline by matching the customer entity type name against `model.queues[].name` (case-insensitive). This was an interim choice to unblock Sprint 1 without a model schema change.
-
-**Rule for Sprint 2:** Replace the name-match heuristic with an explicit `queueId` reference on the C-Event action. Until this is done, LIFO and PRIORITY queue discipline will silently fall back to FIFO if the queue name does not match the entity type name exactly (G1). The `evalCondition` queue-length token and the RENEGE macro also always use FIFO for entity selection (G2).
+SEIZE macro resolves queue discipline by matching `model.queues` against the customer entity type name. This avoids a model schema change (adding `queueId` to C-event actions).
+- **Consequence:** a queue named differently from the entity type it serves silently falls back to FIFO. Sprint 2 must formalise queue-to-event binding via `queueId`. See G1/G2 in Known Issues.
 
 ---
 
@@ -1273,7 +1266,15 @@ UI / UX
 
 ---
 
-## 20. Current Sprint
+## 20. Sprint History
+
+| Sprint | Status | Completed | Description | Tests | M/M/1 |
+|---|---|---|---|---|---|
+| Sprint 1 | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening | 182 passing | 1.48% error |
+
+---
+
+## 21. Current Sprint
 
 **Sprint 2 — Queue Discipline Correctness + Run Controls**
 
