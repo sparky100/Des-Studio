@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-04 | Reflects: Sprint 1 complete + Sprint 2 plan + ADR-003/004/005 + Sprint 3 complete + Known Issues*
+*Last updated: 2026-05-04 | Reflects: Sprint 5 complete + ADR-006 + Known Issues*
 
 ---
 
@@ -107,7 +107,7 @@ If Claude Code finds itself rewriting a file that the audit marked as working (�
 | `src/engine/distributions.js` | All sampler functions | Math.random() (add seeded RNG) |
 | `src/ui/editors/index.jsx` | All five editors work | Operator filtering, priority field, token staleness |
 | `src/ui/execute/index.jsx` | VisualView, StepLog, EntityTable, run history | No validation, no seed field, silent truncation |
-| `src/db/models.js` | Multi-user CRUD wrappers | avg_service_time column mismatch (Sprint 5) |
+| `src/db/models.js` | Multi-user CRUD wrappers | User-scoped model/run queries, run stats, result persistence, owner-guarded delete |
 | `src/App.jsx` | Auth listener, model library shell | Back button discards silently (Sprint 2) |
 | `tests/` | ~120 engine tests passing | UI and DB layers untested |
 
@@ -564,7 +564,7 @@ These are open defects from the audit. Do not work around them — fix them.
 | C6 | **Medium** | `phases.js:91,125` | Stale B-Event references after deletion become silent no-ops | Sprint 1 ✓ |
 | C7 | **Medium** | `distributions.js:84` | No seeded RNG — `Math.random()` throughout | Sprint 1 ✓ |
 | C8 | **Low** | `editors/index.jsx:495` | ConditionBuilder token list stale after prop change | Sprint 2 |
-| C9 | **Low** | `db/models.js:127` | `avg_service_time` DB column written with `avgSojourn` value | Sprint 2 |
+| C9 | **Low** | `db/models.js:127` | Resolved in Sprint 5: `avg_service_time` now stores `summary.avgSvc`; `results_json.summary` keeps service/sojourn details | Sprint 5 ✓ |
 | C10 | **Low** | `editors/index.jsx:171,241,731` | Distribution parameter inputs missing `type="number"` | Sprint 1 ✓ |
 | C11 | **Low** | `components.jsx` | `DistPicker` references `DISTRIBUTIONS` which is never imported — latent `ReferenceError` | Sprint 1 ✓ |
 | G1 | **Medium** | `engine/macros.js:121–132` | Queue discipline lookup uses entity type name match — silently falls back to FIFO if queue name ≠ type name | Sprint 2 |
@@ -980,6 +980,8 @@ npm test -- predicate-builder        # Predicate Builder tests only
 npm test -- dist-picker              # Distribution Picker tests only
 npm test -- c-event-editor           # C-Event editor tests only
 npm test -- execute-panel            # Execute panel tests only
+npm test -- model-export model-import results-export
+npm test -- accessibility delete-model onboarding
 
 # Testing — DB layer (mocked Supabase — Sprint 3 onwards)
 npm test -- db                       # All DB wrapper tests
@@ -1022,7 +1024,7 @@ Key tables in Supabase. Do not change column names without updating `src/db/mode
 **Schema rules:**
 - Never add columns without adding a corresponding entry to the relevant CRUD wrapper in `src/db/models.js`.
 - `model_json` must always conform to the entity schema defined in `docs/addition1_entity_model.md`. Do not store ad-hoc fields.
-- `avg_service_time` column currently stores `avgSojourn` — this is a known mismatch (C9). Do not propagate this error to new columns.
+- `avg_service_time` maps engine `summary.avgSvc`; `results_json.summary` remains the source of detailed service/sojourn metrics.
 
 ---
 
@@ -1277,43 +1279,62 @@ UI / UX
 | Sprint 2 | ✅ Complete | 2026-05-03 | UI editor completeness | 215 passing | N/A |
 | Sprint 3 | ✅ Complete | 2026-05-04 | Experiment controls: warm-up, termination, fork model | 272 passing | 1.48% error |
 | Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results: workers, batches, CI dashboard | 294 passing | CI contains 9.0 |
+| Sprint 5 | ✅ Complete | 2026-05-04 | Polish, Export & Production | 334 passing | CI contains 9.0 |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 5 — Polish, Export & Production**
+**Sprint 6 — LLM Integration & Results Analysis**
 
-Goal: Production-ready release. Error handling, import/export, accessibility, onboarding, model deletion, run-history/stat fixes, and results export polish.
+Goal: Add LLM-assisted results analysis on top of the structured results export completed in Sprint 5.
 
-**Prerequisites:** Sprint 4 exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 5 feature prompts.
+**Prerequisites:** Sprint 5 exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 6 feature prompts.
 
-### Recently Completed — Sprint 4
+### Recently Completed — Sprint 5
 
-Sprint 4 completed on 2026-05-04.
+Sprint 5 completed on 2026-05-04.
 
-- Added `src/engine/worker.js` as a thin Web Worker wrapper around `buildEngine()`.
-- Added `src/engine/replication-runner.js` with a bounded worker pool, deterministic per-replication seeds, progress callbacks, cancellation, and compacted result payloads to avoid retaining full per-replication snapshot logs.
-- Added `src/engine/statistics.js` for running mean, sample variance/std dev, and 95% CI with t-critical lookup for small N.
-- Extended `src/ui/execute/index.jsx` with multi-replication execution, live batch progress, per-replication result rows, aggregate CI table, cancellation, and single-run compatibility.
-- Extended `src/db/models.js` so replication batches persist once with per-replication and aggregate CI data in `results_json`.
-- Stored `batch_id` in `results_json.batch_id` rather than a top-level column because no committed schema/migration confirms a `batch_id` database column.
+- Added shared React error boundaries around risky UI surfaces.
+- Added model JSON export/import and results JSON/CSV export.
+- Populated model run counts from user-scoped run history.
+- Corrected `avg_service_time` to persist `summary.avgSvc` with JSON fallback for older records.
+- Added keyboard/ARIA improvements across library, tabs, dialogs, Execute controls, and destructive buttons.
+- Added first-run onboarding with a valid M/M/1 sample model.
+- Added owner-only model deletion with confirmation and an `owner_id` DB guard.
 
-### Sprint 4 Completion Gate
+### Sprint 5 Completion Gate
 
 ```text
-npm test       -> 22 files, 294 tests passed
-npm run build  -> succeeds and emits worker bundle
+npm test       -> 31 files, 334 tests passed
+npm run build  -> succeeds
 30-replication M/M/1 CI gate -> 95% CI contains analytical mean wait 9.0
 ```
 
-### Sprint 4 Architectural Decisions
+### Recent Architectural Decisions
 
 - Use a bounded Web Worker pool rather than one worker per replication.
 - Use local runner callbacks for same-browser live progress; persist final batch results to Supabase.
 - Store one run row per replication batch with per-replication results and aggregate CI in `results_json`.
 - Provide cancellation for active replication batches.
 - See `docs/decisions/ADR-006-replication-runner-architecture.md`.
+- No committed schema file confirms `simulation_runs` cascade on model delete; carry this as a data integrity risk until the next schema migration.
+
+### Future-Claude Notes
+
+- Sprint 6 should build LLM analysis on the structured results already exported from `src/ui/execute/index.jsx`; do not introduce client-side LLM API keys.
+- Keep model import/export validation compatible with the current model JSON shape and the first-run M/M/1 sample in `src/App.jsx`.
+- `deleteModel(id, userId)` is intentionally owner-guarded via `owner_id`; keep destructive model actions user-scoped.
+- `ModelCard` behaves as a keyboard-reachable model selector with a nested delete action; preserve event isolation between select and delete.
+
+### New Commands Or Environment Variables
+
+- No new environment variables were introduced in Sprint 5.
+- Useful Sprint 5 verification commands:
+  - `npm test -- model-export model-import results-export`
+  - `npm test -- accessibility delete-model onboarding`
+  - `npm test`
+  - `npm run build`
 
 ---
 
@@ -1336,7 +1357,7 @@ npm run build  -> succeeds and emits worker bundle
 
 **Status:** Resolved 2026-05-04. The root cause was not Vitest configuration: two open-ended seeded engine tests ran `buildEngine(...).runAll()` without a simulation time bound. Because the engine records full snapshots in the log and arrivals keep growing the entity pool, those tests exhausted worker memory during collection/execution. The fix bounded those test runs with `maxSimTime = 50` and moved stale top-level `runAll()` calls into `beforeAll()`.
 
-**Impact:** Full test suite execution is reliable again. Verification: `npm test` passes 17 test files / 272 tests with zero unhandled worker errors.
+**Impact:** Full test suite execution is reliable again. Latest verification after Sprint 5: `npm test` passes 31 test files / 334 tests with zero unhandled worker errors.
 
 ---
 

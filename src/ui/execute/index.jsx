@@ -50,6 +50,124 @@ function makeBatchResult(replicationPayloads, aggregateStats, maxTime, warmupPer
   };
 }
 
+function slugifyResultName(name = "model") {
+  const slug = String(name || "model")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "model";
+}
+
+function timestampForFilename(date = new Date()) {
+  return date.toISOString().replace(/[:.]/g, "-");
+}
+
+function buildResultsExportPayload({
+  model,
+  results,
+  replicationResults = [],
+  aggregateStats = {},
+  config = {},
+  batchStatus = "idle",
+  exportedAt = new Date().toISOString(),
+} = {}) {
+  return {
+    schema: "des-studio.results.v1",
+    exportedAt,
+    status: results ? "complete" : "partial",
+    batchStatus,
+    model: {
+      id: config.modelId ?? null,
+      name: model?.name ?? "Untitled model",
+    },
+    experiment: {
+      seed: config.seed ?? null,
+      replications: config.replications ?? Math.max(replicationResults.length, results ? 1 : 0),
+      warmupPeriod: config.warmupPeriod ?? 0,
+      maxSimTime: config.maxSimTime ?? null,
+      terminationMode: config.terminationMode ?? "time",
+      terminationCondition: config.terminationCondition ?? null,
+    },
+    results: results ?? null,
+    replications: replicationResults.map(payload => ({
+      replicationIndex: payload.replicationIndex,
+      seed: payload.seed,
+      summary: payload.result?.summary ?? payload.summary ?? {},
+      finalTime: payload.result?.finalTime ?? payload.finalTime ?? payload.result?.snap?.clock ?? null,
+    })),
+    aggregateStats,
+  };
+}
+
+function csvEscape(value) {
+  if (value == null) return "";
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function buildResultsCsv({ results, replicationResults = [], aggregateStats = {}, config = {} } = {}) {
+  const rows = [["replicationIndex", "seed", "served", "reneged", "avgWait", "avgSvc", "avgSojourn", "finalTime"]];
+
+  const resultRows = replicationResults.length
+    ? replicationResults.map(payload => ({
+        replicationIndex: payload.replicationIndex,
+        seed: payload.seed,
+        summary: payload.result?.summary ?? payload.summary ?? {},
+        finalTime: payload.result?.finalTime ?? payload.finalTime ?? payload.result?.snap?.clock ?? null,
+      }))
+    : results
+      ? [{
+          replicationIndex: 0,
+          seed: config.seed ?? null,
+          summary: results.summary ?? {},
+          finalTime: results.finalTime ?? results.snap?.clock ?? null,
+        }]
+      : [];
+
+  for (const row of resultRows) {
+    rows.push([
+      row.replicationIndex,
+      row.seed,
+      row.summary.served,
+      row.summary.reneged,
+      row.summary.avgWait,
+      row.summary.avgSvc,
+      row.summary.avgSojourn,
+      row.finalTime,
+    ]);
+  }
+
+  const aggregateRows = Object.entries(aggregateStats)
+    .filter(([, stat]) => stat && stat.n > 0)
+    .map(([metric, stat]) => [
+      metric,
+      stat.n,
+      stat.mean,
+      stat.lower,
+      stat.upper,
+      stat.halfWidth,
+    ]);
+
+  if (aggregateRows.length) {
+    rows.push([]);
+    rows.push(["metric", "n", "mean", "lower95", "upper95", "halfWidth"]);
+    rows.push(...aggregateRows);
+  }
+
+  return rows.map(row => row.map(csvEscape).join(",")).join("\n");
+}
+
+function downloadTextFile(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 const CustomerToken = ({ entity, size = 36, showId = true }) => {
   const col = tokenColor(entity.id);
   const statusBorder = { waiting: C.waiting, serving: C.serving, done: C.served, reneged: C.reneged, idle: C.green, busy: C.amber }[entity.status] || C.muted;
@@ -472,6 +590,49 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   }, []);
 
   const batchActive = batchStatus === "running" || batchStatus === "cancelling";
+  const partialBatchStatus = batchStatus === "cancelled" || batchStatus === "error";
+  const canExportResults = Boolean(results || (partialBatchStatus && replicationResults.length));
+  const exportConfig = useMemo(() => ({
+    modelId,
+    seed: runSeedRef.current,
+    replications,
+    warmupPeriod,
+    maxSimTime: terminationMode === "time" ? maxSimTime : null,
+    terminationMode,
+    terminationCondition: terminationMode === "condition" ? terminationCondition : null,
+  }), [modelId, replications, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
+  const exportPartial = partialBatchStatus && replicationResults.length > 0;
+  const resultFilenameBase = `des-studio-results-${slugifyResultName(model.name)}${exportPartial ? "-partial" : ""}-${timestampForFilename()}`;
+
+  const exportResultsJson = useCallback(() => {
+    const payload = buildResultsExportPayload({
+      model,
+      results,
+      replicationResults,
+      aggregateStats,
+      config: exportConfig,
+      batchStatus,
+    });
+    downloadTextFile(
+      JSON.stringify(payload, null, 2),
+      `${resultFilenameBase}.json`,
+      "application/json"
+    );
+  }, [model, results, replicationResults, aggregateStats, exportConfig, batchStatus, resultFilenameBase]);
+
+  const exportResultsCsv = useCallback(() => {
+    const csv = buildResultsCsv({
+      results,
+      replicationResults,
+      aggregateStats,
+      config: exportConfig,
+    });
+    downloadTextFile(
+      csv,
+      `${resultFilenameBase}.csv`,
+      "text/csv;charset=utf-8"
+    );
+  }, [results, replicationResults, aggregateStats, exportConfig, resultFilenameBase]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -481,6 +642,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WARM-UP PERIOD</span>
             <input
+              aria-label="Warm-up period"
               type="number"
               value={warmupPeriod}
               onChange={e => setWarmupPeriod(parseFloat(e.target.value) || 0)}
@@ -493,6 +655,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>REPLICATIONS</span>
             <input
+              aria-label="Replication count"
               type="number"
               value={replications}
               onChange={e => setReplications(parseInt(e.target.value) || 0)}
@@ -506,6 +669,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
             <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SEED</span>
             <div style={{ display: "flex", gap: 6 }}>
               <input
+                aria-label="Simulation seed"
                 type="number"
                 value={seed}
                 onChange={e => setSeed(parseInt(e.target.value) || 0)}
@@ -521,11 +685,11 @@ const ExecutePanel = ({ model, modelId, userId }) => {
             <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>TERMINATION MODE</span>
             <div style={{ display: "flex", gap: 12, alignItems: "center", height: 32 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-                <input type="radio" checked={terminationMode === "time"} onChange={() => setTerminationMode("time")} />
+                <input type="radio" name="terminationMode" checked={terminationMode === "time"} onChange={() => setTerminationMode("time")} />
                 Time-based
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
-                <input type="radio" checked={terminationMode === "condition"} onChange={() => setTerminationMode("condition")} />
+                <input type="radio" name="terminationMode" checked={terminationMode === "condition"} onChange={() => setTerminationMode("condition")} />
                 Condition-based
               </label>
             </div>
@@ -535,6 +699,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN DURATION</span>
               <input
+                aria-label="Run duration"
                 type="number"
                 value={maxSimTime}
                 onChange={e => setMaxSimTime(parseFloat(e.target.value) || 0)}
@@ -565,11 +730,13 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive}>⚡ Run All</Btn>
+        <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results JSON</Btn>
+        <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2 }}>
+        <div role="tablist" aria-label="Execute views" style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2 }}>
           {["visual", "log", "entities"].map(v => (
-            <button key={v} onClick={() => setView(v)} style={{ padding: "6px 12px", background: view === v ? "#333" : "transparent", border: "none", color: view === v ? "#fff" : "#888", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
+            <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)} style={{ padding: "6px 12px", background: view === v ? "#333" : "transparent", border: "none", color: view === v ? "#fff" : "#888", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
               {v.charAt(0).toUpperCase() + v.slice(1)}
             </button>
           ))}
@@ -577,7 +744,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
       </div>
 
       {validation.errors.length > 0 && (
-        <div style={{ background: '#7f1d1d', border: '1px solid #dc2626', borderRadius: 6,
+        <div role="alert" style={{ background: '#7f1d1d', border: '1px solid #dc2626', borderRadius: 6,
           padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: '#fca5a5', fontFamily: FONT, marginBottom: 4 }}>
             Model has {validation.errors.length} blocking error{validation.errors.length > 1 ? 's' : ''} — fix before running:
@@ -761,4 +928,12 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   );
 };
 
-export { CustomerToken, VisualView, ExecutePanel };
+export {
+  buildResultsCsv,
+  buildResultsExportPayload,
+  CustomerToken,
+  ExecutePanel,
+  slugifyResultName,
+  timestampForFilename,
+  VisualView,
+};

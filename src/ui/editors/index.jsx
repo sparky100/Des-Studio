@@ -224,7 +224,7 @@ const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
                   <option key={k} value={k}>{v.label}</option>
                 ))}
               </select>
-              <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+              <Btn small variant="danger" ariaLabel={`Remove attribute ${a.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
             </div>
             {/* Row 2: distribution params */}
             <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',paddingLeft:4}}>
@@ -288,7 +288,7 @@ const EntityTypeEditor=({types,onChange})=>{
               <input value={et.count||""} onChange={e=>upd(i,"count",e.target.value)} placeholder="1"
                 style={{width:50,background:"transparent",border:`1px solid ${C.server}55`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
             </>}
-            <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+            <Btn small variant="danger" ariaLabel={`Remove entity type ${et.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
           </div>
           <AttrEditor
             attrs={Array.isArray(et.attrDefs)?et.attrDefs:[]}
@@ -326,7 +326,7 @@ const StateVarEditor=({vars,onChange})=>{
               style={{width:80,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
             <input value={sv.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
               style={{flex:1,background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
-            <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+            <Btn small variant="danger" ariaLabel={`Remove state variable ${sv.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
           </div>
           <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:sv.resetOnWarmup?C.amber:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
             <input type="checkbox" checked={!!sv.resetOnWarmup} onChange={e=>upd(i,'resetOnWarmup',e.target.checked)} style={{accentColor:C.amber}}/>
@@ -389,7 +389,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 <input value={ev.scheduledTime} type="number" step="0.5" onChange={e=>upd(i,"scheduledTime",e.target.value)}
                   style={{width:65,background:"transparent",border:`1px solid ${C.bEvent+"66"}`,borderRadius:4,color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
               </>}
-              <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+              <Btn small variant="danger" ariaLabel={`Remove B-event ${ev.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -401,7 +401,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 <div key={j} style={{display:'flex',gap:8,alignItems:'center'}}>
                   <DropField value={eff} onChange={v=>updEff(j,v)}
                     options={bEffectOptions(entityTypes, queues, stateVariables)} color={C.green}/>
-                  <Btn small variant="danger" onClick={()=>remEff(j)}>✕</Btn>
+                  <Btn small variant="danger" ariaLabel={`Remove B-event effect ${j + 1}`} onClick={()=>remEff(j)}>✕</Btn>
                 </div>
               ))}
             </div>
@@ -422,7 +422,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                       <option value="">— select B-event —</option>
                       {events.map(b=><option key={b.id} value={b.id}>{b.name||b.id}</option>)}
                     </select>
-                    <Btn small variant="danger" onClick={()=>remS(i,j)}>✕</Btn>
+                    <Btn small variant="danger" ariaLabel={`Remove B-event schedule ${j + 1}`} onClick={()=>remS(i,j)}>✕</Btn>
                   </div>
                   <DistPicker value={{dist:s.dist,distParams:s.distParams}} onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams})} compact/>
                   <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:s.isRenege?C.reneged:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
@@ -678,7 +678,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
               </select>
             )}
             {/* Remove */}
-            <Btn small variant="danger" onClick={()=>removeRow(idx)}>✕</Btn>
+            <Btn small variant="danger" ariaLabel={`Remove condition clause ${idx + 1}`} onClick={()=>removeRow(idx)}>✕</Btn>
           </div>
         </div>
       );
@@ -852,7 +852,7 @@ const EntityFilterBuilder = ({ entityTypes = [], value, onChange }) => {
                   placeholder="0"
                   style={{ width: 70, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: '5px 8px', outline: 'none' }}/>
               )}
-              <Btn small variant="danger" onClick={() => removeRow(idx)}>✕</Btn>
+              <Btn small variant="danger" ariaLabel={`Remove entity filter clause ${idx + 1}`} onClick={() => removeRow(idx)}>✕</Btn>
             </div>
           </div>
         );
@@ -974,7 +974,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,
               borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,
               padding:"5px 8px",outline:"none"}}/>
-            <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+            <Btn small variant="danger" ariaLabel={`Remove C-event ${ev.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
           </div>
 
           {/* Condition */}
@@ -1042,7 +1042,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                         </option>
                       ))}
                     </select>
-                    <Btn small variant="danger" onClick={()=>remSched(i,j)}>✕</Btn>
+                    <Btn small variant="danger" ariaLabel={`Remove C-event schedule ${j + 1}`} onClick={()=>remSched(i,j)}>✕</Btn>
                   </div>
 
                   {/* Row 2: Delay distribution */}
@@ -1185,7 +1185,7 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:4,justifyContent:'flex-end'}}>
               <span style={{fontSize:10,color:'transparent',fontFamily:FONT}}>&nbsp;</span>
-              <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
+              <Btn small variant="danger" ariaLabel={`Remove queue ${q.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
             </div>
           </div>
 

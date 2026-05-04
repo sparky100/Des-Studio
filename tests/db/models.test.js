@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchModels, saveModel, deleteModel, saveSimulationRun, fetchRunHistory, forkModel } from '../../src/db/models.js';
+import { fetchModels, saveModel, deleteModel, saveSimulationRun, fetchRunHistory, fetchRunStatsForModels, forkModel, normalizeRunHistoryRow } from '../../src/db/models.js';
 import { supabase } from '../../src/db/supabase.js';
 
 describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
@@ -90,6 +90,30 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
     });
   });
 
+  describe('deleteModel', () => {
+    it('deletes by id and owner_id', async () => {
+      supabase.from('des_models').delete.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+      supabase.from('des_models').select.mockResolvedValueOnce({ data: [{ id: 'm1' }], error: null });
+
+      const result = await deleteModel('m1', 'u1');
+
+      expect(result).toEqual({ ok: true });
+      expect(supabase.from).toHaveBeenCalledWith('des_models');
+      expect(supabase.from('des_models').delete).toHaveBeenCalled();
+      expect(supabase.from('des_models').eq).toHaveBeenCalledWith('id', 'm1');
+      expect(supabase.from('des_models').eq).toHaveBeenCalledWith('owner_id', 'u1');
+      expect(supabase.from('des_models').select).toHaveBeenCalledWith('id');
+    });
+
+    it('does not query when id or userId is missing', async () => {
+      const result = await deleteModel('m1', null);
+
+      expect(result.ok).toBe(false);
+      expect(supabase.from).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Simulation Runs', () => {
     it('enforces run_by matching current user', async () => {
       // Mock the insert operation without .single()
@@ -112,7 +136,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
         'm1',
         'u1',
         {
-          summary: { total: 12, served: 10, reneged: 2, avgWait: 4, avgSojourn: 7 },
+          summary: { total: 12, served: 10, reneged: 2, avgWait: 4, avgSvc: 3, avgSojourn: 7 },
           snap: { clock: 500 },
         },
         {
@@ -129,9 +153,11 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from('simulation_runs').insert).toHaveBeenCalledWith(
         expect.objectContaining({
           seed: 0,
+          avg_service_time: 3,
           replications: 3,
           results_json: expect.objectContaining({
             existing: true,
+            summary: expect.objectContaining({ avgSvc: 3, avgSojourn: 7 }),
             batch_id: 'batch-123',
             aggregateStats: { 'summary.avgWait': { n: 3, mean: 4 } },
             replications: [{ replicationIndex: 0, seed: 100 }],
@@ -139,6 +165,56 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
         })
       );
       expect(suppliedResultsJson).toEqual({ existing: true });
+    });
+
+    it('stores a null avg_service_time when avgSvc is missing', async () => {
+      supabase.from('simulation_runs').insert.mockResolvedValueOnce({ data: { id: 'run-id-3' }, error: null });
+
+      await saveSimulationRun('m1', 'u1', {
+        summary: { total: 1, served: 1, reneged: 0, avgWait: 4, avgSojourn: 9 },
+        snap: { clock: 50 },
+      });
+
+      expect(supabase.from('simulation_runs').insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          avg_service_time: null,
+          results_json: expect.objectContaining({
+            summary: expect.objectContaining({ avgSojourn: 9 }),
+          }),
+        })
+      );
+    });
+
+    it('normalizes run history avg service from results_json when scalar is absent', () => {
+      expect(normalizeRunHistoryRow({
+        id: 'run-1',
+        avg_service_time: null,
+        results_json: { summary: { avgSvc: 2.75 } },
+      })).toEqual(expect.objectContaining({ avg_service_time: 2.75 }));
+    });
+
+    it('fetches run stats by model and current user only', async () => {
+      supabase.from('simulation_runs').select.mockReturnThis();
+      supabase.from('simulation_runs').in.mockReturnThis();
+      supabase.from('simulation_runs').eq.mockResolvedValueOnce({
+        data: [
+          { model_id: 'm1' },
+          { model_id: 'm1' },
+          { model_id: 'm2' },
+        ],
+        error: null,
+      });
+
+      const stats = await fetchRunStatsForModels(['m1', 'm2'], 'u1');
+
+      expect(supabase.from).toHaveBeenCalledWith('simulation_runs');
+      expect(supabase.from('simulation_runs').select).toHaveBeenCalledWith('model_id');
+      expect(supabase.from('simulation_runs').in).toHaveBeenCalledWith('model_id', ['m1', 'm2']);
+      expect(supabase.from('simulation_runs').eq).toHaveBeenCalledWith('run_by', 'u1');
+      expect(stats).toEqual({
+        m1: { runs: 2 },
+        m2: { runs: 1 },
+      });
     });
   });
 

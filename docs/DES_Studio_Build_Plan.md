@@ -47,6 +47,16 @@ Claude Code must read the relevant existing files before touching anything.
 | 1.9 | 2026-05-04 | Added detailed implementation prompts and completion checklists for Sprint 5 tasks F5.1–F5.9. |
 | 1.10 | 2026-05-04 | Reviewed Sprints 6–8 prompts. Aligned LLM work with Supabase Edge Function proxy, corrected Sprint 7 references to current engine structures, resolved stale ADR numbering collisions, and flagged shift capacity mapping as an open design decision. |
 | 1.11 | 2026-05-04 | Sprint 4 complete — Replication & Results. Added Web Worker wrapper, bounded replication runner, batch persistence via results_json, live Execute CI dashboard, cancellation, and 30-replication M/M/1 CI gate. Full suite passes: 22 files, 294 tests. |
+| 1.12 | 2026-05-04 | Sprint 5 started. F5.1 complete — shared React ErrorBoundary added and risky library/detail/editor/execute surfaces wrapped. Focused UI tests pass. |
+| 1.13 | 2026-05-04 | F5.2 complete — ModelDetail can export current model JSON with validation warning, stable filename slug, app version, and object URL cleanup. |
+| 1.14 | 2026-05-04 | F5.3 complete — model library imports exported or raw JSON, validates before save, blocks invalid imports, and forces imported models private/current-user owned. |
+| 1.15 | 2026-05-04 | F5.4 complete — Execute panel exports completed results as JSON/CSV, including experiment config, replication rows, aggregate confidence intervals, and partial batch filenames for cancelled/error runs. |
+| 1.16 | 2026-05-04 | F5.5 complete — model cards and overview derive run counts from user-scoped simulation history, with non-blocking placeholders and warning state if stats cannot load. |
+| 1.17 | 2026-05-04 | F5.6 complete — simulation run saves now map `summary.avgSvc` to `avg_service_time`, keep service metrics in `results_json`, and read history fallback values from JSON for older records. |
+| 1.18 | 2026-05-04 | F5.7 complete — keyboard/ARIA pass added labelled shared fields, focusable model cards, selected tab state, dialog semantics, execute control labels, and accessible validation alerts. |
+| 1.19 | 2026-05-04 | F5.8 complete — empty personal libraries now show compact onboarding actions for blank creation, JSON import, and a private runnable M/M/1 sample model. |
+| 1.20 | 2026-05-04 | F5.9 complete — owner-only model delete added with confirmation, local removal, DB ownership guard on `owner_id`, and tests for missing user/id and non-owner public models. |
+| 1.21 | 2026-05-04 | Sprint 5 complete — Polish, Export & Production. Full test suite passes: 31 files, 334 tests. Production build succeeds. |
 
 ---
 
@@ -59,6 +69,7 @@ Claude Code must read the relevant existing files before touching anything.
 | Sprint 2 | ✅ Complete | 2026-05-03 | UI Editor Completeness. | 215 (215) | N/A | Success | Configured JSDOM, enhanced ConditionBuilder, etc. |
 | Sprint 3 | ✅ Complete | 2026-05-04 | Experiment Controls (Warm-up, Termination, Fork Model). | 272 (272) | 1.48% | Success | ADR-002 implemented. Vitest heap issue resolved; full suite passes. |
 | Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results (Workers, Batches, CI Dashboard). | 294 (294) | CI contains 9.0 | Success | Bounded worker pool implemented. `batch_id` stored inside `results_json` because no committed schema column exists. |
+| Sprint 5 | ✅ Complete | 2026-05-04 | Polish, Export & Production. | 334 (334) | CI contains 9.0 | Success | Error boundaries, model/results import/export, run stats, avg service mapping, accessibility, onboarding, and owner-only delete complete. |
 
 ---
 
@@ -158,13 +169,13 @@ Complete once before Sprint 1. These are prerequisites.
 
 | Task | Status | Notes |
 |---|---|---|
-| Place `CLAUDE.md` in project root | ⬜ | Replaces missing/generic CLAUDE_WORKFLOW.md |
-| Place `docs/addition1_entity_model.md` | ⬜ | Entity schema and action vocabulary |
-| Place `docs/decisions/ADR-001-auth-model.md` | ⬜ | Auth rules |
-| Place `docs/decisions/ADR-002-public-model-runs.md` | ⬜ | Deferred decision |
-| Create `.env.example` | ⬜ | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
-| Confirm `npm run dev` starts | ⬜ | — |
-| Confirm `npm test` passes all ~120 engine tests | ⬜ | Node environment |
+| Place `CLAUDE.md` in project root | ✅ | Replaces missing/generic CLAUDE_WORKFLOW.md |
+| Place `docs/addition1_entity_model.md` | ✅ | Entity schema and action vocabulary |
+| Place `docs/decisions/ADR-001-auth-model.md` | ✅ | Auth rules |
+| Place `docs/decisions/ADR-002-public-model-runs.md` | ✅ | Deferred decision |
+| Create `.env.example` | ✅ | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
+| Confirm `npm run dev` starts | ✅ | — |
+| Confirm `npm test` passes all ~120 engine tests | ✅ | Node environment |
 
 ### Pre-Sprint Orientation Prompt
 
@@ -195,7 +206,7 @@ Report the result of each check. Flag anything that blocks Sprint 1.
 All fixes operate on existing files — no new architecture.
 **Exit gate:** M/M/1 benchmark exits 0. All ~120 existing tests still pass.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-03 | **Completed:** 2026-05-03
 
 > **Rule for this sprint:** Read the target file before proposing any change.
 > Every task modifies existing code. None creates new files except test files.
@@ -245,7 +256,7 @@ Flag risks and dependencies before we start.
 **Audit status:** ~ (exists — must be removed and replaced)
 **Existing code:** `conditions.js:76`, `macros.js:220`, `editors/index.jsx:144–149`
 **Action:** Fix existing files — do not create new files except test file
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-03
 
 ```
 Re-read CLAUDE.md. Task F1.1 of Sprint 1.
@@ -276,12 +287,12 @@ Write tests/engine/conditions.test.js (new file) BEFORE implementing:
 ```
 
 **Completion checklist:**
-- [ ] `grep -r "new Function" src/` returns nothing
-- [ ] `grep -r "eval(" src/` returns nothing
-- [ ] `Custom...` option absent from `DropField`
-- [ ] `DropField:131` auto-activate fixed
-- [ ] `tests/engine/conditions.test.js` passes including security test
-- [ ] All ~120 existing engine tests still pass
+- [x] `grep -r "new Function" src/` returns nothing
+- [x] `grep -r "eval(" src/` returns nothing
+- [x] `Custom...` option absent from `DropField`
+- [x] `DropField:131` auto-activate fixed
+- [x] `tests/engine/conditions.test.js` passes including security test
+- [x] All ~120 existing engine tests still pass
 
 ---
 
@@ -290,7 +301,7 @@ Write tests/engine/conditions.test.js (new file) BEFORE implementing:
 **Audit status:** ~ (Phase C exists — restart rule is wrong granularity)
 **Existing code:** `engine/index.js:121–142` — outer while loop correct, inner for-loop missing break
 **Action:** Add `break` to existing for-loop — one line change, one new test
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-03
 
 ```
 Re-read CLAUDE.md Section 4. Task F1.2 of Sprint 1.
@@ -321,10 +332,10 @@ Confirm all ~120 existing tests still pass.
 ```
 
 **Completion checklist:**
-- [ ] `break` added inside for-loop after `fireCEvent()`
-- [ ] New test fails on pre-fix code (document the output)
-- [ ] New test passes after fix
-- [ ] All existing tests still pass
+- [x] `break` added inside for-loop after `fireCEvent()`
+- [x] New test fails on pre-fix code (document the output)
+- [x] New test passes after fix
+- [x] All existing tests still pass
 
 ---
 
@@ -333,7 +344,7 @@ Confirm all ~120 existing tests still pass.
 **Audit status:** ✗ (LIFO/Priority exist in UI — engine ignores q.discipline entirely)
 **Existing code:** `entities.js:84–88` — `waitingOf()` sorts by arrivalTime only
 **Action:** Extend `waitingOf()` in existing `entities.js`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-03
 
 ```
 Re-read CLAUDE.md Section 6. Task F1.3 of Sprint 1.
@@ -363,11 +374,11 @@ Confirm all existing tests still pass.
 ```
 
 **Completion checklist:**
-- [ ] `waitingOf()` reads `q.discipline`
-- [ ] LIFO and PRIORITY sort logic implemented
-- [ ] FIFO tiebreaker on equal PRIORITY values
-- [ ] Five new tests pass
-- [ ] All existing tests still pass
+- [x] `waitingOf()` reads `q.discipline`
+- [x] LIFO and PRIORITY sort logic implemented
+- [x] FIFO tiebreaker on equal PRIORITY values
+- [x] Five new tests pass
+- [x] All existing tests still pass
 
 ---
 
@@ -376,7 +387,7 @@ Confirm all existing tests still pass.
 **Audit status:** ✗ (acknowledged gap — test.todo exists in engine tests)
 **Existing code:** `distributions.js:84`, `phases.js:93,136` — Math.random() throughout
 **Action:** Add mulberry32 to `distributions.js`; thread seed through `buildEngine()`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Re-read CLAUDE.md Section 9.2. Task F1.4 of Sprint 1.
@@ -416,12 +427,12 @@ Confirm all existing tests still pass.
 ```
 
 **Completion checklist:**
-- [ ] `mulberry32` added to `distributions.js`
-- [ ] `buildEngine(model, seed, maxCycles)` signature updated
-- [ ] `grep -rn "Math.random" src/engine/` returns nothing
-- [ ] Two reproducibility tests pass
-- [ ] Seed field in Execute panel (extends existing panel)
-- [ ] Seed persisted to `runs` table
+- [x] `mulberry32` added to `distributions.js`
+- [x] `buildEngine(model, seed, maxCycles)` signature updated
+- [x] `grep -rn "Math.random" src/engine/` returns nothing
+- [x] Two reproducibility tests pass
+- [x] Seed field in Execute panel (extends existing panel)
+- [x] Seed persisted to `runs` table
 
 ---
 
@@ -430,7 +441,7 @@ Confirm all existing tests still pass.
 **Audit status:** ✗ (no validation exists — buildEngine called directly)
 **Existing code:** `execute/index.jsx:141–147` — Run button calls buildEngine() directly
 **Action:** Add `validateModel()` before `buildEngine()` call in existing execute panel
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Re-read CLAUDE.md Section 8 and docs/addition1_entity_model.md Section 7.
@@ -463,12 +474,12 @@ Confirm all existing tests still pass after these changes.
 ```
 
 **Completion checklist:**
-- [ ] `validateModel()` implements V1–V10
-- [ ] V11 warning implemented
-- [ ] Run button disabled on validation failure
-- [ ] Errors shown in editor tabs (not execute panel only)
-- [ ] `type="number"` added at lines 171, 241, 731
-- [ ] B-Event deletion guard warns on dangling references
+- [x] `validateModel()` implements V1–V10
+- [x] V11 warning implemented
+- [x] Run button disabled on validation failure
+- [x] Errors shown in editor tabs (not execute panel only)
+- [x] `type="number"` added at lines 171, 241, 731
+- [x] B-Event deletion guard warns on dangling references
 
 ---
 
@@ -477,7 +488,7 @@ Confirm all existing tests still pass after these changes.
 **Audit status:** ✗ (C4) + ✗ (C11)
 **Existing code:** `engine/index.js:121` (cap exists, silent), `shared/components.jsx` (DistPicker crashes)
 **Action:** Extend existing engine and fix existing component
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Task F1.6 of Sprint 1. Two fixes in existing files.
@@ -505,12 +516,12 @@ After both fixes:
 ```
 
 **Completion checklist:**
-- [ ] Phase C cap raised to 500 in existing `engine/index.js`
-- [ ] Warning returned in results object when cap hit
-- [ ] Amber banner shown in existing Execute panel
-- [ ] DistPicker missing import fixed in `components.jsx`
-- [ ] DistPicker renders without crashing
-- [ ] All existing tests still pass
+- [x] Phase C cap raised to 500 in existing `engine/index.js`
+- [x] Warning returned in results object when cap hit
+- [x] Amber banner shown in existing Execute panel
+- [x] DistPicker missing import fixed in `components.jsx`
+- [x] DistPicker renders without crashing
+- [x] All existing tests still pass
 
 ---
 
@@ -519,7 +530,7 @@ After both fixes:
 **Audit status:** ~ (benchmark exists — labelled M/M/1 but uses Fixed service dist — is actually M/D/1)
 **Existing code:** benchmark file in `tests/` — find and fix
 **Action:** Fix the existing benchmark — change service distribution to Exponential
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Task F1.7 of Sprint 1 — Sprint exit gate.
@@ -547,11 +558,11 @@ Record the % error here: _____
 ```
 
 **Completion checklist:**
-- [ ] Benchmark uses Exponential service distribution
-- [ ] Benchmark exits 0
-- [ ] % error within 5% of 9.0 time units
-- [ ] All ~120 existing engine tests still pass
-- [ ] `npm run build` succeeds
+- [x] Benchmark uses Exponential service distribution
+- [x] Benchmark exits 0
+- [x] % error within 5% of 9.0 time units
+- [x] All ~120 existing engine tests still pass
+- [x] `npm run build` succeeds
 
 ---
 
@@ -634,7 +645,7 @@ Definition of done:
 
 **Audit status:** ✗ (vite.config.js set to node only — UI tests would fail)
 **Existing code:** `vite.config.js` — `environment: 'node'` — needs `environmentMatchGlobs`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Re-read CLAUDE.md Section 12.3. Task F2.1 of Sprint 2.
@@ -669,11 +680,11 @@ Confirm existing engine tests still pass (node env unchanged).
 ```
 
 **Completion checklist:**
-- [ ] `vite.config.js` has `environmentMatchGlobs` (not replaced)
-- [ ] Packages installed in `devDependencies`
-- [ ] `tests/setup.js` with Supabase mock created
-- [ ] Smoke test passes
-- [ ] Existing engine tests unaffected
+- [x] `vite.config.js` has `environmentMatchGlobs` (not replaced)
+- [x] Packages installed in `devDependencies`
+- [x] `tests/setup.js` with Supabase mock created
+- [x] Smoke test passes
+- [x] Existing engine tests unaffected
 
 ---
 
@@ -681,7 +692,7 @@ Confirm existing engine tests still pass (node env unchanged).
 
 **Audit status:** ~ (operators shown but not filtered — all tokens treated as numeric)
 **Existing code:** `editors/index.jsx` (ConditionBuilder) — extend the existing component
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Re-read CLAUDE.md Section 7.5 and docs/addition1_entity_model.md Section 2.3.
@@ -715,10 +726,10 @@ Use @testing-library/react. Query by role — never by CSS class.
 ```
 
 **Completion checklist:**
-- [ ] Operator dropdown filtered by `valueType` in existing ConditionBuilder
-- [ ] Value input widget changes by `valueType`
-- [ ] Type-mismatched predicate impossible to construct
-- [ ] Six tests pass
+- [x] Operator dropdown filtered by `valueType` in existing ConditionBuilder
+- [x] Value input widget changes by `valueType`
+- [x] Type-mismatched predicate impossible to construct
+- [x] Six tests pass
 
 ---
 
@@ -726,7 +737,7 @@ Use @testing-library/react. Query by role — never by CSS class.
 
 **Audit status:** ~ (flat AND/OR chains exist — no nesting, precedence undefined to user)
 **Existing code:** `editors/index.jsx` (ConditionBuilder) — extend
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Task F2.3 of Sprint 2.
@@ -757,9 +768,9 @@ Extend tests/ui/shared/predicate-builder.test.jsx:
 ```
 
 **Completion checklist:**
-- [ ] AND/OR compound predicates serialise to nested JSON
-- [ ] Mixed AND/OR displays evaluation order explicitly
-- [ ] Three new tests pass
+- [x] AND/OR compound predicates serialise to nested JSON
+- [x] Mixed AND/OR displays evaluation order explicitly
+- [x] Three new tests pass
 
 ---
 
@@ -767,7 +778,7 @@ Extend tests/ui/shared/predicate-builder.test.jsx:
 
 **Audit status:** ✗ (type-level selection only — no attribute-level filter)
 **Existing code:** `editors/index.jsx` (CEventEditor), `engine/entities.js` (waitingOf)
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Task F2.4 of Sprint 2.
@@ -793,12 +804,12 @@ UI test (add to predicate-builder.test.jsx):
 ```
 
 **Completion checklist:**
-- [ ] Entity filter section in existing CEventEditor
-- [ ] Only `Entity.*` variables available in entity filter
-- [ ] `waitingOf()` applies filter before discipline sort
-- [ ] SEIZE does not fire when no entities pass filter
-- [ ] Engine unit test passes
-- [ ] UI test passes
+- [x] Entity filter section in existing CEventEditor
+- [x] Only `Entity.*` variables available in entity filter
+- [x] `waitingOf()` applies filter before discipline sort
+- [x] SEIZE does not fire when no entities pass filter
+- [x] Engine unit test passes
+- [x] UI test passes
 
 ---
 
@@ -806,7 +817,7 @@ UI test (add to predicate-builder.test.jsx):
 
 **Audit status:** ✗ (implicit array order — undiscoverable, no drag-to-reorder)
 **Existing code:** `editors/index.jsx` (CEventEditor) — extend
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Task F2.5 of Sprint 2.
@@ -828,10 +839,10 @@ Write a UI test (add to tests/ui/editors/c-event-editor.test.jsx):
 ```
 
 **Completion checklist:**
-- [ ] Priority badge on each row in existing CEventEditor
-- [ ] Drag-to-reorder works and updates priority numbers
-- [ ] Priority stored in `model_json`
-- [ ] UI test passes
+- [x] Priority badge on each row in existing CEventEditor
+- [x] Drag-to-reorder works and updates priority numbers
+- [x] Priority stored in `model_json`
+- [x] UI test passes
 
 ---
 
@@ -839,7 +850,7 @@ Write a UI test (add to tests/ui/editors/c-event-editor.test.jsx):
 
 **Audit status:** ✗ — `editors/index.jsx:495` — missing dependency in hook
 **Existing code:** `editors/index.jsx` around line 495
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Task F2.6 of Sprint 2.
@@ -863,9 +874,9 @@ Write a UI test (add to tests/ui/editors/c-event-editor.test.jsx):
 ```
 
 **Completion checklist:**
-- [ ] Token list updates on entity class change
-- [ ] Token list updates on attribute change
-- [ ] UI test passes
+- [x] Token list updates on entity class change
+- [x] Token list updates on attribute change
+- [x] UI test passes
 
 ---
 
@@ -873,7 +884,7 @@ Write a UI test (add to tests/ui/editors/c-event-editor.test.jsx):
 
 **Audit status:** ✗ (no history stack anywhere)
 **Existing code:** `editors/index.jsx` — add history tracking to existing model state
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Task F2.7 of Sprint 2.
@@ -898,10 +909,10 @@ Visible undo/redo buttons in existing editor toolbar.
 ```
 
 **Completion checklist:**
-- [ ] Approach confirmed before implementation
-- [ ] Undo/redo tracks minimum 20 steps
-- [ ] Keyboard shortcuts working
-- [ ] Toolbar buttons present in existing UI
+- [x] Approach confirmed before implementation
+- [x] Undo/redo tracks minimum 20 steps
+- [x] Keyboard shortcuts working
+- [x] Toolbar buttons present in existing UI
 
 ---
 
@@ -909,7 +920,7 @@ Visible undo/redo buttons in existing editor toolbar.
 
 **Audit status:** ✗ (Back button discards silently — known defect)
 **Existing code:** `App.jsx`, existing editor navigation
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Task F2.8 of Sprint 2.
@@ -933,9 +944,9 @@ Write a UI test (add to tests/ui/editors/ or execute):
 ```
 
 **Completion checklist:**
-- [ ] Warning dialog on navigation away
-- [ ] `beforeunload` handler registered
-- [ ] UI test passes
+- [x] Warning dialog on navigation away
+- [x] `beforeunload` handler registered
+- [x] UI test passes
 
 ---
 
@@ -943,7 +954,7 @@ Write a UI test (add to tests/ui/editors/ or execute):
 
 **Audit status:** ✗ (DistPicker fixed in F1.6 — CSV import not yet present)
 **Existing code:** `shared/components.jsx` (DistPicker — now working after F1.6)
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Task F2.9 of Sprint 2.
@@ -968,11 +979,11 @@ Write a UI test using a mock File object (add to tests/ui/shared/dist-picker.tes
 ```
 
 **Completion checklist:**
-- [ ] CSV option in existing DistPicker dropdown
-- [ ] Column selection shown after parse
-- [ ] 10% skip threshold warning shown
-- [ ] Values array stored (no CSV file stored)
-- [ ] UI test passes
+- [x] CSV option in existing DistPicker dropdown
+- [x] Column selection shown after parse
+- [x] 10% skip threshold warning shown
+- [x] Values array stored (no CSV file stored)
+- [x] UI test passes
 
 ---
 
@@ -980,7 +991,7 @@ Write a UI test using a mock File object (add to tests/ui/shared/dist-picker.tes
 
 **Audit status:** ✗ — `const owner = null` hardcoded; version tag hardcoded "v6"
 **Existing code:** `App.jsx` (ModelCard), `ui/execute/index.jsx` (version tag)
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-03
 
 ```
 Task F2.10 of Sprint 2. Two small fixes in existing files.
@@ -998,8 +1009,8 @@ Both are cosmetic. No engine or logic changes. No new files.
 ```
 
 **Completion checklist:**
-- [ ] Owner avatar and username displayed in ModelCard
-- [ ] Version tag reads from `package.json` dynamically
+- [x] Owner avatar and username displayed in ModelCard
+- [x] Version tag reads from `package.json` dynamically
 
 ---
 
@@ -1786,7 +1797,7 @@ Testing:
 
 **Goal:** Production-ready release. Error handling, import/export, accessibility, onboarding.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-04 | **Completed:** 2026-05-04
 **Prerequisite:** Sprint 4 exit gate passed.
 
 | Feature | Audit Status | Action |
@@ -1799,7 +1810,7 @@ Testing:
 | F5.6 — Fix avg_service_time column (C9) | ~ (mismatch) | Fix: `db/models.js:127` |
 | F5.7 — Keyboard navigation + ARIA | ✗ (not implemented) | Extend: all UI components |
 | F5.8 — First-run onboarding | ✗ (not implemented) | New: welcome panel + sample model |
-| F5.9 — Model delete | ✗ (deleteModel() exists in db/models.js — no UI surface anywhere) | New: owner-only Delete button on ModelCard + user_id ownership guard |
+| F5.9 — Model delete | ✗ (deleteModel() exists in db/models.js — no UI surface anywhere) | New: owner-only Delete button on ModelCard + `owner_id` ownership guard |
 
 ### Sprint 5 Planning Prompt *(run in claude.ai)*
 
@@ -1839,7 +1850,7 @@ Definition of done:
 
 **Audit status:** ✗ (no ErrorBoundary anywhere)
 **Action:** New shared component, wrap risky UI surfaces
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F5.1 of Sprint 5.
@@ -1889,11 +1900,11 @@ Testing:
 ```
 
 **Completion checklist:**
-- [ ] `ErrorBoundary` exported from `shared/components.jsx`
-- [ ] Fallback UI uses tokens
-- [ ] Model library, ModelDetail, editors, and Execute wrapped
-- [ ] Reset callback supported
-- [ ] Error boundary tests pass
+- [x] `ErrorBoundary` exported from `shared/components.jsx`
+- [x] Fallback UI uses tokens
+- [x] Model library, ModelDetail, editors, and Execute wrapped
+- [x] Reset callback supported
+- [x] Error boundary tests pass
 
 ---
 
@@ -1901,7 +1912,7 @@ Testing:
 
 **Audit status:** ✗ (models are Supabase-only; no file export)
 **Action:** Add export button to existing ModelDetail
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F5.2 of Sprint 5.
@@ -1944,12 +1955,12 @@ Testing:
 ```
 
 **Completion checklist:**
-- [ ] Export JSON button added to ModelDetail
-- [ ] Export payload includes model metadata and `model_json`
-- [ ] Filename generated from model name
-- [ ] Invalid model warning shown
-- [ ] Object URL revoked after download
-- [ ] Export tests pass
+- [x] Export JSON button added to ModelDetail
+- [x] Export payload includes model metadata and `model_json`
+- [x] Filename generated from model name
+- [x] Invalid model warning shown
+- [x] Object URL revoked after download
+- [x] Export tests pass
 
 ---
 
@@ -1957,7 +1968,7 @@ Testing:
 
 **Audit status:** ✗ (no upload/import path)
 **Action:** Add import affordance to model library
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F5.3 of Sprint 5.
@@ -2001,12 +2012,12 @@ Testing:
 ```
 
 **Completion checklist:**
-- [ ] Import JSON button added to model library
-- [ ] Exported payload and raw model_json supported
-- [ ] Imported model validates before save
-- [ ] Imported model is private and owned by current user
-- [ ] Invalid imports show errors and do not save
-- [ ] Import tests pass
+- [x] Import JSON button added to model library
+- [x] Exported payload and raw model_json supported
+- [x] Imported model validates before save
+- [x] Imported model is private and owned by current user
+- [x] Invalid imports show errors and do not save
+- [x] Import tests pass
 
 ---
 
@@ -2014,7 +2025,7 @@ Testing:
 
 **Audit status:** ✗ (no results export from Execute panel)
 **Action:** Add CSV/JSON export from Execute panel
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F5.4 of Sprint 5.
@@ -2053,12 +2064,12 @@ Testing:
 ```
 
 **Completion checklist:**
-- [ ] JSON results export implemented
-- [ ] CSV results export implemented
-- [ ] Single-run and multi-run results supported
-- [ ] Export buttons disabled before results exist
-- [ ] Partial result export handled deliberately
-- [ ] Results export tests pass
+- [x] JSON results export implemented
+- [x] CSV results export implemented
+- [x] Single-run and multi-run results supported
+- [x] Export buttons disabled before results exist
+- [x] Partial result export handled deliberately
+- [x] Results export tests pass
 
 ---
 
@@ -2066,7 +2077,7 @@ Testing:
 
 **Audit status:** ~ (stats panel runs count always 0)
 **Action:** Fix model/run stats derivation
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F5.5 of Sprint 5.
@@ -2101,11 +2112,11 @@ Testing:
 ```
 
 **Completion checklist:**
-- [ ] Run count no longer always 0
-- [ ] Stats derived from run history or DB wrapper
-- [ ] User isolation preserved
-- [ ] Loading/failure states handled
-- [ ] DB/UI tests pass
+- [x] Run count no longer always 0
+- [x] Stats derived from run history or DB wrapper
+- [x] User isolation preserved
+- [x] Loading/failure states handled
+- [x] DB/UI tests pass
 
 ---
 
@@ -2113,7 +2124,7 @@ Testing:
 
 **Audit status:** ~ (`avg_service_time` column mismatch in DB wrapper/stats area)
 **Action:** Fix `src/db/models.js` run/stat mapping
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F5.6 of Sprint 5.
@@ -2143,11 +2154,11 @@ Testing:
 ```
 
 **Completion checklist:**
-- [ ] Actual schema/wrapper mismatch identified
-- [ ] `saveRun()` maps avg service time correctly
-- [ ] Existing run records remain readable
-- [ ] Results_json includes avg service data
-- [ ] Tests pass
+- [x] Actual schema/wrapper mismatch identified
+- [x] `saveRun()` maps avg service time correctly
+- [x] Existing run records remain readable
+- [x] Results_json includes avg service data
+- [x] Tests pass
 
 ---
 
@@ -2155,7 +2166,7 @@ Testing:
 
 **Audit status:** ✗ (keyboard/ARIA pass not yet done)
 **Action:** Extend existing UI components
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F5.7 of Sprint 5.
@@ -2198,12 +2209,12 @@ Testing:
 ```
 
 **Completion checklist:**
-- [ ] Primary workflow keyboard reachable
-- [ ] Icon/destructive buttons have accessible names
-- [ ] Inputs have labels
-- [ ] Tabs expose selected state
-- [ ] Error text visible and associated where practical
-- [ ] Accessibility UI tests pass
+- [x] Primary workflow keyboard reachable
+- [x] Icon/destructive buttons have accessible names
+- [x] Inputs have labels
+- [x] Tabs expose selected state
+- [x] Error text visible and associated where practical
+- [x] Accessibility UI tests pass
 
 ---
 
@@ -2211,7 +2222,7 @@ Testing:
 
 **Audit status:** ✗ (no onboarding/sample model)
 **Action:** Add welcome panel + sample M/M/1 model
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F5.8 of Sprint 5.
@@ -2249,12 +2260,12 @@ Testing:
 ```
 
 **Completion checklist:**
-- [ ] Empty model list shows onboarding panel
-- [ ] Blank model, sample model, and import actions available
-- [ ] Sample M/M/1 model validates
-- [ ] Sample model saves as private and owned by current user
-- [ ] Onboarding hidden for users with models
-- [ ] Onboarding tests pass
+- [x] Empty model list shows onboarding panel
+- [x] Blank model, sample model, and import actions available
+- [x] Sample M/M/1 model validates
+- [x] Sample model saves as private and owned by current user
+- [x] Onboarding hidden for users with models
+- [x] Onboarding tests pass
 
 ---
 
@@ -2263,7 +2274,7 @@ Testing:
 **Audit status:** ✗ (deleteModel() exists in db/models.js — no UI surface anywhere)
 **Existing code:** `App.jsx` (ModelCard), `src/db/models.js`
 **Action:** New UI affordance + ownership guard
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F5.9 of Sprint 5.
@@ -2306,13 +2317,13 @@ Testing:
 ```
 
 **Completion checklist:**
-- [ ] Delete button visible to owner only
-- [ ] Confirmation dialog shown before delete
-- [ ] `deleteModel()` includes `user_id` ownership guard
-- [ ] Missing userId/id blocks delete query
-- [ ] Cascade behaviour confirmed and documented
-- [ ] UI test passes
-- [ ] DB layer test passes
+- [x] Delete button visible to owner only
+- [x] Confirmation dialog shown before delete
+- [x] `deleteModel()` includes `owner_id` ownership guard (current schema field; prompt's `user_id` reference is stale)
+- [x] Missing userId/id blocks delete query
+- [x] Cascade behaviour checked: no committed schema file confirms `simulation_runs` cascade; orphaned run records remain a data integrity risk to resolve with the next schema migration
+- [x] UI test passes
+- [x] DB layer test passes
 
 ---
 
@@ -3371,17 +3382,17 @@ npm run build                          # Succeeds
 
 | # | Severity | Finding | File | Sprint | Status |
 |---|---|---|---|---|---|
-| C1 | Critical | `new Function()` eval — XSS | `conditions.js:76`, `macros.js:220` | S1 F1.1 | ⬜ |
-| C2 | Critical | LIFO/Priority ignored by engine | `entities.js:84–88` | S1 F1.3 | ⬜ |
-| C3 | High | C-scan restart pass-granularity | `engine/index.js:121–142` | S1 F1.2 | ⬜ |
-| C4 | High | Phase C truncation silent | `engine/index.js:121` | S1 F1.6 | ⬜ |
-| C5 | High | No pre-run validation | `execute/index.jsx:141–147` | S1 F1.5 | ⬜ |
-| C6 | Medium | Stale B-Event refs after delete | `phases.js:91,125` | S1 F1.5 | ⬜ |
-| C7 | Medium | No seeded RNG | `distributions.js:84` | S1 F1.4 | ⬜ |
-| C8 | Low | ConditionBuilder tokens stale | `editors/index.jsx:495` | S2 F2.6 | ⬜ |
-| C9 | Low | avg_service_time column mismatch | `db/models.js:127` | S5 F5.6 | ⬜ |
-| C10 | Low | Distribution inputs missing type=number | `editors/index.jsx:171,241,731` | S1 F1.5 | ⬜ |
-| C11 | Low | DistPicker ReferenceError | `components.jsx` | S1 F1.6 | ⬜ |
+| C1 | Critical | `new Function()` eval — XSS | `conditions.js:76`, `macros.js:220` | S1 F1.1 | ✅ |
+| C2 | Critical | LIFO/Priority ignored by engine | `entities.js:84–88` | S1 F1.3 | ✅ |
+| C3 | High | C-scan restart pass-granularity | `engine/index.js:121–142` | S1 F1.2 | ✅ |
+| C4 | High | Phase C truncation silent | `engine/index.js:121` | S1 F1.6 | ✅ |
+| C5 | High | No pre-run validation | `execute/index.jsx:141–147` | S1 F1.5 | ✅ |
+| C6 | Medium | Stale B-Event refs after delete | `phases.js:91,125` | S1 F1.5 | ✅ |
+| C7 | Medium | No seeded RNG | `distributions.js:84` | S1 F1.4 | ✅ |
+| C8 | Low | ConditionBuilder tokens stale | `editors/index.jsx:495` | S2 F2.6 | ✅ |
+| C9 | Low | avg_service_time column mismatch | `db/models.js:127` | S5 F5.6 | ✅ |
+| C10 | Low | Distribution inputs missing type=number | `editors/index.jsx:171,241,731` | S1 F1.5 | ✅ |
+| C11 | Low | DistPicker ReferenceError | `components.jsx` | S1 F1.6 | ✅ |
 
 ---
 

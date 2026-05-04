@@ -14,6 +14,7 @@ const mockQuery = {
   update: vi.fn().mockReturnThis(),
   delete: vi.fn().mockReturnThis(),
   eq: vi.fn().mockReturnThis(),
+  in: vi.fn().mockReturnThis(),
   or: vi.fn().mockReturnThis(),
   contains: vi.fn().mockReturnThis(),
   order: vi.fn().mockReturnThis(),

@@ -73,8 +73,8 @@ describe('CEventEditor — priority field', () => {
         queues={[]}
       />
     );
-    // Delete the first event (P1) — click the first ✕ button
-    const deleteButtons = screen.getAllByRole('button', { name: /✕/ });
+    // Delete the first event (P1) through its accessible remove button
+    const deleteButtons = screen.getAllByRole('button', { name: /remove c-event/i });
     fireEvent.click(deleteButtons[0]);
     const remaining = handleChange.mock.calls[0][0];
     expect(remaining).toHaveLength(2);

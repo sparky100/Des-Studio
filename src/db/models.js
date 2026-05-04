@@ -128,9 +128,23 @@ export async function saveModel(model, userId) {
   }
 }
 
-export async function deleteModel(id) {
-  const { error } = await supabase.from("des_models").delete().eq("id", id);
-  if (error) throw error;
+export async function deleteModel(id, userId) {
+  if (!id || !userId) {
+    return { ok: false, error: "Model id and user id are required to delete a model." };
+  }
+
+  // No committed schema file currently confirms simulation_runs cascade behaviour.
+  const { data, error } = await supabase
+    .from("des_models")
+    .delete()
+    .eq("id", id)
+    .eq("owner_id", userId)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  if (Array.isArray(data) && data.length === 0) {
+    return { ok: false, error: "Model not found or you do not own it." };
+  }
+  return { ok: true };
 }
 
 export async function setVisibility(id, visibility) {
@@ -157,6 +171,9 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     summary: s,
     clock: result.snap?.clock,
   };
+  if (!resultsJson.summary) {
+    resultsJson.summary = s;
+  }
   if (config.batchId) {
     resultsJson.batch_id = config.batchId;
   }
@@ -178,12 +195,19 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     total_served:        s.served   || 0,
     total_reneged:       s.reneged  || 0,
     avg_wait_time:       s.avgWait  ?? null,
-    avg_service_time:    s.avgSojourn ?? null,
+    avg_service_time:    s.avgSvc ?? null,
     renege_rate:         s.total ? (s.reneged / s.total) : 0,
     results_json:        resultsJson,
     duration_ms:         config.durationMs || null,
   });
   if (error) throw error;
+}
+
+export function normalizeRunHistoryRow(row = {}) {
+  return {
+    ...row,
+    avg_service_time: row.avg_service_time ?? row.results_json?.summary?.avgSvc ?? null,
+  };
 }
 
 export async function fetchRunHistory(modelId) {
@@ -200,7 +224,26 @@ export async function fetchRunHistory(modelId) {
       "Run: ALTER TABLE simulation_runs ADD COLUMN IF NOT EXISTS warmup_period REAL;"
     );
   }
-  return data || [];
+  return (data || []).map(normalizeRunHistoryRow);
+}
+
+export async function fetchRunStatsForModels(modelIds = [], userId) {
+  const ids = Array.from(new Set(modelIds.filter(Boolean)));
+  const emptyStats = ids.reduce((stats, id) => ({ ...stats, [id]: { runs: 0 } }), {});
+  if (!ids.length || !userId) return emptyStats;
+
+  const { data, error } = await supabase
+    .from("simulation_runs")
+    .select("model_id")
+    .in("model_id", ids)
+    .eq("run_by", userId);
+  if (error) throw error;
+
+  return (data || []).reduce((stats, row) => {
+    if (!stats[row.model_id]) stats[row.model_id] = { runs: 0 };
+    stats[row.model_id].runs += 1;
+    return stats;
+  }, emptyStats);
 }
 
 export async function forkModel(sourceModelId, newUserId, newName = "") {

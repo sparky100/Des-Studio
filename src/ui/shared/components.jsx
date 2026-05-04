@@ -1,7 +1,64 @@
 // ui/shared/components.jsx — Reusable micro-components
-import { useState, useRef } from "react";
+import { Component, useId, useState, useRef } from "react";
 import { C, FONT } from "./tokens.js";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
+
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error(error, info);
+  }
+
+  reset = () => {
+    this.setState({ error: null });
+    this.props.onReset?.();
+  };
+
+  render() {
+    if (!this.state.error) return this.props.children;
+
+    const title = this.props.title || "Something went wrong";
+    const message = this.props.message || "This panel could not render.";
+    const errorMessage = this.state.error?.message || String(this.state.error);
+
+    return (
+      <div role="alert" style={{
+        background: C.red + "12",
+        border: `1px solid ${C.red}44`,
+        borderRadius: 8,
+        padding: 14,
+        color: C.text,
+        fontFamily: FONT,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+      }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.red }}>{title}</div>
+        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>{message}</div>
+        <code style={{
+          background: C.bg,
+          border: `1px solid ${C.border}`,
+          borderRadius: 5,
+          color: C.amber,
+          fontSize: 11,
+          padding: "7px 9px",
+          whiteSpace: "pre-wrap",
+        }}>
+          {errorMessage}
+        </code>
+        {this.props.onReset && <Btn small variant="ghost" onClick={this.reset}>Try again</Btn>}
+      </div>
+    );
+  }
+}
 
 const Tag=({label,color=C.muted})=>(
   <span style={{background:color+"18",border:`1px solid ${color}44`,color,borderRadius:3,padding:"2px 7px",fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",fontFamily:FONT}}>{label}</span>
@@ -16,20 +73,24 @@ const PhaseTag=({phase})=>{
 const Avatar=({u,size=28})=>(
   <div style={{width:size,height:size,borderRadius:"50%",background:u.color+"22",border:`1.5px solid ${u.color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.38,fontWeight:700,color:u.color,fontFamily:FONT,flexShrink:0}}>{u.initials}</div>
 );
-const Btn=({children,onClick,variant="ghost",small,disabled,full,style={}})=>{
+const Btn=({children,onClick,variant="ghost",small,disabled,full,style={},ariaLabel,title,type="button"})=>{
   const v={primary:{bg:C.accent,fg:"#080c10",br:C.accent},ghost:{bg:"#ffffff08",fg:C.text,br:C.border},
     danger:{bg:C.red+"18",fg:C.red,br:C.red+"44"},success:{bg:C.green+"18",fg:C.green,br:C.green+"44"},
     amber:{bg:C.amber+"18",fg:C.amber,br:C.amber+"44"}}[variant]||{bg:"#ffffff08",fg:C.text,br:C.border};
-  return <button onClick={onClick} disabled={disabled} style={{background:v.bg,color:v.fg,border:`1px solid ${v.br}`,borderRadius:5,padding:small?"4px 10px":"7px 14px",fontSize:small?11:12,fontWeight:600,fontFamily:FONT,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.45:1,display:"inline-flex",alignItems:"center",gap:6,width:full?"100%":undefined,justifyContent:full?"center":undefined,transition:"opacity .15s",flexShrink:0,...style}}>{children}</button>;
+  return <button type={type} onClick={onClick} disabled={disabled} aria-label={ariaLabel} title={title} style={{background:v.bg,color:v.fg,border:`1px solid ${v.br}`,borderRadius:5,padding:small?"4px 10px":"7px 14px",fontSize:small?11:12,fontWeight:600,fontFamily:FONT,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.45:1,display:"inline-flex",alignItems:"center",gap:6,width:full?"100%":undefined,justifyContent:full?"center":undefined,transition:"opacity .15s",flexShrink:0,...style}}>{children}</button>;
 };
-const Field=({label,value,onChange,multiline,rows=2,placeholder=""})=>(
-  <div style={{display:"flex",flexDirection:"column",gap:5}}>
-    {label&&<label style={{fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.muted,textTransform:"uppercase",fontFamily:FONT}}>{label}</label>}
-    {multiline
-      ?<textarea value={value||""} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",resize:"vertical",outline:"none",lineHeight:1.6}}/>
-      :<input value={value||""} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",outline:"none",width:"100%",boxSizing:"border-box"}}/>}
-  </div>
-);
+const Field=({label,value,onChange,multiline,rows=2,placeholder="",autoFocus=false})=>{
+  const generatedId=useId();
+  const id=`field-${generatedId}`;
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:5}}>
+      {label&&<label htmlFor={id} style={{fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.muted,textTransform:"uppercase",fontFamily:FONT}}>{label}</label>}
+      {multiline
+        ?<textarea id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} autoFocus={autoFocus} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",resize:"vertical",outline:"none",lineHeight:1.6}}/>
+        :<input id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",outline:"none",width:"100%",boxSizing:"border-box"}}/>}
+    </div>
+  );
+};
 const SH=({label,color=C.muted,children})=>(
   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${C.border}`,paddingBottom:8,marginBottom:12}}>
     <span style={{fontSize:10,fontWeight:700,letterSpacing:1.8,textTransform:"uppercase",color,fontFamily:FONT}}>{label}</span>
@@ -174,5 +235,5 @@ const DistPicker=({value,onChange,compact})=>{
   );
 };
 
-export { Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty, DistPicker };
+export { ErrorBoundary, Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty, DistPicker };
 
