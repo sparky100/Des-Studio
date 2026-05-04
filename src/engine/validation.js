@@ -44,6 +44,26 @@ export function validateModel(model) {
     });
   });
 
+  // ── V3: Every defaultValue matches its declared valueType ───────────────────
+  entityTypes.forEach(et => {
+    (et.attrDefs || []).forEach(a => {
+      if (a.defaultValue === undefined || a.defaultValue === '') return; // Default values can be empty
+      const val = a.defaultValue;
+      const type = a.valueType;
+
+      if (type === 'number') {
+        if (isNaN(parseFloat(val)) || !isFinite(val)) {
+          err('V3', `Attribute '${a.name || '?'}' in '${et.name || '?'}': default value '${val}' is not a valid number.`, 'entities');
+        }
+      } else if (type === 'boolean') {
+        if (val !== 'true' && val !== 'false') {
+          err('V3', `Attribute '${a.name || '?'}' in '${et.name || '?'}': default value '${val}' is not 'true' or 'false'.`, 'entities');
+        }
+      }
+      // String type always matches, no specific validation needed for its content
+    });
+  });
+
   // ── V4: PRIORITY queue discipline requires a 'priority' attribute ───────────
   queues.forEach(q => {
     if ((q.discipline || 'FIFO').toUpperCase() !== 'PRIORITY') return;
@@ -166,12 +186,20 @@ export function validateModel(model) {
     });
   });
 
-  // ── V8: Model must have at least one arrival source ─────────────────────────
-  // In the current engine, Source = B-Event whose effect contains ARRIVE(
+  // ── V8: Model must have at least one arrival source and at least one sink ──
   const hasArrive = bEvents.some(b => b.effect && b.effect.includes('ARRIVE('));
-  if (bEvents.length > 0 && !hasArrive) {
+  if (!hasArrive) {
     warn('V8',
       'No B-Event with an ARRIVE(Type) effect was found — the simulation will have no entity arrivals.',
+      'bevents');
+  }
+
+  // A "sink" is effectively an entity reaching a terminal status (done or reneged)
+  // This check is a heuristic based on event effects that lead to termination.
+  const hasSinkMacro = bEvents.some(b => b.effect && (b.effect.includes('COMPLETE(') || b.effect.includes('RENEGE(')));
+  if (!hasSinkMacro) {
+    warn('V8',
+      'No B-Event with a COMPLETE() or RENEGE() effect was found — entities may never leave the system.',
       'bevents');
   }
 
@@ -203,6 +231,14 @@ export function validateModel(model) {
       }
     });
   });
+
+  // ── V13: Termination check (Sprint 3.2) ─────────────────────────────────────
+  const hasTermination = model.maxSimTime > 0 || model.terminationCondition;
+  if (!hasTermination && hasArrive) {
+    warn('V13', 
+      'No simulation time limit or termination condition set. Model may run until cycle limit (5000) if arrivals continue indefinitely.',
+      'execute');
+  }
 
   return { errors, warnings };
 }

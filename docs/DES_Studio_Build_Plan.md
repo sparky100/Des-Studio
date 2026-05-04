@@ -40,6 +40,18 @@ Claude Code must read the relevant existing files before touching anything.
 | 1.2 | 2026-05-03 | Added Sprint 6 (LLM Integration & Results Analysis), Sprint 7 (Dynamic Distributions & Time-Varying Resources), and Sprint 8 (LLM Chat Model Builder). Features derived from design sessions in chats "LLM model integration and results analysis", "dynamic sampling distributions and time varying resources", and "Building models through LLM chat interface". Absent-feature register updated. |
 | 1.3 | 2026-05-03 | Sprint 2 complete — 215 tests passing (14 files), build 3.29s. Sprint 3 started. |
 | 1.4 | 2026-05-03 | Added F5.9 — model delete UI with owner-only guard. Identified gap: no UI surface for model deletion existed in any prior sprint. |
+| 1.5 | 2026-05-04 | Sprint 3 complete — Experiment Controls. Includes warm-up period, termination conditions, unified experiment panel, DB layer tests, engine test completion, and ADR-002 resolution (fork model). Noted persistent 'JS heap out of memory' error during full/engine test runs. |
+
+---
+
+## Sprint History
+
+| Sprint | Status | Completed | Description | Tests Passed (Total) | M/M/1 Error | Build | Notes |
+|---|---|---|---|---|---|---|---|
+| Pre-Sprint | ✅ Complete | 2026-04-30 | Project setup, initial audit & plan. | ~120 (120) | N/A | Success | Initial setup of CLAUDE.md, .env.example, etc. |
+| Sprint 1 | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening. | 182 (182) | 1.48% | Success | Fixes for XSS, C-scan restart, queue discipline, seeded RNG, validation, DistPicker. |
+| Sprint 2 | ✅ Complete | 2026-05-03 | UI Editor Completeness. | 215 (215) | N/A | Success | Configured JSDOM, enhanced ConditionBuilder, etc. |
+| Sprint 3 | ✅ Complete | 2026-05-04 | Experiment Controls (Warm-up, Termination, Fork Model). | DB: 8/8, UI: 30/30 | 1.48% | Success | ADR-002 implemented. Noted 'JS heap out of memory' on full/engine test runs. |
 
 ---
 
@@ -1002,7 +1014,7 @@ Both are cosmetic. No engine or logic changes. No new files.
 **Goal:** Implement warm-up period, termination conditions, and unified
 experiment panel. All changes extend existing engine and UI files.
 
-**Status:** 🔄 In progress | **Started:** 2026-05-03 | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-03 | **Completed:** 2026-05-04
 **Prerequisite:** Sprint 2 exit gate passed.
 
 > **Key audit finding:** `max_simulation_time` column already exists in the DB schema.

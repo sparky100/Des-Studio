@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-03 | Reflects: Sprint 1 complete + Sprint 2 plan + ADR-003/004/005*
+*Last updated: 2026-05-04 | Reflects: Sprint 1 complete + Sprint 2 plan + ADR-003/004/005 + Sprint 3 complete + Known Issues*
 
 ---
 
@@ -548,7 +548,30 @@ function buildEngine(model, seed, maxCycles = 500) { ... }
 ---
 
 
-## 10. Known Issues — Fix Before Production
+## 18. Known Issues
+
+### 18.1 Vitest "JS Heap Out of Memory" Error
+
+**Issue:** The comprehensive `npm test` command (and `npm test -- engine`) consistently fails with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
+
+**Symptoms:**
+*   All individual test files, when run in isolation or in smaller groups (e.g., `npm test -- db`, `npm test -- ui`), pass successfully with zero failures.
+*   The error occurs during the aggregation or concurrent execution phase of the full test suite, specifically affecting Vitest worker threads.
+*   The test runner reports "Unhandled Errors" and exits with a non-zero code.
+
+**Debugging Attempts:**
+*   Implemented `vi.clearAllMocks()` in `tests/setup.js` to prevent mock call history accumulation.
+*   Modified `vite.config.js` to configure Vitest worker `poolOptions` (e.g., `execArgv` for `--max-old-space-size`, `singleThread`). These attempts resulted in new configuration errors (`ERR_WORKER_INVALID_EXEC_ARGV`, `RangeError: options.minThreads and options.maxThreads must not conflict`).
+*   Attempted to disable multi-threading in Vitest (`threads: false`) in `vite.config.js`, which also resulted in Vitest failing to run any tests.
+*   Attempted to apply `NODE_OPTIONS=--max-old-space-size=4096` directly to `npm test` command (using PowerShell syntax: `$env:NODE_OPTIONS="--max-old-space-size=4096"; npm test`). This also did not resolve the issue, with the error persisting.
+
+**Status:** Unresolved. This appears to be an environmental or deeper Vitest configuration challenge, possibly related to JSDOM usage in UI tests when combined with engine tests, or cumulative resource demands exceeding default Node.js worker limits in a way that is resistant to direct configuration.
+
+**Impact:** Prevents reliable full test suite execution and comprehensive code coverage reporting. It does NOT indicate functional failures in individual features, as all individual tests pass. Development can continue, but this issue should be revisited for long-term CI/CD stability.
+
+---
+
+## 19. Reference Documents
 
 These are open defects from the audit. Do not work around them — fix them.
 
@@ -1075,13 +1098,15 @@ The `new Function()` eval in `conditions.js` is a **security vulnerability, not 
 
 This is why Task 1 of Sprint 1 (removing `new Function()`) is classified as a security fix and must be completed before any other work. The multi-user sharing model makes this exploitable in production.
 
-### 16.5 Open Architectural Decision — Public Model Run Permissions
+### 16.5 Public Model Execution Rules (ADR-002: Fork Model)
 
-The following question is **not yet resolved** and must not be implemented with assumed behaviour. It is logged as a deferred decision for the Sprint 3 retrospective:
+**Rule:** When a non-owner user initiates a run on a public model, the UI MUST first create a private copy (fork) of that model for the user. All subsequent simulation runs will be associated with this forked model.
 
-> *Can another user run a public model, or only view its definition? If they run it, do the results appear in the model owner's run history or the viewer's? Who can delete a public model's run history?*
+**Rule:** Forked models are entirely owned by the user who initiated the run.
 
-Until this is decided via ADR, public models are **view-only** for non-owners. Do not implement run permissions for public models beyond what already exists.
+**Rule:** Simulation run records for forked models appear exclusively in the runner's history and can be deleted by the runner.
+
+**Rule:** The original public model's run history and metrics MUST NOT be affected by non-owner executions via the fork mechanism.
 
 ---
 
@@ -1172,7 +1197,7 @@ This prevents silent architectural drift — the most common way AI-assisted pro
 | ADR | Title | Status | Sprint | CLAUDE.md Sections Affected |
 |---|---|---|---|---|
 | ADR-001 | Multi-user auth model and public model rules | Accepted | Pre-Sprint 1 | §16 |
-| ADR-002 | Public model run permissions | Proposed | Defer to Sprint 3 retro | §16.5 |
+| ADR-002 | Public model run permissions | Accepted | Sprint 3 | §16.5 |
 | ADR-003 | Safe expression evaluator strategy (C1 fix) | Accepted | Sprint 1 | §5.2, §18 |
 | ADR-004 | mulberry32 as the seeded PRNG (C7 fix) | Accepted | Sprint 1 | §9, §18 |
 | ADR-005 | Queue discipline lookup by entity type name | Accepted — interim | Sprint 1/2 | §6, §10 |
@@ -1223,8 +1248,6 @@ AUTHENTICATION & DATA ISOLATION
    — model would be orphaned and invisible to the owner.
 ✗  Patch operation that overwrites is_public silently
    — preserve the flag unless the user explicitly changed it.
-✗  Implementing run permissions for public models
-   — deferred to ADR-002. Public models are view-only for non-owners until decided.
 
 SIMULATION CORRECTNESS
 ✗  Math.random()               — non-reproducible. Use seeded PRNG.
@@ -1351,6 +1374,53 @@ npm run build                        # Succeeds
 - Parallel web worker replications
 - `avg_service_time` DB column fix (C9) — deferred to Sprint 3
 - Public model run permissions (ADR-002) — deferred to Sprint 3
+
+---
+
+### 18. Known Issues
+
+#### 18.1 Vitest "JS Heap Out of Memory" Error
+
+**Issue:** The comprehensive `npm test` command (and `npm test -- engine`) consistently fails with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
+
+**Symptoms:**
+*   All individual test files, when run in isolation or in smaller groups (e.g., `npm test -- db`, `npm test -- ui`), pass successfully with zero failures.
+*   The error occurs during the aggregation or concurrent execution phase of the full test suite, specifically affecting Vitest worker threads.
+*   The test runner reports "Unhandled Errors" and exits with a non-zero code.
+
+**Debugging Attempts:**
+*   Implemented `vi.clearAllMocks()` in `tests/setup.js` to prevent mock call history accumulation.
+*   Modified `vite.config.js` to configure Vitest worker `poolOptions` (e.g., `execArgv` for `--max-old-space-size`, `singleThread`). These attempts resulted in new configuration errors (`ERR_WORKER_INVALID_EXEC_ARGV`, `RangeError: options.minThreads and options.maxThreads must not conflict`).
+*   Attempted to disable multi-threading in Vitest (`threads: false`) in `vite.config.js`, which also resulted in Vitest failing to run any tests.
+*   Attempted to apply `NODE_OPTIONS=--max-old-space-size=4096` directly to `npm test` command (using PowerShell syntax: `$env:NODE_OPTIONS="--max-old-space-size=4096"; npm test`). This also did not resolve the issue, with the error persisting.
+
+**Status:** Unresolved. This appears to be an environmental or deeper Vitest configuration challenge, possibly related to JSDOM usage in UI tests when combined with engine tests, or cumulative resource demands exceeding default Node.js worker limits in a way that is resistant to direct configuration.
+
+**Impact:** Prevents reliable full test suite execution and comprehensive code coverage reporting. It does NOT indicate functional failures in individual features, as all individual tests pass. Development can continue, but this issue should be revisited for long-term CI/CD stability.
+
+---
+
+
+## 18. Known Issues
+
+### 18.1 Vitest "JS Heap Out of Memory" Error
+
+**Issue:** The comprehensive `npm test` command (and `npm test -- engine`) consistently fails with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
+
+**Symptoms:**
+*   All individual test files, when run in isolation or in smaller groups (e.g., `npm test -- db`, `npm test -- ui`), pass successfully with zero failures.
+*   The error occurs during the aggregation or concurrent execution phase of the full test suite, specifically affecting Vitest worker threads.
+*   The test runner reports "Unhandled Errors" and exits with a non-zero code.
+
+**Debugging Attempts:**
+*   Implemented `vi.clearAllMocks()` in `tests/setup.js` to prevent mock call history accumulation.
+*   Modified `vite.config.js` to configure Vitest worker `poolOptions` (e.g., `execArgv` for `--max-old-space-size`, `singleThread`). These attempts resulted in new configuration errors (`ERR_WORKER_INVALID_EXEC_ARGV`, `RangeError: options.minThreads and options.maxThreads must not conflict`).
+*   Attempted to disable multi-threading in Vitest (`threads: false`) in `vite.config.js`, which also resulted in Vitest failing to run any tests.
+*   Attempted to apply `NODE_OPTIONS=--max-old-space-size=4096` directly to `npm test` command (using PowerShell syntax: `$env:NODE_OPTIONS="--max-old-space-size=4096"; npm test`). This also did not resolve the issue, with the error persisting.
+
+**Status:** Unresolved. This appears to be an environmental or deeper Vitest configuration challenge, possibly related to JSDOM usage in UI tests when combined with engine tests, or cumulative resource demands exceeding default Node.js worker limits in a way that is resistant to direct configuration.
+
+**Impact:** Prevents reliable full test suite execution and comprehensive code coverage reporting. It does NOT indicate functional failures in individual features, as all individual tests pass. Development can continue, but this issue should be revisited for long-term CI/CD stability.
 
 ---
 

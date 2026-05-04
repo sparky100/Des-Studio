@@ -43,11 +43,15 @@ function toRow(model, userId) {
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
-export async function fetchModels() {
-  const { data, error } = await supabase
-    .from("des_models")
-    .select("*")
-    .order("updated_at", { ascending: false });
+export async function fetchModels(userId) {
+  let query = supabase.from("des_models").select("*");
+  if (userId) {
+    query = query.or(`owner_id.eq.${userId},visibility.eq.public,access->${userId}.is.not.null`);
+  } else {
+    query = query.eq("visibility", "public");
+  }
+  
+  const { data, error } = await query.order("updated_at", { ascending: false });
   if (error) throw error;
   if (data && data.length > 0 && data[0].queues === undefined) {
     console.warn(
@@ -147,5 +151,37 @@ export async function fetchRunHistory(modelId) {
     );
   }
   return data || [];
+}
+
+export async function forkModel(sourceModelId, newUserId, newName = "") {
+  // 1. Fetch the original model
+  const { data: sourceModel, error: fetchError } = await supabase
+    .from("des_models")
+    .select("*")
+    .eq("id", sourceModelId)
+    .single();
+  if (fetchError) throw fetchError;
+  if (!sourceModel) throw new Error("Source model not found.");
+
+  // 2. Prepare the new model row
+  const forkedModel = {
+    ...sourceModel,
+    id:             undefined, // New model, so no ID
+    owner_id:       newUserId,
+    name:           newName || `Fork of ${sourceModel.name}`,
+    visibility:     'private', // Forked models are always private
+    access:         {},        // Clear access rules
+    created_at:     undefined, // Supabase will set these
+    updated_at:     undefined,
+  };
+
+  // 3. Insert the new model
+  const { data, error: insertError } = await supabase
+    .from("des_models")
+    .insert(forkedModel)
+    .select()
+    .single();
+  if (insertError) throw insertError;
+  return norm(data);
 }
 

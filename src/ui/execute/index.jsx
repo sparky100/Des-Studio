@@ -1,12 +1,11 @@
 // ui/execute/index.jsx — CustomerToken, VisualView, ExecutePanel
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { C, FONT } from "../shared/tokens.js";
+import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildEngine } from "../../engine/index.js";
 import { saveSimulationRun } from "../../db/models.js";
 import { validateModel } from "../../engine/validation.js";
+import { ConditionBuilder } from "../editors/index.jsx";
 
-const TOKEN_COLORS = ["#06b6d4", "#f59e0b", "#8b5cf6", "#3fb950", "#f87171", "#a78bfa", "#34d399", "#fbbf24"];
 const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
 
 const CustomerToken = ({ entity, size = 36, showId = true }) => {
@@ -31,7 +30,7 @@ const ServerBay = ({ server, customers }) => {
   const borderCol = isB ? C.busy : C.idle;
   return (
     <div style={{
-      background: "#1a1a1a", border: `2px solid ${borderCol}44`, borderRadius: 10, padding: 14,
+      background: C.panel, border: `2px solid ${borderCol}44`, borderRadius: 10, padding: 14,
       display: "flex", flexDirection: "column", gap: 10, minWidth: 160, position: "relative"
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
@@ -62,7 +61,7 @@ const ServerBay = ({ server, customers }) => {
   );
 };
 
-const VisualView = ({ snap, model }) => {
+const VisualView = ({ snap, model, summary }) => {
   if (!snap) return <Empty icon="▶" msg="Run or step the simulation to see the visual view." />;
 
   const allEntities = snap.entities || [];
@@ -73,6 +72,25 @@ const VisualView = ({ snap, model }) => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {summary?.warmupPeriod > 0 && (
+        <div style={{ background: "#78350f22", border: `1px solid ${C.amber}44`, borderRadius: 8, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 16 }}>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: 9, color: "#888", fontWeight: 700 }}>WARM-UP DURATION</span>
+              <span style={{ fontSize: 14, color: C.amber, fontWeight: 700 }}>{summary.warmupPeriod}</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: 9, color: "#888", fontWeight: 700 }}>OBS. EXCLUDED</span>
+              <span style={{ fontSize: 14, color: C.reneged, fontWeight: 700 }}>{summary.excludedCount || 0}</span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <span style={{ fontSize: 9, color: "#888", fontWeight: 700 }}>OBS. INCLUDED</span>
+              <span style={{ fontSize: 14, color: C.served, fontWeight: 700 }}>{summary.total || 0}</span>
+            </div>
+          </div>
+          <div style={{ fontSize: 10, color: C.amber, fontWeight: 700, fontFamily: FONT, letterSpacing: 1 }}>WARM-UP AUDIT TRAIL</div>
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 16, alignItems: "start" }}>
         <div style={{ background: "#111", border: `2px solid #a855f744`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 140 }}>
           <div style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 2, marginBottom: 6 }}>SIM CLOCK</div>
@@ -139,23 +157,49 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
   const [warmupPeriod, setWarmupPeriod] = useState(0);
+  const [maxSimTime, setMaxSimTime] = useState(500);
+  const [terminationMode, setTerminationMode] = useState("time");
+  const [terminationCondition, setTerminationCondition] = useState(null);
+  const [replications, setReplications] = useState(1);
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
   const autoRef = useRef(null);
 
-  const validation = useMemo(() => validateModel(model), [model]);
+  const validation = useMemo(() => {
+    const v = validateModel({
+      ...model,
+      maxSimTime: terminationMode === 'time' ? maxSimTime : 0,
+      terminationCondition: terminationMode === 'condition' ? terminationCondition : null
+    });
+    
+    // F3.4 Additional Validations
+    if (terminationMode === 'time' && warmupPeriod >= maxSimTime) {
+      v.errors.push({ code: 'V14', message: 'Warm-up period must be less than the run duration.', tab: 'execute' });
+    }
+    if (!Number.isInteger(replications) || replications < 1) {
+      v.errors.push({ code: 'V15', message: 'Replication count must be a positive integer.', tab: 'execute' });
+    }
+    
+    return v;
+  }, [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
   const hasErrors = validation.errors.length > 0;
 
   const initEngine = useCallback(() => {
     if (hasErrors) return;
     runSeedRef.current = seed;
-    engineRef.current = buildEngine(model, seed, warmupPeriod);
+    engineRef.current = buildEngine(
+      model, 
+      seed, 
+      warmupPeriod, 
+      terminationMode === 'time' ? maxSimTime : null,
+      terminationMode === 'condition' ? terminationCondition : null
+    );
     setCurrentSnap(engineRef.current.getSnap());
     setLog([{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }]);
     setMode("stepping");
     setSaveStatus(null);
     setPhaseCTruncated(false);
-  }, [model, seed, hasErrors, warmupPeriod]);
+  }, [model, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
 
   const stopAuto = useCallback(() => {
     if (autoRef.current) {
@@ -187,7 +231,11 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
         
-        saveSimulationRun(modelId, userId, fullResult, { seed: runSeedRef.current, warmupPeriod })
+        saveSimulationRun(modelId, userId, fullResult, { 
+          seed: runSeedRef.current, 
+          warmupPeriod,
+          maxTime: terminationMode === 'time' ? maxSimTime : null
+        })
           .then(() => {
             setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
@@ -198,7 +246,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           });
       }
     }
-  }, [userId, modelId, warmupPeriod, stopAuto]);
+  }, [userId, modelId, warmupPeriod, maxSimTime, terminationMode, stopAuto]);
 
   const doRunAll = useCallback(async () => {
     stopAuto();
@@ -209,7 +257,13 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     }
 
     const runSeed = seed;
-    const engine = buildEngine(model, runSeed, warmupPeriod);
+    const engine = buildEngine(
+      model, 
+      runSeed, 
+      warmupPeriod,
+      terminationMode === 'time' ? maxSimTime : null,
+      terminationMode === 'condition' ? terminationCondition : null
+    );
     const result = engine.runAll();
 
     setCurrentSnap(result.snap);
@@ -221,14 +275,18 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing simulation history to database..." }]);
 
     try {
-      await saveSimulationRun(modelId, userId, result, { seed: runSeed, warmupPeriod });
+      await saveSimulationRun(modelId, userId, result, { 
+        seed: runSeed, 
+        warmupPeriod,
+        maxTime: terminationMode === 'time' ? maxSimTime : null
+      });
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
     } catch (e) {
       setSaveStatus({ state: 'error', message: `✗ Failed to save: ${e.message}` });
       setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
     }
-  }, [model, userId, modelId, seed, hasErrors, warmupPeriod, stopAuto]);
+  }, [model, userId, modelId, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, stopAuto]);
 
   const toggleAuto = () => {
     if (autoRunning) {
@@ -252,44 +310,103 @@ const ExecutePanel = ({ model, modelId, userId }) => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Experiment Controls Section */}
+      <div style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WARM-UP PERIOD</span>
+            <input
+              type="number"
+              value={warmupPeriod}
+              onChange={e => setWarmupPeriod(parseFloat(e.target.value) || 0)}
+              style={{ width: 100, background: "transparent", border: `1px solid ${C.border}`,
+                borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
+                padding: "6px 8px", outline: "none" }}
+            />
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>REPLICATIONS</span>
+            <input
+              type="number"
+              value={replications}
+              onChange={e => setReplications(parseInt(e.target.value) || 0)}
+              style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`,
+                borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
+                padding: "6px 8px", outline: "none" }}
+            />
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SEED</span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input
+                type="number"
+                value={seed}
+                onChange={e => setSeed(parseInt(e.target.value) || 0)}
+                style={{ width: 120, background: "transparent", border: `1px solid ${C.border}`,
+                  borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
+                  padding: "6px 8px", outline: "none" }}
+              />
+              <Btn small variant="ghost" onClick={() => setSeed(Math.floor(Math.random() * 1e9))}>rand</Btn>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>TERMINATION MODE</span>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", height: 32 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
+                <input type="radio" checked={terminationMode === "time"} onChange={() => setTerminationMode("time")} />
+                Time-based
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
+                <input type="radio" checked={terminationMode === "condition"} onChange={() => setTerminationMode("condition")} />
+                Condition-based
+              </label>
+            </div>
+          </div>
+
+          {terminationMode === "time" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN DURATION</span>
+              <input
+                type="number"
+                value={maxSimTime}
+                onChange={e => setMaxSimTime(parseFloat(e.target.value) || 0)}
+                style={{ width: 100, background: "transparent", border: `1px solid ${C.border}`,
+                  borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
+                  padding: "6px 8px", outline: "none" }}
+              />
+            </div>
+          )}
+        </div>
+
+        {terminationMode === "condition" && (
+          <div style={{ borderTop: `1px solid #333`, paddingTop: 14 }}>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 8 }}>STOP CONDITION</span>
+            <ConditionBuilder 
+              condition={terminationCondition}
+              entityTypes={model.entityTypes}
+              stateVariables={model.stateVariables}
+              queues={model.queues}
+              onChange={setTerminationCondition}
+            />
+          </div>
+        )}
+      </div>
+
       <div style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 14, display: "flex", gap: 10, alignItems: "center" }}>
         <Btn variant="primary" onClick={initEngine} disabled={hasErrors}>⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors}>⏭ Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors}>⚡ Run All</Btn>
         <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ fontSize: 10, color: "#666", fontFamily: FONT }}>warm-up:</span>
-            <input
-              type="number"
-              value={warmupPeriod}
-              onChange={e => setWarmupPeriod(parseFloat(e.target.value) || 0)}
-              style={{ width: 50, background: "transparent", border: "1px solid #333",
-                borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 11,
-                padding: "4px 6px", outline: "none" }}
-            />
-          </div>
-          <div style={{width: 1, height: 16, background: '#333'}}/>
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span style={{ fontSize: 10, color: "#666", fontFamily: FONT }}>seed:</span>
-            <input
-              type="number"
-              value={seed}
-            onChange={e => setSeed(parseInt(e.target.value) || 0)}
-            style={{ width: 80, background: "transparent", border: "1px solid #333",
-              borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 11,
-              padding: "4px 6px", outline: "none" }}
-          />
-          <Btn small variant="ghost" onClick={() => setSeed(Math.floor(Math.random() * 1e9))}>rand</Btn>
-          </div>
-          <div style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2 }}>
-            {["visual", "log", "entities"].map(v => (
-              <button key={v} onClick={() => setView(v)} style={{ padding: "6px 12px", background: view === v ? "#333" : "transparent", border: "none", color: view === v ? "#fff" : "#888", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
-                {v.charAt(0).toUpperCase() + v.slice(1)}
-              </button>
-            ))}
-          </div>
+        <div style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2 }}>
+          {["visual", "log", "entities"].map(v => (
+            <button key={v} onClick={() => setView(v)} style={{ padding: "6px 12px", background: view === v ? "#333" : "transparent", border: "none", color: view === v ? "#fff" : "#888", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
+              {v.charAt(0).toUpperCase() + v.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -320,12 +437,12 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         </div>
       )}
 
-      {phaseCTruncated && (
-        <div style={{ background: '#78350f', border: '1px solid #d97706', borderRadius: 6, padding: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#fde68a', fontFamily: FONT }}>
-            Phase C scan hit the 500-pass cap — model may have an unstable or conflicting C-event condition
+      {phaseCTruncated && model.maxCPasses && (
+        <div style={{ background: C.amber + '18', border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, fontFamily: FONT }}>
+            Phase C scan hit the {model.maxCPasses}-pass cap — model may have an unstable or conflicting C-event condition
           </div>
-          <div style={{ fontSize: 11, color: '#fde68a', fontFamily: FONT, marginTop: 4, opacity: 0.8 }}>
+          <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, marginTop: 4, opacity: 0.8 }}>
             Check your C-event conditions for cycles or conditions that never become false.
           </div>
         </div>
@@ -342,7 +459,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         </div>
       )}
 
-      {view === "visual" && <VisualView snap={currentSnap} model={model} />}
+      {view === "visual" && <VisualView snap={currentSnap} model={model} summary={results?.summary} />}
 
       {view === "log" && (
         <div style={{ background: "#050505", border: `1px solid #333`, borderRadius: 6, padding: 14 }}>
@@ -355,8 +472,15 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           <div style={{ maxHeight: 350, overflowY: 'auto' }}>
             {log.length === 0 ? <div style={{ color: "#444", fontSize: 12 }}>Log empty. Run simulation to see events.</div> :
               [...log].reverse().map((r, i) => (
-                <div key={i} style={{ fontSize: 12, fontFamily: "monospace", color: "#10b981", borderBottom: "1px solid #1a1a1a", padding: "4px 0" }}>
-                  <span style={{ color: "#666" }}>[t={r.time?.toFixed(2)}]</span> <PhaseTag phase={r.phase} /> {r.message}
+                <div key={i}>
+                  {r.phase === "WARMUP" && (
+                    <div style={{ padding: "12px 0", borderBottom: "1px solid #333", borderTop: "1px solid #333", margin: "8px 0", textAlign: "center", color: C.amber, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, background: "#78350f22" }}>
+                      ──── WARM-UP ENDED AT T={r.time?.toFixed(2)} ────
+                    </div>
+                  )}
+                  <div style={{ fontSize: 12, fontFamily: "monospace", color: r.phase === "WARMUP" ? C.amber : "#10b981", borderBottom: "1px solid #1a1a1a", padding: "4px 0" }}>
+                    <span style={{ color: "#666" }}>[t={r.time?.toFixed(2)}]</span> <PhaseTag phase={r.phase} /> {r.message}
+                  </div>
                 </div>
               ))
             }

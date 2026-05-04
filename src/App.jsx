@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase }                         from "./db/supabase.js";
 import { fetchModels, fetchProfiles,
          saveModel, deleteModel,
-         setVisibility, setAccess }         from "./db/models.js";
+         setVisibility, setAccess, forkModel }         from "./db/models.js";
 import { C, FONT, GOOGLE_FONT_URL }         from "./ui/shared/tokens.js";
 import { Btn, Empty }                       from "./ui/shared/components.jsx";
 import { ModelCard, ModelDetail,
@@ -79,6 +79,8 @@ export default function App(){
   const [showNew,setShowNew]=useState(false)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
+  const [showForkConfirm,setShowForkConfirm]=useState(false)
+  const [modelToFork,setModelToFork]=useState(null)
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -96,7 +98,7 @@ export default function App(){
     if(!session)return
     setLoading(true);setError('')
     try{
-      const [mods,profs]=await Promise.all([fetchModels(),fetchProfiles()])
+      const [mods,profs]=await Promise.all([fetchModels(session.user.id),fetchProfiles()])
       setModels(mods);setProfiles(profs)
       setProfile(profs.find(p=>p.id===session.user.id)||null)
     }catch(e){setError(e.message)}
@@ -107,6 +109,35 @@ export default function App(){
 
   const uid=session?.user?.id
   const signOut=()=>supabase.auth.signOut()
+
+  const handleOpenModel = useCallback((model) => {
+    if (model.owner_id !== uid && model.visibility === 'public') {
+      setModelToFork(model);
+      setShowForkConfirm(true);
+    } else {
+      setOpenId(model.id);
+    }
+  }, [uid]);
+
+  const confirmFork = useCallback(async () => {
+    if (!modelToFork || !uid) return;
+    setLoading(true);setError('');setShowForkConfirm(false);
+    try {
+      const newModel = await forkModel(modelToFork.id, uid, `Fork of ${modelToFork.name}`);
+      await loadData();
+      setOpenId(newModel.id);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+      setModelToFork(null);
+    }
+  }, [modelToFork, uid, loadData]);
+
+  const cancelFork = useCallback(() => {
+    setShowForkConfirm(false);
+    setModelToFork(null);
+  }, []);
 
   if(!session)return <AuthScreen/>
 
@@ -143,6 +174,7 @@ export default function App(){
             onDelete:async(id)=>{await deleteModel(id)},
             onSetVisibility:setVisibility,
             onSetAccess:setAccess,
+            onFork:confirmFork, // Add onFork to ModelDetail overrides
           }}
         />
       </div>
@@ -182,12 +214,12 @@ export default function App(){
         {tab==='my'&&(myModels.length===0
           ?<Empty icon="📐" msg="No models yet. Create your first DES model."/>
           :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:14}}>
-            {myModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>setOpenId(m.id)} profiles={profiles}/>)}
+            {myModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>handleOpenModel(m)} profiles={profiles}/>)}
           </div>)}
         {tab==='public'&&(pubModels.length===0
           ?<Empty icon="🌐" msg="No public models available."/>
           :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:14}}>
-            {pubModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>setOpenId(m.id)} profiles={profiles}/>)}
+            {pubModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>handleOpenModel(m)} profiles={profiles}/>)}
           </div>)}
       </div>
       {showNew&&(
@@ -196,6 +228,18 @@ export default function App(){
           await loadData()
           setOpenId(m.id)
         }}/>
+      )}
+      {showForkConfirm && modelToFork && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#000000aa',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+          <div style={{background:C.panel,padding:24,borderRadius:10,width:400,maxWidth:'90vw',display:'flex',flexDirection:'column',gap:20}}>
+            <h2 style={{fontSize:18,fontWeight:700,color:C.text}}>Run Public Model</h2>
+            <p style={{fontSize:13,color:C.muted}}>To run "{modelToFork.name}", a private copy will be created in your library. You will own this copy and its run history.</p>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:10}}>
+              <Btn variant="ghost" onClick={cancelFork}>Cancel</Btn>
+              <Btn variant="primary" onClick={confirmFork}>Fork & Run</Btn>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -31,6 +31,8 @@ export const FONT = "'JetBrains Mono','Fira Code',monospace";
 export const GOOGLE_FONT_URL =
   "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap";
 
+export const TOKEN_COLORS = ["#06b6d4", "#f59e0b", "#8b5cf6", "#3fb950", "#f87171", "#a78bfa", "#34d399", "#fbbf24"];
+
 // Utility: title-case a string
 export const toTitleCase = s =>
   (s || '').trim().replace(/\b\w/g, c => c.toUpperCase());

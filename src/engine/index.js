@@ -15,10 +15,12 @@ import { fireBEvent, fireCEvent }              from "./phases.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
-export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
+export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500) {
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
-  const rng = mulberry32(seed ?? 0);
+  const rng = mulberry32(seed);
   let _warmupComplete = false;
+  let _terminationConditionMet = false;
+  let _excludedCount = 0;
 
   // ── Initialise scalar state ───────────────────────────────────────────────
   const state = { __served: 0, __reneged: 0 };
@@ -69,8 +71,10 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
   let clock = 0;
   const log = [];
 
+  const INITIAL_FEL_MAX_SCHEDULED_TIME = 900; // Arbitrary limit for initial B-Events
+
   let fel = (model.bEvents || [])
-    .filter(ev => parseFloat(ev.scheduledTime) < 900)
+    .filter(ev => parseFloat(ev.scheduledTime) < INITIAL_FEL_MAX_SCHEDULED_TIME)
     .map(ev => ({ ...ev, scheduledTime: parseFloat(ev.scheduledTime) || 0 }));
 
   if (warmupPeriod > 0) {
@@ -91,12 +95,14 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
     helpers: makeHelpers(entities),
     nextId,
     rng,
-    _lastCustId: null,
-    _lastSrvId:  null,
   });
 
   // ── step(): one Phase A → B → C cycle ────────────────────────────────────
   function step() {
+    if (_terminationConditionMet) {
+      return { done: true, cycleLog: [], snap: snap(clock) };
+    }
+
     if (fel.length === 0) {
       log.push({ phase: "END", time: clock, message: "FEL empty — simulation complete", snap: snap(clock) });
       return { done: true, cycleLog: [{ phase: "END", time: clock, message: "FEL empty" }], snap: snap(clock) };
@@ -105,7 +111,30 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
     const cycleLog = [];
 
     // Phase A — advance clock
-    clock = fel[0].scheduledTime;
+    const nextTime = fel[0].scheduledTime;
+
+    // Time-based termination check (before advancing clock)
+    if (maxSimTime !== null && nextTime > maxSimTime) {
+      clock = maxSimTime;
+      _terminationConditionMet = true;
+      const msg = `Run limit reached (t=${maxSimTime.toFixed(3)}) — simulation complete`;
+      log.push({ phase: "END", time: clock, message: msg, snap: snap(clock) });
+      return { done: true, cycleLog: [{ phase: "END", time: clock, message: msg }], snap: snap(clock) };
+    }
+
+    clock = nextTime;
+
+    // Condition-based termination check
+    if (terminationCondition) {
+      const h = makeHelpers(entities);
+      if (evalCondition(terminationCondition, h, state, clock)) {
+        _terminationConditionMet = true;
+        const msg = "Termination condition met — simulation complete";
+        log.push({ phase: "END", time: clock, message: msg, snap: snap(clock) });
+        return { done: true, cycleLog: [{ phase: "END", time: clock, message: msg }], snap: snap(clock) };
+      }
+    }
+
     cycleLog.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}` });
     log.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}`, snap: snap(clock) });
 
@@ -127,7 +156,10 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
             catch { state[sv.name] = sv.initialValue; }
           }
         }
+        const beforeCount = entities.filter(e => e.role !== 'server').length;
         entities = entities.filter(e => e.role === 'server' || (e.status !== 'done' && e.status !== 'reneged'));
+        const afterCount = entities.filter(e => e.role !== 'server').length;
+        _excludedCount = beforeCount - afterCount;
         continue; // Proceed to next due event
       }
 
@@ -149,7 +181,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
       .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999));
 
     let cFired = true, cPass = 0;
-    while (cFired && cPass < 500) {
+    while (cFired && cPass < maxCPasses) {
       cFired = false; cPass++;
       for (const ev of sortedCEvents) {
         const h = makeHelpers(entities);
@@ -174,9 +206,20 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
     // cFired=true at loop exit means the cap stopped an in-progress scan — truncated
     const phaseCTruncated = cFired;
     if (phaseCTruncated) {
-      const truncMsg = `Phase C truncated after 500 passes at t=${clock.toFixed(3)} — model may have an unstable condition`;
+      const truncMsg = `Phase C truncated after ${maxCPasses} passes at t=${clock.toFixed(3)} — model may have an unstable condition`;
       cycleLog.push({ phase: "C", time: clock, message: truncMsg });
       log.push({ phase: "C", time: clock, message: truncMsg, snap: snap(clock) });
+    }
+
+    // Condition-based termination check (post-step)
+    if (terminationCondition) {
+      const h = makeHelpers(entities);
+      if (evalCondition(terminationCondition, h, state, clock)) {
+        _terminationConditionMet = true;
+        const msg = "Termination condition met — simulation complete";
+        log.push({ phase: "END", time: clock, message: msg, snap: snap(clock) });
+        return { done: true, cycleLog: [...cycleLog, { phase: "END", time: clock, message: msg }], snap: snap(clock), felSize: fel.length, phaseCTruncated };
+      }
     }
 
     return { done: false, cycleLog, snap: snap(clock), felSize: fel.length, phaseCTruncated };
@@ -186,13 +229,27 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
   function runAll() {
     let c = 0;
     let anyPhaseCTruncated = false;
-    while (fel.length > 0 && c < maxCycles) {
+
+    // Initial termination check
+    if (terminationCondition) {
+      const h = makeHelpers(entities);
+      if (evalCondition(terminationCondition, h, state, clock)) {
+        _terminationConditionMet = true;
+        log.push({ phase: "END", time: clock, message: "Termination condition met at start", snap: snap(clock) });
+      }
+    }
+
+    while (fel.length > 0 && c < maxCycles && !_terminationConditionMet) {
       c++;
       const r = step();
       if (r.phaseCTruncated) anyPhaseCTruncated = true;
       if (r.done) break;
     }
-    log.push({ phase: "END", time: clock, message: "Simulation complete", snap: snap(clock) });
+    if (!_terminationConditionMet && c >= maxCycles) {
+      log.push({ phase: "END", time: clock, message: `Cycle limit reached (${maxCycles}) — simulation halted`, snap: snap(clock) });
+    } else if (fel.length === 0 && !_terminationConditionMet) {
+      log.push({ phase: "END", time: clock, message: "FEL empty — simulation complete", snap: snap(clock) });
+    }
 
     const customers    = entities.filter(e => e.role !== "server");
     const served       = customers.filter(e => e.status === "done");
@@ -222,6 +279,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
         avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
         maxSojourn:        maxSojourn!= null ? +maxSojourn.toFixed(4): null,
         phaseCTruncated:   anyPhaseCTruncated,
+        warmupPeriod,
+        excludedCount:     _excludedCount,
       },
       entitySummary: entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
     };
