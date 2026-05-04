@@ -157,7 +157,13 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     setPhaseCTruncated(false);
   }, [model, seed, hasErrors, warmupPeriod]);
 
-  const stopAuto = () => { if (autoRef.current) { clearInterval(autoRef.current); autoRef.current = null; setAutoRunning(false); } };
+  const stopAuto = useCallback(() => {
+    if (autoRef.current) {
+      clearInterval(autoRef.current);
+      autoRef.current = null;
+      setAutoRunning(false);
+    }
+  }, []);
 
   const doStep = useCallback(() => {
     if (!engineRef.current) return;
@@ -192,7 +198,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           });
       }
     }
-  }, [userId, modelId]);
+  }, [userId, modelId, warmupPeriod, stopAuto]);
 
   const doRunAll = useCallback(async () => {
     stopAuto();
@@ -222,7 +228,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
       setSaveStatus({ state: 'error', message: `✗ Failed to save: ${e.message}` });
       setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
     }
-  }, [model, userId, modelId, seed, hasErrors]);
+  }, [model, userId, modelId, seed, hasErrors, warmupPeriod, stopAuto]);
 
   const toggleAuto = () => {
     if (autoRunning) { stopAuto(); return; }
