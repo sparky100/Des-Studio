@@ -548,30 +548,9 @@ function buildEngine(model, seed, maxCycles = 500) { ... }
 ---
 
 
-## 18. Known Issues
+## 10. Known Issues
 
-### 18.1 Vitest "JS Heap Out of Memory" Error
-
-**Issue:** Historical issue: the comprehensive `npm test` command (and `npm test -- engine`) previously failed with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
-
-**Symptoms:**
-*   All individual test files, when run in isolation or in smaller groups (e.g., `npm test -- db`, `npm test -- ui`), pass successfully with zero failures.
-*   The error occurs during the aggregation or concurrent execution phase of the full test suite, specifically affecting Vitest worker threads.
-*   The test runner reports "Unhandled Errors" and exits with a non-zero code.
-
-**Debugging Attempts:**
-*   Implemented `vi.clearAllMocks()` in `tests/setup.js` to prevent mock call history accumulation.
-*   Modified `vite.config.js` to configure Vitest worker `poolOptions` (e.g., `execArgv` for `--max-old-space-size`, `singleThread`). These attempts resulted in new configuration errors (`ERR_WORKER_INVALID_EXEC_ARGV`, `RangeError: options.minThreads and options.maxThreads must not conflict`).
-*   Attempted to disable multi-threading in Vitest (`threads: false`) in `vite.config.js`, which also resulted in Vitest failing to run any tests.
-*   Attempted to apply `NODE_OPTIONS=--max-old-space-size=4096` directly to `npm test` command (using PowerShell syntax: `$env:NODE_OPTIONS="--max-old-space-size=4096"; npm test`). This also did not resolve the issue, with the error persisting.
-
-**Status:** Resolved 2026-05-04. The root cause was not Vitest configuration: two open-ended seeded engine tests ran `buildEngine(...).runAll()` without a simulation time bound. Because the engine records full snapshots in the log and arrivals keep growing the entity pool, those tests exhausted worker memory during collection/execution. The fix bounded those test runs with `maxSimTime = 50` and moved stale top-level `runAll()` calls into `beforeAll()`.
-
-**Impact:** Full test suite execution is reliable again. Verification: `npm test` passes 17 test files / 272 tests with zero unhandled worker errors.
-
----
-
-## 19. Reference Documents
+### 10.1 Audit Tracker
 
 These are open defects from the audit. Do not work around them — fix them.
 
@@ -1037,7 +1016,7 @@ Key tables in Supabase. Do not change column names without updating `src/db/mode
 | Table | Key Columns | Notes |
 |---|---|---|
 | `models` | `id`, `name`, `user_id`, `model_json`, `is_public`, `created_at` | `model_json` is JSONB — full model stored here |
-| `runs` | `id`, `model_id`, `seed`, `replications`, `max_simulation_time`, `results_json`, `created_at` | `replications` currently always written as `1`. `seed` currently always `null`. Fix in Sprint 1. |
+| `runs` | `id`, `model_id`, `seed`, `replications`, `max_simulation_time`, `results_json`, `created_at` | Sprint 4 persists one row per replication batch. `batch_id` is stored in `results_json.batch_id` because no committed schema column exists. |
 | `profiles` | `id`, `username`, `avatar_url` | Linked to Supabase Auth `auth.users` |
 
 **Schema rules:**
@@ -1201,6 +1180,7 @@ This prevents silent architectural drift — the most common way AI-assisted pro
 | ADR-003 | Safe expression evaluator strategy (C1 fix) | Accepted | Sprint 1 | §5.2, §18 |
 | ADR-004 | mulberry32 as the seeded PRNG (C7 fix) | Accepted | Sprint 1 | §9, §18 |
 | ADR-005 | Queue discipline lookup by entity type name | Accepted — interim | Sprint 1/2 | §6, §10 |
+| ADR-006 | Replication runner architecture | Accepted | Sprint 4 | §21 |
 
 ---
 
@@ -1294,116 +1274,52 @@ UI / UX
 | Sprint | Status | Completed | Description | Tests | M/M/1 |
 |---|---|---|---|---|---|
 | Sprint 1 | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening | 182 passing | 1.48% error |
+| Sprint 2 | ✅ Complete | 2026-05-03 | UI editor completeness | 215 passing | N/A |
+| Sprint 3 | ✅ Complete | 2026-05-04 | Experiment controls: warm-up, termination, fork model | 272 passing | 1.48% error |
+| Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results: workers, batches, CI dashboard | 294 passing | CI contains 9.0 |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 2 — Queue Discipline Correctness + Run Controls**
+**Sprint 5 — Polish, Export & Production**
 
-Goal: Fix the broken queue discipline bindings uncovered in the Sprint 1 retrospective (G1, G2), then add the run controls — termination criteria, warm-up, and multi-replication — that real-world models require. The exit gate is a passing multi-replication M/M/1 test with mean ± 95% CI within 5% of the analytical value.
+Goal: Production-ready release. Error handling, import/export, accessibility, onboarding, model deletion, run-history/stat fixes, and results export polish.
 
-### Task Order (strict — do not reorder)
+**Prerequisites:** Sprint 4 exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 5 feature prompts.
 
-**Task 1 — Formalise queue-to-event binding (G1, G2 — ADR-005)**
-- Add a `queueId` field to C-Event action rows in the model schema
-- Update the C-Event editor to show a queue picker when the action is SEIZE
-- Replace the name-match heuristic in `macros.js` with a direct `queueId` lookup
-- Fix `waitingOf()` call in `evalCondition()` (conditions.js:154) to pass the correct discipline
-- Fix `waitingOf()` call in the RENEGE macro (macros.js:272) to pass the correct discipline
-- Remove the `firedThisPass` dead-code Set from Phase C (G3)
-- Write tests confirming LIFO and PRIORITY are applied correctly end-to-end
+### Recently Completed — Sprint 4
 
-**Task 2 — Time-based and condition-based termination**
-- Add `maxSimTime` parameter to `buildEngine` — engine stops when `clock >= maxSimTime`
-- Add `stopCondition` parameter — a condition string evaluated each Phase A; engine stops when true
-- Expose both fields in the Execute panel UI
-- Update validation: if neither `maxSimTime` nor a natural FEL-empty termination exists, warn the modeller
-- Write engine tests for both termination modes
+Sprint 4 completed on 2026-05-04.
 
-**Task 3 — Seeded multi-replication runner**
-- Add a `replications` field to the Execute panel (integer ≥ 1, default 1)
-- When replications > 1, run `buildEngine(model, baseSeed + i, maxCycles)` for `i = 0..N-1`
-- Collect per-replication `avgWait`, `avgSvc`, `served` into a results array
-- Compute mean and 95% CI (t-distribution, `n-1` degrees of freedom) for each summary stat
-- Display results table: per-replication column + mean ± CI row
-- Persist the full replication results array to `runs.results_json`; persist `seed` as `baseSeed` and `replications` count
-- Write a test confirming 10 replications of the M/M/1 fixture produce a mean within 5% of the analytical value
+- Added `src/engine/worker.js` as a thin Web Worker wrapper around `buildEngine()`.
+- Added `src/engine/replication-runner.js` with a bounded worker pool, deterministic per-replication seeds, progress callbacks, cancellation, and compacted result payloads to avoid retaining full per-replication snapshot logs.
+- Added `src/engine/statistics.js` for running mean, sample variance/std dev, and 95% CI with t-critical lookup for small N.
+- Extended `src/ui/execute/index.jsx` with multi-replication execution, live batch progress, per-replication result rows, aggregate CI table, cancellation, and single-run compatibility.
+- Extended `src/db/models.js` so replication batches persist once with per-replication and aggregate CI data in `results_json`.
+- Stored `batch_id` in `results_json.batch_id` rather than a top-level column because no committed schema/migration confirms a `batch_id` database column.
 
-**Task 4 — Warm-up period**
-- Add `warmupTime` parameter to `buildEngine` (default 0 — no warm-up)
-- At `clock >= warmupTime`, reset all stats collectors (`__served`, `__reneged`, per-entity sojourn accumulation) without clearing entity state or the FEL
-- Expose `warmupTime` field in Execute panel UI alongside `maxSimTime`
-- Write a test confirming that stats recorded before `warmupTime` are excluded from summary output
+### Sprint 4 Completion Gate
 
-**Task 5 — C-Event priority as explicit integer field**
-- Add a `priority` integer field to each C-Event in the model schema (default: position in array, 1-indexed)
-- Display and edit the priority field in `CEventEditor` as a numbered input
-- `engine/index.js` Phase C: sort `model.cEvents` by `ev.priority` ascending before the scan (lower = higher priority)
-- Add drag-to-reorder to the C-Event list in the editor; priority numbers update automatically on reorder
-- Update the relevant engine test: restart rule test must use explicit priority values, not array order
-
-**Task 6 — ConditionBuilder token staleness (C8)**
-- Fix `editors/index.jsx:495`: add `entityTypes` and `stateVariables` to the `useMemo` / `useEffect` dependency array for the token list in `ConditionBuilder`
-- Write a UI test confirming that adding an entity type while the C-Event editor is open immediately makes the new type's tokens available in the condition picker
-
-**Task 7 — Remove `mulberry32(0)` default parameter (G4)**
-- Remove the default `= mulberry32(0)` from `sample()` and `sampleAttrs()` in `distributions.js`
-- Make the `rng` parameter required (no default)
-- Any call site that currently relies on the default must be updated to pass an explicit RNG
-- Confirm `grep -rn "mulberry32(0)" src/engine/` returns nothing after the fix
-
-### Completion Gate
-
-```bash
-npm test -- --run                    # All tests pass (182 + new Sprint 2 tests)
-npm test -- ui                       # UI test suite passes (Sprint 2 adds jsdom tests)
-node tests/engine/mm1_benchmark.js   # Still exits 0
-npm run build                        # Succeeds
-# M/M/1 multi-replication gate (new):
-# Run 10 replications of M/M/1 (λ=0.9, μ=1.0) via the UI or a script
-# Mean wait across replications must be within 5% of 9.0 time units
-# 95% CI must include 9.0
+```text
+npm test       -> 22 files, 294 tests passed
+npm run build  -> succeeds and emits worker bundle
+30-replication M/M/1 CI gate -> 95% CI contains analytical mean wait 9.0
 ```
 
-### Out of Scope for Sprint 2
+### Sprint 4 Architectural Decisions
 
-- Undo/redo history stack
-- Visual DAG canvas (React Flow)
-- Export features (CSV, JSON)
-- Parallel web worker replications
-- `avg_service_time` DB column fix (C9) — deferred to Sprint 3
-- Public model run permissions (ADR-002) — deferred to Sprint 3
-
----
-
-### 18. Known Issues
-
-#### 18.1 Vitest "JS Heap Out of Memory" Error
-
-**Issue:** Historical issue: the comprehensive `npm test` command (and `npm test -- engine`) previously failed with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
-
-**Symptoms:**
-*   All individual test files, when run in isolation or in smaller groups (e.g., `npm test -- db`, `npm test -- ui`), pass successfully with zero failures.
-*   The error occurs during the aggregation or concurrent execution phase of the full test suite, specifically affecting Vitest worker threads.
-*   The test runner reports "Unhandled Errors" and exits with a non-zero code.
-
-**Debugging Attempts:**
-*   Implemented `vi.clearAllMocks()` in `tests/setup.js` to prevent mock call history accumulation.
-*   Modified `vite.config.js` to configure Vitest worker `poolOptions` (e.g., `execArgv` for `--max-old-space-size`, `singleThread`). These attempts resulted in new configuration errors (`ERR_WORKER_INVALID_EXEC_ARGV`, `RangeError: options.minThreads and options.maxThreads must not conflict`).
-*   Attempted to disable multi-threading in Vitest (`threads: false`) in `vite.config.js`, which also resulted in Vitest failing to run any tests.
-*   Attempted to apply `NODE_OPTIONS=--max-old-space-size=4096` directly to `npm test` command (using PowerShell syntax: `$env:NODE_OPTIONS="--max-old-space-size=4096"; npm test`). This also did not resolve the issue, with the error persisting.
-
-**Status:** Resolved 2026-05-04. The root cause was not Vitest configuration: two open-ended seeded engine tests ran `buildEngine(...).runAll()` without a simulation time bound. Because the engine records full snapshots in the log and arrivals keep growing the entity pool, those tests exhausted worker memory during collection/execution. The fix bounded those test runs with `maxSimTime = 50` and moved stale top-level `runAll()` calls into `beforeAll()`.
-
-**Impact:** Full test suite execution is reliable again. Verification: `npm test` passes 17 test files / 272 tests with zero unhandled worker errors.
+- Use a bounded Web Worker pool rather than one worker per replication.
+- Use local runner callbacks for same-browser live progress; persist final batch results to Supabase.
+- Store one run row per replication batch with per-replication results and aggregate CI in `results_json`.
+- Provide cancellation for active replication batches.
+- See `docs/decisions/ADR-006-replication-runner-architecture.md`.
 
 ---
 
+## 22. Historical Test Issues
 
-## 18. Known Issues
-
-### 18.1 Vitest "JS Heap Out of Memory" Error
+### 22.1 Vitest "JS Heap Out of Memory" Error
 
 **Issue:** Historical issue: the comprehensive `npm test` command (and `npm test -- engine`) previously failed with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
 

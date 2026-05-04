@@ -3,11 +3,52 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildEngine } from "../../engine/index.js";
+import { runReplications } from "../../engine/replication-runner.js";
+import { summarizeReplicationResults } from "../../engine/statistics.js";
 import { saveSimulationRun } from "../../db/models.js";
 import { validateModel } from "../../engine/validation.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 
 const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
+const CI_METRICS = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.served", "summary.reneged"];
+const METRIC_LABELS = {
+  "summary.avgWait": "Avg wait",
+  "summary.avgSvc": "Avg service",
+  "summary.avgSojourn": "Avg sojourn",
+  "summary.served": "Served",
+  "summary.reneged": "Reneged",
+};
+
+const fmt = (value, digits = 2) => Number.isFinite(value) ? value.toFixed(digits) : "—";
+const makeBatchId = () => {
+  const cryptoApi = globalThis.crypto;
+  if (typeof cryptoApi?.randomUUID === "function") {
+    return cryptoApi.randomUUID();
+  }
+  return `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+};
+
+function makeBatchResult(replicationPayloads, aggregateStats, maxTime, warmupPeriod) {
+  const summaries = replicationPayloads.map(payload => payload.result?.summary || {});
+  const total = summaries.reduce((sum, summary) => sum + (summary.total || 0), 0);
+  const served = summaries.reduce((sum, summary) => sum + (summary.served || 0), 0);
+  const reneged = summaries.reduce((sum, summary) => sum + (summary.reneged || 0), 0);
+  const finalTime = Math.max(...replicationPayloads.map(payload => payload.result?.finalTime || 0), 0);
+
+  return {
+    snap: { clock: finalTime },
+    summary: {
+      total,
+      served,
+      reneged,
+      avgWait: aggregateStats["summary.avgWait"]?.mean ?? null,
+      avgSvc: aggregateStats["summary.avgSvc"]?.mean ?? null,
+      avgSojourn: aggregateStats["summary.avgSojourn"]?.mean ?? null,
+      warmupPeriod,
+      maxSimTime: maxTime,
+    },
+  };
+}
 
 const CustomerToken = ({ entity, size = 36, showId = true }) => {
   const col = tokenColor(entity.id);
@@ -157,6 +198,10 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   const [saveStatus, setSaveStatus] = useState(null);
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
   const [results, setResults] = useState(null);
+  const [batchStatus, setBatchStatus] = useState("idle");
+  const [batchProgress, setBatchProgress] = useState(null);
+  const [replicationResults, setReplicationResults] = useState([]);
+  const [aggregateStats, setAggregateStats] = useState({});
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
   const [warmupPeriod, setWarmupPeriod] = useState(0);
   const [maxSimTime, setMaxSimTime] = useState(500);
@@ -166,6 +211,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
   const autoRef = useRef(null);
+  const runnerRef = useRef(null);
 
   const validation = useMemo(() => {
     const v = validateModel({
@@ -202,6 +248,10 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     setSaveStatus(null);
     setPhaseCTruncated(false);
     setResults(null);
+    setBatchStatus("idle");
+    setBatchProgress(null);
+    setReplicationResults([]);
+    setAggregateStats({});
   }, [model, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
 
   const stopAuto = useCallback(() => {
@@ -261,12 +311,109 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     }
 
     const runSeed = seed;
+    const maxTimeForRun = terminationMode === 'time' ? maxSimTime : null;
+    const stopConditionForRun = terminationMode === 'condition' ? terminationCondition : null;
+
+    if (replications > 1) {
+      const batchId = makeBatchId();
+      const completedPayloads = [];
+
+      setMode("running");
+      setCurrentSnap(null);
+      setResults(null);
+      setLog([{ phase: "INIT", time: 0, message: `Replication batch started  (N=${replications}, base seed: ${runSeed})` }]);
+      setSaveStatus(null);
+      setPhaseCTruncated(false);
+      setBatchStatus("running");
+      setBatchProgress({ completed: 0, total: replications, running: 0, pending: replications, cancelled: false, workerCount: 0 });
+      setReplicationResults([]);
+      setAggregateStats({});
+
+      runnerRef.current = runReplications({
+        model,
+        replications,
+        baseSeed: runSeed,
+        warmupPeriod,
+        maxSimTime: maxTimeForRun,
+        terminationCondition: stopConditionForRun,
+        onProgress: progress => setBatchProgress(progress),
+        onReplicationComplete: payload => {
+          completedPayloads[payload.replicationIndex] = payload;
+          const ordered = completedPayloads.filter(Boolean);
+          const nextStats = summarizeReplicationResults(ordered, CI_METRICS);
+
+          setReplicationResults(ordered);
+          setAggregateStats(nextStats);
+          setCurrentSnap(payload.result?.snap || null);
+          setLog(prev => [
+            ...prev,
+            {
+              phase: "REP",
+              time: payload.result?.finalTime || 0,
+              message: `Replication ${payload.replicationIndex + 1}/${replications} complete  (seed: ${payload.seed})`,
+            },
+          ]);
+          if (payload.result?.summary?.phaseCTruncated) setPhaseCTruncated(true);
+        },
+        onComplete: async payloads => {
+          const ordered = payloads.filter(Boolean);
+          const stats = summarizeReplicationResults(ordered, CI_METRICS);
+          const batchResult = makeBatchResult(ordered, stats, maxTimeForRun, warmupPeriod);
+
+          setBatchStatus("complete");
+          setResults(batchResult);
+          setAggregateStats(stats);
+          setSaveStatus({ state: 'saving', message: 'Saving replication batch...' });
+
+          try {
+            await saveSimulationRun(modelId, userId, batchResult, {
+              seed: runSeed,
+              replications,
+              warmupPeriod,
+              maxTime: maxTimeForRun,
+              batchId,
+              aggregateStats: stats,
+              replicationResults: ordered.map(payload => ({
+                replicationIndex: payload.replicationIndex,
+                seed: payload.seed,
+                summary: payload.result?.summary || {},
+                finalTime: payload.result?.finalTime,
+              })),
+            });
+            setSaveStatus({ state: 'success', message: '✓ Replication batch saved successfully!' });
+            setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved." }]);
+          } catch (e) {
+            setSaveStatus({ state: 'error', message: `✗ Failed to save batch: ${e.message}` });
+            setLog(prev => [...prev, { phase: "ERROR", time: batchResult.snap.clock, message: `Database error: ${e.message}` }]);
+          } finally {
+            runnerRef.current = null;
+            setMode("done");
+          }
+        },
+        onError: error => {
+          setBatchStatus("error");
+          setSaveStatus({ state: 'error', message: `✗ Replication failed: ${error.message}` });
+          setLog(prev => [...prev, { phase: "ERROR", time: 0, message: `Replication ${error.replicationIndex + 1} failed: ${error.message}` }]);
+          runnerRef.current = null;
+          setMode("idle");
+        },
+        onCancelled: () => {
+          setBatchStatus("cancelled");
+          setSaveStatus({ state: 'error', message: 'Replication batch cancelled. Results were not saved.' });
+          setLog(prev => [...prev, { phase: "CANCEL", time: 0, message: "Replication batch cancelled." }]);
+          runnerRef.current = null;
+          setMode("idle");
+        },
+      });
+      return;
+    }
+
     const engine = buildEngine(
       model, 
       runSeed, 
       warmupPeriod,
-      terminationMode === 'time' ? maxSimTime : null,
-      terminationMode === 'condition' ? terminationCondition : null
+      maxTimeForRun,
+      stopConditionForRun
     );
     const result = engine.runAll();
 
@@ -282,8 +429,9 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     try {
       await saveSimulationRun(modelId, userId, result, { 
         seed: runSeed, 
+        replications: 1,
         warmupPeriod,
-        maxTime: terminationMode === 'time' ? maxSimTime : null
+        maxTime: maxTimeForRun
       });
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
@@ -291,7 +439,13 @@ const ExecutePanel = ({ model, modelId, userId }) => {
       setSaveStatus({ state: 'error', message: `✗ Failed to save: ${e.message}` });
       setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
     }
-  }, [model, userId, modelId, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, stopAuto]);
+  }, [model, userId, modelId, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto]);
+
+  const cancelBatch = useCallback(() => {
+    if (!runnerRef.current) return;
+    setBatchStatus("cancelling");
+    runnerRef.current.cancel();
+  }, []);
 
   const toggleAuto = () => {
     if (autoRunning) {
@@ -312,6 +466,12 @@ const ExecutePanel = ({ model, modelId, userId }) => {
       }
     };
   }, [autoRunning, autoSpeed, doStep]);
+
+  useEffect(() => {
+    return () => runnerRef.current?.cancel();
+  }, []);
+
+  const batchActive = batchStatus === "running" || batchStatus === "cancelling";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -401,10 +561,11 @@ const ExecutePanel = ({ model, modelId, userId }) => {
       </div>
 
       <div style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 14, display: "flex", gap: 10, alignItems: "center" }}>
-        <Btn variant="primary" onClick={initEngine} disabled={hasErrors}>⟳ Reset</Btn>
-        <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors}>⏭ Step</Btn>
-        <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
-        <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors}>⚡ Run All</Btn>
+        <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive}>⟳ Reset</Btn>
+        <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
+        <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
+        <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive}>⚡ Run All</Btn>
+        {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         <div style={{ flex: 1 }} />
         <div style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2 }}>
           {["visual", "log", "entities"].map(v => (
@@ -461,6 +622,88 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           fontSize: 12, fontFamily: FONT,
         }}>
           {saveStatus.message}
+        </div>
+      )}
+
+      {(batchStatus !== "idle" || replicationResults.length > 0) && (
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>REPLICATION BATCH</div>
+            <Tag label={batchStatus} color={batchStatus === "complete" ? C.green : batchStatus === "error" || batchStatus === "cancelled" ? C.red : C.amber} />
+            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
+              Running {batchProgress?.completed || replicationResults.length}/{batchProgress?.total || replications}
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>
+              Pool: {batchProgress?.workerCount || "—"} · Running: {batchProgress?.running || 0} · Pending: {batchProgress?.pending || 0}
+            </div>
+          </div>
+
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
+              <thead>
+                <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                  <th style={{ padding: 8 }}>Rep #</th>
+                  <th style={{ padding: 8 }}>Seed</th>
+                  <th style={{ padding: 8 }}>Served</th>
+                  <th style={{ padding: 8 }}>Avg wait</th>
+                  <th style={{ padding: 8 }}>Avg service</th>
+                  <th style={{ padding: 8 }}>Avg sojourn</th>
+                  <th style={{ padding: 8 }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {replicationResults.map(payload => (
+                  <tr key={payload.replicationIndex} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ padding: 8 }}>{payload.replicationIndex + 1}</td>
+                    <td style={{ padding: 8, color: C.amber }}>{payload.seed}</td>
+                    <td style={{ padding: 8 }}>{payload.result?.summary?.served ?? "—"}</td>
+                    <td style={{ padding: 8 }}>{fmt(payload.result?.summary?.avgWait)}</td>
+                    <td style={{ padding: 8 }}>{fmt(payload.result?.summary?.avgSvc)}</td>
+                    <td style={{ padding: 8 }}>{fmt(payload.result?.summary?.avgSojourn)}</td>
+                    <td style={{ padding: 8 }}><Tag label="complete" color={C.green} /></td>
+                  </tr>
+                ))}
+                {!replicationResults.length && (
+                  <tr>
+                    <td colSpan={7} style={{ padding: 8, color: C.muted }}>Waiting for first replication result...</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {Object.values(aggregateStats).some(stat => stat.n >= 2) && (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
+                <thead>
+                  <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                    <th style={{ padding: 8 }}>Metric</th>
+                    <th style={{ padding: 8 }}>Mean</th>
+                    <th style={{ padding: 8 }}>Lower 95%</th>
+                    <th style={{ padding: 8 }}>Upper 95%</th>
+                    <th style={{ padding: 8 }}>Half-width</th>
+                    <th style={{ padding: 8 }}>n</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {CI_METRICS.map(metric => {
+                    const stat = aggregateStats[metric];
+                    if (!stat || stat.n < 2) return null;
+                    return (
+                      <tr key={metric} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: 8 }}>{METRIC_LABELS[metric]}</td>
+                        <td style={{ padding: 8, color: C.accent }}>{fmt(stat.mean)}</td>
+                        <td style={{ padding: 8 }}>{fmt(stat.lower)}</td>
+                        <td style={{ padding: 8 }}>{fmt(stat.upper)}</td>
+                        <td style={{ padding: 8, color: C.amber }}>{fmt(stat.halfWidth)}</td>
+                        <td style={{ padding: 8 }}>{stat.n}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

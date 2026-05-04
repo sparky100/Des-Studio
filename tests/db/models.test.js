@@ -103,6 +103,43 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       // .single() is not called for saveSimulationRun
       expect(supabase.from('simulation_runs').single).not.toHaveBeenCalled();
     });
+
+    it('persists replication batch metadata in results_json', async () => {
+      supabase.from('simulation_runs').insert.mockResolvedValueOnce({ data: { id: 'run-id-2' }, error: null });
+      const suppliedResultsJson = { existing: true };
+
+      await saveSimulationRun(
+        'm1',
+        'u1',
+        {
+          summary: { total: 12, served: 10, reneged: 2, avgWait: 4, avgSojourn: 7 },
+          snap: { clock: 500 },
+        },
+        {
+          seed: 0,
+          replications: 3,
+          maxTime: 500,
+          batchId: 'batch-123',
+          aggregateStats: { 'summary.avgWait': { n: 3, mean: 4 } },
+          replicationResults: [{ replicationIndex: 0, seed: 100 }],
+          resultsJson: suppliedResultsJson,
+        }
+      );
+
+      expect(supabase.from('simulation_runs').insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          seed: 0,
+          replications: 3,
+          results_json: expect.objectContaining({
+            existing: true,
+            batch_id: 'batch-123',
+            aggregateStats: { 'summary.avgWait': { n: 3, mean: 4 } },
+            replications: [{ replicationIndex: 0, seed: 100 }],
+          }),
+        })
+      );
+      expect(suppliedResultsJson).toEqual({ existing: true });
+    });
   });
 
   describe('forkModel', () => {

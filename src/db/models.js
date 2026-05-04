@@ -153,20 +153,34 @@ export async function setAccess(id, access) {
 
 export async function saveSimulationRun(modelId, userId, result, config = {}) {
   const s = result.summary || {};
+  const resultsJson = config.resultsJson ? { ...config.resultsJson } : {
+    summary: s,
+    clock: result.snap?.clock,
+  };
+  if (config.batchId) {
+    resultsJson.batch_id = config.batchId;
+  }
+  if (config.aggregateStats) {
+    resultsJson.aggregateStats = config.aggregateStats;
+  }
+  if (config.replicationResults) {
+    resultsJson.replications = config.replicationResults;
+  }
+
   const { error } = await supabase.from("simulation_runs").insert({
     model_id:            modelId,
     run_by:              userId,
     replications:        config.replications || 1,
-    max_simulation_time: config.maxTime      || 500,
+    max_simulation_time: config.maxTime      ?? 500,
     warmup_period:       config.warmupPeriod || null,
-    seed:                config.seed         || null,
+    seed:                config.seed         ?? null,
     total_arrived:       s.total    || 0,
     total_served:        s.served   || 0,
     total_reneged:       s.reneged  || 0,
     avg_wait_time:       s.avgWait  ?? null,
     avg_service_time:    s.avgSojourn ?? null,
     renege_rate:         s.total ? (s.reneged / s.total) : 0,
-    results_json:        { summary: s, clock: result.snap?.clock },
+    results_json:        resultsJson,
     duration_ms:         config.durationMs || null,
   });
   if (error) throw error;

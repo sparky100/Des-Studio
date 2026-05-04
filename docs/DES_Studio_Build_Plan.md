@@ -42,6 +42,11 @@ Claude Code must read the relevant existing files before touching anything.
 | 1.4 | 2026-05-03 | Added F5.9 — model delete UI with owner-only guard. Identified gap: no UI surface for model deletion existed in any prior sprint. |
 | 1.5 | 2026-05-04 | Sprint 3 complete — Experiment Controls. Includes warm-up period, termination conditions, unified experiment panel, DB layer tests, engine test completion, and ADR-002 resolution (fork model). Noted persistent 'JS heap out of memory' error during full/engine test runs. |
 | 1.6 | 2026-05-04 | Resolved Vitest heap issue. Root cause was unbounded seeded engine tests running open-ended `runAll()` simulations with full snapshot logs. Full suite now passes: 17 files, 272 tests. |
+| 1.7 | 2026-05-04 | Added ADR-006 for Sprint 4 replication architecture: bounded worker pool, local live progress callbacks, one persisted batch row, and cancellation. |
+| 1.8 | 2026-05-04 | Added detailed implementation prompts and completion checklists for Sprint 4 tasks F4.1–F4.5. |
+| 1.9 | 2026-05-04 | Added detailed implementation prompts and completion checklists for Sprint 5 tasks F5.1–F5.9. |
+| 1.10 | 2026-05-04 | Reviewed Sprints 6–8 prompts. Aligned LLM work with Supabase Edge Function proxy, corrected Sprint 7 references to current engine structures, resolved stale ADR numbering collisions, and flagged shift capacity mapping as an open design decision. |
+| 1.11 | 2026-05-04 | Sprint 4 complete — Replication & Results. Added Web Worker wrapper, bounded replication runner, batch persistence via results_json, live Execute CI dashboard, cancellation, and 30-replication M/M/1 CI gate. Full suite passes: 22 files, 294 tests. |
 
 ---
 
@@ -53,6 +58,7 @@ Claude Code must read the relevant existing files before touching anything.
 | Sprint 1 | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening. | 182 (182) | 1.48% | Success | Fixes for XSS, C-scan restart, queue discipline, seeded RNG, validation, DistPicker. |
 | Sprint 2 | ✅ Complete | 2026-05-03 | UI Editor Completeness. | 215 (215) | N/A | Success | Configured JSDOM, enhanced ConditionBuilder, etc. |
 | Sprint 3 | ✅ Complete | 2026-05-04 | Experiment Controls (Warm-up, Termination, Fork Model). | 272 (272) | 1.48% | Success | ADR-002 implemented. Vitest heap issue resolved; full suite passes. |
+| Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results (Workers, Batches, CI Dashboard). | 294 (294) | CI contains 9.0 | Success | Bounded worker pool implemented. `batch_id` stored inside `results_json` because no committed schema column exists. |
 
 ---
 
@@ -1062,7 +1068,7 @@ Definition of done:
 
 **Audit status:** ✗ (absent from both engine and UI)
 **Existing code:** `engine/index.js` (extend loop), `execute/index.jsx` (extend panel)
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-04
 
 ```
 Task F3.1 of Sprint 3.
@@ -1091,11 +1097,11 @@ In the existing Execute panel:
 ```
 
 **Completion checklist:**
-- [ ] `buildEngine()` accepts `warmupPeriod`
-- [ ] Stats reset in engine at `T_warmup` (not in UI)
-- [ ] Unit test fails before implementation, passes after
-- [ ] Warm-up field in existing Execute panel
-- [ ] `schema.sql` and `models.js` updated with `warmup_period` column
+- [x] `buildEngine()` accepts `warmupPeriod`
+- [x] Stats reset in engine at `T_warmup` (not in UI)
+- [x] Unit test fails before implementation, passes after
+- [x] Warm-up field in existing Execute panel
+- [x] `schema.sql` and `models.js` updated with `warmup_period` column
 
 ---
 
@@ -1103,7 +1109,7 @@ In the existing Execute panel:
 
 **Audit status:** ✗ (max_simulation_time column exists in DB — engine never reads it)
 **Existing code:** `engine/index.js`, `db/models.js` (column exists), `execute/index.jsx`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-04
 
 ```
 Task F3.2 of Sprint 3.
@@ -1128,12 +1134,12 @@ Unit test: engine halts at exactly T_end.
 ```
 
 **Completion checklist:**
-- [ ] Engine reads `maxSimTime` parameter
-- [ ] Engine terminates at `T_now >= maxSimTime`
-- [ ] Run Duration field in existing Execute panel
-- [ ] Validation: run duration > warm-up period
-- [ ] `max_simulation_time` column now populated in runs table
-- [ ] Unit test passes
+- [x] Engine reads `maxSimTime` parameter
+- [x] Engine terminates at `T_now >= maxSimTime`
+- [x] Run Duration field in existing Execute panel
+- [x] Validation: run duration > warm-up period
+- [x] `max_simulation_time` column now populated in runs table
+- [x] Unit test passes
 
 ---
 
@@ -1141,7 +1147,7 @@ Unit test: engine halts at exactly T_end.
 
 **Audit status:** ✗ (not implemented)
 **Existing code:** `engine/index.js`, `execute/index.jsx`, `ConditionBuilder` (reuse)
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-04
 
 ```
 Task F3.3 of Sprint 3.
@@ -1163,11 +1169,11 @@ Unit test: engine halts when predicate becomes true (not at a fixed time).
 ```
 
 **Completion checklist:**
-- [ ] `terminationCondition` parameter in `buildEngine()`
-- [ ] Engine evaluates predicate each Phase A
-- [ ] Terminates correctly when predicate true
-- [ ] UI reuses existing `ConditionBuilder` component
-- [ ] Unit test passes
+- [x] `terminationCondition` parameter in `buildEngine()`
+- [x] Engine evaluates predicate each Phase A
+- [x] Terminates correctly when predicate true
+- [x] UI reuses existing `ConditionBuilder` component
+- [x] Unit test passes
 
 ---
 
@@ -1175,7 +1181,7 @@ Unit test: engine halts when predicate becomes true (not at a fixed time).
 
 **Audit status:** ✗ (controls scattered or absent — Execute panel exists but needs extension)
 **Existing code:** `execute/index.jsx` — extend existing panel
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-04
 
 ```
 Task F3.4 of Sprint 3.
@@ -1199,11 +1205,11 @@ Validation before Run:
 ```
 
 **Completion checklist:**
-- [ ] All experiment parameters in one panel section
-- [ ] Termination mode radio buttons working
-- [ ] Replication count field present (engine still single-run — Sprint 4)
-- [ ] Validation errors shown inline before Run
-- [ ] Run blocked until validation passes
+- [x] All experiment parameters in one panel section
+- [x] Termination mode radio buttons working
+- [x] Replication count field present (engine still single-run — Sprint 4)
+- [x] Validation errors shown inline before Run
+- [x] Run blocked until validation passes
 
 ---
 
@@ -1211,7 +1217,7 @@ Validation before Run:
 
 **Audit status:** ✗ (StepLog exists and works — add warm-up boundary marker)
 **Existing code:** `execute/index.jsx` (StepLog — working component)
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-04
 
 ```
 Task F3.5 of Sprint 3.
@@ -1230,9 +1236,9 @@ If a replication's warm-up exceeds its run duration, show an error banner.
 ```
 
 **Completion checklist:**
-- [ ] Warm-up boundary marker in existing StepLog
-- [ ] Stats panel shows warm-up statistics
-- [ ] Error banner if warm-up > run duration
+- [x] Warm-up boundary marker in existing StepLog
+- [x] Stats panel shows warm-up statistics
+- [x] Error banner if warm-up > run duration
 
 ---
 
@@ -1240,7 +1246,7 @@ If a replication's warm-up exceeds its run duration, show an error banner.
 
 **Audit status:** ✗ (zero DB tests — CRUD wrappers work but are untested)
 **Existing code:** `src/db/models.js` — tested via mocked Supabase client
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-04
 
 ```
 Task F3.6 of Sprint 3.
@@ -1262,9 +1268,9 @@ Assert on mock call arguments — not just that a result was returned.
 ```
 
 **Completion checklist:**
-- [ ] `tests/db/models.test.js` created
-- [ ] All six critical isolation tests pass
-- [ ] `user_id` filter confirmed on all list queries
+- [x] `tests/db/models.test.js` created
+- [x] All six critical isolation tests pass
+- [x] `user_id` filter confirmed on all list queries
 
 ---
 
@@ -1272,7 +1278,7 @@ Assert on mock call arguments — not just that a result was returned.
 
 **Audit status:** ~ (5 test files, ~120 tests — gaps in required coverage)
 **Existing code:** `tests/engine/` — extend existing files
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-04
 
 ```
 Task F3.7 of Sprint 3.
@@ -1297,16 +1303,16 @@ Do not modify existing passing tests.
 ```
 
 **Completion checklist:**
-- [ ] All required engine test cases exist
-- [ ] All tests pass
-- [ ] No existing tests broken
+- [x] All required engine test cases exist
+- [x] All tests pass
+- [x] No existing tests broken
 
 ---
 
 ### F3.8 — ADR-002 Resolution
 
 **Audit status:** ✗ (deferred decision — must be made before Sprint 4 builds run history)
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ Complete | **Completed:** 2026-05-04
 
 ```
 Task F3.8 of Sprint 3.
@@ -1330,9 +1336,9 @@ Do not implement any run permissions until I confirm the decision.
 ```
 
 **Completion checklist:**
-- [ ] ADR-002 updated with decision
-- [ ] CLAUDE.md ADR Register updated
-- [ ] Code changes implemented (if Option B)
+- [x] ADR-002 updated with decision
+- [x] CLAUDE.md ADR Register updated
+- [x] Code changes implemented (if Option B)
 
 ---
 
@@ -1351,17 +1357,17 @@ npm run build                          # Succeeds
 
 ## Sprint 4 — Replication & Results
 
-**Goal:** Enable N parallel replications using Web Workers with independent seeds.
-Stream results in real time via Supabase. Display live confidence intervals.
+**Goal:** Enable N replications using Web Workers with independent seeds.
+Stream same-browser progress via local runner callbacks, persist final batch results to Supabase, and display live confidence intervals.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
-**Prerequisite:** Sprint 3 exit gate passed. ADR-002 accepted.
+**Status:** ✅ Complete | **Started:** 2026-05-04 | **Completed:** 2026-05-04
+**Prerequisite:** Sprint 3 exit gate passed. ADR-002 and ADR-006 accepted.
 
 | Feature | Audit Status | Action |
 |---|---|---|
 | F4.1 — Web Worker engine wrapper | ✗ (engine blocks main thread) | New: `src/engine/worker.js` |
 | F4.2 — Multi-replication runner | ✗ (replications always 1) | New: `src/engine/replication-runner.js` |
-| F4.3 — Supabase real-time subscription | ✗ (no channel subscriptions) | Extend: `execute/index.jsx` |
+| F4.3 — Batch persistence + local progress callbacks | ✗ (replication progress/results not wired) | Extend: `execute/index.jsx`, `src/db/models.js` |
 | F4.4 — Running mean + 95% CI | ✗ (point estimates only) | New: `src/engine/statistics.js` |
 | F4.5 — Live CI dashboard | ✗ (static results table only) | Extend: `execute/index.jsx` |
 
@@ -1377,26 +1383,402 @@ Completed in Sprints 1–3: [paste]
 
 Features:
   F4.1 — Web Worker wrapper for buildEngine() (non-blocking main thread)
-  F4.2 — Multi-replication runner: N workers with independent seeds
-  F4.3 — Supabase real-time subscription for live results
+  F4.2 — Multi-replication runner: N replications scheduled through a bounded worker pool
+  F4.3 — Local live progress callbacks; Supabase persists final batch results
   F4.4 — Running mean and 95% CI (t-distribution for N<30)
   F4.5 — Live CI dashboard in existing execute panel
 
 CRITICAL:
   - Seeds must be independent per worker
+  - Use a bounded worker pool, not one worker per replication
+  - Same-browser live progress uses local runner callbacks
   - The existing runs table has replications column (always 1) — fix this
-  - Real-time subscription requires a batch_id on runs rows (new column)
+  - Store one run row per replication batch; put per-replication and aggregate CI results in results_json
+  - batch_id should identify the batch if the runs schema supports it or is migrated in Sprint 4
+  - Active replication batches must be cancellable
   - The existing single-run Execute flow must still work if N=1
 
 Definition of done:
-  - 30 M/M/1 replications run concurrently — UI stays responsive
+  - 30 M/M/1 replications run through the bounded worker pool — UI stays responsive
   - 95% CI contains analytical mean wait (9.0) after 30 reps
   - CI narrows visibly on dashboard as replications complete
   - npm test -- --run passes
 ```
 
-*(Full per-feature prompts follow the same structure as Sprints 1–3.
-See DES_Studio_Build_Plan.md for complete prompt text.)*
+---
+
+### F4.1 — Web Worker Engine Wrapper
+
+**Audit status:** ✗ (engine runs synchronously on main thread)
+**Action:** New `src/engine/worker.js`
+**Status:** ✅ Complete | **Completed:** 2026-05-04
+
+```
+Task F4.1 of Sprint 4.
+
+Read these files before writing code:
+  - src/engine/index.js
+  - src/ui/execute/index.jsx
+  - docs/decisions/ADR-006-replication-runner-architecture.md
+
+Create src/engine/worker.js as a thin Web Worker wrapper around buildEngine().
+Do not move engine logic into the worker file. The worker only receives a run
+request, calls buildEngine(), and posts a structured response.
+
+Worker message contract:
+  Input:
+    {
+      type: "RUN_REPLICATION",
+      payload: {
+        replicationIndex,
+        model,
+        seed,
+        warmupPeriod,
+        maxSimTime,
+        terminationCondition,
+        maxCycles,
+        maxCPasses
+      }
+    }
+
+  Success output:
+    {
+      type: "REPLICATION_COMPLETE",
+      payload: {
+        replicationIndex,
+        seed,
+        result
+      }
+    }
+
+  Error output:
+    {
+      type: "REPLICATION_ERROR",
+      payload: {
+        replicationIndex,
+        seed,
+        message,
+        stack
+      }
+    }
+
+Rules:
+  - Keep src/engine pure JavaScript. No React imports, no DOM access.
+  - The worker must not import any UI or DB code.
+  - The worker must not persist results.
+  - The worker must catch errors and post REPLICATION_ERROR rather than crashing silently.
+  - Preserve buildEngine() argument order as it exists in src/engine/index.js.
+
+Testing:
+  - Add a unit/integration test for the worker message contract if the Vitest environment supports Worker.
+  - If Worker is awkward in Vitest, export a pure helper from worker.js, e.g.
+    runReplicationPayload(payload), and test that helper directly.
+  - Test success returns replicationIndex, seed, and result.summary.
+  - Test invalid model/input returns a structured error.
+```
+
+**Completion checklist:**
+- [x] `src/engine/worker.js` created
+- [x] Worker accepts `RUN_REPLICATION`
+- [x] Worker posts `REPLICATION_COMPLETE` on success
+- [x] Worker posts `REPLICATION_ERROR` on failure
+- [x] No UI/DB imports in worker
+- [x] Worker/helper tests pass
+
+---
+
+### F4.2 — Multi-Replication Runner
+
+**Audit status:** ✗ (replications field exists but execution still effectively single-run)
+**Action:** New `src/engine/replication-runner.js`
+**Status:** ✅ Complete | **Completed:** 2026-05-04
+
+```
+Task F4.2 of Sprint 4.
+
+Read these files before writing code:
+  - src/engine/worker.js (from F4.1)
+  - src/engine/index.js
+  - src/ui/execute/index.jsx
+  - docs/decisions/ADR-006-replication-runner-architecture.md
+
+Create src/engine/replication-runner.js.
+
+Export runReplications(options):
+  options = {
+    model,
+    replications,
+    baseSeed,
+    warmupPeriod,
+    maxSimTime,
+    terminationCondition,
+    maxCycles,
+    maxCPasses,
+    workerCount,
+    onProgress,
+    onReplicationComplete,
+    onError,
+    onComplete,
+    onCancelled
+  }
+
+Return a controller:
+  {
+    cancel()
+  }
+
+Runner behaviour:
+  - Use ADR-006: bounded worker pool, not one worker per replication.
+  - Default workerCount should be conservative:
+      min(replications, max(1, (navigator.hardwareConcurrency || 2) - 1), 4)
+    but allow tests to pass workerCount explicitly.
+  - Assign seeds deterministically:
+      seed = baseSeed + replicationIndex
+    where replicationIndex is 0-based.
+  - Start up to workerCount workers.
+  - As each worker completes, start the next pending replication until all are done.
+  - Preserve result order by replicationIndex in the final results array.
+  - Invoke onProgress with:
+      { completed, total, running, pending, cancelled }
+  - Invoke onReplicationComplete after every successful replication.
+  - Invoke onComplete once with all replication results if not cancelled.
+  - On cancel():
+      terminate active workers,
+      stop scheduling pending work,
+      invoke onCancelled,
+      do not invoke onComplete.
+
+Single-replication compatibility:
+  - If replications === 1, the existing Execute flow may still use the
+    synchronous path from execute/index.jsx.
+  - The runner should still work for replications === 1, because tests may call it.
+
+Testing:
+  - Unit test seed assignment: baseSeed 100, 3 reps => 100,101,102.
+  - Unit test bounded pool: replications 30, workerCount 4 never runs more than 4 active workers.
+  - Unit test final result order is replicationIndex order even if workers finish out of order.
+  - Unit test cancellation terminates active work and prevents onComplete.
+  - Use fake worker adapters if needed so tests do not depend on real browser Worker timing.
+```
+
+**Completion checklist:**
+- [x] `src/engine/replication-runner.js` created
+- [x] Bounded worker pool implemented
+- [x] Deterministic independent seeds implemented
+- [x] Progress callbacks implemented
+- [x] Cancellation implemented
+- [x] Result ordering preserved
+- [x] Runner tests pass
+
+---
+
+### F4.3 — Batch Persistence + Local Progress Callbacks
+
+**Audit status:** ✗ (replication batches are not persisted as batches; live progress not wired)
+**Action:** Extend `src/ui/execute/index.jsx`, `src/db/models.js`
+**Status:** ✅ Complete | **Completed:** 2026-05-04
+
+```
+Task F4.3 of Sprint 4.
+
+Read these files before writing code:
+  - src/db/models.js
+  - src/ui/execute/index.jsx
+  - docs/decisions/ADR-002-public-model-runs.md
+  - docs/decisions/ADR-006-replication-runner-architecture.md
+
+Implement ADR-006 persistence:
+  - Same-browser live progress uses local runner callbacks.
+  - Supabase is used for final batch persistence.
+  - Store one run row per replication batch.
+  - Store per-replication results and aggregate summaries in results_json.
+
+Extend or add DB wrapper functionality in src/db/models.js:
+  - saveRun() must accept:
+      {
+        model_id,
+        seed,
+        replications,
+        max_simulation_time,
+        results_json,
+        batch_id
+      }
+  - Preserve existing single-run save behaviour.
+  - Do not query Supabase directly from execute/index.jsx if a wrapper can do it.
+  - If the schema does not yet support batch_id, handle it deliberately:
+      Option A: include batch_id only if existing code/schema supports it
+      Option B: add a migration/schema note in docs and code TODO
+    Do not silently assume a missing DB column exists.
+
+Extend execute/index.jsx:
+  - Generate a stable batch_id for every multi-replication run.
+    Use crypto.randomUUID() when available; fallback to a timestamp/random string.
+  - Wire replication-runner callbacks into Execute component state:
+      progress
+      perReplicationResults
+      aggregateStats
+      status: idle | running | cancelling | complete | error | cancelled
+  - Persist only after successful completion.
+  - Do not persist a successful final result after cancellation.
+  - Preserve ADR-002 fork behaviour for non-owner public model runs.
+
+Testing:
+  - DB test: saveRun includes seed, replications, results_json, and batch_id when supplied.
+  - DB test: single-run saveRun still works with replications=1.
+  - UI test: progress state updates when runner callbacks fire.
+  - UI test: completed multi-replication batch calls saveRun once, not once per replication.
+  - UI test: cancelled batch does not call successful saveRun.
+```
+
+**Completion checklist:**
+- [x] `saveRun()` accepts and persists batch replication metadata
+- [x] One run row per batch, not one row per replication
+- [x] `results_json` contains per-replication and aggregate data
+- [x] Execute panel uses local progress callbacks
+- [x] Completed batch persists once
+- [x] Cancelled batch does not persist as successful
+- [x] DB and UI tests pass
+
+---
+
+### F4.4 — Running Mean + 95% CI
+
+**Audit status:** ✗ (only point estimates displayed)
+**Action:** New `src/engine/statistics.js`
+**Status:** ✅ Complete | **Completed:** 2026-05-04
+
+```
+Task F4.4 of Sprint 4.
+
+Create src/engine/statistics.js.
+
+Export:
+  - mean(values)
+  - sampleVariance(values)
+  - sampleStdDev(values)
+  - tCritical95(df)
+  - confidenceInterval95(values)
+  - summarizeReplicationResults(results, metricPaths)
+
+Rules:
+  - Ignore null, undefined, and non-finite values when computing statistics.
+  - For n = 0: return { n: 0, mean: null, lower: null, upper: null, halfWidth: null }
+  - For n = 1: mean is defined, CI bounds are null because sample variance is unavailable.
+  - For n >= 2:
+      halfWidth = tCritical95(n - 1) * sampleStdDev(values) / sqrt(n)
+      lower = mean - halfWidth
+      upper = mean + halfWidth
+  - Use a small t-critical lookup table for df 1..30.
+  - For df > 30 use 1.96.
+  - Do not add a statistics dependency.
+
+summarizeReplicationResults(results, metricPaths):
+  - results is an array of replication payloads from the runner.
+  - metricPaths might include:
+      "summary.avgWait"
+      "summary.avgSvc"
+      "summary.served"
+      "summary.reneged"
+      "summary.avgSojourn"
+  - Return an object keyed by metricPath with n, mean, lower, upper, halfWidth.
+
+Testing:
+  - mean ignores null/undefined/non-finite values.
+  - sampleStdDev uses n-1 denominator.
+  - confidenceInterval95 for one value has null bounds.
+  - confidenceInterval95 for known values matches expected half-width within tolerance.
+  - tCritical95(1), tCritical95(10), tCritical95(30), tCritical95(31) return expected values.
+  - summarizeReplicationResults extracts nested metrics correctly.
+```
+
+**Completion checklist:**
+- [x] `src/engine/statistics.js` created
+- [x] Mean, sample variance, sample std dev implemented
+- [x] 95% CI implemented with t-critical lookup for df <= 30
+- [x] Non-finite values ignored
+- [x] Nested metric summary helper implemented
+- [x] Statistics tests pass
+
+---
+
+### F4.5 — Live CI Dashboard
+
+**Audit status:** ✗ (Execute view has static/single-run results only)
+**Action:** Extend `src/ui/execute/index.jsx`
+**Status:** ✅ Complete | **Completed:** 2026-05-04
+
+```
+Task F4.5 of Sprint 4.
+
+Read src/ui/execute/index.jsx in full before editing.
+Preserve the existing Execute panel, VisualView, StepLog, EntityTable, saveStatus
+banner, run history, warm-up controls, termination controls, and single-run flow.
+
+Extend the Execute panel for multi-replication runs:
+
+When replications === 1:
+  - Keep the existing single-run user experience.
+  - Existing VisualView, StepLog, EntityTable, and summary behaviour remain available.
+
+When replications > 1:
+  - Run through replication-runner.js.
+  - Show batch status:
+      Running X/Y
+      Worker pool size
+      Pending count
+      Cancel button
+  - Show a live replication results table:
+      Rep #
+      Seed
+      Served
+      Avg wait
+      Avg service
+      Avg sojourn
+      Status
+  - Show aggregate CI cards or table for key KPIs:
+      mean
+      lower 95%
+      upper 95%
+      half-width
+      n
+  - Update aggregates as each replication completes.
+  - CI should visibly narrow as more replications finish.
+  - On Cancel:
+      call controller.cancel()
+      disable Cancel while cancellation is in progress
+      show cancelled status
+      do not save successful final run
+  - On worker error:
+      surface an error banner
+      keep completed replication results visible
+      allow user to run again
+
+UI/UX rules:
+  - Use existing tokens from src/ui/shared/tokens.js.
+  - Do not put cards inside cards.
+  - Keep dashboard compact and operational, not a marketing/hero layout.
+  - Avoid layout shifts as rows are added.
+  - Do not use hardcoded style values where tokens exist.
+
+Testing:
+  - UI test: replications=1 still renders existing single-run results.
+  - UI test: replications>1 shows batch progress and Cancel button.
+  - UI test: fake runner completion updates per-replication table.
+  - UI test: aggregate CI appears after at least two completed replications.
+  - UI test: cancel calls controller.cancel() and does not call saveRun as successful.
+  - Integration/engine test: 30 M/M/1 replications with fixed base seed produce a CI that contains analytical mean wait 9.0.
+```
+
+**Completion checklist:**
+- [x] Existing single-run Execute flow preserved
+- [x] Multi-replication dashboard rendered
+- [x] Live progress updates as replications complete
+- [x] Running CI displayed for key KPIs
+- [x] Cancel button works
+- [x] Successful batch persists once
+- [x] Error/cancel states are visible
+- [x] UI tests pass
+- [x] 30-replication M/M/1 CI gate passes
 
 ---
 
@@ -1422,7 +1804,7 @@ See DES_Studio_Build_Plan.md for complete prompt text.)*
 ### Sprint 5 Planning Prompt *(run in claude.ai)*
 
 ```
-We are starting Sprint 5 (final sprint) of DES Studio.
+We are starting Sprint 5 of DES Studio.
 
 Sprint 5 goal: Production-ready — error handling, export/import,
 accessibility, and guided onboarding.
@@ -1433,7 +1815,7 @@ Features:
   F5.1 — React error boundaries (new — extends shared/components.jsx)
   F5.2 — Model export to JSON (new — adds button to existing ModelDetail)
   F5.3 — Model import from JSON (new — adds button to existing model library)
-  F5.4 — Results export CSV/PDF (new — adds button to existing Execute panel)
+  F5.4 — Results export JSON/CSV (new — adds buttons to existing Execute panel)
   F5.5 — Stats panel fix: model.stats never populated
   F5.6 — avg_service_time column fix (C9)
   F5.7 — Keyboard navigation and ARIA labels (extend all existing components)
@@ -1451,7 +1833,428 @@ Definition of done:
   - npm run build succeeds
 ```
 
-*(Full per-feature prompts follow the same structure as earlier sprints.)*
+---
+
+### F5.1 — React Error Boundaries
+
+**Audit status:** ✗ (no ErrorBoundary anywhere)
+**Action:** New shared component, wrap risky UI surfaces
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F5.1 of Sprint 5.
+
+Read these files before writing code:
+  - src/ui/shared/components.jsx
+  - src/App.jsx
+  - src/ui/ModelDetail.jsx
+  - src/ui/editors/index.jsx
+  - src/ui/execute/index.jsx
+
+Add a reusable ErrorBoundary component to src/ui/shared/components.jsx.
+React error boundaries require a class component; this is the one permitted
+exception to the "functional components only" rule because React has no
+function-component error boundary API.
+
+ErrorBoundary API:
+  <ErrorBoundary
+    title="Something went wrong"
+    message="This panel could not render."
+    onReset={optionalCallback}
+  >
+    {children}
+  </ErrorBoundary>
+
+Behaviour:
+  - Catch render-time errors in child components.
+  - Render a compact fallback panel with:
+      title
+      message
+      error message text
+      "Try again" button if onReset is supplied
+  - Log the error to console.error for developer visibility.
+  - Do not swallow async errors from event handlers; those should be handled locally.
+  - Use tokens from src/ui/shared/tokens.js.
+
+Wrap existing surfaces:
+  - Model library/list area in App.jsx
+  - ModelDetail content
+  - Editors tab content
+  - Execute panel content
+
+Testing:
+  - Unit/UI test: a child component that throws renders fallback text.
+  - Test: onReset button invokes callback.
+  - Test: normal child renders unchanged when no error is thrown.
+```
+
+**Completion checklist:**
+- [ ] `ErrorBoundary` exported from `shared/components.jsx`
+- [ ] Fallback UI uses tokens
+- [ ] Model library, ModelDetail, editors, and Execute wrapped
+- [ ] Reset callback supported
+- [ ] Error boundary tests pass
+
+---
+
+### F5.2 — Model Export To JSON
+
+**Audit status:** ✗ (models are Supabase-only; no file export)
+**Action:** Add export button to existing ModelDetail
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F5.2 of Sprint 5.
+
+Read these files before writing code:
+  - src/ui/ModelDetail.jsx
+  - src/ui/editors/index.jsx
+  - src/engine/validation.js
+  - docs/addition1_entity_model.md
+
+Add a model JSON export action to the existing ModelDetail view.
+Do not change the model schema.
+
+Export behaviour:
+  - Button label: "Export JSON"
+  - Export the currently loaded model, including:
+      name
+      description if present
+      model_json
+      exportedAt ISO timestamp
+      appVersion from package.json if practical, otherwise omit
+  - Before export, run validateModel(model_json).
+  - If validation has blocking errors, allow export only after showing a warning:
+      "This model has validation errors. Export anyway?"
+  - Download a `.json` file named from the model name:
+      des-studio-[model-name-slug].json
+  - Use Blob + URL.createObjectURL.
+  - Revoke the object URL after download.
+
+UI rules:
+  - Add the button near other ModelDetail actions.
+  - Preserve existing Save/Back behaviour.
+  - Do not add a new dependency.
+
+Testing:
+  - UI test: Export JSON button renders for a loaded model.
+  - Unit/helper test: exported payload includes model_json and exportedAt.
+  - Test: generated filename slug is stable.
+  - Test: validation warning appears before exporting invalid model.
+```
+
+**Completion checklist:**
+- [ ] Export JSON button added to ModelDetail
+- [ ] Export payload includes model metadata and `model_json`
+- [ ] Filename generated from model name
+- [ ] Invalid model warning shown
+- [ ] Object URL revoked after download
+- [ ] Export tests pass
+
+---
+
+### F5.3 — Model Import From JSON
+
+**Audit status:** ✗ (no upload/import path)
+**Action:** Add import affordance to model library
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F5.3 of Sprint 5.
+
+Read these files before writing code:
+  - src/App.jsx
+  - src/db/models.js
+  - src/engine/validation.js
+  - docs/addition1_entity_model.md
+
+Add model import from JSON to the existing model library.
+
+Import behaviour:
+  - Add "Import JSON" button near model library actions.
+  - Use a hidden file input accepting .json and application/json.
+  - Read the selected file with FileReader.
+  - Accept both:
+      exported payload from F5.2: { name, description, model_json, ... }
+      raw model_json object
+  - Validate the imported model_json with validateModel().
+  - If blocking errors exist, show an error list and do not save.
+  - If warnings only, show warning banner and allow import.
+  - Imported model should be saved as a new private model owned by current user.
+  - Never preserve another user's user_id from imported JSON.
+  - Never preserve is_public=true from imported JSON; default imported models to private.
+  - Suggested imported name:
+      "[original name] (Imported)"
+    with fallback "Imported model".
+
+DB rules:
+  - Use existing saveModel() wrapper or extend it.
+  - saveModel() payload must include current user's user_id.
+  - Do not call Supabase directly from App.jsx except through existing wrappers.
+
+Testing:
+  - UI test: Import JSON button renders.
+  - Test: valid exported payload calls saveModel with model_json and current user_id.
+  - Test: raw model_json import works.
+  - Test: invalid JSON surfaces an error and does not call saveModel.
+  - Test: imported payload does not preserve is_public=true or external user_id.
+```
+
+**Completion checklist:**
+- [ ] Import JSON button added to model library
+- [ ] Exported payload and raw model_json supported
+- [ ] Imported model validates before save
+- [ ] Imported model is private and owned by current user
+- [ ] Invalid imports show errors and do not save
+- [ ] Import tests pass
+
+---
+
+### F5.4 — Results Export
+
+**Audit status:** ✗ (no results export from Execute panel)
+**Action:** Add CSV/JSON export from Execute panel
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F5.4 of Sprint 5.
+
+Read these files before writing code:
+  - src/ui/execute/index.jsx
+  - src/engine/statistics.js (from Sprint 4)
+  - src/db/models.js
+
+Add results export to the existing Execute panel.
+
+Export formats:
+  - JSON: complete latest results object, including experiment config,
+    per-replication results, aggregate CI, seed, replications, warm-up, and run duration.
+  - CSV: flat table suitable for spreadsheets:
+      replicationIndex, seed, served, reneged, avgWait, avgSvc, avgSojourn, finalTime
+    plus aggregate rows if available:
+      metric, n, mean, lower95, upper95, halfWidth
+
+UI behaviour:
+  - Export buttons disabled until a run completes.
+  - Labels:
+      "Export Results JSON"
+      "Export Results CSV"
+  - File names:
+      des-studio-results-[model-name-slug]-[timestamp].json
+      des-studio-results-[model-name-slug]-[timestamp].csv
+  - For single-run results, CSV should still contain one replication-style row.
+  - For cancelled/error runs, export only if partial results exist, and filename should include "partial".
+
+Testing:
+  - Unit/helper test: JSON export payload contains experiment config and results.
+  - Unit/helper test: CSV contains expected headers.
+  - Unit/helper test: multi-replication CSV includes one row per replication.
+  - UI test: export buttons disabled before run and enabled after run.
+```
+
+**Completion checklist:**
+- [ ] JSON results export implemented
+- [ ] CSV results export implemented
+- [ ] Single-run and multi-run results supported
+- [ ] Export buttons disabled before results exist
+- [ ] Partial result export handled deliberately
+- [ ] Results export tests pass
+
+---
+
+### F5.5 — Fix Stats Panel Runs Count
+
+**Audit status:** ~ (stats panel runs count always 0)
+**Action:** Fix model/run stats derivation
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F5.5 of Sprint 5.
+
+Read these files before writing code:
+  - src/App.jsx
+  - src/db/models.js
+  - src/ui/execute/index.jsx
+
+Find where the model library/card stats panel renders run count.
+The audit notes runs count is always 0 because model.stats is not populated.
+
+Fix behaviour:
+  - Run count should reflect saved run history for that model.
+  - If run history is already loaded in the client, derive the count from it.
+  - If DB wrapper support is needed, add a small function in src/db/models.js,
+    e.g. getRunStats(modelId, userId), but do not query Supabase directly from UI.
+  - Preserve user isolation:
+      users see counts for their own model runs
+      public model viewing must not leak other users' private run history
+  - For forked public runs under ADR-002, counts belong to the fork owner.
+
+Display:
+  - Replace hardcoded/empty 0 with actual count.
+  - Show a neutral placeholder such as "—" while loading if needed.
+  - Do not block model list rendering if stats fail; show a non-fatal error state.
+
+Testing:
+  - DB test: stats query filters by model_id and user/ownership as appropriate.
+  - UI test: model card renders non-zero run count when stats are provided.
+  - UI test: loading/failed stats do not crash the model list.
+```
+
+**Completion checklist:**
+- [ ] Run count no longer always 0
+- [ ] Stats derived from run history or DB wrapper
+- [ ] User isolation preserved
+- [ ] Loading/failure states handled
+- [ ] DB/UI tests pass
+
+---
+
+### F5.6 — Fix avg_service_time Column Mismatch (C9)
+
+**Audit status:** ~ (`avg_service_time` column mismatch in DB wrapper/stats area)
+**Action:** Fix `src/db/models.js` run/stat mapping
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F5.6 of Sprint 5.
+
+Read these files before writing code:
+  - src/db/models.js
+  - src/ui/execute/index.jsx
+  - any schema file present in the repo
+
+Find the avg_service_time mismatch noted as C9.
+Determine the actual column names expected by the schema and the actual fields
+returned by engine results.
+
+Fix rules:
+  - Do not rename database columns without an ADR and migration.
+  - Prefer mapping engine summary.avgSvc to the existing DB column if present.
+  - If the DB column is absent or named differently, fix the wrapper mapping,
+    not the engine result shape.
+  - Single-run and multi-replication batch results must both store service time
+    in results_json even if a scalar summary column is unavailable.
+  - Keep backwards compatibility for existing run records.
+
+Testing:
+  - DB test: saveRun maps avgSvc/avg_service_time correctly based on current schema wrapper.
+  - DB test: missing avg service value does not throw.
+  - UI test or helper test: run history displays avg service time from either scalar column or results_json fallback.
+```
+
+**Completion checklist:**
+- [ ] Actual schema/wrapper mismatch identified
+- [ ] `saveRun()` maps avg service time correctly
+- [ ] Existing run records remain readable
+- [ ] Results_json includes avg service data
+- [ ] Tests pass
+
+---
+
+### F5.7 — Keyboard Navigation + ARIA
+
+**Audit status:** ✗ (keyboard/ARIA pass not yet done)
+**Action:** Extend existing UI components
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F5.7 of Sprint 5.
+
+Read these files before writing code:
+  - src/App.jsx
+  - src/ui/ModelDetail.jsx
+  - src/ui/editors/index.jsx
+  - src/ui/execute/index.jsx
+  - src/ui/shared/components.jsx
+
+Perform an accessibility pass focused on keyboard completion of a full simulation workflow.
+
+Required keyboard path:
+  1. Navigate model library
+  2. Open/create a model
+  3. Move through editor tabs
+  4. Edit form fields
+  5. Save model
+  6. Open Execute tab/panel
+  7. Run simulation
+  8. Read/export results
+
+Implementation rules:
+  - Add labels or aria-labels to icon-only buttons.
+  - Ensure tab controls use button semantics and expose selected state.
+  - Ensure destructive actions have accessible confirmation text.
+  - Ensure form inputs have associated labels.
+  - Ensure validation errors are programmatically associated where practical.
+  - Ensure focus is moved sensibly after modal/confirmation open and close.
+  - Do not introduce a UI framework or accessibility dependency.
+  - Preserve existing visual design.
+
+Testing:
+  - UI tests with @testing-library/user-event tab navigation for core flows.
+  - Test: all primary buttons can be reached by keyboard.
+  - Test: Execute Run button has accessible name and disabled state.
+  - Test: validation error text is visible and discoverable.
+  - Optional manual check: Lighthouse accessibility score >= 85.
+```
+
+**Completion checklist:**
+- [ ] Primary workflow keyboard reachable
+- [ ] Icon/destructive buttons have accessible names
+- [ ] Inputs have labels
+- [ ] Tabs expose selected state
+- [ ] Error text visible and associated where practical
+- [ ] Accessibility UI tests pass
+
+---
+
+### F5.8 — First-Run Onboarding
+
+**Audit status:** ✗ (no onboarding/sample model)
+**Action:** Add welcome panel + sample M/M/1 model
+**Status:** ⬜ | **Completed:** —
+
+```
+Task F5.8 of Sprint 5.
+
+Read these files before writing code:
+  - src/App.jsx
+  - src/db/models.js
+  - docs/addition1_entity_model.md
+  - tests/engine/mm1_benchmark.js
+
+Add first-run onboarding for users with no models.
+
+Onboarding behaviour:
+  - If the authenticated user's model list is empty, show a compact welcome panel.
+  - The first screen should still be the usable app/model library, not a marketing landing page.
+  - Offer actions:
+      "Create blank model"
+      "Create sample M/M/1 model"
+      "Import JSON"
+  - The sample model should be a valid M/M/1 queueing model compatible with current schema.
+  - Sample model should pass validateModel().
+  - Saving the sample model creates a private model owned by the current user.
+  - Do not show onboarding once the user has models.
+
+Content rules:
+  - Keep copy brief and practical.
+  - Do not include tutorial paragraphs or keyboard shortcut explanations in-app.
+  - Use existing tokens and model card/list layout.
+
+Testing:
+  - UI test: empty model list shows onboarding actions.
+  - UI test: non-empty model list does not show onboarding.
+  - Test: Create sample M/M/1 calls saveModel with current user_id.
+  - Engine/validation test: sample model validates and can run.
+```
+
+**Completion checklist:**
+- [ ] Empty model list shows onboarding panel
+- [ ] Blank model, sample model, and import actions available
+- [ ] Sample M/M/1 model validates
+- [ ] Sample model saves as private and owned by current user
+- [ ] Onboarding hidden for users with models
+- [ ] Onboarding tests pass
 
 ---
 
@@ -1461,61 +2264,61 @@ Definition of done:
 **Existing code:** `App.jsx` (ModelCard), `src/db/models.js`
 **Action:** New UI affordance + ownership guard
 **Status:** ⬜ | **Completed:** —
-Task F5.9 of Sprint 5.
-Read src/App.jsx — find ModelCard and how models are listed.
-Read src/db/models.js — find the existing deleteModel() function.
-Add a Delete button to ModelCard:
 
-Visible only when model.user_id === currentUser.id
-Not rendered on public models owned by other users
-On click: show confirmation dialog
-"Delete '[model name]'? This cannot be undone."
-On confirm: call deleteModel(model.id, userId)
-On success: remove model from local state without page reload
-On error: display error banner
+```
+Task F5.9 of Sprint 5.
+
+Read these files before writing code:
+  - src/App.jsx
+  - src/db/models.js
+  - schema file if present
+  - docs/decisions/ADR-001-auth-model.md
+  - docs/decisions/ADR-002-public-model-runs.md
+
+Add a Delete button to ModelCard:
+  - Visible only when model.user_id === currentUser.id.
+  - Not rendered on public models owned by other users.
+  - On click, show confirmation dialog:
+      "Delete '[model name]'? This cannot be undone."
+  - On confirm, call deleteModel(model.id, userId).
+  - On success, remove model from local state without page reload.
+  - On error, display error banner.
 
 Extend deleteModel() in db/models.js:
-
-Add .eq('user_id', userId) to the delete query
-Ensures ownership is enforced at the application layer
-in addition to Supabase RLS policy
-If no row deleted (id + user_id mismatch): return structured error
+  - Require both model id and userId.
+  - If either is missing, return structured error and do not execute Supabase query.
+  - Add .eq('user_id', userId) to delete query.
+  - This enforces ownership at the application layer in addition to Supabase RLS.
+  - If no row deleted or Supabase reports an ownership/id mismatch, return structured error.
 
 Document cascade behaviour:
+  - Read schema file if present and confirm whether run records have ON DELETE CASCADE from models.
+  - If yes, note this in a concise code comment in deleteModel().
+  - If no, add a finding in the Sprint 5 notes: orphaned run records are a data integrity risk.
 
-Read schema.sql — confirm whether simulation_runs has
-ON DELETE CASCADE from models table
-If yes: note this in a code comment in deleteModel()
-If no: raise as a finding — orphaned run records are a data integrity risk
-
-Write a UI test (add to tests/ui/):
-
-Owner sees Delete button on their own model
-Non-owner does not see Delete button on a public model
-Confirmation dialog appears before delete executes
-deleteModel() is NOT called if user cancels
-
-Write a DB layer test (add to tests/db/models.test.js):
-
-deleteModel() query includes .eq('user_id', userId)
-deleteModel() called without userId does not execute
-
+Testing:
+  - UI test: owner sees Delete button on their own model.
+  - UI test: non-owner does not see Delete button on a public model.
+  - UI test: confirmation dialog appears before delete executes.
+  - UI test: deleteModel is not called if user cancels.
+  - DB test: deleteModel query includes .eq('user_id', userId).
+  - DB test: deleteModel called without userId does not execute.
+```
 
 **Completion checklist:**
 - [ ] Delete button visible to owner only
 - [ ] Confirmation dialog shown before delete
 - [ ] `deleteModel()` includes `user_id` ownership guard
+- [ ] Missing userId/id blocks delete query
 - [ ] Cascade behaviour confirmed and documented
-- [ ] UI test passes (owner/non-owner visibility + cancel guard)
-- [ ] DB layer test passes (user_id filter asserted)
-
----
+- [ ] UI test passes
+- [ ] DB layer test passes
 
 ---
 
 ## Sprint 6 — LLM Integration & Results Analysis
 
-**Goal:** Embed an AI assistant panel into the Execute view that interprets simulation results in natural language, compares scenarios, and provides sensitivity commentary. All LLM calls use the Anthropic API (claude-sonnet model) from within the browser — no backend changes required.
+**Goal:** Embed an AI assistant panel into the Execute view that interprets simulation results in natural language, compares scenarios, and provides sensitivity commentary. All LLM calls route through a Supabase Edge Function proxy backed by the Anthropic API; no API keys are exposed in the browser bundle.
 
 **Status:** ⬜ Not started | **Started:** — | **Completed:** —
 **Prerequisite:** Sprint 5 exit gate passed. Results export (F5.4) must produce structured JSON that can be passed to the LLM prompt.
@@ -1523,14 +2326,14 @@ deleteModel() called without userId does not execute
 | Feature | Audit Status | Action |
 |---|---|---|
 | F6.1 — AI assistant panel | ✗ | New: collapsible right-hand panel in Execute view |
-| F6.2 — KPI narrative generation | ✗ | New: prompt builder + Anthropic API call from browser |
+| F6.2 — KPI narrative generation | ✗ | New: prompt builder + `llm-proxy` API client |
 | F6.3 — Scenario comparison (A vs B) | ✗ | New: multi-run selector + comparative prompt |
 | F6.4 — Sensitivity commentary | ✗ | New: replication variance summary fed to LLM |
 | F6.5 — Streaming response display | ✗ | New: streamed token display in assistant panel |
 
 ### Design Principles for Sprint 6
 
-The LLM integration must never modify the model or engine. It is read-only and advisory. All calls are made client-side using the Anthropic `/v1/messages` endpoint with `claude-sonnet-4-20250514`. The results JSON passed to the LLM is the same structured object produced by `buildEngine()` — no intermediate transformation layer is required.
+The LLM integration must never modify the model or engine. It is read-only and advisory. The browser builds prompts and handles responses, but every provider call is routed through the Supabase Edge Function `llm-proxy`. The proxy holds `ANTHROPIC_API_KEY` server-side, pins the allowed model, and streams responses back to the client. The results JSON passed to the LLM is the same structured object produced by `buildEngine()` — no intermediate transformation layer is required.
 
 Context injected into every prompt:
 - Model name and description
@@ -1546,7 +2349,8 @@ We are starting Sprint 6 of DES Studio.
 
 Sprint 6 adds an LLM-powered AI assistant panel to the Execute view.
 The assistant interprets simulation results, compares scenarios, and
-provides sensitivity commentary using the Anthropic API (claude-sonnet).
+provides sensitivity commentary using the Supabase `llm-proxy` Edge
+Function backed by the Anthropic API (claude-sonnet).
 
 Completed in Sprints 1–5: [paste]
 
@@ -1757,9 +2561,10 @@ Ensure the streaming response in the AI panel meets production quality:
   - A loading spinner appears while waiting for first token
   - If the stream errors: display "Analysis unavailable — try again" (amber banner)
   - Copy-to-clipboard button appears after stream completes
-  - Response is formatted: markdown bold/italic rendered (use a lightweight
-    markdown renderer — dangerouslySetInnerHTML is NOT permitted;
-    use a safe renderer like marked with sanitisation)
+  - Response is formatted safely: render plain text or a minimal React-rendered
+    markdown subset (paragraphs, lists, bold/italic). Do not use
+    dangerouslySetInnerHTML. Do not add a markdown dependency unless approved
+    by an ADR or explicit implementation decision.
 
 Unit test: onError callback triggered when fetch rejects; panel shows error banner.
 ```
@@ -1770,7 +2575,7 @@ Unit test: onError callback triggered when fetch rejects; panel shows error bann
 - [ ] Loading spinner shown before first token
 - [ ] Error banner shown on failure (no crash)
 - [ ] Copy button present after completion
-- [ ] Markdown rendered safely (no `dangerouslySetInnerHTML`)
+- [ ] Response rendered safely (no `dangerouslySetInnerHTML`; no new markdown dependency without approval)
 - [ ] Unit test passes
 
 ---
@@ -1800,16 +2605,16 @@ npm run build                          # Succeeds
 | Feature | Audit Status | Action |
 |---|---|---|
 | F7.1 — Piecewise inter-arrival distribution schema | ✗ | New: extend `distributions.js` registry |
-| F7.2 — NHPP arrival B-Event scheduler | ✗ | New: extend `phases.js` ARRIVE logic |
-| F7.3 — Resource shift schedule schema | ✗ | New: extend entity model (new node property) |
-| F7.4 — Shift change B-Event handler | ✗ | New: extend `phases.js` |
+| F7.2 — NHPP arrival B-Event scheduler | ✗ | New: extend B-Event scheduling in `phases.js`, `macros.js`, and `engine/index.js` |
+| F7.3 — Server shift schedule schema | ✗ | New: extend server entity type model |
+| F7.4 — Shift change B-Event handler | ✗ | New: extend `phases.js` and `engine/index.js` |
 | F7.5 — Time-varying distribution picker UI | ✗ | New: extend `DistPicker` in `shared/components.jsx` |
-| F7.6 — Shift schedule editor UI | ✗ | New: extend Resource configuration in editors |
+| F7.6 — Shift schedule editor UI | ✗ | New: extend server entity type configuration in editors |
 | F7.7 — Engine validation for time-varying params | ✗ | New: extend `validateModel()` in `validation.js` |
 
 ### Design Principles for Sprint 7
 
-**Piecewise inter-arrival rates.** The modeller defines an ordered list of `{ startTime, distribution }` pairs. At each transition time, the engine schedules a `RATE_CHANGE` B-Event that replaces the active inter-arrival distribution for the relevant Source. The engine then schedules the next arrival using the new distribution. This mechanism requires no changes to Phase B or Phase C — only the ARRIVE B-Event scheduling logic.
+**Piecewise inter-arrival rates.** The modeller defines an ordered list of `{ startTime, distribution }` pairs. At each transition time, the engine schedules a `RATE_CHANGE` B-Event that replaces the active inter-arrival distribution for the relevant arrival B-Event or schedule row. The engine then schedules the next arrival using the new distribution. This mechanism requires no changes to Phase B or Phase C — only the existing B-Event scheduling and ARRIVE macro path.
 
 ```
 PIECEWISE DISTRIBUTION SCHEMA
@@ -1822,10 +2627,10 @@ PIECEWISE DISTRIBUTION SCHEMA
 }
 ```
 
-**Resource shift schedules.** The modeller defines capacity steps on a Resource node: `{ time, capacity }` pairs. Each step is pre-scheduled as a `SHIFT_CHANGE` B-Event at model initialisation. When it fires, `Resource.<id>.capacity` is updated. C-Event conditions referencing `Resource.<id>.busyCount` automatically reflect the new capacity on the next scan.
+**Resource shift schedules.** In the current model, resources are represented by server entity types (`role: "server"`), not a separate Resource node table. The modeller defines capacity steps on a server entity type: `{ time, capacity }` pairs. Each step is pre-scheduled as a `SHIFT_CHANGE` B-Event at model initialisation. Before implementation, the team must confirm how capacity maps onto the current pre-created server entity model (see Open Architectural Decisions).
 
 ```
-SHIFT SCHEDULE SCHEMA (on Resource node)
+SHIFT SCHEDULE SCHEMA (on server entity type)
 { "shiftSchedule": [
     { "time": 0,    "capacity": 3 },
     { "time": 480,  "capacity": 6 },
@@ -1848,17 +2653,17 @@ Completed in Sprints 1–5: [paste]
 Features:
   F7.1 — Piecewise distribution type: new registry entry in distributions.js
   F7.2 — NHPP arrival scheduler: RATE_CHANGE B-Events scheduled at model init
-  F7.3 — Shift schedule schema: new shiftSchedule[] property on Resource nodes
-  F7.4 — Shift change B-Event handler: updates Resource.capacity at scheduled time
+  F7.3 — Shift schedule schema: new shiftSchedule[] property on server entity types
+  F7.4 — Shift change B-Event handler: applies server capacity at scheduled time
   F7.5 — Time-varying distribution picker UI: extends existing DistPicker
-  F7.6 — Shift schedule editor: extends existing Resource configuration panel
+  F7.6 — Shift schedule editor: extends existing server entity type configuration panel
   F7.7 — Validation: piecewise periods must be time-ordered; shift times must be
           within run duration; capacity values must be positive integers
 
 CRITICAL:
   - The Three-Phase engine loop is NOT restructured
   - RATE_CHANGE and SHIFT_CHANGE B-Events are scheduled at buildEngine() init
-  - Resource.capacity changes take effect on the next Phase C scan (correct behaviour)
+  - Server capacity changes take effect on the next Phase C scan (correct behaviour)
   - Seeded RNG must be used for all sampling in piecewise distributions
   - A piecewise distribution with a single period is equivalent to a static distribution
     (no special-casing needed)
@@ -1883,10 +2688,12 @@ Definition of done:
 ```
 Task F7.1 of Sprint 7.
 
-Read src/engine/distributions.js — show me the registerDistribution() pattern
-and the full list of currently registered types.
+Read src/engine/distributions.js — show me the current DISTRIBUTIONS registry
+object and the full list of currently registered types.
 
-Register a new 'piecewise' distribution type:
+Add a new Piecewise distribution entry (or `piecewise` if the registry has
+already been normalized by implementation time). Preserve the existing
+distribution naming convention in `DISTRIBUTIONS`:
   Schema: { "type": "piecewise", "periods": [{ "startTime": number, "distribution": Distribution }] }
 
   Validation function (runs at validateModel() time):
@@ -1921,27 +2728,28 @@ Add to tests/engine/distributions.test.js:
 ### F7.2 — NHPP Arrival B-Event Scheduler
 
 **Audit status:** ✗ (ARRIVE always uses a static distribution)
-**Action:** Extend `phases.js` ARRIVE handler and `engine/index.js` init
+**Action:** Extend B-Event scheduling in `phases.js`, ARRIVE macro path in `macros.js`, and `engine/index.js` init
 **Status:** ⬜ | **Completed:** —
 
 ```
 Task F7.2 of Sprint 7.
 
-Read src/engine/phases.js — show me the ARRIVE handler in full.
+Read src/engine/phases.js — show me how B-Events are scheduled.
+Read src/engine/macros.js — show me the ARRIVE macro in full.
 Read src/engine/index.js — show me the engine initialisation block.
 
-The ARRIVE handler currently samples from a static distribution.
-For piecewise distributions, the handler must additionally schedule
-RATE_CHANGE B-Events at period transition times.
+Arrival B-Events currently use static schedule distributions and ARRIVE macro
+effects. For piecewise distributions, engine initialization must additionally
+schedule RATE_CHANGE B-Events at period transition times.
 
 Extend engine initialisation in buildEngine():
-  For each Source node with a piecewise interArrivalDist:
+  For each arrival B-Event or schedule row with a piecewise inter-arrival distribution:
     For each period transition (periods[i].startTime where i > 0):
       Schedule a RATE_CHANGE B-Event at startTime
-      Payload: { sourceId, newDistribution: periods[i].distribution }
+      Payload: { eventId or scheduleRowId, newDistribution: periods[i].distribution }
 
 Add RATE_CHANGE B-Event handler to phases.js:
-  When fired: update the active distribution reference on the source node
+  When fired: update the active distribution reference for that arrival schedule
   No other state changes — the next ARRIVE B-Event will use the new distribution
 
 Write a unit test:
@@ -1961,18 +2769,20 @@ Write a unit test:
 
 ---
 
-### F7.3 — Resource Shift Schedule Schema
+### F7.3 — Server Shift Schedule Schema
 
-**Audit status:** ✗ (Resource nodes have no shiftSchedule property)
+**Audit status:** ✗ (server entity types have no shiftSchedule property)
 **Action:** Extend entity model schema; extend `docs/addition1_entity_model.md`
 **Status:** ⬜ | **Completed:** —
 
 ```
 Task F7.3 of Sprint 7.
 
-Read docs/addition1_entity_model.md Section 3.1 (Resource State Variables).
+Read docs/addition1_entity_model.md Section 3.1 (Resource State Variables)
+and the current entity type schema. Confirm whether the current schema uses
+server entity types (`role: "server"`) rather than separate Resource nodes.
 
-Add shiftSchedule as an optional property on Resource nodes:
+Add shiftSchedule as an optional property on server entity types:
   Schema: { "shiftSchedule": [{ "time": number, "capacity": number }] }
   Default: absent (no shift schedule = static capacity throughout run)
 
@@ -1986,14 +2796,14 @@ Validation rules to add to validateModel() (F7.7):
     - periods[0].time must be 0
     - all capacity values must be positive integers
     - all times must be within run duration (if run duration is set)
-    - the first period sets the initial Resource.capacity (overrides the static
-      capacity field if shiftSchedule[0] is present)
+    - the first period sets the initial server capacity (overrides the static
+      count/capacity field if shiftSchedule[0] is present)
 
 No engine or UI changes in this task — schema and validation spec only.
 ```
 
 **Completion checklist:**
-- [ ] `shiftSchedule` schema documented in `addition1_entity_model.md`
+- [ ] `shiftSchedule` schema documented for server entity types in `addition1_entity_model.md`
 - [ ] Validation rules V12 added to `validateModel()` spec in `addition1_entity_model.md`
 - [ ] Model JSON schema updated (if applicable)
 
@@ -2010,30 +2820,44 @@ Task F7.4 of Sprint 7.
 
 Read src/engine/phases.js and src/engine/index.js.
 
-Extend buildEngine() initialisation:
-  For each Resource node with a shiftSchedule:
+ARCHITECTURAL DECISION REQUIRED before coding:
+  The current engine pre-creates server entities from entityTypes[].count.
+  Confirm whether shift capacity should be implemented by:
+    A. Creating/retiring server entity instances as capacity changes, or
+    B. Introducing a separate capacity abstraction checked by C-Event conditions.
+
+Recommended default:
+  Use option A. Capacity is the available count of server entities for a server
+  entity type. When capacity increases, create additional idle server entities.
+  When capacity decreases, retire only idle excess server entities; busy servers
+  finish naturally, and the engine records a warning if busyCount exceeds the
+  new target capacity.
+
+Extend buildEngine() initialisation after that decision is accepted:
+  For each server entity type with a shiftSchedule:
     For each period in shiftSchedule:
       Schedule a SHIFT_CHANGE B-Event at period.time
-      Payload: { resourceId, newCapacity: period.capacity }
+      Payload: { serverTypeName, newCapacity: period.capacity }
 
 Add SHIFT_CHANGE B-Event handler to phases.js:
   When fired:
-    1. Update Resource.<resourceId>.capacity to newCapacity
-    2. If new capacity < current busyCount (impossible — capacity cannot drop below
-       in-service entities): add a warning to the results object (do not halt)
-    3. Write a StepLog entry: "SHIFT_CHANGE: Resource <id> capacity → <newCapacity>"
+    1. Apply the new target capacity for the server entity type using the
+       accepted design above
+    2. If new capacity < current busyCount, add a warning to the results object
+       and allow busy servers to complete naturally
+    3. Write a StepLog entry: "SHIFT_CHANGE: <serverTypeName> capacity -> <newCapacity>"
 
 Write unit tests:
   - Single server, shift at T=500: capacity 3 → 1
-  - Assert: Resource.capacity == 3 before T=500
-  - Assert: Resource.capacity == 1 after T=500
+  - Assert: available server capacity behaves as 3 before T=500
+  - Assert: available server capacity behaves as 1 after T=500
   - Assert: StepLog contains SHIFT_CHANGE entry at T=500
   - Capacity-below-busyCount edge case: warning in results, run continues
 ```
 
 **Completion checklist:**
 - [ ] SHIFT_CHANGE B-Events scheduled at `buildEngine()` init
-- [ ] SHIFT_CHANGE handler updates `Resource.<id>.capacity`
+- [ ] SHIFT_CHANGE handler applies server type capacity using the accepted architecture
 - [ ] StepLog entry written on each capacity change
 - [ ] Warning (not halt) if new capacity < current busyCount
 - [ ] Unit tests pass
@@ -2082,17 +2906,17 @@ Write a UI test (add to tests/ui/shared/dist-picker.test.jsx):
 
 ### F7.6 — Shift Schedule Editor
 
-**Audit status:** ✗ (Resource configuration has no shift schedule panel)
-**Action:** Extend Resource configuration in `editors/index.jsx`
+**Audit status:** ✗ (server entity type configuration has no shift schedule panel)
+**Action:** Extend server entity type configuration in `editors/index.jsx`
 **Status:** ⬜ | **Completed:** —
 
 ```
 Task F7.6 of Sprint 7.
 
-Read src/ui/editors/index.jsx — find the Resource (or entity type) configuration
-section. Show me the current fields rendered for a Resource node.
+Read src/ui/editors/index.jsx — find the entity type configuration section.
+Show me the current fields rendered for a server entity type (`role: "server"`).
 
-Extend the Resource configuration panel (do not replace):
+Extend the server entity type configuration panel (do not replace):
   Add a "Shift Schedule" section (collapsed by default):
     - Toggle: "Use shift schedule" (checkbox)
     - When enabled: show a schedule table
@@ -2103,7 +2927,7 @@ Extend the Resource configuration panel (do not replace):
     - Inline validation: times must be sorted; capacity must be a positive integer
 
   On save: if shift schedule enabled, write shiftSchedule[] to model_json.
-           Static capacity field is ignored when shiftSchedule[0] is present.
+           Static count/capacity field is ignored when shiftSchedule[0] is present.
 
 Write a UI test:
   - Enabling shift schedule shows the table; disabling restores static capacity field
@@ -2112,7 +2936,7 @@ Write a UI test:
 ```
 
 **Completion checklist:**
-- [ ] Shift schedule section in existing Resource editor
+- [ ] Shift schedule section in existing server entity type editor
 - [ ] Toggle enables/disables shift table vs static capacity field
 - [ ] Row 0 time locked to 0
 - [ ] Inline validation: sorted times, positive integer capacity
@@ -2142,10 +2966,10 @@ Add validation rules V12–V15 to the existing validateModel():
           duration is configured. (Warning — run proceeds with amber banner)
 
 Error message patterns:
-  V12: "Source '{name}' piecewise distribution must start at time 0."
-  V13: "Source '{name}' piecewise periods are not sorted by start time."
-  V14: "Resource '{name}' shift schedule must begin at time 0."
-  V15: "Resource '{name}' has shift times beyond run duration — later shifts will not fire."
+  V12: "Arrival event '{name}' piecewise distribution must start at time 0."
+  V13: "Arrival event '{name}' piecewise periods are not sorted by start time."
+  V14: "Server type '{name}' shift schedule must begin at time 0."
+  V15: "Server type '{name}' has shift times beyond run duration — later shifts will not fire."
 
 Add to tests/engine/validation.test.js (extend existing file):
   - V12: model with piecewise period[0].startTime != 0 returns blocking error
@@ -2205,11 +3029,11 @@ The builder operates in three modes:
 
 **Describe → Build:** User writes a free-text description of the system (e.g., "An emergency department with triage, nurse assessment, and doctor consultation. Patients arrive at exponential rate 0.3, triage takes 5–10 minutes uniformly..."). The LLM returns a complete model JSON proposal.
 
-**Refine:** User types a refinement request against the current model (e.g., "Add a second doctor and a priority queue for critical patients"). The LLM produces a diff — only the changed elements.
+**Refine:** User types a refinement request against the current model (e.g., "Add a second doctor and a priority queue for critical patients"). The LLM returns the full proposed model after the refinement. The UI computes the structured diff locally; any LLM-written diff narrative is advisory only and must not be treated as authoritative.
 
 **Explain:** User asks "What does this C-Event do?" — the LLM returns a plain-English explanation of the selected model element.
 
-All three modes route through the same `llm-proxy` Edge Function. The mode is encoded in the system prompt.
+All three modes route through the same `llm-proxy` Edge Function. The mode is encoded in the system prompt. The API key and provider selection remain server-side in the Edge Function.
 
 ### Sprint 8 Planning Prompt *(run in claude.ai)*
 
@@ -2310,12 +3134,14 @@ Export buildModelBuilderSystemPrompt():
          {
            "intent": "build" | "refine" | "clarify",
            "questions": ["..."] | null,  // if intent is clarify
-           "proposedModel": { ...model_json... } | null,  // if intent is build/refine
+           "proposedModel": { ...model_json... } | null,  // complete proposed model if intent is build/refine
            "explanation": "..."  // always present — plain-English summary
          }
     4. Instructs the LLM to ask at most 2 clarifying questions before proposing a model
     5. Forbids the LLM from inventing fields, macros, or distribution types
        outside the documented schema
+    6. For refine requests, requires proposedModel to be the complete model after
+       the requested refinement; the UI computes the diff locally
 
 Export buildModelBuilderUserMessage(description, currentModel, conversationHistory):
   Returns the user message for the current turn, including:
@@ -2532,10 +3358,11 @@ npm run build                          # Succeeds
 
 | ADR | Question | Needed by | Status |
 |---|---|---|---|
-| ADR-002 | Public model run permissions | Sprint 3 F3.8 | ⬜ Open |
-| ADR-003 | LLM API key handling — client-side vs Edge Function proxy | Sprint 6 F6.2 | ⬜ Open — recommend Supabase Edge Function proxy; no API key in client bundle |
-| ADR-004 | LLM conversation persistence — session only vs Supabase | Sprint 8 F8.3 | ⬜ Open — initial design: session only (React state) |
-| ADR-005 | Piecewise distribution: warm-up interaction — does warm-up reset the period position? | Sprint 7 F7.2 | ⬜ Open — initial decision: no reset; schedule is time-indexed |
+| ADR-002 | Public model run permissions | Sprint 3 F3.8 | ✅ Accepted — fork model; see `docs/decisions/ADR-002-public-model-run-permissions.md` |
+| TBD-LLM-API | LLM API key handling — client-side vs Edge Function proxy | Sprint 6 F6.2 | ✅ Resolved in plan — use Supabase Edge Function proxy; create ADR if implementation changes |
+| TBD-LLM-CONV | LLM conversation persistence — session only vs Supabase | Sprint 8 F8.3 | ✅ Resolved in plan — session only React state; create ADR if persistence is added |
+| TBD-PIECEWISE-WARMUP | Piecewise distribution warm-up interaction — does warm-up reset the period position? | Sprint 7 F7.2 | ✅ Resolved in plan — no reset; schedule is time-indexed |
+| TBD-SHIFT-CAPACITY | Shift schedule capacity mapping to current server entity model | Sprint 7 F7.4 | ⬜ Open — decide server instance scaling vs separate capacity abstraction before implementation |
 | *(add rows as new questions arise)* | | | |
 
 ---
