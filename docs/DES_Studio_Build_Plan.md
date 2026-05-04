@@ -57,6 +57,8 @@ Claude Code must read the relevant existing files before touching anything.
 | 1.19 | 2026-05-04 | F5.8 complete — empty personal libraries now show compact onboarding actions for blank creation, JSON import, and a private runnable M/M/1 sample model. |
 | 1.20 | 2026-05-04 | F5.9 complete — owner-only model delete added with confirmation, local removal, DB ownership guard on `owner_id`, and tests for missing user/id and non-owner public models. |
 | 1.21 | 2026-05-04 | Sprint 5 complete — Polish, Export & Production. Full test suite passes: 31 files, 334 tests. Production build succeeds. |
+| 1.22 | 2026-05-04 | ADR-007 accepted. Planning revised around three authoring modes over one canonical `model_json`: Forms/Tabs, AI Generated Model, and Visual Designer. The old split-pane SVG hybrid designer is retired; future visual designer work should target the final graph-first authoring surface directly. |
+| 1.23 | 2026-05-04 | Sprint 6 complete — AI assistant panel, prompt builders, streaming API client, deployed Supabase `llm-proxy` Edge Function, comparison/sensitivity actions, and tests added. Full suite passes: 32 files, 343 tests. Production build succeeds. |
 
 ---
 
@@ -70,6 +72,22 @@ Claude Code must read the relevant existing files before touching anything.
 | Sprint 3 | ✅ Complete | 2026-05-04 | Experiment Controls (Warm-up, Termination, Fork Model). | 272 (272) | 1.48% | Success | ADR-002 implemented. Vitest heap issue resolved; full suite passes. |
 | Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results (Workers, Batches, CI Dashboard). | 294 (294) | CI contains 9.0 | Success | Bounded worker pool implemented. `batch_id` stored inside `results_json` because no committed schema column exists. |
 | Sprint 5 | ✅ Complete | 2026-05-04 | Polish, Export & Production. | 334 (334) | CI contains 9.0 | Success | Error boundaries, model/results import/export, run stats, avg service mapping, accessibility, onboarding, and owner-only delete complete. |
+| Sprint 6 | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis. | 343 (343) | N/A | Success | AI insights panel and hosted Supabase `llm-proxy` deployed. |
+
+---
+
+## Forward Product Roadmap
+
+ADR-007 establishes DES Studio's model-authoring architecture: one canonical `model_json`, three authoring modes.
+
+| Sprint | Product focus | Authoring mode impact |
+|---|---|---|
+| Sprint 6 | LLM Integration & Results Analysis | Adds read-only AI interpretation of completed runs; does not modify models |
+| Sprint 7 | Dynamic Distributions & Time-Varying Resources | Extends the canonical model schema used by all authoring modes |
+| Sprint 8 | AI Generated Model Authoring | Adds the second authoring mode: natural-language model proposals validated before apply |
+| Sprint 9 | Visual Designer Authoring | Adds the third authoring mode: graph-first canvas editing over the same canonical model |
+
+The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
 ---
 
@@ -160,6 +178,10 @@ Claude Code must never rewrite a working component — only extend or fix it.
 | LLM model builder — iterative clarification loop | S8 |
 | LLM model builder — diff-preview before apply | S8 |
 | LLM model builder — validation integration | S8 |
+| Visual Designer — graph-first canvas authoring | S9 |
+| Visual Designer — node palette and connection rules | S9 |
+| Visual Designer — graph layout metadata for `model_json` | S9 |
+| Visual Designer — inspector integration with existing editor components | S9 |
 
 ---
 
@@ -2331,7 +2353,7 @@ Testing:
 
 **Goal:** Embed an AI assistant panel into the Execute view that interprets simulation results in natural language, compares scenarios, and provides sensitivity commentary. All LLM calls route through a Supabase Edge Function proxy backed by the Anthropic API; no API keys are exposed in the browser bundle.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-04 | **Completed:** 2026-05-04
 **Prerequisite:** Sprint 5 exit gate passed. Results export (F5.4) must produce structured JSON that can be passed to the LLM prompt.
 
 | Feature | Audit Status | Action |
@@ -2393,7 +2415,7 @@ Definition of done:
 
 **Audit status:** ✗ (not implemented)
 **Action:** New collapsible panel — extends `execute/index.jsx`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F6.1 of Sprint 6.
@@ -2418,10 +2440,10 @@ Write a UI test: panel toggles correctly; buttons disabled before run.
 ```
 
 **Completion checklist:**
-- [ ] AI panel renders and toggles without affecting existing Execute layout
-- [ ] Buttons disabled before first run completes
-- [ ] Placeholder text shown in response area
-- [ ] UI test passes
+- [x] AI panel renders and toggles without affecting existing Execute layout
+- [x] Buttons disabled before first run completes
+- [x] Placeholder text shown in response area
+- [x] UI test passes
 
 ---
 
@@ -2429,7 +2451,7 @@ Write a UI test: panel toggles correctly; buttons disabled before run.
 
 **Audit status:** ✗ (not implemented)
 **Action:** New `src/llm/` directory — `prompts.js` + `apiClient.js`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F6.2 of Sprint 6.
@@ -2472,12 +2494,13 @@ Unit tests (tests/llm/prompts.test.js):
 ```
 
 **Completion checklist:**
-- [ ] `src/llm/prompts.js` with `buildNarrativePrompt()` exported
-- [ ] `src/llm/apiClient.js` with `streamNarrative()` exported
-- [ ] Supabase Edge Function `llm-proxy` deployed
-- [ ] API key never appears in client-side code
-- [ ] Streaming tokens display progressively in panel
-- [ ] Unit tests pass
+- [x] `src/llm/prompts.js` with `buildNarrativePrompt()` exported
+- [x] `src/llm/apiClient.js` with `streamNarrative()` exported
+- [x] Supabase Edge Function `llm-proxy` source added locally
+- [x] Supabase Edge Function `llm-proxy` deployed
+- [x] API key never appears in client-side code
+- [x] Streaming tokens display progressively in panel
+- [x] Unit tests pass
 
 ---
 
@@ -2485,7 +2508,7 @@ Unit tests (tests/llm/prompts.test.js):
 
 **Audit status:** ✗ (not implemented)
 **Action:** Extend `src/llm/prompts.js`; extend AI panel
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F6.3 of Sprint 6.
@@ -2514,11 +2537,11 @@ Unit tests (add to tests/llm/prompts.test.js):
 ```
 
 **Completion checklist:**
-- [ ] `buildComparisonPrompt()` exported from `prompts.js`
-- [ ] Comparison prompt includes both run KPIs side by side
-- [ ] AI panel dropdown populated from run history
-- [ ] Streaming narrative displayed for comparison
-- [ ] Unit tests pass
+- [x] `buildComparisonPrompt()` exported from `prompts.js`
+- [x] Comparison prompt includes both run KPIs side by side
+- [x] AI panel dropdown populated from completed replication rows in the current Execute session
+- [x] Streaming narrative displayed for comparison
+- [x] Unit tests pass
 
 ---
 
@@ -2526,7 +2549,7 @@ Unit tests (add to tests/llm/prompts.test.js):
 
 **Audit status:** ✗ (not implemented)
 **Action:** Extend `src/llm/prompts.js`; extend AI panel
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F6.4 of Sprint 6.
@@ -2550,10 +2573,10 @@ Unit test: sensitivity button disabled when replications < 5.
 ```
 
 **Completion checklist:**
-- [ ] `buildSensitivityPrompt()` exported from `prompts.js`
-- [ ] Sensitivity button disabled when N < 5
-- [ ] CI data correctly structured in prompt
-- [ ] Unit test passes
+- [x] `buildSensitivityPrompt()` exported from `prompts.js`
+- [x] Sensitivity button disabled when N < 5
+- [x] CI data correctly structured in prompt
+- [x] Unit test passes
 
 ---
 
@@ -2561,7 +2584,7 @@ Unit test: sensitivity button disabled when replications < 5.
 
 **Audit status:** ✗ (not implemented)
 **Action:** Extend AI panel component; extend `apiClient.js`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-04
 
 ```
 Task F6.5 of Sprint 6.
@@ -2581,13 +2604,13 @@ Unit test: onError callback triggered when fetch rejects; panel shows error bann
 ```
 
 **Completion checklist:**
-- [ ] Streaming tokens display progressively
-- [ ] Stop button cancels stream via `AbortController`
-- [ ] Loading spinner shown before first token
-- [ ] Error banner shown on failure (no crash)
-- [ ] Copy button present after completion
-- [ ] Response rendered safely (no `dangerouslySetInnerHTML`; no new markdown dependency without approval)
-- [ ] Unit test passes
+- [x] Streaming tokens display progressively
+- [x] Stop button cancels stream via `AbortController`
+- [x] Loading spinner shown before first token
+- [x] Error banner shown on failure (no crash)
+- [x] Copy button present after completion
+- [x] Response rendered safely (no `dangerouslySetInnerHTML`; no new markdown dependency without approval)
+- [x] Unit test passes
 
 ---
 
@@ -2601,6 +2624,12 @@ npm run build                          # Succeeds
 # Manual: open Execute panel, run model, click "AI Insights", verify narrative appears
 # Manual: select two runs, click Compare, verify comparison narrative appears
 ```
+
+**Local gate result (2026-05-04):**
+- `npm test` — 32 files, 343 tests passed
+- `npm test -- llm execute-panel` — 2 files, 14 tests passed
+- `npm run build` — succeeds
+- Hosted Supabase `llm-proxy` deployed to project `znkknldzdfajcrpabtmg`
 
 ---
 
@@ -3014,18 +3043,18 @@ npm run build                          # Succeeds
 
 ---
 
-## Sprint 8 — LLM Chat Model Builder
+## Sprint 8 — AI Generated Model Authoring
 
-**Goal:** Allow a modeller to describe a system in natural language and receive a partially- or fully-configured DES model. The LLM acts as a model-construction assistant: it parses the description, asks clarifying questions, proposes entity classes, queues, B-Events, C-Events, and distributions, and writes the result directly into the model editor. The modeller reviews a diff-preview before any changes are applied.
+**Goal:** Add the second model authoring mode from ADR-007. A modeller describes a system in natural language and receives a partially- or fully-configured DES model proposal. The LLM acts as a model-construction assistant: it parses the description, asks clarifying questions, proposes entity classes, queues, B-Events, C-Events, and distributions, and presents the result as canonical `model_json`. The modeller reviews a diff-preview before any changes are applied.
 
 **Status:** ⬜ Not started | **Started:** — | **Completed:** —
 **Prerequisite:** Sprint 6 (LLM API proxy infrastructure) must be complete. Sprint 8 depends on the Supabase Edge Function `llm-proxy` deployed in F6.2.
 
-**Architectural constraint:** The LLM produces a model JSON object conforming to the existing `addition1_entity_model.md` schema. It is validated by `validateModel()` before being applied. The engine, macros, and database schema are not modified. The LLM cannot bypass validation.
+**Architectural constraint:** ADR-007 applies. AI Generated Model is an authoring mode over the same canonical `model_json` used by Forms/Tabs and the future Visual Designer. The LLM produces a model JSON object conforming to the existing `addition1_entity_model.md` schema. It is validated by `validateModel()` before being applied. The engine, macros, and database schema are not modified. The LLM cannot bypass validation.
 
 | Feature | Audit Status | Action |
 |---|---|---|
-| F8.1 — Chat model builder panel | ✗ | New: panel in model editor (alongside existing tab editors) |
+| F8.1 — AI Generated Model panel | ✗ | New: panel in model editor (alongside existing tab editors) |
 | F8.2 — Intent parser prompt + LLM schema | ✗ | New: `src/llm/model-builder-prompts.js` |
 | F8.3 — Iterative clarification loop | ✗ | New: multi-turn conversation in builder panel |
 | F8.4 — Diff-preview before apply | ✗ | New: structured diff view between current and proposed model |
@@ -3033,6 +3062,8 @@ npm run build                          # Succeeds
 | F8.6 — Partial model apply | ✗ | New: allow applying only selected sections of proposed model |
 
 ### Design Principles for Sprint 8
+
+Sprint 8 implements the AI Generated Model authoring mode. It does not replace the Forms/Tabs editor and does not introduce a separate model format.
 
 The LLM is constrained to produce only valid model JSON. The system prompt is extensive and encodes the full entity model schema (addition1_entity_model.md Section 2–7) as constraints on LLM output. The LLM must not invent macros, distribution types, or field names outside the documented schema.
 
@@ -3051,13 +3082,13 @@ All three modes route through the same `llm-proxy` Edge Function. The mode is en
 ```
 We are starting Sprint 8 of DES Studio.
 
-Sprint 8 adds an LLM-powered chat interface for building simulation models
-from natural language descriptions.
+Sprint 8 adds the AI Generated Model authoring mode: an LLM-powered
+chat interface for building simulation models from natural language descriptions.
 
 Completed in Sprints 1–6: [paste — note: Sprint 6 must be complete]
 
 Features:
-  F8.1 — Chat model builder panel: new panel in model editor view
+  F8.1 — AI Generated Model panel: new panel in model editor view
   F8.2 — Intent parser prompt: system prompt encoding full entity model schema
   F8.3 — Iterative clarification loop: multi-turn conversation state
   F8.4 — Diff-preview: structured diff between current and proposed model
@@ -3071,6 +3102,7 @@ CRITICAL:
     refines, not replaces, unless the user explicitly requests a full rebuild
   - Conversation history is stored in React state only — not persisted to Supabase
   - The builder panel is additive — existing tab editors remain fully functional
+  - ADR-007 applies — this is the second authoring mode over canonical model_json
   - Maximum conversation turns before auto-summary: 10 (prevents context overflow)
 
 Definition of done:
@@ -3084,7 +3116,7 @@ Definition of done:
 
 ---
 
-### F8.1 — Chat Model Builder Panel
+### F8.1 — AI Generated Model Panel
 
 **Audit status:** ✗ (model editor has no chat interface)
 **Action:** New panel alongside existing `editors/index.jsx` tab structure
@@ -3095,9 +3127,9 @@ Task F8.1 of Sprint 8.
 
 Read src/ui/editors/index.jsx — understand the existing tab structure.
 
-Add a new "Build with AI" tab to the existing model editor tab bar:
+Add a new "AI Generated Model" tab to the existing model editor tab bar:
   - Position: first tab (leftmost) — it is the entry point for new models
-  - Tab label: "✦ Build with AI"
+  - Tab label: "AI Generated Model"
   - Panel structure:
       Top: conversation history (scrollable, message bubbles)
       Bottom: text input + Send button
@@ -3107,11 +3139,11 @@ Add a new "Build with AI" tab to the existing model editor tab bar:
   - Conversation history is React state — not persisted
 
 The tab must not affect any existing tab (entity types, state vars, etc.).
-Write a UI test: "Build with AI" tab renders; other tabs unaffected.
+Write a UI test: "AI Generated Model" tab renders; other tabs unaffected.
 ```
 
 **Completion checklist:**
-- [ ] "Build with AI" tab added as first tab in existing editor
+- [ ] "AI Generated Model" tab added as first tab in existing editor
 - [ ] Existing tabs unaffected
 - [ ] Conversation history renders as message bubbles
 - [ ] Text input + Send button present
@@ -3357,11 +3389,99 @@ npm run build                          # Succeeds
 
 ---
 
+## Sprint 9 — Visual Designer Authoring
+
+**Goal:** Add the third model authoring mode from ADR-007: a graph-first visual designer for building and editing DES models over the same canonical `model_json` used by Forms/Tabs and AI Generated Model authoring.
+
+**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Prerequisite:** Sprint 8 complete. The AI Generated Model path should already prove that canonical model proposals can be validated and applied safely. React Flow or any equivalent graph/canvas dependency must be explicitly reviewed before implementation.
+
+**Architectural constraint:** Do not implement the retired split-pane SVG hybrid designer. Sprint 9 should target the final graph-first authoring surface directly. The visual designer must not create a separate model format and must not bypass `validateModel()`.
+
+| Feature | Audit Status | Action |
+|---|---|---|
+| F9.1 — Visual Designer shell and mode entry | ✗ | New: visual authoring mode entry point alongside Forms/Tabs and AI Generated Model |
+| F9.2 — Graph layout metadata decision | ✗ | Decide whether `model_json.graph` is persisted or derived until manual positioning exists |
+| F9.3 — Canvas renderer and node palette | ✗ | New: graph-first canvas with Source, Queue, Activity, Sink nodes |
+| F9.4 — Connection rules and DAG validation | ✗ | Reuse validation concepts; block invalid graph connections |
+| F9.5 — Inspector integration | ✗ | Reuse existing editor components where practical; do not fork model logic |
+| F9.6 — Round-trip parity with Forms/Tabs | ✗ | Switching authoring modes preserves the same canonical model data |
+
+### Design Principles for Sprint 9
+
+The Visual Designer is a first-class authoring mode, not a preview of the tab editor and not a temporary SVG bridge. It should let users think in terms of sources, queues, activities, sinks, and connections, while still producing the same model JSON that the engine already runs.
+
+The useful parts of `docs/DES_Studio_Visual_Designer_Design.md` remain valid:
+
+- the four node types
+- port rules
+- DAG validation rules
+- graph layout metadata questions
+- inspector reuse as a product concept
+
+The obsolete part is the phased SVG hybrid implementation path. ADR-007 supersedes that path.
+
+### Sprint 9 Planning Prompt *(run in claude.ai)*
+
+```
+We are starting Sprint 9 of DES Studio.
+
+Sprint 9 adds the Visual Designer authoring mode defined by ADR-007.
+The retired split-pane SVG hybrid designer must NOT be implemented.
+
+Completed in Sprints 1–8: [paste — note: Sprint 8 must be complete]
+
+Read:
+  - docs/decisions/ADR-007-three-authoring-modes.md
+  - docs/DES_Studio_Visual_Designer_Design.md
+  - src/ui/editors/index.jsx
+  - src/ui/ModelDetail.jsx
+  - docs/addition1_entity_model.md
+
+Features:
+  F9.1 — Visual Designer mode entry in the model authoring surface
+  F9.2 — Decide graph layout metadata strategy for model_json
+  F9.3 — Canvas renderer with Source, Queue, Activity, Sink nodes
+  F9.4 — Connection rules and DAG validation
+  F9.5 — Inspector integration using existing editor components where practical
+  F9.6 — Round-trip parity with Forms/Tabs and AI Generated Model outputs
+
+CRITICAL:
+  - One canonical model_json; no visual-designer-only model format
+  - Do not build FlowDiagramSVG as a bridge implementation
+  - Any new canvas dependency requires explicit review and ADR/update if needed
+  - validateModel() remains the gate before execution or save
+  - Forms/Tabs and AI Generated Model remain first-class authoring modes
+
+Definition of done:
+  - User can enter Visual Designer authoring mode for an existing model
+  - User can create/edit nodes and valid connections
+  - Invalid connections and cycles are blocked
+  - Changes are reflected in canonical model_json and visible in Forms/Tabs
+  - npm test -- --run passes
+  - npm run build succeeds
+```
+
+### Sprint 9 Completion Gate
+
+```bash
+npm test -- --run                      # Zero failures
+npm test -- ui                         # Visual designer mode and inspector tests pass
+npm test -- validation                 # DAG/connection validation tests pass
+npm run build                          # Succeeds
+# Manual: create a model visually, switch to Forms/Tabs, confirm same data
+# Manual: edit a model in Forms/Tabs, switch to Visual Designer, confirm graph reflects it
+# Manual: attempt invalid connections/cycles, confirm they are blocked
+```
+
+---
+
 ## Deferred Features Register
 
 | Feature | Original sprint | Deferred to | Reason | Status |
 |---|---|---|---|---|
-| *(add rows as deferrals occur)* | | | | |
+| Split-pane SVG hybrid visual designer | Visual designer v2.0 Phase 2 | Not scheduled | ADR-007 retired the temporary SVG bridge in favour of direct final Visual Designer authoring | Cancelled |
+| React Flow / canvas dependency decision | Visual designer planning | Sprint 9 | Dependency choice should be reviewed when the final visual designer sprint begins | Deferred |
 
 ---
 
@@ -3370,10 +3490,12 @@ npm run build                          # Succeeds
 | ADR | Question | Needed by | Status |
 |---|---|---|---|
 | ADR-002 | Public model run permissions | Sprint 3 F3.8 | ✅ Accepted — fork model; see `docs/decisions/ADR-002-public-model-run-permissions.md` |
+| ADR-007 | Three authoring modes over one canonical model | Sprint 6 planning | ✅ Accepted — Forms/Tabs, AI Generated Model, and Visual Designer share canonical `model_json`; SVG hybrid retired |
 | TBD-LLM-API | LLM API key handling — client-side vs Edge Function proxy | Sprint 6 F6.2 | ✅ Resolved in plan — use Supabase Edge Function proxy; create ADR if implementation changes |
 | TBD-LLM-CONV | LLM conversation persistence — session only vs Supabase | Sprint 8 F8.3 | ✅ Resolved in plan — session only React state; create ADR if persistence is added |
 | TBD-PIECEWISE-WARMUP | Piecewise distribution warm-up interaction — does warm-up reset the period position? | Sprint 7 F7.2 | ✅ Resolved in plan — no reset; schedule is time-indexed |
 | TBD-SHIFT-CAPACITY | Shift schedule capacity mapping to current server entity model | Sprint 7 F7.4 | ⬜ Open — decide server instance scaling vs separate capacity abstraction before implementation |
+| TBD-VISUAL-CANVAS | Canvas library and graph layout persistence strategy | Sprint 9 F9.2/F9.3 | ⬜ Open — decide dependency/version and whether `model_json.graph` is persisted before implementation |
 | *(add rows as new questions arise)* | | | |
 
 ---

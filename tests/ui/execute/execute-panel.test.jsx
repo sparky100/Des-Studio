@@ -4,6 +4,7 @@ import { ExecutePanel } from '../../../src/ui/execute/index.jsx';
 
 const mockRunReplications = vi.hoisted(() => vi.fn());
 const mockSaveSimulationRun = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockStreamNarrative = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../src/engine/replication-runner.js', () => ({
   runReplications: mockRunReplications,
@@ -11,6 +12,10 @@ vi.mock('../../../src/engine/replication-runner.js', () => ({
 
 vi.mock('../../../src/db/models.js', () => ({
   saveSimulationRun: mockSaveSimulationRun,
+}));
+
+vi.mock('../../../src/llm/apiClient.js', () => ({
+  streamNarrative: mockStreamNarrative,
 }));
 
 const validModel = {
@@ -36,6 +41,7 @@ describe('ExecutePanel', () => {
   beforeEach(() => {
     mockRunReplications.mockReset();
     mockSaveSimulationRun.mockReset();
+    mockStreamNarrative.mockReset();
     mockSaveSimulationRun.mockResolvedValue(undefined);
   });
 
@@ -46,6 +52,21 @@ describe('ExecutePanel', () => {
     expect(screen.getByText('REPLICATIONS')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /run all/i })).toBeInTheDocument();
     expect(screen.getByText('Run or step the simulation to see the visual view.')).toBeInTheDocument();
+  });
+
+  it('toggles the AI assistant panel with actions disabled before results exist', () => {
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+    expect(screen.getByRole('complementary', { name: /ai assistant/i })).toBeInTheDocument();
+    expect(screen.getByText('Run the model to generate insights.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /explain results/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^compare$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /sensitivity/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /close ai assistant/i }));
+    expect(screen.queryByRole('complementary', { name: /ai assistant/i })).not.toBeInTheDocument();
   });
 
   it('runs one replication through the existing single-run path', async () => {
@@ -82,6 +103,33 @@ describe('ExecutePanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /cancel batch/i }));
     expect(cancel).toHaveBeenCalled();
+  });
+
+  it('populates AI comparison options from completed replications', async () => {
+    mockRunReplications.mockImplementation(({ onProgress, onReplicationComplete }) => {
+      onProgress({ completed: 0, total: 2, running: 2, pending: 0, cancelled: false, workerCount: 2 });
+      onReplicationComplete({
+        replicationIndex: 0,
+        seed: 10,
+        result: { finalTime: 10, snap: { clock: 10, entities: [], served: 1, reneged: 0 }, summary: { served: 1, reneged: 0, avgWait: 4, avgSvc: 2, avgSojourn: 6 } },
+      });
+      onReplicationComplete({
+        replicationIndex: 1,
+        seed: 11,
+        result: { finalTime: 11, snap: { clock: 11, entities: [], served: 2, reneged: 0 }, summary: { served: 2, reneged: 0, avgWait: 6, avgSvc: 3, avgSojourn: 7 } },
+      });
+      return { cancel: vi.fn() };
+    });
+
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+    const spinButtons = screen.getAllByRole('spinbutton');
+    fireEvent.change(spinButtons[1], { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+    fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+    expect(await screen.findByRole('option', { name: /replication 1/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /replication 2/i })).toBeInTheDocument();
   });
 
   it('updates replication rows and aggregate CI from runner callbacks', async () => {
@@ -146,5 +194,41 @@ describe('ExecutePanel', () => {
         aggregateStats: expect.any(Object),
       })
     );
+  });
+
+  it('shows an AI assistant error banner when streaming fails', async () => {
+    mockStreamNarrative.mockImplementation((prompt, handlers) => {
+      handlers.onError(new Error('network down'));
+    });
+
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+    fireEvent.click(screen.getByRole('button', { name: /explain results/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/analysis unavailable/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/network down/i);
+  });
+
+  it('streams AI response chunks and shows copy after completion', async () => {
+    mockStreamNarrative.mockImplementation((prompt, handlers) => {
+      handlers.onToken('Queues are ');
+      handlers.onToken('stable.');
+      handlers.onComplete();
+    });
+
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+    fireEvent.click(screen.getByRole('button', { name: /explain results/i }));
+
+    expect(await screen.findByText(/queues are stable/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /copy/i })).toBeInTheDocument();
   });
 });

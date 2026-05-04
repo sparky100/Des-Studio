@@ -8,6 +8,8 @@ import { summarizeReplicationResults } from "../../engine/statistics.js";
 import { saveSimulationRun } from "../../db/models.js";
 import { validateModel } from "../../engine/validation.js";
 import { ConditionBuilder } from "../editors/index.jsx";
+import { streamNarrative } from "../../llm/apiClient.js";
+import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildSensitivityPrompt } from "../../llm/prompts.js";
 
 const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
 const CI_METRICS = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.served", "summary.reneged"];
@@ -306,6 +308,191 @@ const VisualView = ({ snap, model, summary }) => {
   );
 };
 
+function makeRunLabel(payload) {
+  if (!payload) return "Run";
+  if (payload.label) return payload.label;
+  if (payload.replicationIndex != null) return `Replication ${payload.replicationIndex + 1} (seed ${payload.seed ?? "?"})`;
+  return "Completed run";
+}
+
+function makeRunPromptPayload(label, payload) {
+  const summary = payload?.result?.summary || payload?.summary || payload?.results?.summary || {};
+  return {
+    label,
+    experimentConfig: payload?.experiment || payload?.experimentConfig || {},
+    kpis: {
+      served: summary.served ?? null,
+      reneged: summary.reneged ?? null,
+      totalEntities: summary.total ?? null,
+      avgWait: summary.avgWait ?? null,
+      avgService: summary.avgSvc ?? null,
+      avgSojourn: summary.avgSojourn ?? null,
+    },
+    finalTime: payload?.result?.finalTime ?? payload?.finalTime ?? payload?.results?.snap?.clock ?? null,
+  };
+}
+
+const AiAssistantPanel = ({
+  model,
+  results,
+  exportConfig,
+  aggregateStats,
+  comparisonRuns,
+  onClose,
+}) => {
+  const [response, setResponse] = useState("");
+  const [status, setStatus] = useState("idle");
+  const [error, setError] = useState("");
+  const [selectedRunId, setSelectedRunId] = useState(comparisonRuns[0]?.id || "");
+  const abortRef = useRef(null);
+  const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
+  const sensitivityReady = ciResults.some(item => item.n >= 5);
+  const isStreaming = status === "loading" || status === "streaming";
+  const selectedRun = comparisonRuns.find(run => run.id === selectedRunId);
+
+  useEffect(() => {
+    if (!selectedRunId && comparisonRuns[0]) setSelectedRunId(comparisonRuns[0].id);
+  }, [comparisonRuns, selectedRunId]);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const runPrompt = useCallback((prompt) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setResponse("");
+    setError("");
+    setStatus("loading");
+
+    streamNarrative(prompt, {
+      signal: controller.signal,
+      onToken: token => {
+        setStatus("streaming");
+        setResponse(prev => `${prev}${token}`);
+      },
+      onComplete: () => {
+        abortRef.current = null;
+        setStatus("complete");
+      },
+      onError: err => {
+        abortRef.current = null;
+        setError(err?.message || "Analysis unavailable");
+        setStatus("error");
+      },
+    });
+  }, []);
+
+  const stopStream = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStatus(response ? "complete" : "idle");
+  };
+
+  const copyResponse = () => {
+    if (!response || !navigator.clipboard?.writeText) return;
+    navigator.clipboard.writeText(response);
+  };
+
+  const explainResults = () => {
+    runPrompt(buildNarrativePrompt(model, exportConfig, {
+      ...results,
+      aggregateStats,
+    }));
+  };
+
+  const compareRuns = () => {
+    if (!selectedRun) return;
+    runPrompt(buildComparisonPrompt(
+      model.name,
+      makeRunPromptPayload("Current completed run", { results, experiment: exportConfig }),
+      makeRunPromptPayload(selectedRun.label, selectedRun.payload)
+    ));
+  };
+
+  const explainSensitivity = () => {
+    runPrompt(buildSensitivityPrompt(model.name, exportConfig, ciResults));
+  };
+
+  const panelButtonStyle = { width: "100%", justifyContent: "center" };
+
+  return (
+    <aside aria-label="AI assistant" style={{
+      width: 320,
+      flex: "0 0 320px",
+      background: C.panel,
+      border: `1px solid ${C.border}`,
+      borderRadius: 8,
+      padding: 14,
+      display: "flex",
+      flexDirection: "column",
+      gap: 12,
+      minHeight: 520,
+      alignSelf: "stretch",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
+        <div>
+          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>AI Assistant</div>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Read-only results analysis</div>
+        </div>
+        <Btn small variant="ghost" onClick={onClose} ariaLabel="Close AI assistant">x</Btn>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <Btn variant="primary" onClick={explainResults} disabled={!results || isStreaming} style={panelButtonStyle}>
+          Explain results
+        </Btn>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE RUNS</label>
+          <select
+            id="compare-run"
+            value={selectedRunId}
+            onChange={event => setSelectedRunId(event.target.value)}
+            disabled={!comparisonRuns.length || isStreaming}
+            style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px" }}
+          >
+            {!comparisonRuns.length && <option value="">No comparison runs</option>}
+            {comparisonRuns.map(run => <option key={run.id} value={run.id}>{run.label}</option>)}
+          </select>
+          <Btn variant="ghost" onClick={compareRuns} disabled={!results || !selectedRun || isStreaming} style={panelButtonStyle}>
+            Compare
+          </Btn>
+        </div>
+        <Btn variant="amber" onClick={explainSensitivity} disabled={!sensitivityReady || isStreaming} style={panelButtonStyle}>
+          Sensitivity
+        </Btn>
+      </div>
+
+      {status === "error" && (
+        <div role="alert" style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
+          Analysis unavailable - try again. {error}
+        </div>
+      )}
+
+      <div style={{
+        flex: 1,
+        background: C.bg,
+        border: `1px solid ${C.border}`,
+        borderRadius: 6,
+        padding: 12,
+        overflowY: "auto",
+        color: response ? C.text : C.muted,
+        fontFamily: FONT,
+        fontSize: 12,
+        lineHeight: 1.7,
+        whiteSpace: "pre-wrap",
+      }}>
+        {status === "loading" && "Waiting for analysis..."}
+        {response || (status !== "loading" ? "Run the model to generate insights." : "")}
+      </div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        {isStreaming && <Btn small variant="danger" onClick={stopStream}>Stop</Btn>}
+        {status === "complete" && response && <Btn small variant="ghost" onClick={copyResponse}>Copy</Btn>}
+      </div>
+    </aside>
+  );
+};
+
 const ExecutePanel = ({ model, modelId, userId }) => {
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
@@ -326,6 +513,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   const [terminationMode, setTerminationMode] = useState("time");
   const [terminationCondition, setTerminationCondition] = useState(null);
   const [replications, setReplications] = useState(1);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
   const autoRef = useRef(null);
@@ -603,6 +791,11 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   }), [modelId, replications, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
   const exportPartial = partialBatchStatus && replicationResults.length > 0;
   const resultFilenameBase = `des-studio-results-${slugifyResultName(model.name)}${exportPartial ? "-partial" : ""}-${timestampForFilename()}`;
+  const comparisonRuns = useMemo(() => replicationResults.map(payload => ({
+    id: `rep-${payload.replicationIndex}`,
+    label: makeRunLabel(payload),
+    payload,
+  })), [replicationResults]);
 
   const exportResultsJson = useCallback(() => {
     const payload = buildResultsExportPayload({
@@ -635,7 +828,8 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   }, [results, replicationResults, aggregateStats, exportConfig, resultFilenameBase]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1, minWidth: 0 }}>
       {/* Experiment Controls Section */}
       <div style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -732,6 +926,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive}>⚡ Run All</Btn>
         <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results JSON</Btn>
         <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
+        <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)}>AI Insights</Btn>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         <div style={{ flex: 1 }} />
         <div role="tablist" aria-label="Execute views" style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2 }}>
@@ -923,6 +1118,18 @@ const ExecutePanel = ({ model, modelId, userId }) => {
             </tbody>
           </table>
         </div>
+      )}
+      </div>
+
+      {aiPanelOpen && (
+        <AiAssistantPanel
+          model={model}
+          results={results}
+          exportConfig={exportConfig}
+          aggregateStats={aggregateStats}
+          comparisonRuns={comparisonRuns}
+          onClose={() => setAiPanelOpen(false)}
+        />
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-04 | Reflects: Sprint 5 complete + ADR-006 + Known Issues*
+*Last updated: 2026-05-04 | Reflects: Sprint 6 complete + ADR-007 + Known Issues*
 
 ---
 
@@ -1183,6 +1183,7 @@ This prevents silent architectural drift — the most common way AI-assisted pro
 | ADR-004 | mulberry32 as the seeded PRNG (C7 fix) | Accepted | Sprint 1 | §9, §18 |
 | ADR-005 | Queue discipline lookup by entity type name | Accepted — interim | Sprint 1/2 | §6, §10 |
 | ADR-006 | Replication runner architecture | Accepted | Sprint 4 | §21 |
+| ADR-007 | Three authoring modes over one canonical model | Accepted | Sprint 6 planning | §21 |
 
 ---
 
@@ -1280,35 +1281,37 @@ UI / UX
 | Sprint 3 | ✅ Complete | 2026-05-04 | Experiment controls: warm-up, termination, fork model | 272 passing | 1.48% error |
 | Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results: workers, batches, CI dashboard | 294 passing | CI contains 9.0 |
 | Sprint 5 | ✅ Complete | 2026-05-04 | Polish, Export & Production | 334 passing | CI contains 9.0 |
+| Sprint 6 | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis | 343 passing | N/A |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 6 — LLM Integration & Results Analysis**
+**Sprint 7 — Dynamic Distributions & Time-Varying Resources**
 
-Goal: Add LLM-assisted results analysis on top of the structured results export completed in Sprint 5.
+Goal: Add time-varying arrival rates and resource shift schedules on top of the canonical model schema used by all authoring modes.
 
-**Prerequisites:** Sprint 5 exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 6 feature prompts.
+**Prerequisites:** Sprint 6 exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 7 feature prompts.
 
-### Recently Completed — Sprint 5
+### Recently Completed — Sprint 6
 
-Sprint 5 completed on 2026-05-04.
+Sprint 6 completed on 2026-05-04.
 
-- Added shared React error boundaries around risky UI surfaces.
-- Added model JSON export/import and results JSON/CSV export.
-- Populated model run counts from user-scoped run history.
-- Corrected `avg_service_time` to persist `summary.avgSvc` with JSON fallback for older records.
-- Added keyboard/ARIA improvements across library, tabs, dialogs, Execute controls, and destructive buttons.
-- Added first-run onboarding with a valid M/M/1 sample model.
-- Added owner-only model deletion with confirmation and an `owner_id` DB guard.
+- Added a collapsible AI Insights panel to the Execute view.
+- Added prompt builders for KPI narrative, scenario comparison, and sensitivity commentary.
+- Added a streaming LLM API client with cancellation, error fallback, and safe plain-text rendering.
+- Added local Supabase Edge Function source for `llm-proxy`.
+- Deployed `llm-proxy` to Supabase project `znkknldzdfajcrpabtmg`.
+- Stored `ANTHROPIC_API_KEY` as a Supabase Edge Function secret.
+- Installed the Supabase CLI as a local dev dependency.
+- Added LLM prompt tests and Execute panel AI tests.
 
-### Sprint 5 Completion Gate
+### Sprint 6 Completion Gate
 
 ```text
-npm test       -> 31 files, 334 tests passed
+npm test       -> 32 files, 343 tests passed
+npm test -- llm execute-panel -> 2 files, 14 tests passed
 npm run build  -> succeeds
-30-replication M/M/1 CI gate -> 95% CI contains analytical mean wait 9.0
 ```
 
 ### Recent Architectural Decisions
@@ -1322,7 +1325,11 @@ npm run build  -> succeeds
 
 ### Future-Claude Notes
 
-- Sprint 6 should build LLM analysis on the structured results already exported from `src/ui/execute/index.jsx`; do not introduce client-side LLM API keys.
+- Sprint 6 LLM analysis is implemented in `src/ui/execute/index.jsx`, `src/llm/prompts.js`, `src/llm/apiClient.js`, and `supabase/functions/llm-proxy/index.ts`.
+- Do not introduce client-side LLM API keys. `ANTHROPIC_API_KEY` belongs only in Supabase Edge Function secrets.
+- `llm-proxy` is deployed to Supabase project `znkknldzdfajcrpabtmg`.
+- ADR-007 establishes the product architecture for model creation: Forms/Tabs, AI Generated Model, and Visual Designer are three authoring modes over one canonical `model_json`.
+- Do not build the old split-pane SVG hybrid visual designer as a bridge phase; plan the visual designer as the final graph-first authoring surface.
 - Keep model import/export validation compatible with the current model JSON shape and the first-run M/M/1 sample in `src/App.jsx`.
 - `deleteModel(id, userId)` is intentionally owner-guarded via `owner_id`; keep destructive model actions user-scoped.
 - `ModelCard` behaves as a keyboard-reachable model selector with a nested delete action; preserve event isolation between select and delete.
@@ -1335,6 +1342,16 @@ npm run build  -> succeeds
   - `npm test -- accessibility delete-model onboarding`
   - `npm test`
   - `npm run build`
+- Useful Sprint 6 verification commands:
+  - `npm test -- llm execute-panel`
+  - `npm test`
+  - `npm run build`
+
+Server-side deployment secret for Sprint 6:
+
+```text
+ANTHROPIC_API_KEY
+```
 
 ---
 
