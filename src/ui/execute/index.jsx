@@ -291,6 +291,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
             ))}
           </div>
         </div>
+      </div>
 
       {validation.errors.length > 0 && (
         <div style={{ background: '#7f1d1d', border: '1px solid #dc2626', borderRadius: 6,
