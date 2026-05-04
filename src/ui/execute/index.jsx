@@ -231,13 +231,24 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   }, [model, userId, modelId, seed, hasErrors, warmupPeriod, stopAuto]);
 
   const toggleAuto = () => {
-    if (autoRunning) { stopAuto(); return; }
-    if (mode === "idle") initEngine();
-    setAutoRunning(true);
-    autoRef.current = setInterval(() => doStep(), autoSpeed);
+    if (autoRunning) {
+      stopAuto();
+    } else {
+      if (mode === "idle") initEngine();
+      setAutoRunning(true);
+    }
   };
 
-  useEffect(() => () => stopAuto(), []);
+  useEffect(() => {
+    if (!autoRunning) return;
+    autoRef.current = setInterval(doStep, autoSpeed);
+    return () => {
+      if (autoRef.current) {
+        clearInterval(autoRef.current);
+        autoRef.current = null;
+      }
+    };
+  }, [autoRunning, autoSpeed, doStep]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
