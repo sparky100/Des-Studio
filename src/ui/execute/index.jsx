@@ -1,4 +1,5 @@
 // ui/execute/index.jsx — CustomerToken, VisualView, ExecutePanel
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildEngine } from "../../engine/index.js";
@@ -155,6 +156,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   const [autoRunning, setAutoRunning] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
+  const [results, setResults] = useState(null);
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
   const [warmupPeriod, setWarmupPeriod] = useState(0);
   const [maxSimTime, setMaxSimTime] = useState(500);
@@ -199,6 +201,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     setMode("stepping");
     setSaveStatus(null);
     setPhaseCTruncated(false);
+    setResults(null);
   }, [model, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
 
   const stopAuto = useCallback(() => {
@@ -219,15 +222,16 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     if (r.done) {
       setMode("done");
       stopAuto();
+      const fullResult = {
+        snap: r.snap,
+        summary: {
+          total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
+          served: r.snap?.served || 0,
+          reneged: r.snap?.reneged || 0,
+        },
+      };
+      setResults(fullResult);
       if (userId && modelId) {
-        const fullResult = {
-          snap: r.snap,
-          summary: {
-            total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
-            served: r.snap?.served || 0,
-            reneged: r.snap?.reneged || 0,
-          },
-        };
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
         
@@ -267,6 +271,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     const result = engine.runAll();
 
     setCurrentSnap(result.snap);
+    setResults(result);
     setLog(result.log);
     setMode("done");
     if (result.summary?.phaseCTruncated) setPhaseCTruncated(true);
