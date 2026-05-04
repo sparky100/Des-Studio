@@ -8,7 +8,8 @@ const Tag=({label,color=C.muted})=>(
 );
 const PhaseTag=({phase})=>{
   const cfg={A:{color:C.phaseA,label:"Phase A"},B:{color:C.phaseB,label:"Phase B"},
-             C:{color:C.phaseC,label:"Phase C"},INIT:{color:C.muted,label:"Init"},END:{color:C.green,label:"Done"}};
+             C:{color:C.phaseC,label:"Phase C"},INIT:{color:C.muted,label:"Init"},END:{color:C.green,label:"Done"},
+             WARMUP:{color:C.amber,label:"Warmup"}};
   const c=cfg[phase]||{color:C.muted,label:phase};
   return <Tag label={c.label} color={c.color}/>;
 };

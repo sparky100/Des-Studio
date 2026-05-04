@@ -15,9 +15,10 @@ import { fireBEvent, fireCEvent }              from "./phases.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
-export function buildEngine(model, seed, maxCycles = 500) {
+export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
   const rng = mulberry32(seed ?? 0);
+  let _warmupComplete = false;
 
   // ── Initialise scalar state ───────────────────────────────────────────────
   const state = { __served: 0, __reneged: 0 };
@@ -30,7 +31,7 @@ export function buildEngine(model, seed, maxCycles = 500) {
   let _seq = 0;
   const nextId = () => ++_seq;
 
-  const entities = createServerEntities(
+  let entities = createServerEntities(
     model.entityTypes || [],
     (attrDefs) => sampleAttrs(attrDefs, rng)
   );
@@ -100,6 +101,30 @@ export function buildEngine(model, seed, maxCycles = 500) {
 
     // Phase A — advance clock
     clock = fel[0].scheduledTime;
+
+    // Warm-up period reset
+    if (warmupPeriod > 0 && clock >= warmupPeriod && !_warmupComplete) {
+      _warmupComplete = true;
+      const msg = `Warm-up complete at t=${clock.toFixed(3)}. Statistics reset.`;
+      cycleLog.push({ phase: "WARMUP", time: clock, message: msg });
+      log.push({ phase: "WARMUP", time: clock, message: msg, snap: snap(clock) });
+
+      // Reset counters
+      state.__served = 0;
+      state.__reneged = 0;
+
+      // Reset state variables marked for reset
+      for (const sv of model.stateVariables || []) {
+        if (sv.resetOnWarmup) {
+          try   { state[sv.name] = JSON.parse(sv.initialValue); }
+          catch { state[sv.name] = sv.initialValue; }
+        }
+      }
+
+      // Discard entities that have completed their lifecycle
+      entities = entities.filter(e => e.role === 'server' || (e.status !== 'done' && e.status !== 'reneged'));
+    }
+
     cycleLog.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}` });
     log.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}`, snap: snap(clock) });
 

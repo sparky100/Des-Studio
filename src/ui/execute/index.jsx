@@ -138,6 +138,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   const [saveStatus, setSaveStatus] = useState(null);
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
+  const [warmupPeriod, setWarmupPeriod] = useState(0);
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
   const autoRef = useRef(null);
@@ -148,13 +149,13 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   const initEngine = useCallback(() => {
     if (hasErrors) return;
     runSeedRef.current = seed;
-    engineRef.current = buildEngine(model, seed);
+    engineRef.current = buildEngine(model, seed, warmupPeriod);
     setCurrentSnap(engineRef.current.getSnap());
-    setLog([{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed})` }]);
+    setLog([{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }]);
     setMode("stepping");
     setSaveStatus(null);
     setPhaseCTruncated(false);
-  }, [model, seed, hasErrors]);
+  }, [model, seed, hasErrors, warmupPeriod]);
 
   const stopAuto = () => { if (autoRef.current) { clearInterval(autoRef.current); autoRef.current = null; setAutoRunning(false); } };
 
@@ -180,7 +181,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
         
-        saveSimulationRun(modelId, userId, fullResult, { seed: runSeedRef.current })
+        saveSimulationRun(modelId, userId, fullResult, { seed: runSeedRef.current, warmupPeriod })
           .then(() => {
             setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
@@ -202,7 +203,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     }
 
     const runSeed = seed;
-    const engine = buildEngine(model, runSeed);
+    const engine = buildEngine(model, runSeed, warmupPeriod);
     const result = engine.runAll();
 
     setCurrentSnap(result.snap);
@@ -214,7 +215,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing simulation history to database..." }]);
 
     try {
-      await saveSimulationRun(modelId, userId, result, { seed: runSeed });
+      await saveSimulationRun(modelId, userId, result, { seed: runSeed, warmupPeriod });
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
     } catch (e) {
@@ -240,11 +241,24 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors}>⚡ Run All</Btn>
         <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: 10, color: "#666", fontFamily: FONT }}>seed:</span>
-          <input
-            type="number"
-            value={seed}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontSize: 10, color: "#666", fontFamily: FONT }}>warm-up:</span>
+            <input
+              type="number"
+              value={warmupPeriod}
+              onChange={e => setWarmupPeriod(parseFloat(e.target.value) || 0)}
+              style={{ width: 50, background: "transparent", border: "1px solid #333",
+                borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 11,
+                padding: "4px 6px", outline: "none" }}
+            />
+          </div>
+          <div style={{width: 1, height: 16, background: '#333'}}/>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontSize: 10, color: "#666", fontFamily: FONT }}>seed:</span>
+            <input
+              type="number"
+              value={seed}
             onChange={e => setSeed(parseInt(e.target.value) || 0)}
             style={{ width: 80, background: "transparent", border: "1px solid #333",
               borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 11,

@@ -118,6 +118,7 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     run_by:              userId,
     replications:        config.replications || 1,
     max_simulation_time: config.maxTime      || 500,
+    warmup_period:       config.warmupPeriod || null,
     seed:                config.seed         || null,
     total_arrived:       s.total    || 0,
     total_served:        s.served   || 0,
@@ -134,11 +135,17 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
 export async function fetchRunHistory(modelId) {
   const { data, error } = await supabase
     .from("simulation_runs")
-    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, results_json")
+    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, results_json, warmup_period")
     .eq("model_id", modelId)
     .order("ran_at", { ascending: false })
     .limit(20);
   if (error) throw error;
+  if (data && data.length > 0 && data[0].warmup_period === undefined) {
+    console.warn(
+      "Supabase simulation_runs table missing warmup_period column. " +
+      "Run: ALTER TABLE simulation_runs ADD COLUMN IF NOT EXISTS warmup_period REAL;"
+    );
+  }
   return data || [];
 }
 
