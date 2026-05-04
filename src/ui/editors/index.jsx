@@ -81,20 +81,18 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[]) => {
   return opts;
 };
 
-const bEffectOptions = (entityTypes, queues=[]) => {
+const bEffectOptions = (entityTypes, queues=[], stateVariables=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const opts = [{label:'— select effect —',value:''}];
   custs.forEach(c=>{
     opts.push({label:`ARRIVE(${c})`,value:`ARRIVE(${c})`});
-    opts.push({label:`ARRIVE(${c}); totalArrived++`,value:`ARRIVE(${c}); totalArrived++`});
   });
   if(queues.length > 0) {
     opts.push({label:'── ARRIVE into queue ──', value:'', disabled:true});
     custs.forEach(c => {
       queues.forEach(q => {
         opts.push({label:`ARRIVE(${c}, ${q.name})`, value:`ARRIVE(${c}, ${q.name})`});
-        opts.push({label:`ARRIVE(${c}, ${q.name}); totalArrived++`, value:`ARRIVE(${c}, ${q.name}); totalArrived++`});
       });
     });
   }
@@ -114,9 +112,20 @@ const bEffectOptions = (entityTypes, queues=[]) => {
     servers.forEach(s => {
       queues.forEach(q => {
         opts.push({label:`RELEASE(${s}, ${q.name})`, value:`RELEASE(${s}, ${q.name})`});
-        opts.push({label:`RELEASE(${s}, ${q.name}); totalTriaged++`, value:`RELEASE(${s}, ${q.name}); totalTriaged++`});
       });
     });
+  }
+  const svNames = (stateVariables||[]).map(sv=>sv.name).filter(Boolean);
+  opts.push({label:'── Scalar effects ──',value:'',disabled:true});
+  if(svNames.length>0){
+    svNames.forEach(v=>{
+      opts.push({label:`${v}++`,value:`${v}++`});
+      opts.push({label:`${v}--`,value:`${v}--`});
+      opts.push({label:`${v} += 1`,value:`${v} += 1`});
+      opts.push({label:`${v} = 0`,value:`${v} = 0`});
+    });
+  } else {
+    opts.push({label:'No state variables defined',value:'',disabled:true});
   }
   return opts;
 };
@@ -323,7 +332,7 @@ const StateVarEditor=({vars,onChange})=>{
   );
 };
 
-const BEventEditor=({events,onChange,entityTypes=[],queues=[],cEvents=[]})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[]})=>{
   const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:[],schedules:[],description:""}]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
   const rem=(i)=>{
@@ -385,7 +394,7 @@ const BEventEditor=({events,onChange,entityTypes=[],queues=[],cEvents=[]})=>{
               {effects.map((eff,j)=>(
                 <div key={j} style={{display:'flex',gap:8,alignItems:'center'}}>
                   <DropField value={eff} onChange={v=>updEff(j,v)}
-                    options={bEffectOptions(entityTypes, queues)} color={C.green}/>
+                    options={bEffectOptions(entityTypes, queues, stateVariables)} color={C.green}/>
                   <Btn small variant="danger" onClick={()=>remEff(j)}>✕</Btn>
                 </div>
               ))}
