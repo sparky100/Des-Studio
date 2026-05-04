@@ -919,7 +919,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         )}
       </div>
 
-      <div style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 14, display: "flex", gap: 10, alignItems: "center" }}>
+      <div style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive}>⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
@@ -928,8 +928,8 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
         <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)}>AI Insights</Btn>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
-        <div style={{ flex: 1 }} />
-        <div role="tablist" aria-label="Execute views" style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2 }}>
+        <div style={{ flex: 1, minWidth: 12 }} />
+        <div role="tablist" aria-label="Execute views" style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2, marginLeft: "auto" }}>
           {["visual", "log", "entities"].map(v => (
             <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)} style={{ padding: "6px 12px", background: view === v ? "#333" : "transparent", border: "none", color: view === v ? "#fff" : "#888", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
               {v.charAt(0).toUpperCase() + v.slice(1)}
