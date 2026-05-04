@@ -75,22 +75,31 @@ describe('buildEngine — seeded reproducibility', () => {
   };
 
   test('two runs with the same seed produce identical summary.served', () => {
-    const r1 = buildEngine(m1Model, 42).runAll();
-    const r2 = buildEngine(m1Model, 42).runAll();
+    const r1 = buildEngine(m1Model, 42, 0, 50).runAll();
+    const r2 = buildEngine(m1Model, 42, 0, 50).runAll();
     expect(r1.summary.served).toBe(r2.summary.served);
     expect(r1.summary.served).toBeGreaterThan(0);
   });
 
   test('two runs with the same seed produce identical finalTime', () => {
-    const r1 = buildEngine(m1Model, 1234).runAll();
-    const r2 = buildEngine(m1Model, 1234).runAll();
+    const r1 = buildEngine(m1Model, 1234, 0, 50).runAll();
+    const r2 = buildEngine(m1Model, 1234, 0, 50).runAll();
     expect(r1.finalTime).toBe(r2.finalTime);
   });
 
-  test('two runs with different seeds produce different finalTimes', () => {
-    const r1 = buildEngine(m1Model, 1).runAll();
-    const r2 = buildEngine(m1Model, 999999).runAll();
-    // Inter-arrival times differ → with very high probability final times differ
-    expect(r1.finalTime).not.toBe(r2.finalTime);
+  test('two runs with different seeds produce different outcomes', () => {
+    const r1 = buildEngine(m1Model, 1, 0, 50).runAll();
+    const r2 = buildEngine(m1Model, 999999, 0, 50).runAll();
+    // Inter-arrival times differ; with a fixed time limit, compare outcomes
+    // rather than finalTime, which is expected to equal the limit.
+    expect({
+      total: r1.summary.total,
+      served: r1.summary.served,
+      avgWait: r1.summary.avgWait,
+    }).not.toEqual({
+      total: r2.summary.total,
+      served: r2.summary.served,
+      avgWait: r2.summary.avgWait,
+    });
   });
 });

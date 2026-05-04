@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { beforeAll, describe, test, expect } from 'vitest';
 import { buildEngine } from '../index.js';
 
 // ── M/M/1 model fixture ───────────────────────────────────────────────────────
@@ -149,9 +149,11 @@ describe('step()', () => {
 describe('runAll() M/M/1 model', () => {
   let result;
 
-  // Run once — reuse across tests in this block
-  const engine = buildEngine(mm1Model);
-  result = engine.runAll();
+  beforeAll(() => {
+    // Bound the open-ended arrival process so this file stays cheap to collect
+    // and does not build an enormous snapshot log before tests are registered.
+    result = buildEngine(mm1Model, 123, 0, 50).runAll();
+  });
 
   test('returns finalTime, summary, log, snap, entitySummary', () => {
     expect(result).toHaveProperty('finalTime');
@@ -207,8 +209,10 @@ describe('runAll() M/M/1 model', () => {
 
 describe('two-stage model (TriageNurse + Doctor)', () => {
   let result;
-  const engine = buildEngine(twoStageModel, 200);
-  result = engine.runAll();
+
+  beforeAll(() => {
+    result = buildEngine(twoStageModel, 200, 0, 50).runAll();
+  });
 
   test('runs without error and returns summary', () => {
     expect(result.summary).toBeDefined();
@@ -242,8 +246,8 @@ describe('two-stage model (TriageNurse + Doctor)', () => {
 
 describe('seed reproducibility', () => {
   test('two runs with the same seed produce identical summary.served', () => {
-    const r1 = buildEngine(mm1Model, 42).runAll();
-    const r2 = buildEngine(mm1Model, 42).runAll();
+    const r1 = buildEngine(mm1Model, 42, 0, 50).runAll();
+    const r2 = buildEngine(mm1Model, 42, 0, 50).runAll();
     expect(r1.summary.served).toBe(r2.summary.served);
     expect(r1.summary.served).toBeGreaterThan(0);
   });

@@ -41,6 +41,7 @@ Claude Code must read the relevant existing files before touching anything.
 | 1.3 | 2026-05-03 | Sprint 2 complete — 215 tests passing (14 files), build 3.29s. Sprint 3 started. |
 | 1.4 | 2026-05-03 | Added F5.9 — model delete UI with owner-only guard. Identified gap: no UI surface for model deletion existed in any prior sprint. |
 | 1.5 | 2026-05-04 | Sprint 3 complete — Experiment Controls. Includes warm-up period, termination conditions, unified experiment panel, DB layer tests, engine test completion, and ADR-002 resolution (fork model). Noted persistent 'JS heap out of memory' error during full/engine test runs. |
+| 1.6 | 2026-05-04 | Resolved Vitest heap issue. Root cause was unbounded seeded engine tests running open-ended `runAll()` simulations with full snapshot logs. Full suite now passes: 17 files, 272 tests. |
 
 ---
 
@@ -51,7 +52,7 @@ Claude Code must read the relevant existing files before touching anything.
 | Pre-Sprint | ✅ Complete | 2026-04-30 | Project setup, initial audit & plan. | ~120 (120) | N/A | Success | Initial setup of CLAUDE.md, .env.example, etc. |
 | Sprint 1 | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening. | 182 (182) | 1.48% | Success | Fixes for XSS, C-scan restart, queue discipline, seeded RNG, validation, DistPicker. |
 | Sprint 2 | ✅ Complete | 2026-05-03 | UI Editor Completeness. | 215 (215) | N/A | Success | Configured JSDOM, enhanced ConditionBuilder, etc. |
-| Sprint 3 | ✅ Complete | 2026-05-04 | Experiment Controls (Warm-up, Termination, Fork Model). | DB: 8/8, UI: 30/30 | 1.48% | Success | ADR-002 implemented. Noted 'JS heap out of memory' on full/engine test runs. |
+| Sprint 3 | ✅ Complete | 2026-05-04 | Experiment Controls (Warm-up, Termination, Fork Model). | 272 (272) | 1.48% | Success | ADR-002 implemented. Vitest heap issue resolved; full suite passes. |
 
 ---
 

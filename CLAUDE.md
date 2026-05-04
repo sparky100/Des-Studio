@@ -552,7 +552,7 @@ function buildEngine(model, seed, maxCycles = 500) { ... }
 
 ### 18.1 Vitest "JS Heap Out of Memory" Error
 
-**Issue:** The comprehensive `npm test` command (and `npm test -- engine`) consistently fails with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
+**Issue:** Historical issue: the comprehensive `npm test` command (and `npm test -- engine`) previously failed with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
 
 **Symptoms:**
 *   All individual test files, when run in isolation or in smaller groups (e.g., `npm test -- db`, `npm test -- ui`), pass successfully with zero failures.
@@ -565,9 +565,9 @@ function buildEngine(model, seed, maxCycles = 500) { ... }
 *   Attempted to disable multi-threading in Vitest (`threads: false`) in `vite.config.js`, which also resulted in Vitest failing to run any tests.
 *   Attempted to apply `NODE_OPTIONS=--max-old-space-size=4096` directly to `npm test` command (using PowerShell syntax: `$env:NODE_OPTIONS="--max-old-space-size=4096"; npm test`). This also did not resolve the issue, with the error persisting.
 
-**Status:** Unresolved. This appears to be an environmental or deeper Vitest configuration challenge, possibly related to JSDOM usage in UI tests when combined with engine tests, or cumulative resource demands exceeding default Node.js worker limits in a way that is resistant to direct configuration.
+**Status:** Resolved 2026-05-04. The root cause was not Vitest configuration: two open-ended seeded engine tests ran `buildEngine(...).runAll()` without a simulation time bound. Because the engine records full snapshots in the log and arrivals keep growing the entity pool, those tests exhausted worker memory during collection/execution. The fix bounded those test runs with `maxSimTime = 50` and moved stale top-level `runAll()` calls into `beforeAll()`.
 
-**Impact:** Prevents reliable full test suite execution and comprehensive code coverage reporting. It does NOT indicate functional failures in individual features, as all individual tests pass. Development can continue, but this issue should be revisited for long-term CI/CD stability.
+**Impact:** Full test suite execution is reliable again. Verification: `npm test` passes 17 test files / 272 tests with zero unhandled worker errors.
 
 ---
 
@@ -1381,7 +1381,7 @@ npm run build                        # Succeeds
 
 #### 18.1 Vitest "JS Heap Out of Memory" Error
 
-**Issue:** The comprehensive `npm test` command (and `npm test -- engine`) consistently fails with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
+**Issue:** Historical issue: the comprehensive `npm test` command (and `npm test -- engine`) previously failed with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
 
 **Symptoms:**
 *   All individual test files, when run in isolation or in smaller groups (e.g., `npm test -- db`, `npm test -- ui`), pass successfully with zero failures.
@@ -1394,9 +1394,9 @@ npm run build                        # Succeeds
 *   Attempted to disable multi-threading in Vitest (`threads: false`) in `vite.config.js`, which also resulted in Vitest failing to run any tests.
 *   Attempted to apply `NODE_OPTIONS=--max-old-space-size=4096` directly to `npm test` command (using PowerShell syntax: `$env:NODE_OPTIONS="--max-old-space-size=4096"; npm test`). This also did not resolve the issue, with the error persisting.
 
-**Status:** Unresolved. This appears to be an environmental or deeper Vitest configuration challenge, possibly related to JSDOM usage in UI tests when combined with engine tests, or cumulative resource demands exceeding default Node.js worker limits in a way that is resistant to direct configuration.
+**Status:** Resolved 2026-05-04. The root cause was not Vitest configuration: two open-ended seeded engine tests ran `buildEngine(...).runAll()` without a simulation time bound. Because the engine records full snapshots in the log and arrivals keep growing the entity pool, those tests exhausted worker memory during collection/execution. The fix bounded those test runs with `maxSimTime = 50` and moved stale top-level `runAll()` calls into `beforeAll()`.
 
-**Impact:** Prevents reliable full test suite execution and comprehensive code coverage reporting. It does NOT indicate functional failures in individual features, as all individual tests pass. Development can continue, but this issue should be revisited for long-term CI/CD stability.
+**Impact:** Full test suite execution is reliable again. Verification: `npm test` passes 17 test files / 272 tests with zero unhandled worker errors.
 
 ---
 
@@ -1405,7 +1405,7 @@ npm run build                        # Succeeds
 
 ### 18.1 Vitest "JS Heap Out of Memory" Error
 
-**Issue:** The comprehensive `npm test` command (and `npm test -- engine`) consistently fails with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
+**Issue:** Historical issue: the comprehensive `npm test` command (and `npm test -- engine`) previously failed with "JS heap out of memory" errors and "Worker terminated due to reaching memory limit" messages from Vitest.
 
 **Symptoms:**
 *   All individual test files, when run in isolation or in smaller groups (e.g., `npm test -- db`, `npm test -- ui`), pass successfully with zero failures.
@@ -1418,9 +1418,9 @@ npm run build                        # Succeeds
 *   Attempted to disable multi-threading in Vitest (`threads: false`) in `vite.config.js`, which also resulted in Vitest failing to run any tests.
 *   Attempted to apply `NODE_OPTIONS=--max-old-space-size=4096` directly to `npm test` command (using PowerShell syntax: `$env:NODE_OPTIONS="--max-old-space-size=4096"; npm test`). This also did not resolve the issue, with the error persisting.
 
-**Status:** Unresolved. This appears to be an environmental or deeper Vitest configuration challenge, possibly related to JSDOM usage in UI tests when combined with engine tests, or cumulative resource demands exceeding default Node.js worker limits in a way that is resistant to direct configuration.
+**Status:** Resolved 2026-05-04. The root cause was not Vitest configuration: two open-ended seeded engine tests ran `buildEngine(...).runAll()` without a simulation time bound. Because the engine records full snapshots in the log and arrivals keep growing the entity pool, those tests exhausted worker memory during collection/execution. The fix bounded those test runs with `maxSimTime = 50` and moved stale top-level `runAll()` calls into `beforeAll()`.
 
-**Impact:** Prevents reliable full test suite execution and comprehensive code coverage reporting. It does NOT indicate functional failures in individual features, as all individual tests pass. Development can continue, but this issue should be revisited for long-term CI/CD stability.
+**Impact:** Full test suite execution is reliable again. Verification: `npm test` passes 17 test files / 272 tests with zero unhandled worker errors.
 
 ---
 
