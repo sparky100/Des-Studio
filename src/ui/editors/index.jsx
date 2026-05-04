@@ -268,10 +268,11 @@ const EntityTypeEditor=({types,onChange})=>{
             <Tag label={et.role||"customer"} color={et.role==="server"?C.server:C.cEvent}/>
             <input value={et.name} onChange={e=>upd(i,"name",e.target.value)} onBlur={e=>blurName(i,e.target.value)} placeholder="TypeName"
               style={{width:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Role:</span>
             <select value={et.role||"customer"} onChange={e=>upd(i,"role",e.target.value)}
               style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
-              <option value="customer">customer</option>
-              <option value="server">server</option>
+              <option value="customer">Arriving Entity</option>
+              <option value="server">Pre-created Resource</option>
             </select>
             {et.role==="server"&&<>
               <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>count:</span>
@@ -323,7 +324,7 @@ const StateVarEditor=({vars,onChange})=>{
 };
 
 const BEventEditor=({events,onChange,entityTypes=[],queues=[],cEvents=[]})=>{
-  const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:"",schedules:[],description:""}]);
+  const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:[],schedules:[],description:""}]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
   const rem=(i)=>{
     const ev=events[i];
@@ -348,6 +349,12 @@ const BEventEditor=({events,onChange,entityTypes=[],queues=[],cEvents=[]})=>{
       {events.length===0&&<Empty icon="⏰" msg="No B-events."/>}
       {events.map((ev,i)=>{
         const isTmpl=parseFloat(ev.scheduledTime)>=900;
+        const isStart=parseFloat(ev.scheduledTime)===0;
+        const showTimeInput=!isStart&&!isTmpl;
+        const effects=Array.isArray(ev.effect)?ev.effect:(ev.effect?[ev.effect]:[]);
+        const updEff=(j,v)=>{const n=[...events];const ef=[...effects];ef[j]=v;n[i]={...n[i],effect:ef};onChange(n);};
+        const addEff=()=>{const n=[...events];n[i]={...n[i],effect:[...effects,'']};onChange(n);};
+        const remEff=(j)=>{const n=[...events];n[i]={...n[i],effect:effects.filter((_,idx)=>idx!==j)};onChange(n);};
         return (
           <div key={ev.id} style={{background:C.bg,border:`1px solid ${isTmpl?C.muted+"44":C.bEvent+"33"}`,
             borderLeft:`3px solid ${isTmpl?C.muted:C.bEvent}`,borderRadius:6,padding:12,display:"flex",flexDirection:"column",gap:10}}>
@@ -355,16 +362,33 @@ const BEventEditor=({events,onChange,entityTypes=[],queues=[],cEvents=[]})=>{
               <Tag label={isTmpl?"template":"B-event"} color={isTmpl?C.muted:C.bEvent}/>
               <input value={ev.name} onChange={e=>upd(i,"name",e.target.value)} placeholder="Event name"
                 style={{flex:1,minWidth:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
-              <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>t=</span>
-              <input value={ev.scheduledTime} type="number" step="0.5" onChange={e=>upd(i,"scheduledTime",e.target.value)}
-                style={{width:65,background:"transparent",border:`1px solid ${isTmpl?C.muted+"55":C.bEvent+"66"}`,borderRadius:4,color:isTmpl?C.muted:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+              <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",
+                color:isStart?C.bEvent:C.muted,fontFamily:FONT,fontSize:11}}>
+                <input type="checkbox" checked={isStart}
+                  onChange={e=>upd(i,"scheduledTime",e.target.checked?"0":"1")}
+                  style={{accentColor:C.bEvent}}/>
+                Fire at simulation start (t=0)
+              </label>
+              {showTimeInput&&<>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>t=</span>
+                <input value={ev.scheduledTime} type="number" step="0.5" onChange={e=>upd(i,"scheduledTime",e.target.value)}
+                  style={{width:65,background:"transparent",border:`1px solid ${C.bEvent+"66"}`,borderRadius:4,color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+              </>}
               <Btn small variant="danger" onClick={()=>rem(i)}>✕</Btn>
             </div>
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:46}}>effect:</span>
-              <DropField value={ev.effect} onChange={v=>upd(i,'effect',v)}
-                options={bEffectOptions(entityTypes, queues)} color={C.green}
-                placeholder="e.g. ARRIVE(Customer); totalArrived++"/>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>EFFECTS</span>
+                <Btn small variant="ghost" onClick={addEff}>+ Add Effect</Btn>
+              </div>
+              {effects.length===0&&<span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>None — add an effect.</span>}
+              {effects.map((eff,j)=>(
+                <div key={j} style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <DropField value={eff} onChange={v=>updEff(j,v)}
+                    options={bEffectOptions(entityTypes, queues)} color={C.green}/>
+                  <Btn small variant="danger" onClick={()=>remEff(j)}>✕</Btn>
+                </div>
+              ))}
             </div>
             <input value={ev.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
               style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",width:"100%",boxSizing:"border-box"}}/>
@@ -976,7 +1000,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
             border:`1px solid ${C.cEvent}22`,display:"flex",flexDirection:"column",gap:8}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:10,color:C.cEvent,fontFamily:FONT,
-                letterSpacing:1.2,fontWeight:700}}>SCHEDULES B-EVENTS INTO FEL</span>
+                letterSpacing:1.2,fontWeight:700}}>Schedule Follow-on Event</span>
               <Btn small variant="ghost" onClick={()=>addSched(i)}>+ Add Schedule</Btn>
             </div>
             {(ev.cSchedules||[]).length===0&&(

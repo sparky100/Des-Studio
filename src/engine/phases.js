@@ -86,7 +86,8 @@ export function fireBEvent(ev, ctx) {
   }
 
   const effectCtx = { ...ctx, felRef: ev };
-  const { msgs, felEntries } = applyEffect(ev.effect, effectCtx);
+  const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
+  const { msgs, felEntries } = applyEffect(effectStr, effectCtx);
 
   // Process the B-event's own schedules list (next arrival, reneging timer, etc.)
   for (const sched of ev.schedules || []) {
@@ -119,7 +120,8 @@ export function fireBEvent(ev, ctx) {
 export function fireCEvent(ev, ctx) {
   const { clock, model } = ctx;
   const effectCtx = { ...ctx, felRef: null, entityFilter: ev.entityFilter ?? null };
-  const { msgs, felEntries } = applyEffect(ev.effect, effectCtx);
+  const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
+  const { msgs, felEntries } = applyEffect(effectStr, effectCtx);
 
   // Process structured cSchedules
   for (const cs of ev.cSchedules || []) {
