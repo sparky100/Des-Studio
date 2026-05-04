@@ -71,8 +71,13 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
 
   let fel = (model.bEvents || [])
     .filter(ev => parseFloat(ev.scheduledTime) < 900)
-    .map(ev => ({ ...ev, scheduledTime: parseFloat(ev.scheduledTime) || 0 }))
-    .sort((a, b) => a.scheduledTime - b.scheduledTime);
+    .map(ev => ({ ...ev, scheduledTime: parseFloat(ev.scheduledTime) || 0 }));
+
+  if (warmupPeriod > 0) {
+    fel.push({ type: "WARMUP", name: "Warm-up complete", scheduledTime: warmupPeriod });
+  }
+
+  fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
 
   log.push({ phase: "INIT", time: 0, message: "Engine initialised", snap: snap(0) });
 
@@ -101,30 +106,6 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
 
     // Phase A — advance clock
     clock = fel[0].scheduledTime;
-
-    // Warm-up period reset
-    if (warmupPeriod > 0 && clock >= warmupPeriod && !_warmupComplete) {
-      _warmupComplete = true;
-      const msg = `Warm-up complete at t=${clock.toFixed(3)}. Statistics reset.`;
-      cycleLog.push({ phase: "WARMUP", time: clock, message: msg });
-      log.push({ phase: "WARMUP", time: clock, message: msg, snap: snap(clock) });
-
-      // Reset counters
-      state.__served = 0;
-      state.__reneged = 0;
-
-      // Reset state variables marked for reset
-      for (const sv of model.stateVariables || []) {
-        if (sv.resetOnWarmup) {
-          try   { state[sv.name] = JSON.parse(sv.initialValue); }
-          catch { state[sv.name] = sv.initialValue; }
-        }
-      }
-
-      // Discard entities that have completed their lifecycle
-      entities = entities.filter(e => e.role === 'server' || (e.status !== 'done' && e.status !== 'reneged'));
-    }
-
     cycleLog.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}` });
     log.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}`, snap: snap(clock) });
 
@@ -133,6 +114,23 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxCycles = 500) {
     fel       = fel.filter(ev => Math.abs(ev.scheduledTime - clock) >= 1e-9);
 
     for (const ev of due) {
+      if (ev.type === 'WARMUP' && !_warmupComplete) {
+        _warmupComplete = true;
+        const msg = `Warm-up complete at t=${clock.toFixed(3)}. Statistics reset.`;
+        cycleLog.push({ phase: "WARMUP", time: clock, message: msg });
+        log.push({ phase: "WARMUP", time: clock, message: msg, snap: snap(clock) });
+        state.__served = 0;
+        state.__reneged = 0;
+        for (const sv of model.stateVariables || []) {
+          if (sv.resetOnWarmup) {
+            try   { state[sv.name] = JSON.parse(sv.initialValue); }
+            catch { state[sv.name] = sv.initialValue; }
+          }
+        }
+        entities = entities.filter(e => e.role === 'server' || (e.status !== 'done' && e.status !== 'reneged'));
+        continue; // Proceed to next due event
+      }
+
       const ctx = makeCtx(ev);
       ctx.clock = clock;
       const { msgs, felEntries, skipped } = fireBEvent(ev, ctx);

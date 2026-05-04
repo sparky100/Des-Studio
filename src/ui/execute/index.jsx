@@ -282,15 +282,15 @@ const ExecutePanel = ({ model, modelId, userId }) => {
               padding: "4px 6px", outline: "none" }}
           />
           <Btn small variant="ghost" onClick={() => setSeed(Math.floor(Math.random() * 1e9))}>rand</Btn>
+          </div>
+          <div style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2 }}>
+            {["visual", "log", "entities"].map(v => (
+              <button key={v} onClick={() => setView(v)} style={{ padding: "6px 12px", background: view === v ? "#333" : "transparent", border: "none", color: view === v ? "#fff" : "#888", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
+                {v.charAt(0).toUpperCase() + v.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
-        <div style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2 }}>
-          {["visual", "log", "entities"].map(v => (
-            <button key={v} onClick={() => setView(v)} style={{ padding: "6px 12px", background: view === v ? "#333" : "transparent", border: "none", color: view === v ? "#fff" : "#888", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
-              {v.charAt(0).toUpperCase() + v.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {validation.errors.length > 0 && (
         <div style={{ background: '#7f1d1d', border: '1px solid #dc2626', borderRadius: 6,
