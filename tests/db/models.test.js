@@ -8,17 +8,56 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
   });
 
   describe('fetchModels', () => {
-    it('applies complex visibility filter when userId is provided', async () => {
-      // Mock the entire chain leading to the data resolution
+    it('fetches owned, public, and explicitly shared models with parseable filters', async () => {
+      const userId = '7f1882ae-cc1e-4d80-bbdf-fd2355c69c36';
       supabase.from('des_models').select().or.mockReturnThis();
-      supabase.from('des_models').order.mockResolvedValueOnce({ data: [], error: null });
+      supabase.from('des_models').select().contains.mockReturnThis();
+      supabase.from('des_models').order
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: [], error: null });
 
-      await fetchModels('user-123');
+      await fetchModels(userId);
       expect(supabase.from).toHaveBeenCalledWith('des_models');
       expect(supabase.from('des_models').or).toHaveBeenCalledWith(
-        expect.stringContaining('owner_id.eq.user-123')
+        `owner_id.eq.${userId},visibility.eq.public`
       );
+      expect(supabase.from('des_models').or.mock.calls[0][0]).not.toContain('access->');
+      expect(supabase.from('des_models').contains).toHaveBeenCalledWith('access', { [userId]: 'viewer' });
+      expect(supabase.from('des_models').contains).toHaveBeenCalledWith('access', { [userId]: 'editor' });
       expect(supabase.from('des_models').order).toHaveBeenCalledWith('updated_at', { ascending: false });
+    });
+
+    it('deduplicates and sorts rows from visible and shared model queries', async () => {
+      const newer = {
+        id: 'm-new',
+        name: 'Newer',
+        updated_at: '2026-05-04T10:00:00Z',
+        entity_types: [],
+        state_variables: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+      };
+      const older = {
+        id: 'm-old',
+        name: 'Older',
+        updated_at: '2026-05-03T10:00:00Z',
+        entity_types: [],
+        state_variables: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+      };
+
+      supabase.from('des_models').order
+        .mockResolvedValueOnce({ data: [older], error: null })
+        .mockResolvedValueOnce({ data: [newer], error: null })
+        .mockResolvedValueOnce({ data: [older], error: null });
+
+      const models = await fetchModels('user-123');
+
+      expect(models.map(model => model.id)).toEqual(['m-new', 'm-old']);
     });
 
     it('filters strictly by public when no userId is provided', async () => {

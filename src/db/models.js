@@ -44,15 +44,51 @@ function toRow(model, userId) {
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
 export async function fetchModels(userId) {
-  let query = supabase.from("des_models").select("*");
+  let data;
   if (userId) {
-    query = query.or(`owner_id.eq.${userId},visibility.eq.public,access->${userId}.is.not.null`);
+    const sort = { ascending: false };
+    const [visible, sharedViewer, sharedEditor] = await Promise.all([
+      supabase
+        .from("des_models")
+        .select("*")
+        .or(`owner_id.eq.${userId},visibility.eq.public`)
+        .order("updated_at", sort),
+      supabase
+        .from("des_models")
+        .select("*")
+        .contains("access", { [userId]: "viewer" })
+        .order("updated_at", sort),
+      supabase
+        .from("des_models")
+        .select("*")
+        .contains("access", { [userId]: "editor" })
+        .order("updated_at", sort),
+    ]);
+
+    const error = visible.error || sharedViewer.error || sharedEditor.error;
+    if (error) throw error;
+
+    const byId = new Map();
+    for (const row of [
+      ...(visible.data || []),
+      ...(sharedViewer.data || []),
+      ...(sharedEditor.data || []),
+    ]) {
+      byId.set(row.id, row);
+    }
+    data = Array.from(byId.values()).sort((a, b) =>
+      String(b.updated_at || "").localeCompare(String(a.updated_at || ""))
+    );
   } else {
-    query = query.eq("visibility", "public");
+    const { data: publicData, error } = await supabase
+      .from("des_models")
+      .select("*")
+      .eq("visibility", "public")
+      .order("updated_at", { ascending: false });
+    if (error) throw error;
+    data = publicData || [];
   }
-  
-  const { data, error } = await query.order("updated_at", { ascending: false });
-  if (error) throw error;
+
   if (data && data.length > 0 && data[0].queues === undefined) {
     console.warn(
       "Supabase des_models table missing queues column. " +

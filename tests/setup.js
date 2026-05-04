@@ -15,6 +15,7 @@ const mockQuery = {
   delete: vi.fn().mockReturnThis(),
   eq: vi.fn().mockReturnThis(),
   or: vi.fn().mockReturnThis(),
+  contains: vi.fn().mockReturnThis(),
   order: vi.fn().mockReturnThis(),
   limit: vi.fn().mockReturnThis(),
   single: vi.fn().mockResolvedValue({ data: null, error: null }), // Default single return
