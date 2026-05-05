@@ -34,12 +34,12 @@ describe("ModelDiffPreview", () => {
 
     render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={onApply} onDiscard={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /apply selected/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^apply selected$/i }));
     fireEvent.click(screen.getByLabelText(/apply entity classes/i));
     fireEvent.click(screen.getByLabelText(/apply b-events/i));
     fireEvent.click(screen.getByLabelText(/apply c-events/i));
     fireEvent.click(screen.getByLabelText(/apply state variables/i));
-    fireEvent.click(screen.getByRole("button", { name: /apply selected/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^apply selected$/i }));
 
     expect(onApply).toHaveBeenCalledOnce();
     const applied = onApply.mock.calls[0][0];
@@ -61,5 +61,29 @@ describe("ModelDiffPreview", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/applied as a draft/i);
     expect(onApply).toHaveBeenCalledOnce();
     expect(onApply.mock.calls[0][1].errors[0].code).toBe("V1");
+  });
+
+  it("can apply and save all sections in one action", () => {
+    const onApplyAndSave = vi.fn();
+    const proposed = {
+      ...baseModel,
+      queues: [{ id: "q2", name: "Saved Queue", discipline: "FIFO" }],
+    };
+
+    render(
+      <ModelDiffPreview
+        currentModel={baseModel}
+        proposedModel={proposed}
+        onApply={vi.fn()}
+        onApplyAndSave={onApplyAndSave}
+        onDiscard={vi.fn()}
+        allowDraftApply
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /apply & save all/i }));
+
+    expect(onApplyAndSave).toHaveBeenCalledOnce();
+    expect(onApplyAndSave.mock.calls[0][0].queues[0].name).toBe("Saved Queue");
   });
 });

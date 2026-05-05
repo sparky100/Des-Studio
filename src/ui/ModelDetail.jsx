@@ -168,20 +168,33 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     setModel(m=>({...m,[f]:v}));
     setDirty(true);
   };
+  const mergeGeneratedModel=(current,nextModel)=>({
+    ...current,
+    ...(nextModel.name ? { name: nextModel.name } : {}),
+    ...(nextModel.description ? { description: nextModel.description } : {}),
+    entityTypes: Array.isArray(nextModel.entityTypes) ? nextModel.entityTypes : (current.entityTypes || []),
+    stateVariables: Array.isArray(nextModel.stateVariables) ? nextModel.stateVariables : (current.stateVariables || []),
+    bEvents: Array.isArray(nextModel.bEvents) ? nextModel.bEvents : (current.bEvents || []),
+    cEvents: Array.isArray(nextModel.cEvents) ? nextModel.cEvents : (current.cEvents || []),
+    queues: Array.isArray(nextModel.queues) ? nextModel.queues : (current.queues || []),
+  });
   const applyGeneratedModel=(nextModel)=>{
+    const merged=mergeGeneratedModel(model,nextModel);
     setPast(p=>[...p.slice(-19),model]);
     setFuture([]);
-    setModel(m=>({
-      ...m,
-      ...(nextModel.name ? { name: nextModel.name } : {}),
-      ...(nextModel.description ? { description: nextModel.description } : {}),
-      entityTypes: Array.isArray(nextModel.entityTypes) ? nextModel.entityTypes : (m.entityTypes || []),
-      stateVariables: Array.isArray(nextModel.stateVariables) ? nextModel.stateVariables : (m.stateVariables || []),
-      bEvents: Array.isArray(nextModel.bEvents) ? nextModel.bEvents : (m.bEvents || []),
-      cEvents: Array.isArray(nextModel.cEvents) ? nextModel.cEvents : (m.cEvents || []),
-      queues: Array.isArray(nextModel.queues) ? nextModel.queues : (m.queues || []),
-    }));
+    setModel(merged);
     setDirty(true);
+    return merged;
+  };
+  const saveGeneratedModel=async(nextModel)=>{
+    const merged=mergeGeneratedModel(model,nextModel);
+    setPast(p=>[...p.slice(-19),model]);
+    setFuture([]);
+    setModel(merged);
+    if(overrides.onSave)await overrides.onSave(merged);
+    setDirty(false);
+    onRefresh();
+    return merged;
   };
   const undo=()=>{
     if(!past.length)return;
@@ -325,7 +338,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
           message="This tab could not render. Try opening the tab again."
         >
         {tab==="ai"&&(
-          <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel}/>
+          <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel} onSaveModel={saveGeneratedModel}/>
         )}
         {tab==="overview"&&(
           <div style={{maxWidth:700,display:"flex",flexDirection:"column",gap:14}}>

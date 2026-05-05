@@ -70,18 +70,28 @@ function ChangeList({ title, items, color, renderItem }) {
   );
 }
 
-export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onApply, onDiscard, allowDraftApply = false }) {
+export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onApply, onApplyAndSave, onDiscard, allowDraftApply = false }) {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(SECTION_META.map(section => section.key));
   const [validation, setValidation] = useState(null);
+  const [saveError, setSaveError] = useState("");
   const diff = useMemo(() => buildModelDiff(currentModel, proposedModel), [currentModel, proposedModel]);
 
-  const applyModel = (mode) => {
+  const applyModel = async (mode, save = false) => {
     const nextModel = mode === "selected" ? mergeSections(currentModel, proposedModel, selected) : proposedModel;
     const result = validateModel(nextModel);
     setValidation(result);
+    setSaveError("");
     if (result.errors.length && !allowDraftApply) return;
-    onApply?.(nextModel, result);
+    try {
+      if (save) {
+        await onApplyAndSave?.(nextModel, result);
+      } else {
+        onApply?.(nextModel, result);
+      }
+    } catch (error) {
+      setSaveError(error?.message || "Could not save the applied proposal.");
+    }
   };
 
   const toggleSection = key => setSelected(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key]);
@@ -97,6 +107,11 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
         <div role="alert" style={{ background: C.red + "22", border: `1px solid ${C.red}`, borderRadius: 6, padding: 10, color: C.text, fontFamily: FONT, fontSize: 12 }}>
           {allowDraftApply && <div style={{ marginBottom: 6, color: C.amber }}>Applied as a draft is allowed, but this model must be fixed before it can run.</div>}
           {validation.errors.map(error => <div key={`${error.code}-${error.message}`}>[{error.code}] {error.message}</div>)}
+        </div>
+      )}
+      {saveError && (
+        <div role="alert" style={{ background: C.red + "22", border: `1px solid ${C.red}`, borderRadius: 6, padding: 10, color: C.text, fontFamily: FONT, fontSize: 12 }}>
+          {saveError}
         </div>
       )}
       {validation?.warnings?.length > 0 && !validation.errors.length && (
@@ -138,7 +153,9 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
         {!selecting && <Btn variant="ghost" onClick={() => setSelecting(true)}>Apply Selected</Btn>}
         {selecting && <Btn variant="ghost" onClick={() => applyModel("selected")} disabled={!selected.length}>Apply Selected</Btn>}
+        {selecting && onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("selected", true)} disabled={!selected.length}>Apply & Save Selected</Btn>}
         <Btn variant="primary" onClick={() => applyModel("all")}>Apply All</Btn>
+        {onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("all", true)}>Apply & Save All</Btn>}
       </div>
     </div>
   );

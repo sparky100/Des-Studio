@@ -73,4 +73,29 @@ describe("AiGeneratedModelPanel", () => {
     expect(handleApply.mock.calls[0][0].name).toBe("Generated Clinic");
     expect(handleApply.mock.calls[0][0].queues[0].name).toBe("Waiting");
   });
+
+  it("saves a proposal directly from the proposal panel", async () => {
+    const handleSave = vi.fn().mockResolvedValue(undefined);
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      onComplete({
+        intent: "build",
+        questions: null,
+        explanation: "Built a model.",
+        proposedModel: {
+          ...model,
+          queues: [{ id: "waiting", name: "Waiting", discipline: "FIFO" }],
+        },
+      });
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} onSaveModel={handleSave} />);
+
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A post office" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    await screen.findByLabelText(/model proposal preview/i);
+    fireEvent.click(screen.getByRole("button", { name: /apply & save all/i }));
+
+    await waitFor(() => expect(handleSave).toHaveBeenCalledOnce());
+    expect(handleSave.mock.calls[0][0].queues[0].name).toBe("Waiting");
+  });
 });

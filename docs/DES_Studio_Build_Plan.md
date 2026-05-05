@@ -123,6 +123,7 @@ flowchart LR
 | 1.30 | 2026-05-05 | Sprint 7 complete — implemented piecewise time-varying distributions, RATE_CHANGE/SHIFT_CHANGE events, shift schedule editing, validation, typed schema updates, and tests. Shift capacity mapping resolved as server instance scaling. Sprint 8A is now current next. |
 | 1.31 | 2026-05-05 | Sprint 8A complete — added provider-neutral LLM request contract, browser API compatibility, server-side provider/model routing in `llm-proxy`, and focused LLM/Execute tests. Sprint 8 is now current next. |
 | 1.32 | 2026-05-05 | Sprint 8 implementation pass — added AI Generated Model tab, model-builder prompts, non-streaming provider-neutral model-builder calls, structured diff preview, validation-before-apply, partial section apply, and tests. Full suite passes: 42 files, 385 tests. Production build succeeds. Live proxy deployment/manual AI proposal check remains pending. |
+| 1.33 | 2026-05-05 | Sprint 8 AI proposal save refinement — proposal panel now offers direct Apply & Save actions for all or selected sections, preserves the real model identity when saving generated drafts, and allows invalid proposals to be saved as editable drafts with validation warnings. |
 
 ---
 
@@ -3711,6 +3712,7 @@ npm run build                          # Succeeds
 - Local implementation and automated verification are complete for F8.1-F8.6.
 - Full suite passed: `npm test` -> 42 files, 385 tests.
 - Production build succeeded.
+- Refinement: proposal panel includes direct `Apply & Save All` and `Apply & Save Selected` actions because the top-bar Save may not be visible while reviewing AI proposals.
 - Remaining manual gate: redeploy `llm-proxy`, verify a live model-builder request returns JSON, apply a simple proposal, and run the generated model.
 
 ---

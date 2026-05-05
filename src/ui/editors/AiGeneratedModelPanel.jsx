@@ -40,7 +40,7 @@ function Bubble({ role, content }) {
   );
 }
 
-export function AiGeneratedModelPanel({ model, canEdit, onApplyModel }) {
+export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveModel }) {
   const [draft, setDraft] = useState("");
   const [history, setHistory] = useState([]);
   const [proposal, setProposal] = useState(null);
@@ -95,6 +95,16 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel }) {
     setNotice(errorText || warningText || "Proposal applied. Save the model when ready.");
     setHistory(prev => [...prev, { role: "system", content: errorText || "Proposal applied to the editable model." }]);
   };
+  const saveProposal = async (nextModel, validation = { errors: [], warnings: [] }) => {
+    await onSaveModel?.(nextModel);
+    setProposal(null);
+    const errorText = validation.errors?.length
+      ? `Proposal saved as an editable draft with ${validation.errors.length} validation issue(s). Fix them in the tabs before running.`
+      : "";
+    const warningText = validation.warnings?.length ? validation.warnings.map(w => `[${w.code}] ${w.message}`).join("\n") : "";
+    setNotice(errorText || warningText || "Proposal applied and saved.");
+    setHistory(prev => [...prev, { role: "system", content: errorText || "Proposal applied and saved." }]);
+  };
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: proposal ? "minmax(320px, 1fr) minmax(360px, 0.95fr)" : "minmax(320px, 760px)", gap: 16, alignItems: "stretch" }}>
@@ -131,6 +141,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel }) {
           currentModel={model}
           proposedModel={proposal}
           onApply={applyProposal}
+          onApplyAndSave={saveProposal}
           onDiscard={() => setProposal(null)}
           allowDraftApply
         />

@@ -54,8 +54,7 @@ describe("AI generated model apply/save flow", () => {
     fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Create a GP practice" } });
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await screen.findByLabelText(/model proposal preview/i);
-    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /^save$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /apply & save all/i }));
 
     await waitFor(() => expect(handleSave).toHaveBeenCalledOnce());
     expect(handleSave.mock.calls[0][0]).toEqual(expect.objectContaining({
