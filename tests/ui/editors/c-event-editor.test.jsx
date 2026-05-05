@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { CEventEditor } from '../../../src/ui/editors/index.jsx';
 
@@ -173,6 +173,27 @@ describe('CEventEditor — ConditionBuilder token list staleness (C8)', () => {
     expect(options).toContain('attr(Doctor, isSpecialist)');
     expect(options).toContain('idle(Doctor).count');
     expect(options).toContain('busy(Doctor).count');
+  });
+
+  it('writes visible fallback condition tokens back to the canonical C-event value', async () => {
+    const handleChange = vi.fn();
+    render(
+      <CEventEditor
+        events={[{ id: 'c1', name: 'Start Serving Customer', priority: 1, condition: 'queue(Queue 1).length > 0', effect: '', cSchedules: [], description: '' }]}
+        onChange={handleChange}
+        bEvents={[]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[{ id: 'waiting', name: 'Waiting', customerType: 'Customer', discipline: 'FIFO' }]}
+      />
+    );
+
+    expect(screen.getAllByRole('combobox')[0]).toHaveValue('queue(Waiting).length');
+    await waitFor(() => {
+      expect(handleChange).toHaveBeenCalledWith([
+        expect.objectContaining({ condition: 'queue(Waiting).length > 0' }),
+      ]);
+    });
   });
 });
 

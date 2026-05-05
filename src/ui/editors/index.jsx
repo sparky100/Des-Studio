@@ -618,6 +618,17 @@ const parseConditionStr = (str, tokens) => {
   return rows;
 };
 
+const sameConditionRows = (a = [], b = []) => {
+  if (a.length !== b.length) return false;
+  return a.every((row, idx) => {
+    const other = b[idx];
+    return row.token === other.token &&
+      row.operator === other.operator &&
+      row.value === other.value &&
+      row.join === other.join;
+  });
+};
+
 const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], queues=[]}) => {
   // useMemo ensures dropdown rebuilds whenever entityTypes, stateVariables, or queues change (C8 fix)
   const tokens = useMemo(() => {
@@ -666,15 +677,38 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
   };
 
   const [rows, setRows] = useState(()=>parseConditionStr(value, tokens));
+  const tokenSignature = useMemo(() => tokens.map(t => t.value).join('\u001f'), [tokens]);
+  const lastPropValue = useRef(value || '');
+  const lastTokenSignature = useRef(null);
 
-  // Revalidate existing rows when token list changes (entity class added/removed/renamed).
-  // Rows referencing a deleted token fall back to the first available token.
+  // Keep local rows aligned with the canonical condition string and token list.
+  // If an old persisted token no longer exists, the visible fallback is written
+  // back through onChange so validation and the editor do not diverge.
   useEffect(() => {
-    setRows(prev => prev.map(row => ({
-      ...row,
-      token: tokens.find(t => t.value === row.token) ? row.token : (tokens[0]?.value || ''),
-    })));
-  }, [tokens]);
+    const externalValue = value || '';
+    const externalChanged = externalValue !== lastPropValue.current;
+    const tokensChanged = tokenSignature !== lastTokenSignature.current;
+
+    if (externalChanged) {
+      const parsed = parseConditionStr(externalValue, tokens);
+      setRows(prev => sameConditionRows(prev, parsed) ? prev : parsed);
+      const normalized = buildConditionStr(parsed);
+      if (normalized && externalValue !== normalized) onChange(normalized);
+    } else if (tokensChanged) {
+      const normalizedRows = rows.map(row => ({
+        ...row,
+        token: tokens.find(t => t.value === row.token) ? row.token : (tokens[0]?.value || ''),
+      }));
+      const normalized = buildConditionStr(normalizedRows);
+      setRows(prev => sameConditionRows(prev, normalizedRows) ? prev : normalizedRows);
+      if (normalized && externalValue !== normalized) {
+        onChange(normalized);
+      }
+    }
+
+    lastPropValue.current = externalValue;
+    lastTokenSignature.current = tokenSignature;
+  }, [value, tokenSignature, tokens, rows, onChange]);
 
   // Sync rows → condition string whenever rows change
   const updateRows = (newRows) => {
