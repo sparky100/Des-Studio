@@ -4,6 +4,7 @@ import pkg from '../../package.json';
 import { C, FONT } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
+import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
 import { fetchRunHistory } from "../db/models.js";
 import { validateModel } from "../engine/validation.js";
@@ -167,6 +168,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     setModel(m=>({...m,[f]:v}));
     setDirty(true);
   };
+  const applyGeneratedModel=(nextModel)=>{
+    setPast(p=>[...p.slice(-19),model]);
+    setFuture([]);
+    setModel(m=>({...m,...nextModel}));
+    setDirty(true);
+  };
   const undo=()=>{
     if(!past.length)return;
     const prev=past[past.length-1];
@@ -258,6 +265,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   };
 
   const TABS=[
+    {id:"ai",label:"AI Generated Model"},
     {id:"overview",label:"Overview"},{id:"entities",label:"Entity Types"},
     {id:"state",label:"State Vars"},{id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},{id:"queues",label:"Queues"},
@@ -307,6 +315,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
           title="Model panel crashed"
           message="This tab could not render. Try opening the tab again."
         >
+        {tab==="ai"&&(
+          <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel}/>
+        )}
         {tab==="overview"&&(
           <div style={{maxWidth:700,display:"flex",flexDirection:"column",gap:14}}>
             <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null}/>

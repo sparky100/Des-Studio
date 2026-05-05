@@ -65,6 +65,7 @@ describe('accessibility pass', () => {
       />
     );
 
+    expect(screen.getByRole('tab', { name: 'AI Generated Model' })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
 
     await user.click(screen.getByRole('tab', { name: /execute/i }));

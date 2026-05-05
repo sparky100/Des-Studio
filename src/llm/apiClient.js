@@ -1,4 +1,5 @@
 import { supabase } from "../db/supabase.js";
+import { LLM_RESPONSE_FORMATS, LLM_TASKS, buildLlmRequest } from "./contracts.js";
 
 const DEFAULT_MODEL = "claude-sonnet-4-20250514";
 
@@ -50,11 +51,13 @@ export async function streamNarrative(prompt, {
         "Content-Type": "application/json",
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
-      body: JSON.stringify({
+      body: JSON.stringify(buildLlmRequest({
+        kind: prompt.kind,
         messages: prompt.messages,
-        model: DEFAULT_MODEL,
-        max_tokens: prompt.max_tokens || 450,
-      }),
+        maxTokens: prompt.max_tokens || prompt.maxTokens || 450,
+        stream: true,
+        responseFormat: "text",
+      })),
       signal,
     });
 
@@ -83,6 +86,66 @@ export async function streamNarrative(prompt, {
   } catch (error) {
     if (error?.name === "AbortError") return;
     onError?.(error);
+  }
+}
+
+function extractJsonText(payload) {
+  if (!payload) return "";
+  if (typeof payload === "string") return payload;
+  if (payload.intent || payload.proposedModel || payload.questions) return JSON.stringify(payload);
+  if (Array.isArray(payload.content)) {
+    return payload.content
+      .map(part => part?.text || "")
+      .filter(Boolean)
+      .join("\n");
+  }
+  return payload.text || payload.completion || "";
+}
+
+function parseModelBuilderJson(text) {
+  const raw = String(text || "").trim();
+  const fenced = raw.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return JSON.parse(fenced ? fenced[1] : raw);
+}
+
+export async function callModelBuilder(systemPrompt, messages = [], onComplete, onError, { signal } = {}) {
+  try {
+    const sessionResponse = await supabase.auth.getSession();
+    const accessToken = sessionResponse?.data?.session?.access_token;
+    const requestMessages = [
+      { role: "system", content: systemPrompt },
+      ...messages,
+    ];
+
+    const response = await fetch(getProxyUrl(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify(buildLlmRequest({
+        kind: LLM_TASKS.MODEL_BUILDER,
+        messages: requestMessages,
+        maxTokens: 1800,
+        stream: false,
+        responseFormat: LLM_RESPONSE_FORMATS.JSON,
+      })),
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`LLM proxy returned ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const text = extractJsonText(payload);
+    const parsed = typeof payload === "object" && payload.intent ? payload : parseModelBuilderJson(text);
+    onComplete?.(parsed);
+    return parsed;
+  } catch (error) {
+    if (error?.name === "AbortError") return null;
+    onError?.(error);
+    return null;
   }
 }
 

@@ -1290,16 +1290,41 @@ UI / UX
 | Sprint 6 | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis | 343 passing | N/A |
 | Sprint 7A | ✅ Complete | 2026-05-05 | Platform Foundation: Roles, Settings & TypeScript | Docs only | N/A |
 | Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation | 33 focused | N/A |
+| Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources | 369 passing | N/A |
+| Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight | 22 focused | N/A |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 7 — Dynamic Distributions & Time-Varying Resources**
+**Sprint 8 — AI Generated Model Authoring**
 
-Goal: Add time-varying arrival rates and resource shift schedules on top of the canonical model schema used by all authoring modes.
+Goal: Add the AI Generated Model authoring mode over the canonical `model_json`, with LLM proposals validated and previewed before apply.
 
-**Prerequisites:** Sprint 7B exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 7 feature prompts.
+**Prerequisites:** Sprint 8A exit gate passed. Model-builder calls must use the provider-neutral LLM contract introduced in Sprint 8A.
+
+**Current implementation status:** F8.1-F8.6 are locally implemented and automated checks pass. Manual live verification still requires redeploying `llm-proxy`, confirming a model-builder JSON response, applying a simple proposal, and running the generated model.
+
+### Recently Completed — Sprint 8A
+
+Sprint 8A completed on 2026-05-05.
+
+- Added `src/llm/contracts.js` for provider-neutral LLM requests.
+- Preserved `streamNarrative()` while changing browser calls to send `kind`, `messages`, `maxTokens`, `stream`, and `responseFormat`.
+- Refactored `supabase/functions/llm-proxy/index.ts` so provider and model selection are server-side.
+- Added server-side config path: `LLM_PROVIDER`, `LLM_MODEL`, and `ANTHROPIC_MODEL`; `ANTHROPIC_API_KEY` remains server-only.
+- Kept legacy Sprint 6 proxy payload compatibility for rollout.
+- Focused tests passed: `npm test -- llm execute-panel`; typecheck passed.
+
+### Recently Completed — Sprint 7
+
+Sprint 7 completed on 2026-05-05.
+
+- Added piecewise time-varying distributions with clock-aware sampling.
+- Added `RATE_CHANGE` and `SHIFT_CHANGE` B-event markers.
+- Added server shift schedules using server instance scaling.
+- Extended validation, typed contracts, editor controls, and schema docs.
+- Added focused engine and UI tests for time-varying distributions and shift schedules.
 
 ### Recently Completed — Sprint 7A
 
@@ -1362,17 +1387,20 @@ npm run build  -> succeeds
 - ADR-008 is accepted: `profiles.role` stores platform roles (`user`, `admin`) and durable user settings belong in a dedicated `user_settings` table.
 - ADR-009 is accepted: TypeScript may be introduced incrementally for shared contracts/domain boundaries. Existing JavaScript remains valid.
 - Sprint 7B implemented the accepted ADR-008/ADR-009 foundation before dynamic distributions.
+- Sprint 8A keeps provider and model choice server-side; browser code should use the neutral LLM request contract rather than provider-specific fields.
 
 ### Future-Claude Notes
 
 - Sprint 6 LLM analysis is implemented in `src/ui/execute/index.jsx`, `src/llm/prompts.js`, `src/llm/apiClient.js`, and `supabase/functions/llm-proxy/index.ts`.
 - Do not introduce client-side LLM API keys. `ANTHROPIC_API_KEY` belongs only in Supabase Edge Function secrets.
 - `llm-proxy` is deployed to Supabase project `znkknldzdfajcrpabtmg`.
-- Treat the current Anthropic-specific proxy as an implementation, not the final architecture. Provider-neutral LLM configuration is deferred from Sprint 7A but should remain visible before Sprint 8 implementation.
+- Treat Anthropic as the first provider implementation behind `llm-proxy`, not as a browser-facing contract.
+- Sprint 8 model-builder calls should use `src/llm/contracts.js` and the provider-neutral proxy request shape.
+- Sprint 8 implementation files are `src/ui/editors/AiGeneratedModelPanel.jsx`, `src/ui/editors/ModelDiffPreview.jsx`, `src/llm/model-builder-prompts.js`, and `src/llm/apiClient.js`.
 - Do not add local-only user settings that would need to follow a user across devices. Use the ADR-008 `user_settings` direction.
 - Do not add tenant/workspace assumptions ad hoc. SaaS tenancy is not part of Sprint 7A and needs a later explicit schema/RLS planning pass.
 - Execute panel is an MVP surface. Execute UX redesign is not part of Sprint 7A; keep it as a later design/refinement sprint.
-- Sprint 7 may use or extend the typed contracts, but broad TypeScript conversion remains out of scope.
+- Sprint 8 may use or extend the typed contracts, but broad TypeScript conversion remains out of scope.
 - ADR-007 establishes the product architecture for model creation: Forms/Tabs, AI Generated Model, and Visual Designer are three authoring modes over one canonical `model_json`.
 - Do not build the old split-pane SVG hybrid visual designer as a bridge phase; plan the visual designer as the final graph-first authoring surface.
 - Keep model import/export validation compatible with the current model JSON shape and the first-run M/M/1 sample in `src/App.jsx`.
@@ -1391,11 +1419,23 @@ npm run build  -> succeeds
   - `npm test -- llm execute-panel`
   - `npm test`
   - `npm run build`
+- Useful Sprint 8A verification commands:
+  - `npm test -- llm execute-panel`
+  - `npm run typecheck`
+  - `npm run build`
+- Useful Sprint 8 verification commands:
+  - `npm test -- llm ai-generated-model-panel model-diff-preview accessibility execute-panel`
+  - `npm test`
+  - `npm run typecheck`
+  - `npm run build`
 
-Server-side deployment secret for Sprint 6:
+Server-side LLM deployment variables:
 
 ```text
 ANTHROPIC_API_KEY
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-sonnet-4-20250514
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
 ```
 
 ---

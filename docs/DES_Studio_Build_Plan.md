@@ -45,18 +45,18 @@ flowchart LR
   S5 --> S6["Sprint 6<br/>AI results insights<br/>LLM proxy, explain, compare"]
   S6 --> S7A["Sprint 7A<br/>Architecture decisions<br/>Roles, settings, TypeScript"]
   S7A --> S7B["Sprint 7B<br/>Platform implementation<br/>Roles, settings, TS contracts"]
-  S7B --> S7["Sprint 7<br/>Current next<br/>Dynamic DES"]
+  S7B --> S7["Sprint 7<br/>Dynamic DES<br/>Time-varying arrivals + resources"]
   S7 --> S8A["Sprint 8A<br/>LLM provider preflight<br/>Provider-neutral proxy"]
-  S8A --> S8["Sprint 8<br/>AI model authoring<br/>Natural language to model_json"]
+  S8A --> S8["Sprint 8<br/>Current next<br/>AI model authoring"]
   S8 --> S9A["Sprint 9A<br/>Visual preflight<br/>Canvas + graph metadata"]
   S9A --> S9["Sprint 9<br/>Visual Designer<br/>Graph-first authoring"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef next fill:#173447,stroke:#22d3ee,color:#ecfeff;
   classDef later fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
-  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B done;
-  class S7 next;
-  class S8A,S8,S9A,S9 later;
+  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A done;
+  class S8 next;
+  class S9A,S9 later;
 ```
 
 ### Roadmap Snapshot
@@ -67,7 +67,7 @@ flowchart LR
 | AI results analysis | ✅ Complete | Read-only AI Insights uses a Supabase Edge Function proxy; user-facing run labels and history exports are implemented. |
 | Platform foundation | ✅ Complete | Sprint 7B implemented the accepted 7A decisions: platform role/settings persistence and TypeScript tooling/contracts. |
 | Dynamic modelling | ✅ Complete | Sprint 7 adds time-varying arrival rates and resource capacity schedules. |
-| AI model creation | 🔄 Current next | Sprint 8A prepares provider-neutral LLM routing; Sprint 8 adds natural-language model authoring. |
+| AI model creation | 🔄 Current next | Sprint 8A has prepared provider-neutral LLM routing; Sprint 8 now adds natural-language model authoring. |
 | Visual authoring | ⬜ Planned | Sprint 9A settles canvas/graph metadata; Sprint 9 adds graph-first Visual Designer authoring. |
 
 ### Key Issues and Watchpoints
@@ -79,7 +79,7 @@ flowchart LR
 | Roles and settings | ✅ Implemented foundation | ADR-008 defines `profiles.role` and a dedicated `user_settings` table; Sprint 7B added migration, wrappers, and tests. Remote DB migration still needs applying before settings UI depends on it. |
 | Dependency audit | 🔄 Watch | `npm audit` reports 4 moderate findings via Vite/Vitest/esbuild; available fix requires breaking Vite 8 upgrade, so defer to dependency-maintenance pass. |
 | Time-varying arrivals refinement | ⚠️ Track | Sprint 7 samples piecewise schedules by current clock and records RATE_CHANGE markers. A later refinement can consider resampling/cancelling already-pending arrivals that cross a rate boundary if stricter NHPP behaviour is required. |
-| LLM provider coupling | ⏭ Deferred to Sprint 8A | Current Anthropic proxy is acceptable for Sprint 6 results analysis; provider-neutral routing should happen before Sprint 8 model authoring. |
+| LLM provider coupling | ✅ Preflight complete | Sprint 8A moved browser calls to a provider-neutral contract and made provider/model selection server-side in `llm-proxy`. |
 | SaaS tenancy/workspaces | ⏭ Deferred | Important, but not required before Sprints 7-9 unless product requirements change. Needs separate schema/RLS planning. |
 | Execute running-model UX | ⏭ Deferred | MVP works; redesign should be handled in a dedicated UX/refinement sprint. |
 | Visual Designer canvas decision | ⬜ Open | React Flow or alternative must be reviewed before Sprint 9 implementation. |
@@ -121,6 +121,8 @@ flowchart LR
 | 1.28 | 2026-05-05 | Sprint 7B complete — added platform role/settings migration, user settings DB wrappers, `isAdmin` profile exposure, TypeScript tooling, first typed contracts, and tests. Sprint 7 is now current next. |
 | 1.29 | 2026-05-05 | Updated front roadmap/status after Sprint 7B completion. Recorded remote migration application and dependency audit as watchpoints. |
 | 1.30 | 2026-05-05 | Sprint 7 complete — implemented piecewise time-varying distributions, RATE_CHANGE/SHIFT_CHANGE events, shift schedule editing, validation, typed schema updates, and tests. Shift capacity mapping resolved as server instance scaling. Sprint 8A is now current next. |
+| 1.31 | 2026-05-05 | Sprint 8A complete — added provider-neutral LLM request contract, browser API compatibility, server-side provider/model routing in `llm-proxy`, and focused LLM/Execute tests. Sprint 8 is now current next. |
+| 1.32 | 2026-05-05 | Sprint 8 implementation pass — added AI Generated Model tab, model-builder prompts, non-streaming provider-neutral model-builder calls, structured diff preview, validation-before-apply, partial section apply, and tests. Full suite passes: 42 files, 385 tests. Production build succeeds. Live proxy deployment/manual AI proposal check remains pending. |
 
 ---
 
@@ -138,6 +140,7 @@ flowchart LR
 | Sprint 7A | ✅ Complete | 2026-05-05 | Platform Foundation: Roles, Settings & TypeScript. | Docs only | N/A | N/A | ADR-008 and ADR-009 accepted; SaaS tenancy, LLM provider switching, architecture health review, and Execute UX redesign deferred. |
 | Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation. | 33 focused | N/A | Success | Role/settings persistence, DB wrappers, `isAdmin`, TypeScript tooling/contracts complete. |
 | Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources. | 369 (369) | N/A | Success | Piecewise distributions, shift schedules, RATE_CHANGE/SHIFT_CHANGE B-events, validation, UI editors, and typed contracts complete. |
+| Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight. | 22 focused | N/A | Success | Provider-neutral request contract, browser compatibility, server-side provider/model routing, and proxy deployment checklist complete. |
 
 ---
 
@@ -3322,16 +3325,16 @@ npm run build                          # Succeeds
 
 **Goal:** Prepare the LLM infrastructure for AI Generated Model Authoring without binding Sprint 8 more deeply to a single provider. This sprint keeps all provider keys server-side and introduces a provider-neutral request/response boundary.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-05 | **Completed:** 2026-05-05
 **Prerequisite:** Sprint 7B complete. Complete this before Sprint 8 implementation.
 
 | Feature | Audit Status | Action |
 |---|---|---|
-| F8A.1 — Provider-neutral LLM request contract | ✗ | Define request/response shape for narrative, comparison, sensitivity, and model-builder calls |
-| F8A.2 — Edge Function provider router | ~ | Refactor `llm-proxy` internally so provider selection is server-side |
-| F8A.3 — Server-side model/provider configuration | ✗ | Add a simple server-side config path; no browser API keys |
-| F8A.4 — Browser API compatibility | ~ | Preserve existing `streamNarrative()` behavior while routing through the neutral contract |
-| F8A.5 — Tests and deployment checklist | ~ | Add prompt/proxy contract tests and update Supabase deployment checklist |
+| F8A.1 — Provider-neutral LLM request contract | ✅ | Added `src/llm/contracts.js` with task, response format, and neutral request shape |
+| F8A.2 — Edge Function provider router | ✅ | Refactored `llm-proxy` around server-side provider routing with Anthropic as the first implementation |
+| F8A.3 — Server-side model/provider configuration | ✅ | Added `LLM_PROVIDER`, `LLM_MODEL`, and `ANTHROPIC_MODEL` server-side config path; no browser API keys |
+| F8A.4 — Browser API compatibility | ✅ | Preserved `streamNarrative()` API while sending neutral requests through the proxy |
+| F8A.5 — Tests and deployment checklist | ✅ | Added contract/API/proxy tests and deployment notes |
 
 ### Design Principles for Sprint 8A
 
@@ -3348,25 +3351,34 @@ npm run build
 # Manual: deploy llm-proxy and verify one AI Insights request still streams
 ```
 
+### Sprint 8A Completion Notes
+
+- Browser code now sends provider-neutral LLM requests with `version`, `kind`, `messages`, `maxTokens`, `stream`, and `responseFormat`.
+- Browser code no longer sends a provider or model choice in normal `streamNarrative()` calls.
+- `llm-proxy` selects provider/model server-side using `LLM_PROVIDER`, `LLM_MODEL`, or `ANTHROPIC_MODEL`, with the existing Anthropic secret remaining server-only.
+- The Edge Function still accepts the legacy Sprint 6 payload shape for deployment compatibility during rollout.
+- Verification passed: `npm test -- llm execute-panel` (5 files, 22 tests) and `npm run typecheck`.
+- Deployment still requires redeploying `llm-proxy` and verifying one live AI Insights stream.
+
 ---
 
 ## Sprint 8 — AI Generated Model Authoring
 
 **Goal:** Add the second model authoring mode from ADR-007. A modeller describes a system in natural language and receives a partially- or fully-configured DES model proposal. The LLM acts as a model-construction assistant: it parses the description, asks clarifying questions, proposes entity classes, queues, B-Events, C-Events, and distributions, and presents the result as canonical `model_json`. The modeller reviews a diff-preview before any changes are applied.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** 🔄 In progress | **Started:** 2026-05-05 | **Completed:** —
 **Prerequisite:** Sprint 8A complete. Sprint 8 depends on the Supabase Edge Function `llm-proxy`, but model-builder calls must use the provider-neutral contract introduced in Sprint 8A.
 
 **Architectural constraint:** ADR-007 applies. AI Generated Model is an authoring mode over the same canonical `model_json` used by Forms/Tabs and the future Visual Designer. The LLM produces a model JSON object conforming to the existing `addition1_entity_model.md` schema. It is validated by `validateModel()` before being applied. The engine, macros, and database schema are not modified. The LLM cannot bypass validation.
 
 | Feature | Audit Status | Action |
 |---|---|---|
-| F8.1 — AI Generated Model panel | ✗ | New: panel in model editor (alongside existing tab editors) |
-| F8.2 — Intent parser prompt + LLM schema | ✗ | New: `src/llm/model-builder-prompts.js` |
-| F8.3 — Iterative clarification loop | ✗ | New: multi-turn conversation in builder panel |
-| F8.4 — Diff-preview before apply | ✗ | New: structured diff view between current and proposed model |
-| F8.5 — Validation integration | ✗ | Reuse: `validateModel()` called on proposed model before apply |
-| F8.6 — Partial model apply | ✗ | New: allow applying only selected sections of proposed model |
+| F8.1 — AI Generated Model panel | ✅ | Added first tab in model editor with conversation UI and proposal panel |
+| F8.2 — Intent parser prompt + LLM schema | ✅ | Added `src/llm/model-builder-prompts.js` |
+| F8.3 — Iterative clarification loop | ✅ | Added non-streaming model-builder API call and multi-turn panel handling |
+| F8.4 — Diff-preview before apply | ✅ | Added structured `ModelDiffPreview` |
+| F8.5 — Validation integration | ✅ | Proposal and merged partial apply paths call `validateModel()` before applying |
+| F8.6 — Partial model apply | ✅ | Added section-level partial apply |
 
 ### Design Principles for Sprint 8
 
@@ -3427,7 +3439,7 @@ Definition of done:
 
 **Audit status:** ✗ (model editor has no chat interface)
 **Action:** New panel alongside existing `editors/index.jsx` tab structure
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-05
 
 ```
 Task F8.1 of Sprint 8.
@@ -3450,11 +3462,11 @@ Write a UI test: "AI Generated Model" tab renders; other tabs unaffected.
 ```
 
 **Completion checklist:**
-- [ ] "AI Generated Model" tab added as first tab in existing editor
-- [ ] Existing tabs unaffected
-- [ ] Conversation history renders as message bubbles
-- [ ] Text input + Send button present
-- [ ] UI test passes
+- [x] "AI Generated Model" tab added as first tab in existing editor
+- [x] Existing tabs unaffected
+- [x] Conversation history renders as message bubbles
+- [x] Text input + Send button present
+- [x] UI test passes
 
 ---
 
@@ -3462,7 +3474,7 @@ Write a UI test: "AI Generated Model" tab renders; other tabs unaffected.
 
 **Audit status:** ✗ (not implemented)
 **Action:** New `src/llm/model-builder-prompts.js`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-05
 
 ```
 Task F8.2 of Sprint 8.
@@ -3507,11 +3519,11 @@ Unit tests (tests/llm/model-builder-prompts.test.js):
 ```
 
 **Completion checklist:**
-- [ ] `buildModelBuilderSystemPrompt()` exported
-- [ ] `buildModelBuilderUserMessage()` exported
-- [ ] System prompt encodes complete schema (macros, distributions, field types)
-- [ ] Response format constrained to intent/questions/proposedModel/explanation JSON
-- [ ] Unit tests pass
+- [x] `buildModelBuilderSystemPrompt()` exported
+- [x] `buildModelBuilderUserMessage()` exported
+- [x] System prompt encodes complete schema (macros, distributions, field types)
+- [x] Response format constrained to intent/questions/proposedModel/explanation JSON
+- [x] Unit tests pass
 
 ---
 
@@ -3519,7 +3531,7 @@ Unit tests (tests/llm/model-builder-prompts.test.js):
 
 **Audit status:** ✗ (not implemented)
 **Action:** Extend chat panel (F8.1); extend `src/llm/apiClient.js`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-05
 
 ```
 Task F8.3 of Sprint 8.
@@ -3552,12 +3564,12 @@ Cap: after 10 assistant turns without a proposal, auto-inject a system message:
 ```
 
 **Completion checklist:**
-- [ ] `callModelBuilder()` exported from `apiClient.js`
-- [ ] Multi-turn conversation state managed in React state
-- [ ] Clarification questions render as assistant bubbles
-- [ ] Proposal displayed when intent is build/refine
-- [ ] 20-turn length warning shown
-- [ ] 10-turn auto-proposal injection
+- [x] `callModelBuilder()` exported from `apiClient.js`
+- [x] Multi-turn conversation state managed in React state
+- [x] Clarification questions render as assistant bubbles
+- [x] Proposal displayed when intent is build/refine
+- [x] 20-turn length warning shown
+- [x] 10-turn auto-proposal injection
 
 ---
 
@@ -3565,7 +3577,7 @@ Cap: after 10 assistant turns without a proposal, auto-inject a system message:
 
 **Audit status:** ✗ (not implemented)
 **Action:** New `src/ui/editors/ModelDiffPreview.jsx`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-05
 
 ```
 Task F8.4 of Sprint 8.
@@ -3599,13 +3611,13 @@ and one removed queue in a known diff.
 ```
 
 **Completion checklist:**
-- [ ] `ModelDiffPreview.jsx` created
-- [ ] Diff correctly identifies added/modified/removed/unchanged elements
-- [ ] Apply All replaces model in app state
-- [ ] Apply Selected applies only checked sections
-- [ ] Discard closes panel without changes
-- [ ] `validateModel()` called before apply — blocking errors prevent apply
-- [ ] Unit test passes
+- [x] `ModelDiffPreview.jsx` created
+- [x] Diff correctly identifies added/modified/removed/unchanged elements
+- [x] Apply All replaces model in app state
+- [x] Apply Selected applies only checked sections
+- [x] Discard closes panel without changes
+- [x] `validateModel()` called before apply — blocking errors prevent apply
+- [x] Unit test passes
 
 ---
 
@@ -3613,7 +3625,7 @@ and one removed queue in a known diff.
 
 **Audit status:** ~ (validateModel() exists — must be called on proposed model)
 **Action:** Reuse existing `validation.js` — no new code
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-05
 
 ```
 Task F8.5 of Sprint 8.
@@ -3636,10 +3648,10 @@ Write an integration test:
 ```
 
 **Completion checklist:**
-- [ ] `validateModel()` called on proposed model before apply
-- [ ] Blocking errors disable Apply; show list
-- [ ] Warnings allow Apply with banner
-- [ ] Integration test passes
+- [x] `validateModel()` called on proposed model before apply
+- [x] Blocking errors disable Apply; show list
+- [x] Warnings allow Apply with banner
+- [x] Integration test passes
 
 ---
 
@@ -3647,7 +3659,7 @@ Write an integration test:
 
 **Audit status:** ✗ (not implemented)
 **Action:** Extend `ModelDiffPreview.jsx`
-**Status:** ⬜ | **Completed:** —
+**Status:** ✅ | **Completed:** 2026-05-05
 
 ```
 Task F8.6 of Sprint 8.
@@ -3674,10 +3686,10 @@ Unit test:
 ```
 
 **Completion checklist:**
-- [ ] Section-level checkboxes in `ModelDiffPreview`
-- [ ] Apply Selected merges only checked sections
-- [ ] `validateModel()` called on merged model
-- [ ] Unit test passes
+- [x] Section-level checkboxes in `ModelDiffPreview`
+- [x] Apply Selected merges only checked sections
+- [x] `validateModel()` called on merged model
+- [x] Unit test passes
 
 ---
 
@@ -3693,6 +3705,13 @@ npm run build                          # Succeeds
 # Manual: "add a second queue for priority customers"
 # Verify: LLM proposes diff; partial apply works; validate passes
 ```
+
+### Sprint 8 Implementation Notes
+
+- Local implementation and automated verification are complete for F8.1-F8.6.
+- Full suite passed: `npm test` -> 42 files, 385 tests.
+- Production build succeeded.
+- Remaining manual gate: redeploy `llm-proxy`, verify a live model-builder request returns JSON, apply a simple proposal, and run the generated model.
 
 ---
 
