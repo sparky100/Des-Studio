@@ -26,6 +26,9 @@ export function buildModelBuilderSystemPrompt() {
     "Predicates must be structured JSON. Never produce executable code, logic strings requiring eval, or invented operators.",
     "For refine requests, proposedModel must be the complete model after the refinement. The UI computes the diff locally.",
     "Ask at most two clarifying questions before proposing a model.",
+    "If the requested model is too detailed to fit in one complete valid JSON response, return intent clarify and ask for the smallest missing details. Never return partial JSON.",
+    "Keep generated model proposals compact: use short IDs, concise names, and only include fields required by DES Studio.",
+    "Keep explanation to one short sentence when proposedModel is present.",
     'Response schema: {"intent":"build|refine|clarify","questions":["..."]|null,"proposedModel":object|null,"explanation":"plain English summary"}',
     "If intent is build or refine, proposedModel must contain all five top-level sections, even when some are empty arrays.",
   ].join("\n");

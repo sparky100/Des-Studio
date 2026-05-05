@@ -27,6 +27,12 @@ describe("model builder prompts", () => {
     expect(prompt).toMatch(/explanation/);
   });
 
+  it("forbids partial JSON when the proposal would be too large", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/Never return partial JSON/i);
+    expect(prompt).toMatch(/too detailed to fit/i);
+  });
+
   it("includes the current model when one exists", () => {
     const message = buildModelBuilderUserMessage(
       "Add a second server",

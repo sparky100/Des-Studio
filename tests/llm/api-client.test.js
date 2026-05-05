@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { streamNarrative } from "../../src/llm/apiClient.js";
+import { callModelBuilder, streamNarrative } from "../../src/llm/apiClient.js";
 import { supabase } from "../../src/db/supabase.js";
 
 function makeStream(text) {
@@ -55,5 +55,41 @@ describe("LLM API client", () => {
     expect(options.headers.Authorization).toBe("Bearer token-1");
     expect(onToken).toHaveBeenCalledWith("hello");
     expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it("uses the full model-builder token budget for complete JSON proposals", async () => {
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        intent: "clarify",
+        questions: ["How many servers?"],
+        proposedModel: null,
+        explanation: "One detail is needed.",
+      }),
+    });
+
+    await callModelBuilder("system", [{ role: "user", content: "Build a clinic" }], vi.fn(), vi.fn());
+
+    const [, options] = global.fetch.mock.calls[0];
+    const body = JSON.parse(options.body);
+    expect(body).toEqual(expect.objectContaining({
+      kind: "model_builder",
+      maxTokens: 4000,
+      stream: false,
+      responseFormat: "json",
+    }));
+  });
+
+  it("reports malformed model-builder JSON with a user-facing error", async () => {
+    const onError = vi.fn();
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ content: [{ text: '{"intent":"build","explanation":"' }] }),
+    });
+
+    await callModelBuilder("system", [{ role: "user", content: "Build a clinic" }], vi.fn(), onError);
+
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError.mock.calls[0][0].message).toMatch(/incomplete or invalid model JSON/i);
   });
 });

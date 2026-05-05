@@ -105,7 +105,13 @@ function extractJsonText(payload) {
 function parseModelBuilderJson(text) {
   const raw = String(text || "").trim();
   const fenced = raw.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return JSON.parse(fenced ? fenced[1] : raw);
+  try {
+    return JSON.parse(fenced ? fenced[1] : raw);
+  } catch (error) {
+    const friendly = new Error("AI returned incomplete or invalid model JSON. Please ask it to produce a smaller model proposal, or answer one more clarifying question first.");
+    friendly.cause = error;
+    throw friendly;
+  }
 }
 
 export async function callModelBuilder(systemPrompt, messages = [], onComplete, onError, { signal } = {}) {
@@ -126,7 +132,7 @@ export async function callModelBuilder(systemPrompt, messages = [], onComplete, 
       body: JSON.stringify(buildLlmRequest({
         kind: LLM_TASKS.MODEL_BUILDER,
         messages: requestMessages,
-        maxTokens: 1800,
+        maxTokens: 4000,
         stream: false,
         responseFormat: LLM_RESPONSE_FORMATS.JSON,
       })),
