@@ -67,6 +67,8 @@ describe('accessibility pass', () => {
 
     expect(screen.getByRole('tab', { name: 'AI Generated Model' })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    const tabs = screen.getAllByRole('tab').map(tab => tab.textContent);
+    expect(tabs.indexOf('AI Generated Model')).toBeGreaterThan(tabs.indexOf('Overview'));
 
     await user.click(screen.getByRole('tab', { name: /execute/i }));
     expect(screen.getByRole('tab', { name: /execute/i })).toHaveAttribute('aria-selected', 'true');

@@ -48,14 +48,15 @@ flowchart LR
   S7B --> S7["Sprint 7<br/>Dynamic DES<br/>Time-varying arrivals + resources"]
   S7 --> S8A["Sprint 8A<br/>LLM provider preflight<br/>Provider-neutral proxy"]
   S8A --> S8["Sprint 8<br/>Current next<br/>AI model authoring"]
-  S8 --> S9A["Sprint 9A<br/>Visual preflight<br/>Canvas + graph metadata"]
+  S8 --> S8B["Sprint 8B<br/>Model definition coherence<br/>Queue/service semantics"]
+  S8B --> S9A["Sprint 9A<br/>Visual preflight<br/>Canvas + graph metadata"]
   S9A --> S9["Sprint 9<br/>Visual Designer<br/>Graph-first authoring"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef next fill:#173447,stroke:#22d3ee,color:#ecfeff;
   classDef later fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
   class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A done;
-  class S8 next;
+  class S8,S8B next;
   class S9A,S9 later;
 ```
 
@@ -67,7 +68,8 @@ flowchart LR
 | AI results analysis | ✅ Complete | Read-only AI Insights uses a Supabase Edge Function proxy; user-facing run labels and history exports are implemented. |
 | Platform foundation | ✅ Complete | Sprint 7B implemented the accepted 7A decisions: platform role/settings persistence and TypeScript tooling/contracts. |
 | Dynamic modelling | ✅ Complete | Sprint 7 adds time-varying arrival rates and resource capacity schedules. |
-| AI model creation | 🔄 Current next | Sprint 8A has prepared provider-neutral LLM routing; Sprint 8 now adds natural-language model authoring. |
+| AI model creation | 🔄 Current | Sprint 8A has prepared provider-neutral LLM routing; Sprint 8 adds natural-language model authoring. |
+| Model definition coherence | 🔄 Current blocker | Sprint 8B must align queue/customer/server/service semantics before visual designer work proceeds. |
 | Visual authoring | ⬜ Planned | Sprint 9A settles canvas/graph metadata; Sprint 9 adds graph-first Visual Designer authoring. |
 
 ### Key Issues and Watchpoints
@@ -83,6 +85,7 @@ flowchart LR
 | SaaS tenancy/workspaces | ⏭ Deferred | Important, but not required before Sprints 7-9 unless product requirements change. Needs separate schema/RLS planning. |
 | Execute running-model UX | ⏭ Deferred | MVP works; redesign should be handled in a dedicated UX/refinement sprint. |
 | Visual Designer canvas decision | ⬜ Open | React Flow or alternative must be reviewed before Sprint 9 implementation. |
+| Model action vocabulary coherence | 🔄 Active | UI observations show macro-string authoring is leaking into modeller workflows. Pause further feature expansion until ARRIVE/ASSIGN/COMPLETE/routing semantics are coherent across Forms, AI, validation, and engine. |
 
 ---
 
@@ -124,6 +127,7 @@ flowchart LR
 | 1.31 | 2026-05-05 | Sprint 8A complete — added provider-neutral LLM request contract, browser API compatibility, server-side provider/model routing in `llm-proxy`, and focused LLM/Execute tests. Sprint 8 is now current next. |
 | 1.32 | 2026-05-05 | Sprint 8 implementation pass — added AI Generated Model tab, model-builder prompts, non-streaming provider-neutral model-builder calls, structured diff preview, validation-before-apply, partial section apply, and tests. Full suite passes: 42 files, 385 tests. Production build succeeds. Live proxy deployment/manual AI proposal check remains pending. |
 | 1.33 | 2026-05-05 | Sprint 8 AI proposal save refinement — proposal panel now offers direct Apply & Save actions for all or selected sections, preserves the real model identity when saving generated drafts, and allows invalid proposals to be saved as editable drafts with validation warnings. |
+| 1.34 | 2026-05-05 | Added Sprint 8B — Model Definition Coherence as a blocking stabilisation pass before Sprint 9. Scope covers queue/customer binding, service-start/service-complete semantics, user-facing action labels, validation parity, AI proposal normalization, and a two-stage reference model. |
 
 ---
 
@@ -142,6 +146,7 @@ flowchart LR
 | Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation. | 33 focused | N/A | Success | Role/settings persistence, DB wrappers, `isAdmin`, TypeScript tooling/contracts complete. |
 | Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources. | 369 (369) | N/A | Success | Piecewise distributions, shift schedules, RATE_CHANGE/SHIFT_CHANGE B-events, validation, UI editors, and typed contracts complete. |
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight. | 22 focused | N/A | Success | Provider-neutral request contract, browser compatibility, server-side provider/model routing, and proxy deployment checklist complete. |
+| Sprint 8B | 🔄 In progress | — | Model Definition Coherence. | Focused | N/A | Pending | Stabilise queue/service semantics before visual designer work. |
 
 ---
 
@@ -157,6 +162,7 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 7 | Dynamic Distributions & Time-Varying Resources | Extends the canonical model schema used by all authoring modes |
 | Sprint 8A | LLM Provider Architecture Preflight | Introduces provider-neutral server-side LLM routing before AI model authoring |
 | Sprint 8 | AI Generated Model Authoring | Adds the second authoring mode: natural-language model proposals validated before apply |
+| Sprint 8B | Model Definition Coherence | Aligns Forms/Tabs, AI generation, validation, and engine semantics for queues, service starts, completions, and routing |
 | Sprint 9 | Visual Designer Authoring | Adds the third authoring mode: graph-first canvas editing over the same canonical model |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
@@ -3713,7 +3719,69 @@ npm run build                          # Succeeds
 - Full suite passed: `npm test` -> 42 files, 385 tests.
 - Production build succeeded.
 - Refinement: proposal panel includes direct `Apply & Save All` and `Apply & Save Selected` actions because the top-bar Save may not be visible while reviewing AI proposals.
-- Remaining manual gate: redeploy `llm-proxy`, verify a live model-builder request returns JSON, apply a simple proposal, and run the generated model.
+- Manual verification exposed model-definition coherence blockers. Sprint 8B supersedes further Sprint 8 expansion before visual designer work.
+
+---
+
+## Sprint 8B — Model Definition Coherence
+
+**Goal:** Make the canonical DES model understandable and executable across Forms/Tabs, AI Generated Model, validation, and the engine before adding more authoring surfaces.
+
+**Status:** 🔄 In progress | **Started:** 2026-05-05 | **Completed:** —
+**Prerequisite:** Sprint 8 implementation pass. Complete before Sprint 9A/Sprint 9.
+
+### Why This Sprint Blocks Further Work
+
+Manual review in `docs/UI - Observations.md` showed that the current surface is too dependent on macro strings. Users see `ARRIVE(...)`, `ASSIGN(...)`, `COMPLETE()`, and "template" implementation language instead of clear modelling actions. AI generation also exposed gaps: missing effects, false V8 warnings, queue names with spaces, and unclear multi-stage routing.
+
+Proceeding to Visual Designer before resolving this would bake ambiguous semantics into a second authoring surface.
+
+### Sprint 8B Feature Set
+
+| Feature | Audit Status | Action |
+|---|---|---|
+| F8B.1 — Validation parity for generated/manual effects | ~ | `validateModel()` must recognise string, array, and object effects; no false V8 for valid ARRIVE/COMPLETE |
+| F8B.2 — Queue names with spaces | ~ | Engine macros, condition evaluator, validation, and generated dropdown values must support queue names like `Triage Queue` |
+| F8B.3 — Queue/customer binding in dropdowns | ~ | Queue `customerType` must filter ARRIVE options; only valid customer-to-queue combinations should appear |
+| F8B.4 — User-facing action labels | ~ | Dropdowns should say what the action does, e.g. "Add Patient to Triage Queue", while storing canonical macro values |
+| F8B.5 — Service-start/service-complete pattern | ~ | AI and UI should generate `condition: queue > 0 AND idle server > 0`, `ASSIGN(...)`, and schedule a follow-on Service Complete B-event |
+| F8B.6 — Remove implementation language | ~ | No user-visible "template" wording; use "scheduled follow-on" or plain B-event names |
+| F8B.7 — Two-stage reference model | ✗ | Add a Patient -> Queue 1 -> Service 1 -> Queue 2 -> Service 2 -> Complete fixture/test and make it the regression gate |
+| F8B.8 — Save visibility | ~ | Make dirty/save state obvious near model editing surfaces, not only in the top bar |
+| F8B.9 — AI refinement friendliness | ~ | Refining distributions should not primarily show raw JSON; review friendlier proposal summaries |
+
+### Canonical Two-Stage Acceptance Model
+
+The sprint must prove this shape works manually and through AI normalization:
+
+```text
+Patient
+  -> Triage Queue
+  -> Triage Nurse service
+  -> Consultant Queue
+  -> Consultant service
+  -> Complete
+```
+
+Expected model elements:
+
+- Entity types: `Patient`, `Triage Nurse`, `Consultant`
+- Queues: `Triage Queue` accepts `Patient`; `Consultant Queue` accepts `Patient`
+- B-events:
+  - `Patient Arrival`: add Patient to Triage Queue and schedule next arrival
+  - `Triage Complete`: release Triage Nurse and move Patient to Consultant Queue
+  - `Consultation Complete`: release Consultant and mark Patient complete
+- C-events:
+  - `Start Triage`: condition `queue(Triage Queue).length > 0 AND idle(Triage Nurse).count > 0`; schedules `Triage Complete`
+  - `Start Consultation`: condition `queue(Consultant Queue).length > 0 AND idle(Consultant).count > 0`; schedules `Consultation Complete`
+
+### Sprint 8B Completion Gate
+
+```bash
+npm test -- validation conditions queue-name-spaces ai-generated-model-panel b-event-editor c-event-editor model-builder-prompts accessibility
+npm run build
+# Manual: create/generated two-stage model above, run it, confirm no V8/V9 false positives and no user-visible "template" wording.
+```
 
 ---
 
@@ -3722,7 +3790,7 @@ npm run build                          # Succeeds
 **Goal:** Make the dependency and persistence decisions needed for the Visual Designer before building the graph-first authoring surface.
 
 **Status:** ⬜ Not started | **Started:** — | **Completed:** —
-**Prerequisite:** Sprint 8 complete. Complete before Sprint 9 if `TBD-VISUAL-CANVAS` is still open.
+**Prerequisite:** Sprint 8B complete. Complete before Sprint 9 if `TBD-VISUAL-CANVAS` is still open.
 
 | Feature | Audit Status | Action |
 |---|---|---|

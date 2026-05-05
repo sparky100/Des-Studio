@@ -380,7 +380,7 @@ export default function App(){
             onRefresh={loadData}
             overrides={{
               isOwner,canEdit,profiles,userId:uid,isAdmin,
-              onSave:async(m)=>{await saveModel(m,uid);await loadData()},
+              onSave:async(m)=>{const saved=await saveModel(m,uid);await loadData();return saved},
               onDelete:async(id)=>{await deleteModel(id,uid)},
               onSetVisibility:setVisibility,
               onSetAccess:setAccess,

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { buildModelDiff, ModelDiffPreview } from "../../../src/ui/editors/ModelDiffPreview.jsx";
 
@@ -63,7 +63,7 @@ describe("ModelDiffPreview", () => {
     expect(onApply.mock.calls[0][1].errors[0].code).toBe("V1");
   });
 
-  it("can apply and save all sections in one action", () => {
+  it("can apply and save all sections in one action", async () => {
     const onApplyAndSave = vi.fn();
     const proposed = {
       ...baseModel,
@@ -83,7 +83,36 @@ describe("ModelDiffPreview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /apply & save all/i }));
 
-    expect(onApplyAndSave).toHaveBeenCalledOnce();
+    await waitFor(() => expect(onApplyAndSave).toHaveBeenCalledOnce());
     expect(onApplyAndSave.mock.calls[0][0].queues[0].name).toBe("Saved Queue");
+  });
+
+  it("shows a saving state while applying and saving a proposal", async () => {
+    let resolveSave;
+    const onApplyAndSave = vi.fn(() => new Promise(resolve => {
+      resolveSave = resolve;
+    }));
+    const proposed = {
+      ...baseModel,
+      queues: [{ id: "q2", name: "Saved Queue", discipline: "FIFO" }],
+    };
+
+    render(
+      <ModelDiffPreview
+        currentModel={baseModel}
+        proposedModel={proposed}
+        onApply={vi.fn()}
+        onApplyAndSave={onApplyAndSave}
+        onDiscard={vi.fn()}
+        allowDraftApply
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /apply & save all/i }));
+
+    expect(screen.getByRole("button", { name: /saving/i })).toBeDisabled();
+
+    resolveSave();
+    await waitFor(() => expect(screen.getByRole("button", { name: /apply & save all/i })).not.toBeDisabled());
   });
 });

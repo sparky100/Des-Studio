@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
-import { evaluatePredicate } from '../../src/engine/conditions.js';
+import { evalCondition, evaluatePredicate } from '../../src/engine/conditions.js';
 
 // Tests for the safe JSON predicate evaluator (Addition 1 §4).
 // These tests FAIL on the unmodified codebase (evaluatePredicate does not exist).
@@ -305,5 +305,23 @@ describe('evaluatePredicate — safe JSON predicate evaluator', () => {
     }
     expect(exitSpy).not.toHaveBeenCalled();
     exitSpy.mockRestore();
+  });
+});
+
+describe('evalCondition — legacy condition string evaluator', () => {
+  test('supports queue names with spaces in queue length conditions', () => {
+    const helpers = {
+      entities: [{ id: 1, queue: 'Main Queue', status: 'waiting' }],
+      waitingOf: vi.fn(() => []),
+      idleOf: vi.fn(() => [{ id: 2 }]),
+      busyOf: vi.fn(() => []),
+    };
+
+    expect(evalCondition(
+      'queue(Main Queue).length > 0 AND idle(Clerk).count > 0',
+      helpers,
+      {},
+      0
+    )).toBe(true);
   });
 });

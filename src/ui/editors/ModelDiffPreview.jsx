@@ -75,9 +75,11 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
   const [selected, setSelected] = useState(SECTION_META.map(section => section.key));
   const [validation, setValidation] = useState(null);
   const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
   const diff = useMemo(() => buildModelDiff(currentModel, proposedModel), [currentModel, proposedModel]);
 
   const applyModel = async (mode, save = false) => {
+    if (saving) return;
     const nextModel = mode === "selected" ? mergeSections(currentModel, proposedModel, selected) : proposedModel;
     const result = validateModel(nextModel);
     setValidation(result);
@@ -85,12 +87,15 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
     if (result.errors.length && !allowDraftApply) return;
     try {
       if (save) {
+        setSaving(true);
         await onApplyAndSave?.(nextModel, result);
       } else {
         onApply?.(nextModel, result);
       }
     } catch (error) {
       setSaveError(error?.message || "Could not save the applied proposal.");
+    } finally {
+      if (save) setSaving(false);
     }
   };
 
@@ -151,11 +156,11 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
       })}
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-        {!selecting && <Btn variant="ghost" onClick={() => setSelecting(true)}>Apply Selected</Btn>}
-        {selecting && <Btn variant="ghost" onClick={() => applyModel("selected")} disabled={!selected.length}>Apply Selected</Btn>}
-        {selecting && onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("selected", true)} disabled={!selected.length}>Apply & Save Selected</Btn>}
-        <Btn variant="primary" onClick={() => applyModel("all")}>Apply All</Btn>
-        {onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("all", true)}>Apply & Save All</Btn>}
+        {!selecting && <Btn variant="ghost" onClick={() => setSelecting(true)} disabled={saving}>Apply Selected</Btn>}
+        {selecting && <Btn variant="ghost" onClick={() => applyModel("selected")} disabled={!selected.length || saving}>Apply Selected</Btn>}
+        {selecting && onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("selected", true)} disabled={!selected.length || saving}>{saving ? "Saving..." : "Apply & Save Selected"}</Btn>}
+        <Btn variant="primary" onClick={() => applyModel("all")} disabled={saving}>Apply All</Btn>
+        {onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("all", true)} disabled={saving}>{saving ? "Saving..." : "Apply & Save All"}</Btn>}
       </div>
     </div>
   );

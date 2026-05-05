@@ -19,6 +19,19 @@ export function validateModel(model) {
   const bEvents     = model.bEvents        || [];
   const cEvents     = model.cEvents        || [];
   const queues      = model.queues         || [];
+  const effectText = effect => {
+    if (Array.isArray(effect)) return effect.map(effectText).filter(Boolean).join(';');
+    if (effect && typeof effect === 'object') {
+      if (typeof effect.effect === 'string') return effect.effect;
+      const macro = String(effect.macro || effect.type || effect.name || '').trim();
+      if (!macro) return '';
+      const args = Array.isArray(effect.args)
+        ? effect.args
+        : [effect.entityType || effect.customerType || effect.queue || effect.resourceType || effect.serverType, effect.serverType || effect.resourceType].filter(Boolean);
+      return `${macro}(${args.join(',')})`;
+    }
+    return String(effect || '');
+  };
 
   // ── V1: Entity class unique non-empty name ──────────────────────────────────
   const seen1 = new Set();
@@ -255,7 +268,7 @@ export function validateModel(model) {
   });
 
   // ── V8: Model must have at least one arrival source and at least one sink ──
-  const hasArrive = bEvents.some(b => b.effect && b.effect.includes('ARRIVE('));
+  const hasArrive = bEvents.some(b => /ARRIVE\s*\(/i.test(effectText(b.effect)));
   if (!hasArrive) {
     warn('V8',
       'No B-Event with an ARRIVE(Type) effect was found — the simulation will have no entity arrivals.',
@@ -264,12 +277,29 @@ export function validateModel(model) {
 
   // A "sink" is effectively an entity reaching a terminal status (done or reneged)
   // This check is a heuristic based on event effects that lead to termination.
-  const hasSinkMacro = bEvents.some(b => b.effect && (b.effect.includes('COMPLETE(') || b.effect.includes('RENEGE(')));
+  const hasSinkMacro = bEvents.some(b => {
+    const text = effectText(b.effect);
+    return /COMPLETE\s*\(/i.test(text) || /RENEGE\s*\(/i.test(text);
+  });
   if (!hasSinkMacro) {
     warn('V8',
       'No B-Event with a COMPLETE() or RENEGE() effect was found — entities may never leave the system.',
       'bevents');
   }
+
+  const queueRefsFromCondition = (condition) => {
+    if (!condition) return [];
+    if (typeof condition === 'string') {
+      return [...condition.matchAll(/queue\(([^)]+)\)/gi)].map(m => m[1].trim().toLowerCase());
+    }
+    if (typeof condition !== 'object' || Array.isArray(condition)) return [];
+    if (Array.isArray(condition.clauses)) {
+      return condition.clauses.flatMap(queueRefsFromCondition);
+    }
+    const variable = String(condition.variable || condition.token || condition.left || '');
+    const queueMatch = variable.match(/^Queue\.([^.]+)\./i);
+    return queueMatch ? [queueMatch[1].trim().toLowerCase()] : [];
+  };
 
   // ── V9: C-Event conditions must reference defined queues ────────────────────
   const queueNamesLower = new Set(
@@ -277,7 +307,7 @@ export function validateModel(model) {
   );
   cEvents.forEach(c => {
     if (!c.condition) return;
-    const queueRefs = [...c.condition.matchAll(/queue\((\w+)\)/gi)].map(m => m[1].toLowerCase());
+    const queueRefs = queueRefsFromCondition(c.condition);
     queueRefs.forEach(ref => {
       if (!queueNamesLower.has(ref)) {
         err('V9',

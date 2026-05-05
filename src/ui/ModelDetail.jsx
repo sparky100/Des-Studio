@@ -154,6 +154,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   });
   const [tab,setTab]=useState("overview");
   const [dirty,setDirty]=useState(false);
+  const [saveStatus,setSaveStatus]=useState(null);
+  const [saving,setSaving]=useState(false);
   const [past,setPast]=useState([]);    // undo stack — model snapshots, capped at 20
   const [future,setFuture]=useState([]); // redo stack
   const [historyRows,setHistoryRows]=useState([]);
@@ -167,6 +169,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     setFuture([]);                        // new edit clears redo stack
     setModel(m=>({...m,[f]:v}));
     setDirty(true);
+    setSaveStatus(null);
   };
   const mergeGeneratedModel=(current,nextModel)=>({
     ...current,
@@ -184,6 +187,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     setFuture([]);
     setModel(merged);
     setDirty(true);
+    setSaveStatus(null);
     return merged;
   };
   const saveGeneratedModel=async(nextModel)=>{
@@ -191,9 +195,20 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     setPast(p=>[...p.slice(-19),model]);
     setFuture([]);
     setModel(merged);
-    if(overrides.onSave)await overrides.onSave(merged);
-    setDirty(false);
-    onRefresh();
+    setSaving(true);
+    setSaveStatus({state:"saving",message:"Saving generated model..."});
+    try{
+      await overrides.onSave?.(merged);
+      setDirty(false);
+      setSaveStatus({state:"success",message:"Saved"});
+      await onRefresh?.();
+    }catch(error){
+      setDirty(true);
+      setSaveStatus({state:"error",message:error?.message||"Save failed"});
+      throw error;
+    }finally{
+      setSaving(false);
+    }
     return merged;
   };
   const undo=()=>{
@@ -226,7 +241,21 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     return()=>document.removeEventListener('keydown',onKey);
   },[]);
 
-  const save=async()=>{if(overrides.onSave)await overrides.onSave(model);setDirty(false);onRefresh();};
+  const save=async()=>{
+    setSaving(true);
+    setSaveStatus({state:"saving",message:"Saving..."});
+    try{
+      await overrides.onSave?.(model);
+      setDirty(false);
+      setSaveStatus({state:"success",message:"Saved"});
+      await onRefresh?.();
+    }catch(error){
+      setDirty(true);
+      setSaveStatus({state:"error",message:error?.message||"Save failed"});
+    }finally{
+      setSaving(false);
+    }
+  };
 
   const handleBack=()=>{
     if(dirty&&!window.confirm('You have unsaved changes. Leave without saving?'))return;
@@ -287,10 +316,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   };
 
   const TABS=[
-    {id:"ai",label:"AI Generated Model"},
     {id:"overview",label:"Overview"},{id:"entities",label:"Entity Types"},
     {id:"state",label:"State Vars"},{id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},{id:"queues",label:"Queues"},
+    {id:"ai",label:"AI Generated Model"},
     {id:"execute",label:"▶ Execute"},
     {id:"history",label:"History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
@@ -322,7 +351,17 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
         {canEdit&&<Btn small variant="ghost" onClick={undo} disabled={!past.length} title="Undo (Ctrl+Z)">↩ Undo</Btn>}
         {canEdit&&<Btn small variant="ghost" onClick={redo} disabled={!future.length} title="Redo (Ctrl+Shift+Z)">↪ Redo</Btn>}
         <Btn small variant="ghost" onClick={exportJson}>Export JSON</Btn>
-        {canEdit&&dirty&&<Btn small variant="primary" onClick={save}>Save</Btn>}
+        {saveStatus&&(
+          <div role={saveStatus.state==="error"?"alert":"status"} style={{
+            color: saveStatus.state==="error"?C.red:saveStatus.state==="success"?C.green:C.muted,
+            fontFamily:FONT,
+            fontSize:11,
+            fontWeight:700,
+          }}>
+            {saveStatus.message}
+          </div>
+        )}
+        {canEdit&&dirty&&<Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save"}</Btn>}
       </div>
       <div role="tablist" aria-label="Model sections" style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.surface,paddingLeft:20,flexShrink:0,overflowX:"auto"}}>
         {TABS.map(t=>(

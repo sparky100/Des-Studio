@@ -127,4 +127,32 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(onBack).toHaveBeenCalledOnce();
   });
+
+  it('keeps changes dirty and shows an error when saving fails', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const onBack = vi.fn();
+    const overrides = makeOverrides();
+    overrides.onSave = vi.fn().mockRejectedValue(new Error('Database is unavailable'));
+
+    render(
+      <ModelDetail
+        modelId="m1"
+        modelData={mockModel}
+        onBack={onBack}
+        onRefresh={vi.fn()}
+        overrides={overrides}
+      />
+    );
+
+    const inputs = screen.getAllByRole('textbox');
+    fireEvent.change(inputs[0], { target: { value: 'New Name' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Database is unavailable');
+    expect(screen.getByRole('button', { name: /^Save$/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Back/i }));
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('unsaved changes'));
+    expect(onBack).not.toHaveBeenCalled();
+  });
 });

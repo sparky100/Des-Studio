@@ -145,7 +145,8 @@ export function evalCondition(condition, helpers, state, clock) {
     let expr = condition;
 
     // queue(Type).length — check by queue field first, fall back to entity type
-    expr = expr.replace(/queue\((\w+)\)\.length/g, (_, name) => {
+    expr = expr.replace(/queue\(([^)]+)\)\.length/g, (_, rawName) => {
+      const name = rawName.trim();
       const inQueue = helpers.entities
         ? helpers.entities.filter(e =>
             e.queue?.toLowerCase() === name.toLowerCase() && e.status === 'waiting'
@@ -156,17 +157,17 @@ export function evalCondition(condition, helpers, state, clock) {
     });
 
     // idle(Type).count
-    expr = expr.replace(/idle\((\w+)\)\.count/g,
-      (_, t) => String(helpers.idleOf(t).length));
+    expr = expr.replace(/idle\(([^)]+)\)\.count/g,
+      (_, t) => String(helpers.idleOf(t.trim()).length));
 
     // busy(Type).count
-    expr = expr.replace(/busy\((\w+)\)\.count/g,
-      (_, t) => String(helpers.busyOf(t).length));
+    expr = expr.replace(/busy\(([^)]+)\)\.count/g,
+      (_, t) => String(helpers.busyOf(t.trim()).length));
 
     // attr(Type, attrName) — first idle server's attribute
-    expr = expr.replace(/attr\((\w+)\s*,\s*(\w+)\)/g, (_, t, a) => {
-      const e = helpers.idleOf(t)[0];
-      const v = e?.attrs?.[a];
+    expr = expr.replace(/attr\(([^,]+)\s*,\s*([^)]+)\)/g, (_, t, a) => {
+      const e = helpers.idleOf(t.trim())[0];
+      const v = e?.attrs?.[a.trim()];
       return v === undefined ? "0" : typeof v === "string" ? `"${v}"` : String(v);
     });
 

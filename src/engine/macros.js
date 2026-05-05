@@ -85,10 +85,10 @@ export const MACROS = [
   // ── ARRIVE(Type[, QueueName]) ──────────────────────────────────────────────
   {
     name:    "ARRIVE",
-    pattern: /^ARRIVE\((\w+)(?:\s*,\s*(\w+))?\)$/i,
+    pattern: /^ARRIVE\(([^,)]+)(?:\s*,\s*([^)]+))?\)$/i,
     apply(match, ctx) {
-      const typeName  = match[1];
-      const queueName = match[2] || (typeName + "Queue");
+      const typeName  = match[1].trim();
+      const queueName = match[2]?.trim() || (typeName + "Queue");
       const { entities, model, clock, helpers, setLastCustId, msgs } = ctx;
       const et = (model.entityTypes || []).find(
         e => e.name.trim().toLowerCase() === typeName.trim().toLowerCase()
@@ -114,9 +114,10 @@ export const MACROS = [
   // ── ASSIGN(CustomerType|QueueName, ServerType) ────────────────────────────
   {
     name:    "ASSIGN",
-    pattern: /^ASSIGN\((\w+)\s*,\s*(\w+)\)$/i,
+    pattern: /^ASSIGN\(([^,]+)\s*,\s*([^)]+)\)$/i,
     apply(match, ctx) {
-      const [, cType, sType] = match;
+      const cType = match[1].trim();
+      const sType = match[2].trim();
       const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
 
       // Look up queue discipline for this entity type or queue name
@@ -214,10 +215,10 @@ export const MACROS = [
   // Frees server, returns customer to waiting — preserves arrivalTime for sojourn
   {
     name:    "RELEASE",
-    pattern: /^RELEASE\((\w+)(?:\s*,\s*(\w+))?\)$/i,
+    pattern: /^RELEASE\(([^,)]+)(?:\s*,\s*([^)]+))?\)$/i,
     apply(match, ctx) {
-      const srvType     = match[1];
-      const targetQueue = match[2] || null;
+      const srvType     = match[1].trim();
+      const targetQueue = match[2]?.trim() || null;
       const { entities, clock, getLastCustId, getLastSrvId, felRef, msgs } = ctx;
       const custId = felRef?._contextCustId ?? getLastCustId();
       const srvId  = felRef?._contextSrvId  ?? getLastSrvId();

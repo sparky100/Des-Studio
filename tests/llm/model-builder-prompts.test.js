@@ -19,6 +19,18 @@ describe("model builder prompts", () => {
     });
   });
 
+  it("tells the model builder to place user timing answers into DES Studio distribution fields", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+
+    expect(prompt).toMatch(/distParams/);
+    expect(prompt).toMatch(/average time-between-arrivals/i);
+    expect(prompt).toMatch(/serviceTime/);
+    expect(prompt).toMatch(/never leave timing defaults/i);
+    expect(prompt).toMatch(/Service Complete B-event/i);
+    expect(prompt).toMatch(/queue size > 0 and idle server count > 0/i);
+    expect(prompt).toMatch(/RELEASE\(ServerType, Next Queue\)/);
+  });
+
   it("declares the required JSON response keys", () => {
     const prompt = buildModelBuilderSystemPrompt();
     expect(prompt).toMatch(/intent/);

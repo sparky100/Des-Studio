@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-05 | Reflects: Sprint 7A architecture decisions + ADR-008/ADR-009 + Known Issues*
+*Last updated: 2026-05-05 | Reflects: Sprint 8B model-definition coherence + ADR-008/ADR-009 + Known Issues*
 
 ---
 
@@ -187,6 +187,26 @@ while (fel.length > 0 && !terminationConditionMet()) {
 | `RENEGE` | B-Event | Removes entity from queue after patience timeout, routes to Sink |
 
 **These five macros are the complete and closed set.** No other macros may be added without updating `docs/addition1_entity_model.md` first.
+
+### 5.1a Sprint 8B — Model Definition Coherence Rules
+
+The modeller-facing UI must describe actions in DES language, not as raw macro programming. Macro strings may remain the current internal representation, but dropdowns and AI proposal summaries should use clear labels such as:
+
+- `Add Patient to Triage Queue` for internal `ARRIVE(Patient, Triage Queue)`
+- `Start Triage with Triage Nurse` for internal `ASSIGN(Triage Queue, Triage Nurse)`
+- `Schedule Triage Complete` for C-event follow-on schedules
+- `Complete Patient Journey` or `Finish Service` for internal `COMPLETE()`
+
+Rules:
+
+- Prefer explicit `ARRIVE(CustomerType, QueueName)` over legacy `ARRIVE(CustomerType)` in all new UI and AI-generated models.
+- Queue names may contain spaces. Engine macros, condition evaluation, validation, and dropdown-generated values must support names such as `Triage Queue`.
+- Each queue should declare the customer/entity type it accepts via `customerType`; ARRIVE dropdown options must respect that binding.
+- A service-start C-event must have both a queue-availability condition and a server-availability condition: `queue(QueueName).length > 0 AND idle(ServerType).count > 0`.
+- A service-start C-event must assign from the queue or customer to the server and schedule a follow-on completion B-event.
+- `COMPLETE()` is a Phase B follow-on event that completes the currently scheduled customer/server service context. It should not be placed in the initial FEL for normal service completion.
+- Never expose the word `template` to users for follow-on completion or reneging B-events. Use `scheduled follow-on` where a category label is needed.
+- Multi-stage routing is a first-class modelling requirement. Sprint 8B must establish a tested two-stage reference model before visual designer work proceeds.
 
 ### 5.2 Prohibited Action Patterns
 
@@ -1297,13 +1317,37 @@ UI / UX
 
 ## 21. Current Sprint
 
-**Sprint 8 — AI Generated Model Authoring**
+**Sprint 8B — Model Definition Coherence**
 
-Goal: Add the AI Generated Model authoring mode over the canonical `model_json`, with LLM proposals validated and previewed before apply.
+Goal: Align Forms/Tabs, AI Generated Model, validation, and engine semantics for queue/customer binding, service starts, service completion, and multi-stage routing before proceeding to visual designer work.
 
-**Prerequisites:** Sprint 8A exit gate passed. Model-builder calls must use the provider-neutral LLM contract introduced in Sprint 8A.
+**Prerequisites:** Sprint 8 implementation pass exposed manual verification blockers in `docs/UI - Observations.md`. Sprint 8B blocks Sprint 9A/Sprint 9.
 
-**Current implementation status:** F8.1-F8.6 are locally implemented and automated checks pass. Manual live verification still requires redeploying `llm-proxy`, confirming a model-builder JSON response, applying a simple proposal, and running the generated model.
+**Current implementation status:** In progress. The priority is to make the model definition itself coherent, not to add more AI or visual features.
+
+### Sprint 8B Required Outcomes
+
+- `validateModel()` recognises ARRIVE/COMPLETE effects from manual and generated models without false V8 warnings.
+- Queue names with spaces work in macros, condition strings, validation, and generated dropdown values.
+- Queue `customerType` is used to filter ARRIVE options so servers or wrong customer types cannot be added to incompatible queues.
+- User-facing labels avoid raw macro vocabulary where possible and never show `template`.
+- AI proposals produce service-start C-events with queue-size and idle-server conditions.
+- A two-stage Patient -> Queue 1 -> Service 1 -> Queue 2 -> Service 2 -> Complete reference model is added as a regression gate.
+
+### Sprint 8B Completion Gate
+
+```text
+npm test -- validation conditions queue-name-spaces ai-generated-model-panel b-event-editor c-event-editor model-builder-prompts accessibility
+npm run build
+Manual: generated/simple and two-stage models run without V8/V9 false positives or user-visible "template" wording.
+```
+
+### Recently Completed — Sprint 8
+
+Sprint 8 implementation pass completed on 2026-05-05, but manual verification exposed model-definition coherence blockers that are now Sprint 8B.
+
+- Added AI Generated Model tab, model-builder prompts, non-streaming provider-neutral model-builder calls, structured diff preview, validation-before-apply, partial section apply, and direct Apply & Save actions.
+- Sprint 8 files include `src/ui/editors/AiGeneratedModelPanel.jsx`, `src/ui/editors/ModelDiffPreview.jsx`, `src/llm/model-builder-prompts.js`, and `src/llm/apiClient.js`.
 
 ### Recently Completed — Sprint 8A
 

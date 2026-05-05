@@ -6,6 +6,7 @@ import { DISTRIBUTIONS } from "../../engine/distributions.js";
 
 // ── UI Polish Helpers ─────────────────────────────────────────────────────────
 const toTitleCase = s => s.trim().replace(/\b\w/g, c => c.toUpperCase());
+const displayEventName = name => String(name || "").replace(/\s*\((template|tmpl)\)\s*/gi, "").trim();
 
 const conditionOptions = (entityTypes, stateVariables=[], queues=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
@@ -53,10 +54,10 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[]) => {
   const opts = [{label:'— select effect —',value:''}];
   // Queue-based ASSIGN combinations
   if(queues.length > 0) {
-    opts.push({label:'── ASSIGN from queue ──', value:'', disabled:true});
+    opts.push({label:'── Start service from queue ──', value:'', disabled:true});
     queues.forEach(q => {
       servers.forEach(s => {
-        opts.push({label:`ASSIGN(${q.name}, ${s})`, value:`ASSIGN(${q.name}, ${s})`});
+        opts.push({label:`Start ${q.customerType||'entity'} from ${q.name} with ${s}`, value:`ASSIGN(${q.name}, ${s})`});
       });
     });
   }
@@ -64,7 +65,7 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[]) => {
   if(custs.length>0&&servers.length>0){
     opts.push({label:'── ASSIGN ──',value:'',disabled:true});
     custs.forEach(c=>servers.forEach(s=>{
-      opts.push({label:`ASSIGN(${c}, ${s})`,value:`ASSIGN(${c}, ${s})`});
+      opts.push({label:`Start ${c} with ${s}`,value:`ASSIGN(${c}, ${s})`});
     }));
   }
   // Scalar effects on state variables
@@ -85,33 +86,37 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const opts = [{label:'— select effect —',value:''}];
-  custs.forEach(c=>{
-    opts.push({label:`ARRIVE(${c})`,value:`ARRIVE(${c})`});
-  });
   if(queues.length > 0) {
-    opts.push({label:'── ARRIVE into queue ──', value:'', disabled:true});
+    opts.push({label:'── Add arriving entity to queue ──', value:'', disabled:true});
     custs.forEach(c => {
-      queues.forEach(q => {
-        opts.push({label:`ARRIVE(${c}, ${q.name})`, value:`ARRIVE(${c}, ${q.name})`});
+      queues
+        .filter(q => !q.customerType || normTypeName(q.customerType) === c)
+        .forEach(q => {
+          opts.push({label:`Add ${c} to ${q.name}`, value:`ARRIVE(${c}, ${q.name})`});
       });
     });
+  } else {
+    opts.push({label:'── Legacy arrivals ──', value:'', disabled:true});
+    custs.forEach(c=>{
+      opts.push({label:`Add ${c} to its default queue`,value:`ARRIVE(${c})`});
+    });
   }
-  opts.push({label:'COMPLETE()',value:'COMPLETE()'});
-  opts.push({label:'RENEGE(ctx)',value:'RENEGE(ctx)'});
+  opts.push({label:'Finish current service',value:'COMPLETE()'});
+  opts.push({label:'Cancel waiting entity if still queued',value:'RENEGE(ctx)'});
   custs.forEach(c=>{
-    opts.push({label:`RENEGE_OLDEST(${c})`,value:`RENEGE_OLDEST(${c})`});
+    opts.push({label:`Cancel oldest waiting ${c}`,value:`RENEGE_OLDEST(${c})`});
   });
   if(servers.length>0){
     opts.push({label:'── Release server ──',value:'',disabled:true});
     servers.forEach(s=>{
-      opts.push({label:`RELEASE(${s})`,value:`RELEASE(${s})`});
+      opts.push({label:`Release ${s}`,value:`RELEASE(${s})`});
     });
   }
   if(queues.length > 0) {
     opts.push({label:'── RELEASE to queue ──', value:'', disabled:true});
     servers.forEach(s => {
       queues.forEach(q => {
-        opts.push({label:`RELEASE(${s}, ${q.name})`, value:`RELEASE(${s}, ${q.name})`});
+        opts.push({label:`Release ${s} and send entity to ${q.name}`, value:`RELEASE(${s}, ${q.name})`});
       });
     });
   }
@@ -468,7 +473,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
       <InfoBox color={C.bEvent}>
         <strong style={{color:C.bEvent}}>Macros:</strong>{" "}
         <code>ARRIVE(Type)</code> · <code>COMPLETE()</code> · <code>RENEGE(ctx)</code> · <code>RENEGE_OLDEST(Type)</code><br/>
-        Set <em>t=999</em> for template B-events (Service Complete, Renege) — never directly in initial FEL.
+        Completion and reneging B-events are scheduled by another event, so keep them out of the initial event list.
       </InfoBox>
       {events.length===0&&<Empty icon="⏰" msg="No B-events."/>}
       {events.map((ev,i)=>{
@@ -483,7 +488,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
           <div key={ev.id} style={{background:C.bg,border:`1px solid ${isTmpl?C.muted+"44":C.bEvent+"33"}`,
             borderLeft:`3px solid ${isTmpl?C.muted:C.bEvent}`,borderRadius:6,padding:12,display:"flex",flexDirection:"column",gap:10}}>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-              <Tag label={isTmpl?"template":"B-event"} color={isTmpl?C.muted:C.bEvent}/>
+              <Tag label={isTmpl?"scheduled follow-on":"B-event"} color={isTmpl?C.muted:C.bEvent}/>
               <input value={ev.name} onChange={e=>upd(i,"name",e.target.value)} placeholder="Event name"
                 style={{flex:1,minWidth:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
               <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",
@@ -529,7 +534,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                     <select value={s.eventId} onChange={e=>updS(i,j,{eventId:e.target.value})}
                       style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
                       <option value="">— select B-event —</option>
-                      {events.map(b=><option key={b.id} value={b.id}>{b.name||b.id}</option>)}
+                      {events.map(b=><option key={b.id} value={b.id}>{displayEventName(b.name)||b.id}</option>)}
                     </select>
                     <Btn small variant="danger" ariaLabel={`Remove B-event schedule ${j + 1}`} onClick={()=>remS(i,j)}>✕</Btn>
                   </div>
@@ -1146,7 +1151,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                       <option value="">— select B-event to schedule —</option>
                       {bEvents.map(b=>(
                         <option key={b.id} value={b.id}>
-                          {b.name}{parseFloat(b.scheduledTime)>=900?" (template)":""}
+                          {displayEventName(b.name)||b.id}
                         </option>
                       ))}
                     </select>
@@ -1233,8 +1238,8 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
       <SH label="Queues" color={C.cEvent}><Btn small variant="ghost" onClick={add}>+ Add Queue</Btn></SH>
       <InfoBox color={C.cEvent}>
-        Configure per-customer-type queue properties. Each <strong style={{color:C.cEvent}}>customer</strong> type
-        automatically has an implicit queue. Set <em>capacity</em> for bounded queues (blank = unlimited).{' '}
+        Configure explicit waiting lines and which arriving entity type each queue accepts. New models should use
+        explicit queues; legacy models without queues still fall back to an implicit per-customer queue. Set <em>capacity</em> for bounded queues (blank = unlimited).{' '}
         <strong>Discipline:</strong> FIFO (default), LIFO, or Priority.
       </InfoBox>
       {queues.length===0&&<Empty icon="🗂️" msg="No explicit queue configuration — all customer queues default to FIFO with unlimited capacity."/>}
