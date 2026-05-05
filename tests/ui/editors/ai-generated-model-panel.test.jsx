@@ -39,4 +39,38 @@ describe("AiGeneratedModelPanel", () => {
     expect(screen.getByText(/built a post office model/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/model proposal preview/i)).toBeInTheDocument();
   });
+
+  it("unwraps exported-style model_json proposals and applies them as drafts", async () => {
+    const handleApply = vi.fn();
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      onComplete({
+        intent: "build",
+        questions: null,
+        explanation: "Built a clinic model.",
+        proposedModel: {
+          id: "llm-should-not-be-used",
+          name: "Generated Clinic",
+          model_json: {
+            entityTypes: [{ id: "patient", name: "Patient", role: "customer", attrDefs: [] }],
+            stateVariables: [],
+            bEvents: [],
+            cEvents: [],
+            queues: [{ id: "waiting", name: "Waiting", discipline: "FIFO" }],
+          },
+        },
+      });
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
+
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A GP practice" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    await screen.findByLabelText(/model proposal preview/i);
+    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
+
+    expect(handleApply).toHaveBeenCalledOnce();
+    expect(handleApply.mock.calls[0][0]).not.toHaveProperty("id");
+    expect(handleApply.mock.calls[0][0].name).toBe("Generated Clinic");
+    expect(handleApply.mock.calls[0][0].queues[0].name).toBe("Waiting");
+  });
 });

@@ -171,7 +171,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   const applyGeneratedModel=(nextModel)=>{
     setPast(p=>[...p.slice(-19),model]);
     setFuture([]);
-    setModel(m=>({...m,...nextModel}));
+    setModel(m=>({
+      ...m,
+      ...(nextModel.name ? { name: nextModel.name } : {}),
+      ...(nextModel.description ? { description: nextModel.description } : {}),
+      entityTypes: Array.isArray(nextModel.entityTypes) ? nextModel.entityTypes : (m.entityTypes || []),
+      stateVariables: Array.isArray(nextModel.stateVariables) ? nextModel.stateVariables : (m.stateVariables || []),
+      bEvents: Array.isArray(nextModel.bEvents) ? nextModel.bEvents : (m.bEvents || []),
+      cEvents: Array.isArray(nextModel.cEvents) ? nextModel.cEvents : (m.cEvents || []),
+      queues: Array.isArray(nextModel.queues) ? nextModel.queues : (m.queues || []),
+    }));
     setDirty(true);
   };
   const undo=()=>{

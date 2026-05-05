@@ -46,4 +46,20 @@ describe("ModelDiffPreview", () => {
     expect(applied.entityTypes[0].name).toBe("Customer");
     expect(applied.queues[0].name).toBe("New Queue");
   });
+
+  it("can apply invalid proposals as editable drafts when allowed", () => {
+    const onApply = vi.fn();
+    const proposed = {
+      ...baseModel,
+      entityTypes: [{ id: "bad", name: "", role: "customer", attrDefs: [] }],
+    };
+
+    render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={onApply} onDiscard={vi.fn()} allowDraftApply />);
+
+    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/applied as a draft/i);
+    expect(onApply).toHaveBeenCalledOnce();
+    expect(onApply.mock.calls[0][1].errors[0].code).toBe("V1");
+  });
 });

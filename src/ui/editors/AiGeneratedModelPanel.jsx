@@ -5,6 +5,19 @@ import { C, FONT } from "../shared/tokens.js";
 import { Btn, Empty, Field, InfoBox, SH } from "../shared/components.jsx";
 import { ModelDiffPreview } from "./ModelDiffPreview.jsx";
 
+function unwrapProposedModel(proposedModel = {}) {
+  const source = proposedModel.model_json || proposedModel.modelJson || proposedModel.model || proposedModel;
+  return {
+    ...(proposedModel.name ? { name: proposedModel.name } : {}),
+    ...(proposedModel.description ? { description: proposedModel.description } : {}),
+    entityTypes: Array.isArray(source.entityTypes) ? source.entityTypes : [],
+    stateVariables: Array.isArray(source.stateVariables) ? source.stateVariables : [],
+    bEvents: Array.isArray(source.bEvents) ? source.bEvents : [],
+    cEvents: Array.isArray(source.cEvents) ? source.cEvents : [],
+    queues: Array.isArray(source.queues) ? source.queues : [],
+  };
+}
+
 function Bubble({ role, content }) {
   const isUser = role === "user";
   const isSystem = role === "system";
@@ -64,7 +77,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel }) {
         ? questions.join("\n")
         : response.explanation || "Model proposal received.";
       setHistory(prev => [...prev, { role: "assistant", content }]);
-      if (response.proposedModel) setProposal(response.proposedModel);
+      if (response.proposedModel) setProposal(unwrapProposedModel(response.proposedModel));
       if (nextHistory.length >= 20) setNotice("Conversation is long - consider starting a new session.");
     }, err => {
       setError(err?.message || "Model builder request failed.");
@@ -72,11 +85,15 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel }) {
     setLoading(false);
   };
 
-  const applyProposal = (nextModel, warnings = []) => {
+  const applyProposal = (nextModel, validation = { errors: [], warnings: [] }) => {
     onApplyModel?.(nextModel);
     setProposal(null);
-    setNotice(warnings.length ? warnings.map(w => `[${w.code}] ${w.message}`).join("\n") : "Proposal applied. Save the model when ready.");
-    setHistory(prev => [...prev, { role: "system", content: "Proposal applied to the editable model." }]);
+    const errorText = validation.errors?.length
+      ? `Proposal applied as an editable draft with ${validation.errors.length} validation issue(s). Fix them in the tabs before running.`
+      : "";
+    const warningText = validation.warnings?.length ? validation.warnings.map(w => `[${w.code}] ${w.message}`).join("\n") : "";
+    setNotice(errorText || warningText || "Proposal applied. Save the model when ready.");
+    setHistory(prev => [...prev, { role: "system", content: errorText || "Proposal applied to the editable model." }]);
   };
 
   return (
@@ -115,6 +132,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel }) {
           proposedModel={proposal}
           onApply={applyProposal}
           onDiscard={() => setProposal(null)}
+          allowDraftApply
         />
       )}
     </div>
