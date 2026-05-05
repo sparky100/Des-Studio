@@ -5,11 +5,12 @@ import { C, FONT } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
+import { VisualDesignerPanel } from "./visual-designer/VisualDesignerPanel.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
 import { fetchRunHistory } from "../db/models.js";
 import { validateModel } from "../engine/validation.js";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues"];
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph"];
 
 function slugifyModelName(name = "") {
   return (name || "untitled")
@@ -20,10 +21,17 @@ function slugifyModelName(name = "") {
 }
 
 function modelJsonFromModel(model = {}) {
-  return MODEL_JSON_KEYS.reduce((json, key) => ({
-    ...json,
-    [key]: Array.isArray(model[key]) ? model[key] : [],
-  }), {});
+  return MODEL_JSON_KEYS.reduce((json, key) => {
+    if (key === "graph") {
+      return model.graph && typeof model.graph === "object" && !Array.isArray(model.graph)
+        ? { ...json, graph: model.graph }
+        : json;
+    }
+    return {
+      ...json,
+      [key]: Array.isArray(model[key]) ? model[key] : [],
+    };
+  }, {});
 }
 
 function buildModelExportPayload(model, exportedAt = new Date().toISOString()) {
@@ -149,6 +157,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
       bEvents:       modelData.bEvents        || [],
       cEvents:       modelData.cEvents        || [],
       queues:        modelData.queues         || [],
+      graph:         modelData.graph          || null,
       access:        modelData.access         || {},
     };
   });
@@ -171,6 +180,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     setDirty(true);
     setSaveStatus(null);
   };
+  const setWholeModel=(nextModel)=>{
+    setPast(p=>[...p.slice(-19),model]);
+    setFuture([]);
+    setModel(nextModel);
+    setDirty(true);
+    setSaveStatus(null);
+  };
   const mergeGeneratedModel=(current,nextModel)=>({
     ...current,
     ...(nextModel.name ? { name: nextModel.name } : {}),
@@ -180,6 +196,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     bEvents: Array.isArray(nextModel.bEvents) ? nextModel.bEvents : (current.bEvents || []),
     cEvents: Array.isArray(nextModel.cEvents) ? nextModel.cEvents : (current.cEvents || []),
     queues: Array.isArray(nextModel.queues) ? nextModel.queues : (current.queues || []),
+    graph: nextModel.graph && typeof nextModel.graph === "object" && !Array.isArray(nextModel.graph) ? nextModel.graph : (current.graph || null),
   });
   const applyGeneratedModel=(nextModel)=>{
     const merged=mergeGeneratedModel(model,nextModel);
@@ -320,6 +337,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     {id:"state",label:"State Vars"},{id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},{id:"queues",label:"Queues"},
     {id:"ai",label:"AI Generated Model"},
+    {id:"visual",label:"Visual Designer"},
     {id:"execute",label:"▶ Execute"},
     {id:"history",label:"History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
@@ -398,6 +416,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
         >
         {tab==="ai"&&(
           <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel} onSaveModel={saveGeneratedModel}/>
+        )}
+        {tab==="visual"&&(
+          <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel}/>
         )}
         {tab==="overview"&&(
           <div style={{maxWidth:700,display:"flex",flexDirection:"column",gap:14}}>

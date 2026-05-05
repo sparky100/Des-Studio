@@ -68,9 +68,9 @@ flowchart LR
 | AI results analysis | ✅ Complete | Read-only AI Insights uses a Supabase Edge Function proxy; user-facing run labels and history exports are implemented. |
 | Platform foundation | ✅ Complete | Sprint 7B implemented the accepted 7A decisions: platform role/settings persistence and TypeScript tooling/contracts. |
 | Dynamic modelling | ✅ Complete | Sprint 7 adds time-varying arrival rates and resource capacity schedules. |
-| AI model creation | 🔄 Current | Sprint 8A has prepared provider-neutral LLM routing; Sprint 8 adds natural-language model authoring. |
+| AI model creation | ✅ Complete | Sprint 8A prepared provider-neutral LLM routing; Sprint 8 added natural-language model authoring. |
 | Model definition coherence | ✅ Complete | Sprint 8B aligned queue/customer/server/service semantics before visual designer work. |
-| Visual authoring | 🔄 Preflight | Sprint 9A accepted ADR-010; Sprint 9 adds graph-first Visual Designer authoring. |
+| Visual authoring | 🔄 Current | Sprint 9A accepted ADR-010; Sprint 9 is adding graph-first Visual Designer authoring. |
 
 ### Key Issues and Watchpoints
 
@@ -130,6 +130,10 @@ flowchart LR
 | 1.34 | 2026-05-05 | Added Sprint 8B — Model Definition Coherence as a blocking stabilisation pass before Sprint 9. Scope covers queue/customer binding, service-start/service-complete semantics, user-facing action labels, validation parity, AI proposal normalization, and a two-stage reference model. |
 | 1.35 | 2026-05-05 | Continued Sprint 8B observation fixes: clarified queue/entity/B-event/C-event wording, removed remaining visible follow-on implementation language, added in-panel unsaved-change save action, summarised server resources on model cards, and replaced raw modified-proposal JSON with friendly field summaries. |
 | 1.36 | 2026-05-05 | Started Sprint 9A and accepted ADR-010 — Visual Designer will use `@xyflow/react`; `model_json.graph` is optional layout metadata only; graph topology is derived from canonical model logic; inspector reuse strategy is focused building-block reuse. |
+| 1.37 | 2026-05-05 | Started Sprint 9 implementation with dependency-free graph derivation helpers. Added canonical model → visual graph mapping for Source, Queue, Activity, Sink, preserving optional layout metadata and deriving edges from ARRIVE/ASSIGN/RELEASE/COMPLETE logic. |
+| 1.38 | 2026-05-05 | Added the first Visual Designer shell in `ModelDetail`: a new tab renders derived graph counts, nodes, and connections from canonical `model_json`; exports now preserve optional `model_json.graph` layout metadata. |
+| 1.39 | 2026-05-05 | Installed `@xyflow/react` and added the first read-only Visual Designer canvas renderer with Source, Queue, Activity, and Sink node styling over the derived canonical graph. |
+| 1.40 | 2026-05-05 | Added the initial reviewable Visual Designer authoring model: draggable layout persistence, button-based node creation, conservative canonical connection rules, compact inspector, and round-trip tests. UX polish remains the next Sprint 9 refinement pass. |
 
 ---
 
@@ -149,7 +153,8 @@ flowchart LR
 | Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources. | 369 (369) | N/A | Success | Piecewise distributions, shift schedules, RATE_CHANGE/SHIFT_CHANGE B-events, validation, UI editors, and typed contracts complete. |
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight. | 22 focused | N/A | Success | Provider-neutral request contract, browser compatibility, server-side provider/model routing, and proxy deployment checklist complete. |
 | Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence. | Focused | N/A | Success | Stabilised queue/service semantics before visual designer work. |
-| Sprint 9A | 🔄 In progress | — | Visual Designer Architecture Preflight. | Docs | N/A | Pending | ADR-010 accepted; update planning/design docs before Sprint 9 coding. |
+| Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight. | Docs | N/A | Success | ADR-010 accepted; planning/design docs updated before Sprint 9 coding. |
+| Sprint 9 | 🔄 In progress | — | Visual Designer Authoring. | Focused | N/A | Pending | Initial reviewable authoring model added; UX refinement remains. |
 
 ---
 
@@ -3730,7 +3735,7 @@ npm run build                          # Succeeds
 
 **Goal:** Make the canonical DES model understandable and executable across Forms/Tabs, AI Generated Model, validation, and the engine before adding more authoring surfaces.
 
-**Status:** 🔄 In progress | **Started:** 2026-05-05 | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-05 | **Completed:** 2026-05-05
 **Prerequisite:** Sprint 8 implementation pass. Complete before Sprint 9A/Sprint 9.
 
 ### Why This Sprint Blocks Further Work
@@ -3815,19 +3820,30 @@ git diff --check
 
 **Goal:** Add the third model authoring mode from ADR-007: a graph-first visual designer for building and editing DES models over the same canonical `model_json` used by Forms/Tabs and AI Generated Model authoring.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** 🔄 In progress | **Started:** 2026-05-05 | **Completed:** —
 **Prerequisite:** Sprint 9A complete. The AI Generated Model path should already prove that canonical model proposals can be validated and applied safely. ADR-010 accepts `@xyflow/react` as the canvas dependency and defines `model_json.graph` as optional layout metadata only.
 
 **Architectural constraint:** Do not implement the retired split-pane SVG hybrid designer. Sprint 9 should target the final graph-first authoring surface directly. The visual designer must not create a separate model format and must not bypass `validateModel()`.
 
 | Feature | Audit Status | Action |
 |---|---|---|
-| F9.1 — Visual Designer shell and mode entry | ✗ | New: visual authoring mode entry point alongside Forms/Tabs and AI Generated Model |
-| F9.2 — Graph derivation and layout metadata | ✗ | New: derive graph topology from canonical model and persist optional layout metadata |
-| F9.3 — `@xyflow/react` canvas renderer and node palette | ✗ | New: graph-first canvas with Source, Queue, Activity, Sink nodes |
-| F9.4 — Connection rules and DAG validation | ✗ | Reuse validation concepts; block invalid graph connections |
-| F9.5 — Inspector integration | ✗ | Reuse existing editor components where practical; do not fork model logic |
-| F9.6 — Round-trip parity with Forms/Tabs | ✗ | Switching authoring modes preserves the same canonical model data |
+| F9.1 — Visual Designer shell and mode entry | ✓ | New Visual Designer tab renders derived graph summary and editable canvas |
+| F9.2 — Graph derivation and layout metadata | ✓ | Derivation helper and layout persistence are implemented; derived edges are not persisted |
+| F9.3 — `@xyflow/react` canvas renderer and node palette | ~ | Canvas and button-based node palette are implemented; drag-from-palette UX deferred |
+| F9.4 — Connection rules and DAG validation | ~ | Initial conservative connection rules implemented; richer validation panel deferred |
+| F9.5 — Inspector integration | ~ | Compact review inspector implemented; advanced distribution/resource editing deferred |
+| F9.6 — Round-trip parity with Forms/Tabs | ~ | Visual edits update canonical `model_json`; broader manual browser pass remains |
+
+### Sprint 9 Current Implementation Contract
+
+The first Sprint 9 deliverable is a reviewable and testable model-authoring surface, not final UX polish. Visual actions update canonical `model_json` first, then the canvas re-derives topology. `model_json.graph` stores layout metadata only.
+
+Deferred UX refinement:
+
+- drag-from-palette node creation
+- polished validation side panel
+- advanced distribution/resource editing from the canvas inspector
+- delete workflow and richer connection editing
 
 ### Design Principles for Sprint 9
 

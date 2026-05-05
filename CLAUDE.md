@@ -1321,7 +1321,7 @@ UI / UX
 
 Goal: Lock the Visual Designer canvas, graph metadata, round-trip, and inspector reuse decisions before Sprint 9 coding.
 
-**Status:** In progress. ADR-010 is accepted and should guide all Sprint 9 implementation planning.
+**Status:** Sprint 9 implementation is in progress. ADR-010 is accepted and guides all Visual Designer work.
 
 ### Sprint 9A Accepted Decisions
 
@@ -1339,6 +1339,22 @@ Goal: Lock the Visual Designer canvas, graph metadata, round-trip, and inspector
 - Visual node inspectors should reuse small editor building blocks where practical: `DistPicker`, `ConditionBuilder`, `EntityFilterBuilder`, queue/customer/resource option helpers.
 - Do not embed full `BEventEditor` or `CEventEditor` panels inside a node inspector.
 - Do not implement the retired split-pane SVG hybrid designer or `FlowDiagramSVG` bridge.
+
+### Sprint 9 Implementation Notes
+
+- First implementation slice adds dependency-free graph derivation in `src/ui/visual-designer/graph.js`.
+- Visual Designer shell is exposed as a `ModelDetail` tab and now renders the derived graph through an editable `@xyflow/react` canvas, with node/edge summaries retained below it for verification.
+- The initial Sprint 9 implementation is review/test-first, not final UX polish: button-based node creation, draggable layout persistence, conservative connection creation, and a compact inspector are implemented.
+- Visual Designer mutations must update canonical `model_json` first. Graph edges remain derived; `model_json.graph` stores layout metadata only.
+- Deferred UX refinement includes drag-from-palette creation, richer validation panels, delete workflows, and advanced distribution/resource editing from the canvas inspector.
+- Graph topology is derived from canonical model logic:
+  - `ARRIVE(Customer, Queue)` creates Source → Queue.
+  - C-event queue conditions and `ASSIGN(Queue, Server)` create Queue → Activity.
+  - scheduled B-event `RELEASE(Server, Queue)` creates Activity → Queue.
+  - scheduled B-event `COMPLETE()` or `RENEGE()` creates Activity → Sink.
+- `graphLayoutFromDerivedGraph()` serializes layout metadata without derived edges.
+- `model_json.graph` is preserved by model export/apply paths when present.
+- Keep this helper pure and testable; do not import React, DOM, Supabase, or engine internals.
 
 ### Recently Completed — Sprint 8B
 
