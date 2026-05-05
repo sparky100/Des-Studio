@@ -63,6 +63,20 @@ describe("ModelDiffPreview", () => {
     expect(onApply.mock.calls[0][1].errors[0].code).toBe("V1");
   });
 
+  it("summarises modified proposal items without dumping raw JSON", () => {
+    const proposed = {
+      ...baseModel,
+      queues: [{ id: "q1", name: "Old Queue", discipline: "LIFO", capacity: "12" }],
+    };
+
+    render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={vi.fn()} onDiscard={vi.fn()} />);
+
+    expect(screen.getByText("Old Queue")).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element.textContent === "discipline: FIFO to LIFO")).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element.textContent === "capacity: blank to 12")).toBeInTheDocument();
+    expect(screen.queryByText(/"discipline"/i)).not.toBeInTheDocument();
+  });
+
   it("can apply and save all sections in one action", async () => {
     const onApplyAndSave = vi.fn();
     const proposed = {

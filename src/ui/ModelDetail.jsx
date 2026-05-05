@@ -371,6 +371,26 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
         ))}
       </div>
       <div style={{flex:1,overflowY:"auto",padding:20}}>
+        {canEdit&&dirty&&(
+          <div role="status" style={{
+            background:C.amber+"18",
+            border:`1px solid ${C.amber}66`,
+            borderRadius:6,
+            padding:"10px 12px",
+            marginBottom:14,
+            display:"flex",
+            alignItems:"center",
+            justifyContent:"space-between",
+            gap:12,
+            flexWrap:"wrap",
+            color:C.text,
+            fontFamily:FONT,
+            fontSize:12,
+          }}>
+            <span>Unsaved changes in this model.</span>
+            <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save Changes"}</Btn>
+          </div>
+        )}
         <ErrorBoundary
           key={tab}
           title="Model panel crashed"
@@ -493,6 +513,7 @@ const ModelCard=({model,onOpen,onDelete,profiles=[],currentUserId})=>{
   const fmtDate=iso=>{ try{ return new Date(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){return '';} };
   const hasRenege=(model.bEvents||[]).some(ev=>(ev.schedules||[]).some(s=>s.isRenege));
   const srvTypes=(model.entityTypes||[]).filter(et=>et.role==="server");
+  const serverCapacity=srvTypes.reduce((sum, et)=>sum+(parseInt(et.count,10)||1),0);
   const runCount=model.stats?.runs;
   const isOwner=model.owner_id===currentUserId;
   const openFromKeyboard=e=>{
@@ -510,7 +531,7 @@ const ModelCard=({model,onOpen,onDelete,profiles=[],currentUserId})=>{
         <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap"}}>
           <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
           {hasRenege&&<Tag label="reneging" color={C.reneged}/>}
-          {srvTypes.length>0&&<Tag label={srvTypes.map(s=>`${s.count||1}× ${s.name}`).join(", ")} color={C.server}/>}
+          {srvTypes.length>0&&<Tag label={`${serverCapacity} resources across ${srvTypes.length} type${srvTypes.length===1?"":"s"}`} color={C.server}/>}
           {isOwner&&onDelete&&<Btn small variant="danger" onClick={e=>{e.stopPropagation();onDelete(model);}}>Delete</Btn>}
         </div>
       </div>

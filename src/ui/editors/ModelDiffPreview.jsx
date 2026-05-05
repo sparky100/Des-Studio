@@ -70,6 +70,54 @@ function ChangeList({ title, items, color, renderItem }) {
   );
 }
 
+function friendlyValue(value) {
+  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  if (value && typeof value === "object") {
+    if (value.dist || value.type) {
+      const dist = value.dist || value.type;
+      const params = value.distParams || value.params || value.parameters || {};
+      const paramText = Object.entries(params)
+        .map(([key, paramValue]) => `${key} ${Array.isArray(paramValue) ? `${paramValue.length} values` : paramValue}`)
+        .join(", ");
+      return paramText ? `${dist} (${paramText})` : dist;
+    }
+    return value.name || value.id || `${Object.keys(value).length} fields`;
+  }
+  if (value === true) return "yes";
+  if (value === false) return "no";
+  if (value == null || value === "") return "blank";
+  return String(value);
+}
+
+function changedFields(before = {}, after = {}) {
+  const keys = Array.from(new Set([...Object.keys(before || {}), ...Object.keys(after || {})]))
+    .filter(key => JSON.stringify(before?.[key]) !== JSON.stringify(after?.[key]));
+  return keys.filter(key => !["id"].includes(key));
+}
+
+function renderItemSummary(item) {
+  return item.name || item.id || "Unnamed";
+}
+
+function renderModifiedSummary(item) {
+  const before = item.before || {};
+  const after = item.after || {};
+  const title = after.name || before.name || after.id || before.id || "Unnamed";
+  const fields = changedFields(before, after);
+  if (!fields.length) return <div>{title}</div>;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ color: C.text, fontWeight: 700 }}>{title}</div>
+      {fields.slice(0, 5).map(field => (
+        <div key={field} style={{ color: C.muted }}>
+          <span style={{ color: C.amber }}>{field}</span>: {friendlyValue(before[field])} to {friendlyValue(after[field])}
+        </div>
+      ))}
+      {fields.length > 5 && <div style={{ color: C.muted }}>{fields.length - 5} more field changes</div>}
+    </div>
+  );
+}
+
 export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onApply, onApplyAndSave, onDiscard, allowDraftApply = false }) {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(SECTION_META.map(section => section.key));
@@ -142,14 +190,9 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
               <div style={{ color: C.text, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>{section.label}</div>
               <Tag label={hasChanges ? "Changed" : "Unchanged"} color={hasChanges ? C.accent : C.muted} />
             </div>
-            <ChangeList title="Added" items={added} color={C.green} renderItem={item => item.name || item.id || "Unnamed"} />
-            <ChangeList title="Removed" items={removed} color={C.red} renderItem={item => item.name || item.id || "Unnamed"} />
-            <ChangeList title="Modified" items={modified} color={C.amber} renderItem={item => (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <pre style={{ margin: 0, whiteSpace: "pre-wrap", color: C.muted }}>{JSON.stringify(item.before, null, 2)}</pre>
-                <pre style={{ margin: 0, whiteSpace: "pre-wrap", color: C.text }}>{JSON.stringify(item.after, null, 2)}</pre>
-              </div>
-            )} />
+            <ChangeList title="Added" items={added} color={C.green} renderItem={renderItemSummary} />
+            <ChangeList title="Removed" items={removed} color={C.red} renderItem={renderItemSummary} />
+            <ChangeList title="Modified" items={modified} color={C.amber} renderItem={renderModifiedSummary} />
             {!hasChanges && <Empty icon="=" msg={`${unchanged.length} unchanged`} />}
           </section>
         );

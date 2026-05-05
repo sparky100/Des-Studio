@@ -25,4 +25,20 @@ describe('BEventEditor — queue-aware effect options', () => {
     expect(screen.getByRole('option', { name: 'Add Specimen to Lab Queue' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Add Specimen to Triage Queue' })).not.toBeInTheDocument();
   });
+
+  it('explains B-event actions without exposing the old macro list heading', () => {
+    render(
+      <BEventEditor
+        events={[]}
+        onChange={vi.fn()}
+        entityTypes={[{ id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] }]}
+        queues={[{ id: 'triage', name: 'Triage Queue', customerType: 'Patient', discipline: 'FIFO' }]}
+        cEvents={[]}
+      />
+    );
+
+    expect(screen.getAllByText(/Arrivals/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Completion/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Macros:/i)).not.toBeInTheDocument();
+  });
 });

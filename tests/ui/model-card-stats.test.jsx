@@ -31,4 +31,18 @@ describe('ModelCard run stats', () => {
     rerender(<ModelCard model={{ ...baseModel, statsError: true, stats: { runs: null } }} profiles={profiles} onOpen={vi.fn()} />);
     expect(screen.getByText('runs —')).toBeInTheDocument();
   });
+
+  it('summarises server resources without listing every server type name', () => {
+    render(<ModelCard model={{
+      ...baseModel,
+      entityTypes: [
+        { id: 'patient', name: 'Patient', role: 'customer' },
+        { id: 'nurse', name: 'Triage Nurse', role: 'server', count: 2 },
+        { id: 'doctor', name: 'Consultant', role: 'server', count: 1 },
+      ],
+    }} profiles={profiles} onOpen={vi.fn()} />);
+
+    expect(screen.getByText('3 resources across 2 types')).toBeInTheDocument();
+    expect(screen.queryByText(/Triage Nurse, Consultant/i)).not.toBeInTheDocument();
+  });
 });

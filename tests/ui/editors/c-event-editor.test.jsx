@@ -192,4 +192,20 @@ describe('CEventEditor — follow-on B-event labels', () => {
     expect(screen.getByRole('option', { name: 'Service Complete' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /template/i })).not.toBeInTheDocument();
   });
+
+  it('strips template wording from the scheduled follow-on preview', () => {
+    render(
+      <CEventEditor
+        events={[{ id: 'c1', name: 'Start Service', priority: 1, condition: '', effect: '', cSchedules: [{ id: 'cs1', eventId: 'complete', dist: 'Fixed', distParams: { value: '1' } }], description: '' }]}
+        onChange={vi.fn()}
+        bEvents={[{ id: 'complete', name: 'Service Complete (template)', scheduledTime: '9999', effect: 'COMPLETE()', schedules: [] }]}
+        entityTypes={[]}
+        stateVariables={[]}
+        queues={[]}
+      />
+    );
+
+    expect(screen.getByText(/Will schedule:/i).textContent).toContain('Will schedule: Service Complete');
+    expect(screen.queryByText(/template/i)).not.toBeInTheDocument();
+  });
 });

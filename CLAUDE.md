@@ -1323,7 +1323,7 @@ Goal: Align Forms/Tabs, AI Generated Model, validation, and engine semantics for
 
 **Prerequisites:** Sprint 8 implementation pass exposed manual verification blockers in `docs/UI - Observations.md`. Sprint 8B blocks Sprint 9A/Sprint 9.
 
-**Current implementation status:** In progress. The priority is to make the model definition itself coherent, not to add more AI or visual features.
+**Current implementation status:** Implementation complete; manual dev-server verification remains. The priority is to prove the model definition is coherent before adding more AI or visual features.
 
 ### Sprint 8B Required Outcomes
 
@@ -1333,6 +1333,7 @@ Goal: Align Forms/Tabs, AI Generated Model, validation, and engine semantics for
 - User-facing labels avoid raw macro vocabulary where possible and never show `template`.
 - AI proposals produce service-start C-events with queue-size and idle-server conditions.
 - A two-stage Patient -> Queue 1 -> Service 1 -> Queue 2 -> Service 2 -> Complete reference model is added as a regression gate.
+- Remaining observation polish completed: clearer queue/entity/B-event/C-event wording, visible in-panel dirty/save state, concise server resource count on model cards, and friendly proposal modification summaries instead of raw JSON blocks.
 
 ### Sprint 8B Completion Gate
 

@@ -72,6 +72,24 @@ describe('ModelDetail — unsaved-change warning (F2.8)', () => {
     expect(onBack).not.toHaveBeenCalled();
   });
 
+  it('shows an in-panel unsaved changes save action when the model is dirty', () => {
+    render(
+      <ModelDetail
+        modelId="m1"
+        modelData={mockModel}
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        overrides={makeOverrides()}
+      />
+    );
+
+    const inputs = screen.getAllByRole('textbox');
+    fireEvent.change(inputs[0], { target: { value: 'Changed Name' } });
+
+    expect(screen.getByText(/Unsaved changes in this model/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
+  });
+
   it('Back button navigates when user confirms leaving with unsaved changes', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const onBack = vi.fn();

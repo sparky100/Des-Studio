@@ -128,6 +128,7 @@ flowchart LR
 | 1.32 | 2026-05-05 | Sprint 8 implementation pass — added AI Generated Model tab, model-builder prompts, non-streaming provider-neutral model-builder calls, structured diff preview, validation-before-apply, partial section apply, and tests. Full suite passes: 42 files, 385 tests. Production build succeeds. Live proxy deployment/manual AI proposal check remains pending. |
 | 1.33 | 2026-05-05 | Sprint 8 AI proposal save refinement — proposal panel now offers direct Apply & Save actions for all or selected sections, preserves the real model identity when saving generated drafts, and allows invalid proposals to be saved as editable drafts with validation warnings. |
 | 1.34 | 2026-05-05 | Added Sprint 8B — Model Definition Coherence as a blocking stabilisation pass before Sprint 9. Scope covers queue/customer binding, service-start/service-complete semantics, user-facing action labels, validation parity, AI proposal normalization, and a two-stage reference model. |
+| 1.35 | 2026-05-05 | Continued Sprint 8B observation fixes: clarified queue/entity/B-event/C-event wording, removed remaining visible follow-on implementation language, added in-panel unsaved-change save action, summarised server resources on model cards, and replaced raw modified-proposal JSON with friendly field summaries. |
 
 ---
 
@@ -3740,15 +3741,15 @@ Proceeding to Visual Designer before resolving this would bake ambiguous semanti
 
 | Feature | Audit Status | Action |
 |---|---|---|
-| F8B.1 — Validation parity for generated/manual effects | ~ | `validateModel()` must recognise string, array, and object effects; no false V8 for valid ARRIVE/COMPLETE |
-| F8B.2 — Queue names with spaces | ~ | Engine macros, condition evaluator, validation, and generated dropdown values must support queue names like `Triage Queue` |
-| F8B.3 — Queue/customer binding in dropdowns | ~ | Queue `customerType` must filter ARRIVE options; only valid customer-to-queue combinations should appear |
-| F8B.4 — User-facing action labels | ~ | Dropdowns should say what the action does, e.g. "Add Patient to Triage Queue", while storing canonical macro values |
-| F8B.5 — Service-start/service-complete pattern | ~ | AI and UI should generate `condition: queue > 0 AND idle server > 0`, `ASSIGN(...)`, and schedule a follow-on Service Complete B-event |
-| F8B.6 — Remove implementation language | ~ | No user-visible "template" wording; use "scheduled follow-on" or plain B-event names |
-| F8B.7 — Two-stage reference model | ✗ | Add a Patient -> Queue 1 -> Service 1 -> Queue 2 -> Service 2 -> Complete fixture/test and make it the regression gate |
-| F8B.8 — Save visibility | ~ | Make dirty/save state obvious near model editing surfaces, not only in the top bar |
-| F8B.9 — AI refinement friendliness | ~ | Refining distributions should not primarily show raw JSON; review friendlier proposal summaries |
+| F8B.1 — Validation parity for generated/manual effects | ✅ | `validateModel()` recognises string, array, and object effects; no false V8 for valid ARRIVE/COMPLETE |
+| F8B.2 — Queue names with spaces | ✅ | Engine macros, condition evaluator, validation, and generated dropdown values support queue names like `Triage Queue` |
+| F8B.3 — Queue/customer binding in dropdowns | ✅ | Queue `customerType` filters ARRIVE options; only valid customer-to-queue combinations appear |
+| F8B.4 — User-facing action labels | ✅ | Dropdowns say what the action does, e.g. "Add Patient to Triage Queue", while storing canonical macro values |
+| F8B.5 — Service-start/service-complete pattern | ✅ | AI normalization generates `condition: queue > 0 AND idle server > 0`, service-start assignment, and follow-on completion scheduling |
+| F8B.6 — Remove implementation language | ✅ | User-facing follow-on surfaces avoid "template" wording and use scheduled follow-on/plain event names |
+| F8B.7 — Two-stage reference model | ✅ | Patient -> Queue 1 -> Service 1 -> Queue 2 -> Service 2 -> Complete is covered by focused regression tests |
+| F8B.8 — Save visibility | ✅ | Dirty state appears in the editor body with a nearby Save Changes action, while the top-bar Save remains available |
+| F8B.9 — AI refinement friendliness | ✅ | Modified proposal items now show friendly field-level summaries instead of raw JSON blocks |
 
 ### Canonical Two-Stage Acceptance Model
 

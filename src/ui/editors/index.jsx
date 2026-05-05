@@ -344,8 +344,8 @@ const EntityTypeEditor=({types,onChange})=>{
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
       <SH label="Entity Types" color={C.server}><Btn small variant="ghost" onClick={add}>+ Add Type</Btn></SH>
       <InfoBox color={C.server}>
-        <strong style={{color:C.server}}>customer</strong> types arrive via <code>ARRIVE(TypeName)</code>.{" "}
-        <strong style={{color:C.server}}>server</strong> types are pre-created at t=0 with the given <em>count</em>.{" "}
+        <strong style={{color:C.server}}>Arriving entity</strong> types are the things that join queues.{" "}
+        <strong style={{color:C.server}}>Resource</strong> types are pre-created at t=0 with the given <em>count</em>.{" "}
         Server <strong>attrs</strong> (e.g. <code>serviceTime=3</code>) are readable in C-event conditions via <code>attr(Type,attrName)</code>{" "}
         and in SCHEDULE delays via <code>server.attrName</code>.
       </InfoBox>
@@ -469,11 +469,11 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
   const remS=(i,j)=>{const n=[...events];n[i]={...n[i],schedules:n[i].schedules.filter((_,idx)=>idx!==j)};onChange(n);};
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      <SH label="B-Events  (Bound — scheduled in FEL)" color={C.bEvent}><Btn small variant="ghost" onClick={add}>+ Add B-Event</Btn></SH>
+      <SH label="B-Events (Bound)" color={C.bEvent}><Btn small variant="ghost" onClick={add}>+ Add B-Event</Btn></SH>
       <InfoBox color={C.bEvent}>
-        <strong style={{color:C.bEvent}}>Macros:</strong>{" "}
-        <code>ARRIVE(Type)</code> · <code>COMPLETE()</code> · <code>RENEGE(ctx)</code> · <code>RENEGE_OLDEST(Type)</code><br/>
-        Completion and reneging B-events are scheduled by another event, so keep them out of the initial event list.
+        <strong style={{color:C.bEvent}}>Arrivals</strong> add an entity to an explicit queue.{" "}
+        <strong style={{color:C.bEvent}}>Completion</strong> releases the matched resource and either routes the entity onward or marks it complete.{" "}
+        Follow-on completion and reneging events are scheduled by another event, so leave them unticked for simulation start.
       </InfoBox>
       {events.length===0&&<Empty icon="⏰" msg="No B-events."/>}
       {events.map((ev,i)=>{
@@ -1036,20 +1036,16 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
     onChange(n);
   };
 
-  // templates that should never be in initial FEL (t>=900)
-  const templateBEvents=bEvents.filter(b=>parseFloat(b.scheduledTime)>=900);
-
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
       <SH label="C-Events  (Conditional — evaluated in Phase C)" color={C.cEvent}>
         <Btn small variant="ghost" onClick={add}>+ Add C-Event</Btn>
       </SH>
       <InfoBox color={C.cEvent}>
-        <strong style={{color:C.cEvent}}>Condition tokens:</strong>{" "}
+        <strong style={{color:C.cEvent}}>Conditions:</strong>{" "}
         <code>queue(Type).length</code> · <code>idle(Type).count</code> · <code>busy(Type).count</code> ·{" "}
         <code>attr(Type,attrName)</code> · <code>served</code> · <code>reneged</code><br/>
-        <strong style={{color:C.cEvent}}>Effect macros:</strong>{" "}
-        <code>ASSIGN(CustomerType, ServerType)</code> — match customer to server.{" "}
+        <strong style={{color:C.cEvent}}>Service-start effects</strong> match a queued entity to an idle resource.{" "}
         <strong>Scalar effects</strong> also supported: <code>VAR++</code> · <code>VAR--</code> · <code>VAR += N</code> · <code>VAR = value</code><br/>
         <strong style={{color:C.green}}>B-event scheduling</strong> is defined below in the <em>Schedules</em> section —
         select the B-event, distribution, and whether to carry the matched entity context (customer + server IDs).
@@ -1184,7 +1180,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                     <div style={{background:C.panel,borderRadius:4,padding:"6px 10px",
                       fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.7}}>
                       Will schedule: <strong style={{color:C.bEvent}}>
-                        {bEvents.find(b=>b.id===s.eventId)?.name||s.eventId}
+                        {displayEventName(bEvents.find(b=>b.id===s.eventId)?.name)||s.eventId}
                       </strong> at <strong style={{color:C.amber}}>
                         clock + {s.dist==="ServerAttr"
                           ? `server.${s.distParams?.attr||"serviceTime"}`
@@ -1238,11 +1234,11 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
       <SH label="Queues" color={C.cEvent}><Btn small variant="ghost" onClick={add}>+ Add Queue</Btn></SH>
       <InfoBox color={C.cEvent}>
-        Configure explicit waiting lines and which arriving entity type each queue accepts. New models should use
-        explicit queues; legacy models without queues still fall back to an implicit per-customer queue. Set <em>capacity</em> for bounded queues (blank = unlimited).{' '}
+        Configure named waiting lines and which arriving entity type each queue accepts. Arrival dropdowns use this binding, so only compatible
+        entity-to-queue combinations are offered. Set <em>capacity</em> for bounded queues (blank = unlimited).{' '}
         <strong>Discipline:</strong> FIFO (default), LIFO, or Priority.
       </InfoBox>
-      {queues.length===0&&<Empty icon="🗂️" msg="No explicit queue configuration — all customer queues default to FIFO with unlimited capacity."/>}
+      {queues.length===0&&<Empty icon="Queues" msg="No named queues yet. Add a queue before defining new arrivals."/>}
       {queues.map((q,i)=>(
         <div key={q.id} style={{background:C.bg,border:`1px solid ${C.cEvent}33`,
           borderLeft:`3px solid ${C.cEvent}`,borderRadius:6,padding:12,
@@ -1252,7 +1248,7 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
           <div style={{display:'flex',flexDirection:'column',gap:4}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>QUEUE NAME</span>
             <input value={q.name||''} onChange={e=>upd(i,'name',e.target.value)}
-              placeholder="e.g. TriageQueue"
+              placeholder="e.g. Triage Queue"
               style={{...inpStyle(C.cEvent+'88'),color:C.text}}/>
           </div>
 
