@@ -12,6 +12,47 @@ import { MACROS, applyScalar } from "./macros.js";
 import { evalCondition }       from "./conditions.js";
 import { sample }              from "./distributions.js";
 
+function applyShiftChange(ev, ctx) {
+  const serverTypeName = ev.serverTypeName || ev.payload?.serverTypeName;
+  const target = parseInt(ev.newCapacity ?? ev.payload?.newCapacity, 10);
+  if (!serverTypeName || !Number.isInteger(target) || target < 1) {
+    return [`SHIFT_CHANGE ignored: invalid capacity for ${serverTypeName || "unknown server type"}`];
+  }
+
+  const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  const servers = ctx.entities.filter(e => e.role === "server" && match(e.type, serverTypeName));
+  const current = servers.length;
+
+  if (target > current) {
+    const addCount = target - current;
+    for (let i = 0; i < addCount; i++) {
+      const created = ctx.createServerEntity?.(serverTypeName, ctx.clock);
+      if (created) ctx.entities.push(created);
+    }
+    return [`SHIFT_CHANGE: ${serverTypeName} capacity -> ${target} (${addCount} added)`];
+  }
+
+  if (target < current) {
+    let excess = current - target;
+    for (let i = ctx.entities.length - 1; i >= 0 && excess > 0; i--) {
+      const entity = ctx.entities[i];
+      if (entity.role === "server" && match(entity.type, serverTypeName) && entity.status === "idle") {
+        ctx.entities.splice(i, 1);
+        excess--;
+      }
+    }
+    const retainedBusy = excess;
+    if (retainedBusy > 0) {
+      const warning = `SHIFT_CHANGE: ${serverTypeName} target ${target} retained ${retainedBusy} busy server(s) until completion`;
+      ctx.warnings?.push(warning);
+      return [`SHIFT_CHANGE: ${serverTypeName} capacity -> ${target}`, warning];
+    }
+    return [`SHIFT_CHANGE: ${serverTypeName} capacity -> ${target}`];
+  }
+
+  return [`SHIFT_CHANGE: ${serverTypeName} capacity -> ${target}`];
+}
+
 // ── Apply an effect string ────────────────────────────────────────────────────
 // Returns { msgs, felEntries }
 // lastCustId / lastSrvId are returned via the context refs object
@@ -73,6 +114,22 @@ export function fireBEvent(ev, ctx) {
   const { entities, clock, model } = ctx;
   const log   = [];
 
+  if (ev.type === "RATE_CHANGE") {
+    return {
+      msgs: [`RATE_CHANGE: ${ev.sourceName || ev.name || "piecewise source"} period active`],
+      felEntries: [],
+      skipped: false,
+    };
+  }
+
+  if (ev.type === "SHIFT_CHANGE") {
+    return {
+      msgs: applyShiftChange(ev, ctx),
+      felEntries: [],
+      skipped: false,
+    };
+  }
+
   // Reneging guard: skip if context customer is no longer waiting
   if (ev._isRenege && ev._contextCustId != null) {
     const cust = entities.find(e => e.id === ev._contextCustId);
@@ -93,7 +150,7 @@ export function fireBEvent(ev, ctx) {
   for (const sched of ev.schedules || []) {
     const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);
     if (!tmpl) continue;
-    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng));
+    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng, null, { clock }));
     let renegeTarget;
     if (sched.isRenege) {
       // Tag the newest waiting customer
@@ -137,7 +194,7 @@ export function fireCEvent(ev, ctx) {
       delay = Math.max(0, parseFloat(srv?.attrs?.[attrName]) || 1);
       msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [server.${attrName}=${delay}]`);
     } else {
-      delay = Math.max(0, sample(cs.dist || "Fixed", cs.distParams || {}, ctx.rng));
+      delay = Math.max(0, sample(cs.dist || "Fixed", cs.distParams || {}, ctx.rng, null, { clock }));
       msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${cs.dist}(${delay.toFixed(3)})]`);
     }
 

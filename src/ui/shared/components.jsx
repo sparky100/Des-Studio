@@ -109,20 +109,60 @@ const Empty=({icon,msg})=>(
 // ═══════════════════════════════════════════════════════════════════════════════
 // DISTRIBUTION PICKER — reusable widget used by both B-event schedules and C-events
 // ═══════════════════════════════════════════════════════════════════════════════
-const DistPicker=({value,onChange,compact})=>{
+const PiecewiseEditor=({value,onChange,compact})=>{
+  const periods=Array.isArray(value?.distParams?.periods)?value.distParams.periods:[];
+  const upd=(i,patch)=>{
+    const next=[...periods];
+    next[i]={...next[i],...patch};
+    onChange({...value,dist:"Piecewise",distParams:{...(value.distParams||{}),periods:next}});
+  };
+  const add=()=>{
+    const last=periods[periods.length-1];
+    const startTime=last?String((parseFloat(last.startTime||0)||0)+60):"0";
+    onChange({...value,dist:"Piecewise",distParams:{...(value.distParams||{}),periods:[...periods,{startTime,distribution:{dist:"Exponential",distParams:{mean:"1"}}}]}});
+  };
+  const rem=(i)=>onChange({...value,dist:"Piecewise",distParams:{...(value.distParams||{}),periods:periods.filter((_,idx)=>idx!==i)}});
+  const unsorted=periods.some((p,i)=>i>0&&(parseFloat(p.startTime)||0)<(parseFloat(periods[i-1].startTime)||0));
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
+      {periods.map((period,i)=>(
+        <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
+          <label style={{display:"flex",alignItems:"center",gap:4}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from t:</span>
+            <input type="number" value={period.startTime??""} disabled={i===0} onChange={e=>upd(i,{startTime:e.target.value})}
+              style={{width:70,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none",opacity:i===0?0.7:1}}/>
+          </label>
+          <DistPicker value={period.distribution||{dist:"Exponential",distParams:{mean:"1"}}}
+            onChange={distribution=>upd(i,{distribution})} compact={compact} allowPiecewise={false}/>
+          <Btn small variant="danger" ariaLabel={`Remove piecewise period ${i + 1}`} onClick={()=>rem(i)}>x</Btn>
+        </div>
+      ))}
+      {periods.length===0&&<span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>No periods yet. Add a period starting at t=0.</span>}
+      {unsorted&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>Periods must be sorted by start time.</span>}
+      {periods[0]&&parseFloat(periods[0].startTime)!==0&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>First period must start at t=0.</span>}
+      <Btn small variant="ghost" onClick={add} style={{alignSelf:"flex-start"}}>+ Add Period</Btn>
+    </div>
+  );
+};
+
+const DistPicker=({value,onChange,compact,allowPiecewise=true})=>{
   const fileRef=useRef(null);
   const [csvParse,setCsvParse]=useState(null); // { fileName, headers, rows, colIdx }
 
   const v=value||{dist:"Exponential",distParams:{}};
   const isImported=v.dist==="Empirical"&&Array.isArray(v.distParams?.values)&&v.distParams.values.length>0;
   const dd=DISTRIBUTIONS[v.dist||"Fixed"]||DISTRIBUTIONS.Fixed;
+  const isPiecewise=v.dist==="Piecewise";
 
   const selSt={width:compact?160:200,background:C.bg,border:`1px solid ${C.cEvent}55`,
     borderRadius:4,color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"};
 
   const handleDistChange=(sel)=>{
     if(sel==="__csv__"){fileRef.current?.click();return;}
-    onChange({...v,dist:sel,distParams:{}});
+    onChange({...v,dist:sel,distParams:sel==="Piecewise"
+      ?{periods:[{startTime:"0",distribution:{dist:"Exponential",distParams:{mean:"1"}}}]}
+      :{}});
     setCsvParse(null);
   };
 
@@ -181,12 +221,12 @@ const DistPicker=({value,onChange,compact})=>{
       {/* Distribution selector row */}
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
         <select value={v.dist||"Exponential"} onChange={e=>handleDistChange(e.target.value)} style={selSt}>
-          {Object.keys(DISTRIBUTIONS).map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
+          {Object.keys(DISTRIBUTIONS).filter(d=>allowPiecewise||d!=="Piecewise").map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
           <option disabled value="">──────────</option>
           <option value="__csv__">⬆ Import from CSV…</option>
         </select>
         {/* Param inputs — shown for non-CSV distributions */}
-        {!isImported&&dd.params.map(param=>(
+        {!isImported&&!isPiecewise&&dd.params.map(param=>(
           <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
             <input type="number" value={(v.distParams||{})[param]||""}
@@ -198,6 +238,8 @@ const DistPicker=({value,onChange,compact})=>{
         {/* Re-import button shown when CSV is loaded */}
         {isImported&&<button onClick={()=>fileRef.current?.click()} style={btnSt(C.cEvent)}>Re-import CSV</button>}
       </div>
+
+      {isPiecewise&&<PiecewiseEditor value={v} onChange={onChange} compact={compact}/>}
 
       {/* Column picker — appears after file is parsed */}
       {csvParse&&(
@@ -228,7 +270,7 @@ const DistPicker=({value,onChange,compact})=>{
       )}
 
       {/* Distribution hint for non-CSV modes */}
-      {!isImported&&!csvParse&&(
+      {!isImported&&!csvParse&&!isPiecewise&&(
         <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>{dd.hint}</span>
       )}
     </div>

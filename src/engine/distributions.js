@@ -19,6 +19,58 @@ export function mulberry32(seed) {
   };
 }
 
+const DIST_ALIASES = {
+  fixed: "Fixed",
+  uniform: "Uniform",
+  exponential: "Exponential",
+  normal: "Normal",
+  triangular: "Triangular",
+  erlang: "Erlang",
+  empirical: "Empirical",
+  serverattr: "ServerAttr",
+  "server-attr": "ServerAttr",
+  server_attr: "ServerAttr",
+  piecewise: "Piecewise",
+};
+
+export function normalizeDistributionName(dist) {
+  if (!dist) return "Fixed";
+  if (DISTRIBUTIONS[dist]) return dist;
+  return DIST_ALIASES[String(dist).trim().toLowerCase()] || dist;
+}
+
+export function getPiecewisePeriods(params = {}) {
+  return Array.isArray(params.periods) ? params.periods : [];
+}
+
+export function getActivePiecewisePeriod(params = {}, clock = 0) {
+  const periods = getPiecewisePeriods(params);
+  if (!periods.length) return null;
+  const t = Number.isFinite(Number(clock)) ? Number(clock) : 0;
+  let active = periods[0];
+  for (const period of periods) {
+    const startTime = parseFloat(period.startTime ?? period.time ?? 0);
+    if (!Number.isFinite(startTime)) continue;
+    if (startTime <= t) active = period;
+    else break;
+  }
+  return active;
+}
+
+function periodDistribution(period = {}) {
+  const raw = period.distribution || period;
+  const dist = normalizeDistributionName(raw.dist || raw.type || "Fixed");
+  const params = { ...(raw.distParams || raw.params || {}) };
+  if (dist === "Exponential" && params.mean == null && raw.rate != null) {
+    const rate = parseFloat(raw.rate);
+    if (Number.isFinite(rate) && rate > 0) params.mean = String(1 / rate);
+  }
+  for (const key of ["value", "mean", "min", "max", "mode", "stddev", "k", "attr"]) {
+    if (params[key] == null && raw[key] != null) params[key] = raw[key];
+  }
+  return { dist, params };
+}
+
 export const DISTRIBUTIONS = {
   Fixed: {
     params: ["value"],
@@ -87,6 +139,18 @@ export const DISTRIBUTIONS = {
       return vals[Math.floor(rng() * vals.length)];
     },
   },
+  Piecewise: {
+    params: [],
+    label: "Time-varying (piecewise)",
+    hint: "Uses the period active at the current simulation clock",
+    sample: (p, rng, serverAttrs, context = {}) => {
+      const active = getActivePiecewisePeriod(p, context.clock ?? 0);
+      if (!active) return 0;
+      const { dist, params } = periodDistribution(active);
+      if (dist === "Piecewise") return 0;
+      return sample(dist, params, rng, serverAttrs, context);
+    },
+  },
   ServerAttr: {
     params: ["attr"],
     label:  "Server attribute",
@@ -104,11 +168,13 @@ export const DISTRIBUTIONS = {
  * @param {object} params - Distribution parameters (string values from UI)
  * @param {function} rng - Seeded PRNG — must be provided (use buildEngine's rng)
  * @param {object|null} serverAttrs - Server entity attributes (for ServerAttr)
+ * @param {object} context - Optional runtime context such as { clock }
  */
-export function sample(dist, params = {}, rng, serverAttrs = null) {
-  const def = DISTRIBUTIONS[dist];
+export function sample(dist, params = {}, rng, serverAttrs = null, context = {}) {
+  const name = normalizeDistributionName(dist);
+  const def = DISTRIBUTIONS[name];
   if (!def) return parseFloat(params.value) || 0;
-  return def.sample(params, rng, serverAttrs);
+  return def.sample(params, rng, serverAttrs, context);
 }
 
 /**

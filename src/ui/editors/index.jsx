@@ -146,19 +146,65 @@ const DropField = ({value, onChange, options, color}) => {
 };
 
 
+const PiecewiseEditor = ({value, onChange, compact}) => {
+  const periods = Array.isArray(value?.distParams?.periods) ? value.distParams.periods : [];
+  const upd = (i, patch) => {
+    const next = [...periods];
+    next[i] = { ...next[i], ...patch };
+    onChange({ ...value, dist: "Piecewise", distParams: { ...(value.distParams || {}), periods: next } });
+  };
+  const add = () => {
+    const last = periods[periods.length - 1];
+    const startTime = last ? String((parseFloat(last.startTime || 0) || 0) + 60) : "0";
+    onChange({
+      ...value,
+      dist: "Piecewise",
+      distParams: {
+        ...(value.distParams || {}),
+        periods: [...periods, { startTime, distribution: { dist: "Exponential", distParams: { mean: "1" } } }],
+      },
+    });
+  };
+  const rem = i => onChange({ ...value, dist: "Piecewise", distParams: { ...(value.distParams || {}), periods: periods.filter((_, idx) => idx !== i) } });
+  const unsorted = periods.some((p, i) => i > 0 && (parseFloat(p.startTime) || 0) < (parseFloat(periods[i - 1].startTime) || 0));
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
+      {periods.map((period, i) => (
+        <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",flexWrap:"wrap"}}>
+          <label style={{display:"flex",alignItems:"center",gap:4}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from t:</span>
+            <input type="number" value={period.startTime ?? ""} disabled={i===0} onChange={e=>upd(i,{startTime:e.target.value})}
+              style={{width:70,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none",opacity:i===0?0.7:1}}/>
+          </label>
+          <DistPicker value={period.distribution || {dist:"Exponential",distParams:{mean:"1"}}}
+            onChange={distribution=>upd(i,{distribution})} compact={compact} allowPiecewise={false}/>
+          <Btn small variant="danger" ariaLabel={`Remove piecewise period ${i + 1}`} onClick={()=>rem(i)}>x</Btn>
+        </div>
+      ))}
+      {unsorted&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>Periods must be sorted by start time.</span>}
+      {periods[0]&&parseFloat(periods[0].startTime)!==0&&<span style={{fontSize:10,color:C.red,fontFamily:FONT}}>First period must start at t=0.</span>}
+      <Btn small variant="ghost" onClick={add} style={{alignSelf:"flex-start"}}>+ Add Period</Btn>
+    </div>
+  );
+};
+
 // Distribution picker — used by BEventEditor schedule rows
-const DistPicker = ({value, onChange, compact}) => {
+const DistPicker = ({value, onChange, compact, allowPiecewise=true}) => {
   const v = value||{dist:"Exponential",distParams:{}};
   const dd = DISTRIBUTIONS[v.dist||"Fixed"]||DISTRIBUTIONS.Fixed;
+  const isPiecewise = v.dist === "Piecewise";
   return (
     <div style={{display:"flex",flexDirection:"column",gap:6}}>
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-        <select value={v.dist||"Exponential"} onChange={e=>onChange({...v,dist:e.target.value,distParams:{}})}
+        <select value={v.dist||"Exponential"} onChange={e=>onChange({...v,dist:e.target.value,distParams:e.target.value==="Piecewise"
+          ?{periods:[{startTime:"0",distribution:{dist:"Exponential",distParams:{mean:"1"}}}]}
+          :{}})}
           style={{width:compact?160:200,background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:4,
             color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
-          {Object.keys(DISTRIBUTIONS).map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
+          {Object.keys(DISTRIBUTIONS).filter(d=>allowPiecewise||d!=="Piecewise").map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
         </select>
-        {dd.params.map(param=>(
+        {!isPiecewise&&dd.params.map(param=>(
           <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
             <input type="number" value={(v.distParams||{})[param]||""} onChange={e=>onChange({...v,distParams:{...(v.distParams||{}),[param]:e.target.value}})}
@@ -167,7 +213,9 @@ const DistPicker = ({value, onChange, compact}) => {
           </div>
         ))}
       </div>
-      <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>{dd.hint}</span>
+      {isPiecewise
+        ? <PiecewiseEditor value={v} onChange={onChange} compact={compact}/>
+        : <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>{dd.hint}</span>}
     </div>
   );
 };
@@ -220,7 +268,7 @@ const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
               <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>~</span>
               <select value={a.dist||'Fixed'} onChange={e=>upd(i,{dist:e.target.value,distParams:{}})}
                 style={{...inpStyle(C.accent),flex:1}}>
-                {Object.entries(DISTRIBUTIONS).map(([k,v])=>(
+                {Object.entries(DISTRIBUTIONS).filter(([k])=>k!=="Piecewise").map(([k,v])=>(
                   <option key={k} value={k}>{v.label}</option>
                 ))}
               </select>
@@ -260,6 +308,33 @@ const EntityTypeEditor=({types,onChange})=>{
   const upd=(i,f,v)=>{const n=[...types];n[i]={...n[i],[f]:v};onChange(n);};
   const blurName=(i,v)=>{const n=[...types];n[i]={...n[i],name:normTypeName(v)};onChange(n);};
   const rem=(i)=>onChange(types.filter((_,idx)=>idx!==i));
+  const setShiftEnabled=(i,enabled)=>{
+    const n=[...types];
+    n[i]={...n[i],shiftSchedule:enabled
+      ?(Array.isArray(n[i].shiftSchedule)&&n[i].shiftSchedule.length?n[i].shiftSchedule:[{time:"0",capacity:n[i].count||"1"}])
+      :undefined};
+    onChange(n);
+  };
+  const updShift=(i,j,patch)=>{
+    const n=[...types];
+    const schedule=[...(n[i].shiftSchedule||[])];
+    schedule[j]={...schedule[j],...patch};
+    n[i]={...n[i],shiftSchedule:schedule};
+    onChange(n);
+  };
+  const addShift=(i)=>{
+    const n=[...types];
+    const schedule=[...(n[i].shiftSchedule||[])];
+    const last=schedule[schedule.length-1];
+    schedule.push({time:last?String((parseFloat(last.time)||0)+60):"0",capacity:last?.capacity||n[i].count||"1"});
+    n[i]={...n[i],shiftSchedule:schedule};
+    onChange(n);
+  };
+  const remShift=(i,j)=>{
+    const n=[...types];
+    n[i]={...n[i],shiftSchedule:(n[i].shiftSchedule||[]).filter((_,idx)=>idx!==j)};
+    onChange(n);
+  };
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
       <SH label="Entity Types" color={C.server}><Btn small variant="ghost" onClick={add}>+ Add Type</Btn></SH>
@@ -295,6 +370,40 @@ const EntityTypeEditor=({types,onChange})=>{
             role={et.role||'customer'}
             onChange={v=>upd(i,'attrDefs',v)}
           />
+          {et.role==="server"&&(
+            <div style={{background:C.surface,border:`1px solid ${C.server}22`,borderRadius:6,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+              <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:FONT,fontSize:11,color:et.shiftSchedule?C.server:C.muted,fontWeight:700}}>
+                <input type="checkbox" checked={Array.isArray(et.shiftSchedule)} onChange={e=>setShiftEnabled(i,e.target.checked)} style={{accentColor:C.server}}/>
+                Use shift schedule
+              </label>
+              {Array.isArray(et.shiftSchedule)&&(
+                <>
+                  {(et.shiftSchedule||[]).map((step,j)=>{
+                    const time=parseFloat(step.time);
+                    const prev=j>0?parseFloat(et.shiftSchedule[j-1].time):null;
+                    const capacity=Number(step.capacity);
+                    const invalidTime=!Number.isFinite(time)||(j===0&&time!==0)||(j>0&&Number.isFinite(prev)&&time<prev);
+                    const invalidCapacity=!Number.isInteger(capacity)||capacity<1;
+                    return (
+                      <div key={j} style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from t:</span>
+                        <input type="number" value={step.time??""} disabled={j===0} onChange={e=>updShift(i,j,{time:e.target.value})}
+                          style={{width:72,background:"transparent",border:`1px solid ${invalidTime?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none",opacity:j===0?0.7:1}}/>
+                        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>capacity:</span>
+                        <input type="number" value={step.capacity??""} onChange={e=>updShift(i,j,{capacity:e.target.value})}
+                          style={{width:72,background:"transparent",border:`1px solid ${invalidCapacity?C.red:C.border}`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}/>
+                        <Btn small variant="danger" ariaLabel={`Remove shift period ${j + 1}`} onClick={()=>remShift(i,j)}>x</Btn>
+                      </div>
+                    );
+                  })}
+                  <Btn small variant="ghost" onClick={()=>addShift(i)} style={{alignSelf:"flex-start"}}>+ Add Shift</Btn>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
+                    The first shift sets initial capacity; static count is ignored while this is enabled.
+                  </span>
+                </>
+              )}
+            </div>
+          )}
           <input value={et.description||""} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
             style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",width:"100%",boxSizing:"border-box"}}/>
         </div>
@@ -1024,7 +1133,6 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               </span>
             )}
             {(ev.cSchedules||[]).map((s,j)=>{
-              const distDef=DISTRIBUTIONS[s.dist||"ServerAttr"]||DISTRIBUTIONS.ServerAttr||DISTRIBUTIONS.Fixed;
               return (
                 <div key={s.id||j} style={{background:C.bg,borderRadius:5,padding:"10px 12px",
                   border:`1px solid ${C.bEvent}33`,display:"flex",flexDirection:"column",gap:8}}>
@@ -1048,27 +1156,8 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                   {/* Row 2: Delay distribution */}
                   <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:60}}>delay via:</span>
-                    <select value={s.dist||"ServerAttr"} onChange={e=>updSched(i,j,{dist:e.target.value,distParams:{}})}
-                      style={{width:200,background:C.bg,border:`1px solid ${C.accent}55`,borderRadius:4,
-                      color:C.accent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}>
-                      {Object.entries(DISTRIBUTIONS).map(([k,v])=>(
-                        <option key={k} value={k}>{v.label}</option>
-                      ))}
-                    </select>
-                    {/* Distribution params */}
-                    {distDef.params.map(param=>(
-                      <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
-                        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
-                        <input type="number" value={(s.distParams||{})[param]||""}
-                          onChange={e=>updSched(i,j,{distParams:{...(s.distParams||{}),[param]:e.target.value}})}
-                          style={{width:72,background:"transparent",border:`1px solid ${C.border}`,
-                          borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,
-                          padding:"3px 6px",outline:"none"}}/>
-                      </div>
-                    ))}
-                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic",flex:1}}>
-                      {distDef.hint}
-                    </span>
+                    <DistPicker value={{dist:s.dist||"ServerAttr",distParams:s.distParams||{attr:"serviceTime"}}}
+                      onChange={v=>updSched(i,j,{dist:v.dist,distParams:v.distParams})} compact/>
                   </div>
 
                   {/* Row 3: Entity context checkbox */}

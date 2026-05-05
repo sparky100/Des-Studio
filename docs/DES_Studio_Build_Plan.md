@@ -44,8 +44,8 @@ flowchart LR
   S4 --> S5["Sprint 5<br/>Production polish<br/>Exports, accessibility, onboarding"]
   S5 --> S6["Sprint 6<br/>AI results insights<br/>LLM proxy, explain, compare"]
   S6 --> S7A["Sprint 7A<br/>Architecture decisions<br/>Roles, settings, TypeScript"]
-  S7A --> S7B["Sprint 7B<br/>Current next<br/>Implement platform foundation"]
-  S7B --> S7["Sprint 7<br/>Dynamic DES<br/>Time-varying arrivals + resources"]
+  S7A --> S7B["Sprint 7B<br/>Platform implementation<br/>Roles, settings, TS contracts"]
+  S7B --> S7["Sprint 7<br/>Current next<br/>Dynamic DES"]
   S7 --> S8A["Sprint 8A<br/>LLM provider preflight<br/>Provider-neutral proxy"]
   S8A --> S8["Sprint 8<br/>AI model authoring<br/>Natural language to model_json"]
   S8 --> S9A["Sprint 9A<br/>Visual preflight<br/>Canvas + graph metadata"]
@@ -54,9 +54,9 @@ flowchart LR
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef next fill:#173447,stroke:#22d3ee,color:#ecfeff;
   classDef later fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
-  class PS,S1,S2,S3,S4,S5,S6,S7A done;
-  class S7B next;
-  class S7,S8A,S8,S9A,S9 later;
+  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B done;
+  class S7 next;
+  class S8A,S8,S9A,S9 later;
 ```
 
 ### Roadmap Snapshot
@@ -65,18 +65,20 @@ flowchart LR
 |---|---|---|
 | Foundations and core DES engine | ✅ Complete | Engine safety, safe evaluation, seeded reproducibility, validation, editors, experiment controls, replication, results, exports, and accessibility are in place. |
 | AI results analysis | ✅ Complete | Read-only AI Insights uses a Supabase Edge Function proxy; user-facing run labels and history exports are implemented. |
-| Platform foundation | 🔄 Current next | Sprint 7B implements the accepted 7A decisions: platform role/settings persistence and TypeScript tooling/contracts. |
-| Dynamic modelling | ⬜ Planned | Sprint 7 adds time-varying arrival rates and resource capacity schedules. |
-| AI model creation | ⬜ Planned | Sprint 8A prepares provider-neutral LLM routing; Sprint 8 adds natural-language model authoring. |
+| Platform foundation | ✅ Complete | Sprint 7B implemented the accepted 7A decisions: platform role/settings persistence and TypeScript tooling/contracts. |
+| Dynamic modelling | ✅ Complete | Sprint 7 adds time-varying arrival rates and resource capacity schedules. |
+| AI model creation | 🔄 Current next | Sprint 8A prepares provider-neutral LLM routing; Sprint 8 adds natural-language model authoring. |
 | Visual authoring | ⬜ Planned | Sprint 9A settles canvas/graph metadata; Sprint 9 adds graph-first Visual Designer authoring. |
 
 ### Key Issues and Watchpoints
 
 | Area | Status | Direction |
 |---|---|---|
-| Shift capacity mapping | ⬜ Open | Must decide how server shift capacity maps onto the current server entity model before Sprint 7 F7.4. |
+| Shift capacity mapping | ✅ Resolved | Sprint 7 uses server instance scaling: increases create idle servers; decreases retire idle excess; busy excess servers finish and warn. |
 | TypeScript adoption | ✅ Decided | ADR-009 permits incremental TypeScript at schema/domain boundaries; no broad rewrite. Sprint 7B adds tooling/contracts. |
-| Roles and settings | ✅ Decided, not implemented | ADR-008 defines `profiles.role` and a dedicated `user_settings` table. Sprint 7B implements the foundation. |
+| Roles and settings | ✅ Implemented foundation | ADR-008 defines `profiles.role` and a dedicated `user_settings` table; Sprint 7B added migration, wrappers, and tests. Remote DB migration still needs applying before settings UI depends on it. |
+| Dependency audit | 🔄 Watch | `npm audit` reports 4 moderate findings via Vite/Vitest/esbuild; available fix requires breaking Vite 8 upgrade, so defer to dependency-maintenance pass. |
+| Time-varying arrivals refinement | ⚠️ Track | Sprint 7 samples piecewise schedules by current clock and records RATE_CHANGE markers. A later refinement can consider resampling/cancelling already-pending arrivals that cross a rate boundary if stricter NHPP behaviour is required. |
 | LLM provider coupling | ⏭ Deferred to Sprint 8A | Current Anthropic proxy is acceptable for Sprint 6 results analysis; provider-neutral routing should happen before Sprint 8 model authoring. |
 | SaaS tenancy/workspaces | ⏭ Deferred | Important, but not required before Sprints 7-9 unless product requirements change. Needs separate schema/RLS planning. |
 | Execute running-model UX | ⏭ Deferred | MVP works; redesign should be handled in a dedicated UX/refinement sprint. |
@@ -117,6 +119,8 @@ flowchart LR
 | 1.26 | 2026-05-05 | Replanned post-7A sequencing. Added Sprint 7B as the immediate implementation foundation for roles, user settings, and TypeScript tooling/contracts before Sprint 7. Added Sprint 8A LLM provider architecture preflight before AI model authoring. |
 | 1.27 | 2026-05-05 | Added front-of-document roadmap graphic and status snapshot to make sprint sequence, current direction, and key open issues explicit. |
 | 1.28 | 2026-05-05 | Sprint 7B complete — added platform role/settings migration, user settings DB wrappers, `isAdmin` profile exposure, TypeScript tooling, first typed contracts, and tests. Sprint 7 is now current next. |
+| 1.29 | 2026-05-05 | Updated front roadmap/status after Sprint 7B completion. Recorded remote migration application and dependency audit as watchpoints. |
+| 1.30 | 2026-05-05 | Sprint 7 complete — implemented piecewise time-varying distributions, RATE_CHANGE/SHIFT_CHANGE events, shift schedule editing, validation, typed schema updates, and tests. Shift capacity mapping resolved as server instance scaling. Sprint 8A is now current next. |
 
 ---
 
@@ -133,6 +137,7 @@ flowchart LR
 | Sprint 6 | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis. | 343 (343) | N/A | Success | AI insights panel and hosted Supabase `llm-proxy` deployed. |
 | Sprint 7A | ✅ Complete | 2026-05-05 | Platform Foundation: Roles, Settings & TypeScript. | Docs only | N/A | N/A | ADR-008 and ADR-009 accepted; SaaS tenancy, LLM provider switching, architecture health review, and Execute UX redesign deferred. |
 | Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation. | 33 focused | N/A | Success | Role/settings persistence, DB wrappers, `isAdmin`, TypeScript tooling/contracts complete. |
+| Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources. | 369 (369) | N/A | Success | Piecewise distributions, shift schedules, RATE_CHANGE/SHIFT_CHANGE B-events, validation, UI editors, and typed contracts complete. |
 
 ---
 
@@ -2898,6 +2903,8 @@ npm run typecheck                                # Succeeds
 - No large UI file was converted to TypeScript.
 - Admin status is exposed as `profile.isAdmin` / `isAdmin` only; model permissions still derive from owner/editor access.
 - `npm install --save-dev typescript` reported four moderate audit findings in existing dependency tree context; no audit fix was applied because that can introduce unrelated breaking changes.
+- `npm audit --audit-level=moderate` confirms the four findings are via `esbuild <=0.24.2`, `vite <=6.4.1`, `vite-node <=2.2.0-beta.2`, and `vitest` dependency chains. The suggested fix requires `npm audit fix --force` and a breaking Vite 8 upgrade, so it is deferred to dependency maintenance.
+- The Supabase migration `supabase/migrations/20260505073000_platform_roles_user_settings.sql` is committed locally and pushed, but must still be applied to the linked Supabase project before any UI depends on `user_settings`.
 
 ---
 
@@ -2905,24 +2912,24 @@ npm run typecheck                                # Succeeds
 
 **Goal:** Enable modellers to represent systems where arrival rates and resource capacity change over simulated time. This is essential for realistic models of emergency departments, call centres, and any system with diurnal or shift-based patterns.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-05 | **Completed:** 2026-05-05
 **Prerequisite:** Sprint 7B exit gate passed. Sprint 7 may proceed with ADR-009 in force: schema-heavy work should use or extend typed model contracts where practical, but broad TypeScript conversion is still out of scope.
 
 **Architectural constraint:** All time-varying logic is scheduled as B-Events. No new Phase types are introduced. The Three-Phase engine (`engine/index.js`) is not restructured — it is extended via the existing B-Event mechanism.
 
 | Feature | Audit Status | Action |
 |---|---|---|
-| F7.1 — Piecewise inter-arrival distribution schema | ✗ | New: extend `distributions.js` registry |
-| F7.2 — NHPP arrival B-Event scheduler | ✗ | New: extend B-Event scheduling in `phases.js`, `macros.js`, and `engine/index.js` |
-| F7.3 — Server shift schedule schema | ✗ | New: extend server entity type model |
-| F7.4 — Shift change B-Event handler | ✗ | New: extend `phases.js` and `engine/index.js` |
-| F7.5 — Time-varying distribution picker UI | ✗ | New: extend `DistPicker` in `shared/components.jsx` |
-| F7.6 — Shift schedule editor UI | ✗ | New: extend server entity type configuration in editors |
-| F7.7 — Engine validation for time-varying params | ✗ | New: extend `validateModel()` in `validation.js` |
+| F7.1 — Piecewise inter-arrival distribution schema | ✅ | Added `Piecewise` registry entry, aliases, active-period sampler, and tests |
+| F7.2 — NHPP arrival B-Event scheduler | ✅ | RATE_CHANGE events are scheduled at init and piecewise sampling is clock-aware |
+| F7.3 — Server shift schedule schema | ✅ | Added `shiftSchedule[]` to typed contracts and schema docs |
+| F7.4 — Shift change B-Event handler | ✅ | SHIFT_CHANGE events scale server instances and warn when busy capacity exceeds target |
+| F7.5 — Time-varying distribution picker UI | ✅ | Extended shared and editor DistPicker controls with non-recursive piecewise period editing |
+| F7.6 — Shift schedule editor UI | ✅ | Added server shift schedule section in the entity editor |
+| F7.7 — Engine validation for time-varying params | ✅ | Added V12–V15 validation and focused tests |
 
 ### Design Principles for Sprint 7
 
-**Piecewise inter-arrival rates.** The modeller defines an ordered list of `{ startTime, distribution }` pairs. At each transition time, the engine schedules a `RATE_CHANGE` B-Event that replaces the active inter-arrival distribution for the relevant arrival B-Event or schedule row. The engine then schedules the next arrival using the new distribution. This mechanism requires no changes to Phase B or Phase C — only the existing B-Event scheduling and ARRIVE macro path.
+**Piecewise inter-arrival rates.** The modeller defines an ordered list of `{ startTime, distribution }` pairs. At each transition time, the engine schedules a `RATE_CHANGE` B-Event as an explicit transition marker in the FEL. Sampling is clock-aware: whenever a schedule delay is sampled, the `Piecewise` sampler chooses the period active at the current simulation clock and delegates to that period's distribution. This mechanism requires no changes to Phase B or Phase C — only the existing B-Event scheduling path and sampler context.
 
 ```
 PIECEWISE DISTRIBUTION SCHEMA
@@ -2935,7 +2942,7 @@ PIECEWISE DISTRIBUTION SCHEMA
 }
 ```
 
-**Resource shift schedules.** In the current model, resources are represented by server entity types (`role: "server"`), not a separate Resource node table. The modeller defines capacity steps on a server entity type: `{ time, capacity }` pairs. Each step is pre-scheduled as a `SHIFT_CHANGE` B-Event at model initialisation. Before implementation, the team must confirm how capacity maps onto the current pre-created server entity model (see Open Architectural Decisions).
+**Resource shift schedules.** In the current model, resources are represented by server entity types (`role: "server"`), not a separate Resource node table. The modeller defines capacity steps on a server entity type: `{ time, capacity }` pairs. Each step is pre-scheduled as a `SHIFT_CHANGE` B-Event at model initialisation. Capacity maps onto server entity instances: increases create idle server instances; decreases retire idle excess only; busy excess servers complete naturally and add a warning to run results.
 
 ```
 SHIFT SCHEDULE SCHEMA (on server entity type)
@@ -3025,11 +3032,11 @@ Add to tests/engine/distributions.test.js:
 ```
 
 **Completion checklist:**
-- [ ] `piecewise` registered in `distributions.js`
-- [ ] Validation: startTime=0, sorted, non-overlapping
-- [ ] Sampler delegates to active period by T_now
-- [ ] All new distribution tests pass
-- [ ] Existing distribution tests unchanged
+- [x] `piecewise` registered in `distributions.js`
+- [x] Validation: startTime=0, sorted, non-overlapping
+- [x] Sampler delegates to active period by T_now
+- [x] All new distribution tests pass
+- [x] Existing distribution tests unchanged
 
 ---
 
@@ -3069,11 +3076,11 @@ Write a unit test:
 ```
 
 **Completion checklist:**
-- [ ] RATE_CHANGE B-Events scheduled at `buildEngine()` init for piecewise sources
-- [ ] RATE_CHANGE handler updates active distribution on source node
-- [ ] ARRIVE handler uses the currently-active distribution at time of sampling
-- [ ] Unit test demonstrates rate change effect
-- [ ] All existing engine tests pass
+- [x] RATE_CHANGE B-Events scheduled at `buildEngine()` init for piecewise sources
+- [x] RATE_CHANGE handler records the transition marker; sampling remains clock-aware
+- [x] Schedule sampling uses the currently-active distribution at time of sampling
+- [x] Unit test demonstrates clock-based period selection
+- [x] All existing engine tests pass
 
 ---
 
@@ -3111,9 +3118,9 @@ No engine or UI changes in this task — schema and validation spec only.
 ```
 
 **Completion checklist:**
-- [ ] `shiftSchedule` schema documented for server entity types in `addition1_entity_model.md`
-- [ ] Validation rules V12 added to `validateModel()` spec in `addition1_entity_model.md`
-- [ ] Model JSON schema updated (if applicable)
+- [x] `shiftSchedule` schema documented for server entity types in `addition1_entity_model.md`
+- [x] Validation rules V12–V15 added to `validateModel()` spec in `addition1_entity_model.md`
+- [x] Model JSON contract updated in `src/contracts/model.ts`
 
 ---
 
@@ -3164,11 +3171,11 @@ Write unit tests:
 ```
 
 **Completion checklist:**
-- [ ] SHIFT_CHANGE B-Events scheduled at `buildEngine()` init
-- [ ] SHIFT_CHANGE handler applies server type capacity using the accepted architecture
-- [ ] StepLog entry written on each capacity change
-- [ ] Warning (not halt) if new capacity < current busyCount
-- [ ] Unit tests pass
+- [x] SHIFT_CHANGE B-Events scheduled at `buildEngine()` init
+- [x] SHIFT_CHANGE handler applies server type capacity using the accepted architecture
+- [x] StepLog entry written on each capacity change
+- [x] Warning (not halt) if new capacity < current busyCount
+- [x] Unit tests pass
 
 ---
 
@@ -3203,12 +3210,12 @@ Write a UI test (add to tests/ui/shared/dist-picker.test.jsx):
 ```
 
 **Completion checklist:**
-- [ ] Piecewise type in existing `DistPicker` dropdown
-- [ ] Period table editor: add, edit, delete rows
-- [ ] Period 0 start time locked to 0
-- [ ] Nested `DistPicker` per period (no recursion)
-- [ ] Inline sort validation
-- [ ] UI test passes
+- [x] Piecewise type in existing `DistPicker` dropdown
+- [x] Period table editor: add, edit, delete rows
+- [x] Period 0 start time locked to 0
+- [x] Nested `DistPicker` per period (no recursion)
+- [x] Inline sort validation
+- [x] UI test passes
 
 ---
 
@@ -3244,12 +3251,12 @@ Write a UI test:
 ```
 
 **Completion checklist:**
-- [ ] Shift schedule section in existing server entity type editor
-- [ ] Toggle enables/disables shift table vs static capacity field
-- [ ] Row 0 time locked to 0
-- [ ] Inline validation: sorted times, positive integer capacity
-- [ ] `shiftSchedule[]` written to model_json when enabled
-- [ ] UI test passes
+- [x] Shift schedule section in existing server entity type editor
+- [x] Toggle enables/disables shift table vs static capacity field
+- [x] Row 0 time locked to 0
+- [x] Inline validation: sorted times, positive integer capacity
+- [x] `shiftSchedule[]` written to model_json when enabled
+- [x] UI test passes
 
 ---
 
@@ -3288,12 +3295,12 @@ Add to tests/engine/validation.test.js (extend existing file):
 ```
 
 **Completion checklist:**
-- [ ] V12–V15 added to existing `validateModel()`
-- [ ] V12, V13, V14 are blocking — run prevented
-- [ ] V15 is a warning — run proceeds with banner
-- [ ] Error messages identify the specific node by name
-- [ ] Five new validation tests pass
-- [ ] Existing V1–V11 tests unaffected
+- [x] V12–V15 added to existing `validateModel()`
+- [x] V12, V13, V14 are blocking — run prevented
+- [x] V15 is a warning — run proceeds with banner
+- [x] Error messages identify the specific node by name
+- [x] Five new validation tests pass
+- [x] Existing V1–V11 tests unaffected
 
 ---
 
@@ -3810,8 +3817,10 @@ npm run build                          # Succeeds
 | Admin-selectable LLM provider/model | Platform architecture planning | Sprint 8A or later admin UI sprint | Server-side provider configuration should be prepared before Sprint 8, but a full admin UI can wait | Planned |
 | Architecture health review | Platform architecture planning | Post-7A architecture sprint | Important but broader than the focused roles/settings/TypeScript sprint | Deferred |
 | Execute running-model UX redesign direction | Platform architecture planning | Dedicated UX/design sprint | Execute is MVP-good but needs a separate design pass before major redesign | Deferred |
-| Platform role/settings persistence implementation | Sprint 7A | Sprint 7B | ADR-008 is accepted; implement minimal DB/type foundation before Sprint 7 schema work | Planned |
-| TypeScript tooling and first schema contracts | Sprint 7A | Sprint 7B | ADR-009 is accepted; add tooling/contracts before schema-heavy model changes | Planned |
+| Platform role/settings persistence implementation | Sprint 7A | Sprint 7B | ADR-008 accepted; minimal DB/type foundation implemented before Sprint 7 schema work | Complete |
+| TypeScript tooling and first schema contracts | Sprint 7A | Sprint 7B | ADR-009 accepted; tooling/contracts added before schema-heavy model changes | Complete |
+| Apply Sprint 7B Supabase migration to remote project | Sprint 7B | Before settings UI depends on it | Migration file is committed, but remote DB application is a deployment step | Planned |
+| Dependency audit remediation | Sprint 7B | Dependency maintenance sprint | Current fix path requires breaking Vite 8 upgrade; avoid mixing with feature work | Deferred |
 
 ---
 
@@ -3826,7 +3835,7 @@ npm run build                          # Succeeds
 | TBD-LLM-API | LLM API key handling — client-side vs Edge Function proxy | Sprint 6 F6.2 | ✅ Resolved in plan — use Supabase Edge Function proxy; create ADR if implementation changes |
 | TBD-LLM-CONV | LLM conversation persistence — session only vs Supabase | Sprint 8 F8.3 | ✅ Resolved in plan — session only React state; create ADR if persistence is added |
 | TBD-PIECEWISE-WARMUP | Piecewise distribution warm-up interaction — does warm-up reset the period position? | Sprint 7 F7.2 | ✅ Resolved in plan — no reset; schedule is time-indexed |
-| TBD-SHIFT-CAPACITY | Shift schedule capacity mapping to current server entity model | Sprint 7 F7.4 | ⬜ Open — decide server instance scaling vs separate capacity abstraction before implementation |
+| TBD-SHIFT-CAPACITY | Shift schedule capacity mapping to current server entity model | Sprint 7 F7.4 | ✅ Resolved — use server instance scaling; capacity increases create idle instances, decreases retire idle excess, busy excess completes with warning |
 | TBD-VISUAL-CANVAS | Canvas library and graph layout persistence strategy | Sprint 9 F9.2/F9.3 | ⬜ Open — decide dependency/version and whether `model_json.graph` is persisted before implementation |
 | *(add rows as new questions arise)* | | | |
 

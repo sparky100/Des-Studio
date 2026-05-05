@@ -8,23 +8,91 @@
 //   const snap   = engine.getSnap()       // current state snapshot
 //   const felSz  = engine.getFelSize()    // events in FEL
 
-import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32 } from "./distributions.js";
+import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
 import { makeHelpers, createServerEntities }   from "./entities.js";
 import { evalCondition }                        from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
+const INITIAL_FEL_MAX_SCHEDULED_TIME = 900; // Arbitrary limit for initial B-Events
+
+function getValidShiftSchedule(entityType) {
+  if (!Array.isArray(entityType.shiftSchedule) || entityType.shiftSchedule.length === 0) return [];
+  return entityType.shiftSchedule
+    .map(step => ({
+      time: parseFloat(step.time ?? step.startTime ?? 0),
+      capacity: parseInt(step.capacity, 10),
+    }))
+    .filter(step => Number.isFinite(step.time) && Number.isInteger(step.capacity) && step.capacity > 0)
+    .sort((a, b) => a.time - b.time);
+}
+
+function modelWithShiftInitialCapacity(model) {
+  return {
+    ...model,
+    entityTypes: (model.entityTypes || []).map(entityType => {
+      if (entityType.role !== "server") return entityType;
+      const schedule = getValidShiftSchedule(entityType);
+      if (!schedule.length) return entityType;
+      return { ...entityType, count: String(schedule[0].capacity) };
+    }),
+  };
+}
+
+function makeShiftChangeEvents(model) {
+  return (model.entityTypes || [])
+    .filter(entityType => entityType.role === "server")
+    .flatMap(entityType => getValidShiftSchedule(entityType).map(step => ({
+      id: `shift:${entityType.id || entityType.name}:${step.time}`,
+      type: "SHIFT_CHANGE",
+      name: `Shift change: ${entityType.name}`,
+      scheduledTime: step.time,
+      serverTypeName: entityType.name,
+      newCapacity: step.capacity,
+    })));
+}
+
+function makeRateChangeEvents(model) {
+  const events = [];
+  const addPeriods = (ownerName, dist, distParams) => {
+    if (normalizeDistributionName(dist) !== "Piecewise") return;
+    for (const period of getPiecewisePeriods(distParams).slice(1)) {
+      const startTime = parseFloat(period.startTime ?? period.time);
+      if (!Number.isFinite(startTime)) continue;
+      events.push({
+        id: `rate:${ownerName}:${startTime}`,
+        type: "RATE_CHANGE",
+        name: `Rate change: ${ownerName}`,
+        sourceName: ownerName,
+        scheduledTime: startTime,
+      });
+    }
+  };
+
+  for (const bEvent of model.bEvents || []) {
+    (bEvent.schedules || []).forEach((schedule, index) =>
+      addPeriods(`${bEvent.name || bEvent.id} schedule ${index + 1}`, schedule.dist, schedule.distParams));
+  }
+  for (const cEvent of model.cEvents || []) {
+    (cEvent.cSchedules || []).forEach((schedule, index) =>
+      addPeriods(`${cEvent.name || cEvent.id} cSchedule ${index + 1}`, schedule.dist, schedule.distParams));
+  }
+  return events;
+}
+
 export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500) {
+  const runtimeModel = modelWithShiftInitialCapacity(model);
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
   const rng = mulberry32(seed);
   let _warmupComplete = false;
   let _terminationConditionMet = false;
   let _excludedCount = 0;
+  const warnings = [];
 
   // ── Initialise scalar state ───────────────────────────────────────────────
   const state = { __served: 0, __reneged: 0 };
-  for (const sv of model.stateVariables || []) {
+  for (const sv of runtimeModel.stateVariables || []) {
     try   { state[sv.name] = JSON.parse(sv.initialValue); }
     catch { state[sv.name] = sv.initialValue; }
   }
@@ -34,13 +102,27 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const nextId = () => ++_seq;
 
   let entities = createServerEntities(
-    model.entityTypes || [],
+    runtimeModel.entityTypes || [],
     (attrDefs) => sampleAttrs(attrDefs, rng)
   );
   // Assign IDs to pre-created servers
   for (const e of entities) e.id = nextId();
 
   const helpers = () => makeHelpers(entities);
+  const createServerEntity = (serverTypeName, arrivalTime = clock) => {
+    const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+    const entityType = (runtimeModel.entityTypes || []).find(et => et.role === "server" && match(et.name, serverTypeName));
+    if (!entityType) return null;
+    return {
+      id: nextId(),
+      type: entityType.name.trim(),
+      role: "server",
+      status: "idle",
+      attrs: sampleAttrs(entityType.attrDefs || entityType.attrs, rng),
+      arrivalTime,
+      stages: [],
+    };
+  };
 
   // ── Snapshot ──────────────────────────────────────────────────────────────
   function snap(clock) {
@@ -71,11 +153,11 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let clock = 0;
   const log = [];
 
-  const INITIAL_FEL_MAX_SCHEDULED_TIME = 900; // Arbitrary limit for initial B-Events
-
-  let fel = (model.bEvents || [])
+  let fel = (runtimeModel.bEvents || [])
     .filter(ev => parseFloat(ev.scheduledTime) < INITIAL_FEL_MAX_SCHEDULED_TIME)
     .map(ev => ({ ...ev, scheduledTime: parseFloat(ev.scheduledTime) || 0 }));
+
+  fel.push(...makeRateChangeEvents(runtimeModel), ...makeShiftChangeEvents(runtimeModel));
 
   if (warmupPeriod > 0) {
     fel.push({ type: "WARMUP", name: "Warm-up complete", scheduledTime: warmupPeriod });
@@ -89,12 +171,14 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const makeCtx = (felRef = null) => ({
     entities,
     state,
-    model,
+    model: runtimeModel,
     clock,
     felRef,
     helpers: makeHelpers(entities),
     nextId,
     rng,
+    warnings,
+    createServerEntity,
   });
 
   // ── step(): one Phase A → B → C cycle ────────────────────────────────────
@@ -150,7 +234,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         log.push({ phase: "WARMUP", time: clock, message: msg, snap: snap(clock) });
         state.__served = 0;
         state.__reneged = 0;
-        for (const sv of model.stateVariables || []) {
+        for (const sv of runtimeModel.stateVariables || []) {
           if (sv.resetOnWarmup) {
             try   { state[sv.name] = JSON.parse(sv.initialValue); }
             catch { state[sv.name] = sv.initialValue; }
@@ -177,7 +261,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
     // Phase C — evaluate conditionals until stable
     // Sort by ev.priority ascending (lower integer = higher priority, missing = last).
-    const sortedCEvents = (model.cEvents || []).slice()
+    const sortedCEvents = (runtimeModel.cEvents || []).slice()
       .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999));
 
     let cFired = true, cPass = 0;
@@ -281,6 +365,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         phaseCTruncated:   anyPhaseCTruncated,
         warmupPeriod,
         excludedCount:     _excludedCount,
+        warnings,
       },
       entitySummary: entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
     };

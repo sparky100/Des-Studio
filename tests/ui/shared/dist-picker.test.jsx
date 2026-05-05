@@ -151,3 +151,62 @@ describe('DistPicker — CSV import (F2.9)', () => {
     expect(handleChange).not.toHaveBeenCalled();
   });
 });
+
+describe('DistPicker — piecewise time-varying distributions (F7.5)', () => {
+  it('shows a period editor for piecewise distributions and locks period 0 start time', () => {
+    const { container } = render(
+      <DistPicker
+        value={{
+          dist: 'Piecewise',
+          distParams: {
+            periods: [{ startTime: '0', distribution: { dist: 'Exponential', distParams: { mean: '3' } } }],
+          },
+        }}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('+ Add Period')).toBeInTheDocument();
+    expect(container.querySelector('input[type="number"]')).toBeDisabled();
+  });
+
+  it('adding a period emits an updated piecewise distribution', () => {
+    const handleChange = vi.fn();
+    render(
+      <DistPicker
+        value={{
+          dist: 'Piecewise',
+          distParams: {
+            periods: [{ startTime: '0', distribution: { dist: 'Exponential', distParams: { mean: '3' } } }],
+          },
+        }}
+        onChange={handleChange}
+      />
+    );
+
+    fireEvent.click(screen.getByText('+ Add Period'));
+
+    expect(handleChange).toHaveBeenCalledOnce();
+    expect(handleChange.mock.calls[0][0].distParams.periods).toHaveLength(2);
+  });
+
+  it('shows inline validation for unsorted periods', () => {
+    render(
+      <DistPicker
+        value={{
+          dist: 'Piecewise',
+          distParams: {
+            periods: [
+              { startTime: '0', distribution: { dist: 'Fixed', distParams: { value: '1' } } },
+              { startTime: '10', distribution: { dist: 'Fixed', distParams: { value: '1' } } },
+              { startTime: '5', distribution: { dist: 'Fixed', distParams: { value: '1' } } },
+            ],
+          },
+        }}
+        onChange={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Periods must be sorted by start time/i)).toBeInTheDocument();
+  });
+});

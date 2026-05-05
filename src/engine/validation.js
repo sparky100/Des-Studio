@@ -7,6 +7,8 @@
 // Each item: { code, message, tab }
 // tab maps to ModelDetail tab IDs: 'entities' | 'state' | 'bevents' | 'cevents' | 'queues'
 
+import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
+
 export function validateModel(model) {
   const errors   = [];
   const warnings = [];
@@ -86,9 +88,48 @@ export function validateModel(model) {
 
   // ── V5: Distribution parameters in valid bounds (+ V11 warning) ────────────
   function checkDist(dist, params, context, tab) {
-    if (!dist || dist === 'ServerAttr') return;
+    const distName = normalizeDistributionName(dist);
+    if (!distName || distName === 'ServerAttr') return;
     const p = params || {};
-    switch (dist) {
+    if (distName === 'Piecewise') {
+      const periods = getPiecewisePeriods(p);
+      if (!periods.length) {
+        err('V12', `${context}: Piecewise distribution requires at least one period.`, tab);
+        return;
+      }
+      let previous = -Infinity;
+      periods.forEach((period, idx) => {
+        const startTime = parseFloat(period.startTime ?? period.time);
+        if (!Number.isFinite(startTime)) {
+          err('V12', `${context}: Piecewise period ${idx + 1} requires a numeric startTime.`, tab);
+        } else {
+          if (idx === 0 && startTime !== 0) {
+            err('V12', `${context}: Piecewise distribution must start at time 0.`, tab);
+          }
+          if (startTime < previous) {
+            err('V13', `${context}: Piecewise periods are not sorted by start time.`, tab);
+          }
+          previous = startTime;
+        }
+        const raw = period.distribution || period;
+        const nestedDist = raw.dist || raw.type || 'Fixed';
+        const nestedParams = { ...(raw.distParams || raw.params || {}) };
+        if (nestedParams.mean == null && raw.rate != null && normalizeDistributionName(nestedDist) === 'Exponential') {
+          const rate = parseFloat(raw.rate);
+          nestedParams.mean = Number.isFinite(rate) && rate > 0 ? String(1 / rate) : '';
+        }
+        for (const key of ['value', 'mean', 'min', 'max', 'mode', 'stddev', 'k', 'attr']) {
+          if (nestedParams[key] == null && raw[key] != null) nestedParams[key] = raw[key];
+        }
+        if (normalizeDistributionName(nestedDist) === 'Piecewise') {
+          err('V12', `${context}: Nested piecewise distributions are not supported.`, tab);
+        } else {
+          checkDist(nestedDist, nestedParams, `${context} period ${idx + 1}`, tab);
+        }
+      });
+      return;
+    }
+    switch (distName) {
       case 'Exponential': {
         const m = parseFloat(p.mean);
         if (isNaN(m) || m <= 0)
@@ -153,6 +194,33 @@ export function validateModel(model) {
       if (a.name)
         checkDist(a.dist, a.distParams,
           `Entity '${et.name}' attr '${a.name}'`, 'entities');
+    });
+  });
+
+  const maxSimTime = parseFloat(model.maxSimTime);
+  entityTypes.forEach(et => {
+    if (et.role !== 'server' || !Array.isArray(et.shiftSchedule) || et.shiftSchedule.length === 0) return;
+    let previous = -Infinity;
+    et.shiftSchedule.forEach((period, idx) => {
+      const time = parseFloat(period.time ?? period.startTime);
+      const capacity = Number(period.capacity);
+      if (!Number.isFinite(time)) {
+        err('V14', `Server '${et.name || '?'}' shift period ${idx + 1} requires a numeric time.`, 'entities');
+      } else {
+        if (idx === 0 && time !== 0) {
+          err('V14', `Server '${et.name || '?'}' shift schedule must start at time 0.`, 'entities');
+        }
+        if (time < previous) {
+          err('V14', `Server '${et.name || '?'}' shift times must be sorted ascending.`, 'entities');
+        }
+        if (Number.isFinite(maxSimTime) && maxSimTime > 0 && time > maxSimTime) {
+          warn('V15', `Server '${et.name || '?'}' shift at t=${time} is after the run duration.`, 'entities');
+        }
+        previous = time;
+      }
+      if (!Number.isInteger(capacity) || capacity < 1) {
+        err('V14', `Server '${et.name || '?'}' shift capacity must be a positive integer.`, 'entities');
+      }
     });
   });
 
@@ -232,10 +300,10 @@ export function validateModel(model) {
     });
   });
 
-  // ── V13: Termination check (Sprint 3.2) ─────────────────────────────────────
+  // ── V16: Termination check (Sprint 3.2) ─────────────────────────────────────
   const hasTermination = model.maxSimTime > 0 || model.terminationCondition;
   if (!hasTermination && hasArrive) {
-    warn('V13', 
+    warn('V16',
       'No simulation time limit or termination condition set. Model may run until cycle limit (5000) if arrivals continue indefinitely.',
       'execute');
   }

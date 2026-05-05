@@ -26,7 +26,13 @@ export interface EntityTypeDefinition {
   count?: number | string;
   attrDefs?: AttributeDefinition[];
   attrs?: string;
+  shiftSchedule?: ShiftSchedulePeriod[];
   description?: string;
+}
+
+export interface ShiftSchedulePeriod {
+  time: number | string;
+  capacity: number | string;
 }
 
 export interface StateVariableDefinition {
@@ -42,6 +48,12 @@ export interface DistributionSpec {
   dist?: string;
   params?: Record<string, unknown>;
   distParams?: Record<string, unknown>;
+  periods?: PiecewiseDistributionPeriod[];
+}
+
+export interface PiecewiseDistributionPeriod {
+  startTime: number | string;
+  distribution: DistributionSpec;
 }
 
 export interface EventSchedule {
