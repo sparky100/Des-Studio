@@ -32,7 +32,7 @@ describe('ModelCard run stats', () => {
     expect(screen.getByText('runs —')).toBeInTheDocument();
   });
 
-  it('summarises server resources without listing every server type name', () => {
+  it('does not show a separate server resource summary tag', () => {
     render(<ModelCard model={{
       ...baseModel,
       entityTypes: [
@@ -42,7 +42,7 @@ describe('ModelCard run stats', () => {
       ],
     }} profiles={profiles} onOpen={vi.fn()} />);
 
-    expect(screen.getByText('3 resources across 2 types')).toBeInTheDocument();
+    expect(screen.queryByText(/resources across/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Triage Nurse, Consultant/i)).not.toBeInTheDocument();
   });
 });

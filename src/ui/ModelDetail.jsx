@@ -512,8 +512,6 @@ const ModelCard=({model,onOpen,onDelete,profiles=[],currentUserId})=>{
   const owner=(profiles||[]).find(p=>p.id===model.owner_id)||null;
   const fmtDate=iso=>{ try{ return new Date(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){return '';} };
   const hasRenege=(model.bEvents||[]).some(ev=>(ev.schedules||[]).some(s=>s.isRenege));
-  const srvTypes=(model.entityTypes||[]).filter(et=>et.role==="server");
-  const serverCapacity=srvTypes.reduce((sum, et)=>sum+(parseInt(et.count,10)||1),0);
   const runCount=model.stats?.runs;
   const isOwner=model.owner_id===currentUserId;
   const openFromKeyboard=e=>{
@@ -531,7 +529,6 @@ const ModelCard=({model,onOpen,onDelete,profiles=[],currentUserId})=>{
         <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap"}}>
           <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
           {hasRenege&&<Tag label="reneging" color={C.reneged}/>}
-          {srvTypes.length>0&&<Tag label={`${serverCapacity} resources across ${srvTypes.length} type${srvTypes.length===1?"":"s"}`} color={C.server}/>}
           {isOwner&&onDelete&&<Btn small variant="danger" onClick={e=>{e.stopPropagation();onDelete(model);}}>Delete</Btn>}
         </div>
       </div>
