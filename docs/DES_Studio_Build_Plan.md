@@ -2631,6 +2631,23 @@ npm run build                          # Succeeds
 - `npm run build` — succeeds
 - Hosted Supabase `llm-proxy` deployed to project `znkknldzdfajcrpabtmg`
 
+### Sprint 6 Refinements Identified
+
+These refinements came from local UI review after Sprint 6 was implemented.
+
+| Refinement | Status | Notes |
+|---|---|---|
+| Compare against saved run history, not only current-session replication rows | ✅ Implemented 2026-05-04 | AI comparison dropdown now loads saved runs for the current model from `simulation_runs`, with current-session replications retained as fallback options. |
+| Add user-facing run labels | ✅ Implemented 2026-05-05 | Execute now captures an optional run label, persists it in `results_json`, and uses it in the AI comparison dropdown and History table. |
+| Export options from History page | ✅ Implemented 2026-05-05 | History now offers JSON and CSV exports for normalized saved runs, including user-facing run labels. |
+| Fix low-contrast termination mode labels | ✅ Implemented 2026-05-05 | Execute termination radio labels now use the shared text color and mono font for readability. |
+| Improve AI panel layout at narrow widths | 🔄 Partial | Toolbar clipping fixed in commit `667b46a`; panel could still become a drawer or stack below results on small screens. |
+| Decide whether AI analyses should be persisted | ⬜ Future | Current responses are session-only. Persisting analysis notes would need a product decision and schema/API work. |
+| Improve prompt grounding with richer per-queue/per-resource KPIs | ⬜ Future | Current prompts use the available summary/run data. Better queue/resource breakdowns should come from richer result payloads. |
+| Show more specific proxy/configuration errors | ⬜ Future | Current UI shows a graceful generic unavailable message. Deployment diagnostics could distinguish missing proxy, missing secret, and provider failure. |
+| Harden production rate limiting | ⬜ Future | `llm-proxy` currently uses simple in-memory request counting. Persistent user-scoped rate limiting would be stronger. |
+| Add a manual LLM deployment checklist | ⬜ Future | Checklist should cover CLI login, secret setting, function deploy, dashboard verification, and one real AI request. |
+
 ---
 
 ## Sprint 7 — Dynamic Distributions & Time-Varying Resources

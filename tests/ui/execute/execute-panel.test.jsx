@@ -4,6 +4,7 @@ import { ExecutePanel } from '../../../src/ui/execute/index.jsx';
 
 const mockRunReplications = vi.hoisted(() => vi.fn());
 const mockSaveSimulationRun = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockFetchRunHistory = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 const mockStreamNarrative = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../src/engine/replication-runner.js', () => ({
@@ -11,6 +12,7 @@ vi.mock('../../../src/engine/replication-runner.js', () => ({
 }));
 
 vi.mock('../../../src/db/models.js', () => ({
+  fetchRunHistory: mockFetchRunHistory,
   saveSimulationRun: mockSaveSimulationRun,
 }));
 
@@ -41,8 +43,10 @@ describe('ExecutePanel', () => {
   beforeEach(() => {
     mockRunReplications.mockReset();
     mockSaveSimulationRun.mockReset();
+    mockFetchRunHistory.mockReset();
     mockStreamNarrative.mockReset();
     mockSaveSimulationRun.mockResolvedValue(undefined);
+    mockFetchRunHistory.mockResolvedValue([]);
   });
 
   it('renders the execute controls without crashing', () => {
@@ -50,6 +54,9 @@ describe('ExecutePanel', () => {
 
     expect(screen.getByText('WARM-UP PERIOD')).toBeInTheDocument();
     expect(screen.getByText('REPLICATIONS')).toBeInTheDocument();
+    expect(screen.getByLabelText(/run label/i)).toBeInTheDocument();
+    expect(screen.getByText('Time-based')).toBeInTheDocument();
+    expect(screen.getByText('Condition-based')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /run all/i })).toBeInTheDocument();
     expect(screen.getByText('Run or step the simulation to see the visual view.')).toBeInTheDocument();
   });
@@ -72,12 +79,13 @@ describe('ExecutePanel', () => {
   it('runs one replication through the existing single-run path', async () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
+    fireEvent.change(screen.getByLabelText(/run label/i), { target: { value: 'Baseline' } });
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
     expect(mockRunReplications).not.toHaveBeenCalled();
     expect(mockSaveSimulationRun.mock.calls[0][3]).toEqual(
-      expect.objectContaining({ replications: 1 })
+      expect.objectContaining({ replications: 1, runLabel: 'Baseline' })
     );
   });
 
@@ -130,6 +138,34 @@ describe('ExecutePanel', () => {
 
     expect(await screen.findByRole('option', { name: /replication 1/i })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /replication 2/i })).toBeInTheDocument();
+  });
+
+  it('loads saved run history for AI comparison when the panel opens', async () => {
+    mockFetchRunHistory.mockResolvedValueOnce([
+      {
+        id: 'run-1',
+        ran_at: '2026-05-04T21:47:32.000Z',
+        total_arrived: 100,
+        total_served: 80,
+        total_reneged: 2,
+        avg_wait_time: 7,
+        avg_service_time: 3,
+        renege_rate: 0.02,
+        replications: 1,
+        seed: 123,
+        max_simulation_time: 500,
+        warmup_period: 0,
+        run_label: 'Baseline',
+        results_json: { summary: { avgSojourn: 10 } },
+      },
+    ]);
+
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+    fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+    await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith('model-1'));
+    expect(await screen.findByRole('option', { name: 'Baseline' })).toBeInTheDocument();
   });
 
   it('updates replication rows and aggregate CI from runner callbacks', async () => {

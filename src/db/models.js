@@ -183,6 +183,10 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
   if (config.replicationResults) {
     resultsJson.replications = config.replicationResults;
   }
+  const runLabel = typeof config.runLabel === "string" ? config.runLabel.trim() : "";
+  if (runLabel) {
+    resultsJson.runLabel = runLabel;
+  }
 
   const { error } = await supabase.from("simulation_runs").insert({
     model_id:            modelId,
@@ -207,13 +211,14 @@ export function normalizeRunHistoryRow(row = {}) {
   return {
     ...row,
     avg_service_time: row.avg_service_time ?? row.results_json?.summary?.avgSvc ?? null,
+    run_label: row.results_json?.runLabel || row.results_json?.run_label || "",
   };
 }
 
 export async function fetchRunHistory(modelId) {
   const { data, error } = await supabase
     .from("simulation_runs")
-    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, results_json, warmup_period")
+    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, seed, max_simulation_time, results_json, warmup_period")
     .eq("model_id", modelId)
     .order("ran_at", { ascending: false })
     .limit(20);

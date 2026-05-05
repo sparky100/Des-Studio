@@ -144,6 +144,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
           replications: 3,
           maxTime: 500,
           batchId: 'batch-123',
+          runLabel: 'Baseline',
           aggregateStats: { 'summary.avgWait': { n: 3, mean: 4 } },
           replicationResults: [{ replicationIndex: 0, seed: 100 }],
           resultsJson: suppliedResultsJson,
@@ -158,6 +159,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
           results_json: expect.objectContaining({
             existing: true,
             summary: expect.objectContaining({ avgSvc: 3, avgSojourn: 7 }),
+            runLabel: 'Baseline',
             batch_id: 'batch-123',
             aggregateStats: { 'summary.avgWait': { n: 3, mean: 4 } },
             replications: [{ replicationIndex: 0, seed: 100 }],
@@ -189,8 +191,11 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(normalizeRunHistoryRow({
         id: 'run-1',
         avg_service_time: null,
-        results_json: { summary: { avgSvc: 2.75 } },
-      })).toEqual(expect.objectContaining({ avg_service_time: 2.75 }));
+        results_json: { runLabel: 'Two servers', summary: { avgSvc: 2.75 } },
+      })).toEqual(expect.objectContaining({
+        avg_service_time: 2.75,
+        run_label: 'Two servers',
+      }));
     });
 
     it('fetches run stats by model and current user only', async () => {
@@ -215,6 +220,33 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
         m1: { runs: 2 },
         m2: { runs: 1 },
       });
+    });
+
+    it('fetches saved run history with fields needed for AI comparison', async () => {
+      supabase.from('simulation_runs').select.mockReturnThis();
+      supabase.from('simulation_runs').eq.mockReturnThis();
+      supabase.from('simulation_runs').order.mockReturnThis();
+      supabase.from('simulation_runs').limit.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'run-1',
+            model_id: 'm1',
+            seed: 10,
+            max_simulation_time: 500,
+            warmup_period: 0,
+            results_json: { summary: { avgSvc: 3 } },
+          },
+        ],
+        error: null,
+      });
+
+      const rows = await fetchRunHistory('m1');
+
+      expect(supabase.from).toHaveBeenCalledWith('simulation_runs');
+      expect(supabase.from('simulation_runs').select).toHaveBeenCalledWith(expect.stringContaining('seed'));
+      expect(supabase.from('simulation_runs').select).toHaveBeenCalledWith(expect.stringContaining('max_simulation_time'));
+      expect(supabase.from('simulation_runs').eq).toHaveBeenCalledWith('model_id', 'm1');
+      expect(rows[0]).toEqual(expect.objectContaining({ seed: 10, max_simulation_time: 500 }));
     });
   });
 

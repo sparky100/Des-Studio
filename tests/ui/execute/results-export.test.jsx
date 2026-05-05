@@ -7,8 +7,10 @@ import {
 } from '../../../src/ui/execute/index.jsx';
 
 const mockSaveSimulationRun = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockFetchRunHistory = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 
 vi.mock('../../../src/db/models.js', () => ({
+  fetchRunHistory: mockFetchRunHistory,
   saveSimulationRun: mockSaveSimulationRun,
 }));
 
@@ -57,6 +59,7 @@ describe('results export helpers', () => {
         warmupPeriod: 5,
         maxSimTime: 100,
         terminationMode: 'time',
+        runLabel: 'Baseline',
       },
       exportedAt: '2026-05-04T12:00:00.000Z',
     });
@@ -73,14 +76,15 @@ describe('results export helpers', () => {
       replications: 1,
       warmupPeriod: 5,
       maxSimTime: 100,
+      runLabel: 'Baseline',
     }));
   });
 
   it('builds CSV with the expected replication headers', () => {
     const csv = buildResultsCsv({ results: singleResult, config: { seed: 123 } });
 
-    expect(csv.split('\n')[0]).toBe('replicationIndex,seed,served,reneged,avgWait,avgSvc,avgSojourn,finalTime');
-    expect(csv).toContain('0,123,4,1,2.5,1.25,3.75,10');
+    expect(csv.split('\n')[0]).toBe('runLabel,replicationIndex,seed,served,reneged,avgWait,avgSvc,avgSojourn,finalTime');
+    expect(csv).toContain(',0,123,4,1,2.5,1.25,3.75,10');
   });
 
   it('includes one CSV row per completed replication plus aggregates', () => {
@@ -94,8 +98,8 @@ describe('results export helpers', () => {
       },
     });
 
-    expect(csv).toContain('0,10,2,0,4,2,6,20');
-    expect(csv).toContain('1,11,3,1,5,3,8,22');
+    expect(csv).toContain(',0,10,2,0,4,2,6,20');
+    expect(csv).toContain(',1,11,3,1,5,3,8,22');
     expect(csv).toContain('metric,n,mean,lower95,upper95,halfWidth');
     expect(csv).toContain('summary.avgWait,2,4.5,1,8,3.5');
   });

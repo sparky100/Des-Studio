@@ -51,6 +51,93 @@ function downloadJsonFile(payload, filename) {
   }
 }
 
+function csvEscape(value) {
+  if (value == null) return "";
+  const text = String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadTextFile(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+}
+
+function buildRunHistoryExportPayload(model, rows = [], exportedAt = new Date().toISOString()) {
+  return {
+    schema: "des-studio.run-history.v1",
+    exportedAt,
+    model: {
+      id: model?.id ?? null,
+      name: model?.name ?? "Untitled model",
+    },
+    runs: rows.map(row => ({
+      id: row.id,
+      runLabel: row.run_label || "",
+      ranAt: row.ran_at,
+      seed: row.seed ?? null,
+      replications: row.replications ?? 1,
+      warmupPeriod: row.warmup_period ?? null,
+      maxSimulationTime: row.max_simulation_time ?? null,
+      totalArrived: row.total_arrived ?? 0,
+      totalServed: row.total_served ?? 0,
+      totalReneged: row.total_reneged ?? 0,
+      renegeRate: row.renege_rate ?? null,
+      avgWaitTime: row.avg_wait_time ?? null,
+      avgServiceTime: row.avg_service_time ?? null,
+      durationMs: row.duration_ms ?? null,
+      resultsJson: row.results_json ?? null,
+    })),
+  };
+}
+
+function buildRunHistoryCsv(rows = []) {
+  const table = [[
+    "runLabel",
+    "ranAt",
+    "seed",
+    "replications",
+    "warmupPeriod",
+    "maxSimulationTime",
+    "totalArrived",
+    "totalServed",
+    "totalReneged",
+    "renegeRate",
+    "avgWaitTime",
+    "avgServiceTime",
+    "durationMs",
+  ]];
+
+  for (const row of rows) {
+    table.push([
+      row.run_label || "",
+      row.ran_at,
+      row.seed ?? "",
+      row.replications ?? 1,
+      row.warmup_period ?? "",
+      row.max_simulation_time ?? "",
+      row.total_arrived ?? 0,
+      row.total_served ?? 0,
+      row.total_reneged ?? 0,
+      row.renege_rate ?? "",
+      row.avg_wait_time ?? "",
+      row.avg_service_time ?? "",
+      row.duration_ms ?? "",
+    ]);
+  }
+
+  return table.map(row => row.map(csvEscape).join(",")).join("\n");
+}
+
 const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   const [model,setModel]=useState(()=>{
     if(!modelData) return null;
@@ -136,6 +223,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     }
     const payload = buildModelExportPayload(model);
     downloadJsonFile(payload, `des-studio-${slugifyModelName(model.name)}.json`);
+  };
+
+  const exportRunHistoryJson = () => {
+    const payload = buildRunHistoryExportPayload(model, historyRows);
+    downloadJsonFile(payload, `des-studio-run-history-${slugifyModelName(model.name)}.json`);
+  };
+
+  const exportRunHistoryCsv = () => {
+    const csv = buildRunHistoryCsv(historyRows);
+    downloadTextFile(csv, `des-studio-run-history-${slugifyModelName(model.name)}.csv`, "text/csv;charset=utf-8");
   };
 
   const TabErrors = ({ tabId }) => {
@@ -248,7 +345,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
         )}
         {tab==="history"&&(
           <div style={{maxWidth:960}}>
-            <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:14}}>RUN HISTORY (LAST 20)</div>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+              <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,flex:1,minWidth:180}}>RUN HISTORY (LAST 20)</div>
+              <Btn small variant="ghost" onClick={exportRunHistoryJson} disabled={!historyRows.length}>Export History JSON</Btn>
+              <Btn small variant="ghost" onClick={exportRunHistoryCsv} disabled={!historyRows.length}>Export History CSV</Btn>
+            </div>
             {historyLoading&&<div style={{color:C.muted,fontFamily:FONT,fontSize:12}}>Loading...</div>}
             {historyError&&<div style={{color:C.red,fontFamily:FONT,fontSize:12}}>{historyError}</div>}
             {!historyLoading&&!historyError&&historyRows.length===0&&(
@@ -258,7 +359,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FONT,fontSize:11}}>
                   <thead>
-                    <tr>{["Date / Time","Arrived","Served","Reneged","Renege %","Avg Wait","Avg Sojourn","Duration (ms)"].map(h=>(
+                    <tr>{["Date / Time","Label","Arrived","Served","Reneged","Renege %","Avg Wait","Avg Sojourn","Duration (ms)"].map(h=>(
                       <th key={h} style={{textAlign:"left",padding:"6px 12px",color:C.muted,borderBottom:`1px solid ${C.border}`,fontSize:10,letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
                     ))}</tr>
                   </thead>
@@ -271,6 +372,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
                       return(
                         <tr key={row.id} style={{background:i%2===0?C.surface+"60":"transparent"}}>
                           <td style={{padding:"6px 12px",color:C.muted,whiteSpace:"nowrap"}}>{dateStr} {timeStr}</td>
+                          <td style={{padding:"6px 12px",color:row.run_label?C.text:C.muted,whiteSpace:"nowrap"}}>{row.run_label || "-"}</td>
                           <td style={{padding:"6px 12px",color:C.accent,fontWeight:700}}>{row.total_arrived}</td>
                           <td style={{padding:"6px 12px",color:C.served,fontWeight:700}}>{row.total_served}</td>
                           <td style={{padding:"6px 12px",color:C.reneged,fontWeight:700}}>{row.total_reneged}</td>
@@ -383,6 +485,7 @@ const NewModelModal=({onClose,onCreate})=>{
 
 export {
   ModelDetail, ModelCard, NewModelModal,
-  buildModelExportPayload, slugifyModelName, modelJsonFromModel,
+  buildModelExportPayload, buildRunHistoryCsv, buildRunHistoryExportPayload,
+  slugifyModelName, modelJsonFromModel,
 };
 

@@ -5,7 +5,7 @@ import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx
 import { buildEngine } from "../../engine/index.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { summarizeReplicationResults } from "../../engine/statistics.js";
-import { saveSimulationRun } from "../../db/models.js";
+import { fetchRunHistory, saveSimulationRun } from "../../db/models.js";
 import { validateModel } from "../../engine/validation.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
@@ -84,6 +84,7 @@ function buildResultsExportPayload({
       name: model?.name ?? "Untitled model",
     },
     experiment: {
+      runLabel: config.runLabel ?? null,
       seed: config.seed ?? null,
       replications: config.replications ?? Math.max(replicationResults.length, results ? 1 : 0),
       warmupPeriod: config.warmupPeriod ?? 0,
@@ -109,11 +110,12 @@ function csvEscape(value) {
 }
 
 function buildResultsCsv({ results, replicationResults = [], aggregateStats = {}, config = {} } = {}) {
-  const rows = [["replicationIndex", "seed", "served", "reneged", "avgWait", "avgSvc", "avgSojourn", "finalTime"]];
+  const rows = [["runLabel", "replicationIndex", "seed", "served", "reneged", "avgWait", "avgSvc", "avgSojourn", "finalTime"]];
 
   const resultRows = replicationResults.length
     ? replicationResults.map(payload => ({
         replicationIndex: payload.replicationIndex,
+        runLabel: payload.run_label || payload.label || config.runLabel || "",
         seed: payload.seed,
         summary: payload.result?.summary ?? payload.summary ?? {},
         finalTime: payload.result?.finalTime ?? payload.finalTime ?? payload.result?.snap?.clock ?? null,
@@ -121,6 +123,7 @@ function buildResultsCsv({ results, replicationResults = [], aggregateStats = {}
     : results
       ? [{
           replicationIndex: 0,
+          runLabel: config.runLabel || "",
           seed: config.seed ?? null,
           summary: results.summary ?? {},
           finalTime: results.finalTime ?? results.snap?.clock ?? null,
@@ -129,6 +132,7 @@ function buildResultsCsv({ results, replicationResults = [], aggregateStats = {}
 
   for (const row of resultRows) {
     rows.push([
+      row.runLabel,
       row.replicationIndex,
       row.seed,
       row.summary.served,
@@ -310,6 +314,7 @@ const VisualView = ({ snap, model, summary }) => {
 
 function makeRunLabel(payload) {
   if (!payload) return "Run";
+  if (payload.run_label) return payload.run_label;
   if (payload.label) return payload.label;
   if (payload.replicationIndex != null) return `Replication ${payload.replicationIndex + 1} (seed ${payload.seed ?? "?"})`;
   return "Completed run";
@@ -332,12 +337,37 @@ function makeRunPromptPayload(label, payload) {
   };
 }
 
+function makeSavedRunPromptPayload(row) {
+  const summary = row?.results_json?.summary || {};
+  return {
+    label: row?.run_label || row?.label || row?.ran_at || "Saved run",
+    experimentConfig: {
+      warmupPeriod: row?.warmup_period ?? null,
+      maxSimTime: row?.max_simulation_time ?? row?.results_json?.summary?.maxSimTime ?? null,
+      replications: row?.replications ?? 1,
+      seed: row?.seed ?? null,
+    },
+    kpis: {
+      served: row?.total_served ?? summary.served ?? null,
+      reneged: row?.total_reneged ?? summary.reneged ?? null,
+      totalEntities: row?.total_arrived ?? summary.total ?? null,
+      avgWait: row?.avg_wait_time ?? summary.avgWait ?? null,
+      avgService: row?.avg_service_time ?? summary.avgSvc ?? null,
+      avgSojourn: summary.avgSojourn ?? null,
+      renegeRate: row?.renege_rate ?? null,
+    },
+    finalTime: row?.results_json?.clock ?? row?.results_json?.summary?.finalTime ?? null,
+  };
+}
+
 const AiAssistantPanel = ({
   model,
   results,
   exportConfig,
   aggregateStats,
   comparisonRuns,
+  comparisonLoading,
+  comparisonError,
   onClose,
 }) => {
   const [response, setResponse] = useState("");
@@ -402,10 +432,14 @@ const AiAssistantPanel = ({
 
   const compareRuns = () => {
     if (!selectedRun) return;
+    const comparisonPayload = selectedRun.source === "saved"
+      ? makeSavedRunPromptPayload(selectedRun.payload)
+      : makeRunPromptPayload(selectedRun.label, selectedRun.payload);
+
     runPrompt(buildComparisonPrompt(
       model.name,
       makeRunPromptPayload("Current completed run", { results, experiment: exportConfig }),
-      makeRunPromptPayload(selectedRun.label, selectedRun.payload)
+      comparisonPayload
     ));
   };
 
@@ -450,9 +484,14 @@ const AiAssistantPanel = ({
             disabled={!comparisonRuns.length || isStreaming}
             style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px" }}
           >
-            {!comparisonRuns.length && <option value="">No comparison runs</option>}
+            {!comparisonRuns.length && <option value="">{comparisonLoading ? "Loading saved runs..." : "No comparison runs"}</option>}
             {comparisonRuns.map(run => <option key={run.id} value={run.id}>{run.label}</option>)}
           </select>
+          {comparisonError && (
+            <div role="status" style={{ color: C.amber, fontFamily: FONT, fontSize: 10 }}>
+              Saved runs unavailable: {comparisonError}
+            </div>
+          )}
           <Btn variant="ghost" onClick={compareRuns} disabled={!results || !selectedRun || isStreaming} style={panelButtonStyle}>
             Compare
           </Btn>
@@ -513,7 +552,11 @@ const ExecutePanel = ({ model, modelId, userId }) => {
   const [terminationMode, setTerminationMode] = useState("time");
   const [terminationCondition, setTerminationCondition] = useState(null);
   const [replications, setReplications] = useState(1);
+  const [runLabel, setRunLabel] = useState("");
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [savedRunHistory, setSavedRunHistory] = useState([]);
+  const [runHistoryStatus, setRunHistoryStatus] = useState("idle");
+  const [runHistoryError, setRunHistoryError] = useState("");
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
   const autoRef = useRef(null);
@@ -593,6 +636,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
         
         saveSimulationRun(modelId, userId, fullResult, { 
           seed: runSeedRef.current, 
+          runLabel,
           warmupPeriod,
           maxTime: terminationMode === 'time' ? maxSimTime : null
         })
@@ -606,7 +650,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           });
       }
     }
-  }, [userId, modelId, warmupPeriod, maxSimTime, terminationMode, stopAuto]);
+  }, [userId, modelId, runLabel, warmupPeriod, maxSimTime, terminationMode, stopAuto]);
 
   const doRunAll = useCallback(async () => {
     stopAuto();
@@ -674,6 +718,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           try {
             await saveSimulationRun(modelId, userId, batchResult, {
               seed: runSeed,
+              runLabel,
               replications,
               warmupPeriod,
               maxTime: maxTimeForRun,
@@ -735,6 +780,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     try {
       await saveSimulationRun(modelId, userId, result, { 
         seed: runSeed, 
+        runLabel,
         replications: 1,
         warmupPeriod,
         maxTime: maxTimeForRun
@@ -745,7 +791,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
       setSaveStatus({ state: 'error', message: `✗ Failed to save: ${e.message}` });
       setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
     }
-  }, [model, userId, modelId, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto]);
+  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -777,25 +823,58 @@ const ExecutePanel = ({ model, modelId, userId }) => {
     return () => runnerRef.current?.cancel();
   }, []);
 
+  useEffect(() => {
+    if (!aiPanelOpen || !modelId) return;
+    let cancelled = false;
+    setRunHistoryStatus("loading");
+    setRunHistoryError("");
+    fetchRunHistory(modelId)
+      .then(rows => {
+        if (cancelled) return;
+        setSavedRunHistory(rows || []);
+        setRunHistoryStatus("loaded");
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setSavedRunHistory([]);
+        setRunHistoryError(error?.message || "could not load run history");
+        setRunHistoryStatus("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [aiPanelOpen, modelId]);
+
   const batchActive = batchStatus === "running" || batchStatus === "cancelling";
   const partialBatchStatus = batchStatus === "cancelled" || batchStatus === "error";
   const canExportResults = Boolean(results || (partialBatchStatus && replicationResults.length));
   const exportConfig = useMemo(() => ({
     modelId,
     seed: runSeedRef.current,
+    runLabel: runLabel.trim() || null,
     replications,
     warmupPeriod,
     maxSimTime: terminationMode === "time" ? maxSimTime : null,
     terminationMode,
     terminationCondition: terminationMode === "condition" ? terminationCondition : null,
-  }), [modelId, replications, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
+  }), [modelId, runLabel, replications, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
   const exportPartial = partialBatchStatus && replicationResults.length > 0;
   const resultFilenameBase = `des-studio-results-${slugifyResultName(model.name)}${exportPartial ? "-partial" : ""}-${timestampForFilename()}`;
-  const comparisonRuns = useMemo(() => replicationResults.map(payload => ({
-    id: `rep-${payload.replicationIndex}`,
-    label: makeRunLabel(payload),
-    payload,
-  })), [replicationResults]);
+  const comparisonRuns = useMemo(() => {
+    const savedRuns = savedRunHistory.map(row => ({
+      id: `saved-${row.id}`,
+      label: row.run_label || `Saved ${row.ran_at ? new Date(row.ran_at).toLocaleString() : row.id}`,
+      payload: row,
+      source: "saved",
+    }));
+    const currentReplications = replicationResults.map(payload => ({
+      id: `rep-${payload.replicationIndex}`,
+      label: makeRunLabel(payload),
+      payload,
+      source: "session",
+    }));
+    return [...savedRuns, ...currentReplications];
+  }, [savedRunHistory, replicationResults]);
 
   const exportResultsJson = useCallback(() => {
     const payload = buildResultsExportPayload({
@@ -876,13 +955,26 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN LABEL</span>
+            <input
+              aria-label="Run label"
+              value={runLabel}
+              onChange={e => setRunLabel(e.target.value)}
+              placeholder="Baseline"
+              style={{ width: 160, background: "transparent", border: `1px solid ${C.border}`,
+                borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12,
+                padding: "6px 8px", outline: "none" }}
+            />
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>TERMINATION MODE</span>
             <div style={{ display: "flex", gap: 12, alignItems: "center", height: 32 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
                 <input type="radio" name="terminationMode" checked={terminationMode === "time"} onChange={() => setTerminationMode("time")} />
                 Time-based
               </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
                 <input type="radio" name="terminationMode" checked={terminationMode === "condition"} onChange={() => setTerminationMode("condition")} />
                 Condition-based
               </label>
@@ -984,6 +1076,13 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           fontSize: 12, fontFamily: FONT,
         }}>
           {saveStatus.message}
+        </div>
+      )}
+
+      {runLabel.trim() && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN LABEL</span>
+          <Tag label={runLabel.trim()} color={C.accent} />
         </div>
       )}
 
@@ -1128,6 +1227,8 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           exportConfig={exportConfig}
           aggregateStats={aggregateStats}
           comparisonRuns={comparisonRuns}
+          comparisonLoading={runHistoryStatus === "loading"}
+          comparisonError={runHistoryError}
           onClose={() => setAiPanelOpen(false)}
         />
       )}
