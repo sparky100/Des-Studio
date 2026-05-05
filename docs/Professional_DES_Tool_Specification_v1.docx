@@ -1,0 +1,92 @@
+# Professional Discrete Event Simulation (DES) Tool Specification
+
+**Methodology:** Three-Phase Method (A, B, C Phases) with Iterative C-Scan.
+
+**Tech Stack:** TypeScript/React Frontend, FastAPI/SimPy Backend, Supabase Persistence.
+
+## 1. System Architecture
+
+The tool utilizes a decoupled, three-tier architecture to balance a responsive web-based UI with high-performance execution of stochastic models.
+
+- **Frontend (TypeScript/JavaScript):** A web-based visual designer utilizing React Flow for entity lifecycle modeling, incorporating structured validation layers to prevent free-text entry errors.
+
+- **API Orchestrator (FastAPI):** Manages model serialization, job queuing, and parallel execution logic.
+
+- **Database ****&**** Persistence (Supabase):** Stores model schemas, user authentication, and real-time replication results via PostgreSQL.
+
+- **Simulation Workers (SimPy):** Stateless Python processes executing the core Three-Phase loop.
+
+## 2. Entity Lifecycle Designer
+
+The visual designer allows users to model the journey of an entity through the system using a Directed Acyclic Graph (DAG).
+
+| **Node Type** | **Description** | **Logic Mapping** |
+| --- | --- | --- |
+| **Source** | Entry point for transient entities. | Schedules initial B-Events (Arrivals). |
+| **Queue** | Passive waiting area for entities. | Defined by discipline (FIFO, LIFO, Priority). |
+| **Activity** | The core logic block. | Combines a C-Event (Start) and a B-Event (End). |
+| **Sink** | Exit point where entities are disposed. | Finalizes throughput and "Time in System" metrics. |
+
+## 3. The Execution Engine (Three-Phase Method)
+
+To ensure professional accuracy, the engine follows the **Iterative Three-Phase Method**.
+
+- **Phase A (Clock Advance):** The executive identifies the next scheduled B-Event and advances the simulation clock ($T_{now}$) to that time.
+
+- **Phase B (Bound Events):** All deterministic events scheduled for $T_{now}$ are executed (e.g., a machine finishing a part).
+
+- **Phase C (Conditional Scan):**
+
+- The engine scans all C-Events based on **Manual Priority** assigned by the user.
+
+- If a C-Event fires (conditions met), it executes its actions (e.g., seizing a resource).
+
+- **The Restart Rule:** If a C-Event fires, the scan immediately restarts from Priority 1 to ensure higher-priority logic isn't bypassed by state changes.
+
+## 4. Detailed Implementation Considerations
+
+### 4.1. Structured Logic & Validation
+
+To minimize model design errors, the tool replaces free-text entry with a **Predicate Builder**. Users select variables, operators, and values from auto-completing dropdowns. This ensures type safety (e.g., comparing a numeric queue length only to another number) and reference integrity.
+
+### 4.2. Filtered Entity Selection
+
+Activities use a two-step selection process:
+
+- **Conditional Filter:** A check applied to individual entities in the queue (e.g., Entity.Color == 'Red').
+
+- **Queue Rule:** From the filtered subset, the entity is picked based on the global queue discipline (e.g., FIFO).
+
+### 4.3. Parallel Replication & Streaming
+
+The tool supports high-performance parallel runs:
+
+- **Multi-threading:** FastAPI spawns multiple worker processes, each with an independent random seed.
+
+- **Streaming Results:** Results are pushed to Supabase in real-time. A background worker thread in Python handles database writes to ensure the simulation execution is not bottlenecked by network I/O.
+
+- **Statistical Confidence:** The frontend calculates running means and 95% Confidence Intervals as results stream in.
+
+### 4.4. Termination & Warm-up
+
+Modellers can define a **Warm-up Period** where the system reaches a steady state before statistics are recorded. The simulation terminates based on either a fixed **Run Duration** or a specific **Logical Condition** (e.g., processing a batch of 1,000 units).
+
+// Example JSON Logic Segment
+{
+  "event_id": "activity_01",
+  "priority": 1,
+  "condition": {
+    "resource": "machine_alpha",
+    "status": "IDLE",
+    "queue_min_length": 1
+  },
+  "action": "SEIZE machine_alpha; SCHEDULE B_EVENT 'end_service' DELAY exponential(10)"
+}
+
+## References
+
+1. Discrete Event Simulation Three-Phase Method Standards
+
+2. SimPy Documentation and Execution Loops
+
+3. Fast API Parallelism and Background Tasks
