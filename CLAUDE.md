@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-05 | Reflects: Sprint 8B model-definition coherence + ADR-008/ADR-009 + Known Issues*
+*Last updated: 2026-05-05 | Reflects: Sprint 9A visual designer preflight + ADR-010 + Known Issues*
 
 ---
 
@@ -24,7 +24,7 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 | Styling | Inline style objects | — | No CSS classes. No CSS framework. Tokens in `ui/shared/tokens.js` |
 | Database / auth | Supabase JS client | 2.45.0 | PostgreSQL backend. Auth via Supabase Auth. |
 | Test runner | Vitest | 1.6.0 | Engine layer only. Node environment. |
-| Canvas / DAG | Form-based editors | — | React Flow not yet implemented. Visual canvas is a future sprint. |
+| Canvas / DAG | Form-based editors | — | ADR-010 accepts `@xyflow/react`; visual canvas implementation starts in Sprint 9. |
 
 **Do not introduce new dependencies without flagging them first.** The dependency list is intentionally minimal.
 
@@ -1317,15 +1317,32 @@ UI / UX
 
 ## 21. Current Sprint
 
-**Sprint 8B — Model Definition Coherence**
+**Sprint 9A — Visual Designer Architecture Preflight**
 
-Goal: Align Forms/Tabs, AI Generated Model, validation, and engine semantics for queue/customer binding, service starts, service completion, and multi-stage routing before proceeding to visual designer work.
+Goal: Lock the Visual Designer canvas, graph metadata, round-trip, and inspector reuse decisions before Sprint 9 coding.
 
-**Prerequisites:** Sprint 8 implementation pass exposed manual verification blockers in `docs/UI - Observations.md`. Sprint 8B blocks Sprint 9A/Sprint 9.
+**Status:** In progress. ADR-010 is accepted and should guide all Sprint 9 implementation planning.
 
-**Current implementation status:** Implementation complete; manual dev-server verification remains. The priority is to prove the model definition is coherent before adding more AI or visual features.
+### Sprint 9A Accepted Decisions
 
-### Sprint 8B Required Outcomes
+- Use `@xyflow/react` for the Visual Designer canvas. Do not use the older `reactflow` package name.
+- Allow `@xyflow/react/dist/style.css` as a narrow vendor-CSS exception. DES Studio-owned styles still use inline token-driven style objects.
+- Persist `model_json.graph` only as optional layout metadata: positions, viewport, and graph metadata version.
+- Do not persist graph topology as a second model. Derive edges from canonical DES model logic.
+- Visual Designer edits canonical `model_json`; Forms/Tabs and AI Generated Model remain first-class authoring modes over the same data.
+- If graph metadata is missing or stale, regenerate it from canonical model data.
+- Initial node mapping:
+  - Source: arrival B-event with `ARRIVE(CustomerType, QueueName)`
+  - Queue: `queues[]`
+  - Activity: service-start C-event plus scheduled completion B-event
+  - Sink: terminal completion/routing outcome, initially derived rather than a new engine schema element
+- Visual node inspectors should reuse small editor building blocks where practical: `DistPicker`, `ConditionBuilder`, `EntityFilterBuilder`, queue/customer/resource option helpers.
+- Do not embed full `BEventEditor` or `CEventEditor` panels inside a node inspector.
+- Do not implement the retired split-pane SVG hybrid designer or `FlowDiagramSVG` bridge.
+
+### Recently Completed — Sprint 8B
+
+Sprint 8B completed on 2026-05-05.
 
 - `validateModel()` recognises ARRIVE/COMPLETE effects from manual and generated models without false V8 warnings.
 - Queue names with spaces work in macros, condition strings, validation, and generated dropdown values.
@@ -1334,14 +1351,6 @@ Goal: Align Forms/Tabs, AI Generated Model, validation, and engine semantics for
 - AI proposals produce service-start C-events with queue-size and idle-server conditions.
 - A two-stage Patient -> Queue 1 -> Service 1 -> Queue 2 -> Service 2 -> Complete reference model is added as a regression gate.
 - Remaining observation polish completed: clearer queue/entity/B-event/C-event wording, visible in-panel dirty/save state, concise server resource count on model cards, and friendly proposal modification summaries instead of raw JSON blocks.
-
-### Sprint 8B Completion Gate
-
-```text
-npm test -- validation conditions queue-name-spaces ai-generated-model-panel b-event-editor c-event-editor model-builder-prompts accessibility
-npm run build
-Manual: generated/simple and two-stage models run without V8/V9 false positives or user-visible "template" wording.
-```
 
 ### Recently Completed — Sprint 8
 

@@ -69,8 +69,8 @@ flowchart LR
 | Platform foundation | ✅ Complete | Sprint 7B implemented the accepted 7A decisions: platform role/settings persistence and TypeScript tooling/contracts. |
 | Dynamic modelling | ✅ Complete | Sprint 7 adds time-varying arrival rates and resource capacity schedules. |
 | AI model creation | 🔄 Current | Sprint 8A has prepared provider-neutral LLM routing; Sprint 8 adds natural-language model authoring. |
-| Model definition coherence | 🔄 Current blocker | Sprint 8B must align queue/customer/server/service semantics before visual designer work proceeds. |
-| Visual authoring | ⬜ Planned | Sprint 9A settles canvas/graph metadata; Sprint 9 adds graph-first Visual Designer authoring. |
+| Model definition coherence | ✅ Complete | Sprint 8B aligned queue/customer/server/service semantics before visual designer work. |
+| Visual authoring | 🔄 Preflight | Sprint 9A accepted ADR-010; Sprint 9 adds graph-first Visual Designer authoring. |
 
 ### Key Issues and Watchpoints
 
@@ -84,7 +84,7 @@ flowchart LR
 | LLM provider coupling | ✅ Preflight complete | Sprint 8A moved browser calls to a provider-neutral contract and made provider/model selection server-side in `llm-proxy`. |
 | SaaS tenancy/workspaces | ⏭ Deferred | Important, but not required before Sprints 7-9 unless product requirements change. Needs separate schema/RLS planning. |
 | Execute running-model UX | ⏭ Deferred | MVP works; redesign should be handled in a dedicated UX/refinement sprint. |
-| Visual Designer canvas decision | ⬜ Open | React Flow or alternative must be reviewed before Sprint 9 implementation. |
+| Visual Designer canvas decision | ✅ Resolved | ADR-010 accepts `@xyflow/react`, optional layout-only graph metadata, and derived topology. |
 | Model action vocabulary coherence | 🔄 Active | UI observations show macro-string authoring is leaking into modeller workflows. Pause further feature expansion until ARRIVE/ASSIGN/COMPLETE/routing semantics are coherent across Forms, AI, validation, and engine. |
 
 ---
@@ -129,6 +129,7 @@ flowchart LR
 | 1.33 | 2026-05-05 | Sprint 8 AI proposal save refinement — proposal panel now offers direct Apply & Save actions for all or selected sections, preserves the real model identity when saving generated drafts, and allows invalid proposals to be saved as editable drafts with validation warnings. |
 | 1.34 | 2026-05-05 | Added Sprint 8B — Model Definition Coherence as a blocking stabilisation pass before Sprint 9. Scope covers queue/customer binding, service-start/service-complete semantics, user-facing action labels, validation parity, AI proposal normalization, and a two-stage reference model. |
 | 1.35 | 2026-05-05 | Continued Sprint 8B observation fixes: clarified queue/entity/B-event/C-event wording, removed remaining visible follow-on implementation language, added in-panel unsaved-change save action, summarised server resources on model cards, and replaced raw modified-proposal JSON with friendly field summaries. |
+| 1.36 | 2026-05-05 | Started Sprint 9A and accepted ADR-010 — Visual Designer will use `@xyflow/react`; `model_json.graph` is optional layout metadata only; graph topology is derived from canonical model logic; inspector reuse strategy is focused building-block reuse. |
 
 ---
 
@@ -147,7 +148,8 @@ flowchart LR
 | Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation. | 33 focused | N/A | Success | Role/settings persistence, DB wrappers, `isAdmin`, TypeScript tooling/contracts complete. |
 | Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources. | 369 (369) | N/A | Success | Piecewise distributions, shift schedules, RATE_CHANGE/SHIFT_CHANGE B-events, validation, UI editors, and typed contracts complete. |
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight. | 22 focused | N/A | Success | Provider-neutral request contract, browser compatibility, server-side provider/model routing, and proxy deployment checklist complete. |
-| Sprint 8B | 🔄 In progress | — | Model Definition Coherence. | Focused | N/A | Pending | Stabilise queue/service semantics before visual designer work. |
+| Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence. | Focused | N/A | Success | Stabilised queue/service semantics before visual designer work. |
+| Sprint 9A | 🔄 In progress | — | Visual Designer Architecture Preflight. | Docs | N/A | Pending | ADR-010 accepted; update planning/design docs before Sprint 9 coding. |
 
 ---
 
@@ -3374,7 +3376,7 @@ npm run build
 
 **Goal:** Add the second model authoring mode from ADR-007. A modeller describes a system in natural language and receives a partially- or fully-configured DES model proposal. The LLM acts as a model-construction assistant: it parses the description, asks clarifying questions, proposes entity classes, queues, B-Events, C-Events, and distributions, and presents the result as canonical `model_json`. The modeller reviews a diff-preview before any changes are applied.
 
-**Status:** 🔄 In progress | **Started:** 2026-05-05 | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-05 | **Completed:** 2026-05-05
 **Prerequisite:** Sprint 8A complete. Sprint 8 depends on the Supabase Edge Function `llm-proxy`, but model-builder calls must use the provider-neutral contract introduced in Sprint 8A.
 
 **Architectural constraint:** ADR-007 applies. AI Generated Model is an authoring mode over the same canonical `model_json` used by Forms/Tabs and the future Visual Designer. The LLM produces a model JSON object conforming to the existing `addition1_entity_model.md` schema. It is validated by `validateModel()` before being applied. The engine, macros, and database schema are not modified. The LLM cannot bypass validation.
@@ -3790,21 +3792,21 @@ npm run build
 
 **Goal:** Make the dependency and persistence decisions needed for the Visual Designer before building the graph-first authoring surface.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
-**Prerequisite:** Sprint 8B complete. Complete before Sprint 9 if `TBD-VISUAL-CANVAS` is still open.
+**Status:** 🔄 In progress | **Started:** 2026-05-05 | **Completed:** —
+**Prerequisite:** Sprint 8B complete. ADR-010 resolves the former `TBD-VISUAL-CANVAS` decision.
 
 | Feature                            | Audit Status | Action                                                                                      |
 | ---------------------------------- | ------------ | ------------------------------------------------------------------------------------------- |
-| F9A.1 — Canvas dependency decision | ✗            | Decide React Flow vs alternative/no dependency and record ADR/update                        |
-| F9A.2 — Graph metadata persistence | ✗            | Decide whether `model_json.graph` is persisted, derived, or optional                        |
-| F9A.3 — Round-trip contract        | ✗            | Define how Forms/Tabs, AI Generated Model, and Visual Designer preserve one canonical model |
-| F9A.4 — Inspector reuse strategy   | ~            | Decide which existing editor components can be reused in the visual inspector               |
+| F9A.1 — Canvas dependency decision | ✅ | Accepted ADR-010: use `@xyflow/react`; do not use old `reactflow` package name |
+| F9A.2 — Graph metadata persistence | ✅ | Accepted ADR-010: persist optional `model_json.graph` layout metadata only; derive topology |
+| F9A.3 — Round-trip contract        | ✅ | Accepted ADR-010: Forms/Tabs, AI, and Visual Designer edit one canonical model; graph can regenerate |
+| F9A.4 — Inspector reuse strategy   | ✅ | Accepted ADR-010: reuse small building blocks (`DistPicker`, `ConditionBuilder`, `EntityFilterBuilder`, option helpers), not full tab editors |
 
 ### Sprint 9A Completion Gate
 
 ```bash
 git diff --check
-# Manual: confirm ADR-007 and visual design doc agree with dependency/metadata decision
+# Manual: confirm ADR-007, ADR-010, and visual design doc agree with dependency/metadata decision
 ```
 
 ---
@@ -3814,15 +3816,15 @@ git diff --check
 **Goal:** Add the third model authoring mode from ADR-007: a graph-first visual designer for building and editing DES models over the same canonical `model_json` used by Forms/Tabs and AI Generated Model authoring.
 
 **Status:** ⬜ Not started | **Started:** — | **Completed:** —
-**Prerequisite:** Sprint 9A complete if the canvas dependency or graph metadata decision is still open. The AI Generated Model path should already prove that canonical model proposals can be validated and applied safely. React Flow or any equivalent graph/canvas dependency must be explicitly reviewed before implementation.
+**Prerequisite:** Sprint 9A complete. The AI Generated Model path should already prove that canonical model proposals can be validated and applied safely. ADR-010 accepts `@xyflow/react` as the canvas dependency and defines `model_json.graph` as optional layout metadata only.
 
 **Architectural constraint:** Do not implement the retired split-pane SVG hybrid designer. Sprint 9 should target the final graph-first authoring surface directly. The visual designer must not create a separate model format and must not bypass `validateModel()`.
 
 | Feature | Audit Status | Action |
 |---|---|---|
 | F9.1 — Visual Designer shell and mode entry | ✗ | New: visual authoring mode entry point alongside Forms/Tabs and AI Generated Model |
-| F9.2 — Graph layout metadata decision | ✗ | Decide whether `model_json.graph` is persisted or derived until manual positioning exists |
-| F9.3 — Canvas renderer and node palette | ✗ | New: graph-first canvas with Source, Queue, Activity, Sink nodes |
+| F9.2 — Graph derivation and layout metadata | ✗ | New: derive graph topology from canonical model and persist optional layout metadata |
+| F9.3 — `@xyflow/react` canvas renderer and node palette | ✗ | New: graph-first canvas with Source, Queue, Activity, Sink nodes |
 | F9.4 — Connection rules and DAG validation | ✗ | Reuse validation concepts; block invalid graph connections |
 | F9.5 — Inspector integration | ✗ | Reuse existing editor components where practical; do not fork model logic |
 | F9.6 — Round-trip parity with Forms/Tabs | ✗ | Switching authoring modes preserves the same canonical model data |
@@ -3869,7 +3871,8 @@ Features:
 CRITICAL:
   - One canonical model_json; no visual-designer-only model format
   - Do not build FlowDiagramSVG as a bridge implementation
-  - Any new canvas dependency requires explicit review and ADR/update if needed
+  - Canvas dependency is accepted in ADR-010: use @xyflow/react, not reactflow
+  - model_json.graph is optional layout metadata only; graph topology is derived
   - validateModel() remains the gate before execution or save
   - Forms/Tabs and AI Generated Model remain first-class authoring modes
 
@@ -3901,7 +3904,7 @@ npm run build                          # Succeeds
 | Feature | Original sprint | Deferred to | Reason | Status |
 |---|---|---|---|---|
 | Split-pane SVG hybrid visual designer | Visual designer v2.0 Phase 2 | Not scheduled | ADR-007 retired the temporary SVG bridge in favour of direct final Visual Designer authoring | Cancelled |
-| React Flow / canvas dependency decision | Visual designer planning | Sprint 9 | Dependency choice should be reviewed when the final visual designer sprint begins | Deferred |
+| React Flow / canvas dependency decision | Visual designer planning | Sprint 9A | ADR-010 accepts `@xyflow/react` and a narrow vendor-CSS exception | Complete |
 | SaaS tenancy/workspace model | Platform architecture planning | Post-7A architecture sprint | Sprint 7A intentionally handles roles/settings only; tenancy needs separate schema/RLS planning | Deferred |
 | Provider-neutral LLM configuration | Platform architecture planning | Sprint 8A | Sprint 7A intentionally excludes LLM provider switching; future LLM authoring should not deepen browser/provider coupling | Planned |
 | Admin-selectable LLM provider/model | Platform architecture planning | Sprint 8A or later admin UI sprint | Server-side provider configuration should be prepared before Sprint 8, but a full admin UI can wait | Planned |
@@ -3926,7 +3929,7 @@ npm run build                          # Succeeds
 | TBD-LLM-CONV | LLM conversation persistence — session only vs Supabase | Sprint 8 F8.3 | ✅ Resolved in plan — session only React state; create ADR if persistence is added |
 | TBD-PIECEWISE-WARMUP | Piecewise distribution warm-up interaction — does warm-up reset the period position? | Sprint 7 F7.2 | ✅ Resolved in plan — no reset; schedule is time-indexed |
 | TBD-SHIFT-CAPACITY | Shift schedule capacity mapping to current server entity model | Sprint 7 F7.4 | ✅ Resolved — use server instance scaling; capacity increases create idle instances, decreases retire idle excess, busy excess completes with warning |
-| TBD-VISUAL-CANVAS | Canvas library and graph layout persistence strategy | Sprint 9 F9.2/F9.3 | ⬜ Open — decide dependency/version and whether `model_json.graph` is persisted before implementation |
+| ADR-010 | Visual Designer canvas and graph metadata | Sprint 9A / Sprint 9 | ✅ Accepted — use `@xyflow/react`; persist optional layout-only `model_json.graph`; derive topology from canonical model logic |
 | *(add rows as new questions arise)* | | | |
 
 ---

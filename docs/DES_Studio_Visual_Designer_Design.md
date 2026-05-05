@@ -1,6 +1,6 @@
 # DES Studio — Visual Designer: Confirmed Design
 *Entity Lifecycle Designer — Authoring Modes and Visual Designer Plan*
-*Current version: 3.0 | Last updated: 2026-05-04*
+*Current version: 3.1 | Last updated: 2026-05-05*
 
 ---
 
@@ -11,6 +11,7 @@
 | 1.0 | 2026-04-30 | — | Initial design document — three options presented for review |
 | 2.0 | 2026-04-30 | — | Decision confirmed: phased approach. Tab editors (Phase 1) → Split-pane hybrid (Phase 2) → React Flow canvas (Phase 3). Coexistence of both modes documented. |
 | 3.0 | 2026-05-04 | — | ADR-007 accepted: DES Studio has three authoring modes over one canonical `model_json`. The split-pane SVG hybrid phase is retired; the visual designer should be planned as the final graph-first authoring surface. |
+| 3.1 | 2026-05-05 | — | ADR-010 accepted: Sprint 9 uses `@xyflow/react`; `model_json.graph` is optional layout metadata only; visual topology is derived from canonical model logic; SVG Phase 2 prompts remain historical only. |
 | | | | *(add a row each time this document is updated)* |
 
 > **How to update this document:** When a design decision changes, a phase completes, or a new constraint is discovered — add a row to the version history above, increment the version number in the title, and update the relevant section. Do not delete previous content — mark superseded sections as `[Superseded in v X.X — see Section Y]`.
@@ -27,6 +28,8 @@
 
 This decision is recorded in `docs/decisions/ADR-007-three-authoring-modes.md`.
 
+Sprint 9A dependency and graph metadata decisions are recorded in `docs/decisions/ADR-010-visual-designer-canvas-graph-metadata.md`.
+
 The previous v2.0 plan to build a split-pane SVG hybrid designer before the final visual designer is superseded. The SVG hybrid is no longer a required bridge phase. When visual graph authoring is scheduled, it should be planned as the final graph-first designer rather than a temporary renderer.
 
 This is directly aligned with the audit's recommendation:
@@ -34,6 +37,14 @@ This is directly aligned with the audit's recommendation:
 > *"A full rebuild would discard working, tested engine code in exchange for nothing. A selective rebuild... combined with adding the absent features in prioritised sprints — is the correct path."*
 
 The same principle applies to the UI: the existing tab editors are working and remain first-class. AI generation and the visual designer are additive authoring surfaces over the same model data, not replacement formats.
+
+**Sprint 9A accepted decisions:**
+
+- Use `@xyflow/react` for the final graph-first Visual Designer.
+- Allow the required vendor stylesheet `@xyflow/react/dist/style.css` as a narrow exception; DES Studio-owned styles still use inline token-driven style objects.
+- Persist `model_json.graph` only as optional visual layout metadata.
+- Derive graph topology from canonical DES model logic rather than storing a second graph model.
+- Reuse small editor building blocks in the inspector; do not embed full tab editors inside graph nodes.
 
 ---
 
@@ -64,9 +75,11 @@ DES Studio has one canonical model format and three authoring modes.
 |---|---|---|
 | Forms/Tabs | Precise manual construction and editing | Reads and writes `model_json` directly |
 | AI Generated Model | Natural-language model creation and refinement | Proposes validated `model_json` before apply |
-| Visual Designer | Graph-first lifecycle modelling | Reads and writes the same `model_json`, with optional graph layout metadata |
+| Visual Designer | Graph-first lifecycle modelling | Reads and writes the same `model_json`, with optional layout-only graph metadata |
 
 The authoring modes are not separate products and do not create separate schemas. Validation, persistence, import/export, run history, execution, and results analysis all operate on the same model object.
+
+`model_json.graph` is not a separate model. It stores optional layout state such as node positions and viewport. If missing or stale, it is regenerated from canonical model data.
 
 ### Retired v2.0 phased strategy
 
@@ -97,13 +110,13 @@ Add a lightweight SVG flow diagram alongside the existing tab editors. The model
 
 ### Phase 3 — Full React Flow Canvas (Sprint 4+)
 
-[Superseded in v3.0 as a phase number. The React Flow/canvas visual designer remains the preferred direction for the final Visual Designer authoring mode.]
+[Superseded in v3.0 as a phase number. ADR-010 confirms `@xyflow/react` as the Sprint 9 canvas dependency for the final Visual Designer authoring mode.]
 
-Replace the SVG diagram with a full React Flow canvas — drag-and-drop node placement, manual edge routing, minimap, zoom/pan. The inspector panel from Phase 2 is reused **unchanged**. The `model_json` schema is identical. The tab editors remain as a fallback.
+Build the final graph-first canvas with `@xyflow/react` — drag-and-drop node placement, manual edge routing, minimap, zoom/pan. The inspector uses existing editor building blocks where practical. The canonical `model_json` schema remains the source of truth. The tab editors remain first-class.
 
 **Why third:** React Flow integration is a significant dependency addition. By the time Phase 3 begins, the inspector panel is already complete and tested — only the diagram renderer changes.
 
-**Status:** Future authoring mode — no longer dependent on Phase 2 SVG completion
+**Status:** Sprint 9 target — no longer dependent on Phase 2 SVG completion
 
 ---
 
@@ -350,8 +363,8 @@ The final Visual Designer should use a graph-first canvas. The old v2.0 text bel
 
 | Changes in Phase 3 | Unchanged in Phase 3 |
 |---|---|
-| `FlowDiagramSVG.jsx` → `FlowDiagramReactFlow.jsx` | FlowDiagram props interface |
-| `reactflow` added to `package.json` | Inspector panel — identical |
+| Final `FlowDiagramReactFlow.jsx` built directly | Canonical model_json remains the source of truth |
+| `@xyflow/react` added to `package.json` | Forms/Tabs and AI Generated Model remain first-class |
 | Drag-and-drop node placement | model_json schema |
 | Manual edge routing | Predicate Builder |
 | Node palette sidebar | DistPicker |
@@ -363,11 +376,8 @@ The final Visual Designer should use a graph-first canvas. The old v2.0 text bel
 ### One line changes in the application
 
 ```javascript
-// Phase 2 import (in ModelDetail):
-import { FlowDiagramSVG as FlowDiagram } from './FlowDiagramSVG';
-
-// Phase 3 (replace the above line with):
-import { FlowDiagramReactFlow as FlowDiagram } from './FlowDiagramReactFlow';
+// Sprint 9 import in the Visual Designer shell:
+import { FlowDiagramReactFlow } from './FlowDiagramReactFlow';
 ```
 
 Everything else in `ModelDetail` is identical.
@@ -419,43 +429,64 @@ The inspector panel receives `selectedNodeId` (a string) and `model_json`. It ha
 
 ---
 
-## 9. model_json Schema — Fixed in Phase 1, Never Changes
+## 9. model_json Schema — Canonical Model Plus Optional Layout
 
-The `graph` section is added to `model_json` in Phase 2. It does not change in Phase 3.
+The canonical DES model remains the existing `model_json` sections: `entityTypes`, `stateVariables`, `bEvents`, `cEvents`, and `queues`.
+
+The Visual Designer may persist an optional `graph` section, but that section is layout metadata only. It is not required to run a model and it must not contain simulation logic.
 
 ```json
 {
-  "entityClasses": [...],
+  "entityTypes": [...],
   "stateVariables": [...],
   "bEvents": [...],
   "cEvents": [...],
   "queues": [...],
 
   "graph": {
+    "version": 1,
     "nodes": [
-      { "id": "src_01",      "type": "source",   "label": "Customer Arrivals", "x": 80,  "y": 240 },
-      { "id": "q_main",      "type": "queue",    "label": "Main Queue",        "x": 320, "y": 240 },
-      { "id": "act_machine", "type": "activity", "label": "Machine Alpha",     "x": 560, "y": 240 },
-      { "id": "sink_01",     "type": "sink",     "label": "Exit",              "x": 800, "y": 240 }
+      { "id": "source:patient-arrival", "type": "source", "refId": "patient-arrival", "x": 80, "y": 180 },
+      { "id": "queue:triage", "type": "queue", "refId": "triage", "x": 320, "y": 180 },
+      { "id": "activity:start-triage", "type": "activity", "refId": "start-triage", "x": 560, "y": 180 },
+      { "id": "sink:complete", "type": "sink", "refId": null, "x": 800, "y": 180 }
     ],
-    "edges": [
-      { "id": "e1", "from": "src_01",      "to": "q_main"      },
-      { "id": "e2", "from": "q_main",      "to": "act_machine" },
-      { "id": "e3", "from": "act_machine", "to": "sink_01"     }
-    ]
+    "viewport": { "x": 0, "y": 0, "zoom": 1 }
   }
 }
 ```
 
-`node.id` matches the corresponding element's `id` in `cEvents`, `queues`, etc. The graph section stores visual layout only — no model logic.
+`node.refId` points to the corresponding canonical model element where one exists. `source` and `sink` nodes may be derived visual lifecycle concepts rather than standalone engine schema elements.
+
+Persisted graph edges are avoided by default. Edges are derived from canonical DES model logic so they cannot drift from actual routing.
 
 ### Migration for existing models
 
-Models created before Phase 2 have no `graph` section. When the visual designer opens such a model, `generateGraphFromModel(modelJson)` auto-generates the layout and saves it. This is transparent to the modeller.
+Models created before Sprint 9 have no `graph` section. When the visual designer opens such a model, `deriveGraphFromModel(modelJson)` generates visual nodes and edges from the canonical model. If the user moves nodes, the layout positions are saved back into `model_json.graph`.
+
+### Node mapping
+
+| Visual node | Canonical source of truth |
+|---|---|
+| Source | Arrival B-event with `ARRIVE(CustomerType, QueueName)` |
+| Queue | `queues[]` |
+| Activity | Service-start C-event plus scheduled completion B-event |
+| Sink | Terminal completion/routing outcome, initially derived rather than a new engine schema element |
+
+### Round-trip rules
+
+- Forms/Tabs edit canonical `model_json`.
+- AI Generated Model proposes canonical `model_json`.
+- Visual Designer edits canonical `model_json`.
+- `model_json.graph` can be regenerated at any time.
+- Visual connections update canonical model routing first, then refresh derived graph edges.
+- `validateModel()` remains the execution gate.
 
 ---
 
 ## 10. Phase 2 — Detailed Design
+
+[Superseded in v3.1 by ADR-010 — historical reference only. Do not implement the SVG bridge.]
 
 ### Node visual specification
 
@@ -498,10 +529,24 @@ Error:     red dashed border, ✗ icon top-right
 
 ## 11. Phase 3 — Detailed Design
 
+### Sprint 9 Canvas: `@xyflow/react`
+
+Sprint 9 implements the final graph-first Visual Designer directly with `@xyflow/react`. Do not install the older `reactflow` package name.
+
+Required imports:
+
+```javascript
+import { ReactFlow, MiniMap, Controls, Background, Handle, Position } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+```
+
+The stylesheet import is a vendor-CSS exception accepted by ADR-010. DES Studio-owned node styling remains inline and token-driven.
+
 ### New file: `FlowDiagramReactFlow.jsx`
 
 ```javascript
-import ReactFlow, { MiniMap, Controls, Background, Handle, Position } from 'reactflow';
+import { ReactFlow, MiniMap, Controls, Background, Handle, Position } from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 
 export const FlowDiagramReactFlow = ({
   nodes, edges, selectedNodeId,
@@ -531,6 +576,8 @@ export const FlowDiagramReactFlow = ({
 };
 ```
 
+`nodes` and `edges` passed to the diagram are derived view objects. Persisted `model_json.graph.nodes` supplies positions only; edge topology is refreshed from canonical model logic.
+
 ### Node palette (new in Phase 3)
 
 ```
@@ -549,6 +596,8 @@ LEFT SIDEBAR
 
 ## 12. Claude Code Prompts by Phase
 
+[Superseded in v3.1 by Sprint 9 planning in `docs/DES_Studio_Build_Plan.md`. Prompts below are historical unless explicitly marked current.]
+
 ### Phase 1 — Sprints 1 and 2
 
 No new prompts needed. Follow the existing Sprint 1 and Sprint 2 prompts in `docs/DES_Studio_Build_Plan.md` exactly.
@@ -556,6 +605,8 @@ No new prompts needed. Follow the existing Sprint 1 and Sprint 2 prompts in `doc
 ---
 
 ### Phase 2 — Sprint 3 Planning Prompt *(run in claude.ai)*
+
+[Historical only — do not use for Sprint 9. The SVG hybrid bridge is retired.]
 
 ```
 We are starting Sprint 3 of DES Studio.
@@ -597,6 +648,8 @@ Definition of done:
 
 ### Phase 2 — F3.1: graph section in model_json
 
+[Historical only — do not use for Sprint 9. Use ADR-010 graph metadata rules instead.]
+
 ```
 Re-read CLAUDE.md. Task F3.1 of Sprint 3.
 
@@ -623,6 +676,8 @@ Show me the schema and function before implementing.
 ---
 
 ### Phase 2 — F3.2: SVG FlowDiagramSVG component
+
+[Historical only — do not use for Sprint 9. Do not build `FlowDiagramSVG`.]
 
 ```
 Task F3.2 of Sprint 3.
@@ -655,6 +710,8 @@ Do NOT use React Flow. SVG only.
 
 ### Phase 2 — F3.4: InspectorPanel component
 
+[Historical only — inspect component reuse ideas only. Sprint 9 should build focused node inspectors over canonical model fields.]
+
 ```
 Task F3.4 of Sprint 3.
 
@@ -684,6 +741,8 @@ before writing any code.
 
 ### Phase 2 — F3.5: Mode Toggle
 
+[Historical only — Sprint 9 mode entry should target the final Visual Designer, not a split-pane SVG bridge.]
+
 ```
 Task F3.5 of Sprint 3.
 
@@ -702,57 +761,63 @@ Tab editor must be pixel-identical in 'tabs' mode.
 
 ---
 
-### Phase 3 — Sprint Planning Prompt *(run in claude.ai)*
+### Sprint 9 — Current Planning Prompt *(run in claude.ai)*
 
 ```
-We are planning Phase 3 of the DES Studio visual designer.
+We are planning Sprint 9 of the DES Studio visual designer.
 
-Phase 2 delivered:
-  - SVG FlowDiagramSVG with agreed props interface
-  - InspectorPanel reusing Phase 1 components
-  - Mode toggle (Tab / Visual) in ModelDetail
-  - Both modes coexist with identical model_json
+ADR-007 and ADR-010 are accepted.
 
-Phase 3 replaces the SVG renderer with React Flow.
-The inspector panel, model_json, and tab editors do NOT change.
-This is a renderer substitution — not a redesign.
+Sprint 9 implements the final graph-first Visual Designer directly.
 
-New in Phase 3 only:
-  - reactflow added to package.json
-  - FlowDiagramReactFlow.jsx (same props interface as FlowDiagramSVG)
+Key decisions:
+  - Use @xyflow/react, not the old reactflow package name
+  - Import @xyflow/react/dist/style.css as the only vendor-CSS exception
+  - Persist model_json.graph as optional layout metadata only
+  - Derive visual edges from canonical model logic
+  - Visual connections update canonical model_json first
+  - Do not build FlowDiagramSVG as a bridge implementation
+
+New in Sprint 9:
+  - @xyflow/react added to package.json
+  - FlowDiagramReactFlow.jsx
   - Custom node components (SourceNode, QueueNode, ActivityNode, SinkNode)
   - Node palette sidebar (drag-and-drop)
   - MiniMap, zoom/pan, manual node repositioning
-  - One import line change in ModelDetail
+  - Visual Designer mode entry in ModelDetail
+  - Focused node inspector that reuses DistPicker, ConditionBuilder, EntityFilterBuilder, and option helpers
 
-Define sprint scope, risks, and React Flow version.
-Flag any cases where the existing props interface needs extending.
+Definition of done:
+  - Existing model opens in Visual Designer with derived graph
+  - Visual edits update canonical model_json and appear in Forms/Tabs
+  - Forms/Tabs edits are reflected when returning to Visual Designer
+  - Invalid connections and cycles are blocked
+  - npm test -- --run passes
+  - npm run build succeeds
 ```
 
 ---
 
-### Phase 3 — Start Prompt for Claude Code
+### Sprint 9 — Start Prompt for Claude Code
 
 ```
-Re-read CLAUDE.md. Phase 3 of the visual designer.
-
-Phase 3 replaces FlowDiagramSVG with React Flow.
-Inspector panel, tab editors, model_json, and engine do NOT change.
+Re-read CLAUDE.md, ADR-007, ADR-010, and docs/DES_Studio_Visual_Designer_Design.md.
+Sprint 9 implements the final graph-first Visual Designer with @xyflow/react.
 
 Before writing any code:
-  1. Read src/ui/editors/FlowDiagramSVG.jsx — show the full props interface
-  2. Read src/ui/editors/InspectorPanel.jsx — confirm no SVG dependency
-  3. Read package.json — confirm reactflow is not yet installed
+  1. Read package.json — confirm @xyflow/react is not yet installed
+  2. Read src/ui/ModelDetail.jsx — identify the current authoring tab shell
+  3. Read src/ui/editors/index.jsx — identify reusable small editor components
+  4. Read src/engine/validation.js — identify validation extension points
 
 Then explain:
-  1. How FlowDiagramReactFlow.jsx implements the same props interface
-  2. How model.graph.nodes maps to React Flow node format
-  3. How model.graph.edges maps to React Flow edge format
-  4. How callbacks map to React Flow events
-  5. How onNodeDragStop updates model.graph.nodes[i].x and y
+  1. How canonical model_json maps to visual Source/Queue/Activity/Sink nodes
+  2. How derived edges are produced without storing routing logic in model_json.graph
+  3. How @xyflow/react node/edge data maps back to canonical model changes
+  4. How onNodeDragStop updates layout metadata only
+  5. Which existing editor building blocks the inspector will reuse
 
-Show component signature and data mapping before implementing.
-The one-line import change in ModelDetail is the last thing you do.
+Show the graph derivation contract and component signatures before implementing.
 ```
 
 ---
