@@ -1,5 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchModels, saveModel, deleteModel, saveSimulationRun, fetchRunHistory, fetchRunStatsForModels, forkModel, normalizeRunHistoryRow } from '../../src/db/models.js';
+import {
+  fetchModels,
+  saveModel,
+  deleteModel,
+  saveSimulationRun,
+  fetchRunHistory,
+  fetchRunStatsForModels,
+  forkModel,
+  fetchProfiles,
+  fetchUserSettings,
+  saveUserSettings,
+  normalizeProfile,
+  normalizeProfileRole,
+  normalizeRunHistoryRow,
+  normalizeUserSettings,
+} from '../../src/db/models.js';
 import { supabase } from '../../src/db/supabase.js';
 
 describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
@@ -69,6 +84,93 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from).toHaveBeenCalledWith('des_models');
       expect(supabase.from('des_models').eq).toHaveBeenCalledWith('visibility', 'public');
       expect(supabase.from('des_models').order).toHaveBeenCalledWith('updated_at', { ascending: false });
+    });
+  });
+
+  describe('Profiles and user settings', () => {
+    it('normalizes platform roles and exposes isAdmin without model permissions', () => {
+      expect(normalizeProfileRole('admin')).toBe('admin');
+      expect(normalizeProfileRole('owner')).toBe('user');
+      expect(normalizeProfile({ id: 'u1', role: 'admin' })).toEqual(
+        expect.objectContaining({ role: 'admin', isAdmin: true })
+      );
+      expect(normalizeProfile({ id: 'u2', role: 'viewer' })).toEqual(
+        expect.objectContaining({ role: 'user', isAdmin: false })
+      );
+    });
+
+    it('fetches profiles with normalized platform roles', async () => {
+      supabase.from('profiles').select.mockResolvedValueOnce({
+        data: [
+          { id: 'u1', full_name: 'Admin', role: 'admin' },
+          { id: 'u2', full_name: 'Owner word is not a platform role', role: 'owner' },
+        ],
+        error: null,
+      });
+
+      const profiles = await fetchProfiles();
+
+      expect(supabase.from).toHaveBeenCalledWith('profiles');
+      expect(supabase.from('profiles').select).toHaveBeenCalledWith('id, full_name, initials, color, role');
+      expect(profiles).toEqual([
+        expect.objectContaining({ id: 'u1', role: 'admin', isAdmin: true }),
+        expect.objectContaining({ id: 'u2', role: 'user', isAdmin: false }),
+      ]);
+    });
+
+    it('returns default settings when no settings row exists', async () => {
+      supabase.from('user_settings').select.mockReturnThis();
+      supabase.from('user_settings').eq.mockReturnThis();
+      supabase.from('user_settings').single.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'PGRST116', message: 'No rows' },
+      });
+
+      const result = await fetchUserSettings('u1');
+
+      expect(supabase.from).toHaveBeenCalledWith('user_settings');
+      expect(supabase.from('user_settings').eq).toHaveBeenCalledWith('user_id', 'u1');
+      expect(result).toEqual({
+        schemaVersion: 1,
+        settings: { ui: {}, execute: {}, ai: {} },
+      });
+    });
+
+    it('normalizes stored user settings with defaults', () => {
+      expect(normalizeUserSettings({
+        schema_version: 2,
+        settings_json: { ui: { density: 'compact' } },
+      })).toEqual({
+        schemaVersion: 2,
+        settings: { ui: { density: 'compact' }, execute: {}, ai: {} },
+      });
+    });
+
+    it('upserts user settings by current user id', async () => {
+      supabase.from('user_settings').upsert.mockReturnThis();
+      supabase.from('user_settings').select.mockReturnThis();
+      supabase.from('user_settings').single.mockResolvedValueOnce({
+        data: { schema_version: 1, settings_json: { ui: { density: 'compact' } } },
+        error: null,
+      });
+
+      const result = await saveUserSettings('u1', { ui: { density: 'compact' } });
+
+      expect(supabase.from).toHaveBeenCalledWith('user_settings');
+      expect(supabase.from('user_settings').upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          user_id: 'u1',
+          schema_version: 1,
+          settings_json: expect.objectContaining({ ui: { density: 'compact' }, execute: {}, ai: {} }),
+          updated_at: expect.any(String),
+        })
+      );
+      expect(result.settings.ui).toEqual({ density: 'compact' });
+    });
+
+    it('rejects saving settings without a user id', async () => {
+      await expect(saveUserSettings('', {})).rejects.toThrow('User id is required');
+      expect(supabase.from).not.toHaveBeenCalled();
     });
   });
 

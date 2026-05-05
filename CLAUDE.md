@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-04 | Reflects: Sprint 6 complete + ADR-007 + Known Issues*
+*Last updated: 2026-05-05 | Reflects: Sprint 7A architecture decisions + ADR-008/ADR-009 + Known Issues*
 
 ---
 
@@ -20,7 +20,7 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 |---|---|---|---|
 | Frontend framework | React | 18.3.1 | Functional components only. No class components. |
 | Build tool | Vite | 5.4.0 | ESM throughout |
-| Language | JavaScript (JSX) | — | No TypeScript. No linter currently installed. |
+| Language | JavaScript (JSX) + incremental TypeScript | — | Existing JS/JSX remains valid. TypeScript is allowed for domain/schema boundaries under ADR-009. No linter currently installed. |
 | Styling | Inline style objects | — | No CSS classes. No CSS framework. Tokens in `ui/shared/tokens.js` |
 | Database / auth | Supabase JS client | 2.45.0 | PostgreSQL backend. Auth via Supabase Auth. |
 | Test runner | Vitest | 1.6.0 | Engine layer only. Node environment. |
@@ -82,6 +82,7 @@ project root
 - `src/ui/` components never import engine internals directly, except `buildEngine()` which is called only from `execute/index.jsx`.
 - All Supabase access goes through `src/db/models.js` or `src/db/supabase.js`. Never query Supabase directly from a UI component.
 - `tokens.js` is the single source of truth for all colours, spacing, and font sizes. Never hardcode style values.
+- TypeScript is permitted incrementally for shared contracts and low-risk modules. Do not start a broad conversion without an explicit migration task.
 
 ---
 
@@ -576,7 +577,7 @@ These are open defects from the audit. Do not work around them — fix them.
 
 ## 11. Coding Conventions
 
-### JavaScript / JSX
+### JavaScript / JSX / TypeScript
 
 ```javascript
 // Component names: PascalCase
@@ -589,7 +590,8 @@ export const ModelCard = ({ model }) => { ... }
 // No comments unless the WHY is non-obvious
 // Code should be self-explanatory from naming
 
-// No TypeScript — plain JSX throughout
+// TypeScript is allowed incrementally under ADR-009
+// Prefer first TS work at domain/schema boundaries, not large UI conversions
 // No ESLint currently — this will be added in Sprint 2
 ```
 
@@ -1184,6 +1186,8 @@ This prevents silent architectural drift — the most common way AI-assisted pro
 | ADR-005 | Queue discipline lookup by entity type name | Accepted — interim | Sprint 1/2 | §6, §10 |
 | ADR-006 | Replication runner architecture | Accepted | Sprint 4 | §21 |
 | ADR-007 | Three authoring modes over one canonical model | Accepted | Sprint 6 planning | §21 |
+| ADR-008 | Platform roles and user settings, with SaaS/LLM follow-ons | Accepted | Sprint 7A | §21 |
+| ADR-009 | Reassess JavaScript-only implementation and TypeScript adoption | Accepted | Sprint 7A | §2, §21 |
 
 ---
 
@@ -1267,6 +1271,8 @@ UI / UX
 | Safe evaluator strategy | `docs/decisions/ADR-003-safe-evaluator-strategy.md` | Before any change to condition evaluation or expression parsing |
 | Seeded PRNG choice | `docs/decisions/ADR-004-mulberry32-prng.md` | Before changing the RNG or adding sampling call sites |
 | Queue discipline lookup (interim) | `docs/decisions/ADR-005-queue-discipline-lookup.md` | Sprint 2 Task 1 — must be read before touching SEIZE or waitingOf |
+| Platform roles and user settings, with SaaS/LLM follow-ons | `docs/decisions/ADR-008-platform-roles-saas-llm-configuration.md` | Before adding admin features, user settings, tenancy/workspace logic, or LLM provider configuration |
+| Incremental TypeScript adoption | `docs/decisions/ADR-009-typescript-reassessment.md` | Before adding TypeScript tooling or beginning schema-heavy/domain-boundary refactors |
 | Build plan with sprint features and prompts | `docs/DES_Studio_Build_Plan.md` | Start of every sprint — read current sprint section |
 | Full codebase audit findings | `docs/AUDIT.md` | When investigating a known issue — check audit ref before changing |
 
@@ -1282,6 +1288,8 @@ UI / UX
 | Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results: workers, batches, CI dashboard | 294 passing | CI contains 9.0 |
 | Sprint 5 | ✅ Complete | 2026-05-04 | Polish, Export & Production | 334 passing | CI contains 9.0 |
 | Sprint 6 | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis | 343 passing | N/A |
+| Sprint 7A | ✅ Complete | 2026-05-05 | Platform Foundation: Roles, Settings & TypeScript | Docs only | N/A |
+| Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation | 33 focused | N/A |
 
 ---
 
@@ -1291,9 +1299,31 @@ UI / UX
 
 Goal: Add time-varying arrival rates and resource shift schedules on top of the canonical model schema used by all authoring modes.
 
-**Prerequisites:** Sprint 6 exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 7 feature prompts.
+**Prerequisites:** Sprint 7B exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 7 feature prompts.
 
-### Recently Completed — Sprint 6
+### Recently Completed — Sprint 7A
+
+Sprint 7A completed on 2026-05-05.
+
+- Accepted ADR-008 for near-term platform roles and durable user settings.
+- `profiles.role` is the platform-role source of truth with initial roles `user` and `admin`.
+- Model-level owner/editor/viewer access remains separate from platform roles.
+- Durable user preferences should use a dedicated `user_settings` table.
+- SaaS tenancy/workspaces and LLM provider switching are explicitly deferred follow-on architecture decisions.
+- Accepted ADR-009: TypeScript is allowed incrementally, starting with schema/domain contracts rather than broad UI conversion.
+
+### Recently Completed — Sprint 7B
+
+Sprint 7B completed on 2026-05-05.
+
+- Added Supabase migration for `profiles.role`, `is_platform_admin()`, and `user_settings`.
+- Added owner-only `user_settings` RLS policies and updated timestamp trigger.
+- Added `fetchUserSettings()` and `saveUserSettings()` DB wrappers.
+- Normalized profile roles in the DB layer and exposed `isAdmin` without changing model permissions.
+- Added TypeScript tooling, `npm run typecheck`, and first typed contracts for model JSON, run/result payloads, and user settings.
+- Focused tests passed: `npm test -- db onboarding model-export contracts`.
+
+### Previously Completed — Sprint 6
 
 Sprint 6 completed on 2026-05-04.
 
@@ -1305,6 +1335,13 @@ Sprint 6 completed on 2026-05-04.
 - Stored `ANTHROPIC_API_KEY` as a Supabase Edge Function secret.
 - Installed the Supabase CLI as a local dev dependency.
 - Added LLM prompt tests and Execute panel AI tests.
+
+### Sprint 7A Completion Gate
+
+```text
+git diff --check -> succeeds
+No product code changed
+```
 
 ### Sprint 6 Completion Gate
 
@@ -1322,12 +1359,20 @@ npm run build  -> succeeds
 - Provide cancellation for active replication batches.
 - See `docs/decisions/ADR-006-replication-runner-architecture.md`.
 - No committed schema file confirms `simulation_runs` cascade on model delete; carry this as a data integrity risk until the next schema migration.
+- ADR-008 is accepted: `profiles.role` stores platform roles (`user`, `admin`) and durable user settings belong in a dedicated `user_settings` table.
+- ADR-009 is accepted: TypeScript may be introduced incrementally for shared contracts/domain boundaries. Existing JavaScript remains valid.
+- Sprint 7B implemented the accepted ADR-008/ADR-009 foundation before dynamic distributions.
 
 ### Future-Claude Notes
 
 - Sprint 6 LLM analysis is implemented in `src/ui/execute/index.jsx`, `src/llm/prompts.js`, `src/llm/apiClient.js`, and `supabase/functions/llm-proxy/index.ts`.
 - Do not introduce client-side LLM API keys. `ANTHROPIC_API_KEY` belongs only in Supabase Edge Function secrets.
 - `llm-proxy` is deployed to Supabase project `znkknldzdfajcrpabtmg`.
+- Treat the current Anthropic-specific proxy as an implementation, not the final architecture. Provider-neutral LLM configuration is deferred from Sprint 7A but should remain visible before Sprint 8 implementation.
+- Do not add local-only user settings that would need to follow a user across devices. Use the ADR-008 `user_settings` direction.
+- Do not add tenant/workspace assumptions ad hoc. SaaS tenancy is not part of Sprint 7A and needs a later explicit schema/RLS planning pass.
+- Execute panel is an MVP surface. Execute UX redesign is not part of Sprint 7A; keep it as a later design/refinement sprint.
+- Sprint 7 may use or extend the typed contracts, but broad TypeScript conversion remains out of scope.
 - ADR-007 establishes the product architecture for model creation: Forms/Tabs, AI Generated Model, and Visual Designer are three authoring modes over one canonical `model_json`.
 - Do not build the old split-pane SVG hybrid visual designer as a bridge phase; plan the visual designer as the final graph-first authoring surface.
 - Keep model import/export validation compatible with the current model JSON shape and the first-run M/M/1 sample in `src/App.jsx`.

@@ -241,6 +241,7 @@ export default function App(){
   useEffect(()=>{loadData()},[loadData])
 
   const uid=session?.user?.id
+  const isAdmin=profile?.isAdmin===true
   const signOut=()=>supabase.auth.signOut()
 
   const handleOpenModel = useCallback((model) => {
@@ -378,7 +379,7 @@ export default function App(){
             onBack={()=>{setOpenId(null);loadData()}}
             onRefresh={loadData}
             overrides={{
-              isOwner,canEdit,profiles,userId:uid,
+              isOwner,canEdit,profiles,userId:uid,isAdmin,
               onSave:async(m)=>{await saveModel(m,uid);await loadData()},
               onDelete:async(id)=>{await deleteModel(id,uid)},
               onSetVisibility:setVisibility,

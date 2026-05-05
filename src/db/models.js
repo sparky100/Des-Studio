@@ -5,6 +5,37 @@
 
 import { supabase } from "./supabase.js";
 
+export const DEFAULT_USER_SETTINGS = Object.freeze({
+  ui: {},
+  execute: {},
+  ai: {},
+});
+
+const PLATFORM_ROLES = new Set(["user", "admin"]);
+
+export function normalizeProfileRole(role) {
+  return PLATFORM_ROLES.has(role) ? role : "user";
+}
+
+export function normalizeProfile(profile = {}) {
+  const role = normalizeProfileRole(profile.role);
+  return {
+    ...profile,
+    role,
+    isAdmin: role === "admin",
+  };
+}
+
+export function normalizeUserSettings(row = {}) {
+  return {
+    schemaVersion: row.schema_version ?? 1,
+    settings: {
+      ...DEFAULT_USER_SETTINGS,
+      ...(row.settings_json || {}),
+    },
+  };
+}
+
 // ── Row normalisation ─────────────────────────────────────────────────────────
 export function norm(r) {
   return {
@@ -103,7 +134,51 @@ export async function fetchProfiles() {
     .from("profiles")
     .select("id, full_name, initials, color, role");
   if (error) throw error;
-  return data || [];
+  return (data || []).map(normalizeProfile);
+}
+
+export async function fetchUserSettings(userId) {
+  if (!userId) {
+    return normalizeUserSettings();
+  }
+
+  const { data, error } = await supabase
+    .from("user_settings")
+    .select("schema_version, settings_json")
+    .eq("user_id", userId)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") {
+      return normalizeUserSettings();
+    }
+    throw error;
+  }
+
+  return normalizeUserSettings(data);
+}
+
+export async function saveUserSettings(userId, settings = {}, schemaVersion = 1) {
+  if (!userId) {
+    throw new Error("User id is required to save user settings.");
+  }
+
+  const { data, error } = await supabase
+    .from("user_settings")
+    .upsert({
+      user_id: userId,
+      schema_version: schemaVersion,
+      settings_json: {
+        ...DEFAULT_USER_SETTINGS,
+        ...(settings || {}),
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .select("schema_version, settings_json")
+    .single();
+
+  if (error) throw error;
+  return normalizeUserSettings(data);
 }
 
 export async function saveModel(model, userId) {

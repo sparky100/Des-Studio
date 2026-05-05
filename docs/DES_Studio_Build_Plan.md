@@ -31,6 +31,59 @@ Claude Code must read the relevant existing files before touching anything.
 
 ---
 
+## Direction of Travel
+
+DES Studio is moving from a working Forms/Tabs DES modeller into a richer modelling platform with three authoring modes over one canonical `model_json`: manual Forms/Tabs, AI Generated Model, and Visual Designer. The immediate priority is to put the small platform foundation in place before the next schema-heavy modelling sprint.
+
+```mermaid
+flowchart LR
+  PS["Pre-Sprint<br/>Audit + setup"] --> S1["Sprint 1<br/>Engine safety<br/>XSS, RNG, validation"]
+  S1 --> S2["Sprint 2<br/>Editor completeness<br/>Predicate builder, undo, imports"]
+  S2 --> S3["Sprint 3<br/>Experiment controls<br/>Warm-up, termination, fork runs"]
+  S3 --> S4["Sprint 4<br/>Replication + results<br/>Workers, batches, CI"]
+  S4 --> S5["Sprint 5<br/>Production polish<br/>Exports, accessibility, onboarding"]
+  S5 --> S6["Sprint 6<br/>AI results insights<br/>LLM proxy, explain, compare"]
+  S6 --> S7A["Sprint 7A<br/>Architecture decisions<br/>Roles, settings, TypeScript"]
+  S7A --> S7B["Sprint 7B<br/>Current next<br/>Implement platform foundation"]
+  S7B --> S7["Sprint 7<br/>Dynamic DES<br/>Time-varying arrivals + resources"]
+  S7 --> S8A["Sprint 8A<br/>LLM provider preflight<br/>Provider-neutral proxy"]
+  S8A --> S8["Sprint 8<br/>AI model authoring<br/>Natural language to model_json"]
+  S8 --> S9A["Sprint 9A<br/>Visual preflight<br/>Canvas + graph metadata"]
+  S9A --> S9["Sprint 9<br/>Visual Designer<br/>Graph-first authoring"]
+
+  classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
+  classDef next fill:#173447,stroke:#22d3ee,color:#ecfeff;
+  classDef later fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
+  class PS,S1,S2,S3,S4,S5,S6,S7A done;
+  class S7B next;
+  class S7,S8A,S8,S9A,S9 later;
+```
+
+### Roadmap Snapshot
+
+| Stage | Status | Summary |
+|---|---|---|
+| Foundations and core DES engine | ✅ Complete | Engine safety, safe evaluation, seeded reproducibility, validation, editors, experiment controls, replication, results, exports, and accessibility are in place. |
+| AI results analysis | ✅ Complete | Read-only AI Insights uses a Supabase Edge Function proxy; user-facing run labels and history exports are implemented. |
+| Platform foundation | 🔄 Current next | Sprint 7B implements the accepted 7A decisions: platform role/settings persistence and TypeScript tooling/contracts. |
+| Dynamic modelling | ⬜ Planned | Sprint 7 adds time-varying arrival rates and resource capacity schedules. |
+| AI model creation | ⬜ Planned | Sprint 8A prepares provider-neutral LLM routing; Sprint 8 adds natural-language model authoring. |
+| Visual authoring | ⬜ Planned | Sprint 9A settles canvas/graph metadata; Sprint 9 adds graph-first Visual Designer authoring. |
+
+### Key Issues and Watchpoints
+
+| Area | Status | Direction |
+|---|---|---|
+| Shift capacity mapping | ⬜ Open | Must decide how server shift capacity maps onto the current server entity model before Sprint 7 F7.4. |
+| TypeScript adoption | ✅ Decided | ADR-009 permits incremental TypeScript at schema/domain boundaries; no broad rewrite. Sprint 7B adds tooling/contracts. |
+| Roles and settings | ✅ Decided, not implemented | ADR-008 defines `profiles.role` and a dedicated `user_settings` table. Sprint 7B implements the foundation. |
+| LLM provider coupling | ⏭ Deferred to Sprint 8A | Current Anthropic proxy is acceptable for Sprint 6 results analysis; provider-neutral routing should happen before Sprint 8 model authoring. |
+| SaaS tenancy/workspaces | ⏭ Deferred | Important, but not required before Sprints 7-9 unless product requirements change. Needs separate schema/RLS planning. |
+| Execute running-model UX | ⏭ Deferred | MVP works; redesign should be handled in a dedicated UX/refinement sprint. |
+| Visual Designer canvas decision | ⬜ Open | React Flow or alternative must be reviewed before Sprint 9 implementation. |
+
+---
+
 ## Document History
 
 | Version | Date | Change |
@@ -59,6 +112,11 @@ Claude Code must read the relevant existing files before touching anything.
 | 1.21 | 2026-05-04 | Sprint 5 complete — Polish, Export & Production. Full test suite passes: 31 files, 334 tests. Production build succeeds. |
 | 1.22 | 2026-05-04 | ADR-007 accepted. Planning revised around three authoring modes over one canonical `model_json`: Forms/Tabs, AI Generated Model, and Visual Designer. The old split-pane SVG hybrid designer is retired; future visual designer work should target the final graph-first authoring surface directly. |
 | 1.23 | 2026-05-04 | Sprint 6 complete — AI assistant panel, prompt builders, streaming API client, deployed Supabase `llm-proxy` Edge Function, comparison/sensitivity actions, and tests added. Full suite passes: 32 files, 343 tests. Production build succeeds. |
+| 1.24 | 2026-05-05 | Added platform architecture planning before further feature expansion: proposed ADR-008 for roles/SaaS/LLM configuration, proposed ADR-009 for TypeScript reassessment, and Sprint 7A architecture-readiness work. Sprint 7A scope narrowed to admin roles, user settings, and TypeScript reassessment; SaaS tenancy, LLM provider switching, architecture health review, and Execute UX direction remain planned follow-ons. |
+| 1.25 | 2026-05-05 | Sprint 7A complete — accepted ADR-008 for platform roles/user settings and ADR-009 for incremental TypeScript adoption. CLAUDE.md updated; Sprint 7 restored as current implementation sprint. |
+| 1.26 | 2026-05-05 | Replanned post-7A sequencing. Added Sprint 7B as the immediate implementation foundation for roles, user settings, and TypeScript tooling/contracts before Sprint 7. Added Sprint 8A LLM provider architecture preflight before AI model authoring. |
+| 1.27 | 2026-05-05 | Added front-of-document roadmap graphic and status snapshot to make sprint sequence, current direction, and key open issues explicit. |
+| 1.28 | 2026-05-05 | Sprint 7B complete — added platform role/settings migration, user settings DB wrappers, `isAdmin` profile exposure, TypeScript tooling, first typed contracts, and tests. Sprint 7 is now current next. |
 
 ---
 
@@ -73,6 +131,8 @@ Claude Code must read the relevant existing files before touching anything.
 | Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results (Workers, Batches, CI Dashboard). | 294 (294) | CI contains 9.0 | Success | Bounded worker pool implemented. `batch_id` stored inside `results_json` because no committed schema column exists. |
 | Sprint 5 | ✅ Complete | 2026-05-04 | Polish, Export & Production. | 334 (334) | CI contains 9.0 | Success | Error boundaries, model/results import/export, run stats, avg service mapping, accessibility, onboarding, and owner-only delete complete. |
 | Sprint 6 | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis. | 343 (343) | N/A | Success | AI insights panel and hosted Supabase `llm-proxy` deployed. |
+| Sprint 7A | ✅ Complete | 2026-05-05 | Platform Foundation: Roles, Settings & TypeScript. | Docs only | N/A | N/A | ADR-008 and ADR-009 accepted; SaaS tenancy, LLM provider switching, architecture health review, and Execute UX redesign deferred. |
+| Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation. | 33 focused | N/A | Success | Role/settings persistence, DB wrappers, `isAdmin`, TypeScript tooling/contracts complete. |
 
 ---
 
@@ -83,7 +143,10 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint | Product focus | Authoring mode impact |
 |---|---|---|
 | Sprint 6 | LLM Integration & Results Analysis | Adds read-only AI interpretation of completed runs; does not modify models |
+| Sprint 7A | Platform Foundation: Roles, Settings & TypeScript | Decides admin/user role foundations, durable user settings, and TypeScript posture before further expansion |
+| Sprint 7B | Platform Foundation Implementation | Implements the minimal role/settings/TypeScript foundation from Sprint 7A before further schema-heavy modelling work |
 | Sprint 7 | Dynamic Distributions & Time-Varying Resources | Extends the canonical model schema used by all authoring modes |
+| Sprint 8A | LLM Provider Architecture Preflight | Introduces provider-neutral server-side LLM routing before AI model authoring |
 | Sprint 8 | AI Generated Model Authoring | Adds the second authoring mode: natural-language model proposals validated before apply |
 | Sprint 9 | Visual Designer Authoring | Adds the third authoring mode: graph-first canvas editing over the same canonical model |
 
@@ -182,6 +245,15 @@ Claude Code must never rewrite a working component — only extend or fix it.
 | Visual Designer — node palette and connection rules | S9 |
 | Visual Designer — graph layout metadata for `model_json` | S9 |
 | Visual Designer — inspector integration with existing editor components | S9 |
+| Admin role and protected admin surface | S7A |
+| User settings persistence | S7A |
+| Platform role/settings persistence implementation | S7B |
+| TypeScript tooling and first schema contracts | S7B |
+| SaaS tenancy/workspace model | Post-7A |
+| Provider-neutral LLM configuration | S8A |
+| Admin-selectable LLM provider/model | S8A |
+| TypeScript adoption decision and migration plan | S7A |
+| Execute running-model UX redesign direction | Dedicated UX/design sprint |
 
 ---
 
@@ -2650,12 +2722,191 @@ These refinements came from local UI review after Sprint 6 was implemented.
 
 ---
 
+## Sprint 7A — Platform Foundation: Roles, Settings & TypeScript
+
+**Goal:** Establish the first platform foundations before further feature expansion: user/admin roles, durable user settings, and a decision on whether to adopt TypeScript incrementally.
+
+**Status:** ✅ Complete | **Started:** 2026-05-05 | **Completed:** 2026-05-05
+**Prerequisite:** Sprint 6 exit gate passed. This sprint should be completed before Sprint 8 AI authoring and preferably before Sprint 7 schema-heavy time-varying work.
+
+| Feature | Audit Status | Action |
+|---|---|---|
+| F7A.1 — Authorization model v2 | ✅ | Accepted: `profiles.role` stores platform role (`user`, `admin`); model owner/editor/viewer access remains separate |
+| F7A.2 — User settings strategy | ✅ | Accepted: durable preferences belong in a dedicated `user_settings` table with owner-only access by default |
+| F7A.3 — TypeScript reassessment | ✅ | Accepted: retire JavaScript-only rule and adopt TypeScript incrementally at schema/domain boundaries |
+| F7A.4 — Documentation and planning updates | ✅ | ADR-008, ADR-009, CLAUDE.md, and roadmap updated; follow-on decisions deferred explicitly |
+
+### Design Principles for Sprint 7A
+
+- Keep this sprint deliberately narrow: roles/admin, user settings, and TypeScript decision only.
+- Do not implement a partial SaaS tenancy model by accident. Tenancy/workspaces remain a follow-on architecture decision.
+- Do not implement LLM provider switching in this sprint. Provider-neutral LLM architecture remains a follow-on architecture decision.
+- Do not begin a TypeScript rewrite. ADR-009 is about incremental adoption and boundary-first migration.
+- Preserve the build-on rule. Architecture changes should reduce risk without rewriting working features.
+
+### Sprint 7A Planning Prompt *(run in claude.ai)*
+
+```text
+We are starting Sprint 7A of DES Studio.
+
+Sprint 7A is a narrow architecture-readiness sprint before further feature expansion.
+It addresses:
+  1. user/admin roles
+  2. durable user settings
+  3. TypeScript reassessment
+
+Read:
+  - CLAUDE.md
+  - docs/DES_Studio_Build_Plan.md
+  - docs/decisions/ADR-001-auth-model.md
+  - docs/decisions/ADR-002-public-model-runs.md
+  - docs/decisions/ADR-008-platform-roles-saas-llm-configuration.md
+  - docs/decisions/ADR-009-typescript-reassessment.md
+  - src/App.jsx
+  - src/db/models.js
+
+Tasks:
+  F7A.1 — Propose authorization model v2 with platform admin role and model-level access implications
+  F7A.2 — Propose durable user settings strategy and first persistence shape
+  F7A.3 — Reassess JavaScript-only rule and recommend accept/reject for incremental TypeScript adoption
+  F7A.4 — Update ADRs, CLAUDE.md, and this build plan with accepted decisions and deferred questions
+
+Definition of done:
+  - ADR-008 is revised to cover roles/admin and user settings as the accepted near-term scope
+  - ADR-009 is accepted or rejected with rationale
+  - SaaS tenancy, LLM provider switching, architecture health review, and Execute UX are explicitly deferred
+  - CLAUDE.md Current Sprint and Future-Claude notes reflect the decisions
+  - No product feature implementation is required unless a small documentation helper is needed
+```
+
+### Sprint 7A Completion Gate
+
+```bash
+# Documentation/architecture sprint: no code build required unless code is changed.
+git diff --check                      # Succeeds
+# Manual: confirm ADR register and Open Architectural Decisions agree
+# Manual: confirm Sprint 7, Sprint 8, and Sprint 9 prerequisites reflect accepted decisions
+```
+
+### Sprint 7A Completion Notes
+
+- ADR-008 accepted. Platform roles use `profiles.role`; initial values are `user` and `admin`.
+- Model-level ownership/access remains unchanged: `owner_id`, `access`, and `visibility` continue to govern model permissions.
+- User settings should use a dedicated `user_settings` table, not local storage or display-profile fields.
+- ADR-009 accepted. TypeScript is allowed incrementally, but no broad conversion should occur without a migration task.
+- SaaS tenancy/workspaces, LLM provider switching, architecture health review, and Execute UX redesign remain deferred follow-on work.
+
+---
+
+## Post-7A Sequencing Decision
+
+**Decision:** implement a small platform foundation sprint now, before Sprint 7, but defer broader platform/SaaS work until after the modelling roadmap checkpoints.
+
+**Rationale:**
+
+- Sprint 7 changes model schema and distribution/runtime structures. Adding TypeScript tooling and first domain contracts before that work reduces schema drift risk.
+- Roles and user settings are low-scope persistence foundations that future admin/settings surfaces can build on without interrupting Sprint 7.
+- Full SaaS tenancy, LLM provider switching, and Execute UX redesign are larger product/architecture topics. They should not block time-varying modelling features unless their absence creates a direct implementation risk.
+
+**Sequence:**
+
+| Order | Sprint | Implement now? | Reason |
+|---|---|---|---|
+| 1 | Sprint 7B — Platform Foundation Implementation | Yes, before Sprint 7 | Small, low-risk persistence/type foundation from accepted ADRs |
+| 2 | Sprint 7 — Dynamic Distributions & Time-Varying Resources | Yes, after 7B | Schema-heavy modelling work benefits from typed contracts |
+| 3 | Sprint 8A — LLM Provider Architecture Preflight | Yes, before Sprint 8 | AI model authoring should not deepen Anthropic-only coupling |
+| 4 | Sprint 8 — AI Generated Model Authoring | Yes, after 8A | Builds second authoring mode over canonical model JSON |
+| 5 | Sprint 9A — Visual Designer Architecture Preflight | Optional before Sprint 9 | Decide canvas dependency and graph metadata if still open |
+| 6 | Sprint 9 — Visual Designer Authoring | Yes, after preflight | Builds third authoring mode |
+| Later | SaaS tenancy/workspaces | No, defer | Needs separate schema/RLS/billing-oriented architecture pass |
+| Later | Execute running-model UX redesign | No, defer | Important, but deserves a dedicated design/refinement sprint |
+
+---
+
+## Sprint 7B — Platform Foundation Implementation
+
+**Goal:** Implement the minimal platform foundation accepted in Sprint 7A without building full admin UI, SaaS tenancy, or broad TypeScript migration.
+
+**Status:** ✅ Complete | **Started:** 2026-05-05 | **Completed:** 2026-05-05
+**Prerequisite:** Sprint 7A exit gate passed. ADR-008 and ADR-009 accepted.
+
+| Feature | Audit Status | Action |
+|---|---|---|
+| F7B.1 — Profiles role migration | ✅ | Added Supabase migration for `profiles.role` default/check constraint and admin helper |
+| F7B.2 — User settings table | ✅ | Added `user_settings` migration with owner-only RLS and updated timestamp trigger |
+| F7B.3 — Settings DB wrappers | ✅ | Added `fetchUserSettings()` and `saveUserSettings()` through DB layer |
+| F7B.4 — App profile role normalization | ✅ | Normalized platform roles and exposed `isAdmin` without changing model permissions |
+| F7B.5 — TypeScript tooling baseline | ✅ | Added TypeScript dependency, `tsconfig.json`, and `npm run typecheck` |
+| F7B.6 — First typed contracts | ✅ | Added typed contracts for canonical model JSON, run/result payloads, and user settings |
+| F7B.7 — Tests | ✅ | Added DB wrapper/role/settings tests and contract tests |
+
+### Design Principles for Sprint 7B
+
+- Do not build a full admin UI.
+- Do not implement SaaS tenants/workspaces.
+- Do not convert large UI files to TypeScript.
+- Do not give admins implicit edit rights over private user models.
+- Keep TypeScript adoption boundary-first: contracts and tooling only.
+
+### Sprint 7B Planning Prompt *(run in claude.ai)*
+
+```text
+We are starting Sprint 7B of DES Studio.
+
+Sprint 7B implements the small platform foundation from Sprint 7A.
+
+Read:
+  - CLAUDE.md
+  - docs/DES_Studio_Build_Plan.md
+  - docs/decisions/ADR-008-platform-roles-saas-llm-configuration.md
+  - docs/decisions/ADR-009-typescript-reassessment.md
+  - src/App.jsx
+  - src/db/models.js
+  - tests/db/models.test.js
+  - tests/setup.js
+
+Tasks:
+  F7B.1 — Add schema/migration notes for profiles.role and user_settings
+  F7B.2 — Add DB wrappers for fetchUserSettings() and saveUserSettings()
+  F7B.3 — Normalize profile role and expose isAdmin in App state/overrides without changing model permissions
+  F7B.4 — Add TypeScript tooling baseline with allowJs and a type-check command
+  F7B.5 — Add first typed contract files for model JSON and run/result payloads
+  F7B.6 — Add focused tests for settings wrappers, role normalization, and contract exports
+
+Definition of done:
+  - No direct Supabase settings calls from UI components
+  - Admin role is detected but does not bypass model owner/editor access
+  - User settings persistence is represented in DB wrappers and tests
+  - TypeScript tooling is present but no broad conversion has occurred
+  - npm test passes for focused DB/UI tests
+  - npm run build succeeds
+```
+
+### Sprint 7B Completion Gate
+
+```bash
+npm test -- db onboarding model-export contracts  # 4 files, 33 tests passed
+npm run build                                    # Succeeds
+npm run typecheck                                # Succeeds
+# Manual: verify regular user profile still loads and model permissions are unchanged
+```
+
+### Sprint 7B Completion Notes
+
+- No full admin UI was added.
+- No SaaS tenancy/workspace model was added.
+- No large UI file was converted to TypeScript.
+- Admin status is exposed as `profile.isAdmin` / `isAdmin` only; model permissions still derive from owner/editor access.
+- `npm install --save-dev typescript` reported four moderate audit findings in existing dependency tree context; no audit fix was applied because that can introduce unrelated breaking changes.
+
+---
+
 ## Sprint 7 — Dynamic Distributions & Time-Varying Resources
 
 **Goal:** Enable modellers to represent systems where arrival rates and resource capacity change over simulated time. This is essential for realistic models of emergency departments, call centres, and any system with diurnal or shift-based patterns.
 
 **Status:** ⬜ Not started | **Started:** — | **Completed:** —
-**Prerequisite:** Sprint 5 exit gate passed. Sprint 7 does not depend on Sprint 6 and can proceed in parallel.
+**Prerequisite:** Sprint 7B exit gate passed. Sprint 7 may proceed with ADR-009 in force: schema-heavy work should use or extend typed model contracts where practical, but broad TypeScript conversion is still out of scope.
 
 **Architectural constraint:** All time-varying logic is scheduled as B-Events. No new Phase types are introduced. The Three-Phase engine (`engine/index.js`) is not restructured — it is extended via the existing B-Event mechanism.
 
@@ -3060,12 +3311,44 @@ npm run build                          # Succeeds
 
 ---
 
+## Sprint 8A — LLM Provider Architecture Preflight
+
+**Goal:** Prepare the LLM infrastructure for AI Generated Model Authoring without binding Sprint 8 more deeply to a single provider. This sprint keeps all provider keys server-side and introduces a provider-neutral request/response boundary.
+
+**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Prerequisite:** Sprint 7B complete. Complete this before Sprint 8 implementation.
+
+| Feature | Audit Status | Action |
+|---|---|---|
+| F8A.1 — Provider-neutral LLM request contract | ✗ | Define request/response shape for narrative, comparison, sensitivity, and model-builder calls |
+| F8A.2 — Edge Function provider router | ~ | Refactor `llm-proxy` internally so provider selection is server-side |
+| F8A.3 — Server-side model/provider configuration | ✗ | Add a simple server-side config path; no browser API keys |
+| F8A.4 — Browser API compatibility | ~ | Preserve existing `streamNarrative()` behavior while routing through the neutral contract |
+| F8A.5 — Tests and deployment checklist | ~ | Add prompt/proxy contract tests and update Supabase deployment checklist |
+
+### Design Principles for Sprint 8A
+
+- Do not expose provider API keys in browser code.
+- Do not build a full admin LLM settings UI unless explicitly scoped.
+- Preserve existing Sprint 6 AI results analysis behavior.
+- Keep model-builder prompts in Sprint 8 provider-neutral from the start.
+
+### Sprint 8A Completion Gate
+
+```bash
+npm test -- llm execute-panel
+npm run build
+# Manual: deploy llm-proxy and verify one AI Insights request still streams
+```
+
+---
+
 ## Sprint 8 — AI Generated Model Authoring
 
 **Goal:** Add the second model authoring mode from ADR-007. A modeller describes a system in natural language and receives a partially- or fully-configured DES model proposal. The LLM acts as a model-construction assistant: it parses the description, asks clarifying questions, proposes entity classes, queues, B-Events, C-Events, and distributions, and presents the result as canonical `model_json`. The modeller reviews a diff-preview before any changes are applied.
 
 **Status:** ⬜ Not started | **Started:** — | **Completed:** —
-**Prerequisite:** Sprint 6 (LLM API proxy infrastructure) must be complete. Sprint 8 depends on the Supabase Edge Function `llm-proxy` deployed in F6.2.
+**Prerequisite:** Sprint 8A complete. Sprint 8 depends on the Supabase Edge Function `llm-proxy`, but model-builder calls must use the provider-neutral contract introduced in Sprint 8A.
 
 **Architectural constraint:** ADR-007 applies. AI Generated Model is an authoring mode over the same canonical `model_json` used by Forms/Tabs and the future Visual Designer. The LLM produces a model JSON object conforming to the existing `addition1_entity_model.md` schema. It is validated by `validateModel()` before being applied. The engine, macros, and database schema are not modified. The LLM cannot bypass validation.
 
@@ -3406,12 +3689,35 @@ npm run build                          # Succeeds
 
 ---
 
+## Sprint 9A — Visual Designer Architecture Preflight
+
+**Goal:** Make the dependency and persistence decisions needed for the Visual Designer before building the graph-first authoring surface.
+
+**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Prerequisite:** Sprint 8 complete. Complete before Sprint 9 if `TBD-VISUAL-CANVAS` is still open.
+
+| Feature | Audit Status | Action |
+|---|---|---|
+| F9A.1 — Canvas dependency decision | ✗ | Decide React Flow vs alternative/no dependency and record ADR/update |
+| F9A.2 — Graph metadata persistence | ✗ | Decide whether `model_json.graph` is persisted, derived, or optional |
+| F9A.3 — Round-trip contract | ✗ | Define how Forms/Tabs, AI Generated Model, and Visual Designer preserve one canonical model |
+| F9A.4 — Inspector reuse strategy | ~ | Decide which existing editor components can be reused in the visual inspector |
+
+### Sprint 9A Completion Gate
+
+```bash
+git diff --check
+# Manual: confirm ADR-007 and visual design doc agree with dependency/metadata decision
+```
+
+---
+
 ## Sprint 9 — Visual Designer Authoring
 
 **Goal:** Add the third model authoring mode from ADR-007: a graph-first visual designer for building and editing DES models over the same canonical `model_json` used by Forms/Tabs and AI Generated Model authoring.
 
 **Status:** ⬜ Not started | **Started:** — | **Completed:** —
-**Prerequisite:** Sprint 8 complete. The AI Generated Model path should already prove that canonical model proposals can be validated and applied safely. React Flow or any equivalent graph/canvas dependency must be explicitly reviewed before implementation.
+**Prerequisite:** Sprint 9A complete if the canvas dependency or graph metadata decision is still open. The AI Generated Model path should already prove that canonical model proposals can be validated and applied safely. React Flow or any equivalent graph/canvas dependency must be explicitly reviewed before implementation.
 
 **Architectural constraint:** Do not implement the retired split-pane SVG hybrid designer. Sprint 9 should target the final graph-first authoring surface directly. The visual designer must not create a separate model format and must not bypass `validateModel()`.
 
@@ -3499,6 +3805,13 @@ npm run build                          # Succeeds
 |---|---|---|---|---|
 | Split-pane SVG hybrid visual designer | Visual designer v2.0 Phase 2 | Not scheduled | ADR-007 retired the temporary SVG bridge in favour of direct final Visual Designer authoring | Cancelled |
 | React Flow / canvas dependency decision | Visual designer planning | Sprint 9 | Dependency choice should be reviewed when the final visual designer sprint begins | Deferred |
+| SaaS tenancy/workspace model | Platform architecture planning | Post-7A architecture sprint | Sprint 7A intentionally handles roles/settings only; tenancy needs separate schema/RLS planning | Deferred |
+| Provider-neutral LLM configuration | Platform architecture planning | Sprint 8A | Sprint 7A intentionally excludes LLM provider switching; future LLM authoring should not deepen browser/provider coupling | Planned |
+| Admin-selectable LLM provider/model | Platform architecture planning | Sprint 8A or later admin UI sprint | Server-side provider configuration should be prepared before Sprint 8, but a full admin UI can wait | Planned |
+| Architecture health review | Platform architecture planning | Post-7A architecture sprint | Important but broader than the focused roles/settings/TypeScript sprint | Deferred |
+| Execute running-model UX redesign direction | Platform architecture planning | Dedicated UX/design sprint | Execute is MVP-good but needs a separate design pass before major redesign | Deferred |
+| Platform role/settings persistence implementation | Sprint 7A | Sprint 7B | ADR-008 is accepted; implement minimal DB/type foundation before Sprint 7 schema work | Planned |
+| TypeScript tooling and first schema contracts | Sprint 7A | Sprint 7B | ADR-009 is accepted; add tooling/contracts before schema-heavy model changes | Planned |
 
 ---
 
@@ -3508,6 +3821,8 @@ npm run build                          # Succeeds
 |---|---|---|---|
 | ADR-002 | Public model run permissions | Sprint 3 F3.8 | ✅ Accepted — fork model; see `docs/decisions/ADR-002-public-model-run-permissions.md` |
 | ADR-007 | Three authoring modes over one canonical model | Sprint 6 planning | ✅ Accepted — Forms/Tabs, AI Generated Model, and Visual Designer share canonical `model_json`; SVG hybrid retired |
+| ADR-008 | Platform roles and user settings, with SaaS/LLM follow-ons | Sprint 7A / later architecture work | ✅ Accepted — platform roles use `profiles.role`; user settings use dedicated table; tenancy/workspaces and LLM provider configuration are deferred follow-on decisions |
+| ADR-009 | Reassess JavaScript-only implementation and TypeScript adoption | Sprint 7A | ✅ Accepted — adopt TypeScript incrementally at schema/domain boundaries; no broad rewrite |
 | TBD-LLM-API | LLM API key handling — client-side vs Edge Function proxy | Sprint 6 F6.2 | ✅ Resolved in plan — use Supabase Edge Function proxy; create ADR if implementation changes |
 | TBD-LLM-CONV | LLM conversation persistence — session only vs Supabase | Sprint 8 F8.3 | ✅ Resolved in plan — session only React state; create ADR if persistence is added |
 | TBD-PIECEWISE-WARMUP | Piecewise distribution warm-up interaction — does warm-up reset the period position? | Sprint 7 F7.2 | ✅ Resolved in plan — no reset; schedule is time-indexed |
