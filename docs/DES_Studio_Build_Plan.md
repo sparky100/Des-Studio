@@ -3793,12 +3793,12 @@ npm run build
 **Status:** ⬜ Not started | **Started:** — | **Completed:** —
 **Prerequisite:** Sprint 8B complete. Complete before Sprint 9 if `TBD-VISUAL-CANVAS` is still open.
 
-| Feature | Audit Status | Action |
-|---|---|---|
-| F9A.1 — Canvas dependency decision | ✗ | Decide React Flow vs alternative/no dependency and record ADR/update |
-| F9A.2 — Graph metadata persistence | ✗ | Decide whether `model_json.graph` is persisted, derived, or optional |
-| F9A.3 — Round-trip contract | ✗ | Define how Forms/Tabs, AI Generated Model, and Visual Designer preserve one canonical model |
-| F9A.4 — Inspector reuse strategy | ~ | Decide which existing editor components can be reused in the visual inspector |
+| Feature                            | Audit Status | Action                                                                                      |
+| ---------------------------------- | ------------ | ------------------------------------------------------------------------------------------- |
+| F9A.1 — Canvas dependency decision | ✗            | Decide React Flow vs alternative/no dependency and record ADR/update                        |
+| F9A.2 — Graph metadata persistence | ✗            | Decide whether `model_json.graph` is persisted, derived, or optional                        |
+| F9A.3 — Round-trip contract        | ✗            | Define how Forms/Tabs, AI Generated Model, and Visual Designer preserve one canonical model |
+| F9A.4 — Inspector reuse strategy   | ~            | Decide which existing editor components can be reused in the visual inspector               |
 
 ### Sprint 9A Completion Gate
 
