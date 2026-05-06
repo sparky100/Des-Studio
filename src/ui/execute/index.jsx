@@ -1180,7 +1180,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid #333` }}>
             <div style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>SIMULATION LOG (NEWEST FIRST)</div>
             <div style={{ fontSize: 12, fontWeight: 700, color: "#a78bfa", fontFamily: FONT }}>
-              Steps: {log.length} | Clock: {currentSnap?.clock?.toFixed(2) || '—'}
+              Steps: {log.length} | Clock: {currentSnap?.clock?.toFixed(0) || '—'}
             </div>
           </div>
           <div style={{ maxHeight: 350, overflowY: 'auto' }}>
@@ -1189,11 +1189,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
                 <div key={i}>
                   {r.phase === "WARMUP" && (
                     <div style={{ padding: "12px 0", borderBottom: "1px solid #333", borderTop: "1px solid #333", margin: "8px 0", textAlign: "center", color: C.amber, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, background: "#78350f22" }}>
-                      ──── WARM-UP ENDED AT T={r.time?.toFixed(2)} ────
+                      ──── WARM-UP ENDED AT T={r.time?.toFixed(0)} ────
                     </div>
                   )}
                   <div style={{ fontSize: 12, fontFamily: "monospace", color: r.phase === "WARMUP" ? C.amber : "#10b981", borderBottom: "1px solid #1a1a1a", padding: "4px 0" }}>
-                    <span style={{ color: "#666" }}>[t={r.time?.toFixed(2)}]</span> <PhaseTag phase={r.phase} /> {r.message}
+                    <span style={{ color: "#666" }}>[t={r.time?.toFixed(0)}]</span> <PhaseTag phase={r.phase} /> {r.message}
                   </div>
                 </div>
               ))
