@@ -55,6 +55,43 @@ const twoStageModel = {
   ],
 };
 
+const minimalModel = {
+  entityTypes: [
+    { id: "customer", name: "Customer", role: "customer", attrDefs: [] },
+    { id: "server", name: "Server", role: "server", count: 1, attrDefs: [] },
+  ],
+  queues: [
+    { id: "waiting", name: "Waiting", customerType: "Customer", discipline: "FIFO" },
+  ],
+  stateVariables: [],
+  bEvents: [
+    {
+      id: "arrive",
+      name: "Customer Arrival",
+      scheduledTime: "0",
+      effect: "ARRIVE(Customer, Waiting)",
+      schedules: [],
+    },
+    {
+      id: "complete",
+      name: "Service Complete",
+      scheduledTime: "9999",
+      effect: "COMPLETE()",
+      schedules: [],
+    },
+  ],
+  cEvents: [
+    {
+      id: "start-service",
+      name: "Start Service",
+      priority: 1,
+      condition: "queue(Waiting).length > 0 AND idle(Server).count > 0",
+      effect: "ASSIGN(Waiting, Server)",
+      cSchedules: [{ eventId: "complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+    },
+  ],
+};
+
 describe("deriveGraphFromModel", () => {
   it("derives source, queue, activity, and sink nodes from the canonical model", () => {
     const graph = deriveGraphFromModel(twoStageModel);
@@ -108,6 +145,15 @@ describe("deriveGraphFromModel", () => {
       y: expect.any(Number),
     }));
     expect(layout.edges).toBeUndefined();
+  });
+
+  it("keeps the default source-to-sink path compact enough for unzoomed review", () => {
+    const graph = deriveGraphFromModel(minimalModel);
+    const xValues = graph.nodes.map(node => node.x);
+
+    expect(Math.min(...xValues)).toBe(40);
+    expect(Math.max(...xValues)).toBeLessThanOrEqual(610);
+    expect(graph.viewport).toEqual({ x: 0, y: 0, zoom: 1 });
   });
 
   it("supports generated object effects when deriving arrivals", () => {

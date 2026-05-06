@@ -24,7 +24,7 @@ function DesNode({ data, selected }) {
   const hasSource = data.type !== "sink";
   return (
     <div style={{
-      width: 190,
+      width: 160,
       minHeight: 78,
       background: C.surface,
       border: `1px solid ${selected ? color : `${color}66`}`,
@@ -142,7 +142,6 @@ export function FlowDiagramReactFlow({
         nodes={nodes.map(node => ({ ...node, selected: node.id === selectedNodeId }))}
         edges={edges}
         nodeTypes={nodeTypes}
-        fitView
         defaultViewport={graph.viewport || { x: 0, y: 0, zoom: 1 }}
         minZoom={0.3}
         maxZoom={1.5}

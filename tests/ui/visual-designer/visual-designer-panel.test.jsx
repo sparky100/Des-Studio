@@ -11,7 +11,7 @@ vi.mock('@xyflow/react', () => ({
   MarkerType: { ArrowClosed: 'arrowclosed' },
   MiniMap: () => <div data-testid="flow-minimap" />,
   Position: { Left: 'left', Right: 'right' },
-  ReactFlow: ({ nodes = [], edges = [], children, onNodeClick, onNodeDragStop, onConnect }) => {
+  ReactFlow: ({ nodes = [], edges = [], children, fitView, defaultViewport, onNodeClick, onNodeDragStop, onConnect }) => {
     const source = nodes.find(node => node.id.startsWith('source:'));
     const overflow = nodes.find(node => node.id === 'queue:consult-q');
     const first = nodes[0];
@@ -20,6 +20,8 @@ vi.mock('@xyflow/react', () => ({
         data-testid="react-flow"
         data-node-count={nodes.length}
         data-edge-count={edges.length}
+        data-fit-view={String(Boolean(fitView))}
+        data-viewport-zoom={defaultViewport?.zoom}
       >
         {children}
         {first && (
@@ -104,6 +106,8 @@ describe('Visual Designer shell', () => {
     expect(screen.getByLabelText('Visual Designer canvas')).toBeInTheDocument();
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-node-count', '6');
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-edge-count', '5');
+    expect(screen.getByTestId('react-flow')).toHaveAttribute('data-fit-view', 'false');
+    expect(screen.getByTestId('react-flow')).toHaveAttribute('data-viewport-zoom', '1');
     expect(screen.getAllByText('Patient Arrival').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Triage Queue').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Start Triage').length).toBeGreaterThan(0);
