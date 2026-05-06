@@ -291,6 +291,19 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
 
   const validation = useMemo(() => model ? validateModel(model) : { errors: [], warnings: [] }, [model]);
 
+  const handleRunSaved=()=>{
+    setModel(current=>({
+      ...current,
+      stats:{
+        ...(current.stats||{}),
+        runs:Number.isFinite(current.stats?.runs) ? current.stats.runs + 1 : 1,
+      },
+      statsLoading:false,
+      statsError:false,
+    }));
+    onRefresh?.();
+  };
+
   const exportJson = () => {
     const currentValidation = validateModel(model);
     if (currentValidation.errors.length > 0 && !window.confirm("This model has validation errors. Export anyway?")) {
@@ -336,7 +349,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
     {id:"overview",label:"Overview"},{id:"entities",label:"Entity Types"},
     {id:"state",label:"State Vars"},{id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},{id:"queues",label:"Queues"},
-    {id:"ai",label:"AI Generated Model"},
+    {id:"ai",label:"Use AI"},
     {id:"visual",label:"Visual Designer"},
     {id:"execute",label:"▶ Execute"},
     {id:"history",label:"History"},
@@ -368,7 +381,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
         <Tag label={`v${pkg.version}`} color={C.purple}/>
         {canEdit&&<Btn small variant="ghost" onClick={undo} disabled={!past.length} title="Undo (Ctrl+Z)">↩ Undo</Btn>}
         {canEdit&&<Btn small variant="ghost" onClick={redo} disabled={!future.length} title="Redo (Ctrl+Shift+Z)">↪ Redo</Btn>}
-        <Btn small variant="ghost" onClick={exportJson}>Export JSON</Btn>
+        <Btn small variant="ghost" onClick={exportJson}>Export Model</Btn>
         {saveStatus&&(
           <div role={saveStatus.state==="error"?"alert":"status"} style={{
             color: saveStatus.state==="error"?C.red:saveStatus.state==="success"?C.green:C.muted,
@@ -453,7 +466,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
             title="Execute panel crashed"
             message="The simulation controls could not render."
           >
-            <div style={{maxWidth:1080}}><ExecutePanel model={model} modelId={modelId} userId={overrides.userId}/></div>
+            <div style={{maxWidth:1080}}><ExecutePanel model={model} modelId={modelId} userId={overrides.userId} onRunSaved={handleRunSaved}/></div>
           </ErrorBoundary>
         )}
         {tab==="history"&&(

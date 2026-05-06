@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-06 | Reflects: Sprint 9 Visual Designer authoring + Sprint 9B UX hardening + ADR-010 + Known Issues*
+*Last updated: 2026-05-06 | Reflects: Sprint 9 Visual Designer authoring + Sprint 9B UX hardening/review observations + ADR-010 + Known Issues*
 
 ---
 
@@ -1368,6 +1368,20 @@ Current follow-on scope:
 - Improve palette placement affordances, fit/reset layout, and selected-node clarity.
 - Complete manual browser review for create/connect/edit/save/reload/execute.
 - Consider lazy-loading the Visual Designer if the React Flow bundle warning becomes a product concern.
+
+### Review Observations 0605 — Coherence Rules
+
+Manual review on 2026-05-06 identified a cross-surface coherence pass that should be handled before larger Visual Designer expansion:
+
+- UI labels should say `Import Model` / `Export Model`, not `Import JSON` / `Export JSON`.
+- The model authoring tab should say `Use AI`, not `AI Generated Model`.
+- B-event start behavior should be phrased as `Fire at start`; scheduled completion/reneging events should remain labelled as scheduled follow-ons.
+- User-facing B-event labels must spell out queues clearly, e.g. `Add Customer to Waiting Queue`.
+- User-facing C-event service labels should describe the service action, e.g. `Start service with Server and Customer from Waiting Queue`.
+- AI-generated proposals must infer `ARRIVE(Customer, Queue)` when an arrival pattern and a compatible queue are present.
+- AI-generated service C-events must infer `ASSIGN(Queue, Server)` from queue/idle conditions or explicit service fields.
+- AI-generated C-event follow-on B-event schedules should default `useEntityCtx` to true so `COMPLETE()` receives the customer/server context.
+- Model run counts should refresh immediately after a run history record is saved, while still using user-scoped run stats as the persisted source of truth.
 
 ### Recently Completed — Sprint 8B
 

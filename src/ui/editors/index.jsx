@@ -7,6 +7,10 @@ import { DISTRIBUTIONS } from "../../engine/distributions.js";
 // ── UI Polish Helpers ─────────────────────────────────────────────────────────
 const toTitleCase = s => s.trim().replace(/\b\w/g, c => c.toUpperCase());
 const displayEventName = name => String(name || "").replace(/\s*\((template|tmpl)\)\s*/gi, "").trim();
+const queueDisplayName = name => {
+  const text = String(name || "").trim();
+  return /queue$/i.test(text) ? text : `${text} Queue`;
+};
 
 const conditionOptions = (entityTypes, stateVariables=[], queues=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
@@ -57,7 +61,7 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[]) => {
     opts.push({label:'── Start service from queue ──', value:'', disabled:true});
     queues.forEach(q => {
       servers.forEach(s => {
-        opts.push({label:`Start ${q.customerType||'entity'} from ${q.name} with ${s}`, value:`ASSIGN(${q.name}, ${s})`});
+        opts.push({label:`Start service with ${s} and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`, value:`ASSIGN(${q.name}, ${s})`});
       });
     });
   }
@@ -65,7 +69,7 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[]) => {
   if(custs.length>0&&servers.length>0){
     opts.push({label:'── ASSIGN ──',value:'',disabled:true});
     custs.forEach(c=>servers.forEach(s=>{
-      opts.push({label:`Start ${c} with ${s}`,value:`ASSIGN(${c}, ${s})`});
+      opts.push({label:`Start service with ${s} and ${c}`,value:`ASSIGN(${c}, ${s})`});
     }));
   }
   // Scalar effects on state variables
@@ -92,7 +96,7 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[]) => {
       queues
         .filter(q => !q.customerType || normTypeName(q.customerType) === c)
         .forEach(q => {
-          opts.push({label:`Add ${c} to ${q.name}`, value:`ARRIVE(${c}, ${q.name})`});
+          opts.push({label:`Add ${c} to ${queueDisplayName(q.name)}`, value:`ARRIVE(${c}, ${q.name})`});
       });
     });
   } else {
@@ -496,7 +500,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 <input type="checkbox" checked={isStart}
                   onChange={e=>upd(i,"scheduledTime",e.target.checked?"0":"1")}
                   style={{accentColor:C.bEvent}}/>
-                Fire at simulation start (t=0)
+                Fire at start
               </label>
               {showTimeInput&&<>
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>t=</span>

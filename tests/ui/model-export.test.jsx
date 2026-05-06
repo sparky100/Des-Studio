@@ -47,10 +47,10 @@ describe('model JSON export', () => {
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
 
-  it('renders the Export JSON button for a loaded model', () => {
+  it('renders the Export Model button for a loaded model', () => {
     renderDetail();
 
-    expect(screen.getByRole('button', { name: /export json/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /export model/i })).toBeInTheDocument();
   });
 
   it('builds an export payload with metadata and model_json', () => {
@@ -85,7 +85,7 @@ describe('model JSON export', () => {
       entityTypes: [{ id: 'et1', name: '', role: 'customer', attrDefs: [] }],
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /export json/i }));
+    fireEvent.click(screen.getByRole('button', { name: /export model/i }));
 
     expect(confirmSpy).toHaveBeenCalledWith('This model has validation errors. Export anyway?');
     expect(URL.createObjectURL).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('model JSON export', () => {
   it('downloads and revokes the export object URL', () => {
     renderDetail();
 
-    fireEvent.click(screen.getByRole('button', { name: /export json/i }));
+    fireEvent.click(screen.getByRole('button', { name: /export model/i }));
 
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:des-studio-export');

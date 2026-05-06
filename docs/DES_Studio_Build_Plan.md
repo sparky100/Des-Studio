@@ -3942,15 +3942,18 @@ npm run build                          # Succeeds
 | F9B.5 — Palette and placement affordances | ~ | Improve drag/drop affordance, drop hints, fit/reset layout, and selected-node clarity |
 | F9B.6 — Browser review and round-trip hardening | ~ | Manually verify create/connect/edit/save/reload/execute and add regression tests for gaps |
 | F9B.7 — Bundle/code-splitting review | ⬜ | Consider lazy-loading Visual Designer to reduce main bundle size after React Flow integration |
+| F9B.8 — Review Observations 0605 coherence pass | 🔄 | Address manual-review findings: AI-generated ARRIVE/service defaults, follow-on entity context defaults, clearer import/export/AI labels, B/C-event wording, and model run-count refresh |
 
 ### Sprint 9B Completion Gate
 
 ```bash
 npm test -- visual-designer c-event-editor accessibility model-export
+npm test -- ai-generated-model-panel b-event-editor c-event-editor model-export model-import accessibility execute-panel
 npm run build
 # Manual: create, connect, edit resource/timing, save, reload, and execute a visual model
 # Manual: delete each node type and confirm dependencies are explained before mutation
 # Manual: invalid connections and validation warnings highlight the affected node
+# Manual: generate a simple queue with AI and confirm ARRIVE, ASSIGN, COMPLETE scheduling, and Pass Entity Context are populated
 ```
 
 ---

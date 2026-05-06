@@ -532,7 +532,7 @@ const AiAssistantPanel = ({
   );
 };
 
-const ExecutePanel = ({ model, modelId, userId }) => {
+const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
   const [log, setLog] = useState([]);
@@ -643,6 +643,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           .then(() => {
             setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
+            onRunSaved?.();
           })
           .catch(e => {
             setSaveStatus({ state: 'error', message: `✗ Save failed: ${e.message}` });
@@ -650,7 +651,7 @@ const ExecutePanel = ({ model, modelId, userId }) => {
           });
       }
     }
-  }, [userId, modelId, runLabel, warmupPeriod, maxSimTime, terminationMode, stopAuto]);
+  }, [userId, modelId, runLabel, warmupPeriod, maxSimTime, terminationMode, stopAuto, onRunSaved]);
 
   const doRunAll = useCallback(async () => {
     stopAuto();
@@ -733,9 +734,10 @@ const ExecutePanel = ({ model, modelId, userId }) => {
             });
             setSaveStatus({ state: 'success', message: '✓ Replication batch saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved." }]);
+            onRunSaved?.();
           } catch (e) {
             setSaveStatus({ state: 'error', message: `✗ Failed to save batch: ${e.message}` });
-            setLog(prev => [...prev, { phase: "ERROR", time: batchResult.snap.clock, message: `Database error: ${e.message}` }]);
+            setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
           } finally {
             runnerRef.current = null;
             setMode("done");
@@ -787,11 +789,12 @@ const ExecutePanel = ({ model, modelId, userId }) => {
       });
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
+      onRunSaved?.();
     } catch (e) {
       setSaveStatus({ state: 'error', message: `✗ Failed to save: ${e.message}` });
       setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
     }
-  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto]);
+  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;

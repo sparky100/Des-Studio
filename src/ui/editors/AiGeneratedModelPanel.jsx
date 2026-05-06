@@ -27,34 +27,45 @@ function unwrapProposedModel(proposedModel = {}) {
       ? entityType.attrDefs.map(normalizeAttrDef)
       : [],
   });
-  const normalizeBEvent = event => ({
-    ...event,
-    name: cleanGeneratedName(event.name),
-    scheduledTime: normalizeBEventScheduledTime(event),
-    effect: normalizeEffect(event.effect ?? event.effects ?? event.action ?? event.actions),
-    schedules: Array.isArray(event.schedules) ? event.schedules.map(normalizeSchedule) : [],
-  });
+  const queues = Array.isArray(source.queues) ? source.queues : [];
+  const entityTypes = Array.isArray(source.entityTypes) ? source.entityTypes.map(normalizeEntityType) : [];
+  const normalizeBEvent = event => {
+    const effect = normalizeBEventEffect(event, entityTypes, queues);
+    const schedules = Array.isArray(event.schedules)
+      ? event.schedules.map(schedule => normalizeSchedule(schedule, /\bARRIVE\(/i.test(effectText(effect)) ? event.id : ""))
+      : [];
+    return {
+      ...event,
+      name: cleanGeneratedName(event.name),
+      scheduledTime: normalizeBEventScheduledTime({ ...event, effect }),
+      effect,
+      schedules,
+    };
+  };
+  const bEvents = Array.isArray(source.bEvents) ? source.bEvents.map(normalizeBEvent) : [];
   const normalizeCEvent = event => {
-    const effect = normalizeEffect(event.effect ?? event.effects ?? event.action ?? event.actions);
+    const effect = normalizeCEventEffect(event, queues);
+    const cSchedules = Array.isArray(event.cSchedules)
+      ? event.cSchedules.map(normalizeCEventSchedule)
+      : Array.isArray(event.schedules)
+        ? event.schedules.map(normalizeCEventSchedule)
+        : [];
+    const nextSchedules = ensureCompletionEventEffects(cSchedules, bEvents);
     return {
       ...event,
       effect,
       condition: normalizeCEventCondition(event.condition, effect),
-      cSchedules: Array.isArray(event.cSchedules)
-      ? event.cSchedules.map(normalizeSchedule)
-      : Array.isArray(event.schedules)
-        ? event.schedules.map(normalizeSchedule)
-        : [],
+      cSchedules: nextSchedules,
     };
   };
   return {
     ...(proposedModel.name ? { name: proposedModel.name } : {}),
     ...(proposedModel.description ? { description: proposedModel.description } : {}),
-    entityTypes: Array.isArray(source.entityTypes) ? source.entityTypes.map(normalizeEntityType) : [],
+    entityTypes,
     stateVariables: Array.isArray(source.stateVariables) ? source.stateVariables : [],
-    bEvents: Array.isArray(source.bEvents) ? source.bEvents.map(normalizeBEvent) : [],
+    bEvents,
     cEvents: Array.isArray(source.cEvents) ? source.cEvents.map(normalizeCEvent) : [],
-    queues: Array.isArray(source.queues) ? source.queues : [],
+    queues,
   };
 }
 
@@ -85,6 +96,35 @@ function normalizeEffect(effect) {
 
 function effectText(effect) {
   return Array.isArray(effect) ? effect.filter(Boolean).join(";") : String(effect || "");
+}
+
+function firstCustomerType(entityTypes = []) {
+  return entityTypes.find(type => type.role === "customer")?.name || entityTypes[0]?.name || "Customer";
+}
+
+function firstQueueForCustomer(queues = [], customerType = "") {
+  return queues.find(queue => queue.customerType && queue.customerType === customerType)?.name
+    || queues[0]?.name
+    || "";
+}
+
+function eventLooksLikeArrival(event = {}) {
+  const text = `${event.name || ""} ${event.kind || ""} ${event.type || ""}`.toLowerCase();
+  return /arriv|inter-?arrival|arrival pattern/.test(text)
+    || (Array.isArray(event.schedules) && event.schedules.length > 0 && String(event.scheduledTime ?? event.time ?? "0") === "0");
+}
+
+function normalizeBEventEffect(event = {}, entityTypes = [], queues = []) {
+  const effect = normalizeEffect(event.effect ?? event.effects ?? event.action ?? event.actions);
+  if (effectText(effect).trim()) return effect;
+
+  const customer = event.customerType || event.entityType || firstCustomerType(entityTypes);
+  const queue = event.queue || event.queueName || event.targetQueue || firstQueueForCustomer(queues, customer);
+  if (eventLooksLikeArrival(event)) return queue ? `ARRIVE(${customer}, ${queue})` : `ARRIVE(${customer})`;
+
+  const name = String(event.name || "").toLowerCase();
+  if (/complete|finish|depart|sink/.test(name)) return "COMPLETE()";
+  return effect;
 }
 
 function normalizeBEventScheduledTime(event = {}) {
@@ -157,19 +197,58 @@ function normalizeAttrDef(attr = {}) {
   };
 }
 
-function normalizeSchedule(schedule = {}) {
+function normalizeSchedule(schedule = {}, fallbackEventId = "") {
   const normalized = normalizeDistribution(schedule, { dist: "Exponential", distParams: { mean: "1" } });
   return {
     ...schedule,
-    eventId: schedule.eventId || schedule.bEventId || schedule.targetEventId || schedule.target || "",
+    eventId: schedule.eventId || schedule.bEventId || schedule.targetEventId || schedule.target || fallbackEventId,
     dist: normalized.dist,
     distParams: normalized.distParams,
+  };
+}
+
+function normalizeCEventSchedule(schedule = {}) {
+  return {
+    ...normalizeSchedule(schedule),
+    useEntityCtx: schedule.useEntityCtx !== false,
   };
 }
 
 function assignParts(effect) {
   const match = effectText(effect).match(/ASSIGN\(([^,]+)\s*,\s*([^)]+)\)/i);
   return match ? { queueOrCustomer: match[1].trim(), server: match[2].trim() } : null;
+}
+
+function servicePartsFromCondition(condition) {
+  const text = conditionToLegacyString(condition);
+  const queue = text.match(/queue\(([^)]+)\)\.length/i)?.[1]?.trim();
+  const server = text.match(/idle\(([^)]+)\)\.count/i)?.[1]?.trim();
+  return queue && server ? { queueOrCustomer: queue, server } : null;
+}
+
+function normalizeCEventEffect(event = {}, queues = []) {
+  const effect = normalizeEffect(event.effect ?? event.effects ?? event.action ?? event.actions);
+  if (effectText(effect).trim()) return effect;
+
+  const fromCondition = servicePartsFromCondition(event.condition);
+  if (fromCondition) return `ASSIGN(${fromCondition.queueOrCustomer}, ${fromCondition.server})`;
+
+  const queueName = event.queue || event.queueName || event.sourceQueue || queues[0]?.name;
+  const server = event.server || event.serverType || event.resource || event.resourceType;
+  if (queueName && server) return `ASSIGN(${queueName}, ${server})`;
+  return effect;
+}
+
+function ensureCompletionEventEffects(cSchedules = [], bEvents = []) {
+  cSchedules.forEach(schedule => {
+    if (!schedule.eventId) return;
+    const event = bEvents.find(candidate => candidate.id === schedule.eventId);
+    if (!event || effectText(event.effect).trim()) return;
+    event.effect = "COMPLETE()";
+    event.scheduledTime = "9999";
+    event.name = cleanGeneratedName(event.name || "Service Complete");
+  });
+  return cSchedules;
 }
 
 function normalizeCEventCondition(condition, effect) {
@@ -313,9 +392,9 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: proposal ? "minmax(320px, 1fr) minmax(360px, 0.95fr)" : "minmax(320px, 760px)", gap: 16, alignItems: "stretch" }}>
-      <section aria-label="AI Generated Model conversation" style={{ display: "flex", flexDirection: "column", minHeight: 520, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+      <section aria-label="Use AI conversation" style={{ display: "flex", flexDirection: "column", minHeight: 520, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: 14, borderBottom: `1px solid ${C.border}` }}>
-          <SH label="AI Generated Model" />
+          <SH label="Use AI" />
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, marginTop: 4 }}>
             Natural-language authoring over the same validated model JSON.
           </div>

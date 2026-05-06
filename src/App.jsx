@@ -163,10 +163,10 @@ const FirstRunPanel=({onCreateBlank,onCreateSample,onImport})=>(
   <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
     <div>
       <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:4}}>Start your first model</div>
-      <div style={{fontSize:12,color:C.muted}}>Create a blank model, load the M/M/1 sample, or import an existing DES Studio JSON file.</div>
+      <div style={{fontSize:12,color:C.muted}}>Create a blank model, load the M/M/1 sample, or import an existing DES Studio model file.</div>
     </div>
     <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-      <Btn variant="ghost" onClick={onImport}>Import JSON</Btn>
+      <Btn variant="ghost" onClick={onImport}>Import Model</Btn>
       <Btn variant="ghost" onClick={onCreateSample}>Create sample M/M/1 model</Btn>
       <Btn variant="primary" onClick={onCreateBlank}>Create blank model</Btn>
     </div>
@@ -418,13 +418,13 @@ export default function App(){
           <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
             <input
               ref={importFileRef}
-              aria-label="Import JSON file"
+              aria-label="Import model file"
               type="file"
               accept=".json,application/json"
               style={{display:"none"}}
               onChange={handleImportFile}
             />
-            <Btn variant="ghost" onClick={()=>importFileRef.current?.click()}>Import JSON</Btn>
+            <Btn variant="ghost" onClick={()=>importFileRef.current?.click()}>Import Model</Btn>
             <Btn variant="primary" onClick={()=>setShowNew(true)}>+ New Model</Btn>
           </div>
         </div>

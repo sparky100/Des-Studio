@@ -227,6 +227,26 @@ describe('CEventEditor — ConditionBuilder token list staleness (C8)', () => {
 });
 
 describe('CEventEditor — follow-on B-event labels', () => {
+  it('uses service language for queue-based ASSIGN options', () => {
+    render(
+      <CEventEditor
+        events={[{ id: 'c1', name: 'Start Service', priority: 1, condition: '', effect: '', cSchedules: [], description: '' }]}
+        onChange={vi.fn()}
+        bEvents={[]}
+        entityTypes={[
+          { id: 'customer', name: 'Customer', role: 'customer', attrDefs: [] },
+          { id: 'server', name: 'Server', role: 'server', attrDefs: [] },
+        ]}
+        stateVariables={[]}
+        queues={[{ id: 'waiting', name: 'Waiting', customerType: 'Customer', discipline: 'FIFO' }]}
+      />
+    );
+
+    expect(screen.getByRole('option', {
+      name: 'Start service with Server and Customer from Waiting Queue',
+    })).toBeInTheDocument();
+  });
+
   it('does not show template wording for scheduled follow-on B-events', () => {
     render(
       <CEventEditor

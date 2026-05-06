@@ -41,4 +41,18 @@ describe('BEventEditor — queue-aware effect options', () => {
     expect(screen.getAllByText(/Completion/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Macros:/i)).not.toBeInTheDocument();
   });
+
+  it('adds Queue to ARRIVE labels when the queue name omits it', () => {
+    render(
+      <BEventEditor
+        events={[{ id: 'b1', name: 'Arrival', scheduledTime: '0', effect: [''], schedules: [], description: '' }]}
+        onChange={vi.fn()}
+        entityTypes={[{ id: 'customer', name: 'Customer', role: 'customer', attrDefs: [] }]}
+        queues={[{ id: 'waiting', name: 'Waiting', customerType: 'Customer', discipline: 'FIFO' }]}
+        cEvents={[]}
+      />
+    );
+
+    expect(screen.getByRole('option', { name: 'Add Customer to Waiting Queue' })).toBeInTheDocument();
+  });
 });

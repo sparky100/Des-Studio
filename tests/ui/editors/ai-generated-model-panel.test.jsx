@@ -216,4 +216,72 @@ describe("AiGeneratedModelPanel", () => {
       useEntityCtx: true,
     }));
   });
+
+  it("infers missing arrival and service effects from AI proposal structure", async () => {
+    const handleApply = vi.fn();
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      onComplete({
+        intent: "build",
+        questions: null,
+        explanation: "Built a queueing model.",
+        proposedModel: {
+          entityTypes: [
+            { id: "cust", name: "Customer", role: "customer", attrDefs: [] },
+            { id: "clerk", name: "Clerk", role: "server", count: 1, attrDefs: [] },
+          ],
+          stateVariables: [],
+          queues: [{ id: "waiting", name: "Waiting", customerType: "Customer", discipline: "FIFO" }],
+          bEvents: [{
+            id: "arrival",
+            name: "Customer Arrival",
+            scheduledTime: "0",
+            schedules: [{ type: "exponential", mean: 5 }],
+          }, {
+            id: "complete",
+            name: "Service Complete",
+            scheduledTime: "0",
+            schedules: [],
+          }],
+          cEvents: [{
+            id: "start",
+            name: "Service",
+            priority: 1,
+            condition: {
+              operator: "AND",
+              clauses: [
+                { variable: "Queue.Waiting.length", operator: ">", value: 0 },
+                { variable: "Resource.Clerk.idleCount", operator: ">", value: 0 },
+              ],
+            },
+            cSchedules: [{ eventId: "complete", type: "fixed", value: 7.5 }],
+          }],
+        },
+      });
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
+
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A simple queue" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    await screen.findByLabelText(/model proposal preview/i);
+    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
+
+    const applied = handleApply.mock.calls[0][0];
+    expect(applied.bEvents.find(event => event.id === "arrival")).toEqual(expect.objectContaining({
+      effect: "ARRIVE(Customer, Waiting)",
+      schedules: [expect.objectContaining({ eventId: "arrival" })],
+    }));
+    expect(applied.cEvents[0]).toEqual(expect.objectContaining({
+      effect: "ASSIGN(Waiting, Clerk)",
+      condition: "queue(Waiting).length > 0 AND idle(Clerk).count > 0",
+    }));
+    expect(applied.cEvents[0].cSchedules[0]).toEqual(expect.objectContaining({
+      eventId: "complete",
+      useEntityCtx: true,
+    }));
+    expect(applied.bEvents.find(event => event.id === "complete")).toEqual(expect.objectContaining({
+      scheduledTime: "9999",
+      effect: "COMPLETE()",
+    }));
+  });
 });

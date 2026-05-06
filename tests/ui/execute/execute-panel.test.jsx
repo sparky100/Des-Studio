@@ -77,7 +77,8 @@ describe('ExecutePanel', () => {
   });
 
   it('runs one replication through the existing single-run path', async () => {
-    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+    const onRunSaved = vi.fn();
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
 
     fireEvent.change(screen.getByLabelText(/run label/i), { target: { value: 'Baseline' } });
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
@@ -87,6 +88,7 @@ describe('ExecutePanel', () => {
     expect(mockSaveSimulationRun.mock.calls[0][3]).toEqual(
       expect.objectContaining({ replications: 1, runLabel: 'Baseline' })
     );
+    expect(onRunSaved).toHaveBeenCalledOnce();
   });
 
   it('shows batch progress and cancel button for multi-replication runs', async () => {

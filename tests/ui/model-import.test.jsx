@@ -50,10 +50,10 @@ describe('model JSON import', () => {
     mockSaveModel.mockResolvedValue({ id: 'imported-1' });
   });
 
-  it('renders the Import JSON button in the model library', async () => {
+  it('renders the Import Model button in the model library', async () => {
     await renderLibrary();
 
-    expect(screen.getAllByRole('button', { name: /import json/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /import model/i }).length).toBeGreaterThan(0);
   });
 
   it('normalizes exported payloads without preserving external ownership or visibility', () => {
@@ -82,7 +82,7 @@ describe('model JSON import', () => {
   it('imports a valid exported payload through saveModel for the current user', async () => {
     await renderLibrary();
 
-    fireEvent.change(screen.getByLabelText('Import JSON file'), {
+    fireEvent.change(screen.getByLabelText('Import model file'), {
       target: {
         files: [jsonFile('exported.json', { name: 'Exported model', model_json: emptyModelJson })],
       },
@@ -103,7 +103,7 @@ describe('model JSON import', () => {
   it('imports a raw model_json object', async () => {
     await renderLibrary();
 
-    fireEvent.change(screen.getByLabelText('Import JSON file'), {
+    fireEvent.change(screen.getByLabelText('Import model file'), {
       target: {
         files: [jsonFile('raw.json', { ...emptyModelJson, name: 'Raw model' })],
       },
@@ -116,7 +116,7 @@ describe('model JSON import', () => {
   it('surfaces invalid JSON and does not save', async () => {
     await renderLibrary();
 
-    fireEvent.change(screen.getByLabelText('Import JSON file'), {
+    fireEvent.change(screen.getByLabelText('Import model file'), {
       target: { files: [jsonFile('broken.json', '{not json')] },
     });
 
@@ -127,7 +127,7 @@ describe('model JSON import', () => {
   it('blocks imported models with validation errors', async () => {
     await renderLibrary();
 
-    fireEvent.change(screen.getByLabelText('Import JSON file'), {
+    fireEvent.change(screen.getByLabelText('Import model file'), {
       target: {
         files: [jsonFile('invalid.json', {
           name: 'Invalid model',

@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(node tests/engine/mm1_benchmark.js)",
+      "Bash(cat vite.config.js)",
+      "Bash(cat vite.config.ts)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\" http://localhost:5173/)",
+      "Bash(node_modules/.bin/vitest run *)",
+      "Bash(node -e \"import\\('./node_modules/vitest/dist/node.js'\\).then\\(v => console.log\\('ok'\\)\\)\")",
+      "Bash(npm test *)",
+      "Bash(cmd /c \"cd c:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\Des-Studio && npm test -- --run 2>&1\")",
+      "Bash(node_modules/.bin/vitest.cmd run *)",
+      "Bash(node --max-old-space-size=2048 -e ' *)",
+      "Bash(node -e ' *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git commit --amend -m ' *)"
+    ]
+  }
+}
