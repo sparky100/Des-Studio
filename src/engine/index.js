@@ -354,20 +354,38 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       finalTime: clock,
       log,
       snap:      snap(clock),
-      summary: {
-        total:             customers.length,
-        served:            served.length,
-        reneged:           reneged.length,
-        avgWait:           avgWait   != null ? +avgWait.toFixed(4)   : null,
-        avgSvc:            avgSvc    != null ? +avgSvc.toFixed(4)    : null,
-        avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
-        maxSojourn:        maxSojourn!= null ? +maxSojourn.toFixed(4): null,
-        phaseCTruncated:   anyPhaseCTruncated,
-        warmupPeriod,
-        excludedCount:     _excludedCount,
-        warnings,
-      },
+      summary:   getSummary(),
       entitySummary: entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
+    };
+  }
+
+  function getSummary() {
+    const customers    = entities.filter(e => e.role !== "server");
+    const served       = customers.filter(e => e.status === "done");
+    const reneged      = customers.filter(e => e.status === "reneged");
+
+    const avgWait = served.length
+      ? served.reduce((s, e) => s + ((e.serviceStart || 0) - e.arrivalTime), 0) / served.length
+      : null;
+    const avgSvc = served.filter(e => e.completionTime != null && e.serviceStart != null).length
+      ? served.filter(e => e.completionTime != null && e.serviceStart != null)
+          .reduce((s, e) => s + (e.completionTime - e.serviceStart), 0) / served.length
+      : null;
+    const withSojourn  = customers.filter(e => e.sojournTime != null);
+    const avgSojourn   = withSojourn.length ? withSojourn.reduce((s, e) => s + e.sojournTime, 0) / withSojourn.length : null;
+    const maxSojourn   = withSojourn.length ? Math.max(...withSojourn.map(e => e.sojournTime)) : null;
+
+    return {
+      total:             customers.length,
+      served:            served.length,
+      reneged:           reneged.length,
+      avgWait:           avgWait   != null ? +avgWait.toFixed(4)   : null,
+      avgSvc:            avgSvc    != null ? +avgSvc.toFixed(4)    : null,
+      avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
+      maxSojourn:        maxSojourn!= null ? +maxSojourn.toFixed(4): null,
+      warmupPeriod,
+      excludedCount:     _excludedCount,
+      warnings,
     };
   }
 
@@ -376,6 +394,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     runAll,
     getSnap:    () => snap(clock),
     getFelSize: () => fel.length,
+    getSummary,
   };
 }
 

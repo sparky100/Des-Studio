@@ -621,9 +621,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
     if (r.done) {
       setMode("done");
       stopAuto();
+      const summary = engineRef.current.getSummary();
       const fullResult = {
         snap: r.snap,
         summary: {
+          ...summary,
           total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
           served: r.snap?.served || 0,
           reneged: r.snap?.reneged || 0,
