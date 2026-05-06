@@ -569,6 +569,12 @@ const buildConditionStr = (rows) => {
   }).join(' ');
 };
 
+const defaultConditionValueForType = (valueType) => {
+  if (valueType === 'boolean') return 'true';
+  if (valueType === 'string') return 'value';
+  return '0';
+};
+
 // Convert flat rows to compound predicate JSON structure
 const rowsToCompoundPredicate = (rows) => {
   if(!rows || rows.length === 0) return null;
@@ -599,7 +605,7 @@ const parseConditionStr = (str, tokens) => {
     if(part.toUpperCase()==='AND'||part.toUpperCase()==='OR'){
       join = part.toUpperCase(); return;
     }
-    const m = part.match(/^(.+?)\s*(>=|<=|==|!=|>|<)\s*(.+)$/);
+    const m = part.match(/^(.+?)\s*(>=|<=|==|!=|>|<)\s*(.*)$/);
     if(m){
       const token = m[1].trim();
       const op    = m[2].trim();
@@ -609,7 +615,7 @@ const parseConditionStr = (str, tokens) => {
         id: 'r'+Date.now()+Math.random(),
         token: knownToken ? token : (tokens[0]?.value||''),
         operator: ['>=','<=','==','!=','>','<'].includes(op) ? op : '>',
-        value: val||'0',
+        value: val || defaultConditionValueForType(knownToken?.valueType || tokens[0]?.valueType || 'number'),
         join,
       });
       join = 'AND';
@@ -722,7 +728,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
     const defaultOperator = getOperatorsForType(defaultType)[0];
     updateRows([...rows, {
       id:'r'+Date.now(), token:defaultToken,
-      operator:defaultOperator, value:'', join:'AND',
+      operator:defaultOperator, value:defaultConditionValueForType(defaultType), join:'AND',
     }]);
   };
 
@@ -737,6 +743,9 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
     // If changing token and operator isn't valid for new type, reset to first valid operator
     if(patch.token && !allowedOps.includes(n[idx].operator)) {
       patch.operator = allowedOps[0];
+    }
+    if(patch.token && (n[idx].value === '' || n[idx].value == null)) {
+      patch.value = defaultConditionValueForType(newType);
     }
 
     n[idx] = {...n[idx], ...patch};

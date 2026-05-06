@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { CEventEditor } from '../../../src/ui/editors/index.jsx';
@@ -193,6 +194,34 @@ describe('CEventEditor — ConditionBuilder token list staleness (C8)', () => {
       expect(handleChange).toHaveBeenCalledWith([
         expect.objectContaining({ condition: 'queue(Waiting).length > 0' }),
       ]);
+    });
+  });
+
+  it('keeps a newly added conditional clause after the parent model rerenders', async () => {
+    const StatefulEditor = () => {
+      const [events, setEvents] = useState([
+        { id: 'c1', name: 'Start Serving Customer', priority: 1, condition: '', effect: '', cSchedules: [], description: '' },
+      ]);
+      return (
+        <CEventEditor
+          events={events}
+          onChange={setEvents}
+          bEvents={[]}
+          entityTypes={[]}
+          stateVariables={[]}
+          queues={[{ id: 'waiting', name: 'Waiting', customerType: 'Customer', discipline: 'FIFO' }]}
+        />
+      );
+    };
+
+    render(<StatefulEditor />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Add Clause/i }));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('combobox')[0]).toHaveValue('queue(Waiting).length');
+      expect(screen.getByDisplayValue('0')).toBeInTheDocument();
+      expect(screen.getByText(/queue\(Waiting\)\.length == 0/)).toBeInTheDocument();
     });
   });
 });
