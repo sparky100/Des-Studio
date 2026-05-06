@@ -23,3 +23,4 @@ AI Generaor
 Implementation notes
 * Review coherence pass started 06 May 2026.
 * Highest-priority fixes: infer AI ARRIVE/service effects, default follow-on entity context, relabel Import/Export as Model, rename AI tab to Use AI, clarify Fire at start, improve B/C-event service wording, and refresh run counts after saved runs.
+* Follow-up polish (06 May 2026): Default C-Event conditions to `> 0`, remove decimal places from Execute Panel clock, and ensure batch runs trigger save properly.
