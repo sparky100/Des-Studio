@@ -361,6 +361,83 @@ export function findNodeDependents(model, node) {
 
 // Removes a visual node from the canonical model, cascading to dependent elements.
 // Always call deriveGraphFromModel on the result — never mutate layout metadata first.
+// Removes a visual edge from the canonical model by reversing the routing it represents.
+// Four edge source types map to distinct canonical mutations — see graph.js edge derivation.
+export function deleteVisualEdge(model, graph, edgeId) {
+  const edge = (graph.edges || []).find(e => e.id === edgeId);
+  if (!edge) return model;
+  const fromNode = (graph.nodes || []).find(n => n.id === edge.from);
+  const toNode   = (graph.nodes || []).find(n => n.id === edge.to);
+  if (!fromNode || !toNode) return model;
+
+  const bEvents = model.bEvents || [];
+  const cEvents = model.cEvents || [];
+  let next = { ...model };
+
+  // Source → Queue ("arrival"): remove queue target from ARRIVE effect
+  if (edge.source === "arrival" && fromNode.type === VISUAL_NODE_TYPES.SOURCE) {
+    const esc = escRe(toNode.label || "");
+    next.bEvents = bEvents.map(be =>
+      be.id !== fromNode.refId ? be : {
+        ...be,
+        effect: typeof be.effect === "string"
+          ? be.effect.replace(new RegExp(`,\\s*${esc}\\s*\\)`, "gi"), ")")
+          : be.effect,
+      }
+    );
+  }
+
+  // Queue → Activity ("condition"): clear queue-specific condition and ASSIGN effect
+  if (edge.source === "condition" && fromNode.type === VISUAL_NODE_TYPES.QUEUE && toNode.type === VISUAL_NODE_TYPES.ACTIVITY) {
+    next.cEvents = cEvents.map(ce =>
+      ce.id !== toNode.refId ? ce : { ...ce, condition: "", effect: "" }
+    );
+  }
+
+  // Activity → Queue ("routing"): remove cSchedule referencing the RELEASE bEvent for this queue;
+  // also remove the RELEASE bEvent itself if it is not shared with any other C-event.
+  if (edge.source === "routing" && fromNode.type === VISUAL_NODE_TYPES.ACTIVITY && toNode.type === VISUAL_NODE_TYPES.QUEUE) {
+    const cEvent = cEvents.find(ce => ce.id === fromNode.refId);
+    if (cEvent) {
+      const esc = escRe(toNode.label || "");
+      const releasePat = new RegExp(`RELEASE\\([^,]+,\\s*${esc}\\)`, "i");
+      const schedToRemove = (cEvent.cSchedules || []).find(s => {
+        const be = bEvents.find(b => b.id === s.eventId);
+        return be && releasePat.test(typeof be.effect === "string" ? be.effect : "");
+      });
+      if (schedToRemove) {
+        const otherRefs = new Set(
+          cEvents.filter(ce => ce.id !== cEvent.id).flatMap(ce => (ce.cSchedules || []).map(s => s.eventId))
+        );
+        next.cEvents = cEvents.map(ce =>
+          ce.id !== cEvent.id ? ce : {
+            ...ce,
+            cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== schedToRemove.eventId),
+          }
+        );
+        if (!otherRefs.has(schedToRemove.eventId)) {
+          next.bEvents = bEvents.filter(be => be.id !== schedToRemove.eventId);
+        }
+      }
+    }
+  }
+
+  // Activity → Sink ("terminal"): remove cSchedule entry referencing the sink bEvent
+  if (edge.source === "terminal" && fromNode.type === VISUAL_NODE_TYPES.ACTIVITY && toNode.type === VISUAL_NODE_TYPES.SINK) {
+    const cEvent = cEvents.find(ce => ce.id === fromNode.refId);
+    if (cEvent) {
+      next.cEvents = cEvents.map(ce =>
+        ce.id !== cEvent.id ? ce : {
+          ...ce,
+          cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== toNode.refId),
+        }
+      );
+    }
+  }
+
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
 export function deleteVisualNode(model, node) {
   if (!node || !node.refId) return model;
   let next = { ...model };

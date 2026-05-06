@@ -7,6 +7,7 @@ import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import {
   addVisualNode,
   connectVisualNodes,
+  deleteVisualEdge,
   deleteVisualNode,
   findNodeDependents,
   updateGraphLayout,
@@ -267,6 +268,24 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
     const updated = deriveGraphFromModel(next).nodes.find(item => item.refId === node.refId && item.type === node.type);
     if (updated) setSelectedNodeId(updated.id);
   };
+  const deleteEdge = (edgeId) => {
+    if (!canEdit) return;
+    const nextModel = deleteVisualEdge(model, graph, edgeId);
+    applyModel(nextModel);
+    setMessage({ state: "success", text: "Connection removed." });
+  };
+  const resetLayout = () => {
+    if (!canEdit) return;
+    applyModel({ ...model, graph: model.graph ? { ...model.graph, nodes: [] } : undefined });
+  };
+
+  // Auto-dismiss the canvas status message after a short delay.
+  useEffect(() => {
+    if (!message) return;
+    const ms = message.state === "error" ? 4000 : 2000;
+    const timer = setTimeout(() => setMessage(null), ms);
+    return () => clearTimeout(timer);
+  }, [message]);
 
   return (
     <div aria-label="Visual Designer" style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 1280 }}>
@@ -367,6 +386,8 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
             onViewportChange={changeViewport}
             onConnectNodes={connectNodes}
             onDropNode={addNode}
+            onDeleteEdge={canEdit ? deleteEdge : null}
+            onResetLayout={canEdit ? resetLayout : null}
           />
         </div>
 

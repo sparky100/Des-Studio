@@ -11,7 +11,9 @@ vi.mock('@xyflow/react', () => ({
   Handle: () => <span data-testid="flow-handle" />,
   MarkerType: { ArrowClosed: 'arrowclosed' },
   MiniMap: () => <div data-testid="flow-minimap" />,
+  Panel: ({ children }) => <div data-testid="flow-panel">{children}</div>,
   Position: { Left: 'left', Right: 'right' },
+  useReactFlow: () => ({ fitView: vi.fn() }),
   ReactFlow: ({ nodes = [], edges = [], children, fitView, defaultViewport, onNodeClick, onNodeDragStop, onConnect }) => {
     const source = nodes.find(node => node.id.startsWith('source:'));
     const firstQueue = nodes.find(node => node.id.startsWith('queue:'));

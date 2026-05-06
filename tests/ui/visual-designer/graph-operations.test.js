@@ -3,6 +3,7 @@ import { deriveGraphFromModel } from "../../../src/ui/visual-designer/graph.js";
 import {
   addVisualNode,
   connectVisualNodes,
+  deleteVisualEdge,
   updateGraphLayout,
   updateVisualNode,
   validateVisualGraph,
@@ -155,6 +156,35 @@ describe("visual designer graph operations", () => {
     expect(updated.condition).toContain("idle(Manager).count > 0");
     expect(updated.condition).not.toContain("idle(Clerk)");
     expect(updated.condition).toContain("queue(Main Queue).length > 0");
+  });
+
+  it("deleteVisualEdge removes the queue target from an arrival (Source→Queue) edge", () => {
+    const graph = deriveGraphFromModel(baseModel);
+    const arrivalEdge = graph.edges.find(e => e.source === "arrival");
+    expect(arrivalEdge).toBeDefined();
+
+    const next = deleteVisualEdge(baseModel, graph, arrivalEdge.id);
+
+    const arrivalEvent = next.bEvents.find(be => be.id === "arrival");
+    // Queue target removed: ARRIVE(Customer, Main Queue) → ARRIVE(Customer)
+    expect(arrivalEvent.effect).toBe("ARRIVE(Customer)");
+    // The graph no longer derives the arrival edge
+    const nextGraph = deriveGraphFromModel(next);
+    expect(nextGraph.edges.some(e => e.source === "arrival")).toBe(false);
+  });
+
+  it("deleteVisualEdge removes the cSchedule entry from a terminal (Activity→Sink) edge", () => {
+    const graph = deriveGraphFromModel(baseModel);
+    const terminalEdge = graph.edges.find(e => e.source === "terminal");
+    expect(terminalEdge).toBeDefined();
+
+    const next = deleteVisualEdge(baseModel, graph, terminalEdge.id);
+
+    const startService = next.cEvents.find(ce => ce.id === "start-service");
+    // cSchedule referencing the "complete" sink bEvent must be removed
+    expect((startService.cSchedules || []).some(s => s.eventId === "complete")).toBe(false);
+    // The "complete" bEvent itself must still exist (it is a Sink node, not exclusively owned for deletion here)
+    expect(next.bEvents.some(be => be.id === "complete")).toBe(true);
   });
 
   it("summarizes visual graph warnings for incomplete routes", () => {
