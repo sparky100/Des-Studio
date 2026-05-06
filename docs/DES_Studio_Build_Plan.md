@@ -3942,7 +3942,8 @@ npm run build                          # Succeeds
 | F9B.5 — Palette and placement affordances | ~ | Improve drag/drop affordance, drop hints, fit/reset layout, and selected-node clarity |
 | F9B.6 — Browser review and round-trip hardening | ~ | Manually verify create/connect/edit/save/reload/execute and add regression tests for gaps |
 | F9B.7 — Bundle/code-splitting review | ⬜ | Consider lazy-loading Visual Designer to reduce main bundle size after React Flow integration |
-| F9B.8 — Review Observations 0605 coherence pass | 🔄 | Address manual-review findings: AI-generated ARRIVE/service defaults, follow-on entity context defaults, clearer import/export/AI labels, B/C-event wording, and model run-count refresh |
+| F9B.8 — Review Observations 0605 coherence pass | ✅ | Address manual-review findings: AI-generated ARRIVE/service defaults, follow-on entity context defaults, clearer import/export/AI labels, B/C-event wording, and model run-count refresh |
+| F9B.9 — Entity Attribute Logic Fixes | ✅ | Restored EntityFilterBuilder to Visual Designer inspector and unified AttrEditor to use DistPicker (allowing non-Fixed distributions and CSV import for attributes) |
 
 ### Sprint 9B Completion Gate
 

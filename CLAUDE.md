@@ -1382,6 +1382,8 @@ Manual review on 2026-05-06 identified a cross-surface coherence pass that shoul
 - AI-generated service C-events must infer `ASSIGN(Queue, Server)` from queue/idle conditions or explicit service fields.
 - AI-generated C-event follow-on B-event schedules should default `useEntityCtx` to true so `COMPLETE()` receives the customer/server context.
 - Model run counts should refresh immediately after a run history record is saved, while still using user-scoped run stats as the persisted source of truth.
+- Visual Designer Activity inspector must support `entityFilter` so Attribute-Based Routing can be configured from the canvas.
+- Entity Types attribute editor must use the advanced `DistPicker` to allow non-Fixed distributions (like Empirical) and CSV import.
 
 ### Recently Completed — Sprint 8B
 
