@@ -739,7 +739,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
             onRunSaved?.();
           } catch (e) {
             setSaveStatus({ state: 'error', message: `✗ Failed to save batch: ${e.message}` });
-            setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
+            setLog(prev => [...prev, { phase: "ERROR", time: batchResult.snap.clock, message: `❌ Database error: ${e.message}` }]);
           } finally {
             runnerRef.current = null;
             setMode("done");
