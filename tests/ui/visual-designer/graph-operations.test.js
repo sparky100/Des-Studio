@@ -137,6 +137,26 @@ describe("visual designer graph operations", () => {
     }));
   });
 
+  it("updates server type in condition idle() clause and ASSIGN effect without touching queue name", () => {
+    const graph = deriveGraphFromModel(baseModel);
+    const activity = graph.nodes.find(node => node.id === "activity:start-service");
+    const modelWithTwoServers = {
+      ...baseModel,
+      entityTypes: [
+        ...baseModel.entityTypes,
+        { id: "manager", name: "Manager", role: "server", count: 1, attrDefs: [] },
+      ],
+    };
+
+    const next = updateVisualNode(modelWithTwoServers, activity, { serverType: "Manager" });
+    const updated = next.cEvents.find(event => event.id === "start-service");
+
+    expect(updated.effect).toBe("ASSIGN(Main Queue, Manager)");
+    expect(updated.condition).toContain("idle(Manager).count > 0");
+    expect(updated.condition).not.toContain("idle(Clerk)");
+    expect(updated.condition).toContain("queue(Main Queue).length > 0");
+  });
+
   it("summarizes visual graph warnings for incomplete routes", () => {
     const graph = deriveGraphFromModel({
       ...baseModel,

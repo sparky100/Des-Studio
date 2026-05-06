@@ -51,6 +51,15 @@ function replaceQueueName(text = "", oldName, newName) {
     .replace(new RegExp(`RELEASE\\(([^,)]+),\\s*${oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)`, "gi"), `RELEASE($1, ${newName})`);
 }
 
+function replaceServerName(text = "", oldName, newName) {
+  if (!oldName || !newName) return text;
+  const esc = oldName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return String(text || "")
+    .replace(new RegExp(`idle\\(${esc}\\)\\.count`, "gi"), `idle(${newName}).count`)
+    .replace(new RegExp(`busy\\(${esc}\\)\\.count`, "gi"), `busy(${newName}).count`)
+    .replace(new RegExp(`ASSIGN\\(([^,)]+),\\s*${esc}\\)`, "gi"), `ASSIGN($1, ${newName})`);
+}
+
 function findNode(graph, id) {
   return (graph.nodes || []).find(node => node.id === id);
 }
@@ -311,6 +320,11 @@ export function updateVisualNode(model, node, patch = {}) {
         ...(patch.condition !== undefined ? { condition: patch.condition } : {}),
         ...(patch.entityFilter !== undefined ? { entityFilter: patch.entityFilter } : {}),
       };
+      if (patch.serverType) {
+        const oldServer = String(nextEvent.effect || "").match(/ASSIGN\([^,)]+,\s*([^)]+)\)/i)?.[1]?.trim() || "";
+        nextEvent.condition = replaceServerName(nextEvent.condition || "", oldServer, patch.serverType);
+        nextEvent.effect = replaceServerName(nextEvent.effect || "", oldServer, patch.serverType);
+      }
       if (patch.serviceTime) {
         const cSchedules = Array.isArray(nextEvent.cSchedules) ? [...nextEvent.cSchedules] : [];
         const first = cSchedules[0] || { eventId: "", useEntityCtx: true };

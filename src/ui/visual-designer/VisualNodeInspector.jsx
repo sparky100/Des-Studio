@@ -41,6 +41,7 @@ function SelectField({ label, value, onChange, children, disabled }) {
 export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode }) {
   const node = (graph.nodes || []).find(item => item.id === selectedNodeId);
   const customers = (model.entityTypes || []).filter(type => type.role === "customer");
+  const servers = (model.entityTypes || []).filter(type => type.role === "server");
   const queues = model.queues || [];
 
   if (!node) {
@@ -62,6 +63,7 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
   const sinkMacro = String(bEvent?.effect || "").toUpperCase().includes("RENEGE") ? "RENEGE" : "COMPLETE";
   const sourceSchedule = bEvent?.schedules?.[0] || {};
   const activitySchedule = cEvent?.cSchedules?.[0] || {};
+  const activityServer = effectValue(cEvent?.effect, /ASSIGN\([^,)]+,\s*([^)]+)\)/i);
 
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -135,6 +137,12 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               onChange={canEdit ? value => onPatchNode(node, { entityFilter: value }) : () => {}}
             />
           </div>
+          <SelectField label="Server type" value={activityServer} disabled={!canEdit} onChange={value => onPatchNode(node, { serverType: value })}>
+            {servers.length === 0
+              ? <option value="">No server types defined</option>
+              : servers.map(type => <option key={type.id || type.name} value={type.name}>{type.name}</option>)
+            }
+          </SelectField>
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
               Service time
