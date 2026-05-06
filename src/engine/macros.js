@@ -85,7 +85,7 @@ export const MACROS = [
   // ── ARRIVE(Type[, QueueName]) ──────────────────────────────────────────────
   {
     name:    "ARRIVE",
-    pattern: /^ARRIVE\(([^,)]+)(?:\s*,\s*([^)]+))?\)$/i,
+    pattern: /^ARRIVE\(([^,)]+)(?:\s*,\s*([^,)]+))?\)$/i,
     apply(match, ctx) {
       const typeName  = match[1].trim();
       const queueName = match[2]?.trim() || (typeName + "Queue");
@@ -114,7 +114,7 @@ export const MACROS = [
   // ── ASSIGN(CustomerType|QueueName, ServerType) ────────────────────────────
   {
     name:    "ASSIGN",
-    pattern: /^ASSIGN\(([^,]+)\s*,\s*([^)]+)\)$/i,
+    pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)\)$/i,
     apply(match, ctx) {
       const cType = match[1].trim();
       const sType = match[2].trim();
@@ -215,7 +215,7 @@ export const MACROS = [
   // Frees server, returns customer to waiting — preserves arrivalTime for sojourn
   {
     name:    "RELEASE",
-    pattern: /^RELEASE\(([^,)]+)(?:\s*,\s*([^)]+))?\)$/i,
+    pattern: /^RELEASE\(([^,)]+)(?:\s*,\s*([^,)]+))?\)$/i,
     apply(match, ctx) {
       const srvType     = match[1].trim();
       const targetQueue = match[2]?.trim() || null;

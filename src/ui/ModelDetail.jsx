@@ -173,6 +173,23 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
   const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
 
+  useEffect(() => {
+    if (modelData?.stats && modelData.stats.runs !== model?.stats?.runs) {
+      setModel(m => ({
+        ...m,
+        stats: modelData.stats,
+        statsLoading: modelData.statsLoading,
+        statsError: modelData.statsError,
+      }));
+    } else if (modelData && (modelData.statsLoading !== model?.statsLoading || modelData.statsError !== model?.statsError)) {
+      setModel(m => ({
+        ...m,
+        statsLoading: modelData.statsLoading,
+        statsError: modelData.statsError,
+      }));
+    }
+  }, [modelData?.stats, modelData?.statsLoading, modelData?.statsError]);
+
   const setField=(f,v)=>{
     setPast(p=>[...p.slice(-19),model]); // push snapshot before change, cap at 20
     setFuture([]);                        // new edit clears redo stack
@@ -473,9 +490,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
           <div style={{maxWidth:960}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
               <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,flex:1,minWidth:180}}>RUN HISTORY (LAST 20)</div>
-              <Btn small variant="ghost" onClick={exportRunHistoryJson} disabled={!historyRows.length}>Export History JSON</Btn>
-              <Btn small variant="ghost" onClick={exportRunHistoryCsv} disabled={!historyRows.length}>Export History CSV</Btn>
-            </div>
+              <Btn small variant="ghost" onClick={exportRunHistoryJson} disabled={!historyRows.length}>Export History</Btn>
+              <Btn small variant="ghost" onClick={exportRunHistoryCsv} disabled={!historyRows.length}>Export History CSV</Btn>            </div>
             {historyLoading&&<div style={{color:C.muted,fontFamily:FONT,fontSize:12}}>Loading...</div>}
             {historyError&&<div style={{color:C.red,fontFamily:FONT,fontSize:12}}>{historyError}</div>}
             {!historyLoading&&!historyError&&historyRows.length===0&&(

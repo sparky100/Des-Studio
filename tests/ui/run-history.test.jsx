@@ -76,8 +76,8 @@ describe('run history', () => {
 
     await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith('m1'));
     expect(await screen.findByText('Two servers')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /export history json/i })).toBeEnabled();
-    expect(screen.getByRole('button', { name: /export history csv/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export History' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export History CSV' })).toBeEnabled();
   });
 
   it('exports normalized history payloads', () => {
@@ -98,7 +98,7 @@ describe('run history', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /history/i }));
     await screen.findByText('Two servers');
-    fireEvent.click(screen.getByRole('button', { name: /export history json/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export History' }));
 
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:run-history');

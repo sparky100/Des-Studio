@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-06 | Reflects: Sprint 9 Visual Designer authoring + Sprint 9B UX hardening/review observations + ADR-010 + Known Issues*
+*Last updated: 2026-05-06 | Reflects: Sprint 9 Visual Designer authoring + Sprint 9B UX hardening/review observations completed + ADR-010 + Known Issues*
 
 ---
 

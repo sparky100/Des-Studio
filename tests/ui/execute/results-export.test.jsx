@@ -114,13 +114,13 @@ describe('ExecutePanel results export buttons', () => {
   it('disables result exports before a run and enables them after completion', async () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    expect(screen.getByRole('button', { name: /export results json/i })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /export results csv/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export Results' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export Results CSV' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('button', { name: /export results json/i })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: /export results csv/i })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export Results' })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export Results CSV' })).not.toBeDisabled();
   });
 });

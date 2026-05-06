@@ -160,7 +160,7 @@ flowchart LR
 | Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence. | Focused | N/A | Success | Stabilised queue/service semantics before visual designer work. |
 | Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight. | Docs | N/A | Success | ADR-010 accepted; planning/design docs updated before Sprint 9 coding. |
 | Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring. | 38 focused | N/A | Success | Reviewable graph-first authoring model, round-trip parity, drag-to-place palette, visual validation summary, and timing distribution inspector complete. |
-| Sprint 9B | 🔄 In progress | — | Visual Designer UX Hardening. | Focused | N/A | Pending | Consolidates remaining visual designer polish: resource editing, safe delete, richer validation, connection editing, palette affordances, and browser review. |
+| Sprint 9B | 🔄 In progress | — | Visual Designer UX Hardening. | Focused | N/A | Pending | Consolidates remaining visual designer polish: resource editing, safe delete, richer validation, connection editing, palette affordances, and browser review. Review Observations 0605 complete. |
 
 ---
 

@@ -126,7 +126,7 @@ export function addVisualNode(model, type, position = null) {
       name: `Arrival ${bEvents.filter(event => String(event.effect || "").includes("ARRIVE")).length + 1}`,
       scheduledTime: "0",
       effect: targetQueue ? `ARRIVE(${customer}, ${targetQueue})` : `ARRIVE(${customer})`,
-      schedules: [],
+      schedules: [{ eventId: id, dist: "Exponential", distParams: { mean: "5" } }],
     });
   }
 

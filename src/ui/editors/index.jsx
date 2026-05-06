@@ -52,16 +52,17 @@ const conditionOptions = (entityTypes, stateVariables=[], queues=[]) => {
   return opts;
 };
 
-const assignOptions = (entityTypes, stateVariables=[], queues=[]) => {
+const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName="") => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const opts = [{label:'— select effect —',value:''}];
+  const cName = contextName || "service";
   // Queue-based ASSIGN combinations
   if(queues.length > 0) {
     opts.push({label:'── Start service from queue ──', value:'', disabled:true});
     queues.forEach(q => {
       servers.forEach(s => {
-        opts.push({label:`Start service with ${s} and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`, value:`ASSIGN(${q.name}, ${s})`});
+        opts.push({label:`Start ${cName} with ${s} and ${q.customerType||'entity'} from ${queueDisplayName(q.name)}`, value:`ASSIGN(${q.name}, ${s})`});
       });
     });
   }
@@ -69,7 +70,7 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[]) => {
   if(custs.length>0&&servers.length>0){
     opts.push({label:'── ASSIGN ──',value:'',disabled:true});
     custs.forEach(c=>servers.forEach(s=>{
-      opts.push({label:`Start service with ${s} and ${c}`,value:`ASSIGN(${c}, ${s})`});
+      opts.push({label:`Start ${cName} with ${s} and ${c}`,value:`ASSIGN(${c}, ${s})`});
     }));
   }
   // Scalar effects on state variables
@@ -108,7 +109,7 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[]) => {
   opts.push({label:'Finish current service',value:'COMPLETE()'});
   opts.push({label:'Cancel waiting entity if still queued',value:'RENEGE(ctx)'});
   custs.forEach(c=>{
-    opts.push({label:`Cancel oldest waiting ${c}`,value:`RENEGE_OLDEST(${c})`});
+    opts.push({label:`Cancel oldest waiting ${c} from its queue`,value:`RENEGE_OLDEST(${c})`});
   });
   if(servers.length>0){
     opts.push({label:'── Release server ──',value:'',disabled:true});
@@ -120,7 +121,7 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[]) => {
     opts.push({label:'── RELEASE to queue ──', value:'', disabled:true});
     servers.forEach(s => {
       queues.forEach(q => {
-        opts.push({label:`Release ${s} and send entity to ${q.name}`, value:`RELEASE(${s}, ${q.name})`});
+        opts.push({label:`Release ${s} and send entity to ${queueDisplayName(q.name)}`, value:`RELEASE(${s}, ${q.name})`});
       });
     });
   }
@@ -403,15 +404,22 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
               <Tag label={isTmpl?"scheduled follow-on":"B-event"} color={isTmpl?C.muted:C.bEvent}/>
               <input value={ev.name} onChange={e=>upd(i,"name",e.target.value)} placeholder="Event name"
                 style={{flex:1,minWidth:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
-              <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",
-                color:isStart?C.bEvent:C.muted,fontFamily:FONT,fontSize:11}}>
-                <input type="checkbox" checked={isStart}
-                  onChange={e=>upd(i,"scheduledTime",e.target.checked?"0":"1")}
-                  style={{accentColor:C.bEvent}}/>
-                Fire at start
-              </label>
+              <div style={{display:"flex",alignItems:"center",gap:5}}>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Behavior:</span>
+                <select value={isStart ? "start" : isTmpl ? "scheduled" : "time"} 
+                  onChange={e=>{
+                    const v = e.target.value;
+                    if(v==="start") upd(i,"scheduledTime","0");
+                    else if(v==="scheduled") upd(i,"scheduledTime","9999");
+                    else upd(i,"scheduledTime","1");
+                  }}
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                  <option value="start">Fire at start</option>
+                  <option value="scheduled">Scheduled follow-on</option>
+                  <option value="time">Specific time (t=)</option>
+                </select>
+              </div>
               {showTimeInput&&<>
-                <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>t=</span>
                 <input value={ev.scheduledTime} type="number" step="0.5" onChange={e=>upd(i,"scheduledTime",e.target.value)}
                   style={{width:65,background:"transparent",border:`1px solid ${C.bEvent+"66"}`,borderRadius:4,color:C.bEvent,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
               </>}
@@ -1071,7 +1079,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:72}}>effect(s):</span>
             <DropField value={ev.effect} onChange={v=>upd(i,'effect',v)}
-              options={assignOptions(entityTypes, stateVariables, queues)} color={C.green}
+              options={assignOptions(entityTypes, stateVariables, queues, ev.name)} color={C.green}
               placeholder="e.g. ASSIGN(Customer, Server); totalServed++"/>
           </div>
 

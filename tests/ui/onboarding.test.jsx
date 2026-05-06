@@ -49,7 +49,7 @@ describe('first-run onboarding', () => {
     expect(screen.getByText('Start your first model')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create blank model/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create sample m\/m\/1 model/i })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /import json/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /import model/i }).length).toBeGreaterThan(0);
   });
 
   it('hides onboarding when the user already has models', async () => {

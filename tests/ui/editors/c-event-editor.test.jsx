@@ -230,7 +230,7 @@ describe('CEventEditor — follow-on B-event labels', () => {
   it('uses service language for queue-based ASSIGN options', () => {
     render(
       <CEventEditor
-        events={[{ id: 'c1', name: 'Start Service', priority: 1, condition: '', effect: '', cSchedules: [], description: '' }]}
+        events={[{ id: 'c1', name: 'Service', priority: 1, condition: '', effect: '', cSchedules: [], description: '' }]}
         onChange={vi.fn()}
         bEvents={[]}
         entityTypes={[
@@ -243,7 +243,7 @@ describe('CEventEditor — follow-on B-event labels', () => {
     );
 
     expect(screen.getByRole('option', {
-      name: 'Start service with Server and Customer from Waiting Queue',
+      name: 'Start Service with Server and Customer from Waiting Queue',
     })).toBeInTheDocument();
   });
 
