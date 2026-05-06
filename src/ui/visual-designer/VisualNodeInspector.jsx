@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn, DistPicker, Field, SH, Tag } from "../shared/components.jsx";
-import { ConditionBuilder } from "../editors/index.jsx";
+import { ConditionBuilder, EntityFilterBuilder } from "../editors/index.jsx";
 import { VISUAL_NODE_TYPES } from "./graph.js";
 
 function effectValue(effect = "", pattern) {
@@ -120,6 +120,19 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               entityTypes={model.entityTypes || []}
               stateVariables={model.stateVariables || []}
               queues={model.queues || []}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
+                Entity Filter
+              </div>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>optional</span>
+            </div>
+            <EntityFilterBuilder
+              entityTypes={model.entityTypes || []}
+              value={cEvent.entityFilter || null}
+              onChange={canEdit ? value => onPatchNode(node, { entityFilter: value }) : () => {}}
             />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>

@@ -309,6 +309,7 @@ export function updateVisualNode(model, node, patch = {}) {
         ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.priority !== undefined ? { priority: Number(patch.priority) || 1 } : {}),
         ...(patch.condition !== undefined ? { condition: patch.condition } : {}),
+        ...(patch.entityFilter !== undefined ? { entityFilter: patch.entityFilter } : {}),
       };
       if (patch.serviceTime) {
         const cSchedules = Array.isArray(nextEvent.cSchedules) ? [...nextEvent.cSchedules] : [];

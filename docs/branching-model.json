@@ -1,0 +1,74 @@
+{
+  "name": "Quality Branching Example",
+  "description": "Models a process where 80% of items pass and 20% fail inspection using Attribute-Based Routing.",
+  "model_json": {
+    "entityTypes": [
+      {
+        "id": "et_part",
+        "name": "Part",
+        "role": "customer",
+        "attrDefs": [
+          { 
+            "name": "isGood", 
+            "dist": "Empirical", 
+            "distParams": { "values": [1, 1, 1, 1, 0] } 
+          }
+        ]
+      },
+      { "id": "et_insp", "name": "Inspector", "role": "server", "count": 1 },
+      { "id": "et_ship", "name": "Shipping", "role": "server", "count": 10 },
+      { "id": "et_rewk", "name": "ReworkStation", "role": "server", "count": 10 }
+    ],
+    "stateVariables": [
+      { "name": "passedCount", "initialValue": "0" },
+      { "name": "failedCount", "initialValue": "0" }
+    ],
+    "queues": [
+      { "name": "EntryQueue", "customerType": "Part" },
+      { "name": "DecisionQueue", "customerType": "Part" }
+    ],
+    "bEvents": [
+      {
+        "id": "b_arrive",
+        "name": "Part Arrival",
+        "effect": "ARRIVE(Part, EntryQueue)",
+        "schedules": [{ "eventId": "b_arrive", "dist": "Exponential", "distParams": { "mean": "15" } }]
+      },
+      {
+        "id": "b_insp_done",
+        "name": "Inspection Complete",
+        "effect": "RELEASE(Inspector, DecisionQueue)",
+        "schedules": []
+      },
+      { "id": "b_shipped", "name": "Shipped", "effect": "passedCount++; COMPLETE()", "schedules": [] },
+      { "id": "b_reworked", "name": "Reworked", "effect": "failedCount++; COMPLETE()", "schedules": [] }
+    ],
+    "cEvents": [
+      {
+        "id": "c_start_insp",
+        "name": "Start Inspection",
+        "condition": "queue(EntryQueue).length > 0 AND idle(Inspector).count > 0",
+        "effect": "ASSIGN(EntryQueue, Inspector)",
+        "cSchedules": [{ "eventId": "b_insp_done", "dist": "Uniform", "distParams": { "min": "8", "max": "12" }, "useEntityCtx": true }]
+      },
+      {
+        "id": "c_route_pass",
+        "name": "Route to Shipping",
+        "priority": 1,
+        "condition": "queue(DecisionQueue).length > 0 AND idle(Shipping).count > 0",
+        "entityFilter": { "variable": "Entity.isGood", "operator": "==", "value": 1 },
+        "effect": "ASSIGN(DecisionQueue, Shipping)",
+        "cSchedules": [{ "eventId": "b_shipped", "dist": "Fixed", "distParams": { "value": "0.1" }, "useEntityCtx": true }]
+      },
+      {
+        "id": "c_route_fail",
+        "name": "Route to Rework",
+        "priority": 2,
+        "condition": "queue(DecisionQueue).length > 0 AND idle(ReworkStation).count > 0",
+        "entityFilter": { "variable": "Entity.isGood", "operator": "==", "value": 0 },
+        "effect": "ASSIGN(DecisionQueue, ReworkStation)",
+        "cSchedules": [{ "eventId": "b_reworked", "dist": "Fixed", "distParams": { "value": "0.1" }, "useEntityCtx": true }]
+      }
+    ]
+  }
+}

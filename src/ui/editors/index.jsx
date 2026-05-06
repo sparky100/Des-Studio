@@ -1,7 +1,7 @@
 // ui/editors/index.jsx — All model editor components
 import { useState, useRef, useMemo, useEffect } from "react";
 import { C, FONT, normTypeName } from "../shared/tokens.js";
-import { Tag, Btn, Field, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { Tag, Btn, Field, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
 
 // ── UI Polish Helpers ─────────────────────────────────────────────────────────
@@ -265,37 +265,20 @@ const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
         </span>
       )}
       {attrs.map((a,i)=>{
-        const dd = DISTRIBUTIONS[a.dist||'Fixed']||DISTRIBUTIONS.Fixed;
         return (
           <div key={a.id} style={{background:C.surface,borderRadius:6,padding:'8px 10px',
             border:`1px solid ${role==='server'?C.server+'33':C.cEvent+'33'}`,
             display:'flex',flexDirection:'column',gap:6}}>
-            {/* Row 1: name + distribution */}
+            {/* Row 1: name + distribution picker */}
             <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
               <input value={a.name} onChange={e=>upd(i,{name:e.target.value})}
                 placeholder="attrName" style={{...inpStyle(C.amber),width:110}}/>
               <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>~</span>
-              <select value={a.dist||'Fixed'} onChange={e=>upd(i,{dist:e.target.value,distParams:{}})}
-                style={{...inpStyle(C.accent),flex:1}}>
-                {Object.entries(DISTRIBUTIONS).filter(([k])=>k!=="Piecewise").map(([k,v])=>(
-                  <option key={k} value={k}>{v.label}</option>
-                ))}
-              </select>
+              <div style={{flex:1}}>
+                <DistPicker value={{dist:a.dist,distParams:a.distParams,sourceFile:a.sourceFile,column:a.column,_csvStats:a._csvStats}}
+                  onChange={v=>upd(i,v)} compact allowPiecewise={false}/>
+              </div>
               <Btn small variant="danger" ariaLabel={`Remove attribute ${a.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
-            </div>
-            {/* Row 2: distribution params */}
-            <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap',paddingLeft:4}}>
-              {dd.params.map(p=>(
-                <div key={p} style={{display:'flex',alignItems:'center',gap:4}}>
-                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{p}:</span>
-                  <input type="number" value={(a.distParams||{})[p]||''}
-                    onChange={e=>upd(i,{distParams:{...(a.distParams||{}),[p]:e.target.value}})}
-                    style={{...inpStyle(C.amber),width:60}}/>
-                </div>
-              ))}
-              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
-                {dd.hint}
-              </span>
             </div>
             {/* Preview */}
             {a.name&&(
