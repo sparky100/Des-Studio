@@ -91,6 +91,64 @@ describe('ExecutePanel', () => {
     expect(onRunSaved).toHaveBeenCalledOnce();
   });
 
+  it('saves all 10 sequential single-replication runs — each click triggers one Supabase insert', async () => {
+    // Each iteration runs a real engine.runAll(); allow 30 s for the full loop under load.
+    const onRunSaved = vi.fn();
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
+
+    for (let i = 0; i < 10; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+      // Wait for this run's save to complete before clicking again
+      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(i + 1));
+      await waitFor(() => expect(onRunSaved).toHaveBeenCalledTimes(i + 1));
+    }
+
+    expect(mockSaveSimulationRun).toHaveBeenCalledTimes(10);
+    expect(onRunSaved).toHaveBeenCalledTimes(10);
+    // Every call must target the same model with replications=1
+    mockSaveSimulationRun.mock.calls.forEach(([modelId, userId]) => {
+      expect(modelId).toBe('model-1');
+      expect(userId).toBe('user-1');
+    });
+  }, 30000);
+
+  it('displays batch results and saves one record when a multi-replication batch completes', async () => {
+    const N = 3;
+    const onRunSaved = vi.fn();
+
+    // Mock the replication runner to immediately deliver all N payloads and complete
+    mockRunReplications.mockImplementation(({ onReplicationComplete, onComplete }) => {
+      const payloads = Array.from({ length: N }, (_, i) => ({
+        replicationIndex: i,
+        seed: 1000 + i,
+        result: {
+          snap: { clock: 100 + i },
+          summary: { total: 10, served: 8, reneged: 0, avgWait: 5.0, avgSvc: 3.0, avgSojourn: 8.0 },
+          finalTime: 100 + i,
+        },
+      }));
+      payloads.forEach(p => onReplicationComplete?.(p, {}));
+      onComplete?.(payloads);
+      return { cancel: vi.fn() };
+    });
+
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
+
+    const spinButtons = screen.getAllByRole('spinbutton');
+    fireEvent.change(spinButtons[1], { target: { value: String(N) } });
+    fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+
+    // The batch save must fire exactly once with replications=N
+    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+    expect(mockSaveSimulationRun.mock.calls[0][3]).toEqual(
+      expect.objectContaining({ replications: N })
+    );
+    await waitFor(() => expect(onRunSaved).toHaveBeenCalledOnce());
+
+    // The batch status badge and each replication row both render "complete" tags
+    expect(screen.getAllByText('complete').length).toBeGreaterThanOrEqual(N + 1);
+  });
+
   it('shows batch progress and cancel button for multi-replication runs', async () => {
     const cancel = vi.fn();
     mockRunReplications.mockImplementation(({ onProgress }) => {

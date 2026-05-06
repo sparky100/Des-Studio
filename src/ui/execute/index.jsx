@@ -561,6 +561,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
   const engineRef = useRef(null);
   const autoRef = useRef(null);
   const runnerRef = useRef(null);
+  const saveInProgressRef = useRef(false);
 
   const validation = useMemo(() => {
     const v = validateModel({
@@ -658,7 +659,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
   const doRunAll = useCallback(async () => {
     stopAuto();
     if (hasErrors) return;
-    if (saveStatus?.state === 'saving') return;
+    if (saveInProgressRef.current) return;
     if (!userId || !modelId) {
       setSaveStatus({ state: 'error', message: '✗ Missing User/Model ID' });
       return;
@@ -710,38 +711,45 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
           if (payload.result?.summary?.phaseCTruncated) setPhaseCTruncated(true);
         },
         onComplete: async payloads => {
-          const ordered = payloads.filter(Boolean);
-          const stats = summarizeReplicationResults(ordered, CI_METRICS);
-          const batchResult = makeBatchResult(ordered, stats, maxTimeForRun, warmupPeriod);
-
-          setBatchStatus("complete");
-          setResults(batchResult);
-          setAggregateStats(stats);
-          setSaveStatus({ state: 'saving', message: 'Saving replication batch...' });
-
+          saveInProgressRef.current = true;
           try {
-            await saveSimulationRun(modelId, userId, batchResult, {
-              seed: runSeed,
-              runLabel,
-              replications,
-              warmupPeriod,
-              maxTime: maxTimeForRun,
-              batchId,
-              aggregateStats: stats,
-              replicationResults: ordered.map(payload => ({
-                replicationIndex: payload.replicationIndex,
-                seed: payload.seed,
-                summary: payload.result?.summary || {},
-                finalTime: payload.result?.finalTime,
-              })),
-            });
-            setSaveStatus({ state: 'success', message: '✓ Replication batch saved successfully!' });
-            setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved." }]);
-            onRunSaved?.();
-          } catch (e) {
-            setSaveStatus({ state: 'error', message: `✗ Failed to save batch: ${e.message}` });
-            setLog(prev => [...prev, { phase: "ERROR", time: batchResult.snap.clock, message: `❌ Database error: ${e.message}` }]);
+            const ordered = payloads.filter(Boolean);
+            const stats = summarizeReplicationResults(ordered, CI_METRICS);
+            const batchResult = makeBatchResult(ordered, stats, maxTimeForRun, warmupPeriod);
+
+            setBatchStatus("complete");
+            setResults(batchResult);
+            setAggregateStats(stats);
+            setSaveStatus({ state: 'saving', message: 'Saving replication batch...' });
+
+            try {
+              await saveSimulationRun(modelId, userId, batchResult, {
+                seed: runSeed,
+                runLabel,
+                replications,
+                warmupPeriod,
+                maxTime: maxTimeForRun,
+                batchId,
+                aggregateStats: stats,
+                replicationResults: ordered.map(payload => ({
+                  replicationIndex: payload.replicationIndex,
+                  seed: payload.seed,
+                  summary: payload.result?.summary || {},
+                  finalTime: payload.result?.finalTime,
+                })),
+              });
+              setSaveStatus({ state: 'success', message: '✓ Replication batch saved successfully!' });
+              setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved." }]);
+              onRunSaved?.();
+            } catch (saveError) {
+              setSaveStatus({ state: 'error', message: `✗ Failed to save batch: ${saveError.message}` });
+              setLog(prev => [...prev, { phase: "ERROR", time: batchResult.snap.clock, message: `❌ Database error: ${saveError.message}` }]);
+            }
+          } catch (setupError) {
+            setBatchStatus("complete");
+            setSaveStatus({ state: 'error', message: `✗ Batch error: ${setupError.message}` });
           } finally {
+            saveInProgressRef.current = false;
             runnerRef.current = null;
             setMode("done");
           }
@@ -785,12 +793,13 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
     setMode("done");
     if (result.summary?.phaseCTruncated) setPhaseCTruncated(true);
 
+    saveInProgressRef.current = true;
     setSaveStatus({ state: 'saving', message: 'Saving results...' });
     setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing simulation history to database..." }]);
 
     try {
-      await saveSimulationRun(modelId, userId, result, { 
-        seed: runSeed, 
+      await saveSimulationRun(modelId, userId, result, {
+        seed: runSeed,
         runLabel,
         replications: 1,
         warmupPeriod,
@@ -802,8 +811,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
     } catch (e) {
       setSaveStatus({ state: 'error', message: `✗ Failed to save: ${e.message}` });
       setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
+    } finally {
+      saveInProgressRef.current = false;
     }
-  }, [model, userId, modelId, seed, runLabel, hasErrors, saveStatus, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved]);
+  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -1027,7 +1038,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
         <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive}>⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
-        <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving'}>⚡ Run All</Btn>
+        <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
         <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results</Btn>
         <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
         <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)}>AI Insights</Btn>
