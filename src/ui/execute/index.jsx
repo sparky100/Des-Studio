@@ -658,6 +658,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
   const doRunAll = useCallback(async () => {
     stopAuto();
     if (hasErrors) return;
+    if (saveStatus?.state === 'saving') return;
     if (!userId || !modelId) {
       setSaveStatus({ state: 'error', message: '✗ Missing User/Model ID' });
       return;
@@ -763,9 +764,15 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
       return;
     }
 
+    setResults(null);
+    setSaveStatus(null);
+    setPhaseCTruncated(false);
+    setLog([{ phase: "INIT", time: 0, message: `Run started  (seed: ${runSeed})` }]);
+    setMode("running");
+
     const engine = buildEngine(
-      model, 
-      runSeed, 
+      model,
+      runSeed,
       warmupPeriod,
       maxTimeForRun,
       stopConditionForRun
@@ -796,7 +803,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
       setSaveStatus({ state: 'error', message: `✗ Failed to save: ${e.message}` });
       setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
     }
-  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved]);
+  }, [model, userId, modelId, seed, runLabel, hasErrors, saveStatus, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -1020,7 +1027,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
         <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive}>⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
-        <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive}>⚡ Run All</Btn>
+        <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving'}>⚡ Run All</Btn>
         <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results</Btn>
         <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
         <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)}>AI Insights</Btn>
