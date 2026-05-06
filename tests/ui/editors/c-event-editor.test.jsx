@@ -221,7 +221,7 @@ describe('CEventEditor — ConditionBuilder token list staleness (C8)', () => {
     await waitFor(() => {
       expect(screen.getAllByRole('combobox')[0]).toHaveValue('queue(Waiting).length');
       expect(screen.getByDisplayValue('0')).toBeInTheDocument();
-      expect(screen.getByText(/queue\(Waiting\)\.length == 0/)).toBeInTheDocument();
+      expect(screen.getByText(/queue\(Waiting\)\.length > 0/)).toBeInTheDocument();
     });
   });
 });

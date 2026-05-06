@@ -195,7 +195,7 @@ describe('ExecutePanel', () => {
     expect(await screen.findAllByText('Avg wait')).toHaveLength(2);
     expect(screen.getByText('5.00')).toBeInTheDocument();
     expect(screen.getByText('10')).toBeInTheDocument();
-    expect(screen.getByText('11')).toBeInTheDocument();
+    expect(screen.getAllByText('11')[0]).toBeInTheDocument();
   });
 
   it('saves one row after a completed multi-replication batch', async () => {

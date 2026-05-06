@@ -260,8 +260,8 @@ const VisualView = ({ snap, model, summary }) => {
       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 16, alignItems: "start" }}>
         <div style={{ background: "#111", border: `2px solid #a855f744`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 140 }}>
           <div style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 2, marginBottom: 6 }}>SIM CLOCK</div>
-          <div style={{ fontSize: 40, fontWeight: 700, color: "#a855f7", fontFamily: FONT, lineHeight: 1 }}>
-            {parseFloat(snap.clock).toFixed(2)}
+          <div style={{ fontSize: 42, fontWeight: 300, color: "#fff", fontFamily: FONT, lineHeight: 1 }}>
+            {parseFloat(snap.clock).toFixed(0)}
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>

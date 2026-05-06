@@ -93,7 +93,7 @@ describe('ConditionBuilder — operator filtering by valueType', () => {
     );
 
     // Should see the operator and value inputs now
-    expect(screen.getByDisplayValue('==')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('>')).toBeInTheDocument();
   });
 
   it('shows 6 operators (==, !=, <, >, <=, >=) for number tokens', async () => {

@@ -645,7 +645,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
   const addRow = () => {
     const defaultToken = tokens[0]?.value||'';
     const defaultType = tokens[0]?.valueType||'number';
-    const defaultOperator = getOperatorsForType(defaultType)[0];
+    const defaultOperator = defaultType === 'number' ? '>' : getOperatorsForType(defaultType)[0];
     updateRows([...rows, {
       id:'r'+Date.now(), token:defaultToken,
       operator:defaultOperator, value:defaultConditionValueForType(defaultType), join:'AND',
