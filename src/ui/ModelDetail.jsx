@@ -318,6 +318,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
       statsLoading:false,
       statsError:false,
     }));
+    if(tab==="history"){
+      setHistoryLoading(true);setHistoryError("");
+      fetchRunHistory(modelId)
+        .then(rows=>setHistoryRows(rows))
+        .catch(e=>setHistoryError(e.message))
+        .finally(()=>setHistoryLoading(false));
+    }
     onRefresh?.();
   };
 
