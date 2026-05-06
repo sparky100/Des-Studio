@@ -51,13 +51,15 @@ flowchart LR
   S8 --> S8B["Sprint 8B<br/>Model definition coherence<br/>Queue/service semantics"]
   S8B --> S9A["Sprint 9A<br/>Visual preflight<br/>Canvas + graph metadata"]
   S9A --> S9["Sprint 9<br/>Visual Designer<br/>Graph-first authoring"]
+  S9 --> S9B["Sprint 9B<br/>Visual Designer UX<br/>Hardening + polish"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef next fill:#173447,stroke:#22d3ee,color:#ecfeff;
   classDef later fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
   class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A done;
-  class S8,S8B next;
-  class S9A,S9 later;
+  class S8,S8B,S9 done;
+  class S9B next;
+  class S9A later;
 ```
 
 ### Roadmap Snapshot
@@ -70,7 +72,7 @@ flowchart LR
 | Dynamic modelling | ✅ Complete | Sprint 7 adds time-varying arrival rates and resource capacity schedules. |
 | AI model creation | ✅ Complete | Sprint 8A prepared provider-neutral LLM routing; Sprint 8 added natural-language model authoring. |
 | Model definition coherence | ✅ Complete | Sprint 8B aligned queue/customer/server/service semantics before visual designer work. |
-| Visual authoring | 🔄 Current | Sprint 9A accepted ADR-010; Sprint 9 is adding graph-first Visual Designer authoring. |
+| Visual authoring | 🔄 Current | Sprint 9 delivered the reviewable graph-first authoring model; Sprint 9B consolidates UX hardening, delete, richer validation, and resource editing. |
 
 ### Key Issues and Watchpoints
 
@@ -134,6 +136,9 @@ flowchart LR
 | 1.38 | 2026-05-05 | Added the first Visual Designer shell in `ModelDetail`: a new tab renders derived graph counts, nodes, and connections from canonical `model_json`; exports now preserve optional `model_json.graph` layout metadata. |
 | 1.39 | 2026-05-05 | Installed `@xyflow/react` and added the first read-only Visual Designer canvas renderer with Source, Queue, Activity, and Sink node styling over the derived canonical graph. |
 | 1.40 | 2026-05-05 | Added the initial reviewable Visual Designer authoring model: draggable layout persistence, button-based node creation, conservative canonical connection rules, compact inspector, and round-trip tests. UX polish remains the next Sprint 9 refinement pass. |
+| 1.41 | 2026-05-06 | Continued Sprint 9 UX refinement: palette items can be dragged onto the canvas with persisted placement, node handles now follow Source/Queue/Activity/Sink port rules, and a compact visual validation summary highlights incomplete routes. |
+| 1.42 | 2026-05-06 | Expanded the Visual Designer inspector with existing `DistPicker` controls for Source inter-arrival schedules and Activity service-time schedules, writing back to canonical B-event and C-event schedule data. |
+| 1.43 | 2026-05-06 | Closed Sprint 9 around the reviewed initial Visual Designer authoring model and added Sprint 9B — Visual Designer UX Hardening to consolidate remaining resource editing, delete, richer validation, connection editing, and palette polish work. |
 
 ---
 
@@ -154,7 +159,8 @@ flowchart LR
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight. | 22 focused | N/A | Success | Provider-neutral request contract, browser compatibility, server-side provider/model routing, and proxy deployment checklist complete. |
 | Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence. | Focused | N/A | Success | Stabilised queue/service semantics before visual designer work. |
 | Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight. | Docs | N/A | Success | ADR-010 accepted; planning/design docs updated before Sprint 9 coding. |
-| Sprint 9 | 🔄 In progress | — | Visual Designer Authoring. | Focused | N/A | Pending | Initial reviewable authoring model added; UX refinement remains. |
+| Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring. | 38 focused | N/A | Success | Reviewable graph-first authoring model, round-trip parity, drag-to-place palette, visual validation summary, and timing distribution inspector complete. |
+| Sprint 9B | 🔄 In progress | — | Visual Designer UX Hardening. | Focused | N/A | Pending | Consolidates remaining visual designer polish: resource editing, safe delete, richer validation, connection editing, palette affordances, and browser review. |
 
 ---
 
@@ -172,6 +178,7 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 8 | AI Generated Model Authoring | Adds the second authoring mode: natural-language model proposals validated before apply |
 | Sprint 8B | Model Definition Coherence | Aligns Forms/Tabs, AI generation, validation, and engine semantics for queues, service starts, completions, and routing |
 | Sprint 9 | Visual Designer Authoring | Adds the third authoring mode: graph-first canvas editing over the same canonical model |
+| Sprint 9B | Visual Designer UX Hardening | Polishes the third authoring mode after the core round-trip model is proven |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
@@ -3829,9 +3836,9 @@ git diff --check
 |---|---|---|
 | F9.1 — Visual Designer shell and mode entry | ✓ | New Visual Designer tab renders derived graph summary and editable canvas |
 | F9.2 — Graph derivation and layout metadata | ✓ | Derivation helper and layout persistence are implemented; derived edges are not persisted |
-| F9.3 — `@xyflow/react` canvas renderer and node palette | ~ | Canvas and button-based node palette are implemented; drag-from-palette UX deferred |
-| F9.4 — Connection rules and DAG validation | ~ | Initial conservative connection rules implemented; richer validation panel deferred |
-| F9.5 — Inspector integration | ~ | Compact review inspector implemented; advanced distribution/resource editing deferred |
+| F9.3 — `@xyflow/react` canvas renderer and node palette | ~ | Canvas, button palette, and drag-to-place palette creation are implemented; richer palette UX remains |
+| F9.4 — Connection rules and DAG validation | ~ | Initial conservative connection rules and visual validation summary implemented; richer validation panel deferred |
+| F9.5 — Inspector integration | ~ | Compact inspector includes timing distribution controls; advanced resource editing and delete workflows deferred |
 | F9.6 — Round-trip parity with Forms/Tabs | ~ | Visual edits update canonical `model_json`; broader manual browser pass remains |
 
 ### Sprint 9 Current Implementation Contract
@@ -3840,9 +3847,9 @@ The first Sprint 9 deliverable is a reviewable and testable model-authoring surf
 
 Deferred UX refinement:
 
-- drag-from-palette node creation
+- richer palette placement affordances
 - polished validation side panel
-- advanced distribution/resource editing from the canvas inspector
+- advanced resource editing from the canvas inspector
 - delete workflow and richer connection editing
 
 ### Design Principles for Sprint 9
@@ -3911,6 +3918,39 @@ npm run build                          # Succeeds
 # Manual: create a model visually, switch to Forms/Tabs, confirm same data
 # Manual: edit a model in Forms/Tabs, switch to Visual Designer, confirm graph reflects it
 # Manual: attempt invalid connections/cycles, confirm they are blocked
+```
+
+**Completion note:** Sprint 9 is complete as the initial reviewable Visual Designer authoring model. The user reviewed the initial model and called out round-tripping as good. Remaining visual-designer UX polish is consolidated into Sprint 9B.
+
+---
+
+## Sprint 9B — Visual Designer UX Hardening
+
+**Goal:** Harden and polish the Visual Designer now that the core graph-first authoring model and Forms/Tabs round-trip are working.
+
+**Status:** 🔄 In progress | **Started:** 2026-05-06 | **Completed:** —
+**Prerequisite:** Sprint 9 complete. Continue using the same canonical `model_json`; do not introduce a second graph model.
+
+**Architectural constraint:** Sprint 9B is refinement over the proven Sprint 9 model. Visual edits still update canonical model data first; `model_json.graph` remains layout metadata only.
+
+| Feature | Audit Status | Action |
+|---|---|---|
+| F9B.1 — Activity resource/server editing | ✗ | Add server/resource picker in the Activity inspector and update condition/effect canonical strings safely |
+| F9B.2 — Safe node deletion workflow | ✗ | Delete visual nodes through canonical model elements with dependency warnings and re-derived graph |
+| F9B.3 — Connection editing polish | ✗ | Add edge delete/re-route workflow and clearer connection feedback |
+| F9B.4 — Richer validation panel | ~ | Expand compact visual validation into a node-linked checklist with canvas highlighting |
+| F9B.5 — Palette and placement affordances | ~ | Improve drag/drop affordance, drop hints, fit/reset layout, and selected-node clarity |
+| F9B.6 — Browser review and round-trip hardening | ~ | Manually verify create/connect/edit/save/reload/execute and add regression tests for gaps |
+| F9B.7 — Bundle/code-splitting review | ⬜ | Consider lazy-loading Visual Designer to reduce main bundle size after React Flow integration |
+
+### Sprint 9B Completion Gate
+
+```bash
+npm test -- visual-designer c-event-editor accessibility model-export
+npm run build
+# Manual: create, connect, edit resource/timing, save, reload, and execute a visual model
+# Manual: delete each node type and confirm dependencies are explained before mutation
+# Manual: invalid connections and validation warnings highlight the affected node
 ```
 
 ---

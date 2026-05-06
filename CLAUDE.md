@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-05 | Reflects: Sprint 9A visual designer preflight + ADR-010 + Known Issues*
+*Last updated: 2026-05-06 | Reflects: Sprint 9 Visual Designer authoring + Sprint 9B UX hardening + ADR-010 + Known Issues*
 
 ---
 
@@ -1321,7 +1321,7 @@ UI / UX
 
 Goal: Lock the Visual Designer canvas, graph metadata, round-trip, and inspector reuse decisions before Sprint 9 coding.
 
-**Status:** Sprint 9 implementation is in progress. ADR-010 is accepted and guides all Visual Designer work.
+**Status:** Sprint 9 is complete as the initial reviewable Visual Designer authoring model. Sprint 9B is the current visual-designer UX hardening pass. ADR-010 remains the governing architecture.
 
 ### Sprint 9A Accepted Decisions
 
@@ -1345,8 +1345,9 @@ Goal: Lock the Visual Designer canvas, graph metadata, round-trip, and inspector
 - First implementation slice adds dependency-free graph derivation in `src/ui/visual-designer/graph.js`.
 - Visual Designer shell is exposed as a `ModelDetail` tab and now renders the derived graph through an editable `@xyflow/react` canvas, with node/edge summaries retained below it for verification.
 - The initial Sprint 9 implementation is review/test-first, not final UX polish: button-based node creation, draggable layout persistence, conservative connection creation, and a compact inspector are implemented.
+- The first UX refinement slice adds drag-to-place palette creation, Source/Queue/Activity/Sink port-rule handles, and a compact visual validation summary for incomplete routes.
+- The compact inspector reuses `DistPicker` for Source inter-arrival schedules and Activity service-time schedules, writing back to canonical B-event/C-event schedule rows.
 - Visual Designer mutations must update canonical `model_json` first. Graph edges remain derived; `model_json.graph` stores layout metadata only.
-- Deferred UX refinement includes drag-from-palette creation, richer validation panels, delete workflows, and advanced distribution/resource editing from the canvas inspector.
 - Graph topology is derived from canonical model logic:
   - `ARRIVE(Customer, Queue)` creates Source → Queue.
   - C-event queue conditions and `ASSIGN(Queue, Server)` create Queue → Activity.
@@ -1355,6 +1356,18 @@ Goal: Lock the Visual Designer canvas, graph metadata, round-trip, and inspector
 - `graphLayoutFromDerivedGraph()` serializes layout metadata without derived edges.
 - `model_json.graph` is preserved by model export/apply paths when present.
 - Keep this helper pure and testable; do not import React, DOM, Supabase, or engine internals.
+
+### Sprint 9B — Visual Designer UX Hardening
+
+Current follow-on scope:
+
+- Add Activity resource/server editing in the visual inspector without forking full C-event editor logic.
+- Add safe node deletion through canonical model elements with dependency warnings.
+- Add edge delete/re-route workflow and clearer connection feedback.
+- Expand visual validation into a node-linked checklist with affected-node highlighting.
+- Improve palette placement affordances, fit/reset layout, and selected-node clarity.
+- Complete manual browser review for create/connect/edit/save/reload/execute.
+- Consider lazy-loading the Visual Designer if the React Flow bundle warning becomes a product concern.
 
 ### Recently Completed — Sprint 8B
 

@@ -9,6 +9,7 @@ import {
   connectVisualNodes,
   updateGraphLayout,
   updateVisualNode,
+  validateVisualGraph,
 } from "./graph-operations.js";
 
 const NODE_COLOR = {
@@ -67,10 +68,55 @@ function EdgeRow({ edge, nodeLabels }) {
   );
 }
 
+function ValidationSummary({ issues, onSelectNode }) {
+  const hasIssues = issues.length > 0;
+  return (
+    <div style={{
+      background: hasIssues ? C.amber + "12" : C.green + "12",
+      border: `1px solid ${hasIssues ? C.amber : C.green}55`,
+      borderRadius: 6,
+      padding: "9px 10px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 7,
+      fontFamily: FONT,
+      fontSize: 11,
+      color: C.text,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+        <strong style={{ color: hasIssues ? C.amber : C.green }}>Visual validation</strong>
+        <Tag label={hasIssues ? `${issues.length} warnings` : "clear"} color={hasIssues ? C.amber : C.green} />
+      </div>
+      {!hasIssues && <span style={{ color: C.muted }}>Graph has a source, a sink, and routed visual nodes.</span>}
+      {issues.slice(0, 4).map((issue, idx) => (
+        <button
+          key={`${issue.nodeId || "model"}-${idx}`}
+          type="button"
+          onClick={() => issue.nodeId && onSelectNode?.(issue.nodeId)}
+          style={{
+            background: C.bg,
+            border: `1px solid ${C.border}`,
+            borderRadius: 5,
+            color: issue.nodeId ? C.amber : C.muted,
+            cursor: issue.nodeId ? "pointer" : "default",
+            fontFamily: FONT,
+            fontSize: 10,
+            padding: "6px 8px",
+            textAlign: "left",
+          }}
+        >
+          {issue.message}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [message, setMessage] = useState(null);
   const graph = useMemo(() => deriveGraphFromModel(model || {}), [model]);
+  const visualIssues = useMemo(() => validateVisualGraph(graph), [graph]);
   const nodeLabels = useMemo(
     () => new Map((graph.nodes || []).map(node => [node.id, node.label || node.id])),
     [graph.nodes]
@@ -83,9 +129,9 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
     setMessage(null);
     onModelChange?.(nextModel);
   };
-  const addNode = type => {
+  const addNode = (type, position = null) => {
     if (!canEdit) return;
-    const next = addVisualNode(model, type);
+    const next = addVisualNode(model, type, position);
     applyModel(next);
     const nextGraph = deriveGraphFromModel(next);
     const newest = [...nextGraph.nodes].reverse().find(node => node.type === type);
@@ -107,6 +153,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
       return;
     }
     applyModel(result.model);
+    setMessage({ state: "success", text: "Connection applied to the canonical model." });
   };
   const patchNode = (node, patch) => {
     if (!canEdit) return;
@@ -159,12 +206,36 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
             { type: VISUAL_NODE_TYPES.ACTIVITY, label: "Add Activity", color: C.purple },
             { type: VISUAL_NODE_TYPES.SINK, label: "Add Sink", color: C.red },
           ].map(item => (
-            <Btn key={item.type} small variant="ghost" disabled={!canEdit} onClick={() => addNode(item.type)} style={{ justifyContent: "flex-start", borderColor: `${item.color}66`, color: item.color }}>
+            <button
+              key={item.type}
+              type="button"
+              draggable={canEdit}
+              disabled={!canEdit}
+              onDragStart={event => {
+                event.dataTransfer.setData("application/des-studio-node", item.type);
+                event.dataTransfer.effectAllowed = "copy";
+              }}
+              onClick={() => addNode(item.type)}
+              style={{
+                background: "#ffffff08",
+                color: item.color,
+                border: `1px solid ${item.color}66`,
+                borderRadius: 5,
+                padding: "4px 10px",
+                fontSize: 11,
+                fontWeight: 600,
+                fontFamily: FONT,
+                cursor: canEdit ? "grab" : "not-allowed",
+                opacity: canEdit ? 1 : 0.45,
+                textAlign: "left",
+              }}
+            >
               {item.label}
-            </Btn>
+            </button>
           ))}
+          <ValidationSummary issues={visualIssues} onSelectNode={setSelectedNodeId} />
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, lineHeight: 1.5 }}>
-            Connections update canonical model logic. Edges are re-derived after each edit.
+            Click to add quickly, or drag onto the canvas to choose the starting position.
           </div>
         </div>
 
@@ -190,6 +261,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
             onNodeMove={moveNode}
             onViewportChange={changeViewport}
             onConnectNodes={connectNodes}
+            onDropNode={addNode}
           />
         </div>
 

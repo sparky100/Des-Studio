@@ -20,6 +20,8 @@ const NODE_COLOR = {
 
 function DesNode({ data, selected }) {
   const color = NODE_COLOR[data.type] || C.accent;
+  const hasTarget = data.type !== "source";
+  const hasSource = data.type !== "sink";
   return (
     <div style={{
       width: 190,
@@ -37,11 +39,13 @@ function DesNode({ data, selected }) {
       fontFamily: FONT,
       fontSize: 11,
     }}>
-      <Handle
-        type="target"
-        position={Position.Left}
-        style={{ width: 8, height: 8, background: color, borderColor: C.bg }}
-      />
+      {hasTarget && (
+        <Handle
+          type="target"
+          position={Position.Left}
+          style={{ width: 8, height: 8, background: color, borderColor: C.bg }}
+        />
+      )}
       <div style={{
         color,
         fontSize: 9,
@@ -55,11 +59,13 @@ function DesNode({ data, selected }) {
       {!!data.sublabel && (
         <div style={{ color: C.muted, fontSize: 10, lineHeight: 1.4 }}>{data.sublabel}</div>
       )}
-      <Handle
-        type="source"
-        position={Position.Right}
-        style={{ width: 8, height: 8, background: color, borderColor: C.bg }}
-      />
+      {hasSource && (
+        <Handle
+          type="source"
+          position={Position.Right}
+          style={{ width: 8, height: 8, background: color, borderColor: C.bg }}
+        />
+      )}
     </div>
   );
 }
@@ -96,6 +102,7 @@ export function FlowDiagramReactFlow({
   onNodeMove,
   onViewportChange,
   onConnectNodes,
+  onDropNode,
 }) {
   const nodes = useMemo(() => (graph.nodes || []).map(toFlowNode), [graph.nodes]);
   const edges = useMemo(() => (graph.edges || []).map(toFlowEdge), [graph.edges]);
@@ -103,6 +110,24 @@ export function FlowDiagramReactFlow({
   return (
     <div
       aria-label="Visual Designer canvas"
+      onDragOver={event => {
+        if (!canEdit) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDrop={event => {
+        if (!canEdit) return;
+        const type = event.dataTransfer.getData("application/des-studio-node");
+        if (!type) return;
+        event.preventDefault();
+        const rect = event.currentTarget.getBoundingClientRect();
+        const viewport = graph.viewport || { x: 0, y: 0, zoom: 1 };
+        const zoom = viewport.zoom || 1;
+        onDropNode?.(type, {
+          x: Math.round((event.clientX - rect.left - (viewport.x || 0)) / zoom),
+          y: Math.round((event.clientY - rect.top - (viewport.y || 0)) / zoom),
+        });
+      }}
       style={{
         height: 520,
         minHeight: 360,

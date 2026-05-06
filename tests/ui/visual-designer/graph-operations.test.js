@@ -5,6 +5,7 @@ import {
   connectVisualNodes,
   updateGraphLayout,
   updateVisualNode,
+  validateVisualGraph,
   validateVisualConnection,
 } from "../../../src/ui/visual-designer/graph-operations.js";
 
@@ -59,6 +60,15 @@ describe("visual designer graph operations", () => {
     expect(withSink.bEvents.some(event => event.effect === "COMPLETE()")).toBe(true);
   });
 
+  it("can place a newly added visual node at a requested canvas position", () => {
+    const next = addVisualNode(baseModel, "queue", { x: 777, y: 333 });
+
+    expect(next.graph.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "queue", x: 777, y: 333 }),
+    ]));
+    expect(next.graph.edges).toBeUndefined();
+  });
+
   it("applies valid visual connections to canonical model logic", () => {
     const graph = deriveGraphFromModel(baseModel);
     const sourceId = "source:arrival-0";
@@ -103,5 +113,41 @@ describe("visual designer graph operations", () => {
     expect(next.bEvents.find(event => event.id === "arrival").effect).toBe("ARRIVE(Customer, Front Desk Queue)");
     expect(next.cEvents.find(event => event.id === "start-service").condition).toContain("queue(Front Desk Queue).length");
     expect(deriveGraphFromModel(next).edges.map(edge => `${edge.from}->${edge.to}`)).toContain("source:arrival-0->queue:main-q");
+  });
+
+  it("updates source inter-arrival and activity service distributions through selected node patches", () => {
+    const graph = deriveGraphFromModel(baseModel);
+    const source = graph.nodes.find(node => node.id === "source:arrival-0");
+    const activity = graph.nodes.find(node => node.id === "activity:start-service");
+    const withArrivalDist = updateVisualNode(baseModel, source, {
+      interarrival: { dist: "Exponential", distParams: { mean: "5" } },
+    });
+    const withServiceDist = updateVisualNode(withArrivalDist, activity, {
+      serviceTime: { dist: "Fixed", distParams: { value: "7" } },
+    });
+
+    expect(withServiceDist.bEvents.find(event => event.id === "arrival").schedules[0]).toEqual(expect.objectContaining({
+      eventId: "arrival",
+      dist: "Exponential",
+      distParams: { mean: "5" },
+    }));
+    expect(withServiceDist.cEvents.find(event => event.id === "start-service").cSchedules[0]).toEqual(expect.objectContaining({
+      dist: "Fixed",
+      distParams: { value: "7" },
+    }));
+  });
+
+  it("summarizes visual graph warnings for incomplete routes", () => {
+    const graph = deriveGraphFromModel({
+      ...baseModel,
+      bEvents: [],
+      cEvents: [],
+    });
+
+    expect(validateVisualGraph(graph)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ message: expect.stringContaining("No Source node") }),
+      expect.objectContaining({ message: expect.stringContaining("No Sink node") }),
+      expect.objectContaining({ nodeId: "queue:main-q", message: expect.stringContaining("no downstream activity") }),
+    ]));
   });
 });

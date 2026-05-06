@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { C, FONT } from "../shared/tokens.js";
-import { Btn, Field, SH, Tag } from "../shared/components.jsx";
+import { Btn, DistPicker, Field, SH, Tag } from "../shared/components.jsx";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { VISUAL_NODE_TYPES } from "./graph.js";
 
@@ -60,6 +60,8 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
   const sourceCustomer = effectValue(bEvent?.effect, /ARRIVE\(([^,)]+)/i);
   const sourceQueue = effectValue(bEvent?.effect, /ARRIVE\([^,]+,\s*([^)]+)\)/i);
   const sinkMacro = String(bEvent?.effect || "").toUpperCase().includes("RENEGE") ? "RENEGE" : "COMPLETE";
+  const sourceSchedule = bEvent?.schedules?.[0] || {};
+  const activitySchedule = cEvent?.cSchedules?.[0] || {};
 
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -77,6 +79,16 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
             <option value="">No queue selected</option>
             {queues.map(item => <option key={item.id || item.name} value={item.name}>{item.name}</option>)}
           </SelectField>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
+              Inter-arrival time
+            </div>
+            <DistPicker
+              value={{ dist: sourceSchedule.dist || "Exponential", distParams: sourceSchedule.distParams || { mean: "1" } }}
+              onChange={canEdit ? value => onPatchNode(node, { interarrival: value }) : () => {}}
+              compact
+            />
+          </div>
         </>
       )}
 
@@ -108,6 +120,16 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               entityTypes={model.entityTypes || []}
               stateVariables={model.stateVariables || []}
               queues={model.queues || []}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
+              Service time
+            </div>
+            <DistPicker
+              value={{ dist: activitySchedule.dist || "Fixed", distParams: activitySchedule.distParams || { value: "1" } }}
+              onChange={canEdit ? value => onPatchNode(node, { serviceTime: value }) : () => {}}
+              compact
             />
           </div>
         </>

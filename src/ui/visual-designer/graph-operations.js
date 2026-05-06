@@ -109,7 +109,7 @@ export function updateGraphLayout(model, derivedGraph, patch = {}) {
   };
 }
 
-export function addVisualNode(model, type) {
+export function addVisualNode(model, type, position = null) {
   const withEntities = ensureEntityTypes(model);
   const bEvents = [...(withEntities.bEvents || [])];
   const cEvents = [...(withEntities.cEvents || [])];
@@ -161,7 +161,48 @@ export function addVisualNode(model, type) {
   }
 
   const next = { ...withEntities, bEvents, cEvents, queues };
-  return updateGraphLayout(next, deriveGraphFromModel(next));
+  const derived = deriveGraphFromModel(next);
+  if (!position) return updateGraphLayout(next, derived);
+  const newest = [...derived.nodes].reverse().find(node => node.type === type);
+  return updateGraphLayout(next, derived, newest ? { nodes: [{ id: newest.id, x: position.x, y: position.y }] } : {});
+}
+
+export function validateVisualGraph(graph = {}) {
+  const nodes = graph.nodes || [];
+  const edges = graph.edges || [];
+  const incoming = new Map(nodes.map(node => [node.id, 0]));
+  const outgoing = new Map(nodes.map(node => [node.id, 0]));
+  edges.forEach(edge => {
+    outgoing.set(edge.from, (outgoing.get(edge.from) || 0) + 1);
+    incoming.set(edge.to, (incoming.get(edge.to) || 0) + 1);
+  });
+
+  const issues = [];
+  const push = (severity, nodeId, message) => issues.push({ severity, nodeId, message });
+  if (!nodes.some(node => node.type === VISUAL_NODE_TYPES.SOURCE)) {
+    push("warning", null, "No Source node is present.");
+  }
+  if (!nodes.some(node => node.type === VISUAL_NODE_TYPES.SINK)) {
+    push("warning", null, "No Sink node is present.");
+  }
+  nodes.forEach(node => {
+    if (node.type === VISUAL_NODE_TYPES.SOURCE && (outgoing.get(node.id) || 0) === 0) {
+      push("warning", node.id, `${node.label} is not connected to a queue.`);
+    }
+    if (node.type === VISUAL_NODE_TYPES.QUEUE && (outgoing.get(node.id) || 0) === 0) {
+      push("warning", node.id, `${node.label} has no downstream activity.`);
+    }
+    if (node.type === VISUAL_NODE_TYPES.ACTIVITY && (incoming.get(node.id) || 0) === 0) {
+      push("warning", node.id, `${node.label} has no incoming queue.`);
+    }
+    if (node.type === VISUAL_NODE_TYPES.ACTIVITY && (outgoing.get(node.id) || 0) === 0) {
+      push("warning", node.id, `${node.label} has no completion route.`);
+    }
+    if (node.type === VISUAL_NODE_TYPES.SINK && (incoming.get(node.id) || 0) === 0) {
+      push("warning", node.id, `${node.label} has no incoming activity.`);
+    }
+  });
+  return issues;
 }
 
 export function connectVisualNodes(model, graph, from, to) {
@@ -220,11 +261,23 @@ export function updateVisualNode(model, node, patch = {}) {
     next.bEvents = updateByRef(next.bEvents, node.refId, event => {
       const queue = patch.queueName || (String(event.effect || "").match(/ARRIVE\([^,]+,\s*([^)]+)\)/i)?.[1]?.trim()) || "";
       const customer = patch.customerType || (String(event.effect || "").match(/ARRIVE\(([^,)]+)/i)?.[1]?.trim()) || firstCustomerType(model);
-      return {
+      const nextEvent = {
         ...event,
         ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.customerType !== undefined || patch.queueName !== undefined ? { effect: queue ? `ARRIVE(${customer}, ${queue})` : `ARRIVE(${customer})` } : {}),
       };
+      if (patch.interarrival) {
+        const schedules = Array.isArray(nextEvent.schedules) ? [...nextEvent.schedules] : [];
+        const first = schedules[0] || { eventId: event.id, useEntityCtx: false };
+        schedules[0] = {
+          ...first,
+          eventId: first.eventId || event.id,
+          dist: patch.interarrival.dist,
+          distParams: patch.interarrival.distParams || {},
+        };
+        nextEvent.schedules = schedules;
+      }
+      return nextEvent;
     });
   }
   if (node.type === VISUAL_NODE_TYPES.QUEUE) {
@@ -250,12 +303,25 @@ export function updateVisualNode(model, node, patch = {}) {
     }
   }
   if (node.type === VISUAL_NODE_TYPES.ACTIVITY) {
-    next.cEvents = updateByRef(next.cEvents, node.refId, event => ({
-      ...event,
-      ...(patch.name !== undefined ? { name: patch.name } : {}),
-      ...(patch.priority !== undefined ? { priority: Number(patch.priority) || 1 } : {}),
-      ...(patch.condition !== undefined ? { condition: patch.condition } : {}),
-    }));
+    next.cEvents = updateByRef(next.cEvents, node.refId, event => {
+      const nextEvent = {
+        ...event,
+        ...(patch.name !== undefined ? { name: patch.name } : {}),
+        ...(patch.priority !== undefined ? { priority: Number(patch.priority) || 1 } : {}),
+        ...(patch.condition !== undefined ? { condition: patch.condition } : {}),
+      };
+      if (patch.serviceTime) {
+        const cSchedules = Array.isArray(nextEvent.cSchedules) ? [...nextEvent.cSchedules] : [];
+        const first = cSchedules[0] || { eventId: "", useEntityCtx: true };
+        cSchedules[0] = {
+          ...first,
+          dist: patch.serviceTime.dist,
+          distParams: patch.serviceTime.distParams || {},
+        };
+        nextEvent.cSchedules = cSchedules;
+      }
+      return nextEvent;
+    });
   }
   if (node.type === VISUAL_NODE_TYPES.SINK) {
     next.bEvents = updateByRef(next.bEvents, node.refId, event => ({

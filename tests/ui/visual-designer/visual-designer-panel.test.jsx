@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { createEvent, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ModelDetail, buildModelExportPayload } from '../../../src/ui/ModelDetail.jsx';
@@ -193,5 +194,44 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /mock select source/i }));
 
     expect(screen.getByLabelText(/target queue/i)).toHaveValue('Consultant Queue');
+  });
+
+  it('supports dropping a palette node onto the canvas and saving its position', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const data = new Map();
+    const dataTransfer = {
+      dropEffect: '',
+      effectAllowed: '',
+      setData: (type, value) => data.set(type, value),
+      getData: type => data.get(type) || '',
+    };
+
+    render(
+      <ModelDetail
+        modelId="model-visual"
+        modelData={twoStageModel}
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        overrides={{ isOwner: true, canEdit: true, userId: 'user-1', onSave }}
+      />
+    );
+
+    await user.click(screen.getByRole('tab', { name: /visual designer/i }));
+    fireEvent.dragStart(screen.getByRole('button', { name: /add sink/i }), { dataTransfer });
+    const canvas = screen.getByLabelText('Visual Designer canvas');
+    const dropEvent = createEvent.drop(canvas, { dataTransfer });
+    Object.defineProperty(dropEvent, 'clientX', { value: 300 });
+    Object.defineProperty(dropEvent, 'clientY', { value: 200 });
+    fireEvent(canvas, dropEvent);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      graph: expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ type: 'sink', x: 300, y: 200 }),
+        ]),
+      }),
+    }));
   });
 });
