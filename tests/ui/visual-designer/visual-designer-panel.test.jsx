@@ -1,8 +1,9 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { createEvent, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ModelDetail, buildModelExportPayload } from '../../../src/ui/ModelDetail.jsx';
+import { VisualDesignerPanel } from '../../../src/ui/visual-designer/VisualDesignerPanel.jsx';
 
 vi.mock('@xyflow/react', () => ({
   Background: () => <div data-testid="flow-background" />,
@@ -13,6 +14,7 @@ vi.mock('@xyflow/react', () => ({
   Position: { Left: 'left', Right: 'right' },
   ReactFlow: ({ nodes = [], edges = [], children, fitView, defaultViewport, onNodeClick, onNodeDragStop, onConnect }) => {
     const source = nodes.find(node => node.id.startsWith('source:'));
+    const firstQueue = nodes.find(node => node.id.startsWith('queue:'));
     const overflow = nodes.find(node => node.id === 'queue:consult-q');
     const first = nodes[0];
     return (
@@ -32,6 +34,11 @@ vi.mock('@xyflow/react', () => ({
         {source && (
           <button type="button" onClick={() => onNodeClick?.({}, source)}>
             Mock select source
+          </button>
+        )}
+        {firstQueue && (
+          <button type="button" onClick={() => onNodeClick?.({}, firstQueue)}>
+            Mock select queue
           </button>
         )}
         {source && overflow && (
@@ -198,6 +205,65 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /mock select source/i }));
 
     expect(screen.getByLabelText(/target queue/i)).toHaveValue('Consultant Queue');
+  });
+
+  it('shows dependency dialog listing C-event when deleting a queue referenced by C-events', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    // Select the first queue node (Triage Queue) via canvas
+    await user.click(screen.getByRole('button', { name: /mock select queue/i }));
+    // Inspector now shows the queue editor — click the delete button
+    await user.click(screen.getByRole('button', { name: /delete node/i }));
+
+    // Confirmation dialog must appear listing Start Triage as a dependent
+    const dialog = screen.getByRole('dialog', { name: /confirm node deletion/i });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText(/Start Triage/)).toBeInTheDocument();
+
+    // Cancelling must leave the model unchanged
+    await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(onModelChange).not.toHaveBeenCalled();
+  });
+
+  it('deletes a source node with no dependents immediately without a confirmation dialog', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+
+    const isolatedModel = {
+      id: 'isolated',
+      entityTypes: [{ id: 'cust', name: 'Customer', role: 'customer', attrDefs: [] }],
+      stateVariables: [],
+      queues: [],
+      bEvents: [{ id: 'arr1', name: 'Customer Arrival', scheduledTime: '0', effect: 'ARRIVE(Customer)', schedules: [] }],
+      cEvents: [],
+    };
+
+    render(
+      <VisualDesignerPanel
+        model={isolatedModel}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    // Select the source node
+    await user.click(screen.getByRole('button', { name: /mock select source/i }));
+    // No dependents — click delete should fire immediately without a dialog
+    await user.click(screen.getByRole('button', { name: /delete node/i }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(onModelChange).toHaveBeenCalledOnce();
+    expect(onModelChange.mock.calls[0][0].bEvents).toHaveLength(0);
   });
 
   it('supports dropping a palette node onto the canvas and saving its position', async () => {

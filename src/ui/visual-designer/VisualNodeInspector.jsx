@@ -38,7 +38,7 @@ function SelectField({ label, value, onChange, children, disabled }) {
   );
 }
 
-export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode }) {
+export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode, onDeleteNode }) {
   const node = (graph.nodes || []).find(item => item.id === selectedNodeId);
   const customers = (model.entityTypes || []).filter(type => type.role === "customer");
   const servers = (model.entityTypes || []).filter(type => type.role === "server");
@@ -167,6 +167,12 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
       )}
 
       {!canEdit && <Btn small variant="ghost" disabled>Read-only</Btn>}
+
+      {canEdit && (
+        <div style={{ marginTop: 4, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+          <Btn small variant="danger" full onClick={() => onDeleteNode?.(node)}>Delete node</Btn>
+        </div>
+      )}
     </div>
   );
 }

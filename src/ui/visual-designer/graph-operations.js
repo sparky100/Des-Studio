@@ -263,6 +263,198 @@ export function connectVisualNodes(model, graph, from, to) {
   return { model: updateGraphLayout(next, deriveGraphFromModel(next)), validation };
 }
 
+function escRe(str) {
+  return (str || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Returns the canonical elements that will be deleted or modified when the given node is deleted.
+// Each item: { name, elementType, description }
+export function findNodeDependents(model, node) {
+  const deps = [];
+  if (!node || !node.refId) return deps;
+  const bEvents = model.bEvents || [];
+  const cEvents = model.cEvents || [];
+  const queues = model.queues || [];
+
+  if (node.type === VISUAL_NODE_TYPES.SOURCE) {
+    cEvents.forEach(ce => {
+      if ((ce.cSchedules || []).some(s => s.eventId === node.refId)) {
+        deps.push({ name: ce.name || ce.id, elementType: "C-Event", description: "will be deleted" });
+      }
+    });
+  }
+
+  if (node.type === VISUAL_NODE_TYPES.QUEUE) {
+    const queue = queues.find(q => q.id === node.refId);
+    if (queue && queue.name) {
+      const esc = escRe(queue.name);
+      const condPat = new RegExp(`queue\\(${esc}\\)`, "i");
+      const effPat = new RegExp(`ASSIGN\\(${esc}`, "i");
+      const arrivePat = new RegExp(`ARRIVE\\([^,]+,\\s*${esc}\\)`, "i");
+      const releasePat = new RegExp(`RELEASE\\([^,]+,\\s*${esc}\\)`, "i");
+
+      const affectedCIds = new Set();
+      cEvents.forEach(ce => {
+        const cond = typeof ce.condition === "string" ? ce.condition : "";
+        const eff = typeof ce.effect === "string" ? ce.effect : "";
+        if (condPat.test(cond) || effPat.test(eff)) {
+          affectedCIds.add(ce.id);
+          deps.push({ name: ce.name || ce.id, elementType: "C-Event", description: "will be deleted" });
+        }
+      });
+
+      // Transitive: completion B-events exclusively owned by those C-events
+      const otherRefs = new Set(
+        cEvents
+          .filter(ce => !affectedCIds.has(ce.id))
+          .flatMap(ce => (ce.cSchedules || []).map(s => s.eventId))
+          .filter(Boolean)
+      );
+      affectedCIds.forEach(cId => {
+        const ce = cEvents.find(c => c.id === cId);
+        (ce?.cSchedules || []).forEach(s => {
+          if (s.eventId && !otherRefs.has(s.eventId)) {
+            const be = bEvents.find(b => b.id === s.eventId);
+            if (be) deps.push({ name: be.name || be.id, elementType: "B-Event", description: "will be deleted" });
+          }
+        });
+      });
+
+      // Source B-events whose ARRIVE/RELEASE effect references this queue (will be updated, not deleted)
+      bEvents.forEach(be => {
+        const eff = typeof be.effect === "string" ? be.effect : "";
+        if (arrivePat.test(eff) || releasePat.test(eff)) {
+          deps.push({ name: be.name || be.id, elementType: "B-Event", description: "arrival or routing reference will be updated" });
+        }
+      });
+    }
+  }
+
+  if (node.type === VISUAL_NODE_TYPES.ACTIVITY) {
+    const ce = cEvents.find(c => c.id === node.refId);
+    if (ce) {
+      const otherRefs = new Set(
+        cEvents
+          .filter(c => c.id !== node.refId)
+          .flatMap(c => (c.cSchedules || []).map(s => s.eventId))
+          .filter(Boolean)
+      );
+      (ce.cSchedules || []).forEach(s => {
+        if (s.eventId && !otherRefs.has(s.eventId)) {
+          const be = bEvents.find(b => b.id === s.eventId);
+          if (be) deps.push({ name: be.name || be.id, elementType: "B-Event", description: "will be deleted" });
+        }
+      });
+    }
+  }
+
+  if (node.type === VISUAL_NODE_TYPES.SINK) {
+    cEvents.forEach(ce => {
+      if ((ce.cSchedules || []).some(s => s.eventId === node.refId)) {
+        deps.push({ name: ce.name || ce.id, elementType: "C-Event", description: "completion schedule will be removed" });
+      }
+    });
+  }
+
+  return deps;
+}
+
+// Removes a visual node from the canonical model, cascading to dependent elements.
+// Always call deriveGraphFromModel on the result — never mutate layout metadata first.
+export function deleteVisualNode(model, node) {
+  if (!node || !node.refId) return model;
+  let next = { ...model };
+  const bEvents = model.bEvents || [];
+  const cEvents = model.cEvents || [];
+  const queues = model.queues || [];
+
+  if (node.type === VISUAL_NODE_TYPES.SOURCE) {
+    next.bEvents = bEvents.filter(be => be.id !== node.refId);
+    next.cEvents = cEvents.map(ce => ({
+      ...ce,
+      cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== node.refId),
+    }));
+  }
+
+  if (node.type === VISUAL_NODE_TYPES.QUEUE) {
+    const queue = queues.find(q => q.id === node.refId);
+    if (queue && queue.name) {
+      const esc = escRe(queue.name);
+      const condPat = new RegExp(`queue\\(${esc}\\)`, "i");
+      const effPat = new RegExp(`ASSIGN\\(${esc}`, "i");
+      const arrivePat = new RegExp(`ARRIVE\\([^,]+,\\s*${esc}\\)`, "i");
+      const releasePat = new RegExp(`RELEASE\\([^,]+,\\s*${esc}\\)`, "i");
+
+      const affectedCIds = new Set(
+        cEvents
+          .filter(ce => {
+            const cond = typeof ce.condition === "string" ? ce.condition : "";
+            const eff = typeof ce.effect === "string" ? ce.effect : "";
+            return condPat.test(cond) || effPat.test(eff);
+          })
+          .map(ce => ce.id)
+      );
+
+      const otherRefs = new Set(
+        cEvents
+          .filter(ce => !affectedCIds.has(ce.id))
+          .flatMap(ce => (ce.cSchedules || []).map(s => s.eventId))
+          .filter(Boolean)
+      );
+      const ownedBIds = new Set();
+      affectedCIds.forEach(cId => {
+        const ce = cEvents.find(c => c.id === cId);
+        (ce?.cSchedules || []).forEach(s => {
+          if (s.eventId && !otherRefs.has(s.eventId)) ownedBIds.add(s.eventId);
+        });
+      });
+
+      next.queues = queues.filter(q => q.id !== node.refId);
+      next.cEvents = cEvents.filter(ce => !affectedCIds.has(ce.id));
+      next.bEvents = bEvents
+        .filter(be => !ownedBIds.has(be.id))
+        .map(be => {
+          const eff = typeof be.effect === "string" ? be.effect : "";
+          if (arrivePat.test(eff)) {
+            return { ...be, effect: eff.replace(new RegExp(`,\\s*${esc}\\s*\\)`, "gi"), ")") };
+          }
+          if (releasePat.test(eff)) {
+            return { ...be, effect: "" };
+          }
+          return be;
+        });
+    }
+  }
+
+  if (node.type === VISUAL_NODE_TYPES.ACTIVITY) {
+    const ce = cEvents.find(c => c.id === node.refId);
+    const ownedBIds = new Set();
+    if (ce) {
+      const otherRefs = new Set(
+        cEvents
+          .filter(c => c.id !== node.refId)
+          .flatMap(c => (c.cSchedules || []).map(s => s.eventId))
+          .filter(Boolean)
+      );
+      (ce.cSchedules || []).forEach(s => {
+        if (s.eventId && !otherRefs.has(s.eventId)) ownedBIds.add(s.eventId);
+      });
+    }
+    next.cEvents = cEvents.filter(c => c.id !== node.refId);
+    next.bEvents = bEvents.filter(be => !ownedBIds.has(be.id));
+  }
+
+  if (node.type === VISUAL_NODE_TYPES.SINK) {
+    next.bEvents = bEvents.filter(be => be.id !== node.refId);
+    next.cEvents = cEvents.map(ce => ({
+      ...ce,
+      cSchedules: (ce.cSchedules || []).filter(s => s.eventId !== node.refId),
+    }));
+  }
+
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
 export function updateVisualNode(model, node, patch = {}) {
   if (!node) return model;
   let next = { ...model };

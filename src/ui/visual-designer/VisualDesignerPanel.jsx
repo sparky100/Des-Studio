@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn, Empty, SH, Tag } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
@@ -7,6 +7,8 @@ import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import {
   addVisualNode,
   connectVisualNodes,
+  deleteVisualNode,
+  findNodeDependents,
   updateGraphLayout,
   updateVisualNode,
   validateVisualGraph,
@@ -68,6 +70,65 @@ function EdgeRow({ edge, nodeLabels }) {
   );
 }
 
+function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Confirm node deletion"
+      onClick={e => { if (e.target === e.currentTarget) onCancel(); }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.65)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 9999,
+      }}
+    >
+      <div style={{
+        background: C.surface,
+        border: `1px solid ${C.red}55`,
+        borderRadius: 8,
+        padding: 24,
+        maxWidth: 440,
+        width: "90%",
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+        fontFamily: FONT,
+      }}>
+        <div style={{ color: C.red, fontSize: 13, fontWeight: 700 }}>
+          Delete {node.label}?
+        </div>
+        {dependents.length > 0 && (
+          <>
+            <div style={{ color: C.text, fontSize: 12 }}>
+              Deleting this node will also affect:
+            </div>
+            <ul style={{ margin: 0, padding: "0 0 0 16px", display: "flex", flexDirection: "column", gap: 5 }}>
+              {dependents.map((dep, i) => (
+                <li key={i} style={{ color: C.muted, fontSize: 11 }}>
+                  <span style={{ color: C.text, fontWeight: 600 }}>{dep.name}</span>
+                  {" "}
+                  <span style={{ color: C.muted }}>({dep.elementType})</span>
+                  {" — "}
+                  <span>{dep.description}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <Btn small variant="ghost" onClick={onCancel}>Cancel</Btn>
+          <Btn small variant="danger" onClick={onConfirm}>Delete</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ValidationSummary({ issues, onSelectNode }) {
   const hasIssues = issues.length > 0;
   return (
@@ -115,6 +176,7 @@ function ValidationSummary({ issues, onSelectNode }) {
 export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [message, setMessage] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const graph = useMemo(() => deriveGraphFromModel(model || {}), [model]);
   const visualIssues = useMemo(() => validateVisualGraph(graph), [graph]);
   const nodeLabels = useMemo(
@@ -129,6 +191,49 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
     setMessage(null);
     onModelChange?.(nextModel);
   };
+
+  function doDelete(targetNode) {
+    const nextModel = deleteVisualNode(model, targetNode);
+    setSelectedNodeId(null);
+    setPendingDelete(null);
+    applyModel(nextModel);
+  }
+
+  function deleteNode(targetNode) {
+    if (!targetNode) return;
+    const deps = findNodeDependents(model, targetNode);
+    if (deps.length > 0) {
+      setPendingDelete({ node: targetNode, dependents: deps });
+    } else {
+      doDelete(targetNode);
+    }
+  }
+
+  // Ref holds the latest delete-triggering closure so the keydown listener never goes stale.
+  const deleteKeyHandlerRef = useRef(null);
+  deleteKeyHandlerRef.current = () => {
+    if (!canEdit || !selectedNodeId) return;
+    const targetNode = (graph.nodes || []).find(n => n.id === selectedNodeId);
+    if (!targetNode) return;
+    const deps = findNodeDependents(model, targetNode);
+    if (deps.length > 0) {
+      setPendingDelete({ node: targetNode, dependents: deps });
+    } else {
+      doDelete(targetNode);
+    }
+  };
+
+  useEffect(() => {
+    const handler = e => {
+      if (e.key !== "Delete") return;
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      e.preventDefault();
+      deleteKeyHandlerRef.current();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
   const addNode = (type, position = null) => {
     if (!canEdit) return;
     const next = addVisualNode(model, type, position);
@@ -271,6 +376,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
           selectedNodeId={selectedNodeId}
           canEdit={canEdit}
           onPatchNode={patchNode}
+          onDeleteNode={canEdit ? deleteNode : null}
         />
       </div>
 
@@ -289,6 +395,15 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
         {!graph.edges.length && <Empty icon="Edges" msg="No visual connections can be derived from this model yet." />}
         {graph.edges.map(edge => <EdgeRow key={edge.id} edge={edge} nodeLabels={nodeLabels} />)}
       </section>
+
+      {pendingDelete && (
+        <DeleteNodeDialog
+          node={pendingDelete.node}
+          dependents={pendingDelete.dependents}
+          onConfirm={() => doDelete(pendingDelete.node)}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 }

@@ -147,6 +147,7 @@ export function FlowDiagramReactFlow({
         maxZoom={1.5}
         nodesDraggable={canEdit}
         nodesConnectable={canEdit}
+        deleteKeyCode={null}
         elementsSelectable
         panOnScroll
         onNodeClick={(_, node) => onNodeSelect?.(node.id)}
