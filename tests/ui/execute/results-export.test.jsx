@@ -10,8 +10,10 @@ const mockSaveSimulationRun = vi.hoisted(() => vi.fn().mockResolvedValue(undefin
 const mockFetchRunHistory = vi.hoisted(() => vi.fn().mockResolvedValue([]));
 
 vi.mock('../../../src/db/models.js', () => ({
-  fetchRunHistory: mockFetchRunHistory,
+  fetchRunHistory:  mockFetchRunHistory,
   saveSimulationRun: mockSaveSimulationRun,
+  fetchUserSettings: vi.fn().mockResolvedValue({ schemaVersion: 1, settings: {} }),
+  saveUserSettings:  vi.fn().mockResolvedValue({ schemaVersion: 1, settings: {} }),
 }));
 
 const validModel = {

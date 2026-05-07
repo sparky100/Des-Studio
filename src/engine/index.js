@@ -137,6 +137,18 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         total:   entities.filter(e => e.type === t).length,
       };
     });
+    // nextArrivals: maps each b-event id to its next scheduled time in the FEL.
+    // Used by the Execute canvas to show countdowns on Source nodes.
+    // FEL is already sorted; first occurrence of each id is the earliest.
+    const nextArrivals = {};
+    const _seen = new Set();
+    for (const entry of fel) {
+      if (entry.id && !_seen.has(entry.id)) {
+        nextArrivals[entry.id] = entry.scheduledTime;
+        _seen.add(entry.id);
+      }
+    }
+
     return {
       clock:    clock || 0,
       served:   state.__served  || 0,
@@ -146,6 +158,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         Object.entries(state).filter(([k]) => !k.startsWith("__"))
       ),
       byType,
+      nextArrivals,
     };
   }
 

@@ -59,8 +59,10 @@ vi.mock('@xyflow/react', () => ({
 }));
 
 vi.mock('../../../src/db/models.js', () => ({
-  fetchRunHistory:    mockFetchRunHistory,
-  saveSimulationRun:  mockSaveSimulationRun,
+  fetchRunHistory:   mockFetchRunHistory,
+  saveSimulationRun: mockSaveSimulationRun,
+  fetchUserSettings: vi.fn().mockResolvedValue({ schemaVersion: 1, settings: {} }),
+  saveUserSettings:  vi.fn().mockResolvedValue({ schemaVersion: 1, settings: {} }),
 }));
 
 vi.mock('../../../src/engine/replication-runner.js', () => ({

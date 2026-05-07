@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-07 | Reflects: Sprint 9B Visual Designer UX hardening complete + ADR-010 + Known Issues*
+*Last updated: 2026-05-07 | Reflects: Sprint 9C Execute Canvas Live Flow View complete + ADR-010 + Known Issues*
 
 ---
 
@@ -24,7 +24,7 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 | Styling | Inline style objects | — | No CSS classes. No CSS framework. Tokens in `ui/shared/tokens.js` |
 | Database / auth | Supabase JS client | 2.45.0 | PostgreSQL backend. Auth via Supabase Auth. |
 | Test runner | Vitest | 1.6.0 | Engine layer only. Node environment. |
-| Canvas / DAG | `@xyflow/react` ^12.10.2 | — | ADR-010 governs canvas design. Lazy-loaded via `React.lazy()` + `<Suspense>` in `ModelDetail.jsx` — never import `VisualDesignerPanel` statically from `ModelDetail`. |
+| Canvas / DAG | `@xyflow/react` ^12.10.2 | — | ADR-010 governs canvas design. Lazy-loaded in two places: `VisualDesignerPanel` via `React.lazy()` in `ModelDetail.jsx` (authoring canvas); `ExecuteCanvas` via `React.lazy()` in `execute/index.jsx` (live flow view). Never import either statically. `model_json.graph` drives layout for both canvases. |
 
 **Do not introduce new dependencies without flagging them first.** The dependency list is intentionally minimal.
 
@@ -50,8 +50,15 @@ project root
 │   ├── ui/
 │   │   ├── editors/                 ← EntityTypeEditor, BEventEditor, CEventEditor, QueueEditor
 │   │   │   └── index.jsx
-│   │   ├── execute/                 ← Run panel, VisualView, StepLog, EntityTable
-│   │   │   └── index.jsx
+│   │   ├── execute/                 ← Run panel, ExecuteCanvas (live flow), BottomPanel, execute-mode nodes
+│   │   │   ├── index.jsx
+│   │   │   ├── ExecuteCanvas.jsx         ← @xyflow/react canvas; topology derived from model_json
+│   │   │   ├── ExecuteSourceNode.jsx     ← Live Source node (arrival countdown, pulse)
+│   │   │   ├── ExecuteQueueNode.jsx      ← Live Queue node (depth badge, dot tokens, sparkline)
+│   │   │   ├── ExecuteActivityNode.jsx   ← Live Activity node (server dot pool, utilisation)
+│   │   │   ├── ExecuteSinkNode.jsx       ← Live Sink node (served count, throughput, sojourn)
+│   │   │   ├── AnimatedEdge.jsx          ← Entity token animation along edges (animateMotion)
+│   │   │   └── BottomPanel.jsx           ← Collapsible tabbed panel (log · entities · stage KPIs)
 │   │   └── shared/
 │   │       ├── tokens.js            ← Style tokens (colours, spacing, typography)
 │   │       └── components.jsx       ← Shared UI components (DistPicker — has latent bug, see §9)
@@ -107,7 +114,7 @@ If Claude Code finds itself rewriting a file that the audit marked as working (�
 | `src/engine/conditions.js` | Condition evaluation structure | new Function() call (replace with safe eval) |
 | `src/engine/distributions.js` | All sampler functions | Math.random() (add seeded RNG) |
 | `src/ui/editors/index.jsx` | All five editors work | Operator filtering, priority field, token staleness |
-| `src/ui/execute/index.jsx` | VisualView, StepLog, EntityTable, run history | No validation, no seed field, silent truncation |
+| `src/ui/execute/index.jsx` | ExecuteCanvas (live canvas), BottomPanel, run history, replication runner | VisualView retained as fallback for empty models |
 | `src/db/models.js` | Multi-user CRUD wrappers | User-scoped model/run queries, run stats, result persistence, owner-guarded delete |
 | `src/App.jsx` | Auth listener, model library shell | Back button discards silently (Sprint 2) |
 | `tests/` | ~120 engine tests passing | UI and DB layers untested |
@@ -1321,16 +1328,42 @@ UI / UX
 | Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources | 369 passing | N/A |
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight | 22 focused | N/A |
 | Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX hardening: safe deletion, connection feedback, validation checklist, palette affordances, lazy bundle split | 451 passing | N/A |
+| Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas Live Flow View: topology-derived canvas, four live node components, entity token animation, configurable KPI bar, BottomPanel with Stage KPIs, speed slider, node-filtered log | 464 passing | N/A |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 9A — Visual Designer Architecture Preflight**
+**Sprint 10 — Modelling Expressiveness: Routing & Pooling**
 
-Goal: Lock the Visual Designer canvas, graph metadata, round-trip, and inspector reuse decisions before Sprint 9 coding.
+Goal: Extend the engine vocabulary with conditional routing, probabilistic routing, multi-server pooling, and time-series output. No existing macro or test is replaced.
 
-**Status:** Sprint 9 is complete as the initial reviewable Visual Designer authoring model. Sprint 9B is the current visual-designer UX hardening pass. ADR-010 remains the governing architecture.
+**Status:** Sprint 9C completed 2026-05-07. Sprint 10 is the active sprint.
+
+### Sprint 9C Completion Notes
+
+Sprint 9C completed on 2026-05-07.
+
+- F9C.1: `ExecuteCanvas` shell — lazy-loaded `@xyflow/react` canvas; derives topology from `model_json` via `deriveGraphFromModel()`. Falls back to `VisualView` for empty models.
+- F9C.2: `ExecuteSourceNode` — arrival countdown from `snap.nextArrivals`, inter-arrival distribution label, arrival pulse.
+- F9C.3: `ExecuteQueueNode` — depth badge with colour thresholds, entity type dot tokens, 20-tick rolling sparkline.
+- F9C.4: `ExecuteActivityNode` — server dot-grid (capacity dots, ■ busy / □ idle), utilisation %, completion flash.
+- F9C.5: `ExecuteSinkNode` — large served count, throughput/hr, mean sojourn time.
+- F9C.6: `AnimatedEdge` — entity tokens travel along edges via SVG `<animateMotion>`; `snap.nextArrivals` added to engine snap for countdown data; animation preference in `user_settings.execute.animateTokens`.
+- F9C.7: Configurable KPI bar — 4 user-selectable slots; config in `user_settings.execute.kpiSlots`.
+- F9C.8: `BottomPanel` — collapsible tabbed panel (Step Log · Entities · Stage KPIs · Charts placeholder) below the canvas.
+- F9C.9: Stage KPIs tab — live queue and server statistics derived from snap without new engine instrumentation.
+- F9C.10: Speed slider — 0.5×–10× multiplier on the auto-step interval.
+- F9C.11: Node-filtered log — clicking a canvas node filters the Step Log; "Show all" clears.
+
+**Architecture rules added by Sprint 9C:**
+- `ExecuteCanvas` is lazy-loaded in `execute/index.jsx` — never import it statically (same rule as `VisualDesignerPanel`).
+- `model_json.graph` layout metadata drives both the Visual Designer authoring canvas and the Execute live canvas. The `deriveGraphFromModel()` helper is the single topology source for both.
+- Animation and KPI-slot preferences are persisted in `user_settings.execute`. Never store cross-session execution preferences in React component state.
+
+### Sprint 9A Accepted Decisions
+
+**Status:** Sprint 9A decisions remain governing architecture for Sprint 9 and beyond.
 
 ### Sprint 9A Accepted Decisions
 

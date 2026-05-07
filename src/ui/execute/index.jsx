@@ -1,11 +1,14 @@
 // ui/execute/index.jsx — CustomerToken, VisualView, ExecutePanel
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+const ExecuteCanvas = lazy(() => import("./ExecuteCanvas.jsx").then(m => ({ default: m.ExecuteCanvas })));
 import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildEngine } from "../../engine/index.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { summarizeReplicationResults } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun } from "../../db/models.js";
+import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings } from "../../db/models.js";
+import { BottomPanel } from "./BottomPanel.jsx";
+import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
@@ -562,6 +565,19 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
   const autoRef = useRef(null);
   const runnerRef = useRef(null);
   const saveInProgressRef = useRef(false);
+  // F9C.6 — animation toggle
+  const [animationEnabled, setAnimationEnabled] = useState(true);
+  // F9C.7 — configurable KPI slots
+  const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
+  // F9C.10 — speed multiplier (1× = 400ms interval, 10× = 40ms, 0.5× = 800ms)
+  const [speedMultiplier, setSpeedMultiplier] = useState(1);
+  // F9C.11 — node filter for bottom panel log
+  const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
+  // F9C.10 — effective auto-step delay (must be declared before the autoRef useEffect)
+  const effectiveAutoSpeed = useMemo(
+    () => Math.max(40, Math.round(400 / speedMultiplier)),
+    [speedMultiplier]
+  );
 
   const validation = useMemo(() => {
     const v = validateModel({
@@ -833,18 +849,59 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
 
   useEffect(() => {
     if (!autoRunning) return;
-    autoRef.current = setInterval(doStep, autoSpeed);
+    autoRef.current = setInterval(doStep, effectiveAutoSpeed);
     return () => {
       if (autoRef.current) {
         clearInterval(autoRef.current);
         autoRef.current = null;
       }
     };
-  }, [autoRunning, autoSpeed, doStep]);
+  }, [autoRunning, effectiveAutoSpeed, doStep]);
 
   useEffect(() => {
     return () => runnerRef.current?.cancel();
   }, []);
+
+  // Load execute preferences (animation toggle, KPI slots) on mount
+  useEffect(() => {
+    if (!userId) return;
+    fetchUserSettings(userId)
+      .then(({ settings }) => {
+        if (settings?.execute?.animateTokens !== undefined) {
+          setAnimationEnabled(settings.execute.animateTokens !== false);
+        }
+        if (Array.isArray(settings?.execute?.kpiSlots)) {
+          setKpiSlots(settings.execute.kpiSlots);
+        }
+      })
+      .catch(() => {}); // keep defaults on error
+  }, [userId]);
+
+  const saveExecuteSetting = useCallback(async (patch) => {
+    if (!userId) return;
+    try {
+      const current = await fetchUserSettings(userId);
+      await saveUserSettings(userId, {
+        ...current.settings,
+        execute: { ...current.settings?.execute, ...patch },
+      });
+    } catch {} // silently ignore
+  }, [userId]);
+
+  const toggleAnimation = useCallback(() => {
+    const next = !animationEnabled;
+    setAnimationEnabled(next);
+    saveExecuteSetting({ animateTokens: next });
+  }, [animationEnabled, saveExecuteSetting]);
+
+  const handleKpiSlotChange = useCallback((slotIndex, newKey) => {
+    setKpiSlots(prev => {
+      const next = [...prev];
+      next[slotIndex] = newKey;
+      saveExecuteSetting({ kpiSlots: next });
+      return next;
+    });
+  }, [saveExecuteSetting]);
 
   useEffect(() => {
     if (!aiPanelOpen || !modelId) return;
@@ -1042,14 +1099,24 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
         <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results</Btn>
         <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
         <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)}>AI Insights</Btn>
+        <Btn variant="ghost" onClick={toggleAnimation} title="Toggle entity token animation">
+          {animationEnabled ? "● Animate" : "○ Animate"}
+        </Btn>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         <div style={{ flex: 1, minWidth: 12 }} />
-        <div role="tablist" aria-label="Execute views" style={{ display: "flex", background: "#000", borderRadius: 6, padding: 2, marginLeft: "auto" }}>
-          {["visual", "log", "entities"].map(v => (
-            <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)} style={{ padding: "6px 12px", background: view === v ? "#333" : "transparent", border: "none", color: view === v ? "#fff" : "#888", borderRadius: 4, cursor: "pointer", fontSize: 12 }}>
-              {v.charAt(0).toUpperCase() + v.slice(1)}
-            </button>
-          ))}
+        {/* Speed slider (F9C.10) */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, whiteSpace: "nowrap" }}>
+            Speed {speedMultiplier.toFixed(1)}×
+          </span>
+          <input
+            aria-label="Animation speed multiplier"
+            type="range"
+            min={0.5} max={10} step={0.5}
+            value={speedMultiplier}
+            onChange={e => setSpeedMultiplier(parseFloat(e.target.value))}
+            style={{ width: 80, accentColor: "#06b6d4" }}
+          />
         </div>
       </div>
 
@@ -1242,7 +1309,34 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
         </div>
       )}
 
-      {view === "visual" && <VisualView snap={currentSnap} model={model} summary={results?.summary} />}
+      {view === "visual" && (() => {
+        const hasDerivableGraph = !!(model.queues?.length || model.bEvents?.length || model.cEvents?.length);
+        if (hasDerivableGraph) {
+          return (
+            <>
+              <Suspense fallback={<VisualView snap={currentSnap} model={model} summary={results?.summary} />}>
+                <ExecuteCanvas
+                  snap={currentSnap}
+                  model={model}
+                  summary={results?.summary}
+                  animationEnabled={animationEnabled}
+                  kpiSlots={kpiSlots}
+                  onKpiSlotChange={handleKpiSlotChange}
+                  onNodeSelect={setSelectedNodeLabel}
+                />
+              </Suspense>
+              <BottomPanel
+                log={log}
+                snap={currentSnap}
+                model={model}
+                selectedNodeLabel={selectedNodeLabel}
+                onClearFilter={() => setSelectedNodeLabel(null)}
+              />
+            </>
+          );
+        }
+        return <VisualView snap={currentSnap} model={model} summary={results?.summary} />;
+      })()}
 
       {view === "log" && (
         <div style={{ background: "#050505", border: `1px solid #333`, borderRadius: 6, padding: 14 }}>
