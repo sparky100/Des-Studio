@@ -119,6 +119,7 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('tab', { name: /visual designer/i }));
+    await screen.findByLabelText('Visual Designer'); // wait for lazy chunk to resolve
 
     expect(screen.getByRole('tab', { name: /visual designer/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('Visual Designer')).toBeInTheDocument();
@@ -165,6 +166,7 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('tab', { name: /visual designer/i }));
+    await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /add queue/i }));
 
     expect(screen.getByText('Unsaved changes in this model.')).toBeInTheDocument();
@@ -186,6 +188,7 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('tab', { name: /visual designer/i }));
+    await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /mock move first node/i }));
     await user.click(screen.getByRole('button', { name: /save changes/i }));
 
@@ -213,6 +216,7 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('tab', { name: /visual designer/i }));
+    await screen.findByLabelText('Visual Designer');
     await user.click(screen.getByRole('button', { name: /mock connect source to consultant queue/i }));
     await user.click(screen.getByRole('button', { name: /mock select source/i }));
 
@@ -325,6 +329,7 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('tab', { name: /visual designer/i }));
+    await screen.findByLabelText('Visual Designer');
     fireEvent.dragStart(screen.getByRole('button', { name: /add sink/i }), { dataTransfer });
     const canvas = screen.getByLabelText('Visual Designer canvas');
     const dropEvent = createEvent.drop(canvas, { dataTransfer });

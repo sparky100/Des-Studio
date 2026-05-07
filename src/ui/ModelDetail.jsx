@@ -1,12 +1,16 @@
 // ui/ModelDetail.jsx — ModelDetail, ModelCard, NewModelModal
-import { useState, useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
 import pkg from '../../package.json';
 import { C, FONT } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
-import { VisualDesignerPanel } from "./visual-designer/VisualDesignerPanel.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
+
+// Lazy-loaded so @xyflow/react is not included in the initial bundle.
+const VisualDesignerPanel = lazy(() =>
+  import("./visual-designer/VisualDesignerPanel.jsx").then(m => ({ default: m.VisualDesignerPanel }))
+);
 import { fetchRunHistory } from "../db/models.js";
 import { validateModel } from "../engine/validation.js";
 
@@ -455,7 +459,21 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
           <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel} onSaveModel={saveGeneratedModel}/>
         )}
         {tab==="visual"&&(
-          <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel}/>
+          <Suspense fallback={
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 48,
+              color: C.muted,
+              fontFamily: FONT,
+              fontSize: 12,
+            }}>
+              Loading Visual Designer…
+            </div>
+          }>
+            <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel}/>
+          </Suspense>
         )}
         {tab==="overview"&&(
           <div style={{maxWidth:700,display:"flex",flexDirection:"column",gap:14}}>
