@@ -1115,13 +1115,63 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>REPLICATION BATCH</div>
             <Tag label={batchStatus} color={batchStatus === "complete" ? C.green : batchStatus === "error" || batchStatus === "cancelled" ? C.red : C.amber} />
             <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
-              Running {batchProgress?.completed || replicationResults.length}/{batchProgress?.total || replications}
+              {batchStatus === "complete"
+                ? `${replicationResults.length} replications complete`
+                : `Running ${batchProgress?.completed || replicationResults.length}/${batchProgress?.total || replications}`}
             </div>
-            <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>
-              Pool: {batchProgress?.workerCount || "—"} · Running: {batchProgress?.running || 0} · Pending: {batchProgress?.pending || 0}
-            </div>
+            {batchStatus !== "complete" && (
+              <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>
+                Pool: {batchProgress?.workerCount || "—"} · Running: {batchProgress?.running || 0} · Pending: {batchProgress?.pending || 0}
+              </div>
+            )}
           </div>
 
+          {/* Aggregate KPI summary — shown prominently at the top only when complete */}
+          {batchStatus === "complete" && Object.values(aggregateStats).some(stat => stat.n >= 2) && (
+            <div style={{
+              background: `${C.green}0d`,
+              border: `1px solid ${C.green}44`,
+              borderRadius: 6,
+              padding: 14,
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+            }}>
+              <div style={{ fontSize: 10, color: C.green, fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>
+                AGGREGATE RESULTS — {replicationResults.length} REPLICATIONS
+              </div>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                gap: 10,
+              }}>
+                {CI_METRICS.map(metric => {
+                  const stat = aggregateStats[metric];
+                  if (!stat || stat.n < 2) return null;
+                  return (
+                    <div key={metric} style={{
+                      background: C.surface,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 5,
+                      padding: "10px 12px",
+                    }}>
+                      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 4 }}>
+                        {METRIC_LABELS[metric]}
+                      </div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: C.accent, fontFamily: FONT }}>
+                        {fmt(stat.mean)}
+                      </div>
+                      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>
+                        ±{fmt(stat.halfWidth)} (95% CI)
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Individual replication rows */}
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
               <thead>
@@ -1156,6 +1206,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
             </table>
           </div>
 
+          {/* CI confidence-interval table — live-updates as reps complete, always shown when n≥2 */}
           {Object.values(aggregateStats).some(stat => stat.n >= 2) && (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>

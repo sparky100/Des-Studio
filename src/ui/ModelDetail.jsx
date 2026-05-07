@@ -313,6 +313,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
   const validation = useMemo(() => model ? validateModel(model) : { errors: [], warnings: [] }, [model]);
 
   const handleRunSaved=()=>{
+    // Increment runs optimistically — do NOT call onRefresh here.
+    // onRefresh calls loadData() which sets loading=true, unmounting ModelDetail
+    // and losing ExecutePanel state (results, tab position) mid-session.
     setModel(current=>({
       ...current,
       stats:{
@@ -329,7 +332,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
         .catch(e=>setHistoryError(e.message))
         .finally(()=>setHistoryLoading(false));
     }
-    onRefresh?.();
+    // Intentionally not calling onRefresh() — it triggers a full loadData()
+    // which sets loading=true and unmounts ModelDetail, resetting the execute panel.
   };
 
   const exportJson = () => {
