@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-06 | Reflects: Sprint 9 Visual Designer authoring + Sprint 9B UX hardening/review observations completed + ADR-010 + Known Issues*
+*Last updated: 2026-05-07 | Reflects: Sprint 9B Visual Designer UX hardening complete + ADR-010 + Known Issues*
 
 ---
 
@@ -24,7 +24,7 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 | Styling | Inline style objects | — | No CSS classes. No CSS framework. Tokens in `ui/shared/tokens.js` |
 | Database / auth | Supabase JS client | 2.45.0 | PostgreSQL backend. Auth via Supabase Auth. |
 | Test runner | Vitest | 1.6.0 | Engine layer only. Node environment. |
-| Canvas / DAG | Form-based editors | — | ADR-010 accepts `@xyflow/react`; visual canvas implementation starts in Sprint 9. |
+| Canvas / DAG | `@xyflow/react` ^12.10.2 | — | ADR-010 governs canvas design. Lazy-loaded via `React.lazy()` + `<Suspense>` in `ModelDetail.jsx` — never import `VisualDesignerPanel` statically from `ModelDetail`. |
 
 **Do not introduce new dependencies without flagging them first.** The dependency list is intentionally minimal.
 
@@ -1271,6 +1271,14 @@ ARCHITECTURE
 ✗  Free-text condition field       — all logic via Predicate Builder. No exceptions.
 ✗  'Custom...' escape hatch        — removed. Do not recreate under any name.
 ✗  Architectural rule change without ADR — create docs/decisions/ADR-NNN.md first.
+✗  Static import of VisualDesignerPanel in ModelDetail
+   — lazy-loaded via React.lazy(). Tests must await screen.findByLabelText()
+     after the Visual Designer tab click; do not use screen.getByLabelText() there.
+✗  Mutating graph metadata before canonical model_json in Visual Designer
+   — deletion, patching, and connection must update model_json first, then
+     re-derive the graph. See deleteVisualNode(), updateVisualNode(), connectVisualNodes().
+✗  Duplicating validateModel() logic in Visual Designer UI components
+   — ValidationChecklist reads from validateModel() directly. No parallel validation.
 
 UI / UX
 ✗  LIFO or Priority in QueueEditor dropdown if engine does not implement it.
@@ -1312,6 +1320,7 @@ UI / UX
 | Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation | 33 focused | N/A |
 | Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources | 369 passing | N/A |
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight | 22 focused | N/A |
+| Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX hardening: safe deletion, connection feedback, validation checklist, palette affordances, lazy bundle split | 451 passing | N/A |
 
 ---
 
@@ -1359,15 +1368,16 @@ Goal: Lock the Visual Designer canvas, graph metadata, round-trip, and inspector
 
 ### Sprint 9B — Visual Designer UX Hardening
 
-Current follow-on scope:
+Sprint 9B completed on 2026-05-07.
 
-- Add Activity resource/server editing in the visual inspector without forking full C-event editor logic.
-- Add safe node deletion through canonical model elements with dependency warnings.
-- Add edge delete/re-route workflow and clearer connection feedback.
-- Expand visual validation into a node-linked checklist with affected-node highlighting.
-- Improve palette placement affordances, fit/reset layout, and selected-node clarity.
-- Complete manual browser review for create/connect/edit/save/reload/execute.
-- Consider lazy-loading the Visual Designer if the React Flow bundle warning becomes a product concern.
+- F9B.1: Activity inspector server/resource picker — populated from `model.entityTypes` filtered by `role: "server"`, writes back to C-event condition `idle()` clause and `ASSIGN()` effect via `updateVisualNode`.
+- F9B.2: Safe node deletion — `findNodeDependents()` checks cascade before any mutation; named dependents listed in a confirmation dialog; `deleteVisualNode()` mutates canonical `model_json` first, then re-derives the graph.
+- F9B.3: Connection editing polish — `isValidConnection` prop wires `validateVisualConnection` for live handle feedback; `onEdgeContextMenu` + `window.confirm` for edge deletion; `deleteVisualEdge()` reverses canonical routing by edge source type.
+- F9B.4: Node-linked validation checklist — `ValidationChecklist` replaces `ValidationSummary`; combines `validateVisualGraph` and `validateModel` results; clicking a row calls `fitNodeRef.current(nodeId)` and opens the inspector; `errorNodeIds` Set drives red `!` badge on `DesNode` as derived state only.
+- F9B.5: Palette affordances — `CanvasControls` Panel adds ⊡ Fit and ↺ Layout buttons inside ReactFlow; drop-zone highlight via `dragOver` state; selected-node ring strengthened to `0 0 0 3px color88`.
+- F9B.6: Round-trip regression tests (5 new in `sprint-9b-roundtrip.test.jsx`) + `docs/sprint-9b-review.md` walkthrough checklist fully checked.
+- F9B.7: `VisualDesignerPanel` lazy-loaded via `React.lazy()` + `<Suspense>` in `ModelDetail.jsx`; main bundle shrank from 758 kB → 540 kB (−28%); Visual Designer chunk 220 kB loaded on first tab open.
+- Execute save guard hardened: `saveInProgressRef` (useRef) replaces stale-closure `saveStatus` guard; batch `onComplete` wrapped in outer try/catch so display and save both survive setup errors; 10-run and batch-completion tests added.
 
 ### Review Observations 0605 — Coherence Rules
 

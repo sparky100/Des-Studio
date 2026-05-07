@@ -9,7 +9,7 @@
 
 ## Scripted Walkthrough Checklist
 
-### [ ] Create a new model using only the Visual Designer palette
+### [x] Create a new model using only the Visual Designer palette
 
 **How to test:** Navigate to any model → Visual Designer tab → use the NODE PALETTE buttons (Add Source, Add Queue, Add Activity, Add Sink) or drag-and-drop them onto the canvas.
 
@@ -19,7 +19,7 @@
 
 ---
 
-### [ ] Connect all four node types in a valid Source→Queue→Activity→Sink chain
+### [x] Connect all four node types in a valid Source→Queue→Activity→Sink chain
 
 **How to test:** Drag from the Source node's right handle to the Queue node's left handle; repeat for Queue→Activity and Activity→Sink. Alternatively use `connectVisualNodes` via the canvas drag gesture.
 
@@ -34,7 +34,7 @@ The Validation checklist clears the "not connected" warnings as edges are create
 
 ---
 
-### [ ] Edit Activity resource/server type from the inspector
+### [x] Edit Activity resource/server type from the inspector
 
 **How to test:** Click an Activity node → Inspector panel shows "Server type" dropdown → change to a different server entity type.
 
@@ -44,7 +44,7 @@ The Validation checklist clears the "not connected" warnings as edges are create
 
 ---
 
-### [ ] Edit Source inter-arrival timing from the inspector
+### [x] Edit Source inter-arrival timing from the inspector
 
 **How to test:** Click a Source node → Inspector shows "Inter-arrival time" DistPicker → change distribution type or mean value.
 
@@ -54,7 +54,7 @@ The Validation checklist clears the "not connected" warnings as edges are create
 
 ---
 
-### [ ] Save the model and reload the page — confirm graph and data intact
+### [x] Save the model and reload the page — confirm graph and data intact
 
 **How to test:** After authoring, click "Save changes". Refresh the browser (F5). Reopen the model → Visual Designer tab.
 
@@ -64,7 +64,7 @@ The Validation checklist clears the "not connected" warnings as edges are create
 
 ---
 
-### [ ] Switch to Forms/Tabs — confirm all data matches
+### [x] Switch to Forms/Tabs — confirm all data matches
 
 **How to test:** After editing in Visual Designer, click the "B-Events" or "C-Events" tab.
 
@@ -77,7 +77,7 @@ The Validation checklist clears the "not connected" warnings as edges are create
 
 ---
 
-### [ ] Execute the model — confirm it runs without engine errors
+### [x] Execute the model — confirm it runs without engine errors
 
 **How to test:** Switch to the Execute tab → click "⚡ Run All". With a fully-connected model (Source→Queue→Activity→Sink) with valid distributions, the run should complete.
 
@@ -87,7 +87,7 @@ The Validation checklist clears the "not connected" warnings as edges are create
 
 ---
 
-### [ ] Delete a node with a dependency — confirm the warning dialog appears
+### [x] Delete a node with a dependency — confirm the warning dialog appears
 
 **How to test:** Click a Queue node that is referenced by a C-event → click "Delete node" in the inspector (or press Delete key).
 
@@ -97,7 +97,7 @@ The Validation checklist clears the "not connected" warnings as edges are create
 
 ---
 
-### [ ] Trigger a validation error — confirm click-to-node navigation works
+### [x] Trigger a validation error — confirm click-to-node navigation works
 
 **How to test:** Create a model with an intentional error (e.g., an Activity C-event whose condition references a deleted queue). Open the Visual Designer → Validation checklist shows the error row as clickable.
 
@@ -107,7 +107,7 @@ The Validation checklist clears the "not connected" warnings as edges are create
 
 ---
 
-### [ ] Test fit-to-canvas reset button
+### [x] Test fit-to-canvas reset button
 
 **How to test:** With nodes spread across the canvas, click the "⊡ Fit" button (top-left panel inside the canvas). Then click "↺ Layout" to clear saved positions and re-derive the auto-layout.
 
