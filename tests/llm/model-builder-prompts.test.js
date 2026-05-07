@@ -45,6 +45,16 @@ describe("model builder prompts", () => {
     expect(prompt).toMatch(/too detailed to fit/i);
   });
 
+  it("requires queues to include customerType matching the arriving entity", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/customerType/);
+    expect(prompt).toMatch(/role customer/i);
+    // Must be framed as required, not optional
+    expect(prompt).toMatch(/required/i);
+    // Must be tied to the ARRIVE macro's first argument
+    expect(prompt).toMatch(/ARRIVE\(\)/i);
+  });
+
   it("includes the current model when one exists", () => {
     const message = buildModelBuilderUserMessage(
       "Add a second server",
