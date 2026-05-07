@@ -45,6 +45,16 @@ describe("model builder prompts", () => {
     expect(prompt).toMatch(/too detailed to fit/i);
   });
 
+  it("mandates COMPLETE() for final-stage completion B-events and RELEASE() only for intermediate routing", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    // Final-stage completion must use COMPLETE()
+    expect(prompt).toMatch(/COMPLETE\(\).*final stage/i);
+    // Must explicitly forbid RELEASE() on final-stage events
+    expect(prompt).toMatch(/Never use RELEASE\(\) as the effect of a final-stage/i);
+    // Intermediate routing uses RELEASE(ServerType, NextQueueName)
+    expect(prompt).toMatch(/RELEASE\(ServerType, NextQueueName\)/);
+  });
+
   it("requires queues to include customerType matching the arriving entity", () => {
     const prompt = buildModelBuilderSystemPrompt();
     expect(prompt).toMatch(/customerType/);
