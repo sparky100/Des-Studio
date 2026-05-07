@@ -25,15 +25,21 @@ function DesNode({ data, selected }) {
   const color = NODE_COLOR[data.type] || C.accent;
   const hasTarget = data.type !== "source";
   const hasSource = data.type !== "sink";
+  const hasError = !!data.hasError;
   return (
     <div style={{
+      position: "relative",
       width: 160,
       minHeight: 78,
       background: C.surface,
-      border: `1.5px solid ${selected ? color : `${color}44`}`,
-      borderLeft: `4px solid ${color}`,
+      border: `1.5px solid ${hasError && !selected ? C.red : selected ? color : `${color}44`}`,
+      borderLeft: `4px solid ${hasError && !selected ? C.red : color}`,
       borderRadius: 6,
-      boxShadow: selected ? `0 0 0 3px ${color}88, 0 0 10px ${color}44` : "none",
+      boxShadow: selected
+        ? `0 0 0 3px ${color}88, 0 0 10px ${color}44`
+        : hasError
+          ? `0 0 0 2px ${C.red}44`
+          : "none",
       color: C.text,
       display: "flex",
       flexDirection: "column",
@@ -42,6 +48,27 @@ function DesNode({ data, selected }) {
       fontFamily: FONT,
       fontSize: 11,
     }}>
+      {hasError && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: -5,
+            right: -5,
+            width: 14,
+            height: 14,
+            borderRadius: "50%",
+            background: C.red,
+            border: `2px solid ${C.bg}`,
+            color: "#fff",
+            fontSize: 8,
+            fontWeight: 900,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >!</div>
+      )}
       {hasTarget && (
         <Handle
           type="target"
@@ -110,8 +137,22 @@ const panelBtnStyle = {
   padding: "5px 9px",
 };
 
-function CanvasControls({ canEdit, onResetLayout, connecting }) {
+function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef }) {
   const { fitView } = useReactFlow();
+
+  // Expose fitView for a specific node so the validation checklist can navigate to it.
+  // Assigned synchronously during render so it is always current.
+  if (fitNodeRef) {
+    fitNodeRef.current = (nodeId) => {
+      fitView({
+        nodes: nodeId ? [{ id: nodeId }] : [],
+        padding: 0.4,
+        duration: 400,
+        maxZoom: 1.2,
+      });
+    };
+  }
+
   return (
     <>
       <Panel position="top-left" style={{ display: "flex", gap: 5 }}>
@@ -160,6 +201,8 @@ export function FlowDiagramReactFlow({
   graph,
   canEdit = false,
   selectedNodeId = null,
+  errorNodeIds,
+  fitNodeRef,
   onNodeSelect,
   onNodeMove,
   onViewportChange,
@@ -170,7 +213,17 @@ export function FlowDiagramReactFlow({
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const nodes = useMemo(() => (graph.nodes || []).map(toFlowNode), [graph.nodes]);
+
+  // Attach hasError flag to each node so DesNode can show the error badge.
+  // This is derived state — never stored in model_json.
+  const nodes = useMemo(
+    () => (graph.nodes || []).map(node => {
+      const base = toFlowNode(node);
+      return { ...base, data: { ...base.data, hasError: errorNodeIds ? errorNodeIds.has(node.id) : false } };
+    }),
+    [graph.nodes, errorNodeIds]
+  );
+
   const edges = useMemo(() => (graph.edges || []).map(toFlowEdge), [graph.edges]);
 
   const isValidConnection = useCallback(connection => {
@@ -250,7 +303,12 @@ export function FlowDiagramReactFlow({
           nodeColor={node => NODE_COLOR[node.data?.type] || C.accent}
           maskColor="rgba(8, 12, 16, 0.72)"
         />
-        <CanvasControls canEdit={canEdit} onResetLayout={onResetLayout} connecting={connecting} />
+        <CanvasControls
+          canEdit={canEdit}
+          onResetLayout={onResetLayout}
+          connecting={connecting}
+          fitNodeRef={fitNodeRef}
+        />
       </ReactFlow>
     </div>
   );

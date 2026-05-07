@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn, Empty, SH, Tag } from "../shared/components.jsx";
+import { validateModel } from "../../engine/validation.js";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
@@ -130,46 +131,134 @@ function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
   );
 }
 
-function ValidationSummary({ issues, onSelectNode }) {
-  const hasIssues = issues.length > 0;
+// Maps a validateModel error/warning to the canvas node that owns it,
+// by extracting the element name from the message and matching against graph nodes.
+function findNodeForError(item, graph) {
+  const match = (item.message || "").match(/'([^']+)'/);
+  const name = match?.[1];
+  if (!name) return null;
+  const nodes = graph?.nodes || [];
+  if (item.tab === "cevents") {
+    return nodes.find(n => n.type === VISUAL_NODE_TYPES.ACTIVITY && n.label === name)?.id ?? null;
+  }
+  if (item.tab === "bevents") {
+    return nodes.find(
+      n => (n.type === VISUAL_NODE_TYPES.SOURCE || n.type === VISUAL_NODE_TYPES.SINK) && n.label === name
+    )?.id ?? null;
+  }
+  if (item.tab === "queues") {
+    return nodes.find(n => n.type === VISUAL_NODE_TYPES.QUEUE && n.label === name)?.id ?? null;
+  }
+  return null;
+}
+
+// Clickable checklist combining visual-graph warnings with canonical model errors/warnings.
+// Each row with a known nodeId pans the canvas to that node and selects it.
+function ValidationChecklist({ visualIssues, modelErrors, modelWarnings, graph, onFocusNode }) {
+  const items = [
+    ...visualIssues.map((issue, i) => ({
+      key: `vis-${i}`,
+      message: issue.message,
+      nodeId: issue.nodeId ?? null,
+      severity: "warning",
+    })),
+    ...modelErrors.map((err, i) => ({
+      key: `err-${err.code}-${i}`,
+      message: `[${err.code}] ${err.message}`,
+      nodeId: findNodeForError(err, graph),
+      severity: "error",
+    })),
+    ...modelWarnings.map((warn, i) => ({
+      key: `warn-${warn.code}-${i}`,
+      message: `[${warn.code}] ${warn.message}`,
+      nodeId: findNodeForError(warn, graph),
+      severity: "warning",
+    })),
+  ];
+
+  const hasIssues = items.length > 0;
+  const errCount = modelErrors.length;
+  const warnCount = visualIssues.length + modelWarnings.length;
+
   return (
-    <div style={{
-      background: hasIssues ? C.amber + "12" : C.green + "12",
-      border: `1px solid ${hasIssues ? C.amber : C.green}55`,
-      borderRadius: 6,
-      padding: "9px 10px",
-      display: "flex",
-      flexDirection: "column",
-      gap: 7,
-      fontFamily: FONT,
-      fontSize: 11,
-      color: C.text,
-    }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
-        <strong style={{ color: hasIssues ? C.amber : C.green }}>Visual validation</strong>
-        <Tag label={hasIssues ? `${issues.length} warnings` : "clear"} color={hasIssues ? C.amber : C.green} />
+    <div
+      aria-label="Validation checklist"
+      style={{
+        background: !hasIssues ? `${C.green}10` : `${C.amber}08`,
+        border: `1px solid ${!hasIssues ? `${C.green}44` : `${C.border}`}`,
+        borderRadius: 6,
+        fontFamily: FONT,
+        overflow: "hidden",
+      }}
+    >
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 6,
+        padding: "7px 10px",
+        borderBottom: hasIssues ? `1px solid ${C.border}` : "none",
+        flexWrap: "wrap",
+      }}>
+        <span style={{
+          color: !hasIssues ? C.green : C.muted,
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: 1,
+          textTransform: "uppercase",
+        }}>
+          Validation
+        </span>
+        {!hasIssues && (
+          <span style={{ color: C.green, fontSize: 10 }}>✓ clear</span>
+        )}
+        {hasIssues && (
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+            {errCount > 0 && <Tag label={`${errCount} error${errCount > 1 ? "s" : ""}`} color={C.red} />}
+            {warnCount > 0 && <Tag label={`${warnCount} warning${warnCount > 1 ? "s" : ""}`} color={C.amber} />}
+          </div>
+        )}
       </div>
-      {!hasIssues && <span style={{ color: C.muted }}>Graph has a source, a sink, and routed visual nodes.</span>}
-      {issues.slice(0, 4).map((issue, idx) => (
-        <button
-          key={`${issue.nodeId || "model"}-${idx}`}
-          type="button"
-          onClick={() => issue.nodeId && onSelectNode?.(issue.nodeId)}
-          style={{
-            background: C.bg,
-            border: `1px solid ${C.border}`,
-            borderRadius: 5,
-            color: issue.nodeId ? C.amber : C.muted,
-            cursor: issue.nodeId ? "pointer" : "default",
-            fontFamily: FONT,
-            fontSize: 10,
-            padding: "6px 8px",
-            textAlign: "left",
-          }}
-        >
-          {issue.message}
-        </button>
-      ))}
+      {hasIssues && (
+        <div role="list" style={{ maxHeight: 180, overflowY: "auto" }}>
+          {items.map(item => (
+            <button
+              key={item.key}
+              type="button"
+              title={item.message}
+              aria-label={item.message}
+              onClick={() => item.nodeId && onFocusNode?.(item.nodeId)}
+              style={{
+                alignItems: "flex-start",
+                background: "transparent",
+                border: "none",
+                borderBottom: `1px solid ${C.border}`,
+                color: item.severity === "error" ? C.red : C.amber,
+                cursor: item.nodeId ? "pointer" : "default",
+                display: "flex",
+                fontFamily: FONT,
+                fontSize: 10,
+                gap: 6,
+                padding: "7px 10px",
+                textAlign: "left",
+                width: "100%",
+              }}
+            >
+              <span style={{ flexShrink: 0, lineHeight: "14px" }}>
+                {item.severity === "error" ? "●" : "◆"}
+              </span>
+              <span style={{
+                color: item.nodeId ? C.text : C.muted,
+                lineHeight: 1.4,
+                wordBreak: "break-word",
+                minWidth: 0,
+              }}>
+                {item.message}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -178,8 +267,21 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [message, setMessage] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  // Ref set by CanvasControls (inside ReactFlow) to expose fitView for specific nodes
+  const fitNodeRef = useRef(null);
   const graph = useMemo(() => deriveGraphFromModel(model || {}), [model]);
   const visualIssues = useMemo(() => validateVisualGraph(graph), [graph]);
+  const modelValidation = useMemo(() => validateModel(model || {}), [model]);
+  // Derived set of canvas node IDs that have active validation issues — never stored in model_json
+  const errorNodeIds = useMemo(() => {
+    const ids = new Set();
+    visualIssues.forEach(issue => { if (issue.nodeId) ids.add(issue.nodeId); });
+    [...modelValidation.errors, ...modelValidation.warnings].forEach(item => {
+      const id = findNodeForError(item, graph);
+      if (id) ids.add(id);
+    });
+    return ids;
+  }, [visualIssues, modelValidation, graph]);
   const nodeLabels = useMemo(
     () => new Map((graph.nodes || []).map(node => [node.id, node.label || node.id])),
     [graph.nodes]
@@ -279,6 +381,12 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
     applyModel({ ...model, graph: model.graph ? { ...model.graph, nodes: [] } : undefined });
   };
 
+  // Pan/zoom the canvas to a node and open its inspector.
+  const focusNode = (nodeId) => {
+    setSelectedNodeId(nodeId);
+    fitNodeRef.current?.(nodeId);
+  };
+
   // Auto-dismiss the canvas status message after a short delay.
   useEffect(() => {
     if (!message) return;
@@ -357,7 +465,13 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
               {item.label}
             </button>
           ))}
-          <ValidationSummary issues={visualIssues} onSelectNode={setSelectedNodeId} />
+          <ValidationChecklist
+            visualIssues={visualIssues}
+            modelErrors={modelValidation.errors}
+            modelWarnings={modelValidation.warnings}
+            graph={graph}
+            onFocusNode={focusNode}
+          />
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, lineHeight: 1.5 }}>
             Click to add quickly, or drag onto the canvas to choose the starting position.
           </div>
@@ -381,6 +495,8 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
             graph={graph}
             canEdit={canEdit}
             selectedNodeId={selectedNodeId}
+            errorNodeIds={errorNodeIds}
+            fitNodeRef={fitNodeRef}
             onNodeSelect={setSelectedNodeId}
             onNodeMove={moveNode}
             onViewportChange={changeViewport}

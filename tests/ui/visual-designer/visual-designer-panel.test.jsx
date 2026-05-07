@@ -5,6 +5,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { ModelDetail, buildModelExportPayload } from '../../../src/ui/ModelDetail.jsx';
 import { VisualDesignerPanel } from '../../../src/ui/visual-designer/VisualDesignerPanel.jsx';
 
+// A source node with no queue → validateVisualGraph fires "not connected" warning
+const disconnectedSourceModel = {
+  id: 'model-validation',
+  entityTypes: [{ id: 'cust', name: 'Customer', role: 'customer', attrDefs: [] }],
+  stateVariables: [],
+  queues: [],
+  bEvents: [{ id: 'arr', name: 'Customer Arrival', scheduledTime: '0', effect: 'ARRIVE(Customer)', schedules: [] }],
+  cEvents: [],
+};
+
 vi.mock('@xyflow/react', () => ({
   Background: () => <div data-testid="flow-background" />,
   Controls: () => <div data-testid="flow-controls" />,
@@ -207,6 +217,31 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /mock select source/i }));
 
     expect(screen.getByLabelText(/target queue/i)).toHaveValue('Consultant Queue');
+  });
+
+  it('validation checklist shows clickable error row for a disconnected source and selecting it opens the inspector', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <VisualDesignerPanel
+        model={disconnectedSourceModel}
+        canEdit
+        onModelChange={vi.fn()}
+      />
+    );
+
+    // Checklist must be present
+    const checklist = screen.getByLabelText('Validation checklist');
+    expect(checklist).toBeInTheDocument();
+
+    // A warning row mentioning the unconnected source must be visible
+    const warnRow = screen.getByRole('button', { name: /not connected/i });
+    expect(warnRow).toBeInTheDocument();
+
+    // Clicking the row selects the node → the inspector renders the source fields
+    await user.click(warnRow);
+    // Source inspector shows the arrival event's name in a "Source name" input
+    expect(screen.getByDisplayValue('Customer Arrival')).toBeInTheDocument();
   });
 
   it('shows dependency dialog listing C-event when deleting a queue referenced by C-events', async () => {
