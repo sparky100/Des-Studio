@@ -203,9 +203,32 @@ export function deriveGraphFromModel(model = {}) {
       if (!bEvent) return;
       const calls = macroCalls(bEvent.effect);
       calls.forEach((call, index) => {
-        if (call.macro === "RELEASE" && call.args[1]) {
-          const nextQueueId = queueNodeByName.get(norm(call.args[1]));
-          if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}`), from: id, to: nextQueueId, source: "routing" });
+        if (call.macro === "RELEASE") {
+          // F10.1d: derive edges from routing table when present; fall back to single arg
+          if (Array.isArray(bEvent.routing) && bEvent.routing.length > 0) {
+            bEvent.routing.forEach((branch, branchIdx) => {
+              const nextQueueId = queueNodeByName.get(norm(branch.queueName));
+              if (nextQueueId) {
+                const condLabel = branch.condition
+                  ? `${branch.condition.variable} ${branch.condition.operator} ${branch.condition.value}`
+                  : "condition";
+                edges.push({
+                  id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}-${branchIdx}`),
+                  from: id, to: nextQueueId, source: "routing", label: condLabel,
+                });
+              }
+            });
+            if (bEvent.defaultQueueName) {
+              const defQueueId = queueNodeByName.get(norm(bEvent.defaultQueueName));
+              if (defQueueId) edges.push({
+                id: edgeId(id, defQueueId, `${schedule.eventId}-${index}-default`),
+                from: id, to: defQueueId, source: "routing", label: "fallback",
+              });
+            }
+          } else if (call.args[1]) {
+            const nextQueueId = queueNodeByName.get(norm(call.args[1]));
+            if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}`), from: id, to: nextQueueId, source: "routing" });
+          }
         }
         if (call.macro === "COMPLETE" || call.macro === "RENEGE") {
           const sinkId = sinkNodeByBEventId.get(bEvent.id);

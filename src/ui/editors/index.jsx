@@ -397,6 +397,14 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const updEff=(j,v)=>{const n=[...events];const ef=[...effects];ef[j]=v;n[i]={...n[i],effect:ef};onChange(n);};
         const addEff=()=>{const n=[...events];n[i]={...n[i],effect:[...effects,'']};onChange(n);};
         const remEff=(j)=>{const n=[...events];n[i]={...n[i],effect:effects.filter((_,idx)=>idx!==j)};onChange(n);};
+        // F10.1c — conditional routing
+        const hasRelease=effects.some(eff=>typeof eff==='string'&&/^RELEASE\s*\(/i.test(eff));
+        const hasRouting=Array.isArray(ev.routing);
+        const routingEntityAttrs=entityTypes.filter(et=>et.role!=="server").flatMap(et=>(et.attrDefs||et.attrs||[]).map(a=>`Entity.${a.name||a}`)).filter(Boolean);
+        const toggleRouting=()=>{const n=[...events];if(hasRouting){const{routing:_r,defaultQueueName:_d,...rest}=n[i];n[i]=rest;}else{const cleanEff=effects.map(eff=>typeof eff==='string'?eff.replace(/^(RELEASE\s*\([^,)]+),\s*[^)]+\)/i,'$1)'):eff);n[i]={...n[i],routing:[],defaultQueueName:'',effect:cleanEff};}onChange(n);};
+        const addRoutingRow=()=>{const n=[...events];const r=[...(n[i].routing||[])];r.push({condition:{variable:'',operator:'==',value:''},queueName:''});n[i]={...n[i],routing:r};onChange(n);};
+        const updRoutingRow=(j,p)=>{const n=[...events];const r=[...n[i].routing];r[j]={...r[j],...p};n[i]={...n[i],routing:r};onChange(n);};
+        const remRoutingRow=(j)=>{const n=[...events];n[i]={...n[i],routing:n[i].routing.filter((_,idx)=>idx!==j)};onChange(n);};
         return (
           <div key={ev.id} style={{background:C.bg,border:`1px solid ${isTmpl?C.muted+"44":C.bEvent+"33"}`,
             borderLeft:`3px solid ${isTmpl?C.muted:C.bEvent}`,borderRadius:6,padding:12,display:"flex",flexDirection:"column",gap:10}}>
@@ -439,6 +447,53 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 </div>
               ))}
             </div>
+            {hasRelease&&(
+              <div style={{background:C.surface,borderRadius:5,padding:10,display:"flex",flexDirection:"column",gap:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>CONDITIONAL ROUTING</span>
+                  <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:11,color:hasRouting?C.bEvent:C.muted,fontFamily:FONT,fontWeight:hasRouting?700:400}}>
+                    <input type="checkbox" checked={hasRouting} onChange={toggleRouting} style={{accentColor:C.bEvent}}/>
+                    Enable routing table
+                  </label>
+                </div>
+                {hasRouting&&(<>
+                  {(ev.routing||[]).map((row,j)=>(
+                    <div key={j} style={{background:C.bg,borderRadius:4,padding:"8px 10px",border:`1px solid ${C.border}`,display:"flex",flexDirection:"column",gap:6}}>
+                      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>IF</span>
+                        <select value={row.condition?.variable||""} onChange={e=>updRoutingRow(j,{condition:{...row.condition,variable:e.target.value}})}
+                          style={{flex:1,minWidth:110,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                          <option value="">— attribute —</option>
+                          {routingEntityAttrs.map(a=><option key={a} value={a}>{a}</option>)}
+                        </select>
+                        <select value={row.condition?.operator||"=="} onChange={e=>updRoutingRow(j,{condition:{...row.condition,operator:e.target.value}})}
+                          style={{width:52,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 3px",outline:"none"}}>
+                          {["==","!=","<",">","<=",">="].map(op=><option key={op} value={op}>{op}</option>)}
+                        </select>
+                        <input value={row.condition?.value||""} onChange={e=>updRoutingRow(j,{condition:{...row.condition,value:e.target.value}})} placeholder="value"
+                          style={{width:80,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}/>
+                        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
+                        <select value={row.queueName||""} onChange={e=>updRoutingRow(j,{queueName:e.target.value})}
+                          style={{flex:1,minWidth:100,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                          <option value="">— queue —</option>
+                          {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
+                        </select>
+                        <Btn small variant="danger" ariaLabel={`Remove routing row ${j+1}`} onClick={()=>remRoutingRow(j)}>✕</Btn>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT,whiteSpace:"nowrap"}}>FALLBACK →</span>
+                    <select value={ev.defaultQueueName||""} onChange={e=>upd(i,"defaultQueueName",e.target.value)}
+                      style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                      <option value="">— required fallback queue —</option>
+                      {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
+                    </select>
+                  </div>
+                  <Btn small variant="ghost" onClick={addRoutingRow}>+ Add condition</Btn>
+                </>)}
+              </div>
+            )}
             <input value={ev.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
               style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",width:"100%",boxSizing:"border-box"}}/>
             {/* Schedules */}

@@ -8,9 +8,9 @@
 // EXTENDING: To add pre/post-phase hooks (e.g. for statistics collection),
 // add hook functions to the options object passed to runPhases().
 
-import { MACROS, applyScalar } from "./macros.js";
-import { evalCondition }       from "./conditions.js";
-import { sample }              from "./distributions.js";
+import { MACROS, applyScalar }              from "./macros.js";
+import { evalCondition, evaluatePredicate } from "./conditions.js";
+import { sample }                           from "./distributions.js";
 
 function applyShiftChange(ev, ctx) {
   const serverTypeName = ev.serverTypeName || ev.payload?.serverTypeName;
@@ -145,6 +145,32 @@ export function fireBEvent(ev, ctx) {
   const effectCtx = { ...ctx, felRef: ev };
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
   const { msgs, felEntries } = applyEffect(effectStr, effectCtx);
+
+  // ── Conditional routing (F10.1) ──────────────────────────────────────────
+  // When a B-event carries a routing table, re-assign the released customer's
+  // queue after the effect string has already run (so cust.status === "waiting").
+  if (Array.isArray(ev.routing) || ev.defaultQueueName !== undefined) {
+    const custId = effectCtx._lastCustId;
+    const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
+    if (cust && cust.status === "waiting") {
+      let routed = null;
+      for (const branch of ev.routing) {
+        if (branch.condition && evaluatePredicate(branch.condition, { currentEntity: cust })) {
+          routed = branch.queueName;
+          break;
+        }
+      }
+      if (!routed) routed = ev.defaultQueueName ?? null;
+      if (routed) {
+        cust.queue = routed;
+        msgs.push(`Routing: #${cust.id} → "${routed}" (conditional)`);
+      } else {
+        const warn = `RELEASE routing: no condition matched for entity #${cust.id} and no defaultQueueName set`;
+        msgs.push(warn);
+        ctx.warnings?.push(warn);
+      }
+    }
+  }
 
   // Process the B-event's own schedules list (next arrival, reneging timer, etc.)
   for (const sched of ev.schedules || []) {

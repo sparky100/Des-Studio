@@ -194,12 +194,25 @@ export function sampleAttrs(attrDefs, rng) {
     });
     return o;
   }
-  // New array format
+  // New array format.
+  // Each entry is either { name, dist, distParams } (engine format) or
+  // { name, valueType, defaultValue } (editor format). When dist is absent
+  // but defaultValue is present, use it directly rather than sampling Fixed(0).
   if (Array.isArray(attrDefs)) {
     const o = {};
     attrDefs.forEach(a => {
       if (!a.name) return;
-      o[a.name] = sample(a.dist || "Fixed", a.distParams || { value: "0" }, rng);
+      if (a.dist) {
+        o[a.name] = sample(a.dist, a.distParams || { value: "0" }, rng);
+      } else if (a.defaultValue !== undefined) {
+        // Editor-facing format — use defaultValue, coercing to number when declared numeric
+        const v = a.defaultValue;
+        o[a.name] = (a.valueType === "number" || (typeof v !== "string" && typeof v !== "boolean"))
+          ? +v
+          : v;
+      } else {
+        o[a.name] = 0;
+      }
     });
     return o;
   }

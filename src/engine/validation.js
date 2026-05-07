@@ -330,6 +330,45 @@ export function validateModel(model) {
     });
   });
 
+  // ── V17: Routing table validation (F10.1) ─────────────────────────────────
+  bEvents.forEach(b => {
+    if (!Array.isArray(b.routing)) return;
+    const bLabel = `B-Event '${b.name || b.id}'`;
+
+    // queueName (in effect string) and routing are mutually exclusive
+    const effectStr = effectText(b.effect);
+    const releaseHasQueue = /RELEASE\s*\([^,)]+,\s*[^)]+\)/i.test(effectStr);
+    if (releaseHasQueue) {
+      err('V17',
+        `${bLabel} specifies both a RELEASE target queue (in effect) and a routing table — they are mutually exclusive.`,
+        'bevents');
+    }
+
+    // Each routing entry must reference a valid queue
+    b.routing.forEach((branch, idx) => {
+      const qName = (branch.queueName || '').trim();
+      if (!qName) {
+        err('V17',
+          `${bLabel} routing entry ${idx + 1} is missing a queueName.`,
+          'bevents');
+      } else if (!queueNamesLower.has(qName.toLowerCase())) {
+        err('V17',
+          `${bLabel} routing entry ${idx + 1} references unknown queue '${qName}'.`,
+          'bevents');
+      }
+    });
+
+    // defaultQueueName must exist
+    if (b.defaultQueueName !== undefined && b.defaultQueueName !== null) {
+      const defQ = String(b.defaultQueueName || '').trim();
+      if (!queueNamesLower.has(defQ.toLowerCase())) {
+        err('V17',
+          `${bLabel} defaultQueueName '${defQ}' does not match any defined queue.`,
+          'bevents');
+      }
+    }
+  });
+
   // ── V16: Termination check (Sprint 3.2) ─────────────────────────────────────
   const hasTermination = model.maxSimTime > 0 || model.terminationCondition;
   if (!hasTermination && hasArrive) {
