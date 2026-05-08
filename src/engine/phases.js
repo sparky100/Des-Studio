@@ -146,24 +146,36 @@ export function fireBEvent(ev, ctx) {
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
   const { msgs, felEntries } = applyEffect(effectStr, effectCtx);
 
+  // ── Route helper: apply a resolved queueName to the customer.
+  // null / "" means "exit system" — complete the customer immediately.
+  const applyRoute = (cust, queueName, note) => {
+    if (!queueName) {
+      cust.status        = "done";
+      cust.completionTime = clock;
+      cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
+      ctx.state.__served  = (ctx.state.__served || 0) + 1;
+      msgs.push(`Routing: #${cust.id} → exit system (${note})`);
+    } else {
+      cust.queue = queueName;
+      msgs.push(`Routing: #${cust.id} → "${queueName}" (${note})`);
+    }
+  };
+
   // ── Conditional routing (F10.1) ──────────────────────────────────────────
-  // When a B-event carries a routing table, re-assign the released customer's
-  // queue after the effect string has already run (so cust.status === "waiting").
   if (Array.isArray(ev.routing) || ev.defaultQueueName !== undefined) {
     const custId = effectCtx._lastCustId;
     const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
     if (cust && cust.status === "waiting") {
-      let routed = null;
+      let routed;
       for (const branch of ev.routing) {
         if (branch.condition && evaluatePredicate(branch.condition, { currentEntity: cust })) {
           routed = branch.queueName;
           break;
         }
       }
-      if (!routed) routed = ev.defaultQueueName ?? null;
-      if (routed) {
-        cust.queue = routed;
-        msgs.push(`Routing: #${cust.id} → "${routed}" (conditional)`);
+      if (routed === undefined) routed = ev.defaultQueueName ?? null;
+      if (routed !== undefined) {
+        applyRoute(cust, routed || null, "conditional");
       } else {
         const warn = `RELEASE routing: no condition matched for entity #${cust.id} and no defaultQueueName set`;
         msgs.push(warn);
@@ -173,9 +185,6 @@ export function fireBEvent(ev, ctx) {
   }
 
   // ── Probabilistic routing (F10.2) ────────────────────────────────────────
-  // When a B-event carries probabilisticRouting: [{ probability, queueName }],
-  // sample a branch using the replication's seeded RNG. Must be mutually
-  // exclusive with conditional routing (enforced at validation time).
   if (Array.isArray(ev.probabilisticRouting) && ev.probabilisticRouting.length > 0) {
     const custId = effectCtx._lastCustId;
     const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
@@ -187,8 +196,7 @@ export function fireBEvent(ev, ctx) {
         cumulative += branch.probability;
         if (roll < cumulative) { chosen = branch.queueName; break; }
       }
-      cust.queue = chosen;
-      msgs.push(`Routing: #${cust.id} → "${chosen}" (p=${roll.toFixed(4)})`);
+      applyRoute(cust, chosen || null, `p=${roll.toFixed(4)}`);
     }
   }
 

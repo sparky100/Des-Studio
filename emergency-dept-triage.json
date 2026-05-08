@@ -1,0 +1,120 @@
+{
+  "name": "Emergency Department Triage",
+  "model_json": {
+    "entityTypes": [
+      {
+        "id": "et-patient",
+        "name": "Patient",
+        "role": "customer",
+        "count": "",
+        "attrDefs": []
+      },
+      {
+        "id": "et-triage",
+        "name": "Triage Nurse",
+        "role": "server",
+        "count": "1",
+        "attrDefs": []
+      },
+      {
+        "id": "et-doctor",
+        "name": "Doctor",
+        "role": "server",
+        "count": "1",
+        "attrDefs": []
+      }
+    ],
+    "queues": [
+      {
+        "id": "q-triage",
+        "name": "Triage Queue",
+        "customerType": "Patient",
+        "discipline": "FIFO"
+      },
+      {
+        "id": "q-doctor",
+        "name": "Doctor Queue",
+        "customerType": "Patient",
+        "discipline": "FIFO"
+      }
+    ],
+    "bEvents": [
+      {
+        "id": "be-arrive",
+        "name": "Patient Arrives",
+        "scheduledTime": "0",
+        "effect": "ARRIVE(Patient, Triage Queue)",
+        "schedules": [
+          {
+            "eventId": "be-arrive",
+            "dist": "Exponential",
+            "distParams": {
+              "mean": "10"
+            }
+          }
+        ]
+      },
+      {
+        "id": "be-triage-complete",
+        "name": "Triage Complete",
+        "scheduledTime": "9999",
+        "effect": "RELEASE(Triage Nurse)",
+        "probabilisticRouting": [
+          {
+            "probability": 0.9,
+            "queueName": "Doctor Queue"
+          },
+          {
+            "probability": 0.1,
+            "queueName": null
+          }
+        ],
+        "schedules": []
+      },
+      {
+        "id": "be-consult-complete",
+        "name": "Consultation Complete",
+        "scheduledTime": "9999",
+        "effect": "COMPLETE()",
+        "schedules": []
+      }
+    ],
+    "cEvents": [
+      {
+        "id": "ce-triage",
+        "name": "Start Triage",
+        "priority": 1,
+        "condition": "queue(Triage Queue).length > 0 AND idle(Triage Nurse).count > 0",
+        "effect": "ASSIGN(Triage Queue, Triage Nurse)",
+        "cSchedules": [
+          {
+            "eventId": "be-triage-complete",
+            "dist": "Exponential",
+            "distParams": {
+              "mean": "5"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      },
+      {
+        "id": "ce-doctor",
+        "name": "Start Consultation",
+        "priority": 2,
+        "condition": "queue(Doctor Queue).length > 0 AND idle(Doctor).count > 0",
+        "effect": "ASSIGN(Doctor Queue, Doctor)",
+        "cSchedules": [
+          {
+            "eventId": "be-consult-complete",
+            "dist": "Exponential",
+            "distParams": {
+              "mean": "9"
+            },
+            "useEntityCtx": true
+          }
+        ]
+      }
+    ],
+    "stateVariables": []
+  }
+}
