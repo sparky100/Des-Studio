@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-07 | Reflects: Sprint 9C Execute Canvas Live Flow View complete + ADR-010 + Known Issues*
+*Last updated: 2026-05-08 | Reflects: Sprint 10 Modelling Expressiveness: Routing & Pooling complete + ADR-011*
 
 ---
 
@@ -1215,6 +1215,7 @@ This prevents silent architectural drift — the most common way AI-assisted pro
 | ADR-007 | Three authoring modes over one canonical model | Accepted | Sprint 6 planning | §21 |
 | ADR-008 | Platform roles and user settings, with SaaS/LLM follow-ons | Accepted | Sprint 7A | §21 |
 | ADR-009 | Reassess JavaScript-only implementation and TypeScript adoption | Accepted | Sprint 7A | §2, §21 |
+| ADR-011 | Conditional routing schema (Option A: routing table on B-event) | Accepted | Sprint 10 | §5.1, §21 |
 
 ---
 
@@ -1329,16 +1330,35 @@ UI / UX
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight | 22 focused | N/A |
 | Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX hardening: safe deletion, connection feedback, validation checklist, palette affordances, lazy bundle split | 451 passing | N/A |
 | Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas Live Flow View: topology-derived canvas, four live node components, entity token animation, configurable KPI bar, BottomPanel with Stage KPIs, speed slider, node-filtered log | 464 passing | N/A |
+| Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness: Routing & Pooling — conditional routing, probabilistic routing, multi-server pooling (capacity > 1), time-series collection + Charts tab, wait-time histogram, Visual Designer multi-edge | 508 passing | N/A |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 10 — Modelling Expressiveness: Routing & Pooling**
+**Sprint 11 — Modelling Expressiveness: Capacity & Output**
 
-Goal: Extend the engine vocabulary with conditional routing, probabilistic routing, multi-server pooling, and time-series output. No existing macro or test is replaced.
+Goal: Finite queues, balking, waiting-time distributions, entity batching, and assembly.
 
-**Status:** Sprint 9C completed 2026-05-07. Sprint 10 is the active sprint.
+**Status:** Sprint 10 completed 2026-05-08. Sprint 11 is the active sprint.
+
+### Sprint 10 Completion Notes
+
+Sprint 10 completed on 2026-05-08.
+
+- F10.1: Conditional entity routing — `routing: [{ condition, queueName }]` + `defaultQueueName` on B-events; `evaluatePredicate` against released entity attributes; first match wins.
+- F10.2: Probabilistic routing — `probabilisticRouting: [{ probability, queueName }]`; sampled with the replication's seeded RNG; probabilities must sum to 1.0.
+- F10.3: Multi-server pooling — `count > 1` on server entity types creates N entity instances; `idle(Type).count` condition handles the pool; V19 validation added.
+- F10.4: `collectTimeSeries` flag on `buildEngine()` (default false, zero overhead); appends `{ t, byType }` after each Phase C stabilises; returned as `results.timeSeries`.
+- F10.5: Charts tab enabled in BottomPanel — SVG queue-depth and server-utilisation line charts; "Detailed output" checkbox in controls bar toggles collection.
+- F10.6: Wait-time histogram in Charts tab — 12-bin SVG bar chart from `results.waitDist[queue].values[]`; p50/p90/p95/p99 marker lines overlaid; always computed (cheap, opt-out N/A).
+- F10.7: Visual Designer edge labels now show condition text or "fallback" for routing-table edges; fallback edges rendered dashed amber.
+- F10.8: Documentation — addition1_entity_model.md V7/V17/V18/V19, CLAUDE.md, Build Plan, ADR-011.
+
+**Architecture rules added by Sprint 10:**
+- `RELEASE` routing table (`routing` or `probabilisticRouting`) on B-events is the canonical multi-route pattern. Never implement routing by adding C-events after service.
+- `collectTimeSeries: false` is the default. Tests must never enable it without bounding the simulation to avoid log-snapshot memory growth (see §22).
+- `results.timeSeries` and `results.waitDist` are new optional fields on the results object. Existing consumers that don't reference these fields are unaffected.
 
 ### Sprint 9C Completion Notes
 

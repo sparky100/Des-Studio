@@ -77,7 +77,7 @@ flowchart LR
 | Model definition coherence | ✅ Complete | Sprint 8B: queue/customer/server/service semantics aligned. |
 | Visual authoring | ✅ Complete | Sprint 9: graph-first authoring model. Sprint 9B: UX hardening complete. |
 | Execute canvas | ✅ Complete | Sprint 9C: topology-derived live canvas, four live node components, entity token animation, configurable KPI bar, BottomPanel with Stage KPIs. |
-| Modelling expressiveness | ⬜ Planned | Sprints 10–12: conditional routing, multi-server pooling, finite queues, batching, recirculation. |
+| Modelling expressiveness | 🔄 In progress | Sprint 10 ✅: conditional/probabilistic routing, multi-server pooling, time-series, wait-time distributions. Sprints 11–12: finite queues, balking, batching, recirculation. |
 
 ### Key Issues and Watchpoints
 
@@ -150,7 +150,7 @@ flowchart LR
 | Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring. | 38 focused | N/A | Success | Graph-first authoring, round-trip parity, drag-to-place palette, visual validation summary. |
 | Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX Hardening. | Focused | N/A | Success | Resource editing, safe delete, richer validation, connection editing, palette affordances, entity attribute logic fixes complete. |
 | Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas — Live Flow View. | 464 (464) | N/A | Success | ExecuteCanvas (lazy), four execute-mode node components, AnimatedEdge token animation, BottomPanel with Stage KPIs, configurable KPI bar, speed slider, node-filtered log. |
-| Sprint 10 | ⬜ Not started | — | Modelling Expressiveness — Routing & Pooling. | — | — | — | Conditional routing; probabilistic routing; multi-server pooling; time-series output. |
+| Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Routing & Pooling. | 508 (508) | N/A | Success | Conditional routing (routing table + probabilistic), multi-server pooling, time-series collection + SVG Charts tab, wait-time histogram, Visual Designer multi-edge labels. |
 | Sprint 11 | ⬜ Not started | — | Modelling Expressiveness — Capacity & Output. | — | — | — | Finite queues; balking; waiting time distributions. |
 | Sprint 12 | ⬜ Not started | — | Modelling Expressiveness — Assembly & Recirculation. | — | — | — | Entity batching; controlled back-edges for rework loops. |
 
@@ -191,13 +191,13 @@ The existing Forms/Tabs editor remains the stable manual authoring mode througho
 | Multi-replication with 95% CI | ✅ Sprint 4 | — |
 | AI-generated model authoring | ✅ Sprint 8 | — |
 | Visual graph authoring | ✅ Sprint 9 | — |
-| Conditional routing (entity-attribute branching) | ⚠️ Achievable via C-Event pattern; not guided or visualised | Sprint 10 |
-| Probabilistic routing (stochastic branch probability) | ❌ Absent | Sprint 10 |
-| Multi-server resource pooling (capacity > 1) | ❌ Absent — manual duplication workaround only | Sprint 10 |
-| Time-series output (queue length / utilisation over time) | ❌ Absent — point estimates only | Sprint 10 |
+| Conditional routing (entity-attribute branching) | ✅ F10.1: RELEASE routing table; Visual Designer shows labelled condition edges | — |
+| Probabilistic routing (stochastic branch probability) | ✅ F10.2: RELEASE probabilisticRouting; seeded RNG sampling | — |
+| Multi-server resource pooling (capacity > 1) | ✅ F10.3: entity-per-instance model; pool size field in UI; V19 validation | — |
+| Time-series output (queue length / utilisation over time) | ✅ F10.4/5: opt-in collectTimeSeries flag; SVG Charts tab in BottomPanel | — |
 | Finite queues and capacity-limited buffers | ❌ Absent | Sprint 11 |
 | Balking (probabilistic queue joining) | ❌ Absent | Sprint 11 |
-| Waiting time distribution and percentiles | ❌ Absent | Sprint 11 |
+| Waiting time distribution and percentiles | ✅ F10.6: waitDist p50/p90/p95/p99 + 12-bin histogram in Charts tab | — |
 | Entity batching / assembly | ❌ Absent | Sprint 12 |
 | Recirculation / rework loops | ❌ Absent — back-edges blocked by DAG rule | Sprint 12 |
 | Full staff rostering (resource shift schedules) | ~ Partial — piecewise NHPP implemented; full rostering incomplete | Sprint 13+ |

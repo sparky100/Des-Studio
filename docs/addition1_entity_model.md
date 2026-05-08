@@ -254,7 +254,7 @@ This section defines every action the engine supports. This is the **complete an
 | **Inputs** | `entityId: string` — the entity completing service. `resourceId: string` — the resource being released. `nextNodeId: string` — the Queue or Sink node the entity moves to. |
 | **Preconditions** | The entity must currently be assigned to the resource (internal engine check). If not, this is an engine logic error. |
 | **State changes** | 1. `Resource.<resourceId>.status` set to `IDLE`. 2. `Resource.<resourceId>.busyCount` decremented by 1. 3. Entity sojourn time at this activity recorded: `T_now - entity.inServiceSince`. 4. If `nextNodeId` is a Queue: entity placed in that queue, `Queue.<nextNodeId>.length` incremented by 1. 5. If `nextNodeId` is a Sink: throughput recorded, total time-in-system recorded (`T_now - entity.arrivalTime`), entity disposed. |
-| **Routing** | Routing is determined by the edge leaving the Activity node in the DAG. A single outgoing edge to one Queue or Sink is the standard case. Conditional routing is not supported in this version. |
+| **Routing** | Determined by the RELEASE B-Event fired by the Activity. **Single route** (default): `RELEASE(ServerType, QueueName)` — fixed target queue. **Conditional routing** (F10.1): optional `routing: [{ condition, queueName }]` array + `defaultQueueName` on the B-event. Conditions are `evaluatePredicate` predicates against the released entity's attributes; first match wins; `defaultQueueName` is used when no condition matches. **Probabilistic routing** (F10.2): optional `probabilisticRouting: [{ probability, queueName }]` array; sampled using the replication's seeded RNG; probabilities must sum to 1.0 (±0.001). `routing`, `probabilisticRouting`, and a RELEASE literal queue arg are mutually exclusive on the same B-event. |
 | **Post-execution** | COMPLETE fires in Phase B. After all Phase B events fire at `T_now`, Phase C scan begins. A SEIZE C-Event on the now-IDLE resource is the expected next step. |
 
 ---
@@ -396,7 +396,7 @@ The engine must validate the complete model before `buildEngine()` proceeds. Any
 | V4 | If queue rule is PRIORITY, the entity class must have a numeric attribute named `priority`. | Blocking | `Queue '{id}' uses PRIORITY discipline but entity class '{class}' has no numeric 'priority' attribute.` |
 | V5 | Every Distribution parameter must be within valid bounds (rate > 0, stdDev > 0, max > min, etc.). | Blocking | `Distribution parameter out of range in {context}: {detail}.` |
 | V6 | No B-Event schedule may reference a non-existent event ID. | Blocking | `Schedule in '{event}' references unknown event ID '{ref}'.` |
-| V7 | Every Activity node must have exactly one incoming edge and one outgoing edge. | Blocking | `Activity '{id}' has {n} incoming / {m} outgoing edges. Expected 1 of each.` |
+| V7 | Every Activity node must have at least one incoming edge and at least one outgoing edge. Multiple outgoing edges are valid when a routing table or probabilistic routing is configured on the scheduled RELEASE B-Event. | Blocking | `Activity '{id}' has no incoming queue edge.` / `Activity '{id}' has no outgoing route.` |
 | V8 | The model must contain at least one Source node and one Sink node. | Blocking | `Model has no Source node.` / `Model has no Sink node.` |
 | V9 | No C-Event condition may reference an undefined variable or attribute. | Blocking | `Condition references unknown variable '{ref}' in C-event '{id}'.` |
 | V10 | No entity attribute name may collide with a built-in state variable prefix (`Resource`, `Queue`). | Blocking | `Attribute name '{name}' conflicts with built-in variable namespace.` |
@@ -406,6 +406,9 @@ The engine must validate the complete model before `buildEngine()` proceeds. Any
 | V14 | Server `shiftSchedule` must start at time 0, be sorted ascending, and use positive integer capacities. | Blocking | `Server '{name}' shift schedule must start at time 0.` |
 | V15 | Shift times after configured run duration are unreachable. | Warning only | `Server '{name}' shift at t={time} is after the run duration.` |
 | V16 | Open-ended arrival models should define a time or condition termination. | Warning only | `No simulation time limit or termination condition set.` |
+| V17 | B-event `routing` entries: every `queueName` must reference a defined queue; `defaultQueueName` must also be a defined queue; `routing` and a RELEASE literal queue arg are mutually exclusive. | Blocking | `B-Event '{name}' routing entry {n} references unknown queue '{q}'.` |
+| V18 | B-event `probabilisticRouting`: probabilities must sum to 1.0 (±0.001); every `queueName` must reference a defined queue; mutually exclusive with `routing` and a RELEASE literal queue arg. | Blocking | `B-Event '{name}' probabilistic routing probabilities sum to {sum}, must be 1.0.` |
+| V19 | Server entity type `count` must be an integer ≥ 1. | Blocking | `Server type '{name}' count '{val}' must be an integer ≥ 1.` |
 
 ---
 
