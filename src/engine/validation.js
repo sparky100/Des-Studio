@@ -369,6 +369,37 @@ export function validateModel(model) {
     }
   });
 
+  // ── V18: Probabilistic routing validation (F10.2) ─────────────────────────
+  bEvents.forEach(b => {
+    if (!Array.isArray(b.probabilisticRouting)) return;
+    const bLabel = `B-Event '${b.name || b.id}'`;
+
+    // Mutually exclusive with routing and literal RELEASE queue arg
+    if (Array.isArray(b.routing)) {
+      err('V18', `${bLabel} has both routing and probabilisticRouting — they are mutually exclusive.`, 'bevents');
+    }
+    const effectStr = effectText(b.effect);
+    if (/RELEASE\s*\([^,)]+,\s*[^)]+\)/i.test(effectStr)) {
+      err('V18', `${bLabel} specifies a RELEASE target queue and probabilisticRouting — mutually exclusive.`, 'bevents');
+    }
+
+    // Probabilities must sum to 1.0 (± 0.001)
+    const sum = b.probabilisticRouting.reduce((s, branch) => s + (parseFloat(branch.probability) || 0), 0);
+    if (Math.abs(sum - 1.0) > 0.001) {
+      err('V18', `${bLabel} probabilisticRouting probabilities sum to ${sum.toFixed(4)}, must be 1.0 (±0.001).`, 'bevents');
+    }
+
+    // Each branch must reference a valid queue
+    b.probabilisticRouting.forEach((branch, idx) => {
+      const qName = (branch.queueName || '').trim();
+      if (!qName) {
+        err('V18', `${bLabel} probabilisticRouting entry ${idx + 1} is missing a queueName.`, 'bevents');
+      } else if (!queueNamesLower.has(qName.toLowerCase())) {
+        err('V18', `${bLabel} probabilisticRouting entry ${idx + 1} references unknown queue '${qName}'.`, 'bevents');
+      }
+    });
+  });
+
   // ── V16: Termination check (Sprint 3.2) ─────────────────────────────────────
   const hasTermination = model.maxSimTime > 0 || model.terminationCondition;
   if (!hasTermination && hasArrive) {

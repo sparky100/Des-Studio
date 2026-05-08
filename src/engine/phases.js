@@ -172,6 +172,26 @@ export function fireBEvent(ev, ctx) {
     }
   }
 
+  // ── Probabilistic routing (F10.2) ────────────────────────────────────────
+  // When a B-event carries probabilisticRouting: [{ probability, queueName }],
+  // sample a branch using the replication's seeded RNG. Must be mutually
+  // exclusive with conditional routing (enforced at validation time).
+  if (Array.isArray(ev.probabilisticRouting) && ev.probabilisticRouting.length > 0) {
+    const custId = effectCtx._lastCustId;
+    const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
+    if (cust && cust.status === "waiting") {
+      const roll = ctx.rng();
+      let cumulative = 0;
+      let chosen = ev.probabilisticRouting[ev.probabilisticRouting.length - 1].queueName;
+      for (const branch of ev.probabilisticRouting) {
+        cumulative += branch.probability;
+        if (roll < cumulative) { chosen = branch.queueName; break; }
+      }
+      cust.queue = chosen;
+      msgs.push(`Routing: #${cust.id} → "${chosen}" (p=${roll.toFixed(4)})`);
+    }
+  }
+
   // Process the B-event's own schedules list (next arrival, reneging timer, etc.)
   for (const sched of ev.schedules || []) {
     const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);

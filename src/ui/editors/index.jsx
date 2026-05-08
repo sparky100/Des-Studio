@@ -397,14 +397,28 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const updEff=(j,v)=>{const n=[...events];const ef=[...effects];ef[j]=v;n[i]={...n[i],effect:ef};onChange(n);};
         const addEff=()=>{const n=[...events];n[i]={...n[i],effect:[...effects,'']};onChange(n);};
         const remEff=(j)=>{const n=[...events];n[i]={...n[i],effect:effects.filter((_,idx)=>idx!==j)};onChange(n);};
-        // F10.1c — conditional routing
+        // F10.1c / F10.2c — routing mode (none | conditional | probabilistic)
         const hasRelease=effects.some(eff=>typeof eff==='string'&&/^RELEASE\s*\(/i.test(eff));
         const hasRouting=Array.isArray(ev.routing);
+        const hasProb=Array.isArray(ev.probabilisticRouting);
+        const routingMode=hasRouting?"conditional":hasProb?"probabilistic":"none";
         const routingEntityAttrs=entityTypes.filter(et=>et.role!=="server").flatMap(et=>(et.attrDefs||et.attrs||[]).map(a=>`Entity.${a.name||a}`)).filter(Boolean);
-        const toggleRouting=()=>{const n=[...events];if(hasRouting){const{routing:_r,defaultQueueName:_d,...rest}=n[i];n[i]=rest;}else{const cleanEff=effects.map(eff=>typeof eff==='string'?eff.replace(/^(RELEASE\s*\([^,)]+),\s*[^)]+\)/i,'$1)'):eff);n[i]={...n[i],routing:[],defaultQueueName:'',effect:cleanEff};}onChange(n);};
+        const setRoutingMode=(mode)=>{
+          const n=[...events];
+          const{routing:_r,defaultQueueName:_d,probabilisticRouting:_pr,...rest}=n[i];
+          const cleanEff=effects.map(eff=>typeof eff==='string'?eff.replace(/^(RELEASE\s*\([^,)]+),\s*[^)]+\)/i,'$1)'):eff);
+          if(mode==="conditional") n[i]={...rest,routing:[],defaultQueueName:'',effect:cleanEff};
+          else if(mode==="probabilistic") n[i]={...rest,probabilisticRouting:[{probability:1,queueName:''}],effect:cleanEff};
+          else n[i]={...rest};
+          onChange(n);
+        };
         const addRoutingRow=()=>{const n=[...events];const r=[...(n[i].routing||[])];r.push({condition:{variable:'',operator:'==',value:''},queueName:''});n[i]={...n[i],routing:r};onChange(n);};
         const updRoutingRow=(j,p)=>{const n=[...events];const r=[...n[i].routing];r[j]={...r[j],...p};n[i]={...n[i],routing:r};onChange(n);};
         const remRoutingRow=(j)=>{const n=[...events];n[i]={...n[i],routing:n[i].routing.filter((_,idx)=>idx!==j)};onChange(n);};
+        const addProbRow=()=>{const n=[...events];const pr=[...(n[i].probabilisticRouting||[])];pr.push({probability:0,queueName:''});n[i]={...n[i],probabilisticRouting:pr};onChange(n);};
+        const updProbRow=(j,p)=>{const n=[...events];const pr=[...n[i].probabilisticRouting];pr[j]={...pr[j],...p};n[i]={...n[i],probabilisticRouting:pr};onChange(n);};
+        const remProbRow=(j)=>{const n=[...events];n[i]={...n[i],probabilisticRouting:n[i].probabilisticRouting.filter((_,idx)=>idx!==j)};onChange(n);};
+        const probTotal=parseFloat(((ev.probabilisticRouting||[]).reduce((s,b)=>s+(parseFloat(b.probability)||0),0)).toFixed(4));
         return (
           <div key={ev.id} style={{background:C.bg,border:`1px solid ${isTmpl?C.muted+"44":C.bEvent+"33"}`,
             borderLeft:`3px solid ${isTmpl?C.muted:C.bEvent}`,borderRadius:6,padding:12,display:"flex",flexDirection:"column",gap:10}}>
@@ -450,13 +464,15 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
             {hasRelease&&(
               <div style={{background:C.surface,borderRadius:5,padding:10,display:"flex",flexDirection:"column",gap:8}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>CONDITIONAL ROUTING</span>
-                  <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:11,color:hasRouting?C.bEvent:C.muted,fontFamily:FONT,fontWeight:hasRouting?700:400}}>
-                    <input type="checkbox" checked={hasRouting} onChange={toggleRouting} style={{accentColor:C.bEvent}}/>
-                    Enable routing table
-                  </label>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>RELEASE ROUTING</span>
+                  <select value={routingMode} onChange={e=>setRoutingMode(e.target.value)}
+                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                    <option value="none">Single queue (no routing)</option>
+                    <option value="conditional">Conditional routing</option>
+                    <option value="probabilistic">Probabilistic routing</option>
+                  </select>
                 </div>
-                {hasRouting&&(<>
+                {routingMode==="conditional"&&(<>
                   {(ev.routing||[]).map((row,j)=>(
                     <div key={j} style={{background:C.bg,borderRadius:4,padding:"8px 10px",border:`1px solid ${C.border}`,display:"flex",flexDirection:"column",gap:6}}>
                       <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
@@ -491,6 +507,27 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                     </select>
                   </div>
                   <Btn small variant="ghost" onClick={addRoutingRow}>+ Add condition</Btn>
+                </>)}
+                {routingMode==="probabilistic"&&(<>
+                  {(ev.probabilisticRouting||[]).map((row,j)=>(
+                    <div key={j} style={{background:C.bg,borderRadius:4,padding:"8px 10px",border:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                      <input value={row.probability} type="number" min="0" max="1" step="0.01" onChange={e=>updProbRow(j,{probability:parseFloat(e.target.value)||0})} aria-label={`Probability for route ${j+1}`}
+                        style={{width:70,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}/>
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
+                      <select value={row.queueName||""} onChange={e=>updProbRow(j,{queueName:e.target.value})}
+                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                        <option value="">— queue —</option>
+                        {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
+                      </select>
+                      <Btn small variant="danger" ariaLabel={`Remove probabilistic row ${j+1}`} onClick={()=>remProbRow(j)}>✕</Btn>
+                    </div>
+                  ))}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <Btn small variant="ghost" onClick={addProbRow}>+ Add branch</Btn>
+                    <span style={{fontSize:11,fontFamily:FONT,fontWeight:700,color:Math.abs(probTotal-1)>0.001?C.red:C.green}}>
+                      Total: {probTotal.toFixed(3)}{Math.abs(probTotal-1)>0.001?" ≠ 1.0 ✗":" ✓"}
+                    </span>
+                  </div>
                 </>)}
               </div>
             )}
