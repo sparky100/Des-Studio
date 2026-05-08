@@ -666,26 +666,26 @@ const sameConditionRows = (a = [], b = []) => {
 const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], queues=[]}) => {
   // useMemo ensures dropdown rebuilds whenever entityTypes, stateVariables, or queues change (C8 fix)
   const tokens = useMemo(() => {
-    // Named queue tokens — use customerType for the entity label when available
+    // Named queue tokens — "Number of Patients in Triage Queue"
     const queueTokens = (queues||[]).map(q => ({
       label: q.customerType
-        ? `${normTypeName(q.customerType)} waiting in ${q.name}`
+        ? `Number of ${normTypeName(q.customerType)} in ${q.name}`
         : `Number waiting in ${q.name}`,
       value: `queue(${q.name}).length`,
       valueType: 'number',
     }));
-    // Customer entity-type tokens (by type name, not named queue)
+    // Customer entity-type tokens — counts across all queues for that type
     const entityTypeTokens = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>({
-      label: `${normTypeName(e.name)} — total waiting`,
+      label: `Number of ${normTypeName(e.name)} waiting (any queue)`,
       value: `queue(${normTypeName(e.name)}).length`,
       valueType: 'number',
     }));
-    // Server tokens — idle count, busy count, and any attributes
+    // Server tokens — "Number of available Nurses", "Number of busy Nurses"
     const serverTokens = (entityTypes||[]).filter(e=>e.role==='server').flatMap(e=>{
       const name = normTypeName(e.name);
       return [
-        { label:`${name} — number idle (available)`, value:`idle(${name}).count`, valueType:'number' },
-        { label:`${name} — number busy (in use)`,    value:`busy(${name}).count`, valueType:'number' },
+        { label:`Number of available ${name}`, value:`idle(${name}).count`, valueType:'number' },
+        { label:`Number of busy ${name}`,      value:`busy(${name}).count`, valueType:'number' },
         ...(e.attrDefs||[]).filter(a=>a.name).map(a=>({
           label: `${name} — ${a.name} attribute`,
           value: `attr(${name}, ${a.name})`,
