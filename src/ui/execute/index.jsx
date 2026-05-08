@@ -567,6 +567,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
   const saveInProgressRef = useRef(false);
   // F9C.6 — animation toggle
   const [animationEnabled, setAnimationEnabled] = useState(true);
+  // F10.4 — detailed time-series output (default off — zero engine overhead)
+  const [collectTimeSeries, setCollectTimeSeries] = useState(false);
   // F9C.7 — configurable KPI slots
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
   // F9C.10 — speed multiplier (1× = 400ms interval, 10× = 40ms, 0.5× = 800ms)
@@ -799,7 +801,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
       runSeed,
       warmupPeriod,
       maxTimeForRun,
-      stopConditionForRun
+      stopConditionForRun,
+      5000, 500,
+      collectTimeSeries
     );
     const result = engine.runAll();
 
@@ -1102,6 +1106,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
         <Btn variant="ghost" onClick={toggleAnimation} title="Toggle entity token animation">
           {animationEnabled ? "● Animate" : "○ Animate"}
         </Btn>
+        <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 11, color: collectTimeSeries ? C.accent : "#9ca3af", fontFamily: FONT }}
+          title="Record queue depth and server utilisation at every clock tick for Charts tab">
+          <input type="checkbox" checked={collectTimeSeries} onChange={e => setCollectTimeSeries(e.target.checked)} style={{ accentColor: C.accent }}/>
+          Detailed output
+        </label>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         <div style={{ flex: 1, minWidth: 12 }} />
         {/* Speed slider (F9C.10) */}
@@ -1329,6 +1338,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
                 log={log}
                 snap={currentSnap}
                 model={model}
+                results={results}
                 selectedNodeLabel={selectedNodeLabel}
                 onClearFilter={() => setSelectedNodeLabel(null)}
               />

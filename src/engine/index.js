@@ -81,7 +81,7 @@ function makeRateChangeEvents(model) {
   return events;
 }
 
-export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500) {
+export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500, collectTimeSeries = false) {
   const runtimeModel = modelWithShiftInitialCapacity(model);
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
   const rng = mulberry32(seed);
@@ -165,6 +165,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // ── Build initial FEL ─────────────────────────────────────────────────────
   let clock = 0;
   const log = [];
+  const _timeSeries = collectTimeSeries ? [] : null; // null = disabled, zero overhead
 
   let fel = (runtimeModel.bEvents || [])
     .filter(ev => parseFloat(ev.scheduledTime) < INITIAL_FEL_MAX_SCHEDULED_TIME)
@@ -319,7 +320,10 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       }
     }
 
-    return { done: false, cycleLog, snap: snap(clock), felSize: fel.length, phaseCTruncated };
+    // Collect time-series snapshot after Phase C stabilises (F10.4a)
+    const stepSnap = snap(clock);
+    if (_timeSeries !== null) _timeSeries.push({ t: stepSnap.clock, byType: stepSnap.byType });
+    return { done: false, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated };
   }
 
   // ── runAll(): run to completion ───────────────────────────────────────────
@@ -366,10 +370,44 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     return {
       finalTime: clock,
       log,
-      snap:      snap(clock),
-      summary:   getSummary(),
-      entitySummary: entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
+      snap:           snap(clock),
+      summary:        getSummary(),
+      entitySummary:  entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
+      timeSeries:     _timeSeries ?? undefined,
+      waitDist:       computeWaitDist(entities),
     };
+  }
+
+  // ── waitDist: per-queue wait-time distribution (F10.4b) ───────────────────
+  // Wait time = serviceStart − arrivalTime, recorded for every served customer.
+  // Always computed (cheap O(n)) regardless of collectTimeSeries flag.
+  function computeWaitDist(allEntities) {
+    const byQueue = {};
+    for (const e of allEntities) {
+      if (e.role === "server" || !e.stages || e.stages.length === 0) continue;
+      const qName = e.queue;
+      if (!qName) continue;
+      const wait = e.stages[0]?.stageWait ?? 0;
+      if (!byQueue[qName]) byQueue[qName] = [];
+      byQueue[qName].push(wait);
+    }
+    const dist = {};
+    for (const [q, waits] of Object.entries(byQueue)) {
+      const sorted = [...waits].sort((a, b) => a - b);
+      const n = sorted.length;
+      if (n === 0) continue;
+      const pct = (p) => sorted[Math.min(Math.floor(p * n), n - 1)];
+      dist[q] = {
+        n,
+        mean: +(sorted.reduce((s, v) => s + v, 0) / n).toFixed(4),
+        p50:  +pct(0.50).toFixed(4),
+        p90:  +pct(0.90).toFixed(4),
+        p95:  +pct(0.95).toFixed(4),
+        p99:  +pct(0.99).toFixed(4),
+        values: sorted.map(v => +v.toFixed(4)),
+      };
+    }
+    return dist;
   }
 
   function getSummary() {

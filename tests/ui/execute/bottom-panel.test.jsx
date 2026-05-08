@@ -30,13 +30,13 @@ const model = {
 };
 
 describe("BottomPanel — F9C.8", () => {
-  test("renders three active tabs and one disabled Charts tab", () => {
+  test("renders four active tabs including Charts", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
     expect(screen.getByRole("tab", { name: /step log/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /entities/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /stage kpis/i })).toBeInTheDocument();
-    const charts = screen.getByRole("tab", { name: /charts/i });
-    expect(charts).toBeDisabled();
+    // Charts tab is now enabled (F10.5)
+    expect(screen.getByRole("tab", { name: /charts/i })).not.toBeDisabled();
   });
 
   test("collapse toggle hides the panel body", () => {
