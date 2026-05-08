@@ -344,14 +344,11 @@ export function validateModel(model) {
         'bevents');
     }
 
-    // Each routing entry must reference a valid queue
+    // Each routing entry must reference a valid queue, or null/"" meaning "exit system"
     b.routing.forEach((branch, idx) => {
-      const qName = (branch.queueName || '').trim();
-      if (!qName) {
-        err('V17',
-          `${bLabel} routing entry ${idx + 1} is missing a queueName.`,
-          'bevents');
-      } else if (!queueNamesLower.has(qName.toLowerCase())) {
+      const qName = branch.queueName == null ? null : String(branch.queueName).trim();
+      if (qName === null || qName === '') return; // null = exit system — valid
+      if (!queueNamesLower.has(qName.toLowerCase())) {
         err('V17',
           `${bLabel} routing entry ${idx + 1} references unknown queue '${qName}'.`,
           'bevents');
@@ -402,12 +399,11 @@ export function validateModel(model) {
       err('V18', `${bLabel} probabilisticRouting probabilities sum to ${sum.toFixed(4)}, must be 1.0 (±0.001).`, 'bevents');
     }
 
-    // Each branch must reference a valid queue
+    // Each branch must reference a valid queue, or null/"" meaning "exit system"
     b.probabilisticRouting.forEach((branch, idx) => {
-      const qName = (branch.queueName || '').trim();
-      if (!qName) {
-        err('V18', `${bLabel} probabilisticRouting entry ${idx + 1} is missing a queueName.`, 'bevents');
-      } else if (!queueNamesLower.has(qName.toLowerCase())) {
+      const qName = branch.queueName == null ? null : String(branch.queueName).trim();
+      if (qName === null || qName === '') return; // null = exit system — valid
+      if (!queueNamesLower.has(qName.toLowerCase())) {
         err('V18', `${bLabel} probabilisticRouting entry ${idx + 1} references unknown queue '${qName}'.`, 'bevents');
       }
     });
