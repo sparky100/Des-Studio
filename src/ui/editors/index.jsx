@@ -666,34 +666,39 @@ const sameConditionRows = (a = [], b = []) => {
 const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], queues=[]}) => {
   // useMemo ensures dropdown rebuilds whenever entityTypes, stateVariables, or queues change (C8 fix)
   const tokens = useMemo(() => {
+    // Named queue tokens — use customerType for the entity label when available
     const queueTokens = (queues||[]).map(q => ({
-      label: `queue(${q.name}).length — entities in ${q.name}`,
+      label: q.customerType
+        ? `${normTypeName(q.customerType)} waiting in ${q.name}`
+        : `Number waiting in ${q.name}`,
       value: `queue(${q.name}).length`,
       valueType: 'number',
     }));
+    // Customer entity-type tokens (by type name, not named queue)
     const entityTypeTokens = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>({
-      label: `queue(${normTypeName(e.name)}).length  — customers waiting`,
+      label: `${normTypeName(e.name)} — total waiting (by type)`,
       value: `queue(${normTypeName(e.name)}).length`,
       valueType: 'number',
     }));
+    // Server tokens — idle count, busy count, and any attributes
     const serverTokens = (entityTypes||[]).filter(e=>e.role==='server').flatMap(e=>{
       const name = normTypeName(e.name);
       return [
-        { label:`idle(${name}).count  — idle servers`, value:`idle(${name}).count`, valueType:'number' },
-        { label:`busy(${name}).count  — busy servers`, value:`busy(${name}).count`, valueType:'number' },
+        { label:`${name} — number idle (available)`, value:`idle(${name}).count`, valueType:'number' },
+        { label:`${name} — number busy (in use)`,    value:`busy(${name}).count`, valueType:'number' },
         ...(e.attrDefs||[]).filter(a=>a.name).map(a=>({
-          label: `attr(${name}, ${a.name})  — ${a.name} of idle ${name}`,
+          label: `${name} — ${a.name} attribute`,
           value: `attr(${name}, ${a.name})`,
           valueType: a.valueType||'number',
         })),
       ];
     });
     const builtInTokens = [
-      { label:'served  — cumulative customers served', value:'served', valueType:'number' },
-      { label:'reneged  — cumulative customers reneged', value:'reneged', valueType:'number' },
+      { label:'Served — total who have completed service', value:'served', valueType:'number' },
+      { label:'Reneged — total who abandoned the queue',  value:'reneged', valueType:'number' },
     ];
     const stateVarTokens = (stateVariables||[]).filter(sv=>sv.name).map(sv=>({
-      label: `${sv.name}  — ${sv.description||'state variable'}`,
+      label: `${sv.name} — ${sv.description||'state variable'}`,
       value: sv.name,
       valueType: 'number',
     }));
