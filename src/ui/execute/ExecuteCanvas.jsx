@@ -480,8 +480,10 @@ export function ExecuteCanvas({
         if (node.type === "queue") {
           const queueEntities = waiting.filter(e => e.queue === node.label);
           const qDef = (model.queues || []).find(q => q.name === node.label);
+          const cap = qDef?.capacity ? parseInt(qDef.capacity, 10) : null;
           liveData = {
             depth: queueEntities.length,
+            capacity: Number.isFinite(cap) && cap > 0 ? cap : null,
             entities: queueEntities,
             discipline: qDef?.discipline ?? null,
             clock: snap.clock,

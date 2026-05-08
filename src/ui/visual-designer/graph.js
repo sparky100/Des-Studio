@@ -133,13 +133,35 @@ export function deriveGraphFromModel(model = {}) {
   queues.forEach(queue => {
     const id = nodeId(VISUAL_NODE_TYPES.QUEUE, queue.id || queue.name);
     queueNodeByName.set(norm(queue.name), id);
+    const cap = queue.capacity ? parseInt(queue.capacity, 10) : null;
     nodes.push({
       id,
       type: VISUAL_NODE_TYPES.QUEUE,
       refId: queue.id || null,
       label: queue.name || "Queue",
       sublabel: queue.customerType ? `Accepts ${queue.customerType}` : "Queue",
+      capacity: Number.isFinite(cap) && cap > 0 ? cap : null,
     });
+  });
+
+  // F11.5: derive overflow edges from queues that have overflowDestination or capacity
+  queues.forEach(queue => {
+    if (!queue.overflowDestination && !queue.capacity) return;
+    const fromId = queueNodeByName.get(norm(queue.name));
+    if (!fromId) return;
+    if (queue.overflowDestination) {
+      const toId = queueNodeByName.get(norm(queue.overflowDestination));
+      if (toId && toId !== fromId) {
+        edges.push({ id: edgeId(fromId, toId, "overflow"), from: fromId, to: toId, source: "overflow", label: "overflow" });
+      }
+    } else if (queue.capacity) {
+      // capacity set but no overflow destination — show an exit sink
+      const exitId = `sink:overflow-exit-${queue.id || queue.name}`;
+      if (!nodes.find(n => n.id === exitId)) {
+        nodes.push({ id: exitId, type: VISUAL_NODE_TYPES.SINK, refId: null, label: "Exit", sublabel: "Overflow exit" });
+      }
+      edges.push({ id: edgeId(fromId, exitId, "overflow"), from: fromId, to: exitId, source: "overflow", label: "overflow" });
+    }
   });
 
   bEvents.forEach(event => {

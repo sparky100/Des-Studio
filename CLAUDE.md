@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-08 | Reflects: Sprint 10 Modelling Expressiveness: Routing & Pooling complete + ADR-011*
+*Last updated: 2026-05-08 | Reflects: Sprint 11 Modelling Expressiveness: Capacity & Output complete*
 
 ---
 
@@ -1331,16 +1331,34 @@ UI / UX
 | Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX hardening: safe deletion, connection feedback, validation checklist, palette affordances, lazy bundle split | 451 passing | N/A |
 | Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas Live Flow View: topology-derived canvas, four live node components, entity token animation, configurable KPI bar, BottomPanel with Stage KPIs, speed slider, node-filtered log | 464 passing | N/A |
 | Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness: Routing & Pooling — conditional routing, probabilistic routing, multi-server pooling (capacity > 1), time-series collection + Charts tab, wait-time histogram, Visual Designer multi-edge | 508 passing | N/A |
+| Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness: Capacity & Output — finite queue capacity, balking (probability + condition), overflow routing, per-queue metrics (blockingCount/balkCount), Visual Designer overflow edges | 523+ passing | N/A |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 11 — Modelling Expressiveness: Capacity & Output**
+**Sprint 12 — Modelling Expressiveness: Assembly & Recirculation**
 
-Goal: Finite queues, balking, waiting-time distributions, entity batching, and assembly.
+Goal: Entity batching (BATCH/UNBATCH macros), controlled back-edges for rework loops, Entity.loopCount.
 
-**Status:** Sprint 10 completed 2026-05-08. Sprint 11 is the active sprint.
+**Status:** Sprint 11 completed 2026-05-08. Sprint 12 is the active sprint.
+
+### Sprint 11 Completion Notes
+
+Sprint 11 completed on 2026-05-08.
+
+- F11.1: Finite queue capacity — `capacity` field on Queue (already in UI, now enforced by engine). ARRIVE checks queue depth before placing entity; capacity check added before `entities.push` in ARRIVE macro.
+- F11.2: Balking — optional `balkProbability` (0–1, seeded RNG) and `balkCondition` (Predicate against `Queue.<name>.length`) on arrival B-events. Balk config shown in new BALKING section in B-event editor.
+- F11.3: Overflow routing — shared `overflowDestination` on Queue object: null = exit system; named queue = route there. Reuses Sprint 10 null-exit pattern. WHEN FULL — SEND TO dropdown in QueueEditor when capacity is set.
+- F11.4: Per-queue metrics — `results.perQueue[queueName] = { blockingCount, balkCount }` from closure-scoped `perQueueMetrics` Map in `buildEngine()`.
+- F11.5: Visual Designer — Queue inspector gets capacity input + overflow destination picker; overflow edges derived in `deriveGraphFromModel`; Queue→Queue and Queue→Sink connections allowed in `validateVisualConnection`; overflow edge deletion via `deleteVisualEdge`.
+- F11.5 (Execute canvas) — `ExecuteQueueNode` depth badge shows `depth/capacity` with red colour when at capacity.
+- F11.6: Documentation.
+
+**Architecture rules added by Sprint 11:**
+- `capacity: null` (default) on Queue = unlimited — current ARRIVE behaviour unchanged. The capacity check is strictly additive.
+- `balkProbability` and `balkCondition` are on the B-event, not the Queue. A queue may have different balk thresholds for different arrival sources.
+- `overflowDestination: null` reuses the Sprint 10 null-exit mechanism.
 
 ### Sprint 10 Completion Notes
 

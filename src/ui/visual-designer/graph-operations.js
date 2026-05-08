@@ -91,8 +91,12 @@ export function validateVisualConnection(graph, from, to) {
   if (source.type === VISUAL_NODE_TYPES.SOURCE && target.type !== VISUAL_NODE_TYPES.QUEUE) {
     return { ok: false, message: "Sources can only connect to queues." };
   }
-  if (source.type === VISUAL_NODE_TYPES.QUEUE && target.type !== VISUAL_NODE_TYPES.ACTIVITY) {
-    return { ok: false, message: "Queues can only connect to activities." };
+  if (source.type === VISUAL_NODE_TYPES.QUEUE &&
+      ![VISUAL_NODE_TYPES.ACTIVITY, VISUAL_NODE_TYPES.QUEUE, VISUAL_NODE_TYPES.SINK].includes(target.type)) {
+    return { ok: false, message: "Queues can connect to activities (service), other queues (overflow), or sinks (overflow exit)." };
+  }
+  if (source.type === VISUAL_NODE_TYPES.QUEUE && target.type === VISUAL_NODE_TYPES.QUEUE && source.id === target.id) {
+    return { ok: false, message: "A queue cannot overflow to itself." };
   }
   if (source.type === VISUAL_NODE_TYPES.ACTIVITY && ![VISUAL_NODE_TYPES.QUEUE, VISUAL_NODE_TYPES.SINK].includes(target.type)) {
     return { ok: false, message: "Activities can only route to queues or sinks." };
@@ -236,6 +240,20 @@ export function connectVisualNodes(model, graph, from, to) {
       condition: `queue(${source.label}).length > 0 AND idle(${server}).count > 0`,
       effect: `ASSIGN(${source.label}, ${server})`,
     }));
+  }
+
+  // F11.5: Queue → Queue overflow connection
+  if (source.type === VISUAL_NODE_TYPES.QUEUE && target.type === VISUAL_NODE_TYPES.QUEUE) {
+    next.queues = (next.queues || []).map(q =>
+      q.id !== source.refId ? q : { ...q, overflowDestination: target.label }
+    );
+  }
+
+  // F11.5: Queue → Sink overflow exit (null overflowDestination = exit system)
+  if (source.type === VISUAL_NODE_TYPES.QUEUE && target.type === VISUAL_NODE_TYPES.SINK) {
+    next.queues = (next.queues || []).map(q =>
+      q.id !== source.refId ? q : { ...q, overflowDestination: null }
+    );
   }
 
   if (source.type === VISUAL_NODE_TYPES.ACTIVITY && target.type === VISUAL_NODE_TYPES.QUEUE) {
@@ -422,6 +440,13 @@ export function deleteVisualEdge(model, graph, edgeId) {
     }
   }
 
+  // Queue → Queue/Sink ("overflow"): clear overflowDestination on the source queue
+  if (edge.source === "overflow" && fromNode.type === VISUAL_NODE_TYPES.QUEUE) {
+    next.queues = (next.queues || []).map(q =>
+      q.id !== fromNode.refId ? q : { ...q, overflowDestination: undefined }
+    );
+  }
+
   // Activity → Sink ("terminal"): remove cSchedule entry referencing the sink bEvent
   if (edge.source === "terminal" && fromNode.type === VISUAL_NODE_TYPES.ACTIVITY && toNode.type === VISUAL_NODE_TYPES.SINK) {
     const cEvent = cEvents.find(ce => ce.id === fromNode.refId);
@@ -564,9 +589,11 @@ export function updateVisualNode(model, node, patch = {}) {
     const nextName = patch.name;
     next.queues = updateByRef(next.queues, node.refId, queue => ({
       ...queue,
-      ...(patch.name !== undefined ? { name: patch.name } : {}),
-      ...(patch.customerType !== undefined ? { customerType: patch.customerType } : {}),
-      ...(patch.discipline !== undefined ? { discipline: patch.discipline } : {}),
+      ...(patch.name             !== undefined ? { name: patch.name }                         : {}),
+      ...(patch.customerType     !== undefined ? { customerType: patch.customerType }         : {}),
+      ...(patch.discipline       !== undefined ? { discipline: patch.discipline }             : {}),
+      ...(patch.capacity         !== undefined ? { capacity: patch.capacity }                 : {}),
+      ...(patch.overflowDestination !== undefined ? { overflowDestination: patch.overflowDestination } : {}),
     }));
     if (nextName !== undefined && oldName && nextName && oldName !== nextName) {
       next.bEvents = (next.bEvents || []).map(event => ({

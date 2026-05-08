@@ -46,8 +46,8 @@ function DisciplineBadge({ discipline }) {
   );
 }
 
-function DepthBadge({ depth }) {
-  const color = depthColor(depth);
+function DepthBadge({ depth, capacity }) {
+  const color = capacity ? (depth >= capacity ? C.red : depthColor(depth)) : depthColor(depth);
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
       <div style={{
@@ -63,9 +63,11 @@ function DepthBadge({ depth }) {
         padding: "3px 7px",
         textAlign: "center",
       }}>
-        {depth}
+        {capacity ? `${depth}/${capacity}` : depth}
       </div>
-      <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>waiting</span>
+      <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>
+        {capacity ? "capacity" : "waiting"}
+      </span>
     </div>
   );
 }
@@ -166,7 +168,8 @@ export function ExecuteQueueNode({ data }) {
   }, [live?.clock]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const depth      = live?.depth ?? 0;
-  const color      = depthColor(depth);
+  const capacity   = live?.capacity ?? null;
+  const color      = capacity ? (depth >= capacity ? C.red : depthColor(depth)) : depthColor(depth);
   const entities   = live?.entities ?? [];
   const discipline = live?.discipline ?? null;
 
@@ -218,7 +221,7 @@ export function ExecuteQueueNode({ data }) {
 
       {/* Depth badge */}
       {live ? (
-        <DepthBadge depth={depth} />
+        <DepthBadge depth={depth} capacity={capacity} />
       ) : (
         <div style={{ fontSize: 9, color: C.muted }}>—</div>
       )}

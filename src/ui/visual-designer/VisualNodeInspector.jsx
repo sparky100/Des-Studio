@@ -105,6 +105,25 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
             <option value="LIFO">LIFO</option>
             <option value="PRIORITY">Priority</option>
           </SelectField>
+          <Field
+            label="Max queue length (blank = unlimited)"
+            value={queue.capacity || ""}
+            type="number"
+            onChange={canEdit ? value => onPatchNode(node, { capacity: value || null }) : null}
+          />
+          {queue.capacity && (
+            <SelectField
+              label="When full — send to"
+              value={queue.overflowDestination || ""}
+              disabled={!canEdit}
+              onChange={value => onPatchNode(node, { overflowDestination: value || null })}
+            >
+              <option value="">Exit system (reject arrival)</option>
+              {(model.queues || [])
+                .filter(q => q.id !== queue.id)
+                .map(q => <option key={q.id || q.name} value={q.name}>{q.name}</option>)}
+            </SelectField>
+          )}
         </>
       )}
 
