@@ -97,6 +97,12 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     _perQueue[qName][field]++;
   };
 
+  // ── Event fire counts: how many times each B/C-event has fired ─────────────
+  const _eventCounts = {};
+  const incEventCount = (id) => {
+    if (id) _eventCounts[id] = (_eventCounts[id] || 0) + 1;
+  };
+
   // ── Initialise scalar state ───────────────────────────────────────────────
   const state = { __served: 0, __reneged: 0 };
   for (const sv of runtimeModel.stateVariables || []) {
@@ -166,6 +172,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       ),
       byType,
       nextArrivals,
+      eventCounts: { ..._eventCounts },
     };
   }
 
@@ -201,6 +208,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     warnings,
     createServerEntity,
     incQueueMetric,
+    incEventCount,
   });
 
   // ── step(): one Phase A → B → C cycle ────────────────────────────────────

@@ -16,6 +16,67 @@ const TABS = [
 
 // ── Stage KPIs ────────────────────────────────────────────────────────────────
 
+function EventCountsTable({ snap, model }) {
+  const counts = snap?.eventCounts ?? {};
+  const bEvents = (model.bEvents || []).filter(b => parseFloat(b.scheduledTime) < 900 || Object.prototype.hasOwnProperty.call(counts, b.id));
+  const cEvents = model.cEvents || [];
+  if (bEvents.length === 0 && cEvents.length === 0) return null;
+
+  const thStyle = { padding: "4px 8px", textAlign: "left", fontWeight: 600, color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 0.8 };
+  const tdStyle = (color) => ({ padding: "4px 8px", fontFamily: FONT, fontSize: 11, color: color || C.text });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {bEvents.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, color: C.bEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
+            B-EVENTS (BOUND) — TIMES FIRED
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>
+              <th style={thStyle}>Event</th>
+              <th style={{ ...thStyle, textAlign: "right" }}>Count</th>
+            </tr></thead>
+            <tbody>
+              {bEvents.map(b => (
+                <tr key={b.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={tdStyle(C.bEvent)}>{b.name || b.id}</td>
+                  <td style={{ ...tdStyle(counts[b.id] ? C.text : C.muted), textAlign: "right", fontWeight: counts[b.id] ? 700 : 400 }}>
+                    {counts[b.id] || 0}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {cEvents.length > 0 && (
+        <div>
+          <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
+            C-EVENTS (CONDITIONAL) — TIMES FIRED
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>
+              <th style={thStyle}>Event</th>
+              <th style={{ ...thStyle, textAlign: "right" }}>Count</th>
+            </tr></thead>
+            <tbody>
+              {cEvents.map(c => (
+                <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={tdStyle(C.cEvent)}>{c.name || c.id}</td>
+                  <td style={{ ...tdStyle(counts[c.id] ? C.text : C.muted), textAlign: "right", fontWeight: counts[c.id] ? 700 : 400 }}>
+                    {counts[c.id] || 0}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function StageKpisTable({ snap, model }) {
   if (!snap) {
     return (
@@ -493,7 +554,12 @@ export function BottomPanel({ log, snap, model, results, selectedNodeLabel, onCl
         <div style={{ padding: 14, maxHeight: 300, overflowY: "auto" }}>
           {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} />}
-          {activeTab === "stagekpis" && <StageKpisTable snap={snap} model={model} />}
+          {activeTab === "stagekpis" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <EventCountsTable snap={snap} model={model} />
+              <StageKpisTable snap={snap} model={model} />
+            </div>
+          )}
           {activeTab === "charts"    && <ChartsTab results={results} model={model} />}
         </div>
       )}

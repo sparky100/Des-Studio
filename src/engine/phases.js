@@ -143,6 +143,9 @@ export function fireBEvent(ev, ctx) {
     }
   }
 
+  // Count B-event firing (skip synthetic system events)
+  if (ev.id && !ev.type) ctx.incEventCount?.(ev.id);
+
   const effectCtx = { ...ctx, felRef: ev };
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
   const { msgs, felEntries } = applyEffect(effectStr, effectCtx);
@@ -230,6 +233,9 @@ export function fireBEvent(ev, ctx) {
 
 // ── Phase C: fire one conditional event ──────────────────────────────────────
 export function fireCEvent(ev, ctx) {
+  // Count C-event firing
+  if (ev.id) ctx.incEventCount?.(ev.id);
+
   const { clock, model } = ctx;
   const effectCtx = { ...ctx, felRef: null, entityFilter: ev.entityFilter ?? null };
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
