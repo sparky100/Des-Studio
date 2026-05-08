@@ -369,6 +369,19 @@ export function validateModel(model) {
     }
   });
 
+  // ── V19: Server entity type count must be integer >= 1 (F10.3) ─────────────
+  entityTypes.forEach(et => {
+    if (et.role !== "server") return;
+    const raw = et.count;
+    if (raw === undefined || raw === null || raw === "") return; // defaults to 1 in engine
+    const n = parseInt(raw, 10);
+    if (!Number.isInteger(n) || n < 1) {
+      err('V19',
+        `Server type '${et.name || et.id}' count '${raw}' must be an integer >= 1.`,
+        'entities');
+    }
+  });
+
   // ── V18: Probabilistic routing validation (F10.2) ─────────────────────────
   bEvents.forEach(b => {
     if (!Array.isArray(b.probabilisticRouting)) return;

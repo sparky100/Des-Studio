@@ -277,9 +277,17 @@ const EntityTypeEditor=({types,onChange})=>{
               <option value="server">Pre-created Resource</option>
             </select>
             {et.role==="server"&&<>
-              <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>count:</span>
-              <input value={et.count||""} onChange={e=>upd(i,"count",e.target.value)} placeholder="1"
-                style={{width:50,background:"transparent",border:`1px solid ${C.server}55`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+              <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>pool size:</span>
+              <input
+                aria-label={`Server pool size for ${et.name||"server"}`}
+                type="number" min="1" step="1"
+                value={et.count||""} onChange={e=>upd(i,"count",e.target.value)} placeholder="1"
+                style={{width:60,background:"transparent",border:`1px solid ${C.server}55`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+              {parseInt(et.count||"1",10)>1&&(
+                <span style={{fontSize:10,color:C.server,fontFamily:FONT}}>
+                  ({parseInt(et.count,10)} servers in pool)
+                </span>
+              )}
             </>}
             <Btn small variant="danger" ariaLabel={`Remove entity type ${et.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
           </div>

@@ -36,7 +36,8 @@ describe('EntityTypeEditor — shift schedules (F7.6)', () => {
     );
 
     expect(screen.getByText('+ Add Shift')).toBeInTheDocument();
-    expect(container.querySelector('input[type="number"]')).toBeDisabled();
+    // The first shift row's time field is always locked at t=0
+    expect(container.querySelector('input[type="number"][disabled]')).toBeInTheDocument();
     expect(screen.getAllByDisplayValue('3')).toHaveLength(1);
     expect(screen.getAllByDisplayValue('1').length).toBeGreaterThanOrEqual(1);
   });
