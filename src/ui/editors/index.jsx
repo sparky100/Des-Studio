@@ -676,7 +676,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
     }));
     // Customer entity-type tokens (by type name, not named queue)
     const entityTypeTokens = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>({
-      label: `${normTypeName(e.name)} — total waiting (by type)`,
+      label: `${normTypeName(e.name)} — total waiting`,
       value: `queue(${normTypeName(e.name)}).length`,
       valueType: 'number',
     }));
