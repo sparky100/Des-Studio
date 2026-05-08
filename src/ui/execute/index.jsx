@@ -12,7 +12,7 @@ import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
-import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildSensitivityPrompt } from "../../llm/prompts.js";
+import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildSensitivityPrompt, buildSuggestionPrompt } from "../../llm/prompts.js";
 
 const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
 const CI_METRICS = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.served", "summary.reneged"];
@@ -450,6 +450,13 @@ const AiAssistantPanel = ({
     runPrompt(buildSensitivityPrompt(model.name, exportConfig, ciResults));
   };
 
+  const suggestChanges = () => {
+    runPrompt(buildSuggestionPrompt(model, exportConfig, {
+      ...results,
+      aggregateStats,
+    }));
+  };
+
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
 
   return (
@@ -469,7 +476,7 @@ const AiAssistantPanel = ({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>AI Assistant</div>
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Read-only results analysis</div>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Results analysis + change suggestions</div>
         </div>
         <Btn small variant="ghost" onClick={onClose} ariaLabel="Close AI assistant">x</Btn>
       </div>
@@ -501,6 +508,9 @@ const AiAssistantPanel = ({
         </div>
         <Btn variant="amber" onClick={explainSensitivity} disabled={!sensitivityReady || isStreaming} style={panelButtonStyle}>
           Sensitivity
+        </Btn>
+        <Btn variant="primary" onClick={suggestChanges} disabled={!results || isStreaming} style={panelButtonStyle}>
+          Suggest model changes
         </Btn>
       </div>
 

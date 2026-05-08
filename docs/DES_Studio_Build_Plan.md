@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.46 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.47 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -151,6 +151,7 @@ flowchart LR
 | Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Routing & Pooling. | 508 (508) | N/A | Success | Conditional routing (routing table + probabilistic), multi-server pooling, time-series collection + SVG Charts tab, wait-time histogram, Visual Designer multi-edge labels. |
 | Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Capacity & Output. | 523 (523) | N/A | Success | Finite queue capacity, balking (probability + condition), overflow routing, per-queue blockingCount/balkCount, Visual Designer overflow edges. |
 | Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation. | 541 (541) | 1.48% | Success | BATCH/UNBATCH macros, loop guard, Entity.loopCount, Visual Designer back-edges, ADR-012 accepted. |
+| Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement. | 543 (543) | N/A | Success | 7-macro prompts update, validation feedback loop, results-informed refinement, Suggest Model Changes button. |
 
 ---
 
@@ -173,6 +174,7 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 10 | Modelling Expressiveness — Routing & Pooling | Conditional routing; probabilistic routing; multi-server pooling; time-series output |
 | Sprint 11 | Modelling Expressiveness — Capacity & Output | Finite queues; balking; waiting time distributions |
 | Sprint 12 | Modelling Expressiveness — Assembly & Recirculation | Entity batching; rework loops via controlled back-edges |
+| Sprint 13 | AI Model Building Enhancement | 7-macro prompts, validation feedback loop, results-informed refinement, Suggest Model Changes |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
@@ -1246,6 +1248,30 @@ Sprint 12 of DES Studio is complete. Before committing, update ALL of:
 
 4. docs/decisions/ADR-012-recirculation-batching.md
    - Set Status to Accepted (already done)
+```
+
+## Sprint 13 — AI Model Building Enhancement
+
+**Goal:** Enhance the AI model building system with updated prompts for all 7 macros, a validation feedback loop, results-informed refinement, and a "Suggest Model Changes" button in the Execute panel's AI Assistant.
+
+**Status:** ✅ Complete | **Started:** 2026-05-08 | **Completed:** 2026-05-08
+**Prerequisite:** Sprint 12 exit gate passed.
+
+| Feature | Status | Description |
+|---|---|---|
+| F13.1 — 7-macro prompts update | ✅ | MACROS constant updated to all 7 macros (ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE, BATCH, UNBATCH); B_EVENT_MACROS and C_EVENT_MACROS constants added with event-type guidance; system prompt includes BATCH/UNBATCH usage guidance. |
+| F13.2 — Validation feedback loop | ✅ | `AiGeneratedModelPanel.send()` calls `validateModel()` on AI proposal; on errors, sends retry with error summary; max 1 retry; retry response explanation shown in history; unfixable issues displayed as notice. |
+| F13.3 — Results-informed refinement | ✅ | `buildModelBuilderUserMessage()` accepts optional 4th `results` param; when provided, includes `simulationResults` in JSON payload with KPI data and instruction to refine based on bottlenecks. |
+| F13.4 — Suggest Model Changes button | ✅ | `buildSuggestionPrompt()` function returns kind:"suggestion" payload; "Suggest model changes" button in Execute panel AI Assistant (disabled when no results); triggers `suggestChanges()` calling `runPrompt()`. |
+| F13.5 — SUGGESTION task kind | ✅ | `LLM_TASKS.SUGGESTION` added to `src/llm/contracts.js`. |
+
+### Sprint 13 Completion Gate
+
+```bash
+npm test -- ai-generated-model-panel ai-model-apply-save   # 8 passed
+npm test -- model-builder-prompts prompts                   # 16 passed
+npm test -- --run                                           # 543 passed
+npm run build                                               # Succeeds
 ```
 
 ---

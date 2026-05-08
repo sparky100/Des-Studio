@@ -19,7 +19,7 @@ const model = {
 describe("AiGeneratedModelPanel", () => {
   it("renders conversation input and handles a proposal response", async () => {
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
-      onComplete({
+      const response = {
         intent: "build",
         questions: null,
         explanation: "Built a post office model.",
@@ -27,7 +27,9 @@ describe("AiGeneratedModelPanel", () => {
           ...model,
           entityTypes: [...model.entityTypes, { id: "srv", name: "Clerk", role: "server", count: 2, attrDefs: [] }],
         },
-      });
+      };
+      onComplete(response);
+      return response;
     });
 
     render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
@@ -43,7 +45,7 @@ describe("AiGeneratedModelPanel", () => {
   it("unwraps exported-style model_json proposals and applies them as drafts", async () => {
     const handleApply = vi.fn();
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
-      onComplete({
+      const response = {
         intent: "build",
         questions: null,
         explanation: "Built a clinic model.",
@@ -58,7 +60,9 @@ describe("AiGeneratedModelPanel", () => {
             queues: [{ id: "waiting", name: "Waiting", discipline: "FIFO" }],
           },
         },
-      });
+      };
+      onComplete(response);
+      return response;
     });
 
     render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
@@ -77,7 +81,7 @@ describe("AiGeneratedModelPanel", () => {
   it("saves a proposal directly from the proposal panel", async () => {
     const handleSave = vi.fn().mockResolvedValue(undefined);
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
-      onComplete({
+      const response = {
         intent: "build",
         questions: null,
         explanation: "Built a model.",
@@ -85,7 +89,9 @@ describe("AiGeneratedModelPanel", () => {
           ...model,
           queues: [{ id: "waiting", name: "Waiting", discipline: "FIFO" }],
         },
-      });
+      };
+      onComplete(response);
+      return response;
     });
 
     render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} onSaveModel={handleSave} />);
@@ -102,7 +108,7 @@ describe("AiGeneratedModelPanel", () => {
   it("normalizes structured predicate JSON conditions before applying proposals", async () => {
     const handleApply = vi.fn();
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
-      onComplete({
+      const response = {
         intent: "build",
         questions: null,
         explanation: "Built a model.",
@@ -127,7 +133,9 @@ describe("AiGeneratedModelPanel", () => {
             cSchedules: [],
           }],
         },
-      });
+      };
+      onComplete(response);
+      return response;
     });
 
     render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
@@ -145,7 +153,7 @@ describe("AiGeneratedModelPanel", () => {
   it("normalizes AI timing answers into schedule and service-time distributions", async () => {
     const handleApply = vi.fn();
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
-      onComplete({
+      const response = {
         intent: "build",
         questions: null,
         explanation: "Built a post office model.",
@@ -180,7 +188,9 @@ describe("AiGeneratedModelPanel", () => {
             schedules: [{ eventId: "complete", type: "fixed", value: 7.5, useEntityCtx: true }],
           }],
         },
-      });
+      };
+      onComplete(response);
+      return response;
     });
 
     render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
@@ -220,7 +230,7 @@ describe("AiGeneratedModelPanel", () => {
   it("infers missing arrival and service effects from AI proposal structure", async () => {
     const handleApply = vi.fn();
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
-      onComplete({
+      const response = {
         intent: "build",
         questions: null,
         explanation: "Built a queueing model.",
@@ -256,7 +266,9 @@ describe("AiGeneratedModelPanel", () => {
             cSchedules: [{ eventId: "complete", type: "fixed", value: 7.5 }],
           }],
         },
-      });
+      };
+      onComplete(response);
+      return response;
     });
 
     render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
@@ -283,5 +295,86 @@ describe("AiGeneratedModelPanel", () => {
       scheduledTime: "9999",
       effect: "COMPLETE()",
     }));
+  });
+
+  it("retries the model builder when validation finds errors, and shows fixed proposal", async () => {
+    const handleApply = vi.fn();
+    let callCount = 0;
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      callCount++;
+      let response;
+      if (callCount === 1) {
+        // First call: return proposal with a validation error (BATCH size < 2)
+        response = {
+          intent: "build",
+          questions: null,
+          explanation: "Built a batch model.",
+          proposedModel: {
+            entityTypes: [{ id: "cust", name: "Customer", role: "customer", attrDefs: [] }],
+            stateVariables: [],
+            queues: [{ id: "main", name: "Main Queue", discipline: "FIFO" }],
+            bEvents: [{
+              id: "arrive",
+              name: "Customer Arrival",
+              scheduledTime: "0",
+              effect: "ARRIVE(Customer, Main Queue)",
+              schedules: [{ eventId: "arrive", dist: "Exponential", distParams: { mean: "5" } }],
+            }],
+            cEvents: [{
+              id: "batch",
+              name: "Batch",
+              priority: 1,
+              condition: "queue(Main Queue).length > 0",
+              effect: "BATCH(Main Queue, 1)",
+              cSchedules: [],
+            }],
+          },
+        };
+      } else {
+        // Second call: return fixed proposal
+        response = {
+          intent: "build",
+          questions: null,
+          explanation: "Fixed batch size to 2.",
+          proposedModel: {
+            entityTypes: [{ id: "cust", name: "Customer", role: "customer", attrDefs: [] }],
+            stateVariables: [],
+            queues: [{ id: "main", name: "Main Queue", discipline: "FIFO" }],
+            bEvents: [{
+              id: "arrive",
+              name: "Customer Arrival",
+              scheduledTime: "0",
+              effect: "ARRIVE(Customer, Main Queue)",
+              schedules: [{ eventId: "arrive", dist: "Exponential", distParams: { mean: "5" } }],
+            }],
+            cEvents: [{
+              id: "batch",
+              name: "Batch",
+              priority: 1,
+              condition: "queue(Main Queue).length > 0",
+              effect: "BATCH(Main Queue, 2)",
+              cSchedules: [],
+            }],
+          },
+        };
+      }
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={{
+      entityTypes: [{ id: "cust", name: "Customer", role: "customer", attrDefs: [] }],
+      stateVariables: [],
+      bEvents: [],
+      cEvents: [],
+      queues: [{ id: "main", name: "Main Queue", discipline: "FIFO" }],
+    }} canEdit onApplyModel={handleApply} />);
+
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Batch model with 2 entities" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => expect(mockCallModelBuilder).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(/fixed batch size to 2/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/model proposal preview/i)).toBeInTheDocument();
   });
 });

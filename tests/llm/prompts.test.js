@@ -4,6 +4,7 @@ import {
   buildComparisonPrompt,
   buildNarrativePrompt,
   buildSensitivityPrompt,
+  buildSuggestionPrompt,
   promptWordEstimate,
 } from "../../src/llm/prompts.js";
 
@@ -64,5 +65,21 @@ describe("LLM prompt builders", () => {
       ci95Upper: 10,
       n: 5,
     }));
+  });
+
+  it("builds a suggestion prompt with model structure and KPI data", () => {
+    const prompt = buildSuggestionPrompt(
+      model,
+      { warmupPeriod: 10, maxSimTime: 200, replications: 3, seed: 42 },
+      { summary: { total: 20, served: 18, reneged: 2, avgWait: 8.2, avgSvc: 4.1, avgSojourn: 12.3 } }
+    );
+    expect(prompt.kind).toBe("suggestion");
+    expect(prompt.messages[0].role).toBe("system");
+    const payload = JSON.parse(prompt.messages[1].content);
+    expect(payload.model.entityTypes[0]).toEqual(expect.objectContaining({ name: "Nurse", role: "server" }));
+    expect(payload.model.queues[0]).toEqual(expect.objectContaining({ name: "Main queue" }));
+    expect(payload.kpis.queues[0].meanWait).toBe(8.2);
+    expect(payload.kpis.avgWait).toBe(8.2);
+    expect(payload.experiment.replications).toBe(3);
   });
 });

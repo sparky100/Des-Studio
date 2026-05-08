@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-05 | Reflects: Sprint 7A architecture decisions + ADR-008/ADR-009 + Known Issues*
+*Last updated: 2026-05-08 | Reflects: Sprint 13 AI Model Building Enhancement*
 
 ---
 
@@ -176,7 +176,7 @@ while (fel.length > 0 && !terminationConditionMet()) {
 
 **Full specification:** `docs/addition1_entity_model.md` — read this before any Sprint 1–3 work.
 
-### 5.1 The Five Permitted Macros
+### 5.1 The Seven Permitted Macros
 
 | Macro | Phase | Purpose |
 |---|---|---|
@@ -185,8 +185,10 @@ while (fel.length > 0 && !terminationConditionMet()) {
 | `COMPLETE` | B-Event | Releases resource, records stats, routes entity to next node |
 | `ASSIGN` | B or C | Modifies a mutable entity attribute or user-defined state variable |
 | `RENEGE` | B-Event | Removes entity from queue after patience timeout, routes to Sink |
+| `BATCH` | C-Event | Accumulates N entities per queue discipline; creates batch entity with `batch.children` |
+| `UNBATCH` | B-Event | Restores children from parent.batch to target queue; parent marked done |
 
-**These five macros are the complete and closed set.** No other macros may be added without updating `docs/addition1_entity_model.md` first.
+**These seven macros are the complete and closed set.** No other macros may be added without updating `docs/addition1_entity_model.md` first.
 
 ### 5.2 Prohibited Action Patterns
 
@@ -1290,113 +1292,79 @@ UI / UX
 | Sprint 6 | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis | 343 passing | N/A |
 | Sprint 7A | ✅ Complete | 2026-05-05 | Platform Foundation: Roles, Settings & TypeScript | Docs only | N/A |
 | Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation | 33 focused | N/A |
+| Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources | 369 passing | N/A |
+| Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight | 22 focused | N/A |
+| Sprint 8 | ✅ Complete | 2026-05-05 | AI Generated Model Authoring | 385 passing | N/A |
+| Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence | Focused | N/A |
+| Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight | Docs | N/A |
+| Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring | 38 focused | N/A |
+| Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX Hardening | Focused | N/A |
+| Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas — Live Flow View | 464 passing | N/A |
+| Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Routing & Pooling | 508 passing | N/A |
+| Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Capacity & Output | 523 passing | N/A |
+| Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation | 541 passing | 1.48% error |
+| Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement | 543 passing | N/A |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 7 — Dynamic Distributions & Time-Varying Resources**
+**Sprint 13 — AI Model Building Enhancement**
 
-Goal: Add time-varying arrival rates and resource shift schedules on top of the canonical model schema used by all authoring modes.
+Goal: Enhance the AI model building system with updated prompts for all 7 macros, a validation feedback loop, results-informed refinement, and a "Suggest Model Changes" button in the Execute panel's AI Assistant.
 
-**Prerequisites:** Sprint 7B exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 7 feature prompts.
+**Prerequisites:** Sprint 12 exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 13 feature prompts.
 
-### Recently Completed — Sprint 7A
+### Recently Completed — Sprint 13
 
-Sprint 7A completed on 2026-05-05.
+Sprint 13 completed on 2026-05-08.
 
-- Accepted ADR-008 for near-term platform roles and durable user settings.
-- `profiles.role` is the platform-role source of truth with initial roles `user` and `admin`.
-- Model-level owner/editor/viewer access remains separate from platform roles.
-- Durable user preferences should use a dedicated `user_settings` table.
-- SaaS tenancy/workspaces and LLM provider switching are explicitly deferred follow-on architecture decisions.
-- Accepted ADR-009: TypeScript is allowed incrementally, starting with schema/domain contracts rather than broad UI conversion.
+- Updated `MACROS` array in `model-builder-prompts.js` to all 7 macros with B_EVENT_MACROS and C_EVENT_MACROS constants.
+- Added results-informed refinement: `buildModelBuilderUserMessage()` accepts optional 4th `results` param with KPI data.
+- Added `buildSuggestionPrompt()` function returning kind:"suggestion" with model structure and KPI data.
+- Added `SUGGESTION` task kind to `contracts.js`.
+- Added "Suggest model changes" button to Execute panel AI Assistant (disabled when no results).
+- Added validation feedback loop in `AiGeneratedModelPanel.send()` — max 1 retry with error summary; retry explanation shown in history.
+- Fixed mock return values in `callModelBuilder` test mocks to match API returning parsed response.
+- All new features have tests.
 
-### Recently Completed — Sprint 7B
+### Previously Completed — Sprint 12
 
-Sprint 7B completed on 2026-05-05.
+Sprint 12 completed on 2026-05-08.
 
-- Added Supabase migration for `profiles.role`, `is_platform_admin()`, and `user_settings`.
-- Added owner-only `user_settings` RLS policies and updated timestamp trigger.
-- Added `fetchUserSettings()` and `saveUserSettings()` DB wrappers.
-- Normalized profile roles in the DB layer and exposed `isAdmin` without changing model permissions.
-- Added TypeScript tooling, `npm run typecheck`, and first typed contracts for model JSON, run/result payloads, and user settings.
-- Focused tests passed: `npm test -- db onboarding model-export contracts`.
+- BATCH macro (C-Event, queue-accumulation model)
+- UNBATCH macro (B-Event, restores originals)
+- Controlled back-edges with loop guard (Entity.loopCount, maxLoopCount, exitQueueName)
+- Visual Designer support for loop and batch nodes
+- ADR-012 accepted
 
-### Previously Completed — Sprint 6
+### Sprint 13 Completion Gate
 
-Sprint 6 completed on 2026-05-04.
-
-- Added a collapsible AI Insights panel to the Execute view.
-- Added prompt builders for KPI narrative, scenario comparison, and sensitivity commentary.
-- Added a streaming LLM API client with cancellation, error fallback, and safe plain-text rendering.
-- Added local Supabase Edge Function source for `llm-proxy`.
-- Deployed `llm-proxy` to Supabase project `znkknldzdfajcrpabtmg`.
-- Stored `ANTHROPIC_API_KEY` as a Supabase Edge Function secret.
-- Installed the Supabase CLI as a local dev dependency.
-- Added LLM prompt tests and Execute panel AI tests.
-
-### Sprint 7A Completion Gate
-
-```text
-git diff --check -> succeeds
-No product code changed
+```bash
+npm test -- ai-generated-model-panel ai-model-apply-save   # 8 passed
+npm test -- model-builder-prompts prompts                   # 16 passed
+npm test -- --run                                           # 543 passed
+npm run build                                               # Succeeds
 ```
 
-### Sprint 6 Completion Gate
+### Sprint 12 Completion Gate
 
-```text
-npm test       -> 32 files, 343 tests passed
-npm test -- llm execute-panel -> 2 files, 14 tests passed
-npm run build  -> succeeds
+```bash
+npm test -- --run                       # 541 passed, 60 test files
+npm test -- macros                      # BATCH, UNBATCH, recirculation tests pass
+npm test -- validation                  # V22 (BATCH size), V23 (UNBATCH queue), V24 (loop guard) pass
+npm run build                           # Succeeds
+node tests/engine/mm1_benchmark.js      # 1.48% error (< 5% gate)
 ```
-
-### Recent Architectural Decisions
-
-- Use a bounded Web Worker pool rather than one worker per replication.
-- Use local runner callbacks for same-browser live progress; persist final batch results to Supabase.
-- Store one run row per replication batch with per-replication results and aggregate CI in `results_json`.
-- Provide cancellation for active replication batches.
-- See `docs/decisions/ADR-006-replication-runner-architecture.md`.
-- No committed schema file confirms `simulation_runs` cascade on model delete; carry this as a data integrity risk until the next schema migration.
-- ADR-008 is accepted: `profiles.role` stores platform roles (`user`, `admin`) and durable user settings belong in a dedicated `user_settings` table.
-- ADR-009 is accepted: TypeScript may be introduced incrementally for shared contracts/domain boundaries. Existing JavaScript remains valid.
-- Sprint 7B implemented the accepted ADR-008/ADR-009 foundation before dynamic distributions.
 
 ### Future-Codex Notes
 
-- Sprint 6 LLM analysis is implemented in `src/ui/execute/index.jsx`, `src/llm/prompts.js`, `src/llm/apiClient.js`, and `supabase/functions/llm-proxy/index.ts`.
-- Do not introduce client-side LLM API keys. `ANTHROPIC_API_KEY` belongs only in Supabase Edge Function secrets.
-- `llm-proxy` is deployed to Supabase project `znkknldzdfajcrpabtmg`.
-- Treat the current Anthropic-specific proxy as an implementation, not the final architecture. Provider-neutral LLM configuration is deferred from Sprint 7A but should remain visible before Sprint 8 implementation.
-- Do not add local-only user settings that would need to follow a user across devices. Use the ADR-008 `user_settings` direction.
-- Do not add tenant/workspace assumptions ad hoc. SaaS tenancy is not part of Sprint 7A and needs a later explicit schema/RLS planning pass.
-- Execute panel is an MVP surface. Execute UX redesign is not part of Sprint 7A; keep it as a later design/refinement sprint.
-- Sprint 7 may use or extend the typed contracts, but broad TypeScript conversion remains out of scope.
-- ADR-007 establishes the product architecture for model creation: Forms/Tabs, AI Generated Model, and Visual Designer are three authoring modes over one canonical `model_json`.
-- Do not build the old split-pane SVG hybrid visual designer as a bridge phase; plan the visual designer as the final graph-first authoring surface.
-- Keep model import/export validation compatible with the current model JSON shape and the first-run M/M/1 sample in `src/App.jsx`.
-- `deleteModel(id, userId)` is intentionally owner-guarded via `owner_id`; keep destructive model actions user-scoped.
-- `ModelCard` behaves as a keyboard-reachable model selector with a nested delete action; preserve event isolation between select and delete.
-
-### New Commands Or Environment Variables
-
-- No new environment variables were introduced in Sprint 5.
-- Useful Sprint 5 verification commands:
-  - `npm test -- model-export model-import results-export`
-  - `npm test -- accessibility delete-model onboarding`
-  - `npm test`
-  - `npm run build`
-- Useful Sprint 6 verification commands:
-  - `npm test -- llm execute-panel`
-  - `npm test`
-  - `npm run build`
-
-Server-side deployment secret for Sprint 6:
-
-```text
-ANTHROPIC_API_KEY
-```
+- Sprint 13 AI model building features: prompts in `src/llm/model-builder-prompts.js`, validation loop in `src/ui/editors/AiGeneratedModelPanel.jsx`, suggestion in `src/llm/prompts.js` + `src/ui/execute/index.jsx`.
+- `callModelBuilder()` returns the parsed response object — mock implementations must `return onComplete(response)` to match the real API.
+- Validation retry is max 1 retry to avoid infinite loops; the retry response's explanation replaces the original in conversation history.
+- "Suggest model changes" uses `streamNarrative` (text output) — keeps it in the AI Assistant panel; no cross-tab navigation.
+- `B_EVENT_MACROS` and `C_EVENT_MACROS` constants are defined in prompts but not yet referenced in building logic — future sprint work.
+- Pre-existing test failures in `visual-designer-panel.test.jsx` (4 failures, label and timeout issues) are not related to Sprint 13 work.
 
 ---
 

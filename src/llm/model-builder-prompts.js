@@ -1,6 +1,9 @@
-const MACROS = ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE"];
+const MACROS = ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE", "BATCH", "UNBATCH"];
 const DISTRIBUTIONS = ["exponential", "uniform", "normal", "triangular", "fixed", "lognormal", "empirical", "piecewise"];
 const MODEL_SECTIONS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues"];
+
+const B_EVENT_MACROS = ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE", "UNBATCH"];
+const C_EVENT_MACROS = ["ASSIGN", "BATCH"];
 
 function trimHistory(history = [], limit = 10) {
   return history.slice(-limit).map(turn => ({
@@ -36,6 +39,9 @@ export function buildModelBuilderSystemPrompt() {
     "For service time, either put it directly in the C-event cSchedule distribution for the Service Complete B-event, or create a server attrDef named serviceTime with Fixed value and use ServerAttr attr serviceTime.",
     "The 'scheduledTime' for follow-on B-events (those scheduled by others) should be '9999'. Only events intended to fire at t=0 should have '0'.",
     "For multi-stage service, use the first stage completion B-event to RELEASE(ServerType, Next Queue) and the final completion B-event to COMPLETE().",
+    "BATCH(QueueName, batchSize) is a C-Event macro. It accumulates entities in a queue until depth >= batchSize, then creates a parent batch entity. batchSize must be integer >= 2. The queue discipline (FIFO/LIFO/PRIORITY) determines which entities are selected.",
+    "UNBATCH(QueueName) is a B-Event macro (follow-on). It restores the original entities from a batch parent to a target queue. Children retain their IDs, arrivalTime, stages, and attributes.",
+    "BATCH is only valid in C-Event actions. UNBATCH is only valid in B-Event actions.",
     "Predicates must be structured JSON. Never produce executable code, logic strings requiring eval, or invented operators.",
     "For refine requests, proposedModel must be the complete model after the refinement. The UI computes the diff locally.",
     "Ask at most two clarifying questions before proposing a model.",
@@ -47,15 +53,19 @@ export function buildModelBuilderSystemPrompt() {
   ].join("\n");
 }
 
-export function buildModelBuilderUserMessage(description, currentModel = {}, conversationHistory = []) {
+export function buildModelBuilderUserMessage(description, currentModel = {}, conversationHistory = [], results = null) {
   const hasCurrentModel = MODEL_SECTIONS.some(section => Array.isArray(currentModel?.[section]) && currentModel[section].length);
+  const instruction = hasCurrentModel
+    ? (results
+      ? "Refine the current model based on the simulation results. Use KPI data to identify bottlenecks and suggest targeted structural changes (e.g. add servers, adjust routing, increase capacity)."
+      : "Refine the current model unless the user explicitly requests a full rebuild.")
+    : "Build a DES Studio model proposal from the request.";
   return JSON.stringify({
     currentModel: hasCurrentModel ? currentModel : null,
     conversationHistory: trimHistory(conversationHistory),
+    simulationResults: results || null,
     userRequest: String(description || ""),
-    instruction: hasCurrentModel
-      ? "Refine the current model unless the user explicitly requests a full rebuild."
-      : "Build a DES Studio model proposal from the request.",
+    instruction,
     requiredResponseKeys: ["intent", "questions", "proposedModel", "explanation"],
   }, null, 2);
 }

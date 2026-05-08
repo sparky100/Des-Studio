@@ -4,6 +4,7 @@ import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../
 import { C, FONT } from "../shared/tokens.js";
 import { Btn, Empty, Field, InfoBox, SH } from "../shared/components.jsx";
 import { ModelDiffPreview } from "./ModelDiffPreview.jsx";
+import { validateModel } from "../../engine/validation.js";
 
 const DIST_NAMES = {
   fixed: "Fixed",
@@ -355,17 +356,57 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       messages.push({ role: "user", content: "Please now produce a model proposal based on the discussion so far." });
     }
 
-    await callModelBuilder(systemPrompt, messages, response => {
-      const questions = Array.isArray(response.questions) ? response.questions.filter(Boolean) : [];
-      const content = response.intent === "clarify"
-        ? questions.join("\n")
-        : response.explanation || "Model proposal received.";
-      setHistory(prev => [...prev, { role: "assistant", content }]);
-      if (response.proposedModel) setProposal(unwrapProposedModel(response.proposedModel));
-      if (nextHistory.length >= 20) setNotice("Conversation is long - consider starting a new session.");
-    }, err => {
+    let response;
+    try {
+      response = await callModelBuilder(systemPrompt, messages, () => {}, err => {
+        setError(err?.message || "Model builder request failed.");
+      });
+    } catch (err) {
       setError(err?.message || "Model builder request failed.");
-    });
+      setLoading(false);
+      return;
+    }
+
+    if (!response) { setLoading(false); return; }
+
+    // Validation retry loop — max 1 retry when validation errors found
+    if (response.proposedModel) {
+      let proposal = unwrapProposedModel(response.proposedModel);
+      const validation = validateModel(proposal);
+
+      if (validation.errors?.length) {
+        const errorSummary = validation.errors.map(e => `[${e.code}] ${e.message}`).join("\n");
+        setHistory(prev => [...prev, {
+          role: "system",
+          content: `Validation found ${validation.errors.length} issue(s). Asking AI to fix...`,
+        }]);
+
+        const retryMessages = [...messages, {
+          role: "user",
+          content: `The proposal had validation errors that must be fixed. Please correct ALL of these and return a complete corrected model:\n${errorSummary}`,
+        }];
+
+        const retryResponse = await callModelBuilder(systemPrompt, retryMessages, () => {}, () => {});
+        if (retryResponse?.proposedModel) {
+          proposal = unwrapProposedModel(retryResponse.proposedModel);
+          response = retryResponse;
+        }
+      }
+
+      setProposal(proposal);
+      const finalValidation = validateModel(proposal);
+      if (finalValidation.errors?.length) {
+        setNotice(`Proposal has ${finalValidation.errors.length} validation issue(s) that could not be auto-fixed. Fix them in the tabs before running.`);
+      }
+    }
+
+    const questions = Array.isArray(response.questions) ? response.questions.filter(Boolean) : [];
+    const content = response.intent === "clarify"
+      ? questions.join("\n")
+      : (response.explanation || "Model proposal received.");
+    setHistory(prev => [...prev, { role: "assistant", content }]);
+
+    if (nextHistory.length >= 20) setNotice("Conversation is long - consider starting a new session.");
     setLoading(false);
   };
 

@@ -25,7 +25,7 @@ describe("AI generated model apply/save flow", () => {
   it("marks the model dirty and saves using the existing model identity", async () => {
     const handleSave = vi.fn().mockResolvedValue(undefined);
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
-      onComplete({
+      const response = {
         intent: "build",
         explanation: "Generated a draft.",
         proposedModel: {
@@ -37,7 +37,9 @@ describe("AI generated model apply/save flow", () => {
           cEvents: [],
           queues: [],
         },
-      });
+      };
+      onComplete(response);
+      return response;
     });
 
     render(

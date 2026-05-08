@@ -5,11 +5,13 @@ import {
 } from "../../src/llm/model-builder-prompts.js";
 
 describe("model builder prompts", () => {
-  it("constrains the model builder to the supported macro vocabulary", () => {
+  it("constrains the model builder to the supported macro vocabulary (7 macros)", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE"].forEach(macro => {
+    ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE", "BATCH", "UNBATCH"].forEach(macro => {
       expect(prompt).toMatch(new RegExp(macro));
     });
+    expect(prompt).toMatch(/BATCH.*C-Event/i);
+    expect(prompt).toMatch(/UNBATCH.*B-Event/i);
   });
 
   it("constrains the model builder to supported distributions", () => {
@@ -76,5 +78,39 @@ describe("model builder prompts", () => {
     expect(payload.currentModel.entityTypes[0].name).toBe("Server");
     expect(payload.conversationHistory[0].content).toBe("Initial request");
     expect(payload.requiredResponseKeys).toEqual(["intent", "questions", "proposedModel", "explanation"]);
+  });
+
+  it("includes simulation results in the payload when results are provided", () => {
+    const results = {
+      queues: [{ name: "Triage", meanWait: 8.2, maxWait: 14.3 }],
+      resources: [{ name: "Nurse", utilisation: 0.98 }],
+      throughput: 42,
+      served: 40,
+      reneged: 2,
+      avgWait: 8.2,
+      avgService: 4.1,
+      avgSojourn: 12.3,
+    };
+    const message = buildModelBuilderUserMessage(
+      "Waits are too long, add a server",
+      { entityTypes: [{ id: "cust", name: "Customer", role: "customer" }], queues: [], bEvents: [], cEvents: [], stateVariables: [] },
+      [],
+      results
+    );
+    const payload = JSON.parse(message);
+
+    expect(payload.simulationResults).toEqual(results);
+    expect(payload.instruction).toMatch(/simulation results/i);
+    expect(payload.instruction).toMatch(/bottlenecks/i);
+  });
+
+  it("leaves simulationResults null when no results provided", () => {
+    const message = buildModelBuilderUserMessage(
+      "Add a server",
+      { entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] },
+      []
+    );
+    const payload = JSON.parse(message);
+    expect(payload.simulationResults).toBeNull();
   });
 });
