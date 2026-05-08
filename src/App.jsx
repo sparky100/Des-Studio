@@ -316,6 +316,31 @@ export default function App(){
     }
   },[uid,loadData]);
 
+  const handleStartTemplate = useCallback(async (template) => {
+    if(!uid)return;
+    setLoading(true);setError('');
+    try{
+      const saved=await saveModel({
+        name: template.name,
+        description: template.description,
+        visibility: "private",
+        access: {},
+        entityTypes: template.entityTypes || [],
+        stateVariables: template.stateVariables || [],
+        bEvents: template.bEvents || [],
+        cEvents: template.cEvents || [],
+        queues: template.queues || [],
+      }, uid);
+      await loadData();
+      setIsTemplate(true);
+      setOpenId(saved.id);
+    }catch(e){
+      setError(e.message);
+    }finally{
+      setLoading(false);
+    }
+  },[uid,loadData]);
+
   const handleDeleteModel = useCallback(async (model) => {
     if(!model||!uid)return;
     if(!window.confirm(`Delete '${model.name}'? This cannot be undone.`))return;
@@ -490,6 +515,24 @@ export default function App(){
             {actionError}
           </div>
         )}
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:12}}>QUICK START — PICK A TEMPLATE</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
+            {TEMPLATES.map(t => (
+              <div key={t.id} role="button" tabIndex={0} aria-label={`Try ${t.name}`}
+                onClick={() => handleStartTemplate(t)}
+                onKeyDown={e => { if (e.key === 'Enter') handleStartTemplate(t); }}
+                style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:12,cursor:'pointer',display:'flex',flexDirection:'column',gap:6}}
+                onMouseEnter={e => e.currentTarget.style.borderColor = C.accent + '66'}
+                onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+              >
+                <div style={{fontSize:12,fontWeight:700,color:C.text}}>{t.name}</div>
+                <div style={{fontSize:10,color:C.muted,lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{t.description}</div>
+                <div style={{fontSize:9,color:C.accent,fontWeight:600}}>▶ Run now</div>
+              </div>
+            ))}
+          </div>
+        </div>
         <div role="tablist" aria-label="Model library sections" style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:24}}>
           {[{id:'my',label:`My Models (${myModels.length})`},{id:'public',label:`Public Library (${pubModels.length})`}].map(t=>(
             <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} style={{background:'none',border:'none',borderBottom:tab===t.id?`2px solid ${C.accent}`:'2px solid transparent',color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'10px 18px',cursor:'pointer',fontWeight:tab===t.id?700:400}}>{t.label}</button>
