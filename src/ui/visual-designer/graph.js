@@ -201,30 +201,60 @@ export function deriveGraphFromModel(model = {}) {
     (event.cSchedules || []).forEach(schedule => {
       const bEvent = bEventById.get(schedule.eventId);
       if (!bEvent) return;
+
+      // Helper: get or create a synthetic Sink node for null-queueName routing branches
+      const getExitSinkId = () => {
+        const syntheticId = `sink:exit-${bEvent.id}`;
+        if (!nodes.find(n => n.id === syntheticId)) {
+          nodes.push({
+            id: syntheticId,
+            type: VISUAL_NODE_TYPES.SINK,
+            refId: null,
+            label: "Exit",
+            sublabel: "Direct exit",
+          });
+        }
+        return syntheticId;
+      };
+
       const calls = macroCalls(bEvent.effect);
       calls.forEach((call, index) => {
         if (call.macro === "RELEASE") {
-          // F10.1d: derive edges from routing table when present; fall back to single arg
+          // Conditional routing table (F10.1)
           if (Array.isArray(bEvent.routing) && bEvent.routing.length > 0) {
             bEvent.routing.forEach((branch, branchIdx) => {
-              const nextQueueId = queueNodeByName.get(norm(branch.queueName));
-              if (nextQueueId) {
-                const condLabel = branch.condition
-                  ? `${branch.condition.variable} ${branch.condition.operator} ${branch.condition.value}`
-                  : "condition";
-                edges.push({
-                  id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}-${branchIdx}`),
-                  from: id, to: nextQueueId, source: "routing", label: condLabel,
-                });
+              const condLabel = branch.condition
+                ? `${branch.condition.variable} ${branch.condition.operator} ${branch.condition.value}`
+                : "condition";
+              if (!branch.queueName) {
+                // null queueName = exit system → derive edge to synthetic Sink
+                const sinkId = getExitSinkId();
+                edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: condLabel });
+              } else {
+                const nextQueueId = queueNodeByName.get(norm(branch.queueName));
+                if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: condLabel });
               }
             });
             if (bEvent.defaultQueueName) {
               const defQueueId = queueNodeByName.get(norm(bEvent.defaultQueueName));
-              if (defQueueId) edges.push({
-                id: edgeId(id, defQueueId, `${schedule.eventId}-${index}-default`),
-                from: id, to: defQueueId, source: "routing", label: "fallback",
-              });
+              if (defQueueId) edges.push({ id: edgeId(id, defQueueId, `${schedule.eventId}-${index}-default`), from: id, to: defQueueId, source: "routing", label: "fallback" });
             }
+
+          // Probabilistic routing table (F10.2)
+          } else if (Array.isArray(bEvent.probabilisticRouting) && bEvent.probabilisticRouting.length > 0) {
+            bEvent.probabilisticRouting.forEach((branch, branchIdx) => {
+              const probLabel = `${Math.round((branch.probability ?? 0) * 100)}%`;
+              if (!branch.queueName) {
+                // null queueName = exit system → synthetic Sink
+                const sinkId = getExitSinkId();
+                edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: sinkId, source: "terminal", label: probLabel });
+              } else {
+                const nextQueueId = queueNodeByName.get(norm(branch.queueName));
+                if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}-${branchIdx}`), from: id, to: nextQueueId, source: "routing", label: probLabel });
+              }
+            });
+
+          // Single fixed RELEASE(Server, Queue)
           } else if (call.args[1]) {
             const nextQueueId = queueNodeByName.get(norm(call.args[1]));
             if (nextQueueId) edges.push({ id: edgeId(id, nextQueueId, `${schedule.eventId}-${index}`), from: id, to: nextQueueId, source: "routing" });
