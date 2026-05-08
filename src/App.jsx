@@ -9,11 +9,14 @@ import { fetchModels, fetchProfiles,
          saveModel, deleteModel,
          setVisibility, setAccess, forkModel,
          fetchRunStatsForModels }         from "./db/models.js";
+import { saveLocalModel, deleteLocalModel,
+         saveLocalRun, fetchLocalRunHistory } from "./db/local.js";
 import { C, FONT, GOOGLE_FONT_URL }         from "./ui/shared/tokens.js";
 import { Btn, Empty, ErrorBoundary }        from "./ui/shared/components.jsx";
 import { ModelCard, ModelDetail,
          NewModelModal }                    from "./ui/ModelDetail.jsx";
 import { validateModel }                    from "./engine/validation.js";
+import { TEMPLATES }                        from "./engine/templates.js";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues"];
 
@@ -102,62 +105,27 @@ function extractImportedModelPayload(payload) {
   return model;
 }
 
-// ── Auth Screen ───────────────────────────────────────────────────────────────
-function AuthScreen(){
-  const [mode,setMode]=useState('login')
-  const [email,setEmail]=useState('')
-  const [password,setPassword]=useState('')
-  const [name,setName]=useState('')
-  const [loading,setLoading]=useState(false)
-  const [error,setError]=useState('')
-  const [info,setInfo]=useState('')
-  const submit=async()=>{
-    setError('');setInfo('');setLoading(true)
-    try{
-      if(mode==='login'){
-        const {error}=await supabase.auth.signInWithPassword({email,password})
-        if(error)throw error
-      }else{
-        const {error}=await supabase.auth.signUp({email,password,options:{data:{full_name:name}}})
-        if(error)throw error
-        setInfo('Account created! Sign in directly.')
-        setMode('login')
-      }
-    }catch(e){setError(e.message)}
-    finally{setLoading(false)}
-  }
-  const inp={background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:13,padding:'10px 12px',outline:'none',width:'100%',boxSizing:'border-box'}
-  return(
-    <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:FONT}}>
-      <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');`}</style>
-      <div style={{width:380,display:'flex',flexDirection:'column',gap:20}}>
-        <div style={{textAlign:'center'}}>
-          <div style={{fontSize:28,fontWeight:700,color:C.accent,letterSpacing:3}}>DES STUDIO</div>
-          <div style={{fontSize:12,color:C.muted,marginTop:4}}>Three-Phase Discrete-Event Simulation</div>
-        </div>
-        <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:24,display:'flex',flexDirection:'column',gap:14}}>
-          <div style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:4}}>
-            {['login','signup'].map(m=>(
-              <button key={m} onClick={()=>setMode(m)} style={{flex:1,background:'none',border:'none',borderBottom:mode===m?`2px solid ${C.accent}`:'2px solid transparent',color:mode===m?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'8px 0',cursor:'pointer',fontWeight:mode===m?700:400,textTransform:'uppercase',letterSpacing:1}}>
-                {m==='login'?'Sign In':'Sign Up'}
-              </button>
-            ))}
-          </div>
-          {mode==='signup'&&<div style={{display:'flex',flexDirection:'column',gap:5}}><label style={{fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.muted,textTransform:'uppercase'}}>Full Name</label><input value={name} onChange={e=>setName(e.target.value)} placeholder="Your name" style={inp}/></div>}
-          <div style={{display:'flex',flexDirection:'column',gap:5}}><label style={{fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.muted,textTransform:'uppercase'}}>Email</label><input value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" type="email" style={inp}/></div>
-          <div style={{display:'flex',flexDirection:'column',gap:5}}><label style={{fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.muted,textTransform:'uppercase'}}>Password</label><input value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" type="password" style={inp}/></div>
-          {error&&<div style={{background:C.red+'18',border:`1px solid ${C.red}44`,borderRadius:5,padding:'8px 12px',fontSize:12,color:C.red}}>{error}</div>}
-          {info&&<div style={{background:C.green+'18',border:`1px solid ${C.green}44`,borderRadius:5,padding:'8px 12px',fontSize:12,color:C.green}}>{info}</div>}
-          <button onClick={submit} disabled={loading} style={{background:C.accent,color:'#080c10',border:'none',borderRadius:6,padding:'11px 0',fontFamily:FONT,fontSize:13,fontWeight:700,cursor:loading?'not-allowed':'pointer',opacity:loading?0.6:1,width:'100%'}}>
-            {loading?'Please wait...':mode==='login'?'Sign In':'Create Account'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export { createSampleMm1Model, extractImportedModelPayload };
+
+const TemplateCard = ({ template, onTry }) => (
+  <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:16,display:'flex',flexDirection:'column',gap:8,cursor:'pointer',transition:'border-color .15s'}}
+    onClick={() => onTry(template)}
+    onMouseEnter={e => e.currentTarget.style.borderColor = C.accent + '66'}
+    onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+    role="button" tabIndex={0}
+    onKeyDown={e => { if (e.key === 'Enter') onTry(template); }}
+    aria-label={`Try ${template.name}`}
+  >
+    <div style={{fontSize:13,fontWeight:700,color:C.text}}>{template.name}</div>
+    <div style={{fontSize:11,color:C.muted,lineHeight:1.5,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{template.description}</div>
+    <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
+      <span style={{fontSize:9,background:C.accent+'18',color:C.accent,borderRadius:3,padding:'2px 6px',fontWeight:600,letterSpacing:0.5}}>{'▶ Run'}</span>
+      {template.entityTypes?.filter(e => e.role === 'server').map(e =>
+        <span key={e.id} style={{fontSize:9,background:C.bg,border:`1px solid ${C.border}`,borderRadius:3,padding:'2px 6px',color:C.muted}}>{e.count}× {e.name}</span>
+      )}
+    </div>
+  </div>
+);
 
 const FirstRunPanel=({onCreateBlank,onCreateSample,onImport})=>(
   <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
@@ -190,6 +158,22 @@ export default function App(){
   const [runStatsError,setRunStatsError]=useState('')
   const [actionError,setActionError]=useState('')
   const importFileRef=useRef(null)
+  const [localModel,setLocalModel]=useState(null) // anonymous mode: opened model
+  const [isTemplate,setIsTemplate]=useState(false) // template quick-start flag
+
+  const handleTryTemplate = useCallback((template) => {
+    const localId = "local_" + Date.now();
+    const saved = saveLocalModel({
+      id: localId,
+      name: template.name,
+      description: template.description,
+      visibility: "private",
+      ...template,
+    });
+    setLocalModel(saved);
+    setOpenId(localId);
+    setIsTemplate(true);
+  }, []);
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -344,16 +328,14 @@ export default function App(){
     setModels(current=>current.filter(m=>m.id!==model.id));
   },[uid]);
 
-  if(!session)return <AuthScreen/>
-
-  if(loading)return(
+  if(loading && !session)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:C.muted,fontFamily:FONT,fontSize:13}}>
       <style>{`@import url('${GOOGLE_FONT_URL}');`}</style>
       Loading...
     </div>
   )
 
-  if(error)return(
+  if(error && !session)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:C.red,fontFamily:FONT,fontSize:13,padding:24,textAlign:'center'}}>
       ERROR: {error}
     </div>
@@ -363,31 +345,63 @@ export default function App(){
   const pubModels=models.filter(m=>m.visibility==='public'&&m.owner_id!==uid)
 
   if(openId){
-    const model=models.find(m=>m.id===openId)
-    const isOwner=model?.owner_id===uid
-    const canEdit=isOwner||model?.access?.[uid]==='editor'
+    const model = models.find(m => m.id === openId) || localModel;
+    const isOwner = model?.owner_id === uid;
+    const canEdit = isOwner || model?.access?.[uid] === 'editor';
+    const isLocal = !session && model?.id?.startsWith('local_');
     return(
       <div style={{background:C.bg,minHeight:'100vh'}}>
         <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         <ErrorBoundary
           title="Model view crashed"
           message="This model could not render. Return to the library and reopen it."
-          onReset={()=>setOpenId(null)}
+          onReset={()=>{setOpenId(null);setLocalModel(null)}}
         >
           <ModelDetail modelId={openId}
-            modelData={models.find(m=>m.id===openId)||null}
-            onBack={()=>{setOpenId(null);loadData()}}
+            modelData={model}
+            initialTab={isTemplate?"execute":undefined}
+            onBack={()=>{setOpenId(null);setLocalModel(null);setIsTemplate(false)}}
             onRefresh={loadData}
             overrides={{
-              isOwner,canEdit,profiles,userId:uid,isAdmin,
-              onSave:async(m)=>{const saved=await saveModel(m,uid);await loadData();return saved},
-              onDelete:async(id)=>{await deleteModel(id,uid)},
-              onSetVisibility:setVisibility,
-              onSetAccess:setAccess,
-              onFork:confirmFork, // Add onFork to ModelDetail overrides
+              autoRun: isTemplate,
+              isOwner: true, canEdit: true, profiles, userId: isLocal ? null : uid, isAdmin,
+              onSave: isLocal
+                ? async (m) => saveLocalModel(m)
+                : async (m) => { const saved = await saveModel(m, uid); await loadData(); return saved; },
+              onDelete: isLocal
+                ? async (id) => { deleteLocalModel(id); setOpenId(null); setLocalModel(null); }
+                : async (id) => { await deleteModel(id, uid); },
+              onSetVisibility: setVisibility,
+              onSetAccess: setAccess,
+              onFork: session ? confirmFork : undefined,
             }}
           />
         </ErrorBoundary>
+      </div>
+    )
+  }
+
+  if(!session){
+    return(
+      <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
+        <style>{`*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:${C.bg};}::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px;}@import url('${GOOGLE_FONT_URL}');`}</style>
+        <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 24px',display:'flex',alignItems:'center',gap:16,height:52}}>
+          <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2}}>DES STUDIO</div>
+          <div style={{fontSize:11,color:C.muted,borderLeft:`1px solid ${C.border}`,paddingLeft:16}}>Three-Phase · Entities · Servers</div>
+          <div style={{flex:1}}/>
+        </div>
+        <div style={{maxWidth:1100,margin:'0 auto',padding:'28px 24px'}}>
+          <div style={{textAlign:'center',marginBottom:32}}>
+            <div style={{fontSize:22,fontWeight:700,color:C.text,marginBottom:8}}>Try DES Studio Instantly</div>
+            <div style={{fontSize:13,color:C.muted,maxWidth:600,margin:'0 auto',lineHeight:1.6}}>
+              Pick a template to run a simulation immediately — no sign-up needed.
+              <span style={{display:'block',marginTop:6}}>Sign in to save models and access the full editor.</span>
+            </div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:14}}>
+            {TEMPLATES.map(t => <TemplateCard key={t.id} template={t} onTry={handleTryTemplate} />)}
+          </div>
+        </div>
       </div>
     )
   }

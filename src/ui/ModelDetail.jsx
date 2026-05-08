@@ -151,7 +151,7 @@ function buildRunHistoryCsv(rows = []) {
   return table.map(row => row.map(csvEscape).join(",")).join("\n");
 }
 
-const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
+const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})=>{
   const [model,setModel]=useState(()=>{
     if(!modelData) return null;
     return {
@@ -165,7 +165,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
       access:        modelData.access         || {},
     };
   });
-  const [tab,setTab]=useState("overview");
+  const [tab,setTab]=useState(initialTab||"overview");
   const [dirty,setDirty]=useState(false);
   const [saveStatus,setSaveStatus]=useState(null);
   const [saving,setSaving]=useState(false);
@@ -512,7 +512,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={}})=>{
             title="Execute panel crashed"
             message="The simulation controls could not render."
           >
-            <div style={{maxWidth:1080}}><ExecutePanel model={model} modelId={modelId} userId={overrides.userId} onRunSaved={handleRunSaved}/></div>
+            <div style={{maxWidth:1080}}><ExecutePanel model={model} modelId={modelId} userId={overrides.userId} onRunSaved={handleRunSaved} autoRun={overrides.autoRun}/></div>
           </ErrorBoundary>
         )}
         {tab==="history"&&(

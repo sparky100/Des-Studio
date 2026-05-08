@@ -7,6 +7,7 @@ import { buildEngine } from "../../engine/index.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { summarizeReplicationResults } from "../../engine/statistics.js";
 import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings } from "../../db/models.js";
+import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
@@ -545,7 +546,7 @@ const AiAssistantPanel = ({
   );
 };
 
-const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
+const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) => {
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
   const [log, setLog] = useState([]);
@@ -666,16 +667,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
         entitySummary: engineRef.current.getEntitySummary?.(),
       };
       setResults(fullResult);
-      if (userId && modelId) {
+      if (modelId) {
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
-        
-        saveSimulationRun(modelId, userId, fullResult, { 
-          seed: runSeedRef.current, 
-          runLabel,
-          warmupPeriod,
-          maxTime: terminationMode === 'time' ? maxSimTime : null
-        })
+        const config = { seed: runSeedRef.current, runLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null };
+        const save = userId ? saveSimulationRun(modelId, userId, fullResult, config) : saveLocalRun(modelId, fullResult, config);
+        save
           .then(() => {
             setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
@@ -693,8 +690,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
     stopAuto();
     if (hasErrors) return;
     if (saveInProgressRef.current) return;
-    if (!userId || !modelId) {
-      setSaveStatus({ state: 'error', message: '✗ Missing User/Model ID' });
+    if (!modelId) {
+      setSaveStatus({ state: 'error', message: '✗ No model to run' });
       return;
     }
 
@@ -756,21 +753,19 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
             setSaveStatus({ state: 'saving', message: 'Saving replication batch...' });
 
             try {
-              await saveSimulationRun(modelId, userId, batchResult, {
-                seed: runSeed,
-                runLabel,
-                replications,
-                warmupPeriod,
-                maxTime: maxTimeForRun,
-                batchId,
+              const batchConfig = {
+                seed: runSeed, runLabel, replications, warmupPeriod, maxTime: maxTimeForRun, batchId,
                 aggregateStats: stats,
                 replicationResults: ordered.map(payload => ({
-                  replicationIndex: payload.replicationIndex,
-                  seed: payload.seed,
-                  summary: payload.result?.summary || {},
-                  finalTime: payload.result?.finalTime,
+                  replicationIndex: payload.replicationIndex, seed: payload.seed,
+                  summary: payload.result?.summary || {}, finalTime: payload.result?.finalTime,
                 })),
-              });
+              };
+              if (userId) {
+                await saveSimulationRun(modelId, userId, batchResult, batchConfig);
+              } else {
+                saveLocalRun(modelId, batchResult, batchConfig);
+              }
               setSaveStatus({ state: 'success', message: '✓ Replication batch saved successfully!' });
               setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved." }]);
               onRunSaved?.();
@@ -833,13 +828,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
     setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing simulation history to database..." }]);
 
     try {
-      await saveSimulationRun(modelId, userId, result, {
-        seed: runSeed,
-        runLabel,
-        replications: 1,
-        warmupPeriod,
-        maxTime: maxTimeForRun
-      });
+      const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun };
+      const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
+      await save;
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
       onRunSaved?.();
@@ -880,6 +871,15 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
   useEffect(() => {
     return () => runnerRef.current?.cancel();
   }, []);
+
+  // Auto-run on mount (used by template quick-start)
+  const autoRunRef = useRef(false);
+  useEffect(() => {
+    if (autoRun && !autoRunRef.current && !hasErrors && modelId) {
+      autoRunRef.current = true;
+      doRunAll();
+    }
+  }, [autoRun, hasErrors, modelId, doRunAll]);
 
   // Load execute preferences (animation toggle, KPI slots) on mount
   useEffect(() => {
@@ -927,7 +927,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
     let cancelled = false;
     setRunHistoryStatus("loading");
     setRunHistoryError("");
-    fetchRunHistory(modelId)
+    const fetcher = userId ? fetchRunHistory : fetchLocalRunHistory;
+    fetcher(modelId)
       .then(rows => {
         if (cancelled) return;
         setSavedRunHistory(rows || []);
