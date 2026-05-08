@@ -292,6 +292,43 @@ export function deriveGraphFromModel(model = {}) {
 
   const dedupedNodes = [...new Map(nodes.map(node => [node.id, node])).values()];
   const dedupedEdges = [...new Map(edges.map(edge => [edge.id, edge])).values()];
+  const nodeTypeById = new Map(dedupedNodes.map(n => [n.id, n.type]));
+
+  // ── Back-edge auto-detection (F12.6) ───────────────────────────────────────
+  // An Activity → Queue edge is a back-edge if there's already a path
+  // from that Queue to that Activity through other edges.
+  function pathExists(edgeList, from, to, excludeIdx) {
+    const adj = new Map();
+    edgeList.forEach((e, idx) => {
+      if (idx === excludeIdx) return;
+      if (!adj.has(e.from)) adj.set(e.from, []);
+      adj.get(e.from).push(e.to);
+    });
+    const seen = new Set();
+    const stack = [from];
+    while (stack.length) {
+      const current = stack.pop();
+      if (current === to) return true;
+      if (seen.has(current)) continue;
+      seen.add(current);
+      (adj.get(current) || []).forEach(next => stack.push(next));
+    }
+    return false;
+  }
+
+  dedupedEdges.forEach((edge, idx) => {
+    if (nodeTypeById.get(edge.from) === VISUAL_NODE_TYPES.ACTIVITY &&
+        nodeTypeById.get(edge.to) === VISUAL_NODE_TYPES.QUEUE &&
+        !edge.loop &&
+        edge.source !== "overflow") {
+      if (pathExists(dedupedEdges, edge.to, edge.from, idx)) {
+        edge.loop = true;
+        edge.maxLoopCount = 3;
+        edge.exitQueueName = null;
+      }
+    }
+  });
+
   return {
     version: 1,
     nodes: withLayout(dedupedNodes, dedupedEdges, graph),

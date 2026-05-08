@@ -77,6 +77,15 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       opts.push({label:`Start ${cName} with ${s} and ${c}`,value:`ASSIGN(${c}, ${s})`});
     }));
   }
+  // BATCH options — C-Event macro
+  if(queues.length > 0) {
+    opts.push({label:'── BATCH (accumulate entities, fire when queue >= batchSize) ──',value:'',disabled:true});
+    queues.forEach(q => {
+      opts.push({label:`Batch 2 entities from ${queueDisplayName(q.name)}`, value:`BATCH(${q.name}, 2)`});
+      opts.push({label:`Batch 5 entities from ${queueDisplayName(q.name)}`, value:`BATCH(${q.name}, 5)`});
+      opts.push({label:`Batch 10 entities from ${queueDisplayName(q.name)}`, value:`BATCH(${q.name}, 10)`});
+    });
+  }
   // Scalar effects on state variables
   const svNames = (stateVariables||[]).map(sv=>sv.name).filter(Boolean);
   if(svNames.length>0){
@@ -131,6 +140,12 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[]) => {
           value: `RELEASE(${s}, ${q.name})`
         });
       });
+    });
+  }
+  if(queues.length > 0) {
+    opts.push({label:'── UNBATCH (restore batch children to queue) ──', value:'', disabled:true});
+    queues.forEach(q => {
+      opts.push({label:`Unbatch into ${queueDisplayName(q.name)}`, value:`UNBATCH(${q.name})`});
     });
   }
   const svNames = (stateVariables||[]).map(sv=>sv.name).filter(Boolean);

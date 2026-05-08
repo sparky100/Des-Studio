@@ -361,7 +361,11 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
       return;
     }
     applyModel(result.model);
-    setMessage({ state: "success", text: "Connection applied to the canonical model." });
+    if (result.validation.loop) {
+      setMessage({ state: "success", text: `Loop back-edge created — configure rework limit in the B-Event editor (max ${result.validation.maxLoopCount || 3}x).` });
+    } else {
+      setMessage({ state: "success", text: "Connection applied to the canonical model." });
+    }
   };
   const patchNode = (node, patch) => {
     if (!canEdit) return;

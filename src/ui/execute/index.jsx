@@ -604,11 +604,13 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
     if (hasErrors) return;
     runSeedRef.current = seed;
     engineRef.current = buildEngine(
-      model, 
-      seed, 
-      warmupPeriod, 
+      model,
+      seed,
+      warmupPeriod,
       terminationMode === 'time' ? maxSimTime : null,
-      terminationMode === 'condition' ? terminationCondition : null
+      terminationMode === 'condition' ? terminationCondition : null,
+      5000, 500,
+      collectTimeSeries
     );
     setCurrentSnap(engineRef.current.getSnap());
     setLog([{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }]);
@@ -620,7 +622,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
     setBatchProgress(null);
     setReplicationResults([]);
     setAggregateStats({});
-  }, [model, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
+  }, [model, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries]);
 
   const stopAuto = useCallback(() => {
     if (autoRef.current) {
@@ -649,6 +651,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
           served: r.snap?.served || 0,
           reneged: r.snap?.reneged || 0,
         },
+        timeSeries:    engineRef.current.getTimeSeries?.(),
+        waitDist:      engineRef.current.getWaitDist?.(),
+        entitySummary: engineRef.current.getEntitySummary?.(),
       };
       setResults(fullResult);
       if (userId && modelId) {
@@ -834,7 +839,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved }) => {
     } finally {
       saveInProgressRef.current = false;
     }
-  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved]);
+  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, stopAuto, onRunSaved]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;

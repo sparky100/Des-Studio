@@ -112,22 +112,29 @@ function toFlowNode(node) {
 }
 
 function toFlowEdge(edge) {
-  // Use the explicit label when present (e.g. routing conditions from F10.1d),
-  // fall back to the edge source type ("routing", "arrival", "terminal", etc.)
   const label = edge.label || edge.source || undefined;
+  const isLoop = edge.loop === true;
   const isFallback = edge.label === "fallback";
   return {
     id: edge.id,
     source: edge.from,
     target: edge.to,
-    label,
-    markerEnd: { type: MarkerType.ArrowClosed, color: isFallback ? C.muted : C.muted },
-    style: {
-      stroke: isFallback ? C.muted : C.muted,
-      strokeWidth: 1.5,
-      strokeDasharray: isFallback ? "5,3" : undefined,
+    label: isLoop ? `↻ rework (max ${edge.maxLoopCount || 3}x)` : label,
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color: isLoop ? C.amber : isFallback ? C.muted : C.muted,
     },
-    labelStyle: { fill: isFallback ? C.amber : C.muted, fontFamily: FONT, fontSize: 10 },
+    style: {
+      stroke: isLoop ? C.amber : isFallback ? C.muted : C.muted,
+      strokeWidth: isLoop ? 2 : 1.5,
+      strokeDasharray: isLoop ? "8,4" : isFallback ? "5,3" : undefined,
+    },
+    labelStyle: {
+      fill: isLoop ? C.amber : isFallback ? C.amber : C.muted,
+      fontFamily: FONT,
+      fontSize: 10,
+      fontWeight: isLoop ? 700 : undefined,
+    },
     labelBgStyle: { fill: C.bg, fillOpacity: 0.9 },
   };
 }
@@ -242,8 +249,9 @@ export function FlowDiagramReactFlow({
   const edges = useMemo(() => (graph.edges || []).map(toFlowEdge), [graph.edges]);
 
   const isValidConnection = useCallback(connection => {
-    const { ok } = validateVisualConnection(graph, connection.source, connection.target);
-    return ok;
+    const validation = validateVisualConnection(graph, connection.source, connection.target);
+    connection._validation = validation;
+    return validation.ok;
   }, [graph]);
 
   return (

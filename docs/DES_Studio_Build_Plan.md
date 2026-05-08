@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.44 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.46 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -58,11 +58,8 @@ flowchart LR
   S11 --> S12["Sprint 12<br/>Assembly & Recirculation"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
-  classDef current fill:#173447,stroke:#22d3ee,color:#ecfeff;
-  classDef planned fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
-  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B done;
-  class S9C current;
-  class S10,S11,S12 planned;
+  classDef future fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
+  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12 done;
 ```
 
 ### Roadmap Snapshot
@@ -77,7 +74,7 @@ flowchart LR
 | Model definition coherence | ✅ Complete | Sprint 8B: queue/customer/server/service semantics aligned. |
 | Visual authoring | ✅ Complete | Sprint 9: graph-first authoring model. Sprint 9B: UX hardening complete. |
 | Execute canvas | ✅ Complete | Sprint 9C: topology-derived live canvas, four live node components, entity token animation, configurable KPI bar, BottomPanel with Stage KPIs. |
-| Modelling expressiveness | 🔄 In progress | Sprints 10–11 ✅: routing, pooling, time-series, finite queues, balking. Sprint 12: entity batching, recirculation. |
+| Modelling expressiveness | ✅ Complete | Sprints 10–12: routing, pooling, time-series, finite queues, balking, entity batching, recirculation. Complete DES vocabulary for healthcare, logistics, and manufacturing. |
 
 ### Key Issues and Watchpoints
 
@@ -126,6 +123,7 @@ flowchart LR
 | 1.43 | 2026-05-06 | Sprint 9 closed; Sprint 9B added |
 | 1.44 | 2026-05-07 | Added Sprints 10, 11, 12 — Modelling Expressiveness backlog. Added Modelling Capability Coverage table. Updated roadmap flowchart, Roadmap Snapshot, Key Issues and Watchpoints, Forward Product Roadmap, Sprint History, Deferred Features Register, and Open Architectural Decisions. Added ADR-011 (conditional routing schema) and ADR-012 (recirculation/batching design). Added Sprint 9B documentation update prompt. |
 | 1.45 | 2026-05-07 | Added Sprint 9C — Execute Canvas Live Flow View. Sprint 9B marked complete. Updated flowchart, Roadmap Snapshot, Key Issues, Forward Product Roadmap, Sprint History, and Deferred Features Register. Removed Execute UX from deferred list. |
+| 1.46 | 2026-05-08 | Sprint 12 complete — BATCH/UNBATCH macros, loop guard, Entity.loopCount, Visual Designer back-edges. 541 tests across 60 files. Updated flowchart, Roadmap Snapshot, Sprint History, Modelling Capability Coverage, Open Architectural Decisions (ADR-012 accepted). |
 
 ---
 
@@ -152,7 +150,7 @@ flowchart LR
 | Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas — Live Flow View. | 464 (464) | N/A | Success | ExecuteCanvas (lazy), four execute-mode node components, AnimatedEdge token animation, BottomPanel with Stage KPIs, configurable KPI bar, speed slider, node-filtered log. |
 | Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Routing & Pooling. | 508 (508) | N/A | Success | Conditional routing (routing table + probabilistic), multi-server pooling, time-series collection + SVG Charts tab, wait-time histogram, Visual Designer multi-edge labels. |
 | Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Capacity & Output. | 523 (523) | N/A | Success | Finite queue capacity, balking (probability + condition), overflow routing, per-queue blockingCount/balkCount, Visual Designer overflow edges. |
-| Sprint 12 | ⬜ Not started | — | Modelling Expressiveness — Assembly & Recirculation. | — | — | — | Entity batching; controlled back-edges for rework loops. |
+| Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation. | 541 (541) | 1.48% | Success | BATCH/UNBATCH macros, loop guard, Entity.loopCount, Visual Designer back-edges, ADR-012 accepted. |
 
 ---
 
@@ -198,8 +196,8 @@ The existing Forms/Tabs editor remains the stable manual authoring mode througho
 | Finite queues and capacity-limited buffers | ✅ F11.1: capacity field on Queue; ARRIVE enforces limit | — |
 | Balking (probabilistic queue joining) | ✅ F11.2: balkProbability + balkCondition on arrival B-events | — |
 | Waiting time distribution and percentiles | ✅ F10.6: waitDist p50/p90/p95/p99 + 12-bin histogram in Charts tab | — |
-| Entity batching / assembly | ❌ Absent | Sprint 12 |
-| Recirculation / rework loops | ❌ Absent — back-edges blocked by DAG rule | Sprint 12 |
+| Entity batching / assembly | ✅ BATCH (C-Event) + UNBATCH (B-Event) macros; queue-accumulation model | Sprint 12 |
+| Recirculation / rework loops | ✅ Controlled back-edges with loop:true flag; maxLoopCount guard; Entity.loopCount auto-maintained | Sprint 12 |
 | Full staff rostering (resource shift schedules) | ~ Partial — piecewise NHPP implemented; full rostering incomplete | Sprint 13+ |
 
 ---
@@ -1149,20 +1147,20 @@ npm run build                           # Succeeds
 
 **Goal:** Add entity batching (assembly / kitting) and controlled recirculation (rework loops, multi-pass processes). The most architecturally complex extensions — deferred until routing and capacity are stable.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-08 | **Completed:** 2026-05-08
 **Prerequisite:** Sprint 11 exit gate passed.
 
-> **Design note:** Back-edges require ADR-012 before any engine work. The DAG constraint prevents infinite loops. The solution is controlled loop constructs with mandatory exit conditions — not removal of the DAG rule.
+> **Design note:** ADR-012 accepted before any engine work. Back-edges use `loop: true` flag on graph edges. BATCH uses queue-accumulation model (Option A). UNBATCH restores original entities with full history.
 
-| Feature | Audit Status | Action |
+| Feature | Status | Description |
 |---|---|---|
-| F12.1 — ADR-012: Recirculation and batching design | ❌ | Write and accept ADR before sprint coding begins |
-| F12.2 — BATCH macro | ❌ | New macro: accumulate N entities; release batch to activity when threshold met |
-| F12.3 — UNBATCH macro | ❌ | New macro: disperse batch back to individual entities after processing |
-| F12.4 — Controlled back-edges with loop guard | ❌ | Allow back-edges with mandatory max-loop-count OR conditional exit to Sink |
-| F12.5 — Entity.loopCount attribute | ❌ | Engine tracks recirculation count per entity; accessible in Predicate Builder |
-| F12.6 — Visual Designer: loop and batch node support | ❌ | Visual back-edge representation; BATCH queue node variant |
-| F12.7 — Documentation update | ❌ | Update `addition1_entity_model.md` with BATCH and UNBATCH specs; update Build Plan |
+| F12.1 — ADR-012: Recirculation and batching design | ✅ | Accepted 2026-05-08. Four design decisions: back-edge `loop:true` flag, loop guard (maxLoopCount + conditional exit), BATCH queue-accumulation, UNBATCH restore originals. |
+| F12.2 — BATCH macro | ✅ | C-Event macro. Accumulates N entities per queue discipline; creates parent batch entity with `batch.children`; attributes copied from first child. |
+| F12.3 — UNBATCH macro | ✅ | B-Event macro. Restores children from parent.batch to target queue; parent marked done and counted as served. |
+| F12.4 — Controlled back-edges with loop guard | ✅ | Loop guard fires after probabilistic routing in phases.js: increments entity.loopCount per ev.loopConfig; routes to exitQueueName or marks done when maxLoopCount reached. |
+| F12.5 — Entity.loopCount attribute | ✅ | Auto-maintained by engine; resolved in resolveVariable()/evalCondition()/buildConditionTokens(); initialised to 0 in createCustomer(). |
+| F12.6 — Visual Designer: loop and batch node support | ✅ | wouldCreateCycle skips loop:true edges; validateVisualConnection returns `loop:true` for Activity→Queue cycles; back-edge auto-detection in deriveGraphFromModel; dashed amber rendering for loop edges. |
+| F12.7 — Documentation update | ✅ | `addition1_entity_model.md` updated with BATCH (MACRO 6) and UNBATCH (MACRO 7) specs, Entity.loopCount, Loop Guard, V22/V23/V24 validation gates. Closed macro set updated from 5 to 7. |
 
 ### Sprint 12 Planning Prompt *(run in claude.ai)*
 
@@ -1210,14 +1208,44 @@ Definition of done:
 ### Sprint 12 Completion Gate
 
 ```bash
-npm test -- --run                       # Zero failures — all prior tests unchanged
+npm test -- --run                       # 541 passed, 60 test files — all prior tests unchanged
 npm test -- macros                      # BATCH, UNBATCH, recirculation tests pass
-npm test -- validation                  # Back-edge and loop guard validation pass
-npm test -- ui                          # Batch and loop Visual Designer tests pass
-npm run build                           # Succeeds
+npm test -- validation                  # V22 (BATCH size), V23 (UNBATCH queue), V24 (loop guard) pass
+npm test -- ui                          # Batch and loop Visual Designer tests pass (graph-operations, FlowDiagramReactFlow)
+npm run build                           # Succeeds — 6 chunks
+node tests/engine/mm1_benchmark.js      # 1.48% error (< 5% gate)
 # Manual: assembly model — product only created when both components present
 # Manual: rework loop — 30% rework, max 3 loops; no infinite loop;
 #         Entity.loopCount correct in step log
+```
+
+### Sprint 12 Documentation Update *(run at completion)*
+
+```
+Sprint 12 of DES Studio is complete. Before committing, update ALL of:
+
+1. docs/addition1_entity_model.md
+   - BATCH (MACRO 6) and UNBATCH (MACRO 7) macro specifications
+   - Entity.loopCount field on Entity schema
+   - Loop Guard section (maxLoopCount, exitQueueName)
+   - Closed macro set updated from 5 to 7
+   - Validation gates V22, V23, V24 added
+   - "Out of Scope" amended to remove entity joining
+
+2. AGENTS.md
+   - Update "Current Sprint" from Sprint 12 to next sprint or "Complete"
+   - Add BATCH/UNBATCH to the five permitted macros (now seven)
+   - Add loop guard rules to Three-Phase and entity sections
+
+3. docs/DES_Studio_Build_Plan.md
+   - Set Sprint 12 status to ✅ Complete with completion date 2026-05-08
+   - Record final test count in Sprint History table (541 tests, 60 files)
+   - Update roadmap flowchart, Roadmap Snapshot, Modelling Capability Coverage
+   - Mark ADR-012 as ✅ Accepted in Open Architectural Decisions
+   - Add version 1.46 to Document History
+
+4. docs/decisions/ADR-012-recirculation-batching.md
+   - Set Status to Accepted (already done)
 ```
 
 ---
@@ -1254,8 +1282,8 @@ npm run build                           # Succeeds
 | ADR-008 | Platform roles and user settings | Sprint 7A | ✅ Accepted — `profiles.role`; dedicated `user_settings` table |
 | ADR-009 | TypeScript adoption posture | Sprint 7A | ✅ Accepted — incremental at schema/domain boundaries |
 | ADR-010 | Visual Designer canvas and graph metadata | Sprint 9A | ✅ Accepted — `@xyflow/react`; optional layout-only `model_json.graph` |
-| ADR-011 | Conditional routing schema | Sprint 10 | ⬜ Open — routing table on RELEASE (Option A, recommended) vs ROUTE node type (Option B). Must be accepted before F10.1 coding begins. |
-| ADR-012 | Recirculation and batching design | Sprint 12 | ⬜ Open — back-edge loop guard strategy; BATCH multi-entity accumulation semantics. Must be accepted before F12.4 coding begins. |
+| ADR-011 | Conditional routing schema | Sprint 10 | ✅ Accepted — routing table on RELEASE (Option A). |
+| ADR-012 | Recirculation and batching design | Sprint 12 | ✅ Accepted — back-edge loop:true flag; BATCH queue-accumulation (Option A); UNBATCH restore originals. |
 
 ---
 

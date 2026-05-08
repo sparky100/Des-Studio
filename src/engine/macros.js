@@ -119,7 +119,7 @@ export const MACROS = [
               const id = ctx.nextId();
               entities.push({ id, type: typeName, role: et?.role || "customer", status: "waiting",
                 queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
-                arrivalTime: clock, stages: [], lastStageStart: null });
+                arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 });
               setLastCustId(id);
               msgs.push(`#${id} (${typeName}) balked → rerouted to "${dest}"`);
             } else {
@@ -136,7 +136,7 @@ export const MACROS = [
             const id = ctx.nextId();
             entities.push({ id, type: typeName, role: et?.role || "customer", status: "waiting",
               queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
-              arrivalTime: clock, stages: [], lastStageStart: null });
+              arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 });
             setLastCustId(id);
             msgs.push(`#${id} (${typeName}) balked (p) → rerouted to "${dest}"`);
           } else {
@@ -160,7 +160,7 @@ export const MACROS = [
             const id = ctx.nextId();
             entities.push({ id, type: typeName, role: et?.role || "customer", status: "waiting",
               queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
-              arrivalTime: clock, stages: [], lastStageStart: null });
+              arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 });
             setLastCustId(id);
             msgs.push(`#${id} (${typeName}) blocked (capacity ${cap}) → overflow to "${dest}"`);
           } else {
@@ -182,6 +182,7 @@ export const MACROS = [
         arrivalTime:    clock,
         stages:         [],
         lastStageStart: null,
+        loopCount:      0,
       };
       entities.push(ent);
       setLastCustId(id);
@@ -347,6 +348,118 @@ export const MACROS = [
       } else if (ent) {
         msgs.push(`RENEGE skipped — #${id} already ${ent.status}`);
       }
+    },
+  },
+
+  // ── BATCH(QueueName, batchSize) — C-Event macro ────────────────────────────
+  {
+    name:    "BATCH",
+    pattern: /^BATCH\(([^,)]+)\s*,\s*(\d+)\)$/i,
+    apply(match, ctx) {
+      const queueName = match[1].trim();
+      const batchSize = parseInt(match[2], 10);
+      const { entities, model, clock, msgs, setLastCustId, helpers, nextId } = ctx;
+
+      const qDef = (model.queues || []).find(
+        q => q.name?.trim().toLowerCase() === queueName.trim().toLowerCase()
+      );
+      if (!qDef) {
+        msgs.push(`BATCH(${queueName},${batchSize}): queue not found`);
+        return;
+      }
+      const discipline = qDef.discipline || 'FIFO';
+
+      let candidates = entities.filter(
+        e => e.status === "waiting" && e.role !== "batch" &&
+          e.queue?.trim().toLowerCase() === queueName.trim().toLowerCase()
+      );
+      if (candidates.length < batchSize) {
+        msgs.push(`BATCH(${queueName},${batchSize}): only ${candidates.length} waiting — insufficient`);
+        return;
+      }
+      switch ((discipline || 'FIFO').toUpperCase()) {
+        case 'LIFO': candidates.sort((a, b) => (b.arrivalTime || 0) - (a.arrivalTime || 0)); break;
+        case 'PRIORITY':
+          candidates.sort((a, b) => {
+            const pa = Number(a.attrs?.priority ?? Infinity);
+            const pb = Number(b.attrs?.priority ?? Infinity);
+            if (pa !== pb) return pa - pb;
+            return (a.arrivalTime || 0) - (b.arrivalTime || 0);
+          });
+          break;
+        default:
+          candidates.sort((a, b) => (a.arrivalTime || 0) - (b.arrivalTime || 0));
+      }
+
+      const batched = candidates.slice(0, batchSize);
+      const ids = batched.map(e => e.id);
+      const idSet = new Set(ids);
+      for (let i = entities.length - 1; i >= 0; i--) {
+        if (idSet.has(entities[i].id)) {
+          entities.splice(i, 1);
+        }
+      }
+
+      const firstChild = batched[0];
+      const parentId = nextId();
+      const parent = {
+        id: parentId,
+        type: firstChild.type,
+        role: "batch",
+        status: "waiting",
+        queue: queueName,
+        attrs: { ...(firstChild.attrs || {}) },
+        arrivalTime: clock,
+        stages: [],
+        lastStageStart: null,
+        loopCount: 0,
+        batch: {
+          children: batched.map(e => ({
+            ...e,
+            attrs: { ...(e.attrs || {}) },
+            stages: e.stages ? e.stages.map(s => ({ ...s })) : [],
+          })),
+        },
+      };
+      entities.push(parent);
+      setLastCustId(parentId);
+      msgs.push(`BATCH: #${ids.join(', #')} → batch #${parentId} in "${queueName}"`);
+    },
+  },
+
+  // ── UNBATCH(QueueName) — B-Event macro ──────────────────────────────────────
+  {
+    name:    "UNBATCH",
+    pattern: /^UNBATCH\(([^,)]+)\)$/i,
+    apply(match, ctx) {
+      const targetQueue = match[1].trim();
+      const { entities, clock, felRef, getLastCustId, msgs } = ctx;
+
+      const parentId = felRef?._contextCustId ?? getLastCustId();
+      const parent = entities.find(e => e.id === parentId);
+
+      if (!parent || parent.role !== "batch" || !parent.batch?.children?.length) {
+        msgs.push(`UNBATCH: #${parentId} is not a batch entity or has no children`);
+        return;
+      }
+
+      const children = parent.batch.children;
+      const childIds = [];
+      for (const child of children) {
+        const restored = {
+          ...child,
+          attrs: { ...(child.attrs || {}) },
+          status: "waiting",
+          queue: targetQueue,
+          lastStageStart: clock,
+        };
+        entities.push(restored);
+        childIds.push(child.id);
+      }
+
+      parent.status = "done";
+      parent.completionTime = clock;
+      msgs.push(`UNBATCH: batch #${parentId} → restored #${childIds.join(', #')} to "${targetQueue}"`);
     },
   },
 

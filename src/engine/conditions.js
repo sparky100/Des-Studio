@@ -70,6 +70,9 @@ function safeEvalExpr(expr) {
 function resolveVariable(ref, state) {
   const parts = ref.split('.');
   if (parts[0] === 'Entity') {
+    if (parts[1] === 'loopCount') {
+      return state.currentEntity?.loopCount ?? 0;
+    }
     // Entity.<attributeName>
     return state.currentEntity?.attrs?.[parts[1]];
   }
@@ -172,9 +175,10 @@ export function evalCondition(condition, helpers, state, clock) {
     });
 
     // Built-in counters
-    expr = expr.replace(/\bserved\b/g,  String(state.__served  || 0));
-    expr = expr.replace(/\breneged\b/g, String(state.__reneged || 0));
-    expr = expr.replace(/\bclock\b/g,   String(clock));
+    expr = expr.replace(/\bserved\b/g,    String(state.__served    || 0));
+    expr = expr.replace(/\breneged\b/g,   String(state.__reneged   || 0));
+    expr = expr.replace(/\bloopCount\b/g, String(state.__loopCount ?? 0));
+    expr = expr.replace(/\bclock\b/g,     String(clock));
 
     // Custom scalar state variables
     Object.keys(state)
@@ -226,8 +230,9 @@ export function buildConditionTokens(entityTypes = [], stateVariables = []) {
     }
   }
 
-  tokens.push({ label: "served  — cumulative served",  value: "served",  valueType: "number" });
-  tokens.push({ label: "reneged — cumulative reneged", value: "reneged", valueType: "number" });
+  tokens.push({ label: "served  — cumulative served",    value: "served",    valueType: "number" });
+  tokens.push({ label: "reneged — cumulative reneged",   value: "reneged",   valueType: "number" });
+  tokens.push({ label: "loopCount  — current entity loop recirculations", value: "loopCount", valueType: "number" });
 
   for (const sv of stateVariables) {
     if (sv.name) {

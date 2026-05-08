@@ -204,6 +204,32 @@ export function fireBEvent(ev, ctx) {
     }
   }
 
+  // ── Loop guard (F12.4): increment loopCount and apply max-circulation guard ──
+  if (ev.loopConfig) {
+    const custId = effectCtx._lastCustId;
+    const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
+    if (cust && (cust.status === "waiting" || cust.status === "serving")) {
+      cust.loopCount = (cust.loopCount || 0) + 1;
+      const maxCount = parseInt(ev.loopConfig.maxLoopCount, 10);
+      if (Number.isFinite(maxCount) && cust.loopCount >= maxCount) {
+        const exitQ = ev.loopConfig.exitQueueName;
+        if (exitQ) {
+          cust.queue = exitQ;
+          cust.status = "waiting";
+          msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → "${exitQ}"`);
+        } else {
+          cust.status = "done";
+          cust.completionTime = clock;
+          cust.sojournTime = +(clock - cust.arrivalTime).toFixed(4);
+          ctx.state.__served = (ctx.state.__served || 0) + 1;
+          msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → exit system`);
+        }
+      } else {
+        msgs.push(`Loop guard: #${cust.id} loopCount → ${cust.loopCount}`);
+      }
+    }
+  }
+
   // Process the B-event's own schedules list (next arrival, reneging timer, etc.)
   for (const sched of ev.schedules || []) {
     const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);

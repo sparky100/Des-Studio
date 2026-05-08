@@ -460,9 +460,12 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   return {
     step,
     runAll,
-    getSnap:    () => snap(clock),
-    getFelSize: () => fel.length,
+    getSnap:         () => snap(clock),
+    getFelSize:      () => fel.length,
     getSummary,
+    getTimeSeries:   () => _timeSeries ?? undefined,
+    getWaitDist:     () => computeWaitDist(entities),
+    getEntitySummary: () => entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
   };
 }
 

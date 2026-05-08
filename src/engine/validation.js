@@ -434,6 +434,64 @@ export function validateModel(model) {
     }
   });
 
+  // ── V22: BATCH batchSize must be integer >= 2 ───────────────────────────────
+  const batchRefs = [];
+  const unbatchRefs = [];
+  bEvents.forEach(b => {
+    const text = effectText(b.effect);
+    const bMatch = text.match(/BATCH\s*\(\s*([^,)]+)\s*,\s*(\d+)\s*\)/i);
+    if (bMatch) {
+      const qName = bMatch[1].trim();
+      const size = parseInt(bMatch[2], 10);
+      if (size < 2) {
+        err('V22', `B-Event '${b.name || b.id}' uses BATCH with batchSize=${size}, must be >= 2.`, 'bevents');
+      }
+      if (!queueNamesLower.has(qName.toLowerCase())) {
+        err('V22', `B-Event '${b.name || b.id}' BATCH references unknown queue '${qName}'.`, 'bevents');
+      }
+      batchRefs.push({ b, qName, size });
+    }
+    const uMatch = text.match(/UNBATCH\s*\(\s*([^,)]+)\s*\)/i);
+    if (uMatch) {
+      const qName = uMatch[1].trim();
+      if (!queueNamesLower.has(qName.toLowerCase())) {
+        err('V23', `B-Event '${b.name || b.id}' UNBATCH references unknown queue '${qName}'.`, 'bevents');
+      }
+      unbatchRefs.push({ b, qName });
+    }
+  });
+
+  cEvents.forEach(c => {
+    const text = effectText(c.effect);
+    const bMatch = text.match(/BATCH\s*\(\s*([^,)]+)\s*,\s*(\d+)\s*\)/i);
+    if (bMatch) {
+      const qName = bMatch[1].trim();
+      const size = parseInt(bMatch[2], 10);
+      if (size < 2) {
+        err('V22', `C-Event '${c.name || c.id}' uses BATCH with batchSize=${size}, must be >= 2.`, 'cevents');
+      }
+      if (!queueNamesLower.has(qName.toLowerCase())) {
+        err('V22', `C-Event '${c.name || c.id}' BATCH references unknown queue '${qName}'.`, 'cevents');
+      }
+      batchRefs.push({ c, qName, size });
+    }
+  });
+
+  // ── V24: Loop guard configuration validation ─────────────────────────────────
+  bEvents.forEach(b => {
+    if (!b.loopConfig) return;
+    const maxCount = parseInt(b.loopConfig.maxLoopCount, 10);
+    if (!Number.isInteger(maxCount) || maxCount < 1) {
+      err('V24', `B-Event '${b.name || b.id}' loopConfig.maxLoopCount must be an integer >= 1.`, 'bevents');
+    }
+    if (b.loopConfig.exitQueueName) {
+      const exitQ = String(b.loopConfig.exitQueueName).trim();
+      if (!queueNamesLower.has(exitQ.toLowerCase())) {
+        err('V24', `B-Event '${b.name || b.id}' loopConfig.exitQueueName '${exitQ}' does not match any defined queue.`, 'bevents');
+      }
+    }
+  });
+
   // ── V16: Termination check (Sprint 3.2) ─────────────────────────────────────
   const hasTermination = model.maxSimTime > 0 || model.terminationCondition;
   if (!hasTermination && hasArrive) {

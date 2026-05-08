@@ -66,7 +66,9 @@ function findNode(graph, id) {
 
 function wouldCreateCycle(edges, from, to) {
   const out = new Map();
-  [...(edges || []), { from, to }].forEach(edge => {
+  // Skip loop edges (loop: true) — they are intentional back-edges
+  const nonLoopEdges = (edges || []).filter(edge => !edge.loop);
+  [...nonLoopEdges, { from, to }].forEach(edge => {
     out.set(edge.from, [...(out.get(edge.from) || []), edge.to]);
   });
   const seen = new Set();
@@ -104,7 +106,19 @@ export function validateVisualConnection(graph, from, to) {
   if (source.type === VISUAL_NODE_TYPES.SOURCE && target.type === VISUAL_NODE_TYPES.SINK) {
     return { ok: false, message: "Sources cannot bypass processing and connect directly to sinks." };
   }
-  if (wouldCreateCycle(graph.edges || [], from, to)) return { ok: false, message: "That connection would create a cycle." };
+  if (wouldCreateCycle(graph.edges || [], from, to)) {
+    // Back-edge detection: allow Activity → Queue connections that create cycles as loop edges
+    if (source.type === VISUAL_NODE_TYPES.ACTIVITY && target.type === VISUAL_NODE_TYPES.QUEUE) {
+      return {
+        ok: true,
+        loop: true,
+        maxLoopCount: 3,
+        exitQueueName: null,
+        message: "Loop edge (back-edge) created — configure rework limit in the edge inspector.",
+      };
+    }
+    return { ok: false, message: "That connection would create a cycle." };
+  }
   return { ok: true, message: "" };
 }
 
@@ -257,13 +271,26 @@ export function connectVisualNodes(model, graph, from, to) {
   }
 
   if (source.type === VISUAL_NODE_TYPES.ACTIVITY && target.type === VISUAL_NODE_TYPES.QUEUE) {
-    const completionId = `route-${source.refId || "activity"}-${target.refId || "queue"}`;
+    const isLoop = validation.loop === true;
+    const completionId = `route-${source.refId || "activity"}-${target.refId || "queue"}${isLoop ? "-loop" : ""}`;
     const bEvents = [...(next.bEvents || [])];
     const existing = bEvents.find(event => event.id === completionId);
+    const loopConfig = isLoop ? { maxLoopCount: validation.maxLoopCount ?? 3, exitQueueName: validation.exitQueueName ?? null } : undefined;
     if (existing) {
-      next.bEvents = updateByRef(bEvents, completionId, event => ({ ...event, effect: `RELEASE(${server}, ${target.label})` }));
+      next.bEvents = updateByRef(bEvents, completionId, event => ({
+        ...event,
+        effect: `RELEASE(${server}, ${target.label})`,
+        ...(loopConfig ? { loopConfig } : {}),
+      }));
     } else {
-      next.bEvents = [...bEvents, { id: completionId, name: `${source.label} Complete`, scheduledTime: "9999", effect: `RELEASE(${server}, ${target.label})`, schedules: [] }];
+      next.bEvents = [...bEvents, {
+        id: completionId,
+        name: `${source.label} Complete`,
+        scheduledTime: "9999",
+        effect: `RELEASE(${server}, ${target.label})`,
+        schedules: [],
+        ...(loopConfig ? { loopConfig } : {}),
+      }];
     }
     next.cEvents = updateByRef(next.cEvents, source.refId, event => ({
       ...event,

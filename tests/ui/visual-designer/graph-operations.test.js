@@ -93,15 +93,16 @@ describe("visual designer graph operations", () => {
     expect(sinkResult.model.cEvents.find(event => event.id === "start-service").cSchedules[0].eventId).toBe("complete");
   });
 
-  it("blocks invalid and cyclic visual connections", () => {
+  it("blocks invalid connections and allows cyclic back-edges as loop edges", () => {
     const graph = deriveGraphFromModel(baseModel);
 
     expect(validateVisualConnection(graph, "source:arrival-0", "sink:complete").ok).toBe(false);
     expect(validateVisualConnection(graph, "sink:complete", "queue:main-q").ok).toBe(false);
     expect(validateVisualConnection(graph, "activity:start-service", "activity:start-service").ok).toBe(false);
+    // Activity → Queue back-edges are now allowed as loop edges (F12.4)
     expect(validateVisualConnection(graph, "activity:start-service", "queue:main-q")).toEqual(expect.objectContaining({
-      ok: false,
-      message: expect.stringContaining("cycle"),
+      ok: true,
+      loop: true,
     }));
   });
 

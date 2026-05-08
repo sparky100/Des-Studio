@@ -18,6 +18,12 @@ export const ENTITY_ROLES = {
     preCreated:  true,
     initialStatus: "idle",
   },
+  batch: {
+    label:       "batch",
+    description: "Created by BATCH macro. Represents a group of entities that flow as one unit.",
+    preCreated:  false,
+    initialStatus: "waiting",
+  },
 };
 
 // Valid entity statuses
@@ -28,6 +34,7 @@ export const ENTITY_STATUSES = {
   reneged:  { color: "#f85149", label: "Reneged"  },
   idle:     { color: "#3fb950", label: "Idle"     },
   busy:     { color: "#f59e0b", label: "Busy"     },
+  batched:  { color: "#8b5cf6", label: "Batched"  },
 };
 
 let _seq = 0;
@@ -47,6 +54,7 @@ export function createCustomer(typeName, role, attrs, clock) {
     arrivalTime: clock,
     stages:      [],
     lastStageStart: null,
+    loopCount: 0,
   };
 }
 

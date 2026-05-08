@@ -289,6 +289,58 @@ This section defines every action the engine supports. This is the **complete an
 
 ---
 
+### MACRO 6 — BATCH (Sprint 12)
+
+| Field | Detail |
+|---|---|
+| **Category** | C-Event action (conditional) |
+| **Purpose** | Accumulates `batchSize` entities from a queue into a single parent batch entity. The parent entity carries `batch.children` storing the original entities. Used for assembly/kitting patterns. |
+| **Called by** | C-Event — fires when `queue(QueueName).length >= batchSize`. |
+| **Inputs** | `queueName: string` — the queue to accumulate entities from. `batchSize: integer >= 2` — number of entities to consume per batch. |
+| **Preconditions** | Queue must exist. At least `batchSize` entities must be waiting in the queue. Entities are selected per the queue's discipline (FIFO/LIFO/PRIORITY). |
+| **State changes** | 1. `batchSize` entities removed from the entities pool. 2. Parent batch entity created with `role: "batch"`, `batch.children` storing copies of original entities. 3. Parent placed in the same queue with attributes copied from the first child. 4. `lastCustId` set to the parent entity ID. |
+| **Routing** | The batch entity competes with individual entities in the queue. A SEIZE on the same queue will pick up the batch (or individual entities) per queue discipline. |
+| **Error conditions** | `batchSize < 2` is a validation error (V22). Referencing a non-existent queue is a validation error (V22). |
+
+---
+
+### MACRO 7 — UNBATCH (Sprint 12)
+
+| Field | Detail |
+|---|---|
+| **Category** | B-Event action (scheduled, deterministic) |
+| **Purpose** | Restores the original entities from a batch parent to a target queue. Children retain their original IDs, `arrivalTime`, `stages`, and attributes. |
+| **Called by** | B-Event — fires after the batch parent has been processed (e.g., after RELEASE). |
+| **Inputs** | `targetQueue: string` — the queue to restore child entities to. |
+| **Preconditions** | The context entity (via `_contextCustId` or `getLastCustId()`) must be a batch parent entity with `role: "batch"` and non-empty `batch.children`. |
+| **State changes** | 1. Each child in `batch.children` is pushed into the entities pool with `status: "waiting"` and `queue: targetQueue`. 2. Parent entity status set to `"done"`, `completionTime` set to clock. 3. Children preserve their original IDs, `arrivalTime`, `stages`, and `attrs`. |
+| **Error conditions** | Referencing a non-existent queue is a validation error (V23). Calling UNBATCH on a non-batch entity is a no-op with a warning. |
+
+---
+
+### Entity.loopCount (Sprint 12)
+
+Every entity carries a `loopCount` field initialized to `0`. This counter is incremented each time the entity traverses a loop edge (back-edge in the visual graph). The loop guard enforces a `maxLoopCount` — when exceeded, the entity is routed to `exitQueueName` (or exits the system if `exitQueueName` is null).
+
+`Entity.loopCount` is readable in Predicate Builder conditions, enabling conditional early exit from rework loops.
+
+### Loop Guard (Sprint 12)
+
+The loop guard is configured via `loopConfig` on a B-Event:
+
+```json
+{
+  "loopConfig": {
+    "maxLoopCount": 3,
+    "exitQueueName": "Finished Queue"
+  }
+}
+```
+
+When a B-Event with `loopConfig` fires and routes an entity, the engine increments `entity.loopCount`. If `loopCount >= maxLoopCount`, the entity is redirected to `exitQueueName` (or completed if `exitQueueName` is null/empty).
+
+---
+
 ## 6. Probability Distributions
 
 All stochastic delays — inter-arrival times, service durations, patience times — are specified using a Distribution object. The engine samples from this distribution using the seeded PRNG assigned to the current replication.
@@ -427,8 +479,9 @@ The following must be added to `CLAUDE.md` before Sprint 1 begins. Copy this sec
 - allowedValues is only valid for string valueType
 
 ### Action Vocabulary — Closed Set
-- The five permitted macros are: ARRIVE, SEIZE, COMPLETE, ASSIGN, RENEGE
+- The seven permitted macros are: ARRIVE, SEIZE, COMPLETE, ASSIGN, RENEGE, BATCH, UNBATCH
 - No other macros may be added without updating Addition 1
+- BATCH is a C-Event only macro; UNBATCH is a B-Event only macro
 - The 'Custom...' free-text escape hatch is REMOVED — do not recreate it
 - new Function(), eval(), and any dynamic code execution are PROHIBITED
 - All condition logic is serialised as JSON and evaluated by the safe condition evaluator
@@ -452,6 +505,9 @@ The following must be added to `CLAUDE.md` before Sprint 1 begins. Copy this sec
 ### Validation Gates (all must run before buildEngine() proceeds)
 - V1–V10 are blocking — run is prevented, error shown inline in editor
 - V11 is a warning — run proceeds with a visible banner
+- V22 (BATCH): batchSize must be integer >= 2; queue must exist
+- V23 (UNBATCH): target queue must exist
+- V24 (loop guard): maxLoopCount must be integer >= 1; exitQueueName must exist when set
 - Validation errors must identify the specific node/event/attribute by name
 - Console.log is not sufficient — errors must be surfaced in the UI
 
@@ -488,7 +544,7 @@ The following are valid future extensions but are **not supported** in the curre
 - **Resource pooling** — shared capacity across resource types
 - **Batch arrivals** — multiple entities created per ARRIVE event
 - **Pre-emption** — interrupting an in-service entity to serve a higher-priority one
-- **Entity splitting or joining** — fork/join patterns
+- **Entity splitting** — fork patterns (single entity dispatched to multiple downstream paths)
 - **Multiple entity classes per Source** — one Source generates one class only
 
 The following are **explicitly in scope** and should not be treated as out of scope when encountered during development:
