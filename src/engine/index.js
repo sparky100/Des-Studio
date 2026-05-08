@@ -90,6 +90,13 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let _excludedCount = 0;
   const warnings = [];
 
+  // ── Per-queue metrics (F11.4): blockingCount, balkCount per queue name ───────
+  const _perQueue = {};
+  const incQueueMetric = (qName, field) => {
+    if (!_perQueue[qName]) _perQueue[qName] = { blockingCount: 0, balkCount: 0 };
+    _perQueue[qName][field]++;
+  };
+
   // ── Initialise scalar state ───────────────────────────────────────────────
   const state = { __served: 0, __reneged: 0 };
   for (const sv of runtimeModel.stateVariables || []) {
@@ -193,6 +200,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     rng,
     warnings,
     createServerEntity,
+    incQueueMetric,
   });
 
   // ── step(): one Phase A → B → C cycle ────────────────────────────────────
@@ -375,6 +383,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       entitySummary:  entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
       timeSeries:     _timeSeries ?? undefined,
       waitDist:       computeWaitDist(entities),
+      perQueue:       Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
     };
   }
 

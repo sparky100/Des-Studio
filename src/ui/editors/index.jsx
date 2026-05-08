@@ -415,6 +415,8 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const remEff=(j)=>{const n=[...events];n[i]={...n[i],effect:effects.filter((_,idx)=>idx!==j)};onChange(n);};
         // F10.1c / F10.2c — routing mode (none | conditional | probabilistic)
         const hasRelease=effects.some(eff=>typeof eff==='string'&&/^RELEASE\s*\(/i.test(eff));
+        const hasArriveEffect=effects.some(eff=>typeof eff==='string'&&/^ARRIVE\s*\(/i.test(eff));
+        const updBalk=(f,v)=>{const n=[...events];n[i]={...n[i],[f]:v===''||v===null?undefined:v};onChange(n);};
         const hasRouting=Array.isArray(ev.routing);
         const hasProb=Array.isArray(ev.probabilisticRouting);
         const routingMode=hasRouting?"conditional":hasProb?"probabilistic":"none";
@@ -545,6 +547,25 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                     </span>
                   </div>
                 </>)}
+              </div>
+            )}
+            {hasArriveEffect&&(
+              <div style={{background:C.surface,borderRadius:5,padding:10,display:'flex',flexDirection:'column',gap:8}}>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>BALKING (OPTIONAL)</span>
+                <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                  <span style={{fontSize:11,color:C.muted,fontFamily:FONT,whiteSpace:'nowrap'}}>Balk probability:</span>
+                  <input
+                    aria-label="Balk probability"
+                    type="number" min="0" max="1" step="0.01"
+                    value={ev.balkProbability??''} onChange={e=>updBalk('balkProbability',e.target.value===''?null:parseFloat(e.target.value))}
+                    placeholder="0 – 1  (blank = no balking)"
+                    style={{width:160,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
+                </div>
+                {ev.balkProbability!=null&&ev.balkProbability>0&&(
+                  <div style={{fontSize:10,color:C.muted,fontFamily:FONT}}>
+                    {Math.round(ev.balkProbability*100)}% of arrivals decline to join the queue and exit (or go to the queue's overflow destination).
+                  </div>
+                )}
               </div>
             )}
             <input value={ev.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
@@ -1355,15 +1376,33 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
             </div>
           </div>
 
-          {/* Row 3: Max length + Description */}
+          {/* Row 3: Max length + Overflow destination + Description */}
           <div style={{display:'flex',gap:8,alignItems:'flex-end',flexWrap:'wrap'}}>
             <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:120}}>
               <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>MAX LENGTH</span>
-              <input value={q.capacity||''} onChange={e=>upd(i,'capacity',e.target.value)}
+              <input
+                aria-label={`Max queue length for ${q.name||'queue'}`}
+                type="number" min="1" step="1"
+                value={q.capacity||''} onChange={e=>upd(i,'capacity',e.target.value)}
                 placeholder="unlimited"
                 style={{...inpStyle(C.border),color:C.amber,width:120}}/>
             </div>
-            <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:160}}>
+            {q.capacity && (
+              <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:160}}>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>WHEN FULL — SEND TO</span>
+                <select
+                  aria-label={`Overflow destination for ${q.name||'queue'}`}
+                  value={q.overflowDestination||''} onChange={e=>upd(i,'overflowDestination',e.target.value||null)}
+                  style={{background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
+                    color:q.overflowDestination?C.amber:C.muted,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
+                  <option value=''>Exit system (reject)</option>
+                  {queues.filter((_,idx)=>idx!==i).map(oq=>(
+                    <option key={oq.id||oq.name} value={oq.name}>{oq.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div style={{display:'flex',flexDirection:'column',gap:4,flex:1,minWidth:140}}>
               <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>DESCRIPTION</span>
               <input value={q.description||''} onChange={e=>upd(i,'description',e.target.value)}
                 placeholder="Description"

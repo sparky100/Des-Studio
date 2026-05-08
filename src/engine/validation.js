@@ -409,6 +409,31 @@ export function validateModel(model) {
     });
   });
 
+  // ── V20: Queue capacity must be integer >= 1 when set (F11.1) ───────────────
+  queues.forEach(q => {
+    if (q.capacity === undefined || q.capacity === null || q.capacity === '') return;
+    const n = parseInt(q.capacity, 10);
+    if (!Number.isInteger(n) || n < 1) {
+      err('V20', `Queue '${q.name || q.id}' capacity '${q.capacity}' must be an integer >= 1.`, 'queues');
+    }
+    if (q.overflowDestination && q.overflowDestination !== null) {
+      const dest = String(q.overflowDestination).trim();
+      if (!queueNamesLower.has(dest.toLowerCase())) {
+        err('V20', `Queue '${q.name || q.id}' overflowDestination '${dest}' does not match any defined queue.`, 'queues');
+      }
+    }
+  });
+
+  // ── V21: balkProbability must be 0–1; balkCondition must not be a free string (F11.2) ──
+  bEvents.forEach(b => {
+    if (b.balkProbability != null) {
+      const p = parseFloat(b.balkProbability);
+      if (!Number.isFinite(p) || p < 0 || p > 1) {
+        err('V21', `B-Event '${b.name || b.id}' balkProbability '${b.balkProbability}' must be between 0 and 1.`, 'bevents');
+      }
+    }
+  });
+
   // ── V16: Termination check (Sprint 3.2) ─────────────────────────────────────
   const hasTermination = model.maxSimTime > 0 || model.terminationCondition;
   if (!hasTermination && hasArrive) {

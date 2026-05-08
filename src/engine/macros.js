@@ -89,10 +89,88 @@ export const MACROS = [
     apply(match, ctx) {
       const typeName  = match[1].trim();
       const queueName = match[2]?.trim() || (typeName + "Queue");
-      const { entities, model, clock, helpers, setLastCustId, msgs } = ctx;
+      const { entities, model, clock, helpers, setLastCustId, msgs, incQueueMetric, felRef } = ctx;
       const et = (model.entityTypes || []).find(
         e => e.name.trim().toLowerCase() === typeName.trim().toLowerCase()
       );
+      const qDef = (model.queues || []).find(
+        q => q.name?.trim().toLowerCase() === queueName.trim().toLowerCase()
+      );
+
+      // ── F11.2 Balking — evaluated before entity joins ────────────────────
+      // Balk config lives on the B-event (felRef) that fired this ARRIVE.
+      const bEvent = felRef;
+      if (bEvent) {
+        // Condition-based balking — uses evaluatePredicate (already imported at top)
+        if (bEvent.balkCondition) {
+          const qLen = entities.filter(
+            e => e.status === "waiting" && e.queue?.trim().toLowerCase() === queueName.trim().toLowerCase()
+          ).length;
+          // Build a state object that exposes Queue.<name>.length for the predicate evaluator
+          const balkState = {
+            ...ctx.state,
+            queues: { [queueName]: { length: qLen } },
+          };
+          const balks = evaluatePredicate(bEvent.balkCondition, balkState);
+          if (balks) {
+            incQueueMetric?.(queueName, "balkCount");
+            const dest = qDef?.overflowDestination ?? null;
+            if (dest) {
+              const id = ctx.nextId();
+              entities.push({ id, type: typeName, role: et?.role || "customer", status: "waiting",
+                queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
+                arrivalTime: clock, stages: [], lastStageStart: null });
+              setLastCustId(id);
+              msgs.push(`#${id} (${typeName}) balked → rerouted to "${dest}"`);
+            } else {
+              msgs.push(`(${typeName}) balked at ${queueName} — not recorded`);
+            }
+            return;
+          }
+        }
+        // Probability-based balking
+        if (bEvent.balkProbability != null && ctx.rng() < bEvent.balkProbability) {
+          incQueueMetric?.(queueName, "balkCount");
+          const dest = qDef?.overflowDestination ?? null;
+          if (dest) {
+            const id = ctx.nextId();
+            entities.push({ id, type: typeName, role: et?.role || "customer", status: "waiting",
+              queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
+              arrivalTime: clock, stages: [], lastStageStart: null });
+            setLastCustId(id);
+            msgs.push(`#${id} (${typeName}) balked (p) → rerouted to "${dest}"`);
+          } else {
+            msgs.push(`(${typeName}) balked at ${queueName} — exited`);
+          }
+          return;
+        }
+      }
+
+      // ── F11.1 Finite queue capacity — checked after balking ──────────────
+      const cap = qDef?.capacity != null ? parseInt(qDef.capacity, 10) : null;
+      if (cap !== null && Number.isFinite(cap) && cap > 0) {
+        const currentDepth = entities.filter(
+          e => e.status === "waiting" && e.queue?.trim().toLowerCase() === queueName.trim().toLowerCase()
+        ).length;
+        if (currentDepth >= cap) {
+          incQueueMetric?.(queueName, "blockingCount");
+          // F11.3 overflow routing: route to overflowDestination or exit
+          const dest = qDef?.overflowDestination ?? null;
+          if (dest) {
+            const id = ctx.nextId();
+            entities.push({ id, type: typeName, role: et?.role || "customer", status: "waiting",
+              queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
+              arrivalTime: clock, stages: [], lastStageStart: null });
+            setLastCustId(id);
+            msgs.push(`#${id} (${typeName}) blocked (capacity ${cap}) → overflow to "${dest}"`);
+          } else {
+            msgs.push(`(${typeName}) blocked at ${queueName} (capacity ${cap}) → exited system`);
+          }
+          return;
+        }
+      }
+
+      // ── Normal join ───────────────────────────────────────────────────────
       const id = ctx.nextId();
       const ent = {
         id,
