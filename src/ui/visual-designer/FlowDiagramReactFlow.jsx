@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Background,
   Controls,
@@ -148,6 +148,13 @@ const panelBtnStyle = {
 function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef }) {
   const { fitView } = useReactFlow();
 
+  // Auto-fit all nodes on mount so they fill the canvas width.
+  // Short delay lets ReactFlow measure node dimensions first.
+  useEffect(() => {
+    const t = setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 80);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Expose fitView for a specific node so the validation checklist can navigate to it.
   // Assigned synchronously during render so it is always current.
   if (fitNodeRef) {
@@ -264,8 +271,8 @@ export function FlowDiagramReactFlow({
         });
       }}
       style={{
-        height: 520,
-        minHeight: 360,
+        height: "clamp(420px, calc(100vh - 360px), 720px)",
+        minHeight: 420,
         width: "100%",
         background: dragOver ? `${C.accent}06` : C.bg,
         border: `1px solid ${C.border}`,

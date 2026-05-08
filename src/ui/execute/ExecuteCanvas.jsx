@@ -607,7 +607,7 @@ export function ExecuteCanvas({
       <div
         aria-label="Execute canvas"
         style={{
-          height: 480,
+          height: "clamp(400px, calc(100vh - 500px), 680px)",
           width: "100%",
           background: C.bg,
           border: `1px solid ${C.border}`,
@@ -620,12 +620,13 @@ export function ExecuteCanvas({
           edges={flowEdges}
           nodeTypes={liveNodeTypes}
           edgeTypes={edgeTypes}
-          defaultViewport={baseGraph.viewport || { x: 0, y: 0, zoom: 1 }}
+          fitView
+          fitViewOptions={{ padding: 0.18, duration: 0 }}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable
           panOnScroll
-          minZoom={0.3}
+          minZoom={0.15}
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
           onNodeClick={(_, node) => onNodeSelect?.(node.data?.label ?? null)}
