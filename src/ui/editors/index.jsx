@@ -17,38 +17,42 @@ const conditionOptions = (entityTypes, stateVariables=[], queues=[]) => {
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const opts = [{label:'— select condition —',value:''}];
   if(queues.length > 0) {
-    opts.push({label:'── Queue lengths ──', value:'', disabled:true});
+    opts.push({label:'── Number waiting in queue ──', value:'', disabled:true});
     queues.forEach(q => {
-      opts.push({label:`queue(${q.name}).length > 0`, value:`queue(${q.name}).length > 0`});
-      opts.push({label:`queue(${q.name}).length == 0`, value:`queue(${q.name}).length == 0`});
+      const entityLabel = q.customerType ? normTypeName(q.customerType) : 'entity';
+      opts.push({label:`${entityLabel} is waiting in ${q.name}`, value:`queue(${q.name}).length > 0`});
+      opts.push({label:`${q.name} is empty (no one waiting)`, value:`queue(${q.name}).length == 0`});
     });
   }
   if(queues.length > 0 && servers.length > 0) {
-    opts.push({label:'── Queue + Server combinations ──', value:'', disabled:true});
+    opts.push({label:'── Service start — queue has customers AND server is free ──', value:'', disabled:true});
     queues.forEach(q => {
+      const entityLabel = q.customerType ? normTypeName(q.customerType) : 'entity';
       servers.forEach(s => {
         opts.push({
-          label: `queue(${q.name}).length > 0 AND idle(${s}).count > 0`,
+          label: `${entityLabel} waiting in ${q.name} AND ${s} is available`,
           value: `queue(${q.name}).length > 0 AND idle(${s}).count > 0`,
         });
       });
     });
   }
-  custs.forEach(c=>{
-    opts.push({label:`queue(${c}).length > 0`,value:`queue(${c}).length > 0`});
-    opts.push({label:`queue(${c}).length == 0`,value:`queue(${c}).length == 0`});
-  });
-  servers.forEach(s=>{
-    opts.push({label:`idle(${s}).count > 0`,value:`idle(${s}).count > 0`});
-    opts.push({label:`busy(${s}).count > 0`,value:`busy(${s}).count > 0`});
-  });
-  if(custs.length>0&&servers.length>0){
-    const c=custs[0],s=servers[0];
-    opts.push({label:`queue(${c}).length > 0 AND idle(${s}).count > 0`,
-               value:`queue(${c}).length > 0 AND idle(${s}).count > 0`});
+  if(servers.length > 0) {
+    opts.push({label:'── Server availability ──', value:'', disabled:true});
+    servers.forEach(s=>{
+      opts.push({label:`${s} is available (at least one idle)`, value:`idle(${s}).count > 0`});
+      opts.push({label:`${s} is in use (at least one busy)`, value:`busy(${s}).count > 0`});
+    });
   }
-  opts.push({label:'served > 0',value:'served > 0'});
-  opts.push({label:'reneged > 0',value:'reneged > 0'});
+  if(custs.length > 0) {
+    opts.push({label:'── Number waiting by entity type ──', value:'', disabled:true});
+    custs.forEach(c=>{
+      opts.push({label:`Any ${c} is waiting`, value:`queue(${c}).length > 0`});
+      opts.push({label:`No ${c} currently waiting`, value:`queue(${c}).length == 0`});
+    });
+  }
+  opts.push({label:'── System totals ──', value:'', disabled:true});
+  opts.push({label:'At least one entity has been served', value:'served > 0'});
+  opts.push({label:'At least one entity has reneged', value:'reneged > 0'});
   return opts;
 };
 
@@ -112,16 +116,20 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[]) => {
     opts.push({label:`Cancel oldest waiting ${c} from its queue`,value:`RENEGE_OLDEST(${c})`});
   });
   if(servers.length>0){
-    opts.push({label:'── Release server ──',value:'',disabled:true});
+    opts.push({label:'── Release server (multi-stage routing) ──',value:'',disabled:true});
     servers.forEach(s=>{
-      opts.push({label:`Release ${s}`,value:`RELEASE(${s})`});
+      opts.push({label:`Release ${s} (entity stays in current stage)`,value:`RELEASE(${s})`});
     });
   }
-  if(queues.length > 0) {
-    opts.push({label:'── RELEASE to queue ──', value:'', disabled:true});
+  if(queues.length > 0 && servers.length > 0) {
+    opts.push({label:'── Release server and route entity to next queue ──', value:'', disabled:true});
     servers.forEach(s => {
       queues.forEach(q => {
-        opts.push({label:`Release ${s} and send entity to ${queueDisplayName(q.name)}`, value:`RELEASE(${s}, ${q.name})`});
+        const entityLabel = q.customerType ? normTypeName(q.customerType) : 'entity';
+        opts.push({
+          label: `Release ${s} and route ${entityLabel} to ${queueDisplayName(q.name)}`,
+          value: `RELEASE(${s}, ${q.name})`
+        });
       });
     });
   }
