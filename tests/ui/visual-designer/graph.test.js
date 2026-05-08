@@ -156,6 +156,40 @@ describe("deriveGraphFromModel", () => {
     expect(graph.viewport).toEqual({ x: 0, y: 0, zoom: 1 });
   });
 
+  // F10.7 — multiple labelled outgoing edges from routing table
+  it("derives multiple labelled edges from a routing table on a RELEASE B-event", () => {
+    const model = {
+      ...twoStageModel,
+      queues: [
+        ...twoStageModel.queues,
+        { id: "icu-q", name: "ICU Queue", customerType: "Patient", discipline: "FIFO" },
+      ],
+      bEvents: [
+        ...twoStageModel.bEvents.filter(b => b.id !== "triage-complete"),
+        {
+          id: "triage-complete",
+          name: "Triage Complete",
+          scheduledTime: "9999",
+          effect: "RELEASE(Triage Nurse)",
+          routing: [
+            { condition: { variable: "Entity.outcome", operator: "==", value: "ICU" }, queueName: "ICU Queue" },
+          ],
+          defaultQueueName: "Consultant Queue",
+          schedules: [],
+        },
+      ],
+    };
+
+    const graph = deriveGraphFromModel(model);
+    const activityEdges = graph.edges.filter(e => e.from === "activity:start-triage");
+
+    // Should have at least a condition edge and a fallback edge
+    expect(activityEdges.length).toBeGreaterThanOrEqual(2);
+    const labels = activityEdges.map(e => e.label).filter(Boolean);
+    expect(labels).toContain("fallback");
+    expect(labels.some(l => String(l).includes("ICU"))).toBe(true);
+  });
+
   it("supports generated object effects when deriving arrivals", () => {
     const graph = deriveGraphFromModel({
       ...twoStageModel,

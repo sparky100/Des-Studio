@@ -112,14 +112,22 @@ function toFlowNode(node) {
 }
 
 function toFlowEdge(edge) {
+  // Use the explicit label when present (e.g. routing conditions from F10.1d),
+  // fall back to the edge source type ("routing", "arrival", "terminal", etc.)
+  const label = edge.label || edge.source || undefined;
+  const isFallback = edge.label === "fallback";
   return {
     id: edge.id,
     source: edge.from,
     target: edge.to,
-    label: edge.source || undefined,
-    markerEnd: { type: MarkerType.ArrowClosed, color: C.muted },
-    style: { stroke: C.muted, strokeWidth: 1.5 },
-    labelStyle: { fill: C.muted, fontFamily: FONT, fontSize: 10 },
+    label,
+    markerEnd: { type: MarkerType.ArrowClosed, color: isFallback ? C.muted : C.muted },
+    style: {
+      stroke: isFallback ? C.muted : C.muted,
+      strokeWidth: 1.5,
+      strokeDasharray: isFallback ? "5,3" : undefined,
+    },
+    labelStyle: { fill: isFallback ? C.amber : C.muted, fontFamily: FONT, fontSize: 10 },
     labelBgStyle: { fill: C.bg, fillOpacity: 0.9 },
   };
 }
