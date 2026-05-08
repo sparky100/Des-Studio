@@ -211,6 +211,72 @@ function EntitiesTab({ snap }) {
 
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
+// ── Wait-time histogram (F10.6) ───────────────────────────────────────────────
+// Renders a bar chart of wait-time distribution from pre-sorted d.values[].
+// Percentile marker lines (p50 green, p90/p95 amber, p99 red) overlaid.
+
+const HIST_W = 360;
+const HIST_H = 60;
+const HIST_BINS = 12;
+
+function WaitHistogram({ dist, color }) {
+  if (!dist || dist.n < 2) return null;
+  const vals = dist.values; // already sorted ascending from engine
+  const minV = vals[0];
+  const maxV = vals[vals.length - 1];
+  if (maxV === minV) return null; // degenerate — all waits identical
+
+  const binWidth = (maxV - minV) / HIST_BINS;
+  const counts = Array(HIST_BINS).fill(0);
+  for (const v of vals) {
+    const i = Math.min(Math.floor((v - minV) / binWidth), HIST_BINS - 1);
+    counts[i]++;
+  }
+  const maxCount = Math.max(...counts, 1);
+  const barW = HIST_W / HIST_BINS;
+
+  // Percentile → x position
+  const toX = (v) => ((v - minV) / (maxV - minV)) * HIST_W;
+
+  const MARKERS = [
+    { label: "p50", value: dist.p50, color: C.green  },
+    { label: "p90", value: dist.p90, color: C.amber  },
+    { label: "p99", value: dist.p99, color: C.red    },
+  ];
+
+  return (
+    <svg width={HIST_W} height={HIST_H} aria-label="Wait time histogram"
+      viewBox={`0 0 ${HIST_W} ${HIST_H}`} style={{ display: "block", width: "100%", overflow: "visible" }}>
+      {/* Bars */}
+      {counts.map((cnt, i) => {
+        const barH = (cnt / maxCount) * (HIST_H - 8);
+        return (
+          <rect key={i}
+            x={i * barW + 1} y={HIST_H - barH - 2}
+            width={Math.max(barW - 2, 1)} height={barH}
+            fill={color} fillOpacity={0.45} rx={1}
+          />
+        );
+      })}
+      {/* Percentile marker lines */}
+      {MARKERS.map(m => {
+        const x = toX(m.value);
+        if (x < 0 || x > HIST_W) return null;
+        return (
+          <g key={m.label}>
+            <line x1={x} y1={0} x2={x} y2={HIST_H - 2}
+              stroke={m.color} strokeWidth={1.5} strokeDasharray="3,2" />
+            <text x={x + 2} y={10} fontSize={7} fill={m.color} fontFamily="monospace">{m.label}</text>
+          </g>
+        );
+      })}
+      {/* X axis labels */}
+      <text x={2}    y={HIST_H} fontSize={7} fill={C.muted} fontFamily="monospace">{minV.toFixed(1)}</text>
+      <text x={HIST_W - 28} y={HIST_H} fontSize={7} fill={C.muted} fontFamily="monospace">{maxV.toFixed(1)}</text>
+    </svg>
+  );
+}
+
 // ── Charts tab (F10.5) ────────────────────────────────────────────────────────
 
 const CHART_W = 360;
@@ -325,34 +391,35 @@ function ChartsTab({ results, model }) {
         </div>
       )}
 
-      {/* Wait time percentiles */}
+      {/* Wait time distribution — histogram + percentile table (F10.6) */}
       {wd && Object.keys(wd).length > 0 && (
         <div>
           <div style={{ fontSize: 10, color: C.amber, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
             WAIT TIME DISTRIBUTION
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, color: C.text }}>
-            <thead>
-              <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                {["Queue", "n", "Mean", "p50", "p90", "p95", "p99"].map(h => (
-                  <th key={h} style={{ padding: "3px 8px", textAlign: "left", fontFamily: FONT, fontSize: 10 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(wd).map(([q, d]) => (
-                <tr key={q} style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={{ padding: "3px 8px", color: C.cEvent, fontFamily: FONT }}>{q}</td>
-                  <td style={{ padding: "3px 8px" }}>{d.n}</td>
-                  <td style={{ padding: "3px 8px", color: C.accent }}>{d.mean}</td>
-                  <td style={{ padding: "3px 8px" }}>{d.p50}</td>
-                  <td style={{ padding: "3px 8px" }}>{d.p90}</td>
-                  <td style={{ padding: "3px 8px" }}>{d.p95}</td>
-                  <td style={{ padding: "3px 8px", color: C.amber }}>{d.p99}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {Object.entries(wd).map(([q, d]) => (
+              <div key={q}>
+                <div style={{ fontSize: 11, color: C.cEvent, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>{q}</div>
+                <WaitHistogram dist={d} color={C.amber} />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 4, marginTop: 6 }}>
+                  {[
+                    { label: "n",    value: d.n,    color: C.muted  },
+                    { label: "mean", value: d.mean, color: C.accent },
+                    { label: "p50",  value: d.p50,  color: C.green  },
+                    { label: "p90",  value: d.p90,  color: C.amber  },
+                    { label: "p95",  value: d.p95,  color: C.amber  },
+                    { label: "p99",  value: d.p99,  color: C.red    },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+                      <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, marginBottom: 2 }}>{s.label.toUpperCase()}</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: s.color, fontFamily: FONT }}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
