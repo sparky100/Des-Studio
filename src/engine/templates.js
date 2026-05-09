@@ -31,9 +31,12 @@ const CALL_CENTER = {
   stateVariables: [],
   bEvents: [
     { id: "b_arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Caller)",
-      schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "0.667" } }] },
+      schedules: [
+        { eventId: "b_arrive", dist: "Exponential", distParams: { mean: "0.667" } },
+        { eventId: "b_renege", dist: "Fixed", distParams: { value: "10" }, isRenege: true },
+      ] },
     { id: "b_complete", name: "Complete", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
-    { id: "b_renege", name: "Abandonment Timer", scheduledTime: "9999", effect: "RENEGE(Caller)", schedules: [] },
+    { id: "b_renege", name: "Abandonment Timer", scheduledTime: "9999", effect: "RENEGE(ctx)", schedules: [] },
   ],
   cEvents: [{
     id: "c_seize", name: "Assign Agent", priority: 1, condition: "queue(Caller).length > 0 AND idle(Agent).count > 0",
@@ -88,8 +91,8 @@ const FAST_FOOD = {
   bEvents: [
     { id: "b_arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Customer)",
       schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "1.5" } }] },
-    { id: "b_order_done", name: "Order Taken", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
-    { id: "b_pay_done", name: "Payment Done", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+    { id: "b_order_done", name: "Order Taken", scheduledTime: "9999", effect: "RELEASE(Cashier, Payment)", schedules: [] },
+    { id: "b_pay_done", name: "Payment Done", scheduledTime: "9999", effect: "RELEASE(Cashier, Pickup)", schedules: [] },
     { id: "b_pickup_done", name: "Pickup Done", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
   ],
   cEvents: [
@@ -105,8 +108,8 @@ const FAST_FOOD = {
   ],
   queues: [
     { id: "q_order", name: "Order", customerType: "Customer", capacity: "", discipline: "FIFO" },
-    { id: "q_pay", name: "Payment", capacity: "", discipline: "FIFO" },
-    { id: "q_pickup", name: "Pickup", capacity: "", discipline: "FIFO" },
+    { id: "q_pay", name: "Payment", customerType: "Customer", capacity: "", discipline: "FIFO" },
+    { id: "q_pickup", name: "Pickup", customerType: "Customer", capacity: "", discipline: "FIFO" },
   ],
 };
 
@@ -144,7 +147,7 @@ const AIRPORT = {
   bEvents: [
     { id: "b_arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Passenger)",
       schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "1" } }] },
-    { id: "b_doc_done", name: "Document Check Done", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+    { id: "b_doc_done", name: "Document Check Done", scheduledTime: "9999", effect: "RELEASE(Officer, Scanner)", schedules: [] },
     { id: "b_scan_done", name: "Scan Done", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
   ],
   cEvents: [
@@ -158,8 +161,8 @@ const AIRPORT = {
       cSchedules: [{ eventId: "b_scan_done", dist: "Triangular", distParams: { min: "1", mode: "2", max: "4" }, useEntityCtx: true }] },
   ],
   queues: [
-    { id: "q_docs", name: "Documents", capacity: "15", discipline: "FIFO" },
-    { id: "q_scan", name: "Scanner", capacity: "15", discipline: "FIFO" },
+    { id: "q_docs", name: "Documents", customerType: "Passenger", capacity: "15", discipline: "FIFO" },
+    { id: "q_scan", name: "Scanner", customerType: "Passenger", capacity: "15", discipline: "FIFO" },
   ],
 };
 
@@ -193,7 +196,7 @@ const CONSTRUCTION = {
   ],
   queues: [
     { id: "q_truck", name: "Truck", customerType: "Truck", capacity: "", discipline: "FIFO" },
-    { id: "q_weigh", name: "Weigh", capacity: "", discipline: "FIFO" },
+    { id: "q_weigh", name: "Weigh", customerType: "Truck", capacity: "", discipline: "FIFO" },
   ],
 };
 
@@ -246,7 +249,7 @@ const OUTPATIENT_CLINIC = {
   ],
   queues: [
     { id: "q_patient", name: "Patient", customerType: "Patient", capacity: "", discipline: "FIFO" },
-    { id: "q_consult", name: "Consultation", capacity: "", discipline: "FIFO" },
+    { id: "q_consult", name: "Consultation", customerType: "Patient", capacity: "", discipline: "FIFO" },
   ],
 };
 
