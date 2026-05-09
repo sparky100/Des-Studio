@@ -50,7 +50,7 @@ const ER_TRIAGE = {
   description: "Two-stage emergency room. Patients arrive, see a triage nurse (2 nurses), then queue for a doctor (3 doctors). Priority queue for treatment.",
   entityTypes: [
     { id: "et_patient", name: "Patient", role: "customer", count: 0, attrDefs: [
-      { id: "a_severity", name: "severity", valueType: "number", defaultValue: 3, mutable: true },
+      { id: "a_priority", name: "priority", valueType: "number", defaultValue: 3, mutable: true },
     ]},
     { id: "et_nurse", name: "Nurse", role: "server", count: 2, attrDefs: [] },
     { id: "et_doctor", name: "Doctor", role: "server", count: 3, attrDefs: [] },
@@ -59,7 +59,7 @@ const ER_TRIAGE = {
   bEvents: [
     { id: "b_arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Patient)",
       schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "2" } }] },
-    { id: "b_triage_done", name: "Triage Done", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+    { id: "b_triage_done", name: "Triage Done", scheduledTime: "9999", effect: "RELEASE(Nurse, Treatment)", schedules: [] },
     { id: "b_treatment_done", name: "Treatment Done", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
   ],
   cEvents: [
@@ -67,12 +67,12 @@ const ER_TRIAGE = {
       effect: "ASSIGN(Patient, Nurse)",
       cSchedules: [{ eventId: "b_triage_done", dist: "Uniform", distParams: { min: "2", max: "5" }, useEntityCtx: true }] },
     { id: "c_treat", name: "Start Treatment", priority: 2, condition: "queue(Treatment).length > 0 AND idle(Doctor).count > 0",
-      effect: "ASSIGN(Patient, Doctor)",
+      effect: "ASSIGN(Treatment, Doctor)",
       cSchedules: [{ eventId: "b_treatment_done", dist: "Triangular", distParams: { min: "5", mode: "10", max: "20" }, useEntityCtx: true }] },
   ],
   queues: [
     { id: "q_patient", name: "Patient", customerType: "Patient", capacity: "", discipline: "FIFO" },
-    { id: "q_treatment", name: "Treatment", capacity: "", discipline: "PRIORITY" },
+    { id: "q_treatment", name: "Treatment", customerType: "Patient", capacity: "", discipline: "PRIORITY" },
   ],
 };
 

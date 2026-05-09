@@ -204,7 +204,7 @@ export function validateModel(model) {
 
   entityTypes.forEach(et => {
     (et.attrDefs || []).forEach(a => {
-      if (a.name)
+      if (a.name && a.dist)
         checkDist(a.dist, a.distParams,
           `Entity '${et.name}' attr '${a.name}'`, 'entities');
     });
