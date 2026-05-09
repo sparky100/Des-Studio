@@ -142,12 +142,19 @@ export function buildSensitivityPrompt(modelName = DEFAULT_MODEL_NAME, experimen
 
 export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results = {}) {
   const system = "You are an expert simulation analyst. Given a model and its run results, suggest specific structural changes to improve performance. Be concise: 150-200 words. Recommend concrete numeric changes (e.g. 'increase capacity from 2 to 3', 'add a server').";
+  const entityTypes = (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count }));
+  const queues = (model.queues || []).map(q => ({ name: q.name, discipline: q.discipline, capacity: q.capacity, customerType: q.customerType }));
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
-      entityTypes: (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count })),
-      queues: (model.queues || []).map(q => ({ name: q.name, discipline: q.discipline, capacity: q.capacity })),
+      entityTypes,
+      queues,
+      // Include flow summary linking queues to their entity types
+      flowSummary: queues
+        .filter(q => q.customerType)
+        .map(q => `${q.customerType} entities wait in queue '${q.name}'`)
+        .join("; ") || "No queue-entity associations defined.",
     },
     experiment: extractExperiment(experimentConfig),
     kpis: buildKpis(model, results),
@@ -158,7 +165,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     messages: makeMessages(
       system,
       payload,
-      "Based on the KPI data, identify the primary bottleneck and recommend a specific model change. State the expected impact (e.g. 'mean wait would drop from 8.2 to ~4.5'). If multiple changes are needed, prioritise the single most impactful one."
+      "Based on the KPI data, identify the primary bottleneck and recommend a specific model change. Consider the entity flow: which entity types wait in which queues, and how they flow through servers. State the expected impact (e.g. 'mean wait would drop from 8.2 to ~4.5'). If multiple changes are needed, prioritise the single most impactful one."
     ),
     max_tokens: 450,
   };

@@ -404,7 +404,16 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     const content = response.intent === "clarify"
       ? questions.join("\n")
       : (response.explanation || "Model proposal received.");
-    setHistory(prev => [...prev, { role: "assistant", content }]);
+    const newTurns = [{ role: "assistant", content }];
+
+    if (response.flowDescription && response.intent !== "clarify") {
+      newTurns.unshift({
+        role: "system",
+        content: `Flow understanding:\n${response.flowDescription}`,
+      });
+    }
+
+    setHistory(prev => [...prev, ...newTurns]);
 
     if (nextHistory.length >= 20) setNotice("Conversation is long - consider starting a new session.");
     setLoading(false);

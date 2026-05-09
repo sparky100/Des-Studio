@@ -48,7 +48,35 @@ export function buildModelBuilderSystemPrompt() {
     "If the requested model is too detailed to fit in one complete valid JSON response, return intent clarify and ask for the smallest missing details. Never return partial JSON.",
     "Keep generated model proposals compact: use short IDs, concise names, and only include fields required by DES Studio.",
     "Keep explanation to one short sentence when proposedModel is present.",
-    'Response schema: {"intent":"build|refine|clarify","questions":["..."]|null,"proposedModel":object|null,"explanation":"plain English summary"}',
+
+    "=== FLOW-FIRST MODEL BUILDING (CRITICAL) ===",
+    "Before proposing a model, you MUST first describe the entity flow through the system in flowDescription. This is more important than getting numeric parameters right.",
+    "Think step by step: identify every entity type and trace its full path through the system — which queues does it wait in, which server serves it, where does it go after service?",
+    "The flow description must explicitly list each entity type followed by its journey: arrives into which queue, which C-event starts its service (ASSIGN to which server), which B-event completes its service, and whether it exits or routes to another queue.",
+    "Every queue must correspond to an entity type that waits in it. The customerType field on the queue MUST match the entity type name. If a queue exists, you must be able to state: 'X entities wait in Queue Y'.",
+    "Response schema: {\"intent\":\"build|refine|clarify\",\"questions\":[\"...\"]|null,\"flowDescription\":\"Entity flow explanation — required when intent is build or refine\",\"proposedModel\":object|null,\"explanation\":\"plain English summary\"}",
+    "The flowDescription field is REQUIRED when intent is build or refine. Do not omit it.",
+    "Example flowDescription: 'Customer entities arrive into MainQueue. StartService C-event (ASSIGN(MainQueue, Clerk)) begins service when queue has waiting customers and a Clerk is idle. It schedules ServiceComplete B-event (COMPLETE()) via cSchedules with the service time distribution. After COMPLETE(), the customer departs the system.'",
+
+    "=== C-EVENT → B-EVENT PATTERN ===",
+    "In DES Studio, the standard pattern for a single-stage service is:",
+    "1. A C-event (Start Service) checks if a queue has entities AND a server is idle (condition: queue(X).length > 0 AND idle(Y).count > 0).",
+    "2. The C-event fires: effect ASSIGN(QueueName, ServerType) removes entity from queue and marks server busy.",
+    "3. The C-event's cSchedules schedules a B-event (Service Complete) with the service time distribution and useEntityCtx: true.",
+    "4. The scheduled B-event fires: effect COMPLETE() marks server idle and records the entity as served.",
+    "C-events START activities. B-events COMPLETE activities. Never skip the B-event completion — every ASSIGN must have a corresponding COMPLETE.",
+    "Never put COMPLETE() as a C-event effect. COMPLETE() is always a B-event effect, scheduled by the C-event's cSchedules.",
+
+    "=== QUEUE-ENTITY ASSOCIATION ===",
+    "Every queue represents a waiting line for entities of exactly one type. This is enforced by the customerType field.",
+    "The customerType on a queue MUST match the name of an entityType with role='customer'.",
+    "If the user describes a system with 'customers waiting in a queue', the queue's customerType is 'Customer' (or whatever the entity type is named).",
+    "If there are multiple entity types (e.g. PremiumCustomer and RegularCustomer), each needs its own queue with the matching customerType.",
+    "Never create a queue without also creating the entity type that waits in it.",
+    "The ARRIVE() macro's first argument is the entity type, second argument is the queue name. These must match the queue's customerType.",
+    "Example: ARRIVE(Customer, MainQueue) requires a queue named MainQueue with customerType: \"Customer\" and an entityType named \"Customer\" with role: \"customer\".",
+
+    "=== MODEL STRUCTURE RULES ===",
     "If intent is build or refine, proposedModel must contain all five top-level sections, even when some are empty arrays.",
   ].join("\n");
 }
