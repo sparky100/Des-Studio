@@ -431,6 +431,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const customers    = entities.filter(e => e.role !== "server");
     const served       = customers.filter(e => e.status === "done");
     const reneged      = customers.filter(e => e.status === "reneged");
+    const servers      = entities.filter(e => e.role === "server");
 
     const avgWait = served.length
       ? served.reduce((s, e) => s + ((e.serviceStart || 0) - e.arrivalTime), 0) / served.length
@@ -443,6 +444,18 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const avgSojourn   = withSojourn.length ? withSojourn.reduce((s, e) => s + e.sojournTime, 0) / withSojourn.length : null;
     const maxSojourn   = withSojourn.length ? Math.max(...withSojourn.map(e => e.sojournTime)) : null;
 
+    const perResource = {};
+    for (const srv of servers) {
+      if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyCount: 0, idleCount: 0 };
+      perResource[srv.type].total++;
+      if (srv.status === "busy" || srv.status === "serving") perResource[srv.type].busyCount++;
+      else perResource[srv.type].idleCount++;
+    }
+    for (const type of Object.keys(perResource)) {
+      const r = perResource[type];
+      r.utilisation = r.total > 0 ? +(r.busyCount / r.total).toFixed(4) : 0;
+    }
+
     return {
       total:             customers.length,
       served:            served.length,
@@ -451,6 +464,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       avgSvc:            avgSvc    != null ? +avgSvc.toFixed(4)    : null,
       avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
       maxSojourn:        maxSojourn!= null ? +maxSojourn.toFixed(4): null,
+      perResource:       Object.keys(perResource).length ? perResource : undefined,
       warmupPeriod,
       excludedCount:     _excludedCount,
       warnings,

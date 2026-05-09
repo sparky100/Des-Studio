@@ -16,32 +16,60 @@ function getSummary(results = {}) {
   return results.summary || results.results?.summary || {};
 }
 
-function extractQueues(model = {}, summary = {}) {
+function extractQueues(model = {}, results = {}) {
+  const summary = getSummary(results);
   const queues = Array.isArray(model.queues) ? model.queues : [];
+  const waitDist = results.waitDist || {};
+  const perQueue = results.perQueue || {};
+
   if (!queues.length) {
     return [{
       name: "Overall",
       meanWait: finiteOrNull(summary.avgWait),
       maxWait: finiteOrNull(summary.maxWait),
+      p95: null,
+      p99: null,
       renegeRate: summary.total ? finiteOrNull((summary.reneged || 0) / summary.total) : null,
+      blockingCount: null,
+      balkCount: null,
     }];
   }
 
-  return queues.map(queue => ({
-    name: queue.name || queue.id || "Queue",
-    meanWait: finiteOrNull(summary.avgWait),
-    maxWait: finiteOrNull(summary.maxWait),
-    renegeRate: summary.total ? finiteOrNull((summary.reneged || 0) / summary.total) : null,
-  }));
+  return queues.map(queue => {
+    const qName = queue.name || queue.id || "Queue";
+    const wd = waitDist[qName] || {};
+    const pq = perQueue[qName] || {};
+    return {
+      name: qName,
+      discipline: queue.discipline || "FIFO",
+      capacity: queue.capacity ?? null,
+      customerType: queue.customerType || null,
+      meanWait: finiteOrNull(wd.mean ?? summary.avgWait),
+      maxWait: finiteOrNull(summary.maxWait),
+      p50: finiteOrNull(wd.p50),
+      p90: finiteOrNull(wd.p90),
+      p95: finiteOrNull(wd.p95),
+      p99: finiteOrNull(wd.p99),
+      nServed: finiteOrNull(wd.n),
+      renegeRate: summary.total ? finiteOrNull((summary.reneged || 0) / summary.total) : null,
+      blockingCount: finiteOrNull(pq.blockingCount),
+      balkCount: finiteOrNull(pq.balkCount),
+    };
+  });
 }
 
 function extractResources(model = {}, summary = {}) {
   const servers = (model.entityTypes || []).filter(entity => entity.role === "server");
-  return servers.map(server => ({
-    name: server.name || server.id || "Server",
-    utilisation: finiteOrNull(summary.resourceUtilisation?.[server.name] ?? summary.utilisation),
-    busyCount: finiteOrNull(summary.busyCount),
-  }));
+  return servers.map(server => {
+    const pr = summary.perResource?.[server.name];
+    return {
+      name: server.name || server.id || "Server",
+      utilisation: finiteOrNull(pr?.utilisation ?? summary.resourceUtilisation?.[server.name] ?? summary.utilisation),
+      busyCount: finiteOrNull(pr?.busyCount ?? summary.busyCount),
+      idleCount: finiteOrNull(pr?.idleCount),
+      totalServers: finiteOrNull(pr?.total),
+    };
+  });
 }
 
 function extractExperiment(experimentConfig = {}) {
@@ -57,7 +85,7 @@ function extractExperiment(experimentConfig = {}) {
 function buildKpis(model = {}, results = {}) {
   const summary = getSummary(results);
   return {
-    queues: extractQueues(model, summary),
+    queues: extractQueues(model, results),
     resources: extractResources(model, summary),
     throughput: finiteOrNull(summary.served ?? summary.throughput),
     totalEntities: finiteOrNull(summary.total),
@@ -80,7 +108,12 @@ function makeMessages(system, payload, instruction) {
 }
 
 export function buildNarrativePrompt(model = {}, experimentConfig = {}, results = {}) {
-  const system = "You are an expert simulation analyst. Interpret the following discrete-event simulation results for a non-specialist audience. Be concise: 150-200 words. Use plain English.";
+  const system = "You are an expert simulation analyst. Interpret the following discrete-event simulation results for a non-specialist audience. Be concise: 150-200 words. Use plain English. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, and per-queue blocking/balking counters.";
+  const waitDist = results.waitDist || {};
+  const waitDistForPrompt = Object.keys(waitDist).length
+    ? Object.fromEntries(Object.entries(waitDist).map(([q, w]) => [q, { n: w.n, mean: w.mean, p50: w.p50, p90: w.p90, p95: w.p95, p99: w.p99 }]))
+    : undefined;
+  const perQueue = results.perQueue || {};
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
@@ -88,6 +121,8 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     },
     experiment: extractExperiment(experimentConfig),
     kpis: buildKpis(model, results),
+    waitDist: waitDistForPrompt,
+    perQueue: Object.keys(perQueue).length ? perQueue : undefined,
     aggregateStats: results.aggregateStats || {},
   };
 
@@ -96,7 +131,7 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     messages: makeMessages(
       system,
       payload,
-      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload."
+      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish between typical and extreme waits."
     ),
     max_tokens: 450,
   };
@@ -141,7 +176,7 @@ export function buildSensitivityPrompt(modelName = DEFAULT_MODEL_NAME, experimen
 }
 
 export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results = {}) {
-  const system = "You are an expert simulation analyst. Given a model and its run results, suggest specific structural changes to improve performance. Be concise: 150-200 words. Recommend concrete numeric changes (e.g. 'increase capacity from 2 to 3', 'add a server').";
+  const system = "You are an expert simulation analyst. Given a model and its run results, suggest specific structural changes to improve performance. Be concise: 150-200 words. Recommend concrete numeric changes (e.g. 'increase capacity from 2 to 3', 'add a server'). You have per-queue wait percentile data (p50, p90, p95, p99), per-resource utilisation and idle count, and per-queue blocking/balking counters. Use these to pinpoint the bottleneck precisely.";
   const entityTypes = (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count }));
   const queues = (model.queues || []).map(q => ({ name: q.name, discipline: q.discipline, capacity: q.capacity, customerType: q.customerType }));
   const payload = {
@@ -150,7 +185,6 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
       description: model.description || "",
       entityTypes,
       queues,
-      // Include flow summary linking queues to their entity types
       flowSummary: queues
         .filter(q => q.customerType)
         .map(q => `${q.customerType} entities wait in queue '${q.name}'`)
@@ -158,6 +192,8 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     },
     experiment: extractExperiment(experimentConfig),
     kpis: buildKpis(model, results),
+    waitDist: results.waitDist || {},
+    perQueue: results.perQueue || {},
   };
 
   return {
@@ -165,7 +201,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     messages: makeMessages(
       system,
       payload,
-      "Based on the KPI data, identify the primary bottleneck and recommend a specific model change. Consider the entity flow: which entity types wait in which queues, and how they flow through servers. State the expected impact (e.g. 'mean wait would drop from 8.2 to ~4.5'). If multiple changes are needed, prioritise the single most impactful one."
+      "Based on the KPI data, identify the primary bottleneck and recommend a specific model change. Consider per-queue wait percentiles (p50, p90, p95), per-resource utilisation, and blocking/balking counters. State the expected impact (e.g. 'mean wait would drop from 8.2 to ~4.5'). If multiple changes are needed, prioritise the single most impactful one."
     ),
     max_tokens: 450,
   };
@@ -177,7 +213,7 @@ export function promptWordEstimate(prompt) {
 }
 
 export function buildResultsQueryPrompt(question, model = {}, results = {}, conversationHistory = []) {
-  const system = "You are a simulation results analyst. Answer questions about the simulation run using only the provided KPI data. Be concise and specific — always cite exact KPI values. If the data does not contain the answer, say so clearly. Never invent numbers.";
+  const system = "You are a simulation results analyst. Answer questions about the simulation run using only the provided KPI data. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, and per-queue blocking/balking counters. Be concise and specific — always cite exact KPI values. If the data does not contain the answer, say so clearly. Never invent numbers.";
   const summary = getSummary(results);
   const kpis = buildKpis(model, results);
   const entityTypes = (model.entityTypes || []).map(e => ({ name: e.name, role: e.role }));
@@ -187,6 +223,12 @@ export function buildResultsQueryPrompt(question, model = {}, results = {}, conv
     capacity: q.capacity,
     customerType: q.customerType,
   }));
+
+  const waitDist = results.waitDist || {};
+  const perQueue = results.perQueue || {};
+  const waitDistForPrompt = Object.keys(waitDist).length
+    ? Object.fromEntries(Object.entries(waitDist).map(([q, w]) => [q, { n: w.n, mean: w.mean, p50: w.p50, p90: w.p90, p95: w.p95, p99: w.p99 }]))
+    : null;
 
   const dataPayload = {
     model: {
@@ -207,8 +249,9 @@ export function buildResultsQueryPrompt(question, model = {}, results = {}, conv
       avgService: summary.avgSvc,
       avgSojourn: summary.avgSojourn,
     },
+    waitDist: waitDistForPrompt,
+    perQueue: Object.keys(perQueue).length ? perQueue : null,
     timeSeriesAvailable: !!(Array.isArray(results.timeSeries) && results.timeSeries.length > 0),
-    waitDistAvailable: !!(results.waitDist && results.waitDist.queues && results.waitDist.queues.length > 0),
   };
 
   const messages = [

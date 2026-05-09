@@ -82,6 +82,62 @@ describe("LLM prompt builders", () => {
     expect(payload.kpis.queues[0].meanWait).toBe(8.2);
     expect(payload.kpis.avgWait).toBe(8.2);
     expect(payload.experiment.replications).toBe(3);
+    expect(payload.waitDist).toBeDefined();
+    expect(payload.perQueue).toBeDefined();
+  });
+
+  it("includes per-resource utilisation and idleCount in suggestion prompt", () => {
+    const modelWithServer = {
+      ...model,
+      entityTypes: [{ id: "server-nurse", name: "Nurse", role: "server", count: 2 }],
+    };
+    const prompt = buildSuggestionPrompt(
+      modelWithServer,
+      {},
+      {
+        summary: {
+          total: 20, served: 18, reneged: 2, avgWait: 8.2, avgSvc: 4.1, avgSojourn: 12.3,
+          perResource: { Nurse: { total: 2, busyCount: 2, idleCount: 0, utilisation: 1.0 } },
+        },
+      }
+    );
+    const payload = JSON.parse(prompt.messages[1].content);
+    expect(payload.kpis.resources[0]).toEqual(expect.objectContaining({
+      name: "Nurse",
+      utilisation: 1.0,
+      busyCount: 2,
+      idleCount: 0,
+      totalServers: 2,
+    }));
+  });
+
+  it("includes per-queue wait percentile and blocking/balking data in suggestion prompt", () => {
+    const modelWithQueue = {
+      ...model,
+      queues: [{ id: "q1", name: "Main queue", discipline: "FIFO", capacity: 5 }],
+    };
+    const prompt = buildSuggestionPrompt(
+      modelWithQueue,
+      {},
+      {
+        summary: { total: 20, served: 18, reneged: 2, avgWait: 8.2, avgSvc: 4.1, avgSojourn: 12.3 },
+        waitDist: { "Main queue": { n: 18, mean: 8.2, p50: 6.1, p90: 15.3, p95: 18.7, p99: 22.4 } },
+        perQueue: { "Main queue": { blockingCount: 3, balkCount: 1 } },
+      }
+    );
+    const payload = JSON.parse(prompt.messages[1].content);
+    expect(payload.kpis.queues[0]).toEqual(expect.objectContaining({
+      name: "Main queue",
+      meanWait: 8.2,
+      p50: 6.1,
+      p90: 15.3,
+      p95: 18.7,
+      p99: 22.4,
+      blockingCount: 3,
+      balkCount: 1,
+    }));
+    expect(payload.waitDist["Main queue"]).toBeDefined();
+    expect(payload.perQueue["Main queue"]).toEqual({ blockingCount: 3, balkCount: 1 });
   });
 
   describe("buildResultsQueryPrompt", () => {
@@ -137,15 +193,26 @@ describe("LLM prompt builders", () => {
       expect(prompt.messages[0].content).toMatch(/never invent numbers/i);
     });
 
-    it("reports timeSeriesAvailable and waitDistAvailable flags", () => {
+    it("reports timeSeriesAvailable flag and includes waitDist data", () => {
       const withTimeSeries = buildResultsQueryPrompt("Show me queue trends", queryModel, { ...queryResults, timeSeries: [{ t: 0, queues: {} }] });
       const parsedTs = JSON.parse(withTimeSeries.messages[withTimeSeries.messages.length - 1].content);
       expect(parsedTs.data.timeSeriesAvailable).toBe(true);
-      expect(parsedTs.data.waitDistAvailable).toBe(false);
+      expect(parsedTs.data.waitDist).toBeNull();
+      expect(parsedTs.data.perQueue).toBeNull();
 
-      const withWaitDist = buildResultsQueryPrompt("Show percentiles", queryModel, { ...queryResults, waitDist: { queues: [{ name: "Test", p50: 5 }] } });
+      const engineWaitDist = { "Triage Queue": { n: 45, mean: 8.2, p50: 6.1, p90: 15.3, p95: 18.7, p99: 22.4 } };
+      const withWaitDist = buildResultsQueryPrompt("Show percentiles", queryModel, { ...queryResults, waitDist: engineWaitDist });
       const parsedWd = JSON.parse(withWaitDist.messages[withWaitDist.messages.length - 1].content);
-      expect(parsedWd.data.waitDistAvailable).toBe(true);
+      expect(parsedWd.data.waitDist).toEqual({
+        "Triage Queue": { n: 45, mean: 8.2, p50: 6.1, p90: 15.3, p95: 18.7, p99: 22.4 },
+      });
+    });
+
+    it("includes perQueue blocking/balking data when available", () => {
+      const enginePerQueue = { "Triage Queue": { blockingCount: 3, balkCount: 1 } };
+      const prompt = buildResultsQueryPrompt("How many balked?", queryModel, { ...queryResults, perQueue: enginePerQueue });
+      const parsed = JSON.parse(prompt.messages[prompt.messages.length - 1].content);
+      expect(parsed.data.perQueue).toEqual(enginePerQueue);
     });
 
     it("keeps query prompts within token budget", () => {
