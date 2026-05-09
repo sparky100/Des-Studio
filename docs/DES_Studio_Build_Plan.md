@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.47 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.48 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -56,10 +56,11 @@ flowchart LR
   S9C --> S10["Sprint 10<br/>Routing & Pooling"]
   S10 --> S11["Sprint 11<br/>Capacity & Output"]
   S11 --> S12["Sprint 12<br/>Assembly & Recirculation"]
+  S12 --> S13["Sprint 13<br/>AI Building"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef future fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
-  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12 done;
+  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13 done;
 ```
 
 ### Roadmap Snapshot
@@ -70,11 +71,12 @@ flowchart LR
 | AI results analysis | ✅ Complete | Read-only AI Insights via Supabase Edge Function proxy; run labels and history exports implemented. |
 | Platform foundation | ✅ Complete | Sprint 7B: role/settings persistence and TypeScript tooling/contracts. |
 | Dynamic modelling | ✅ Complete | Sprint 7: time-varying arrival rates and resource capacity schedules. |
-| AI model creation | ✅ Complete | Sprint 8A: provider-neutral LLM routing. Sprint 8: natural-language model authoring. |
+| AI model creation | ✅ Complete | Sprint 8A: provider-neutral LLM routing. Sprint 8: natural-language model authoring. Sprint 13: enhanced prompts, validation feedback, results-informed refinement, Suggest Model Changes. |
 | Model definition coherence | ✅ Complete | Sprint 8B: queue/customer/server/service semantics aligned. |
 | Visual authoring | ✅ Complete | Sprint 9: graph-first authoring model. Sprint 9B: UX hardening complete. |
 | Execute canvas | ✅ Complete | Sprint 9C: topology-derived live canvas, four live node components, entity token animation, configurable KPI bar, BottomPanel with Stage KPIs. |
 | Modelling expressiveness | ✅ Complete | Sprints 10–12: routing, pooling, time-series, finite queues, balking, entity batching, recirculation. Complete DES vocabulary for healthcare, logistics, and manufacturing. |
+| Template models and anonymous mode | ✅ Complete | Post-Sprint 13: 10 pre-built template models covering healthcare, logistics, manufacturing, and service industries. Anonymous/local storage mode for non-signed-in users. Template auto-run in Execute tab. |
 
 ### Key Issues and Watchpoints
 
@@ -124,6 +126,8 @@ flowchart LR
 | 1.44 | 2026-05-07 | Added Sprints 10, 11, 12 — Modelling Expressiveness backlog. Added Modelling Capability Coverage table. Updated roadmap flowchart, Roadmap Snapshot, Key Issues and Watchpoints, Forward Product Roadmap, Sprint History, Deferred Features Register, and Open Architectural Decisions. Added ADR-011 (conditional routing schema) and ADR-012 (recirculation/batching design). Added Sprint 9B documentation update prompt. |
 | 1.45 | 2026-05-07 | Added Sprint 9C — Execute Canvas Live Flow View. Sprint 9B marked complete. Updated flowchart, Roadmap Snapshot, Key Issues, Forward Product Roadmap, Sprint History, and Deferred Features Register. Removed Execute UX from deferred list. |
 | 1.46 | 2026-05-08 | Sprint 12 complete — BATCH/UNBATCH macros, loop guard, Entity.loopCount, Visual Designer back-edges. 541 tests across 60 files. Updated flowchart, Roadmap Snapshot, Sprint History, Modelling Capability Coverage, Open Architectural Decisions (ADR-012 accepted). |
+| 1.47 | 2026-05-08 | Sprint 13 complete — AI Model Building Enhancement. 7-macro prompts, validation feedback loop, results-informed refinement, Suggest Model Changes button. 543 tests. |
+| 1.48 | 2026-05-09 | Post-Sprint 13 features: template gallery (10 pre-built models), anonymous/local storage mode, template auto-run in Execute tab. Updated user guide to reflect all sprints. |
 
 ---
 
@@ -152,6 +156,7 @@ flowchart LR
 | Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Capacity & Output. | 523 (523) | N/A | Success | Finite queue capacity, balking (probability + condition), overflow routing, per-queue blockingCount/balkCount, Visual Designer overflow edges. |
 | Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation. | 541 (541) | 1.48% | Success | BATCH/UNBATCH macros, loop guard, Entity.loopCount, Visual Designer back-edges, ADR-012 accepted. |
 | Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement. | 543 (543) | N/A | Success | 7-macro prompts update, validation feedback loop, results-informed refinement, Suggest Model Changes button. |
+| Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery. | 543 (543) | N/A | Success | 10 pre-built template models, localStorage backend, template gallery tab, templates guide. |
 
 ---
 
@@ -175,6 +180,7 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 11 | Modelling Expressiveness — Capacity & Output | Finite queues; balking; waiting time distributions |
 | Sprint 12 | Modelling Expressiveness — Assembly & Recirculation | Entity batching; rework loops via controlled back-edges |
 | Sprint 13 | AI Model Building Enhancement | 7-macro prompts, validation feedback loop, results-informed refinement, Suggest Model Changes |
+| Post-13 | Templates & Anonymous Mode | 10 pre-built templates; localStorage backend for non-signed-in users; template gallery tab |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
@@ -298,11 +304,11 @@ Show me the diff for each document before writing it.
 
 ---
 
-## Sprint 9C — Execute Canvas: Live Flow View *(current)*
+## Sprint 9C — Execute Canvas: Live Flow View *(complete)*
 
 **Goal:** Replace the current flat server-card / queue-lane Execute view with a topology-derived live canvas that mirrors the model's flow structure. The canvas reuses `@xyflow/react` and `model_json.graph` layout metadata already established by the Visual Designer, rendering live simulation state as overlays on the same node shapes the modeller knows from authoring.
 
-**Status:** 🔄 In progress | **Started:** 2026-05-07 | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-07 | **Completed:** 2026-05-08
 **Prerequisite:** Sprint 9B complete.
 
 **Architectural constraint:** This sprint is UI-only. No engine changes. The canvas reads engine output (entity states, queue depths, server statuses, step log) from the existing results/state objects — it does not change how that data is produced. The Visual Designer canvas node components are not modified — new execute-mode node components are created alongside them.
@@ -687,7 +693,7 @@ Show me the diff for each document before writing it.
 ### Sprint 9C Completion Gate
 
 ```bash
-npm test -- --run                       # Zero failures
+npm test -- --run                       # 464 tests — zero failures
 npm test -- ui                          # ExecuteCanvas, node component, bottom panel tests pass
 npm test -- execute-panel               # Existing execute panel tests still pass
 npm run build                           # Succeeds
@@ -711,7 +717,7 @@ npm run build                           # Succeeds
 
 **Goal:** Deliver the three highest-priority modelling capability gaps — conditional/probabilistic entity routing, multi-server resource pooling, and time-series output.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-08 | **Completed:** 2026-05-08
 **Prerequisite:** Sprint 9C exit gate passed.
 
 > **Sequencing note:** Conditional routing is the keystone. Finite queues (Sprint 11) require it — a blocked entity must be routed somewhere. Build routing before capacity constraints.
@@ -724,16 +730,16 @@ npm run build                           # Succeeds
 
 Recommendation: Option A for Sprint 10. Option B is future syntactic sugar over the same mechanism.
 
-| Feature | Audit Status | Action |
-|---|---|---|
-| F10.1 — Conditional routing via RELEASE routing table | ❌ | Extend RELEASE macro; extend B-Event schedule row schema and UI |
-| F10.2 — Probabilistic routing (stochastic branch) | ❌ | Add `probabilisticRouting` to RELEASE schedule rows; sample using seeded RNG |
-| F10.3 — Multi-server resource pooling (capacity > 1) | ❌ | Extend resource state model; extend SEIZE/RELEASE; extend resource editor |
-| F10.4 — Time-series collection (opt-in) | ❌ | Add `collectTimeSeries` flag to `buildEngine()`; snapshot queue/resource state at each Phase A |
-| F10.5 — Time-series charts in results panel | ❌ | Charts tab in Execute panel; queue length over time; resource utilisation over time |
-| F10.6 — Waiting time distribution at Sink | ❌ | Record per-entity wait at SEIZE; histogram + p50/p90/p95/p99 per queue |
-| F10.7 — Visual Designer: multiple outgoing edges from Activity | ❌ | Relax single-edge rule when routing table present; show conditions on edges |
-| F10.8 — Documentation update | ❌ | Update `addition1_entity_model.md`, CLAUDE.md, Build Plan, new ADR-011 file |
+| Feature | Status | Description |
+|---|---|---|---|
+| F10.1 — Conditional routing via RELEASE routing table | ✅ | Extend RELEASE macro with routing table; condition evaluation in order; first-match-wins; fallback defaultQueueName. |
+| F10.2 — Probabilistic routing (stochastic branch) | ✅ | probabilisticRouting with weighted branch selection using seeded RNG; sum-to-1 validation. |
+| F10.3 — Multi-server resource pooling (capacity > 1) | ✅ | idleCount/busyCount state model; SEIZE precondition: idleCount >= 1; capacity preserved at 1 for existing models. |
+| F10.4 — Time-series collection (opt-in) | ✅ | collectTimeSeries flag in buildEngine(); snapshots queue length + resource utilisation at each Phase A. |
+| F10.5 — Time-series charts in results panel | ✅ | Charts tab in Execute BottomPanel; MiniLineChart per queue/resource. |
+| F10.6 — Waiting time distribution at Sink | ✅ | WaitDist histogram per queue with p50/p90/p95/p99 markers. |
+| F10.7 — Visual Designer: multiple outgoing edges from Activity | ✅ | Relaxed single-edge rule; labelled conditional/probabilistic routing edges. |
+| F10.8 — Documentation update | ✅ | Updated addition1_entity_model.md, AGENTS.md, Build Plan; ADR-011 accepted. |
 
 ### Sprint 10 Planning Prompt *(run in claude.ai)*
 
@@ -1079,17 +1085,17 @@ npm run build                           # Succeeds
 
 **Goal:** Add finite queue capacity, balking, and overflow routing. These are natural extensions of conditional routing (which must be in place first) and complete the practical queueing model patterns for healthcare and logistics work.
 
-**Status:** ⬜ Not started | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-08 | **Completed:** 2026-05-08
 **Prerequisite:** Sprint 10 exit gate passed.
 
-| Feature | Audit Status | Action |
+| Feature | Status | Description |
 |---|---|---|
-| F11.1 — Finite queue capacity | ❌ | Add `capacity` to Queue; check at ARRIVE; route on overflow |
-| F11.2 — Balking (probabilistic / condition-based joining) | ❌ | `balkCondition` or `balkProbability` on Source; entity may decline to join queue |
-| F11.3 — Overflow routing | ❌ | Extend ARRIVE to route overflow/balking entity using Sprint 10 routing; reuses `overflowDestination` field on Queue |
-| F11.4 — Queue capacity metrics | ❌ | Track `blockingCount` and `balkCount` per queue in results summary |
-| F11.5 — Visual Designer: capacity and overflow on Queue nodes | ❌ | Capacity input; overflow destination picker in Queue inspector |
-| F11.6 — Documentation update | ❌ | Update `addition1_entity_model.md`, CLAUDE.md, Build Plan |
+| F11.1 — Finite queue capacity | ✅ | `capacity` field on Queue (integer >= 1, default unlimited); ARRIVE enforces limit. |
+| F11.2 — Balking (probabilistic / condition-based joining) | ✅ | balkCondition (predicate) + balkProbability (0–1 float) on arrival B-Events. |
+| F11.3 — Overflow routing | ✅ | OverflowDestination field on Queue; reuses Sprint 10 routing infrastructure. |
+| F11.4 — Queue capacity metrics | ✅ | blockingCount + balkCount per queue tracked in results summary. |
+| F11.5 — Visual Designer: capacity and overflow on Queue nodes | ✅ | Capacity input, overflow destination picker in Queue inspector. |
+| F11.6 — Documentation update | ✅ | Updated addition1_entity_model.md, AGENTS.md, Build Plan. |
 
 ### Sprint 11 Planning Prompt *(run in claude.ai)*
 
@@ -1133,7 +1139,7 @@ Definition of done:
 ### Sprint 11 Completion Gate
 
 ```bash
-npm test -- --run                       # Zero failures — M/M/1 benchmark unchanged
+npm test -- --run                       # 523 tests — zero failures
 npm test -- macros                      # Finite capacity and balking tests pass
 npm test -- validation                  # Queue capacity validation tests pass
 npm test -- ui                          # Queue capacity UI tests pass
@@ -1273,6 +1279,23 @@ npm test -- model-builder-prompts prompts                   # 16 passed
 npm test -- --run                                           # 543 passed
 npm run build                                               # Succeeds
 ```
+
+---
+
+## Post-Sprint 13 — Templates, Anonymous Mode, and Template Gallery
+
+**Goal:** Add pre-built template models, anonymous/local storage mode, and a template gallery in the Model Library.
+
+**Status:** ✅ Complete | **Started:** 2026-05-08 | **Completed:** 2026-05-09
+
+| Feature | Status | Description |
+|---|---|---|
+| T1 — Template definitions (10 models) | ✅ | M/M/1, Call Center, ER Triage, Fast Food, Factory Assembly, Airport Security, Construction Logistics, Data Center, Outpatient Clinic, Warehouse Picking. |
+| T2 — Template gallery UI | ✅ | Templates tab in Model Library alongside My Models and Public Library. |
+| T3 — Template auto-run | ✅ | Opening a template creates a private model and opens Execute tab with auto-run flag. |
+| T4 — Anonymous/local storage mode | ✅ | localStorage CRUD backend (`src/db/local.js`); local_ prefix for model IDs; works without Supabase session. |
+| T5 — Template validation tests | ✅ | All 10 templates pass model validation; ER Triage priority queue discipline tested. |
+| T6 — User guide update | ✅ | DES_Studio_User_Guide.md updated to cover all features across Sprints 1–13. |
 
 ---
 
