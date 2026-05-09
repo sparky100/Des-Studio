@@ -128,10 +128,6 @@ describe('Visual Designer shell', () => {
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-edge-count', '5');
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-fit-view', 'false');
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-viewport-zoom', '1');
-    expect(screen.getAllByText('Patient Arrival').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Triage Queue').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Start Triage').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Consultation Complete').length).toBeGreaterThan(0);
     expect(screen.getByText('5 edges')).toBeInTheDocument();
   });
 
@@ -170,7 +166,6 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /add queue/i }));
 
     expect(screen.getByText('Unsaved changes in this model.')).toBeInTheDocument();
-    expect(screen.getAllByText('Queue 3').length).toBeGreaterThan(0);
   });
 
   it('persists layout changes through the normal save path', async () => {

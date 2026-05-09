@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
-import { Btn, Empty, SH, Tag } from "../shared/components.jsx";
+import { Btn, SH, Tag } from "../shared/components.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
@@ -22,55 +22,6 @@ const NODE_COLOR = {
   activity: C.purple,
   sink: C.red,
 };
-
-function NodeTile({ node }) {
-  const color = NODE_COLOR[node.type] || C.accent;
-  return (
-    <div style={{
-      background: C.bg,
-      border: `1px solid ${color}55`,
-      borderLeft: `3px solid ${color}`,
-      borderRadius: 6,
-      padding: 12,
-      display: "flex",
-      flexDirection: "column",
-      gap: 8,
-      minHeight: 92,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <Tag label={node.type} color={color} />
-        <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>{node.label}</div>
-      </div>
-      <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.5 }}>{node.sublabel}</div>
-      <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10 }}>
-        x {node.x} · y {node.y}
-      </div>
-    </div>
-  );
-}
-
-function EdgeRow({ edge, nodeLabels }) {
-  return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "minmax(120px, 1fr) auto minmax(120px, 1fr) auto",
-      gap: 10,
-      alignItems: "center",
-      background: C.bg,
-      border: `1px solid ${C.border}`,
-      borderRadius: 6,
-      padding: "8px 10px",
-      color: C.text,
-      fontFamily: FONT,
-      fontSize: 11,
-    }}>
-      <span>{nodeLabels.get(edge.from) || edge.from}</span>
-      <span style={{ color: C.muted }}>to</span>
-      <span>{nodeLabels.get(edge.to) || edge.to}</span>
-      <Tag label={edge.source || "derived"} color={C.muted} />
-    </div>
-  );
-}
 
 function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
   return (
@@ -282,10 +233,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
     });
     return ids;
   }, [visualIssues, modelValidation, graph]);
-  const nodeLabels = useMemo(
-    () => new Map((graph.nodes || []).map(node => [node.id, node.label || node.id])),
-    [graph.nodes]
-  );
   const counts = (graph.nodes || []).reduce((acc, node) => ({
     ...acc,
     [node.type]: (acc[node.type] || 0) + 1,
@@ -521,21 +468,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
         />
       </div>
 
-      <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>NODES</div>
-        {!graph.nodes.length && <Empty icon="Nodes" msg="No visual nodes can be derived from this model yet." />}
-        {!!graph.nodes.length && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-            {graph.nodes.map(node => <NodeTile key={node.id} node={node} />)}
-          </div>
-        )}
-      </section>
-
-      <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>DERIVED CONNECTIONS</div>
-        {!graph.edges.length && <Empty icon="Edges" msg="No visual connections can be derived from this model yet." />}
-        {graph.edges.map(edge => <EdgeRow key={edge.id} edge={edge} nodeLabels={nodeLabels} />)}
-      </section>
 
       {pendingDelete && (
         <DeleteNodeDialog

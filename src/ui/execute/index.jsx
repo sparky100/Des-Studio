@@ -41,8 +41,13 @@ function makeBatchResult(replicationPayloads, aggregateStats, maxTime, warmupPer
   const reneged = summaries.reduce((sum, summary) => sum + (summary.reneged || 0), 0);
   const finalTime = Math.max(...replicationPayloads.map(payload => payload.result?.finalTime || 0), 0);
 
+  // Use the last completed replication's time series and wait dist for Charts tab
+  const lastResult = replicationPayloads.filter(Boolean).pop()?.result;
+
   return {
     snap: { clock: finalTime },
+    timeSeries: lastResult?.timeSeries,
+    waitDist: lastResult?.waitDist,
     summary: {
       total,
       served,
