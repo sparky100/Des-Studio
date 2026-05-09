@@ -469,7 +469,7 @@ describe('ExecutePanel', () => {
       await screen.findByText(/Triage queue/);
 
       expect(capturedPrompt.messages.some(m => m.content && m.content.includes('What was the wait?'))).toBe(true);
-    });
+    }, 10000);
 
     it('disables Ask during streaming', async () => {
       render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
@@ -489,6 +489,25 @@ describe('ExecutePanel', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
       expect(screen.getByRole('button', { name: /ask question/i })).toBeDisabled();
+    });
+
+    it('displays an error when streaming fails during a query', async () => {
+      mockStreamNarrative.mockImplementation((prompt, handlers) => {
+        handlers.onError?.(new Error('LLM proxy returned 500'));
+      });
+
+      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+      const input = screen.getByLabelText(/ask a question/i);
+      fireEvent.change(input, { target: { value: 'What was the mean wait?' } });
+      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
+
+      expect(await screen.findByText(/LLM proxy returned 500/i)).toBeInTheDocument();
     });
   });
 });

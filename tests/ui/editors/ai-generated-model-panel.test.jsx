@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import React from "react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AiGeneratedModelPanel } from "../../../src/ui/editors/AiGeneratedModelPanel.jsx";
 
@@ -295,6 +296,128 @@ describe("AiGeneratedModelPanel", () => {
       scheduledTime: "9999",
       effect: "COMPLETE()",
     }));
+  });
+
+  describe("voice input (F14.5)", () => {
+    let mockSpeechRecognition;
+    let mockRecognitionInstance;
+
+    beforeEach(() => {
+      mockRecognitionInstance = {
+        start: vi.fn(),
+        stop: vi.fn(),
+        continuous: false,
+        interimResults: false,
+        lang: "",
+        onresult: null,
+        onend: null,
+        onerror: null,
+      };
+      mockSpeechRecognition = vi.fn(() => mockRecognitionInstance);
+    });
+
+    it("renders a microphone button with correct aria-label", () => {
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      expect(screen.getByRole("button", { name: /start voice input/i })).toBeInTheDocument();
+    });
+
+    it("shows error message when SpeechRecognition is unavailable", () => {
+      const origSpeech = window.SpeechRecognition;
+      const origWebkit = window.webkitSpeechRecognition;
+      delete window.SpeechRecognition;
+      delete window.webkitSpeechRecognition;
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /start voice input/i }));
+      expect(screen.getByText(/voice input is not supported/i)).toBeInTheDocument();
+
+      window.SpeechRecognition = origSpeech;
+      window.webkitSpeechRecognition = origWebkit;
+    });
+
+    it("starts speech recognition and toggles to stop button", () => {
+      window.SpeechRecognition = mockSpeechRecognition;
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /start voice input/i }));
+      expect(mockRecognitionInstance.start).toHaveBeenCalledOnce();
+      expect(screen.getByRole("button", { name: /stop voice input/i })).toBeInTheDocument();
+      expect(screen.getByText(/■ stop/i)).toBeInTheDocument();
+    });
+
+    it("stops recognition and toggles back to mic when clicked again", () => {
+      window.SpeechRecognition = mockSpeechRecognition;
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /start voice input/i }));
+      expect(mockRecognitionInstance.start).toHaveBeenCalledOnce();
+
+      fireEvent.click(screen.getByRole("button", { name: /stop voice input/i }));
+      expect(mockRecognitionInstance.stop).toHaveBeenCalledOnce();
+      expect(screen.getByRole("button", { name: /start voice input/i })).toBeInTheDocument();
+    });
+
+    it("configures the onresult callback during start", () => {
+      window.SpeechRecognition = mockSpeechRecognition;
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /start voice input/i }));
+
+      expect(typeof mockRecognitionInstance.onresult).toBe("function");
+      expect(typeof mockRecognitionInstance.onend).toBe("function");
+      expect(typeof mockRecognitionInstance.onerror).toBe("function");
+    });
+
+    it("stops recognition and shows error on onerror callback", async () => {
+      window.SpeechRecognition = mockSpeechRecognition;
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /start voice input/i }));
+      await act(() => { mockRecognitionInstance.onerror(); });
+
+      expect(mockRecognitionInstance.stop).not.toHaveBeenCalled();
+      expect(screen.getByText(/voice input was interrupted/i)).toBeInTheDocument();
+    });
+
+    it("stops recognition on onend callback", async () => {
+      window.SpeechRecognition = mockSpeechRecognition;
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /start voice input/i }));
+      await act(() => { mockRecognitionInstance.onend(); });
+
+      expect(screen.getByRole("button", { name: /start voice input/i })).toBeInTheDocument();
+    });
+
+    it("disables mic button when loading", () => {
+      window.SpeechRecognition = mockSpeechRecognition;
+
+      mockCallModelBuilder.mockImplementation(() => new Promise(() => {}));
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Build something" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      expect(screen.getByRole("button", { name: /start voice input/i })).toBeDisabled();
+    });
+
+    it("cleans up recognition on unmount", () => {
+      window.SpeechRecognition = mockSpeechRecognition;
+
+      const { unmount } = render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+
+      fireEvent.click(screen.getByRole("button", { name: /start voice input/i }));
+      expect(mockRecognitionInstance.start).toHaveBeenCalledOnce();
+
+      unmount();
+      expect(mockRecognitionInstance.stop).toHaveBeenCalledOnce();
+    });
   });
 
   it("retries the model builder when validation finds errors, and shows fixed proposal", async () => {

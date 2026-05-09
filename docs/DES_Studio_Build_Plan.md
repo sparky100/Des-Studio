@@ -165,7 +165,7 @@ flowchart LR
 | Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation. | 541 (541) | 1.48% | Success | BATCH/UNBATCH macros, loop guard, Entity.loopCount, Visual Designer back-edges, ADR-012 accepted. |
 | Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement. | 543 (543) | N/A | Success | 7-macro prompts update, validation feedback loop, results-informed refinement, Suggest Model Changes button. |
 | Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery. | 543 (543) | N/A | Success | 10 pre-built template models, localStorage backend, template gallery tab, templates guide. |
-| Sprint 14 | 🔄 In progress | — | AI Natural Language Results Queries. | — | — | — | F14.5 voice input already delivered in prior session. Remaining: query prompt builder, UI input, answer rendering, follow-ups, tests. |
+| Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries. | 58 Sprint 14 tests | N/A | Success | F14.1–F14.6 all complete. Voice input, results query prompt, AI Assistant query input/answer rendering, follow-ups, and 58 Sprint 14 tests. |
 
 ---
 
@@ -173,28 +173,29 @@ flowchart LR
 
 ADR-007 establishes DES Studio's model-authoring architecture: one canonical `model_json`, three authoring modes.
 
-| Sprint | Product focus | Authoring mode / capability impact |
-|---|---|---|
-| Sprint 6 | LLM Integration & Results Analysis | Read-only AI interpretation; does not modify models |
-| Sprint 7A | Platform Foundation: Roles, Settings & TypeScript | Architecture decisions |
-| Sprint 7B | Platform Foundation Implementation | Role/settings/TypeScript foundation |
-| Sprint 7 | Dynamic Distributions & Time-Varying Resources | Extends canonical model schema |
-| Sprint 8A | LLM Provider Architecture Preflight | Provider-neutral server-side LLM routing |
-| Sprint 8 | AI Generated Model Authoring | Second authoring mode |
-| Sprint 8B | Model Definition Coherence | Semantic alignment across all authoring modes |
-| Sprint 9 | Visual Designer Authoring | Third authoring mode |
-| Sprint 9B | Visual Designer UX Hardening | Polish of third authoring mode — complete |
-| Sprint 9C | Execute Canvas — Live Flow View | Topology-derived execute canvas; replaces flat server/queue lists |
-| Sprint 10 | Modelling Expressiveness — Routing & Pooling | Conditional routing; probabilistic routing; multi-server pooling; time-series output |
-| Sprint 11 | Modelling Expressiveness — Capacity & Output | Finite queues; balking; waiting time distributions |
-| Sprint 12 | Modelling Expressiveness — Assembly & Recirculation | Entity batching; rework loops via controlled back-edges |
-| Sprint 13 | AI Model Building Enhancement | 7-macro prompts, validation feedback loop, results-informed refinement, Suggest Model Changes |
-| Post-13 | Templates & Anonymous Mode | 10 pre-built templates; localStorage backend for non-signed-in users; template gallery tab |
-| Sprint 14 | AI Natural Language Results Queries | Free-form natural language queries against simulation results via the AI Assistant |
-| Sprint 15 | Shareable Results Dashboard | Public share links for run results with live KPI widgets |
-| Sprint 16 | Parametric Sweep & Scenario Comparison | Multi-parameter exploration with side-by-side scenario comparison |
-| Sprint 17 | Statistical Output Analyzer | Automated distribution fitting, hypothesis tests, ranking & selection |
-| Sprint 18 | Model Import/Export & Community Gallery | Share and discover models in a community gallery |
+| Sprint    | Product focus                                       | Authoring mode / capability impact                                                            |
+| --------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Sprint 6  | LLM Integration & Results Analysis                  | Read-only AI interpretation; does not modify models                                           |
+| Sprint 7A | Platform Foundation: Roles, Settings & TypeScript   | Architecture decisions                                                                        |
+| Sprint 7B | Platform Foundation Implementation                  | Role/settings/TypeScript foundation                                                           |
+| Sprint 7  | Dynamic Distributions & Time-Varying Resources      | Extends canonical model schema                                                                |
+| Sprint 8A | LLM Provider Architecture Preflight                 | Provider-neutral server-side LLM routing                                                      |
+| Sprint 8  | AI Generated Model Authoring                        | Second authoring mode                                                                         |
+| Sprint 8B | Model Definition Coherence                          | Semantic alignment across all authoring modes                                                 |
+| Sprint 9  | Visual Designer Authoring                           | Third authoring mode                                                                          |
+| Sprint 9B | Visual Designer UX Hardening                        | Polish of third authoring mode — complete                                                     |
+| Sprint 9C | Execute Canvas — Live Flow View                     | Topology-derived execute canvas; replaces flat server/queue lists                             |
+| Sprint 10 | Modelling Expressiveness — Routing & Pooling        | Conditional routing; probabilistic routing; multi-server pooling; time-series output          |
+| Sprint 11 | Modelling Expressiveness — Capacity & Output        | Finite queues; balking; waiting time distributions                                            |
+| Sprint 12 | Modelling Expressiveness — Assembly & Recirculation | Entity batching; rework loops via controlled back-edges                                       |
+| Sprint 13 | AI Model Building Enhancement                       | 7-macro prompts, validation feedback loop, results-informed refinement, Suggest Model Changes |
+| Post-13   | Templates & Anonymous Mode                          | 10 pre-built templates; localStorage backend for non-signed-in users; template gallery tab    |
+| Sprint 14 | AI Natural Language Results Queries                 | Free-form natural language queries against simulation results via the AI Assistant            |
+| Sprint 15 | Shareable Results Dashboard                         | Public share links for run results with live KPI widgets                                      |
+| Sprint 15 | Shareable Results Dashboard                         | Public share links for run results with live KPI widgets                                      |
+| Sprint 16 | Parametric Sweep & Scenario Comparison              | Multi-parameter exploration with side-by-side scenario comparison                             |
+| Sprint 17 | Statistical Output Analyzer                         | Automated distribution fitting, hypothesis tests, ranking & selection                         |
+| Sprint 18 | Model Import/Export & Community Gallery             | Share and discover models in a community gallery                                              |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 

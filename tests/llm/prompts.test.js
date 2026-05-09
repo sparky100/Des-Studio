@@ -219,5 +219,21 @@ describe("LLM prompt builders", () => {
       const prompt = buildResultsQueryPrompt("What is the throughput?", queryModel, queryResults);
       expect(promptWordEstimate(prompt)).toBeLessThan(2000);
     });
+
+    it("handles empty question gracefully", () => {
+      const prompt = buildResultsQueryPrompt("", queryModel, queryResults);
+      const parsed = JSON.parse(prompt.messages[prompt.messages.length - 1].content);
+      expect(parsed.question).toBe("");
+      expect(parsed.data.kpis.avgWait).toBe(8.2);
+      expect(prompt.kind).toBe("query");
+    });
+
+    it("handles missing optional results data without error", () => {
+      const minimalResults = { summary: { total: 0, served: 0, reneged: 0, avgWait: 0, avgSvc: 0, avgSojourn: 0 } };
+      const prompt = buildResultsQueryPrompt("What happened?", queryModel, minimalResults);
+      const parsed = JSON.parse(prompt.messages[prompt.messages.length - 1].content);
+      expect(parsed.data.kpis.avgWait).toBe(0);
+      expect(parsed.data.timeSeriesAvailable).toBe(false);
+    });
   });
 });

@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-09 | Reflects: Sprint 13 AI Model Building Enhancement + Post-Sprint 13 Templates complete. Current: Sprint 14 — AI Natural Language Results Queries*
+*Last updated: 2026-05-09 | Reflects: Sprint 14 — AI Natural Language Results Queries complete. Current: Sprint 15 — Shareable Results Dashboard*
 
 ---
 
@@ -1312,8 +1312,8 @@ UI / UX
 | Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation | 541 passing | 1.48% error |
 | Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement | 543 passing | N/A |
 | Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
-| Sprint 14 | 🔄 In progress | — | AI Natural Language Results Queries | — | — |
-| Sprint 15 | ⬜ Not started | — | Shareable Results Dashboard | — | — |
+| Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
+| Sprint 15 | 🔄 In progress | — | Shareable Results Dashboard | — | — |
 | Sprint 16 | ⬜ Not started | — | Parametric Sweep & Scenario Comparison | — | — |
 | Sprint 17 | ⬜ Not started | — | Statistical Output Analyzer | — | — |
 | Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
@@ -1322,24 +1322,32 @@ UI / UX
 
 ## 21. Current Sprint
 
-**Sprint 14 — AI Natural Language Results Queries**
+**Sprint 15 — Shareable Results Dashboard**
 
-Goal: Enable free-form natural language queries against simulation results via the AI Assistant. Users ask questions like "Which queue had the longest wait?" or "What was the average utilisation of Clerk?" and the AI answers directly from the results object — no need to navigate tabs.
+Goal: Enable users to create public share links for simulation run results with live KPI widgets. Users generate a shareable URL that displays key metrics (throughput, mean wait, utilisation, queue depths) in a read-only dashboard view — no login required for the viewer.
 
-**Prerequisites:** All modelling vocabulary sprints (10–12), AI model building (13), templates (Post-13) complete. See `docs/DES_Studio_Build_Plan.md` for full feature prompts.
+**Prerequisites:** Sprint 14 complete. All Sprint 14 AI Natural Language Results Queries features completed 2026-05-09.
 
-### Sprint 14 Features
+### Sprint 15 Features
 
 | Feature | Status | Description |
 |---|---|---|
-| F14.1 — Results query prompt builder | ⬜ | `buildResultsQueryPrompt(question, model, results)` transforms a natural language question + structured KPI data into an LLM prompt. Must include only the relevant subset of results data to fit token limits. |
-| F14.2 — Query input in AI Assistant panel | ⬜ | Text input at bottom of AI Assistant panel for free-form questions. Sits below the existing Explain/Compare/Sensitivity/Suggest buttons. |
-| F14.3 — Context-aware answer rendering | ⬜ | AI response rendered as plain text in the assistant panel. Answers cite specific KPI values (e.g. "The Triage Queue had mean wait of 8.2 minutes"). |
-| F14.4 — Follow-up question support | ⬜ | Conversation history preserved within the query session so users can ask "What about the second queue?" as a follow-up. |
-| F14.5 — Voice input for AI model building | ✅ | Microphone button in "Use AI" panel input area using browser Web Speech API. Mic toggles speech recognition; transcribed text populates the draft. Graceful fallback for unsupported browsers. |
-| F14.6 — Documentation & tests | ⬜ | Prompt tests, UI component tests, model integration test. |
+| F15.1 — Share link generation | ⬜ | Generate a signed/unique share URL from a completed run. Store share configuration (pinned KPIs, visible widgets) in Supabase `share_links` table or results metadata. |
+| F15.2 — Public dashboard view | ⬜ | Read-only dashboard page rendering key results KPIs: throughput, mean wait, utilisation, queue depth chart, waiting time percentiles. No auth wall. |
+| F15.3 — KPI widget picker | ⬜ | Before generating share link, user selects which KPIs/widgets to include: summary stats, per-queue metrics, per-resource metrics, time-series chart, wait distribution. |
+| F15.4 — Share link management | ⬜ | View active share links for a model/run. Revoke (invalidate) a share link. List of shared dashboards in run history. |
+| F15.5 — Copy-to-clipboard + QR code | ⬜ | Copy share URL to clipboard. Generate QR code for mobile sharing. |
+| F15.6 — Documentation & tests | ⬜ | Tests for share link CRUD, dashboard rendering, widget picker. Documents updated. |
 
 ### Recently Completed
+
+**Sprint 14 — AI Natural Language Results Queries** (2026-05-09):
+- `buildResultsQueryPrompt()` transforms free-form natural language questions + structured KPI data into LLM prompts with conversation history for follow-ups
+- Query text input in AI Assistant panel with Enter-to-submit, disabled before results available
+- Context-aware answer rendering with "YOU" / "AI" role headers and cited KPI values
+- Follow-up question support via conversationHistory state array with Clear button
+- Voice input for AI model building via browser Web Speech API (mic/stop toggle, real-time transcription, cleanup on unmount, graceful fallback)
+- 58 Sprint 14 tests: 8 prompt tests, 8 UI component tests (7 query + 1 error), 7 voice input tests, 1 query-kind API client test, plus edge case tests for empty question and missing results
 
 **Flow-first AI reasoning** (2026-05-09):
 - `buildModelBuilderSystemPrompt()` now instructs AI to describe entity flow in a `flowDescription` field *before* proposing a model
@@ -1362,15 +1370,15 @@ Goal: Enable free-form natural language queries against simulation results via t
 - Anonymous/local storage mode (localStorage CRUD backend)
 - Template auto-run on open
 
-### Sprint 14 Completion Gate
+### Sprint 15 Completion Gate
 
 ```bash
 npm test -- llm prompts execute-panel ai-generated-model-panel
 npm test -- --run
 npm run build
-# Manual: run an M/M/1 model, ask "What was the mean waiting time?" — correct answer displayed
-# Manual: ask follow-up "Which queue had the longest wait?" — correct answer
-# Manual: ask before any run — informative message about no results available
+# Manual: run a model, generate a share link, open in incognito — dashboard renders correctly
+# Manual: revoke a share link, confirm the dashboard is no longer accessible
+# Manual: share link with selected widgets only shows those KPIs
 ```
 
 ---

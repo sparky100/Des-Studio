@@ -92,4 +92,37 @@ describe("LLM API client", () => {
     expect(onError).toHaveBeenCalledOnce();
     expect(onError.mock.calls[0][0].message).toMatch(/incomplete or invalid model JSON/i);
   });
+
+  it("sends the query kind through the provider-neutral contract", async () => {
+    const onToken = vi.fn();
+    const onComplete = vi.fn();
+    const history = [
+      { role: "user", content: "What was the mean wait?" },
+      { role: "assistant", content: "8.2 minutes." },
+    ];
+
+    await streamNarrative(
+      {
+        kind: "query",
+        messages: [
+          { role: "system", content: "You are a results analyst." },
+          { role: "user", content: JSON.stringify({ question: "What about the second queue?", data: {} }) },
+        ],
+        max_tokens: 600,
+      },
+      { onToken, onComplete }
+    );
+
+    const [, options] = global.fetch.mock.calls[0];
+    const body = JSON.parse(options.body);
+    expect(body).toEqual(expect.objectContaining({
+      version: "2026-05-05",
+      kind: "query",
+      maxTokens: 600,
+      stream: true,
+      responseFormat: "text",
+    }));
+    expect(onToken).toHaveBeenCalledWith("hello");
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
 });
