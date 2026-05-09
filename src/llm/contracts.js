@@ -6,6 +6,7 @@ export const LLM_TASKS = Object.freeze({
   SENSITIVITY: "sensitivity",
   MODEL_BUILDER: "model_builder",
   SUGGESTION: "suggestion",
+  QUERY: "query",
 });
 
 export const LLM_RESPONSE_FORMATS = Object.freeze({

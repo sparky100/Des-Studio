@@ -3,6 +3,7 @@ import {
   buildCiResults,
   buildComparisonPrompt,
   buildNarrativePrompt,
+  buildResultsQueryPrompt,
   buildSensitivityPrompt,
   buildSuggestionPrompt,
   promptWordEstimate,
@@ -81,5 +82,75 @@ describe("LLM prompt builders", () => {
     expect(payload.kpis.queues[0].meanWait).toBe(8.2);
     expect(payload.kpis.avgWait).toBe(8.2);
     expect(payload.experiment.replications).toBe(3);
+  });
+
+  describe("buildResultsQueryPrompt", () => {
+    const queryModel = {
+      name: "Clinic",
+      description: "A small clinic.",
+      entityTypes: [{ name: "Nurse", role: "server" }, { name: "Patient", role: "customer" }],
+      queues: [{ name: "Triage Queue", discipline: "FIFO", customerType: "Patient" }],
+      stateVariables: [{ name: "shiftActive", initialValue: 1 }],
+    };
+
+    const queryResults = {
+      summary: { total: 50, served: 45, reneged: 5, avgWait: 8.2, avgSvc: 4.1, avgSojourn: 12.3, warmupPeriod: 10, maxSimTime: 500 },
+    };
+
+    it("builds a query prompt with kind 'query'", () => {
+      const prompt = buildResultsQueryPrompt("Which queue had the longest wait?", queryModel, queryResults);
+      expect(prompt.kind).toBe("query");
+    });
+
+    it("includes the question and KPI data in the user message", () => {
+      const prompt = buildResultsQueryPrompt("What was the utilisation of Nurse?", queryModel, queryResults);
+      const parsed = JSON.parse(prompt.messages[prompt.messages.length - 1].content);
+      expect(parsed.question).toBe("What was the utilisation of Nurse?");
+      expect(parsed.data.model.name).toBe("Clinic");
+      expect(parsed.data.kpis.avgWait).toBe(8.2);
+      expect(parsed.data.kpis.served).toBe(45);
+    });
+
+    it("includes model structure: entity types, queues, state variables", () => {
+      const prompt = buildResultsQueryPrompt("How many patients were served?", queryModel, queryResults);
+      const parsed = JSON.parse(prompt.messages[prompt.messages.length - 1].content);
+      expect(parsed.data.model.entityTypes).toHaveLength(2);
+      expect(parsed.data.model.queues[0].name).toBe("Triage Queue");
+      expect(parsed.data.model.queues[0].customerType).toBe("Patient");
+      expect(parsed.data.model.stateVariables[0].name).toBe("shiftActive");
+    });
+
+    it("includes conversation history when provided", () => {
+      const history = [
+        { role: "user", content: "What was the mean wait?" },
+        { role: "assistant", content: "The mean wait was 8.2 minutes." },
+      ];
+      const prompt = buildResultsQueryPrompt("What about the second queue?", queryModel, queryResults, history);
+      expect(prompt.messages).toHaveLength(4);
+      expect(prompt.messages[1].content).toBe("What was the mean wait?");
+      expect(prompt.messages[2].content).toBe("The mean wait was 8.2 minutes.");
+    });
+
+    it("sets a system instruction to only answer from provided data", () => {
+      const prompt = buildResultsQueryPrompt("Is the system overloaded?", queryModel, queryResults);
+      expect(prompt.messages[0].content).toMatch(/only the provided KPI data/i);
+      expect(prompt.messages[0].content).toMatch(/never invent numbers/i);
+    });
+
+    it("reports timeSeriesAvailable and waitDistAvailable flags", () => {
+      const withTimeSeries = buildResultsQueryPrompt("Show me queue trends", queryModel, { ...queryResults, timeSeries: [{ t: 0, queues: {} }] });
+      const parsedTs = JSON.parse(withTimeSeries.messages[withTimeSeries.messages.length - 1].content);
+      expect(parsedTs.data.timeSeriesAvailable).toBe(true);
+      expect(parsedTs.data.waitDistAvailable).toBe(false);
+
+      const withWaitDist = buildResultsQueryPrompt("Show percentiles", queryModel, { ...queryResults, waitDist: { queues: [{ name: "Test", p50: 5 }] } });
+      const parsedWd = JSON.parse(withWaitDist.messages[withWaitDist.messages.length - 1].content);
+      expect(parsedWd.data.waitDistAvailable).toBe(true);
+    });
+
+    it("keeps query prompts within token budget", () => {
+      const prompt = buildResultsQueryPrompt("What is the throughput?", queryModel, queryResults);
+      expect(promptWordEstimate(prompt)).toBeLessThan(2000);
+    });
   });
 });

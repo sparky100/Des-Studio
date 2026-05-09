@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-08 | Reflects: Sprint 11 Modelling Expressiveness: Capacity & Output complete*
+*Last updated: 2026-05-09 | Reflects: Sprint 13 AI Model Building Enhancement + Post-Sprint 13 Templates complete. Next: Sprint 14 — AI Natural Language Results Queries*
 
 ---
 
@@ -25,6 +25,7 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 | Database / auth | Supabase JS client | 2.45.0 | PostgreSQL backend. Auth via Supabase Auth. |
 | Test runner | Vitest | 1.6.0 | Engine layer only. Node environment. |
 | Canvas / DAG | `@xyflow/react` ^12.10.2 | — | ADR-010 governs canvas design. Lazy-loaded in two places: `VisualDesignerPanel` via `React.lazy()` in `ModelDetail.jsx` (authoring canvas); `ExecuteCanvas` via `React.lazy()` in `execute/index.jsx` (live flow view). Never import either statically. `model_json.graph` drives layout for both canvases. |
+| Animation | SVG `<animateMotion>` | — | Entity token animation on execute canvas edges. Toggle via `user_settings`. |
 
 **Do not introduce new dependencies without flagging them first.** The dependency list is intentionally minimal.
 
@@ -183,7 +184,7 @@ while (fel.length > 0 && !terminationConditionMet()) {
 
 **Full specification:** `docs/addition1_entity_model.md` — read this before any Sprint 1–3 work.
 
-### 5.1 The Five Permitted Macros
+### 5.1 The Seven Permitted Macros
 
 | Macro | Phase | Purpose |
 |---|---|---|
@@ -192,8 +193,10 @@ while (fel.length > 0 && !terminationConditionMet()) {
 | `COMPLETE` | B-Event | Releases resource, records stats, routes entity to next node |
 | `ASSIGN` | B or C | Modifies a mutable entity attribute or user-defined state variable |
 | `RENEGE` | B-Event | Removes entity from queue after patience timeout, routes to Sink |
+| `BATCH` | C-Event | Accumulates N entities per queue discipline; creates parent batch entity |
+| `UNBATCH` | B-Event | Restores children from parent.batch to target queue; parent marked done |
 
-**These five macros are the complete and closed set.** No other macros may be added without updating `docs/addition1_entity_model.md` first.
+**These seven macros are the complete and closed set.** No other macros may be added without updating `docs/addition1_entity_model.md` first.
 
 ### 5.1a Sprint 8B — Model Definition Coherence Rules
 
@@ -1330,95 +1333,112 @@ UI / UX
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight | 22 focused | N/A |
 | Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX hardening: safe deletion, connection feedback, validation checklist, palette affordances, lazy bundle split | 451 passing | N/A |
 | Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas Live Flow View: topology-derived canvas, four live node components, entity token animation, configurable KPI bar, BottomPanel with Stage KPIs, speed slider, node-filtered log | 464 passing | N/A |
-| Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness: Routing & Pooling — conditional routing, probabilistic routing, multi-server pooling (capacity > 1), time-series collection + Charts tab, wait-time histogram, Visual Designer multi-edge | 508 passing | N/A |
-| Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness: Capacity & Output — finite queue capacity, balking (probability + condition), overflow routing, per-queue metrics (blockingCount/balkCount), Visual Designer overflow edges | 523+ passing | N/A |
+| Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness: Routing & Pooling | 508 passing | N/A |
+| Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness: Capacity & Output | 523 passing | N/A |
+| Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness: Assembly & Recirculation | 541 passing | 1.48% error |
+| Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement | 543 passing | N/A |
+| Post-Sprint 13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
+| Sprint 14 | 🔄 In progress | — | AI Natural Language Results Queries | — | — |
+| Sprint 15 | ⬜ Not started | — | Shareable Results Dashboard | — | — |
+| Sprint 16 | ⬜ Not started | — | Parametric Sweep & Scenario Comparison | — | — |
+| Sprint 17 | ⬜ Not started | — | Statistical Output Analyzer | — | — |
+| Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 12 — Modelling Expressiveness: Assembly & Recirculation**
+**Sprint 14 — AI Natural Language Results Queries**
 
-Goal: Entity batching (BATCH/UNBATCH macros), controlled back-edges for rework loops, Entity.loopCount.
+Goal: Enable free-form natural language queries against simulation results via the AI Assistant. Users ask questions like "Which queue had the longest wait?" or "What was the average utilisation of Clerk?" and the AI answers directly from the results object — no need to navigate tabs.
 
-**Status:** Sprint 11 completed 2026-05-08. Sprint 12 is the active sprint.
+**Prerequisites:** All modelling vocabulary sprints (10–12), AI model building (13), templates (Post-13) complete.
 
-### Sprint 11 Completion Notes
+### Rationale
 
-Sprint 11 completed on 2026-05-08.
+From `docs/des-studio-product-next-steps.md` Phase 2: "Natural language results queries — 'Which queue had the longest wait?' answered directly from the results object — no need to navigate tabs." This is the highest-differentiation AI feature after model building. No competitor (AnyLogic, Simio, Arena) has an AI analyst that connects model → run → insight in one loop.
 
-- F11.1: Finite queue capacity — `capacity` field on Queue (already in UI, now enforced by engine). ARRIVE checks queue depth before placing entity; capacity check added before `entities.push` in ARRIVE macro.
-- F11.2: Balking — optional `balkProbability` (0–1, seeded RNG) and `balkCondition` (Predicate against `Queue.<name>.length`) on arrival B-events. Balk config shown in new BALKING section in B-event editor.
-- F11.3: Overflow routing — shared `overflowDestination` on Queue object: null = exit system; named queue = route there. Reuses Sprint 10 null-exit pattern. WHEN FULL — SEND TO dropdown in QueueEditor when capacity is set.
-- F11.4: Per-queue metrics — `results.perQueue[queueName] = { blockingCount, balkCount }` from closure-scoped `perQueueMetrics` Map in `buildEngine()`.
-- F11.5: Visual Designer — Queue inspector gets capacity input + overflow destination picker; overflow edges derived in `deriveGraphFromModel`; Queue→Queue and Queue→Sink connections allowed in `validateVisualConnection`; overflow edge deletion via `deleteVisualEdge`.
-- F11.5 (Execute canvas) — `ExecuteQueueNode` depth badge shows `depth/capacity` with red colour when at capacity.
-- F11.6: Documentation.
+### Features
 
-**Architecture rules added by Sprint 11:**
-- `capacity: null` (default) on Queue = unlimited — current ARRIVE behaviour unchanged. The capacity check is strictly additive.
-- `balkProbability` and `balkCondition` are on the B-event, not the Queue. A queue may have different balk thresholds for different arrival sources.
-- `overflowDestination: null` reuses the Sprint 10 null-exit mechanism.
+| Feature | Status | Description |
+|---|---|---|
+| F14.1 — Results query prompt builder | ⬜ | `buildResultsQueryPrompt(question, model, results)` transforms a natural language question + structured KPI data into an LLM prompt. Must include only the relevant subset of results data to fit token limits. |
+| F14.2 — Query input in AI Assistant panel | ⬜ | Text input at bottom of AI Assistant panel for free-form questions. Sits below the existing Explain/Compare/Sensitivity/Suggest buttons. |
+| F14.3 — Context-aware answer rendering | ⬜ | AI response rendered as plain text in the assistant panel. Answers cite specific KPI values (e.g. "The Triage Queue had mean wait of 8.2 minutes"). |
+| F14.4 — Follow-up question support | ⬜ | Conversation history preserved within the query session so users can ask "What about the second queue?" as a follow-up. |
+| F14.5 — Documentation & tests | ⬜ | Prompt tests, UI component tests, model integration test. |
 
-### Sprint 10 Completion Notes
+### Architecture Rules
 
-Sprint 10 completed on 2026-05-08.
+- Queries are text-only responses streamed via `streamNarrative()` — same mechanism as existing narrative/comparison/sensitivity/suggestion. No JSON response format required.
+- The LLM never receives the full results object — only a structured subset via `buildKpis()` + relevant time-series snippets. Token budget: max 600 tokens for results data.
+- Results query shares the AI Assistant panel — no new UI surface. The panel gets a collapsible query section below the analysis buttons.
+- Query history is per-session (component state) — not persisted to Supabase.
+- The existing Explain/Compare/Sensitivity/Suggest buttons are not affected.
 
-- F10.1: Conditional entity routing — `routing: [{ condition, queueName }]` + `defaultQueueName` on B-events; `evaluatePredicate` against released entity attributes; first match wins.
-- F10.2: Probabilistic routing — `probabilisticRouting: [{ probability, queueName }]`; sampled with the replication's seeded RNG; probabilities must sum to 1.0.
-- F10.3: Multi-server pooling — `count > 1` on server entity types creates N entity instances; `idle(Type).count` condition handles the pool; V19 validation added.
-- F10.4: `collectTimeSeries` flag on `buildEngine()` (default false, zero overhead); appends `{ t, byType }` after each Phase C stabilises; returned as `results.timeSeries`.
-- F10.5: Charts tab enabled in BottomPanel — SVG queue-depth and server-utilisation line charts; "Detailed output" checkbox in controls bar toggles collection.
-- F10.6: Wait-time histogram in Charts tab — 12-bin SVG bar chart from `results.waitDist[queue].values[]`; p50/p90/p95/p99 marker lines overlaid; always computed (cheap, opt-out N/A).
-- F10.7: Visual Designer edge labels now show condition text or "fallback" for routing-table edges; fallback edges rendered dashed amber.
-- F10.8: Documentation — addition1_entity_model.md V7/V17/V18/V19, CLAUDE.md, Build Plan, ADR-011.
+### Completion Gate
 
-**Architecture rules added by Sprint 10:**
-- `RELEASE` routing table (`routing` or `probabilisticRouting`) on B-events is the canonical multi-route pattern. Never implement routing by adding C-events after service.
-- `collectTimeSeries: false` is the default. Tests must never enable it without bounding the simulation to avoid log-snapshot memory growth (see §22).
-- `results.timeSeries` and `results.waitDist` are new optional fields on the results object. Existing consumers that don't reference these fields are unaffected.
+```bash
+npm test -- llm prompts execute-panel ai-generated-model-panel
+npm test -- --run
+npm run build
+# Manual: run an M/M/1 model, ask "What was the mean waiting time?" — correct answer displayed
+# Manual: ask follow-up "Which queue had the longest wait?" — correct answer
+# Manual: ask before any run — informative message about no results available
+```
 
-### Sprint 9C Completion Notes
+---
 
-Sprint 9C completed on 2026-05-07.
+## 22. Forward Sprint Plan (Sprints 15–18)
 
-- F9C.1: `ExecuteCanvas` shell — lazy-loaded `@xyflow/react` canvas; derives topology from `model_json` via `deriveGraphFromModel()`. Falls back to `VisualView` for empty models.
-- F9C.2: `ExecuteSourceNode` — arrival countdown from `snap.nextArrivals`, inter-arrival distribution label, arrival pulse.
-- F9C.3: `ExecuteQueueNode` — depth badge with colour thresholds, entity type dot tokens, 20-tick rolling sparkline.
-- F9C.4: `ExecuteActivityNode` — server dot-grid (capacity dots, ■ busy / □ idle), utilisation %, completion flash.
-- F9C.5: `ExecuteSinkNode` — large served count, throughput/hr, mean sojourn time.
-- F9C.6: `AnimatedEdge` — entity tokens travel along edges via SVG `<animateMotion>`; `snap.nextArrivals` added to engine snap for countdown data; animation preference in `user_settings.execute.animateTokens`.
-- F9C.7: Configurable KPI bar — 4 user-selectable slots; config in `user_settings.execute.kpiSlots`.
-- F9C.8: `BottomPanel` — collapsible tabbed panel (Step Log · Entities · Stage KPIs · Charts placeholder) below the canvas.
-- F9C.9: Stage KPIs tab — live queue and server statistics derived from snap without new engine instrumentation.
-- F9C.10: Speed slider — 0.5×–10× multiplier on the auto-step interval.
-- F9C.11: Node-filtered log — clicking a canvas node filters the Step Log; "Show all" clears.
+The following sprints are planned but not yet started. See `docs/DES_Studio_Build_Plan.md` for full feature prompts.
 
-**Architecture rules added by Sprint 9C:**
-- `ExecuteCanvas` is lazy-loaded in `execute/index.jsx` — never import it statically (same rule as `VisualDesignerPanel`).
-- `model_json.graph` layout metadata drives both the Visual Designer authoring canvas and the Execute live canvas. The `deriveGraphFromModel()` helper is the single topology source for both.
-- Animation and KPI-slot preferences are persisted in `user_settings.execute`. Never store cross-session execution preferences in React component state.
+### Sprint 15 — Shareable Results Dashboard
 
-### Sprint 9A Accepted Decisions
+**Goal:** Create a shareable read-only URL for model + results. No login required to view. Shows model topology, KPI summary, CI dashboard, time-series charts, and AI narrative commentary.
 
-**Status:** Sprint 9A decisions remain governing architecture for Sprint 9 and beyond.
+**Key features:**
+- Read-only view route: `/models/:id/results`
+- No-auth access to shared results
+- Model topology (read-only Visual Designer layout)
+- KPI summary + CI dashboard + Charts tab
+- AI narrative embedded
 
-### Sprint 9A Accepted Decisions
+### Sprint 16 — Parametric Sweep & Scenario Comparison
 
-- Use `@xyflow/react` for the Visual Designer canvas. Do not use the older `reactflow` package name.
-- Allow `@xyflow/react/dist/style.css` as a narrow vendor-CSS exception. DES Studio-owned styles still use inline token-driven style objects.
-- Persist `model_json.graph` only as optional layout metadata: positions, viewport, and graph metadata version.
-- Do not persist graph topology as a second model. Derive edges from canonical DES model logic.
-- Visual Designer edits canonical `model_json`; Forms/Tabs and AI Generated Model remain first-class authoring modes over the same data.
-- If graph metadata is missing or stale, regenerate it from canonical model data.
-- Initial node mapping:
-  - Source: arrival B-event with `ARRIVE(CustomerType, QueueName)`
-  - Queue: `queues[]`
-  - Activity: service-start C-event plus scheduled completion B-event
-  - Sink: terminal completion/routing outcome, initially derived rather than a new engine schema element
-- Visual node inspectors should reuse small editor building blocks where practical: `DistPicker`, `ConditionBuilder`, `EntityFilterBuilder`, queue/customer/resource option helpers.
-- Do not embed full `BEventEditor` or `CEventEditor` panels inside a node inspector.
-- Do not implement the retired split-pane SVG hybrid designer or `FlowDiagramSVG` bridge.
+**Goal:** Select any numeric model parameter, define range and step size, run all combinations, view heatmap/trade-off chart. Side-by-side scenario comparison with confidence intervals.
+
+**Key features:**
+- Parameter selection (count, capacity, rate, distribution mean)
+- Range + step size config
+- Multi-run orchestration across parameter grid
+- Heatmap/trade-off chart of chosen KPI
+- Scenario comparison table with CI on differences
+
+### Sprint 17 — Statistical Output Analyzer
+
+**Goal:** Professional-grade statistical output analysis: Welch's graphical method for warm-up detection, batch-means for autocorrelated output, scenario comparison with paired-t CIs.
+
+**Key features:**
+- Welch's method automated warm-up detection
+- Batch-means confidence intervals
+- Scenario comparison with paired-t / Bonferroni CIs
+- Practical defaults with plain-English explanations
+
+### Sprint 18 — Model Import/Export & Community Gallery
+
+**Goal:** CSV/Excel model import, AnyLogic/Simio export report, community template publishing, model cloning and social proof metrics.
+
+**Key features:**
+- CSV/Excel import: columns → entity attributes + distribution fitting
+- AnyLogic/Simio export report (removes lock-in fear)
+- Template gallery publishing by users
+- Model cloning count as social proof
+- Featured templates by DES Studio team
+
+---
+
+## 23. Previously Completed Sprint Notes
 
 ### Sprint 9 Implementation Notes
 

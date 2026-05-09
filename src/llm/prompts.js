@@ -176,6 +176,63 @@ export function promptWordEstimate(prompt) {
   return Math.ceil(text.split(/\s+/).filter(Boolean).length * 1.3);
 }
 
+export function buildResultsQueryPrompt(question, model = {}, results = {}, conversationHistory = []) {
+  const system = "You are a simulation results analyst. Answer questions about the simulation run using only the provided KPI data. Be concise and specific — always cite exact KPI values. If the data does not contain the answer, say so clearly. Never invent numbers.";
+  const summary = getSummary(results);
+  const kpis = buildKpis(model, results);
+  const entityTypes = (model.entityTypes || []).map(e => ({ name: e.name, role: e.role }));
+  const queues = (model.queues || []).map(q => ({
+    name: q.name,
+    discipline: q.discipline,
+    capacity: q.capacity,
+    customerType: q.customerType,
+  }));
+
+  const dataPayload = {
+    model: {
+      name: model.name || DEFAULT_MODEL_NAME,
+      description: model.description || "",
+      entityTypes,
+      queues,
+      stateVariables: (model.stateVariables || []).map(v => ({ name: v.name, initialValue: v.initialValue })),
+    },
+    kpis,
+    summary: {
+      warmupPeriod: summary.warmupPeriod,
+      maxSimTime: summary.maxSimTime,
+      totalEntities: summary.total,
+      served: summary.served,
+      reneged: summary.reneged,
+      avgWait: summary.avgWait,
+      avgService: summary.avgSvc,
+      avgSojourn: summary.avgSojourn,
+    },
+    timeSeriesAvailable: !!(Array.isArray(results.timeSeries) && results.timeSeries.length > 0),
+    waitDistAvailable: !!(results.waitDist && results.waitDist.queues && results.waitDist.queues.length > 0),
+  };
+
+  const messages = [
+    { role: "system", content: system },
+    ...conversationHistory.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+    })),
+    {
+      role: "user",
+      content: truncateWords(JSON.stringify({
+        data: dataPayload,
+        question,
+      }, null, 2)),
+    },
+  ];
+
+  return {
+    kind: "query",
+    messages,
+    max_tokens: 600,
+  };
+}
+
 export function buildCiResults(aggregateStats = {}) {
   return Object.entries(aggregateStats)
     .filter(([, stat]) => stat && stat.n >= 2)

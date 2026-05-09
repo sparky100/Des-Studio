@@ -329,4 +329,166 @@ describe('ExecutePanel', () => {
     expect(await screen.findByText(/queues are stable/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /copy/i })).toBeInTheDocument();
   });
+
+  describe('natural language query input (F14.2-4)', () => {
+    beforeEach(() => {
+      mockStreamNarrative.mockReset();
+      mockSaveSimulationRun.mockResolvedValue(undefined);
+    });
+
+    it('shows query input when AI assistant panel is open', async () => {
+      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+      expect(screen.getByLabelText(/ask a question/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/run the model first/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /ask question/i })).toBeDisabled();
+    });
+
+    it('enables query input and Ask button after a run completes', async () => {
+      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+      const input = screen.getByLabelText(/ask a question/i);
+      expect(input).not.toBeDisabled();
+      fireEvent.change(input, { target: { value: 'What was the mean wait?' } });
+      expect(screen.getByRole('button', { name: /ask question/i })).not.toBeDisabled();
+    });
+
+    it('submits a query and streams the response', async () => {
+      mockStreamNarrative.mockImplementation((prompt, handlers) => {
+        handlers.onToken('The mean waiting time was ');
+        handlers.onToken('8.2 minutes.');
+        handlers.onComplete();
+      });
+
+      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+      const input = screen.getByLabelText(/ask a question/i);
+      fireEvent.change(input, { target: { value: 'What was the mean wait?' } });
+      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
+
+      expect(await screen.findByText(/The mean waiting time was 8\.2 minutes/i)).toBeInTheDocument();
+      expect(mockStreamNarrative).toHaveBeenCalledTimes(1);
+    });
+
+    it('builds conversation history for follow-up questions', async () => {
+      mockStreamNarrative
+        .mockImplementationOnce((prompt, handlers) => {
+          handlers.onToken('Main queue had mean wait of 8.2.');
+          handlers.onComplete();
+        })
+        .mockImplementationOnce((prompt, handlers) => {
+          handlers.onToken('The second queue is Triage.');
+          handlers.onComplete();
+        });
+
+      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+      const input = screen.getByLabelText(/ask a question/i);
+
+      fireEvent.change(input, { target: { value: 'Which queue had the longest wait?' } });
+      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
+      await screen.findByText(/Main queue had mean wait of 8\.2/);
+
+      fireEvent.change(input, { target: { value: 'What about the second queue?' } });
+      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
+      expect(await screen.findByText(/The second queue is Triage/)).toBeInTheDocument();
+
+      expect(screen.getByText(/Which queue had the longest wait/i)).toBeInTheDocument();
+      expect(screen.getByText(/What about the second queue/i)).toBeInTheDocument();
+      expect(mockStreamNarrative).toHaveBeenCalledTimes(2);
+    });
+
+    it('clear button resets conversation history', async () => {
+      mockStreamNarrative.mockImplementation((prompt, handlers) => {
+        handlers.onToken('8.2 minutes.');
+        handlers.onComplete();
+      });
+
+      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+      const input = screen.getByLabelText(/ask a question/i);
+      fireEvent.change(input, { target: { value: 'What was the mean wait?' } });
+      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
+      await screen.findByText(/8\.2 minutes/);
+
+      fireEvent.click(screen.getByRole('button', { name: /clear/i }));
+
+      expect(screen.queryByText(/What was the mean wait/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/8\.2 minutes/)).not.toBeInTheDocument();
+    });
+
+    it('preserves conversation history in follow-up prompt', async () => {
+      let capturedPrompt = null;
+      mockStreamNarrative.mockImplementation((prompt, handlers) => {
+        capturedPrompt = prompt;
+        handlers.onToken('8.2 minutes.');
+        handlers.onComplete();
+      });
+
+      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+      const input = screen.getByLabelText(/ask a question/i);
+      fireEvent.change(input, { target: { value: 'What was the wait?' } });
+      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
+      await screen.findByText(/8\.2 minutes/);
+
+      mockStreamNarrative.mockImplementation((prompt, handlers) => {
+        capturedPrompt = prompt;
+        handlers.onToken('Triage queue.');
+        handlers.onComplete();
+      });
+
+      fireEvent.change(input, { target: { value: 'Which queue?' } });
+      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
+      await screen.findByText(/Triage queue/);
+
+      expect(capturedPrompt.messages.some(m => m.content && m.content.includes('What was the wait?'))).toBe(true);
+    });
+
+    it('disables Ask during streaming', async () => {
+      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+
+      const input = screen.getByLabelText(/ask a question/i);
+      fireEvent.change(input, { target: { value: 'Question during streaming' } });
+
+      // Start streaming and hold (don't call onComplete)
+      mockStreamNarrative.mockImplementation((prompt, handlers) => {
+        handlers.onToken('Partial...');
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
+      expect(screen.getByRole('button', { name: /ask question/i })).toBeDisabled();
+    });
+  });
 });

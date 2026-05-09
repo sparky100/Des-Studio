@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-08 | Reflects: Sprint 13 AI Model Building Enhancement*
+*Last updated: 2026-05-09 | Reflects: Sprint 13 AI Model Building Enhancement + Post-Sprint 13 Templates complete. Current: Sprint 14 — AI Natural Language Results Queries*
 
 ---
 
@@ -24,7 +24,8 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 | Styling | Inline style objects | — | No CSS classes. No CSS framework. Tokens in `ui/shared/tokens.js` |
 | Database / auth | Supabase JS client | 2.45.0 | PostgreSQL backend. Auth via Supabase Auth. |
 | Test runner | Vitest | 1.6.0 | Engine layer only. Node environment. |
-| Canvas / DAG | Form-based editors | — | React Flow not yet implemented. Visual canvas is a future sprint. |
+| Canvas / DAG | `@xyflow/react` | — | ADR-010. Visual Designer authoring canvas and Execute live flow view, both lazy-loaded. `model_json.graph` drives layout. |
+| Animation | SVG `<animateMotion>` | — | Entity token animation on execute canvas edges. Toggle in `user_settings`. |
 
 **Do not introduce new dependencies without flagging them first.** The dependency list is intentionally minimal.
 
@@ -102,12 +103,12 @@ If Codex finds itself rewriting a file that the audit marked as working (✓), s
 | File | What works | What is wrong |
 |---|---|---|
 | `src/engine/index.js` | Three-Phase A/B/C loop structure | C-scan restart granularity (fix in place) |
-| `src/engine/macros.js` | All five macros correct | Nothing — preserve entirely |
+| `src/engine/macros.js` | All seven macros correct (ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE, BATCH, UNBATCH) | Nothing — preserve entirely |
 | `src/engine/entities.js` | FIFO discipline correct | LIFO/Priority never read (extend waitingOf) |
 | `src/engine/conditions.js` | Condition evaluation structure | new Function() call (replace with safe eval) |
 | `src/engine/distributions.js` | All sampler functions | Math.random() (add seeded RNG) |
 | `src/ui/editors/index.jsx` | All five editors work | Operator filtering, priority field, token staleness |
-| `src/ui/execute/index.jsx` | VisualView, StepLog, EntityTable, run history | No validation, no seed field, silent truncation |
+| `src/ui/execute/index.jsx` | ExecuteCanvas, BottomPanel, StepLog, EntityTable, run history, replication runner | VisualView retained as fallback for empty models |
 | `src/db/models.js` | Multi-user CRUD wrappers | User-scoped model/run queries, run stats, result persistence, owner-guarded delete |
 | `src/App.jsx` | Auth listener, model library shell | Back button discards silently (Sprint 2) |
 | `tests/` | ~120 engine tests passing | UI and DB layers untested |
@@ -185,7 +186,7 @@ while (fel.length > 0 && !terminationConditionMet()) {
 | `COMPLETE` | B-Event | Releases resource, records stats, routes entity to next node |
 | `ASSIGN` | B or C | Modifies a mutable entity attribute or user-defined state variable |
 | `RENEGE` | B-Event | Removes entity from queue after patience timeout, routes to Sink |
-| `BATCH` | C-Event | Accumulates N entities per queue discipline; creates batch entity with `batch.children` |
+| `BATCH` | C-Event | Accumulates N entities per queue discipline; creates parent batch entity with `batch.children` |
 | `UNBATCH` | B-Event | Restores children from parent.batch to target queue; parent marked done |
 
 **These seven macros are the complete and closed set.** No other macros may be added without updating `docs/addition1_entity_model.md` first.
@@ -357,20 +358,17 @@ ModelDetail (parent)
 
 ### 7.8 Execute Panel (`execute/index.jsx`)
 
-**What exists:** Working. The execute panel provides: a Run button, a VisualView (server bays, queue lanes, entity tokens), a StepLog (phase-tagged event log with clock timestamps), an EntityTable (entity status), and a run history tab showing last 20 runs.
+**What exists:** Working. The execute panel provides: a Run button, an ExecuteCanvas (topology-derived live flow view with @xyflow/react), a StepLog (phase-tagged event log with clock timestamps), an EntityTable (entity status), a BottomPanel (collapsible tabs for log, entities, stage KPIs, charts), and a run history tab showing last 20 runs.
 
 **What it must do:**
 - Validate the model (V1–V11) before calling `buildEngine()`. Block Run if validation fails. Surface errors inline in the relevant editor tab, not only in the execute panel.
 - Accept a seed input field — the modeller can set or randomise the seed. The seed is stored with the run record.
 - Display the Phase C truncation warning if the cap is hit during a run.
 - The stats panel overview tab currently always shows Runs count as 0 (`model.stats` never populated). This must be fixed so that completed runs update the stats count.
-- The VisualView, StepLog, and EntityTable are working and must not be broken by any Sprint 1 changes.
+- The ExecuteCanvas, StepLog, and EntityTable are working and must not be broken by any changes.
 
 **Known gaps:**
-- No pre-run validation (C5) — fix in Sprint 1 Task 5.
-- No seed field — fix in Sprint 1 Task 4.
-- Silent Phase C truncation (C4) — fix in Sprint 1 Task 6.
-- Stats panel always shows 0 runs (C9 adjacent) — fix in Sprint 2.
+- All Sprint 1–5 gaps resolved.
 
 ### 7.9 Model Library (`App.jsx` + `ModelCard`)
 
@@ -656,15 +654,24 @@ tests/
 │   ├── entities.test.js          ← Queue disciplines: FIFO, LIFO, PRIORITY
 │   └── mm1_benchmark.js          ← M/M/1 correctness gate (not a unit test — run manually)
 ├── ui/
-│   ├── editors/
-│   │   ├── entity-type-editor.test.jsx   ← EntityTypeEditor render and interactions
-│   │   ├── b-event-editor.test.jsx        ← BEventEditor, deletion reference guard
-│   │   ├── c-event-editor.test.jsx        ← CEventEditor, priority field, ConditionBuilder
-│   │   ├── queue-editor.test.jsx          ← QueueEditor, discipline dropdown state
-│   │   └── dist-picker.test.jsx           ← DistPicker, CSV import, registry sourcing
-│   ├── execute/
-│   │   └── execute-panel.test.jsx         ← Validation block, seed field, run flow
-│   └── shared/
+│   ├── editors/                 ← EntityTypeEditor, BEventEditor, CEventEditor, QueueEditor
+│   │   ├── index.jsx
+│   │   ├── AiGeneratedModelPanel.jsx  ← AI model building chat interface
+│   │   └── ModelDiffPreview.jsx       ← Diff view for AI proposals
+│   ├── execute/                 ← Run panel, VisualView, StepLog, EntityTable
+│   │   ├── index.jsx
+│   │   ├── ExecuteCanvas.jsx         ← @xyflow/react live flow canvas
+│   │   ├── ExecuteSourceNode.jsx     ← Live Source node
+│   │   ├── ExecuteQueueNode.jsx      ← Live Queue node (depth, dots, sparkline)
+│   │   ├── ExecuteActivityNode.jsx   ← Live Activity node (server pool, utilisation)
+│   │   ├── ExecuteSinkNode.jsx       ← Live Sink node (served, throughput, sojourn)
+│   │   ├── AnimatedEdge.jsx          ← Entity token animation along edges
+│   │   ├── BottomPanel.jsx           ← Collapsible tabbed panel (log · entities · stage KPIs · charts)
+│   │   └── BottomPanelHelpers.js     ← Stage KPIs computation
+│   ├── visual-designer/         ← @xyflow/react authoring canvas
+│   │   ├── VisualDesignerPanel.jsx   ← Lazy-loaded Visual Designer
+│   │   └── graph.js                  ← Graph derivation helpers
+│   ├── shared/
 │       └── predicate-builder.test.jsx     ← Type safety, operator filtering, compound clauses
 ├── db/
 │   └── models.test.js            ← CRUD wrappers, user_id filtering (mocked Supabase)
@@ -1283,7 +1290,7 @@ UI / UX
 ## 20. Sprint History
 
 | Sprint | Status | Completed | Description | Tests | M/M/1 |
-|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|
 | Sprint 1 | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening | 182 passing | 1.48% error |
 | Sprint 2 | ✅ Complete | 2026-05-03 | UI editor completeness | 215 passing | N/A |
 | Sprint 3 | ✅ Complete | 2026-05-04 | Experiment controls: warm-up, termination, fork model | 272 passing | 1.48% error |
@@ -1304,67 +1311,67 @@ UI / UX
 | Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Capacity & Output | 523 passing | N/A |
 | Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation | 541 passing | 1.48% error |
 | Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement | 543 passing | N/A |
+| Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
+| Sprint 14 | 🔄 In progress | — | AI Natural Language Results Queries | — | — |
+| Sprint 15 | ⬜ Not started | — | Shareable Results Dashboard | — | — |
+| Sprint 16 | ⬜ Not started | — | Parametric Sweep & Scenario Comparison | — | — |
+| Sprint 17 | ⬜ Not started | — | Statistical Output Analyzer | — | — |
+| Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 13 — AI Model Building Enhancement**
+**Sprint 14 — AI Natural Language Results Queries**
 
-Goal: Enhance the AI model building system with updated prompts for all 7 macros, a validation feedback loop, results-informed refinement, and a "Suggest Model Changes" button in the Execute panel's AI Assistant.
+Goal: Enable free-form natural language queries against simulation results via the AI Assistant. Users ask questions like "Which queue had the longest wait?" or "What was the average utilisation of Clerk?" and the AI answers directly from the results object — no need to navigate tabs.
 
-**Prerequisites:** Sprint 12 exit gate passed. See `docs/DES_Studio_Build_Plan.md` for the full Sprint 13 feature prompts.
+**Prerequisites:** All modelling vocabulary sprints (10–12), AI model building (13), templates (Post-13) complete. See `docs/DES_Studio_Build_Plan.md` for full feature prompts.
 
-### Recently Completed — Sprint 13
+### Sprint 14 Features
 
-Sprint 13 completed on 2026-05-08.
+| Feature | Status | Description |
+|---|---|---|
+| F14.1 — Results query prompt builder | ⬜ | `buildResultsQueryPrompt(question, model, results)` transforms a natural language question + structured KPI data into an LLM prompt. Must include only the relevant subset of results data to fit token limits. |
+| F14.2 — Query input in AI Assistant panel | ⬜ | Text input at bottom of AI Assistant panel for free-form questions. Sits below the existing Explain/Compare/Sensitivity/Suggest buttons. |
+| F14.3 — Context-aware answer rendering | ⬜ | AI response rendered as plain text in the assistant panel. Answers cite specific KPI values (e.g. "The Triage Queue had mean wait of 8.2 minutes"). |
+| F14.4 — Follow-up question support | ⬜ | Conversation history preserved within the query session so users can ask "What about the second queue?" as a follow-up. |
+| F14.5 — Voice input for AI model building | ✅ | Microphone button in "Use AI" panel input area using browser Web Speech API. Mic toggles speech recognition; transcribed text populates the draft. Graceful fallback for unsupported browsers. |
+| F14.6 — Documentation & tests | ⬜ | Prompt tests, UI component tests, model integration test. |
 
-- Updated `MACROS` array in `model-builder-prompts.js` to all 7 macros with B_EVENT_MACROS and C_EVENT_MACROS constants.
-- Added results-informed refinement: `buildModelBuilderUserMessage()` accepts optional 4th `results` param with KPI data.
-- Added `buildSuggestionPrompt()` function returning kind:"suggestion" with model structure and KPI data.
-- Added `SUGGESTION` task kind to `contracts.js`.
-- Added "Suggest model changes" button to Execute panel AI Assistant (disabled when no results).
-- Added validation feedback loop in `AiGeneratedModelPanel.send()` — max 1 retry with error summary; retry explanation shown in history.
-- Fixed mock return values in `callModelBuilder` test mocks to match API returning parsed response.
-- All new features have tests.
+### Recently Completed
 
-### Previously Completed — Sprint 12
+**Flow-first AI reasoning** (2026-05-09):
+- `buildModelBuilderSystemPrompt()` now instructs AI to describe entity flow in a `flowDescription` field *before* proposing a model
+- Response schema extended: `{"intent","questions","flowDescription","proposedModel","explanation"}`
+- Explicit C-event→B-event pattern documented in prompt: C-events START (ASSIGN), B-events COMPLETE (COMPLETE)
+- Queue-entity association strengthened: every queue's `customerType` must match an entity type name
+- `flowDescription` displayed as a distinct bubble in AI conversation
+- `buildSuggestionPrompt()` now includes `flowSummary` (queue→customerType links)
 
-Sprint 12 completed on 2026-05-08.
+**Voice input for AI modelling** (2026-05-09):
+- Microphone button with Mic/Stop toggle in "Use AI" panel
+- Browser-native Web Speech API for speech-to-text (no dependencies)
+- Real-time transcription appends to draft text field
+- Cleanup on unmount via useEffect
+- Graceful fallback: error message for unsupported browsers
 
-- BATCH macro (C-Event, queue-accumulation model)
-- UNBATCH macro (B-Event, restores originals)
-- Controlled back-edges with loop guard (Entity.loopCount, maxLoopCount, exitQueueName)
-- Visual Designer support for loop and batch nodes
-- ADR-012 accepted
+**Post-Sprint 13 — Templates & Anonymous Mode** (2026-05-09):
+- 10 pre-built template models (M/M/1, Call Center, ER Triage, Fast Food, Factory Assembly, Airport Security, etc.)
+- Template gallery tab in Model Library
+- Anonymous/local storage mode (localStorage CRUD backend)
+- Template auto-run on open
 
-### Sprint 13 Completion Gate
+### Sprint 14 Completion Gate
 
 ```bash
-npm test -- ai-generated-model-panel ai-model-apply-save   # 8 passed
-npm test -- model-builder-prompts prompts                   # 16 passed
-npm test -- --run                                           # 543 passed
-npm run build                                               # Succeeds
+npm test -- llm prompts execute-panel ai-generated-model-panel
+npm test -- --run
+npm run build
+# Manual: run an M/M/1 model, ask "What was the mean waiting time?" — correct answer displayed
+# Manual: ask follow-up "Which queue had the longest wait?" — correct answer
+# Manual: ask before any run — informative message about no results available
 ```
-
-### Sprint 12 Completion Gate
-
-```bash
-npm test -- --run                       # 541 passed, 60 test files
-npm test -- macros                      # BATCH, UNBATCH, recirculation tests pass
-npm test -- validation                  # V22 (BATCH size), V23 (UNBATCH queue), V24 (loop guard) pass
-npm run build                           # Succeeds
-node tests/engine/mm1_benchmark.js      # 1.48% error (< 5% gate)
-```
-
-### Future-Codex Notes
-
-- Sprint 13 AI model building features: prompts in `src/llm/model-builder-prompts.js`, validation loop in `src/ui/editors/AiGeneratedModelPanel.jsx`, suggestion in `src/llm/prompts.js` + `src/ui/execute/index.jsx`.
-- `callModelBuilder()` returns the parsed response object — mock implementations must `return onComplete(response)` to match the real API.
-- Validation retry is max 1 retry to avoid infinite loops; the retry response's explanation replaces the original in conversation history.
-- "Suggest model changes" uses `streamNarrative` (text output) — keeps it in the AI Assistant panel; no cross-tab navigation.
-- `B_EVENT_MACROS` and `C_EVENT_MACROS` constants are defined in prompts but not yet referenced in building logic — future sprint work.
-- Pre-existing test failures in `visual-designer-panel.test.jsx` (4 failures, label and timeout issues) are not related to Sprint 13 work.
 
 ---
 

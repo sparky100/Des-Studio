@@ -13,7 +13,7 @@ import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
-import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildSensitivityPrompt, buildSuggestionPrompt } from "../../llm/prompts.js";
+import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildResultsQueryPrompt, buildSensitivityPrompt, buildSuggestionPrompt } from "../../llm/prompts.js";
 
 const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
 const CI_METRICS = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.served", "summary.reneged"];
@@ -383,7 +383,10 @@ const AiAssistantPanel = ({
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
   const [selectedRunId, setSelectedRunId] = useState(comparisonRuns[0]?.id || "");
+  const [queryText, setQueryText] = useState("");
+  const [conversationHistory, setConversationHistory] = useState([]);
   const abortRef = useRef(null);
+  const responseAreaRef = useRef(null);
   const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
   const sensitivityReady = ciResults.some(item => item.n >= 5);
   const isStreaming = status === "loading" || status === "streaming";
@@ -394,6 +397,12 @@ const AiAssistantPanel = ({
   }, [comparisonRuns, selectedRunId]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (responseAreaRef.current) {
+      responseAreaRef.current.scrollTop = responseAreaRef.current.scrollHeight;
+    }
+  }, [response, conversationHistory]);
 
   const runPrompt = useCallback((prompt) => {
     abortRef.current?.abort();
@@ -421,6 +430,46 @@ const AiAssistantPanel = ({
     });
   }, []);
 
+  const runQuery = useCallback((question) => {
+    if (!question.trim() || !results) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setError("");
+    setStatus("streaming");
+
+    const userEntry = { role: "user", content: question };
+    setConversationHistory(prev => [...prev, userEntry]);
+    setQueryText("");
+
+    const prompt = buildResultsQueryPrompt(
+      question,
+      model,
+      { ...results, aggregateStats },
+      conversationHistory
+    );
+
+    let accumulated = "";
+    streamNarrative(prompt, {
+      signal: controller.signal,
+      onToken: token => {
+        accumulated += token;
+        setResponse(accumulated);
+      },
+      onComplete: () => {
+        abortRef.current = null;
+        setConversationHistory(prev => [...prev, { role: "assistant", content: accumulated }]);
+        setResponse("");
+        setStatus("complete");
+      },
+      onError: err => {
+        abortRef.current = null;
+        setError(err?.message || "Query unavailable");
+        setStatus("error");
+      },
+    });
+  }, [model, results, aggregateStats, conversationHistory]);
+
   const stopStream = () => {
     abortRef.current?.abort();
     abortRef.current = null;
@@ -428,8 +477,18 @@ const AiAssistantPanel = ({
   };
 
   const copyResponse = () => {
-    if (!response || !navigator.clipboard?.writeText) return;
-    navigator.clipboard.writeText(response);
+    const textToCopy = response || conversationHistory.map(e =>
+      `${e.role === "user" ? "Q" : "A"}: ${e.content}`
+    ).join("\n\n");
+    if (!textToCopy || !navigator.clipboard?.writeText) return;
+    navigator.clipboard.writeText(textToCopy);
+  };
+
+  const clearConversation = () => {
+    setConversationHistory([]);
+    setResponse("");
+    setStatus("idle");
+    setError("");
   };
 
   const explainResults = () => {
@@ -463,7 +522,39 @@ const AiAssistantPanel = ({
     }));
   };
 
+  const handleQueryKeyDown = (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      runQuery(queryText);
+    }
+  };
+
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
+
+  const renderContent = () => {
+    if (conversationHistory.length > 0) {
+      return conversationHistory.map((entry, i) => (
+        <div key={i} style={{ marginBottom: 10 }}>
+          <div style={{
+            color: entry.role === "user" ? C.accent : C.primary,
+            fontFamily: FONT,
+            fontWeight: 700,
+            fontSize: 10,
+            letterSpacing: 1,
+            marginBottom: 4,
+          }}>
+            {entry.role === "user" ? "YOU" : "AI"}
+          </div>
+          <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+            {entry.content}
+          </div>
+        </div>
+      ));
+    }
+    if (status === "loading") return "Waiting for analysis...";
+    if (response) return response;
+    return "Run the model to generate insights.";
+  };
 
   return (
     <aside aria-label="AI assistant" style={{
@@ -482,7 +573,7 @@ const AiAssistantPanel = ({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>AI Assistant</div>
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Results analysis + change suggestions</div>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Results analysis + natural language queries</div>
         </div>
         <Btn small variant="ghost" onClick={onClose} ariaLabel="Close AI assistant">x</Btn>
       </div>
@@ -526,7 +617,7 @@ const AiAssistantPanel = ({
         </div>
       )}
 
-      <div style={{
+      <div ref={responseAreaRef} style={{
         flex: 1,
         background: C.bg,
         border: `1px solid ${C.border}`,
@@ -539,13 +630,49 @@ const AiAssistantPanel = ({
         lineHeight: 1.7,
         whiteSpace: "pre-wrap",
       }}>
-        {status === "loading" && "Waiting for analysis..."}
-        {response || (status !== "loading" ? "Run the model to generate insights." : "")}
+        {renderContent()}
       </div>
 
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {isStreaming && <Btn small variant="danger" onClick={stopStream}>Stop</Btn>}
-        {status === "complete" && response && <Btn small variant="ghost" onClick={copyResponse}>Copy</Btn>}
+        {status === "complete" && (response || conversationHistory.length > 0) && <Btn small variant="ghost" onClick={copyResponse}>Copy</Btn>}
+        {conversationHistory.length > 0 && !isStreaming && <Btn small variant="ghost" onClick={clearConversation}>Clear</Btn>}
+      </div>
+
+      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+        <label htmlFor="query-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
+          ASK A QUESTION
+        </label>
+        <div style={{ display: "flex", gap: 6 }}>
+          <input
+            id="query-input"
+            type="text"
+            value={queryText}
+            onChange={event => setQueryText(event.target.value)}
+            onKeyDown={handleQueryKeyDown}
+            disabled={!results || isStreaming}
+            placeholder={results ? "e.g. Which queue had the longest wait?" : "Run the model first..."}
+            style={{
+              flex: 1,
+              background: C.bg,
+              border: `1px solid ${C.border}`,
+              borderRadius: 5,
+              color: C.text,
+              fontFamily: FONT,
+              fontSize: 12,
+              padding: "7px 8px",
+            }}
+          />
+          <Btn
+            small
+            variant="primary"
+            onClick={() => runQuery(queryText)}
+            disabled={!results || !queryText.trim() || isStreaming}
+            ariaLabel="Ask question"
+          >
+            Ask
+          </Btn>
+        </div>
       </div>
     </aside>
   );

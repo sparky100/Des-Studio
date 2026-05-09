@@ -57,10 +57,16 @@ flowchart LR
   S10 --> S11["Sprint 11<br/>Capacity & Output"]
   S11 --> S12["Sprint 12<br/>Assembly & Recirculation"]
   S12 --> S13["Sprint 13<br/>AI Building"]
+  S13 --> PST["Post-Sprint 13<br/>Templates &<br/>Anonymous Mode"]
+  PST --> S14["Sprint 14<br/>AI Natural Language<br/>Results Queries"]
+  S14 --> S15["Sprint 15<br/>Shareable Results<br/>Dashboard"]
+  S15 --> S16["Sprint 16<br/>Parametric Sweep &<br/>Scenario Comparison"]
+  S16 --> S17["Sprint 17<br/>Statistical Output<br/>Analyzer"]
+  S17 --> S18["Sprint 18<br/>Model Import/Export &<br/>Community Gallery"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef future fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
-  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13 done;
+  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST done;
 ```
 
 ### Roadmap Snapshot
@@ -77,6 +83,7 @@ flowchart LR
 | Execute canvas | ✅ Complete | Sprint 9C: topology-derived live canvas, four live node components, entity token animation, configurable KPI bar, BottomPanel with Stage KPIs. |
 | Modelling expressiveness | ✅ Complete | Sprints 10–12: routing, pooling, time-series, finite queues, balking, entity batching, recirculation. Complete DES vocabulary for healthcare, logistics, and manufacturing. |
 | Template models and anonymous mode | ✅ Complete | Post-Sprint 13: 10 pre-built template models covering healthcare, logistics, manufacturing, and service industries. Anonymous/local storage mode for non-signed-in users. Template auto-run in Execute tab. |
+| AI natural language results queries | 🔄 In progress | Sprint 14: free-form natural language queries against simulation results via the AI Assistant. Query input, context-aware answers with KPI citations, follow-up question support. |
 
 ### Key Issues and Watchpoints
 
@@ -128,6 +135,7 @@ flowchart LR
 | 1.46 | 2026-05-08 | Sprint 12 complete — BATCH/UNBATCH macros, loop guard, Entity.loopCount, Visual Designer back-edges. 541 tests across 60 files. Updated flowchart, Roadmap Snapshot, Sprint History, Modelling Capability Coverage, Open Architectural Decisions (ADR-012 accepted). |
 | 1.47 | 2026-05-08 | Sprint 13 complete — AI Model Building Enhancement. 7-macro prompts, validation feedback loop, results-informed refinement, Suggest Model Changes button. 543 tests. |
 | 1.48 | 2026-05-09 | Post-Sprint 13 features: template gallery (10 pre-built models), anonymous/local storage mode, template auto-run in Execute tab. Updated user guide to reflect all sprints. |
+| 1.49 | 2026-05-09 | Sprint 14 — AI Natural Language Results Queries: `buildResultsQueryPrompt()` for free-form KPI questions, query input + conversation history in AI Assistant panel, follow-up question support, updated forward roadmap flowchart through Sprint 18. |
 
 ---
 
@@ -157,6 +165,7 @@ flowchart LR
 | Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation. | 541 (541) | 1.48% | Success | BATCH/UNBATCH macros, loop guard, Entity.loopCount, Visual Designer back-edges, ADR-012 accepted. |
 | Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement. | 543 (543) | N/A | Success | 7-macro prompts update, validation feedback loop, results-informed refinement, Suggest Model Changes button. |
 | Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery. | 543 (543) | N/A | Success | 10 pre-built template models, localStorage backend, template gallery tab, templates guide. |
+| Sprint 14 | 🔄 In progress | — | AI Natural Language Results Queries. | — | — | — | F14.5 voice input already delivered in prior session. Remaining: query prompt builder, UI input, answer rendering, follow-ups, tests. |
 
 ---
 
@@ -181,6 +190,11 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 12 | Modelling Expressiveness — Assembly & Recirculation | Entity batching; rework loops via controlled back-edges |
 | Sprint 13 | AI Model Building Enhancement | 7-macro prompts, validation feedback loop, results-informed refinement, Suggest Model Changes |
 | Post-13 | Templates & Anonymous Mode | 10 pre-built templates; localStorage backend for non-signed-in users; template gallery tab |
+| Sprint 14 | AI Natural Language Results Queries | Free-form natural language queries against simulation results via the AI Assistant |
+| Sprint 15 | Shareable Results Dashboard | Public share links for run results with live KPI widgets |
+| Sprint 16 | Parametric Sweep & Scenario Comparison | Multi-parameter exploration with side-by-side scenario comparison |
+| Sprint 17 | Statistical Output Analyzer | Automated distribution fitting, hypothesis tests, ranking & selection |
+| Sprint 18 | Model Import/Export & Community Gallery | Share and discover models in a community gallery |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
@@ -207,6 +221,7 @@ The existing Forms/Tabs editor remains the stable manual authoring mode througho
 | Entity batching / assembly | ✅ BATCH (C-Event) + UNBATCH (B-Event) macros; queue-accumulation model | Sprint 12 |
 | Recirculation / rework loops | ✅ Controlled back-edges with loop:true flag; maxLoopCount guard; Entity.loopCount auto-maintained | Sprint 12 |
 | Full staff rostering (resource shift schedules) | ~ Partial — piecewise NHPP implemented; full rostering incomplete | Sprint 13+ |
+| AI natural language results queries | 🔄 In progress — query prompt builder, panel input, conversation history, follow-ups | Sprint 14 |
 
 ---
 
@@ -1296,6 +1311,36 @@ npm run build                                               # Succeeds
 | T4 — Anonymous/local storage mode | ✅ | localStorage CRUD backend (`src/db/local.js`); local_ prefix for model IDs; works without Supabase session. |
 | T5 — Template validation tests | ✅ | All 10 templates pass model validation; ER Triage priority queue discipline tested. |
 | T6 — User guide update | ✅ | DES_Studio_User_Guide.md updated to cover all features across Sprints 1–13. |
+
+---
+
+## Sprint 14 — AI Natural Language Results Queries
+
+**Goal:** Enable free-form natural language queries against simulation results via the AI Assistant. Users ask questions like "Which queue had the longest wait?" or "What was the average utilisation of Clerk?" and the AI answers directly from the results object — no need to navigate tabs.
+
+**Status:** 🔄 In progress | **Started:** 2026-05-09
+**Prerequisite:** Post-Sprint 13 exit gate passed.
+**Voice input pre-delivered:** F14.5 (microphone button in "Use AI" panel) was completed in prior session.
+
+| Feature | Status | Description |
+|---|---|---|
+| F14.1 — Results query prompt builder | ✅ | `buildResultsQueryPrompt(question, model, results, conversationHistory)` transforms a natural language question + structured KPI data into an LLM prompt. Includes only the relevant subset of results data. Accepts optional conversation history array for follow-up support. |
+| F14.2 — Query input in AI Assistant panel | ✅ | Text input at bottom of AI Assistant panel with "Ask" button. Sits below the existing Explain/Compare/Sensitivity/Suggest buttons. Enter key submits. Disabled when no results or streaming in progress. |
+| F14.3 — Context-aware answer rendering | ✅ | AI response rendered in the response area with "YOU" / "AI" role headers and KPI values cited inline. Auto-scrolls to latest content. |
+| F14.4 — Follow-up question support | ✅ | Conversation history preserved within the query session via `conversationHistory` state array. Past Q&A rendered in the response area. "Clear" button resets conversation. Users can ask "What about the second queue?" as a follow-up. |
+| F14.5 — Voice input for AI model building | ✅ | Microphone button in "Use AI" panel input area using browser Web Speech API. Mic toggles speech recognition; transcribed text populates the draft. Graceful fallback for unsupported browsers. |
+| F14.6 — Documentation & tests | ⬜ | Prompt tests, UI component tests, build plan update. |
+
+### Sprint 14 Completion Gate
+
+```bash
+npm test -- llm prompts execute-panel ai-generated-model-panel
+npm test -- --run
+npm run build
+# Manual: run an M/M/1 model, ask "What was the mean waiting time?" — correct answer displayed
+# Manual: ask follow-up "Which queue had the longest wait?" — correct answer
+# Manual: ask before any run — informative message about no results available
+```
 
 ---
 

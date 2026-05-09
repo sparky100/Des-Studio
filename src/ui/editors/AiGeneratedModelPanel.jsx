@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { callModelBuilder } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
 import { C, FONT } from "../shared/tokens.js";
@@ -332,7 +332,55 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
   const systemPrompt = useMemo(() => buildModelBuilderSystemPrompt(), []);
+
+  useEffect(() => {
+    return () => recognitionRef.current?.stop();
+  }, []);
+
+  const toggleListening = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setError("Voice input is not supported in this browser. Try Chrome or Edge.");
+      return;
+    }
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onresult = (event) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const chunk = event.results[i][0].transcript;
+        if (event.results[i].isFinal) transcript += chunk;
+      }
+      if (transcript) {
+        setDraft(prev => {
+          const separator = prev.trim() ? " " : "";
+          return prev + separator + transcript;
+        });
+      }
+    };
+
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => {
+      setListening(false);
+      setError("Voice input was interrupted or could not be understood. Try again.");
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+    setListening(true);
+    setError("");
+  };
 
   const send = async () => {
     const text = draft.trim();
@@ -457,7 +505,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           {notice && <Bubble role="system" content={notice} />}
           {error && <div role="alert"><InfoBox color={C.red}>{error}</InfoBox></div>}
         </div>
-        <div style={{ padding: 14, borderTop: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "end" }}>
+        <div style={{ padding: 14, borderTop: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "end" }}>
           <Field
             label="Describe or refine"
             value={draft}
@@ -466,6 +514,30 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
             rows={3}
             placeholder="e.g. A post office with 2 clerks, FIFO queue, exponential arrivals at rate 0.5"
           />
+          <button
+            type="button"
+            aria-label={listening ? "Stop voice input" : "Start voice input"}
+            title={typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition) ? "Voice input" : "Voice input requires Chrome or Edge"}
+            onClick={toggleListening}
+            disabled={!canEdit || loading}
+            style={{
+              background: listening ? C.red + "22" : C.surface,
+              border: `1px solid ${listening ? C.red : C.border}`,
+              borderRadius: 5,
+              color: listening ? C.red : C.muted,
+              fontFamily: FONT,
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "7px 11px",
+              cursor: canEdit && !loading ? "pointer" : "default",
+              opacity: canEdit && !loading ? 1 : 0.5,
+              transition: "all .15s",
+              alignSelf: "end",
+              lineHeight: 1,
+            }}
+          >
+            {listening ? "■ Stop" : "Mic"}
+          </button>
           <Btn variant="primary" onClick={send} disabled={!draft.trim() || loading || !canEdit}>{loading ? "Sending..." : "Send"}</Btn>
         </div>
       </section>
