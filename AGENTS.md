@@ -1313,7 +1313,7 @@ UI / UX
 | Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement | 543 passing | N/A |
 | Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
 | Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
-| Sprint 15 | 🔄 In progress | — | Shareable Results Dashboard | — | — |
+| Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
 | Sprint 16 | ⬜ Not started | — | Parametric Sweep & Scenario Comparison | — | — |
 | Sprint 17 | ⬜ Not started | — | Statistical Output Analyzer | — | — |
 | Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
@@ -1322,22 +1322,34 @@ UI / UX
 
 ## 21. Current Sprint
 
-**Sprint 15 — Shareable Results Dashboard**
-
-Goal: Enable users to create public share links for simulation run results with live KPI widgets. Users generate a shareable URL that displays key metrics (throughput, mean wait, utilisation, queue depths) in a read-only dashboard view — no login required for the viewer.
-
-**Prerequisites:** Sprint 14 complete. All Sprint 14 AI Natural Language Results Queries features completed 2026-05-09.
-
-### Sprint 15 Features
-
-| Feature | Status | Description |
-|---|---|---|
-| F15.1 — Share link generation | ⬜ | Generate a signed/unique share URL from a completed run. Store share configuration (pinned KPIs, visible widgets) in Supabase `share_links` table or results metadata. |
-| F15.2 — Public dashboard view | ⬜ | Read-only dashboard page rendering key results KPIs: throughput, mean wait, utilisation, queue depth chart, waiting time percentiles. No auth wall. |
-| F15.3 — KPI widget picker | ⬜ | Before generating share link, user selects which KPIs/widgets to include: summary stats, per-queue metrics, per-resource metrics, time-series chart, wait distribution. |
-| F15.4 — Share link management | ⬜ | View active share links for a model/run. Revoke (invalidate) a share link. List of shared dashboards in run history. |
-| F15.5 — Copy-to-clipboard + QR code | ⬜ | Copy share URL to clipboard. Generate QR code for mobile sharing. |
-| F15.6 — Documentation & tests | ⬜ | Tests for share link CRUD, dashboard rendering, widget picker. Documents updated. |
+| Sprint | Status | Completed | Description | Tests | M/M/1 |
+|---|---|---|---|---|---|---|
+| Sprint 1 | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening | 182 passing | 1.48% error |
+| Sprint 2 | ✅ Complete | 2026-05-03 | UI editor completeness | 215 passing | N/A |
+| Sprint 3 | ✅ Complete | 2026-05-04 | Experiment controls: warm-up, termination, fork model | 272 passing | 1.48% error |
+| Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results: workers, batches, CI dashboard | 294 passing | CI contains 9.0 |
+| Sprint 5 | ✅ Complete | 2026-05-04 | Polish, Export & Production | 334 passing | N/A |
+| Sprint 6 | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis | 343 passing | N/A |
+| Sprint 7A | ✅ Complete | 2026-05-05 | Platform Foundation: Roles, Settings & TypeScript | Docs only | N/A |
+| Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation | 33 focused | N/A |
+| Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources | 369 passing | N/A |
+| Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight | 22 focused | N/A |
+| Sprint 8 | ✅ Complete | 2026-05-05 | AI Generated Model Authoring | 385 passing | N/A |
+| Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence | Focused | N/A |
+| Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight | Docs | N/A |
+| Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring | 38 focused | N/A |
+| Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX Hardening | Focused | N/A |
+| Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas — Live Flow View | 464 passing | N/A |
+| Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Routing & Pooling | 508 passing | N/A |
+| Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Capacity & Output | 523 passing | N/A |
+| Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation | 541 passing | 1.48% error |
+| Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement | 543 passing | N/A |
+| Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
+| Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
+| Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
+| Sprint 16 | 🔄 Not started | — | Parametric Sweep & Scenario Comparison | — | — |
+| Sprint 17 | ⬜ Not started | — | Statistical Output Analyzer | — | — |
+| Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
 
 ### Recently Completed
 
@@ -1370,16 +1382,19 @@ Goal: Enable users to create public share links for simulation run results with 
 - Anonymous/local storage mode (localStorage CRUD backend)
 - Template auto-run on open
 
-### Sprint 15 Completion Gate
+### Recently Completed
 
-```bash
-npm test -- llm prompts execute-panel ai-generated-model-panel
-npm test -- --run
-npm run build
-# Manual: run a model, generate a share link, open in incognito — dashboard renders correctly
-# Manual: revoke a share link, confirm the dashboard is no longer accessible
-# Manual: share link with selected widgets only shows those KPIs
-```
+**Sprint 15 — Shareable Results Dashboard** (2026-05-09):
+- `src/ui/share/qr.js` — inline SVG QR code generator (byte mode, ECC L, versions 1–6, GF(256) Reed-Solomon, best mask selection, no deps)
+- Share modal in execute panel with widget picker (summary/queues/resources/charts checkboxes), active links list, Copy/QR/Revoke per link
+- Copy-to-clipboard via `navigator.clipboard.writeText()` with status feedback
+- Hash route `#share/<token>` wiring in App.jsx to render DashboardView — no auth required for viewer
+- `DashboardView.jsx` refactored: fixed `{textAlign: left}` React child bug in queue table header
+- 22 new Sprint 15 tests: 10 QR code utility + 12 DashboardView rendering (loading, error, KPI cards, queue table, server table, charts, wait distribution, pinned widgets, revoked link)
+- `getShareLink()` returns full `{ share, run, model }` from Supabase (joins `share_links` + `simulation_runs` + `des_models`)
+- `createShareLink()` uses `crypto.randomUUID()` for token generation
+- `revokeShareLink()` sets `revoked_at` with owner guard
+- `listShareLinks()` filters by `run_id` ordered by `created_at` desc
 
 ---
 

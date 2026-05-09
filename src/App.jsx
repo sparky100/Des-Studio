@@ -16,6 +16,7 @@ import { ModelCard, ModelDetail,
          NewModelModal }                    from "./ui/ModelDetail.jsx";
 import { validateModel }                    from "./engine/validation.js";
 import { TEMPLATES }                        from "./engine/templates.js";
+import DashboardView                        from "./ui/share/DashboardView.jsx";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues"];
 
@@ -144,6 +145,7 @@ export default function App(){
   const [authEmail,setAuthEmail]=useState('')
   const [authPassword,setAuthPassword]=useState('')
   const [authError,setAuthError]=useState('')
+  const [shareToken,setShareToken]=useState(null)
 
   const handleAuth=useCallback(async()=>{
     setAuthError('')
@@ -168,6 +170,16 @@ export default function App(){
       if(!session){setLoading(false);setModels([]);setProfile(null)}
     })
     return ()=>subscription.unsubscribe()
+  },[])
+
+  useEffect(()=>{
+    const check=()=>{
+      const m=window.location.hash.match(/^#share\/(.+)$/)
+      setShareToken(m?m[1]:null)
+    }
+    check()
+    window.addEventListener('hashchange',check)
+    return ()=>window.removeEventListener('hashchange',check)
   },[])
 
   const loadData=useCallback(async()=>{
@@ -351,6 +363,10 @@ export default function App(){
 
   const myModels=models.filter(m=>m.owner_id===uid||m.access?.[uid])
   const pubModels=models.filter(m=>m.visibility==='public'&&m.owner_id!==uid)
+
+  if(shareToken){
+    return <DashboardView token={shareToken} onBack={()=>{setShareToken(null);window.location.hash=''}} />
+  }
 
   if(openId){
     const model = models.find(m => m.id === openId) || localModel;

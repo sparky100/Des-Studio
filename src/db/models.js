@@ -358,3 +358,111 @@ export async function forkModel(sourceModelId, newUserId, newName = "") {
   return norm(data);
 }
 
+// ── Share links ───────────────────────────────────────────────────────────────
+
+export async function createShareLink(runId, userId, config = {}) {
+  const token = globalThis.crypto?.randomUUID
+    ? globalThis.crypto.randomUUID()
+    : `share-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const { data, error } = await supabase
+    .from("share_links")
+    .insert({
+      run_id: runId,
+      created_by: userId,
+      token,
+      config: {
+        pinnedWidgets: config.pinnedWidgets || [],
+        title: config.title || "",
+      },
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return { id: data.id, token: data.token, createdAt: data.created_at };
+}
+
+export async function getShareLink(token) {
+  const { data: link, error: linkError } = await supabase
+    .from("share_links")
+    .select("id, run_id, config, created_at, revoked_at")
+    .eq("token", token)
+    .single();
+  if (linkError) throw linkError;
+  if (!link) throw new Error("Share link not found.");
+  if (link.revoked_at) throw new Error("This share link has been revoked.");
+
+  const { data: run, error: runError } = await supabase
+    .from("simulation_runs")
+    .select("id, ran_at, replications, seed, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, max_simulation_time, warmup_period, results_json")
+    .eq("id", link.run_id)
+    .single();
+  if (runError) throw runError;
+  if (!run) throw new Error("Run not found.");
+
+  const { data: model, error: modelError } = await supabase
+    .from("des_models")
+    .select("name, entity_types, queues")
+    .eq("id", run.model_id)
+    .single();
+  if (modelError) throw modelError;
+
+  return {
+    share: {
+      id: link.id,
+      token,
+      config: link.config,
+      createdAt: link.created_at,
+    },
+    run: {
+      id: run.id,
+      ranAt: run.ran_at,
+      replications: run.replications,
+      seed: run.seed,
+      totalArrived: run.total_arrived,
+      totalServed: run.total_served,
+      totalReneged: run.total_reneged,
+      avgWaitTime: run.avg_wait_time,
+      avgServiceTime: run.avg_service_time,
+      maxSimulationTime: run.max_simulation_time,
+      warmupPeriod: run.warmup_period,
+      resultsJson: run.results_json,
+    },
+    model: {
+      name: model.name,
+      entityTypes: model.entity_types || [],
+      queues: model.queues || [],
+    },
+  };
+}
+
+export async function revokeShareLink(id, userId) {
+  const { data, error } = await supabase
+    .from("share_links")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("created_by", userId)
+    .select("id")
+    .single();
+  if (error) throw error;
+  if (!data) throw new Error("Share link not found or you do not own it.");
+  return { ok: true };
+}
+
+export async function listShareLinks(runId) {
+  const { data, error } = await supabase
+    .from("share_links")
+    .select("id, token, config, created_at, revoked_at")
+    .eq("run_id", runId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(link => ({
+    id: link.id,
+    token: link.token,
+    config: link.config,
+    createdAt: link.created_at,
+    revokedAt: link.revoked_at,
+    isActive: !link.revoked_at,
+  }));
+}
+

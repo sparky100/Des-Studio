@@ -6,13 +6,14 @@ import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx
 import { buildEngine } from "../../engine/index.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { summarizeReplicationResults } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings } from "../../db/models.js";
+import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink } from "../../db/models.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
+import { qrSvg } from "../share/qr.js";
 import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildResultsQueryPrompt, buildSensitivityPrompt, buildSuggestionPrompt } from "../../llm/prompts.js";
 
 const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
@@ -718,6 +719,17 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   // F9C.11 — node filter for bottom panel log
   const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
+  // F15 — share link state
+  const [shareLinks, setShareLinks] = useState([]);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareConfig, setShareConfig] = useState(() => ({
+    title: "",
+    pinnedWidgets: ["summary", "queues", "resources", "charts"],
+  }));
+  const [shareSaving, setShareSaving] = useState(false);
+  const [justCreatedLink, setJustCreatedLink] = useState(null);
+  const [shareLinksLoading, setShareLinksLoading] = useState(false);
+  const [qrToken, setQrToken] = useState(null);
   // F9C.10 — effective auto-step delay (must be declared before the autoRef useEffect)
   const effectiveAutoSpeed = useMemo(
     () => Math.max(40, Math.round(400 / speedMultiplier)),
@@ -1139,6 +1151,59 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
     );
   }, [results, replicationResults, aggregateStats, exportConfig, resultFilenameBase]);
 
+  const loadShareLinks = useCallback(async () => {
+    if (!modelId) return;
+    setShareLinksLoading(true);
+    try {
+      const links = await listShareLinks(modelId);
+      setShareLinks(links);
+    } catch { setShareLinks([]); }
+    finally { setShareLinksLoading(false); }
+  }, [modelId]);
+
+  const handleCreateShareLink = useCallback(async () => {
+    if (!userId || !results) return;
+    setShareSaving(true);
+    try {
+      const result = await createShareLink(modelId, userId, shareConfig);
+      setJustCreatedLink(result);
+      await loadShareLinks();
+    } catch (e) {
+      setSaveStatus({ state: "error", message: `Share link failed: ${e.message}` });
+    } finally { setShareSaving(false); }
+  }, [userId, results, modelId, shareConfig, loadShareLinks]);
+
+  const handleRevokeShareLink = useCallback(async (id) => {
+    if (!userId) return;
+    try {
+      await revokeShareLink(id, userId);
+      await loadShareLinks();
+    } catch (e) {
+      setSaveStatus({ state: "error", message: `Revoke failed: ${e.message}` });
+    }
+  }, [userId, loadShareLinks]);
+
+  const toggleWidget = useCallback((key) => {
+    setShareConfig(prev => ({
+      ...prev,
+      pinnedWidgets: prev.pinnedWidgets.includes(key)
+        ? prev.pinnedWidgets.filter(w => w !== key)
+        : [...prev.pinnedWidgets, key],
+    }));
+  }, []);
+
+  const canShare = userId && results && !shareSaving;
+
+  const baseUrl = window.location.origin + window.location.pathname.replace(/\/+$/, "");
+  const copyToClipboard = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setSaveStatus({ state: 'success', message: '✓ Copied to clipboard!' });
+    } catch {
+      setSaveStatus({ state: 'error', message: 'Failed to copy to clipboard.' });
+    }
+  };
+
   return (
     <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1, minWidth: 0 }}>
@@ -1251,6 +1316,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
         <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results</Btn>
         <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
+        <Btn variant="ghost" onClick={() => { setShowShareModal(true); loadShareLinks(); }} disabled={!canShare}>Share</Btn>
         <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)}>AI Insights</Btn>
         <Btn variant="ghost" onClick={toggleAnimation} title="Toggle entity token animation">
           {animationEnabled ? "● Animate" : "○ Animate"}
@@ -1558,6 +1624,115 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
           comparisonError={runHistoryError}
           onClose={() => setAiPanelOpen(false)}
         />
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000aa", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+          onClick={() => { setShowShareModal(false); setQrToken(null); }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="share-modal-title"
+            onClick={e => e.stopPropagation()}
+            style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, width: 520, maxWidth: "95vw", maxHeight: "90vh", overflowY: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h2 id="share-modal-title" style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: FONT }}>Share Results</h2>
+              <button type="button" onClick={() => { setShowShareModal(false); setQrToken(null); }}
+                style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", fontFamily: FONT, padding: "0 4px" }}>✕</button>
+            </div>
+
+            {/* Widget picker */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>VISIBLE WIDGETS</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {[
+                  { key: "summary", label: "Summary KPIs" },
+                  { key: "queues", label: "Queue table" },
+                  { key: "resources", label: "Server table" },
+                  { key: "charts", label: "Charts & histograms" },
+                ].map(w => (
+                  <label key={w.key} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 11, color: shareConfig.pinnedWidgets.includes(w.key) ? C.accent : C.muted, fontFamily: FONT }}>
+                    <input type="checkbox" checked={shareConfig.pinnedWidgets.includes(w.key)} onChange={() => toggleWidget(w.key)} style={{ accentColor: C.accent }} />
+                    {w.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Create link */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>CREATE SHARE LINK</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  aria-label="Share title"
+                  placeholder="Optional title..."
+                  value={shareConfig.title}
+                  onChange={e => setShareConfig(prev => ({ ...prev, title: e.target.value }))}
+                  style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 10px", outline: "none" }}
+                />
+                <Btn variant="primary" onClick={handleCreateShareLink} disabled={shareSaving}>
+                  {shareSaving ? "Creating..." : "Create Link"}
+                </Btn>
+              </div>
+            </div>
+
+            {/* Existing links */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>ACTIVE LINKS</div>
+                {shareLinksLoading && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Loading...</span>}
+              </div>
+              {shareLinks.length === 0 && !shareLinksLoading && (
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>No share links yet.</div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {shareLinks.filter(l => l.isActive).map(link => {
+                  const url = `${baseUrl}/#share/${link.token}`;
+                  return (
+                    <div key={link.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "8px 10px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, color: C.text, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{link.token.slice(0, 8)}…</div>
+                        <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{new Date(link.createdAt).toLocaleString()}</div>
+                      </div>
+                      {justCreatedLink?.token === link.token && (
+                        <span style={{ fontSize: 9, color: C.green, fontFamily: FONT, fontWeight: 700 }}>NEW</span>
+                      )}
+                      <button type="button" onClick={() => copyToClipboard(url)}
+                        title="Copy link"
+                        style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "4px 8px", cursor: "pointer" }}>
+                        Copy
+                      </button>
+                      <button type="button" onClick={() => setQrToken(qrToken === link.token ? null : link.token)}
+                        title="Show QR code"
+                        style={{ background: "none", border: `1px solid ${qrToken === link.token ? C.accent : C.border}`, borderRadius: 4, color: qrToken === link.token ? C.accent : C.muted, fontFamily: FONT, fontSize: 10, padding: "4px 8px", cursor: "pointer" }}>
+                        QR
+                      </button>
+                      <button type="button" onClick={() => handleRevokeShareLink(link.id)}
+                        title="Revoke share link"
+                        style={{ background: "none", border: `1px solid ${C.red}44`, borderRadius: 4, color: C.red, fontFamily: FONT, fontSize: 10, padding: "4px 8px", cursor: "pointer" }}>
+                        Revoke
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* QR code */}
+            {qrToken && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: 12 }}>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>QR CODE</div>
+                <div dangerouslySetInnerHTML={{ __html: qrSvg(`${baseUrl}/#share/${qrToken}`, 180) }}
+                  style={{ width: 180, height: 180, background: "#fff", borderRadius: 6, padding: 8 }} />
+                <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, textAlign: "center", wordBreak: "break-all" }}>
+                  {`${baseUrl}/#share/${qrToken}`}
+                </div>
+                <button type="button" onClick={() => copyToClipboard(`${baseUrl}/#share/${qrToken}`)}
+                  style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.accent, fontFamily: FONT, fontSize: 10, padding: "5px 16px", cursor: "pointer", fontWeight: 600 }}>
+                  Copy URL
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -14,6 +14,10 @@ import {
   normalizeProfileRole,
   normalizeRunHistoryRow,
   normalizeUserSettings,
+  createShareLink,
+  getShareLink,
+  revokeShareLink,
+  listShareLinks,
 } from '../../src/db/models.js';
 import { supabase } from '../../src/db/supabase.js';
 
@@ -461,6 +465,108 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       supabase.from('des_models').single.mockResolvedValueOnce({ data: null, error: mockError });
 
       await expect(forkModel('source-model-123', 'new-user-456')).rejects.toThrow('Insert failed');
+    });
+  });
+
+  describe('share links (Sprint 15)', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('createShareLink inserts a row with a UUID token', async () => {
+      supabase.from('share_links').insert.mockReturnThis();
+      supabase.from('share_links').select().single.mockResolvedValueOnce({
+        data: { id: 'link-1', token: 'abc-123', created_at: '2026-05-09T12:00:00Z' },
+        error: null,
+      });
+
+      const result = await createShareLink('run-1', 'user-1', { title: 'My Share' });
+
+      expect(result.token).toBe('abc-123');
+      expect(result.id).toBe('link-1');
+      expect(supabase.from).toHaveBeenCalledWith('share_links');
+      expect(supabase.from('share_links').insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          run_id: 'run-1',
+          created_by: 'user-1',
+          config: { pinnedWidgets: [], title: 'My Share' },
+        })
+      );
+    });
+
+    it('getShareLink fetches run and model data by token', async () => {
+      supabase.from('share_links').select().eq.mockReturnThis();
+      supabase.from('share_links').single
+        .mockResolvedValueOnce({
+          data: { id: 'link-1', run_id: 'run-1', config: { pinnedWidgets: [] }, created_at: '2026-05-09T12:00:00Z', revoked_at: null },
+          error: null,
+        });
+
+      supabase.from('simulation_runs').select().eq.mockReturnThis();
+      supabase.from('simulation_runs').single
+        .mockResolvedValueOnce({
+          data: { id: 'run-1', ran_at: '2026-05-09T11:00:00Z', replications: 1, seed: 42, total_arrived: 100, total_served: 95, total_reneged: 5, avg_wait_time: 8.2, avg_service_time: 1.1, max_simulation_time: 500, warmup_period: 0, results_json: { summary: { avgWait: 8.2 } } },
+          error: null,
+        });
+
+      supabase.from('des_models').select().eq.mockReturnThis();
+      supabase.from('des_models').single
+        .mockResolvedValueOnce({
+          data: { name: 'Test Model', entity_types: [{ id: 'et_1', name: 'Customer' }], queues: [{ id: 'q_1', name: 'Queue' }] },
+          error: null,
+        });
+
+      const result = await getShareLink('abc-123');
+
+      expect(result.share.token).toBe('abc-123');
+      expect(result.run.avgWaitTime).toBe(8.2);
+      expect(result.model.name).toBe('Test Model');
+      expect(result.model.entityTypes).toHaveLength(1);
+    });
+
+    it('getShareLink throws when share link is revoked', async () => {
+      supabase.from('share_links').select().eq.mockReturnThis();
+      supabase.from('share_links').single
+        .mockResolvedValueOnce({
+          data: { id: 'link-1', run_id: 'run-1', config: {}, created_at: '2026-05-09T12:00:00Z', revoked_at: '2026-05-09T13:00:00Z' },
+          error: null,
+        });
+
+      await expect(getShareLink('revoked-token')).rejects.toThrow('revoked');
+    });
+
+    it('revokeShareLink sets revoked_at and guards by userId', async () => {
+      supabase.from('share_links').update.mockReturnThis();
+      supabase.from('share_links').eq.mockReturnThis();
+      supabase.from('share_links').select().single.mockResolvedValueOnce({
+        data: { id: 'link-1' },
+        error: null,
+      });
+
+      const result = await revokeShareLink('link-1', 'user-1');
+
+      expect(result.ok).toBe(true);
+      expect(supabase.from('share_links').update).toHaveBeenCalledWith(
+        expect.objectContaining({ revoked_at: expect.any(String) })
+      );
+      expect(supabase.from('share_links').eq).toHaveBeenCalledWith('created_by', 'user-1');
+    });
+
+    it('listShareLinks returns active and revoked links for a run', async () => {
+      supabase.from('share_links').select().eq.mockReturnThis();
+      supabase.from('share_links').order.mockResolvedValueOnce({
+        data: [
+          { id: 'link-1', token: 'tok-1', config: { pinnedWidgets: ['arrived'] }, created_at: '2026-05-09T12:00:00Z', revoked_at: null },
+          { id: 'link-2', token: 'tok-2', config: { pinnedWidgets: [] }, created_at: '2026-05-09T11:00:00Z', revoked_at: '2026-05-09T12:30:00Z' },
+        ],
+        error: null,
+      });
+
+      const links = await listShareLinks('run-1');
+
+      expect(links).toHaveLength(2);
+      expect(links[0].isActive).toBe(true);
+      expect(links[1].isActive).toBe(false);
     });
   });
 });
