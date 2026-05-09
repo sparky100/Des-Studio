@@ -469,12 +469,21 @@ export const MACROS = [
     pattern: /^RENEGE_OLDEST\((\w+)\)$/i,
     apply(match, ctx) {
       const { helpers, state, clock, msgs } = ctx;
-      const ent = helpers.waitingOf(match[1])[0];
+      const cType = match[1].trim();
+      const queues = ctx.model?.queues || [];
+      const matchedQ = queues.find(q => {
+        const n = q.name?.trim().toLowerCase();
+        const t = q.customerType?.trim().toLowerCase();
+        const c = cType.toLowerCase();
+        return n === c || t === c;
+      });
+      const discipline = matchedQ?.discipline || 'FIFO';
+      const ent = helpers.waitingOf(cType, discipline)[0];
       if (ent) {
         ent.status     = "reneged";
         ent.renegeTime = clock;
         state.__reneged = (state.__reneged || 0) + 1;
-        msgs.push(`#${ent.id} (${match[1]}) reneged after ${(clock - ent.arrivalTime).toFixed(3)} t`);
+        msgs.push(`#${ent.id} (${cType}) reneged after ${(clock - ent.arrivalTime).toFixed(3)} t`);
       }
     },
   },

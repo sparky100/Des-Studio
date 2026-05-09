@@ -171,6 +171,9 @@ export const DISTRIBUTIONS = {
  * @param {object} context - Optional runtime context such as { clock }
  */
 export function sample(dist, params = {}, rng, serverAttrs = null, context = {}) {
+  if (typeof rng !== 'function') {
+    throw new Error('sample() requires a seeded PRNG function (rng) — pass buildEngine(model, seed).rng or mulberry32(seed)');
+  }
   const name = normalizeDistributionName(dist);
   const def = DISTRIBUTIONS[name];
   if (!def) return parseFloat(params.value) || 0;

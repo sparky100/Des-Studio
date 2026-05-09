@@ -9,8 +9,7 @@ import { fetchModels, fetchProfiles,
          saveModel, deleteModel,
          setVisibility, setAccess, forkModel,
          fetchRunStatsForModels }         from "./db/models.js";
-import { saveLocalModel, deleteLocalModel,
-         saveLocalRun, fetchLocalRunHistory } from "./db/local.js";
+import { saveLocalModel, deleteLocalModel } from "./db/local.js";
 import { C, FONT, GOOGLE_FONT_URL }         from "./ui/shared/tokens.js";
 import { Btn, Empty, ErrorBoundary }        from "./ui/shared/components.jsx";
 import { ModelCard, ModelDetail,
@@ -107,26 +106,6 @@ function extractImportedModelPayload(payload) {
 
 export { createSampleMm1Model, extractImportedModelPayload };
 
-const TemplateCard = ({ template, onTry }) => (
-  <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:16,display:'flex',flexDirection:'column',gap:8,cursor:'pointer',transition:'border-color .15s'}}
-    onClick={() => onTry(template)}
-    onMouseEnter={e => e.currentTarget.style.borderColor = C.accent + '66'}
-    onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
-    role="button" tabIndex={0}
-    onKeyDown={e => { if (e.key === 'Enter') onTry(template); }}
-    aria-label={`Try ${template.name}`}
-  >
-    <div style={{fontSize:13,fontWeight:700,color:C.text}}>{template.name}</div>
-    <div style={{fontSize:11,color:C.muted,lineHeight:1.5,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{template.description}</div>
-    <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
-      <span style={{fontSize:9,background:C.accent+'18',color:C.accent,borderRadius:3,padding:'2px 6px',fontWeight:600,letterSpacing:0.5}}>{'▶ Run'}</span>
-      {template.entityTypes?.filter(e => e.role === 'server').map(e =>
-        <span key={e.id} style={{fontSize:9,background:C.bg,border:`1px solid ${C.border}`,borderRadius:3,padding:'2px 6px',color:C.muted}}>{e.count}× {e.name}</span>
-      )}
-    </div>
-  </div>
-);
-
 const FirstRunPanel=({onCreateBlank,onCreateSample,onImport})=>(
   <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
     <div>
@@ -160,20 +139,24 @@ export default function App(){
   const importFileRef=useRef(null)
   const [localModel,setLocalModel]=useState(null) // anonymous mode: opened model
   const [isTemplate,setIsTemplate]=useState(false) // template quick-start flag
+  const [showAuth,setShowAuth]=useState(false)
+  const [authMode,setAuthMode]=useState('signin')
+  const [authEmail,setAuthEmail]=useState('')
+  const [authPassword,setAuthPassword]=useState('')
+  const [authError,setAuthError]=useState('')
 
-  const handleTryTemplate = useCallback((template) => {
-    const localId = "local_" + Date.now();
-    const saved = saveLocalModel({
-      id: localId,
-      name: template.name,
-      description: template.description,
-      visibility: "private",
-      ...template,
-    });
-    setLocalModel(saved);
-    setOpenId(localId);
-    setIsTemplate(true);
-  }, []);
+  const handleAuth=useCallback(async()=>{
+    setAuthError('')
+    try{
+      if(authMode==='signin'){
+        const{error}=await supabase.auth.signInWithPassword({email:authEmail,password:authPassword})
+        if(error)throw error
+      }else{
+        const{error}=await supabase.auth.signUp({email:authEmail,password:authPassword})
+        if(error)throw error
+      }
+    }catch(e){setAuthError(e.message)}
+  },[authMode,authEmail,authPassword])
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -415,17 +398,37 @@ export default function App(){
           <div style={{fontSize:11,color:C.muted,borderLeft:`1px solid ${C.border}`,paddingLeft:16}}>Three-Phase · Entities · Servers</div>
           <div style={{flex:1}}/>
         </div>
-        <div style={{maxWidth:1100,margin:'0 auto',padding:'28px 24px'}}>
-          <div style={{textAlign:'center',marginBottom:32}}>
-            <div style={{fontSize:22,fontWeight:700,color:C.text,marginBottom:8}}>Try DES Studio Instantly</div>
-            <div style={{fontSize:13,color:C.muted,maxWidth:600,margin:'0 auto',lineHeight:1.6}}>
-              Pick a template to run a simulation immediately — no sign-up needed.
-              <span style={{display:'block',marginTop:6}}>Sign in to save models and access the full editor.</span>
+        <div style={{maxWidth:400,margin:'0 auto',padding:'60px 24px',textAlign:'center'}}>
+          <div style={{fontSize:20,fontWeight:700,color:C.text,marginBottom:12}}>DES Studio</div>
+          <div style={{fontSize:13,color:C.muted,lineHeight:1.6,marginBottom:24}}>
+            Discrete-event simulation modelling tool. Sign in to build, run, and share models.
+          </div>
+          {!showAuth ? (
+            <button type="button" onClick={()=>setShowAuth(true)}
+              style={{background:C.accent,color:'#fff',border:'none',borderRadius:6,fontFamily:FONT,fontSize:14,padding:'10px 28px',cursor:'pointer',fontWeight:700}}>
+              Sign In / Sign Up
+            </button>
+          ) : (
+            <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:20,textAlign:'left'}}>
+              <div style={{display:'flex',gap:8,marginBottom:16}}>
+                <button type="button" onClick={()=>{setAuthMode('signin');setAuthError('')}}
+                  style={{flex:1,background:authMode==='signin'?C.accent+'18':'none',border:authMode==='signin'?`1px solid ${C.accent}44`:`1px solid ${C.border}`,borderRadius:4,color:authMode==='signin'?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'6px 12px',cursor:'pointer',fontWeight:600}}>Sign In</button>
+                <button type="button" onClick={()=>{setAuthMode('signup');setAuthError('')}}
+                  style={{flex:1,background:authMode==='signup'?C.accent+'18':'none',border:authMode==='signup'?`1px solid ${C.accent}44`:`1px solid ${C.border}`,borderRadius:4,color:authMode==='signup'?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'6px 12px',cursor:'pointer',fontWeight:600}}>Sign Up</button>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                <input type="email" placeholder="Email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:13,padding:'8px 10px',outline:'none'}}/>
+                <input type="password" placeholder="Password" value={authPassword} onChange={e=>setAuthPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')handleAuth()}}
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:13,padding:'8px 10px',outline:'none'}}/>
+                {authError&&<div style={{fontSize:11,color:C.red}}>{authError}</div>}
+                <button type="button" onClick={handleAuth}
+                  style={{background:C.accent,color:'#fff',border:'none',borderRadius:4,fontFamily:FONT,fontSize:13,padding:'8px 16px',cursor:'pointer',fontWeight:600}}>
+                  {authMode==='signin'?'Sign In':'Sign Up'}
+                </button>
+              </div>
             </div>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:14}}>
-            {TEMPLATES.map(t => <TemplateCard key={t.id} template={t} onTry={handleTryTemplate} />)}
-          </div>
+          )}
         </div>
       </div>
     )
@@ -515,9 +518,17 @@ export default function App(){
             {actionError}
           </div>
         )}
-        <div style={{marginBottom:24}}>
-          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:12}}>QUICK START — PICK A TEMPLATE</div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
+        <div role="tablist" aria-label="Model library sections" style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:24}}>
+          {[{id:'my',label:`My Models (${myModels.length})`},{id:'templates',label:`Templates (${TEMPLATES.length})`},{id:'public',label:`Public Library (${pubModels.length})`}].map(t=>(
+            <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} style={{background:'none',border:'none',borderBottom:tab===t.id?`2px solid ${C.accent}`:'2px solid transparent',color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'10px 18px',cursor:'pointer',fontWeight:tab===t.id?700:400}}>{t.label}</button>
+          ))}
+        </div>
+        <ErrorBoundary
+          title="Model library crashed"
+          message="The model list could not render."
+          onReset={loadData}
+        >
+          {tab==='templates'&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
             {TEMPLATES.map(t => (
               <div key={t.id} role="button" tabIndex={0} aria-label={`Try ${t.name}`}
                 onClick={() => handleStartTemplate(t)}
@@ -528,21 +539,10 @@ export default function App(){
               >
                 <div style={{fontSize:12,fontWeight:700,color:C.text}}>{t.name}</div>
                 <div style={{fontSize:10,color:C.muted,lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{t.description}</div>
-                <div style={{fontSize:9,color:C.accent,fontWeight:600}}>▶ Run now</div>
+                <div style={{fontSize:9,color:C.accent,fontWeight:600}}>▶ Start from template</div>
               </div>
             ))}
-          </div>
-        </div>
-        <div role="tablist" aria-label="Model library sections" style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:24}}>
-          {[{id:'my',label:`My Models (${myModels.length})`},{id:'public',label:`Public Library (${pubModels.length})`}].map(t=>(
-            <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} style={{background:'none',border:'none',borderBottom:tab===t.id?`2px solid ${C.accent}`:'2px solid transparent',color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'10px 18px',cursor:'pointer',fontWeight:tab===t.id?700:400}}>{t.label}</button>
-          ))}
-        </div>
-        <ErrorBoundary
-          title="Model library crashed"
-          message="The model list could not render."
-          onReset={loadData}
-        >
+          </div>}
           {tab==='my'&&(myModels.length===0
             ?<FirstRunPanel
               onCreateBlank={()=>setShowNew(true)}

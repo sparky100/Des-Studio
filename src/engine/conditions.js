@@ -147,7 +147,7 @@ export function evalCondition(condition, helpers, state, clock) {
   try {
     let expr = condition;
 
-    // queue(Type).length — check by queue field first, fall back to entity type
+    // queue(Type).length — check by queue field first, fall back to entity type with discipline
     expr = expr.replace(/queue\(([^)]+)\)\.length/g, (_, rawName) => {
       const name = rawName.trim();
       const inQueue = helpers.entities
@@ -155,8 +155,11 @@ export function evalCondition(condition, helpers, state, clock) {
             e.queue?.toLowerCase() === name.toLowerCase() && e.status === 'waiting'
           ).length
         : 0;
-      const byType = helpers.waitingOf(name).length;
-      return String(inQueue > 0 ? inQueue : byType);
+      if (inQueue > 0) return String(inQueue);
+      const discipline = helpers.model?.queues?.find(q =>
+        (q.name || '').toLowerCase() === name.toLowerCase()
+      )?.discipline || 'FIFO';
+      return String(helpers.waitingOf(name, discipline).length);
     });
 
     // idle(Type).count
