@@ -60,7 +60,7 @@ const ER_TRIAGE = {
   ],
   stateVariables: [],
   bEvents: [
-    { id: "b_arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Patient)",
+    { id: "b_arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Patient, Patient)",
       schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "2" } }] },
     { id: "b_triage_done", name: "Triage Done", scheduledTime: "9999", effect: "RELEASE(Nurse, Treatment)", schedules: [] },
     { id: "b_treatment_done", name: "Treatment Done", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
