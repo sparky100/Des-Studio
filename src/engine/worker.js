@@ -10,6 +10,7 @@ export function runReplicationPayload(payload = {}) {
     terminationCondition = null,
     maxCycles = 5000,
     maxCPasses = 500,
+    collectTimeSeries,
   } = payload;
 
   const engine = buildEngine(
@@ -19,7 +20,8 @@ export function runReplicationPayload(payload = {}) {
     maxSimTime,
     terminationCondition,
     maxCycles,
-    maxCPasses
+    maxCPasses,
+    collectTimeSeries
   );
 
   return {

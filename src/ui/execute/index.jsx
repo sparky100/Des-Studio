@@ -584,7 +584,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   // F9C.6 — animation toggle
   const [animationEnabled, setAnimationEnabled] = useState(true);
   // F10.4 — detailed time-series output (default off — zero engine overhead)
-  const [collectTimeSeries, setCollectTimeSeries] = useState(false);
+  const [collectTimeSeries, setCollectTimeSeries] = useState(true);
   // F9C.7 — configurable KPI slots
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
   // F9C.10 — speed multiplier (1× = 400ms interval, 10× = 40ms, 0.5× = 800ms)
@@ -726,6 +726,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         warmupPeriod,
         maxSimTime: maxTimeForRun,
         terminationCondition: stopConditionForRun,
+        collectTimeSeries,
         onProgress: progress => setBatchProgress(progress),
         onReplicationComplete: payload => {
           completedPayloads[payload.replicationIndex] = payload;
@@ -1128,9 +1129,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
           {animationEnabled ? "● Animate" : "○ Animate"}
         </Btn>
         <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 11, color: collectTimeSeries ? C.accent : "#9ca3af", fontFamily: FONT }}
-          title="Record queue depth and server utilisation at every clock tick for Charts tab">
+          title="Disable to reduce memory on long runs (charts won't have queue depth / utilisation)">
           <input type="checkbox" checked={collectTimeSeries} onChange={e => setCollectTimeSeries(e.target.checked)} style={{ accentColor: C.accent }}/>
-          Detailed output
+          Collect time-series
         </label>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         <div style={{ flex: 1, minWidth: 12 }} />

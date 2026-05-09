@@ -57,6 +57,8 @@ export function compactReplicationPayload(payload) {
       summary: result.summary,
       entitySummary: result.entitySummary,
       log: [],
+      timeSeries: result.timeSeries,
+      waitDist: result.waitDist,
     },
   };
 }
@@ -71,6 +73,7 @@ export function runReplications(options = {}) {
     terminationCondition = null,
     maxCycles = 5000,
     maxCPasses = 500,
+    collectTimeSeries,
     workerCount,
     onProgress,
     onReplicationComplete,
@@ -191,6 +194,7 @@ export function runReplications(options = {}) {
             terminationCondition,
             maxCycles,
             maxCPasses,
+            collectTimeSeries,
           },
         });
       } catch (error) {
