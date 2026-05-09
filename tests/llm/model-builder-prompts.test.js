@@ -57,6 +57,15 @@ describe("model builder prompts", () => {
     expect(prompt).toMatch(/RELEASE\(ServerType, NextQueueName\)/);
   });
 
+  it("requires PRIORITY queue discipline when entity has a priority attribute", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/priority.*attrDef/i);
+    expect(prompt).toMatch(/PRIORITY.*queue discipline/i);
+    expect(prompt).toMatch(/lower numbers.*higher priority/i);
+    expect(prompt).toMatch(/1 = highest/i);
+    expect(prompt).toMatch(/valueType.*number/i);
+  });
+
   it("requires queues to include customerType matching the arriving entity", () => {
     const prompt = buildModelBuilderSystemPrompt();
     expect(prompt).toMatch(/customerType/);

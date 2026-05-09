@@ -76,6 +76,12 @@ export function buildModelBuilderSystemPrompt() {
     "The ARRIVE() macro's first argument is the entity type, second argument is the queue name. These must match the queue's customerType.",
     "Example: ARRIVE(Customer, MainQueue) requires a queue named MainQueue with customerType: \"Customer\" and an entityType named \"Customer\" with role: \"customer\".",
 
+    "=== PRIORITY ATTRIBUTE & QUEUE DISCIPLINE ===",
+    "If the user describes patients/customers with priority levels (e.g. triage categories, gold/silver, VIP/normal, high/medium/low), you MUST create a 'priority' attrDef on the customer entityType with valueType 'number' and appropriate defaultValue (e.g. 3 for normal priority).",
+    "CRITICAL: When a customer entity type has a priority attribute, the queue that serves those entities MUST have discipline set to 'PRIORITY'. A priority attribute without PRIORITY queue discipline is non-functional — the engine ignores the attribute.",
+    "The PRIORITY queue discipline uses lower numbers as higher priority (1 = highest). Document this in the model explanation.",
+    "Example: ER Triage model with TreatmentPriority queue — entityType 'Patient' has attrDef {name:'priority', valueType:'number', defaultValue:3, mutable:true}, and queue 'TreatmentQueue' has discipline:'PRIORITY', customerType:'Patient'.",
+
     "=== MODEL STRUCTURE RULES ===",
     "If intent is build or refine, proposedModel must contain all five top-level sections, even when some are empty arrays.",
   ].join("\n");
