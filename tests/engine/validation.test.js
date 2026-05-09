@@ -83,4 +83,100 @@ describe("validateModel", () => {
       }),
     ]));
   });
+
+  // ── V25: RENEGE argument validation ──────────────────────────────────────
+
+  it("warns when RENEGE() argument is a type name instead of 'ctx'", () => {
+    const model = {
+      entityTypes: [{ id: "et_caller", name: "Caller", attrDefs: [] }],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "bad_renege", name: "Bad Abandonment Timer", effect: "RENEGE(Caller)", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "V25",
+          message: expect.stringContaining("RENEGE('Caller')"),
+        }),
+      ])
+    );
+  });
+
+  it("does not warn when RENEGE() argument is 'ctx'", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "good_renege", name: "Good Abandonment Timer", effect: "RENEGE(ctx)", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.warnings.filter(w => w.code === "V25")).toEqual([]);
+  });
+
+  it("does not flag RENEGE_OLDEST as a bad RENEGE argument", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "oldest", name: "Oldest Reneger", effect: "RENEGE_OLDEST(Caller)", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.warnings.filter(w => w.code === "V25")).toEqual([]);
+  });
+
+  it("warns when C-Event uses RENEGE() with a non-ctx argument", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [],
+      cEvents: [{
+        id: "c_bad",
+        name: "Bad C RENEGE",
+        priority: 1,
+        condition: { variable: "Queue.Some.length", operator: ">", value: 0 },
+        effect: "RENEGE(Caller)",
+        cSchedules: [],
+      }],
+    };
+
+    const result = validateModel(model);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "V25",
+          message: expect.stringContaining("RENEGE('Caller')"),
+        }),
+      ])
+    );
+  });
+
+  it("does not warn when effect has no RENEGE at all", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.warnings.filter(w => w.code === "V25")).toEqual([]);
+  });
 });

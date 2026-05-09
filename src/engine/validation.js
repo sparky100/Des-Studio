@@ -500,5 +500,36 @@ export function validateModel(model) {
       'execute');
   }
 
+
+  // ── V25: RENEGE() argument must be 'ctx' (not a type name) ────────────────
+  // RENEGE(TypeName) silently fails because parseInt("TypeName") = NaN.
+  // The correct form is always RENEGE(ctx), which uses the context entity ID from the FEL.
+  bEvents.forEach(b => {
+    const text = effectText(b.effect);
+    const m = text.match(/\bRENEGE\(\s*([^)]+)\s*\)/i);
+    if (m) {
+      const arg = m[1].trim();
+      if (arg.toLowerCase() !== 'ctx') {
+        warn('V25',
+          `B-Event '${b.name || b.id}' uses RENEGE('${arg}') which will silently fail. ` +
+          `Use RENEGE(ctx) to reference the current entity instead.`,
+          'bevents');
+      }
+    }
+  });
+  cEvents.forEach(c => {
+    const text = effectText(c.effect);
+    const m = text.match(/\bRENEGE\(\s*([^)]+)\s*\)/i);
+    if (m) {
+      const arg = m[1].trim();
+      if (arg.toLowerCase() !== 'ctx') {
+        warn('V25',
+          `C-Event '${c.name || c.id}' uses RENEGE('${arg}') which will silently fail. ` +
+          `Use RENEGE(ctx) to reference the current entity instead.`,
+          'cevents');
+      }
+    }
+  });
+
   return { errors, warnings };
 }
