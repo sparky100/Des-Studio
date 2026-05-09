@@ -1,23 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
-  fetchModels,
-  saveModel,
-  deleteModel,
-  saveSimulationRun,
-  fetchRunHistory,
-  fetchRunStatsForModels,
-  forkModel,
-  fetchProfiles,
-  fetchUserSettings,
-  saveUserSettings,
-  normalizeProfile,
-  normalizeProfileRole,
-  normalizeRunHistoryRow,
-  normalizeUserSettings,
   createShareLink,
   getShareLink,
   revokeShareLink,
   listShareLinks,
+  saveSweep,
+  getSweep,
+  listSweeps,
+  deleteSweep,
 } from '../../src/db/models.js';
 import { supabase } from '../../src/db/supabase.js';
 
@@ -567,6 +557,83 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(links).toHaveLength(2);
       expect(links[0].isActive).toBe(true);
       expect(links[1].isActive).toBe(false);
+    });
+  });
+
+  describe('sweeps (Sprint 16)', () => {
+    beforeEach(() => {
+      // Rebuild mock query builder to survive vi.clearAllMocks()
+      const qb = {
+        select: vi.fn().mockReturnThis(),
+        insert: vi.fn().mockReturnThis(),
+        update: vi.fn().mockReturnThis(),
+        delete: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      };
+      supabase.from.mockReturnValue(qb);
+    });
+
+    it('saveSweep inserts a row with config and results', async () => {
+      supabase.from('sweeps').single.mockResolvedValueOnce({
+        data: { id: 'sweep-1', config: { param: 'Server.count', min: 1, max: 3 }, results: { points: [{ value: 1 }, { value: 2 }] }, created_at: '2026-05-09T12:00:00Z' },
+        error: null,
+      });
+
+      const result = await saveSweep('model-1', 'user-1', { param: 'Server.count', min: 1, max: 3 }, { points: [{ value: 1 }, { value: 2 }] });
+
+      expect(result.id).toBe('sweep-1');
+      expect(result.config.param).toBe('Server.count');
+      expect(supabase.from).toHaveBeenCalledWith('sweeps');
+      expect(supabase.from('sweeps').insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model_id: 'model-1',
+          run_by: 'user-1',
+          config: expect.objectContaining({ param: 'Server.count' }),
+        })
+      );
+    });
+
+    it('getSweep fetches a sweep by id', async () => {
+      supabase.from('sweeps').single.mockResolvedValueOnce({
+        data: { id: 'sweep-1', model_id: 'model-1', config: { param: 'Server.count' }, results: { points: [] }, created_at: '2026-05-09T12:00:00Z' },
+        error: null,
+      });
+
+      const result = await getSweep('sweep-1');
+
+      expect(result.id).toBe('sweep-1');
+      expect(result.modelId).toBe('model-1');
+      expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('id', 'sweep-1');
+    });
+
+    it('listSweeps returns all sweeps for a model ordered by creation date', async () => {
+      supabase.from('sweeps').order.mockResolvedValueOnce({
+        data: [
+          { id: 'sweep-1', config: { param: 'Server.count' }, results: {}, created_at: '2026-05-09T12:00:00Z' },
+          { id: 'sweep-2', config: { param: 'Arrival.mean' }, results: {}, created_at: '2026-05-09T11:00:00Z' },
+        ],
+        error: null,
+      });
+
+      const sweeps = await listSweeps('model-1');
+
+      expect(sweeps).toHaveLength(2);
+      expect(sweeps[0].id).toBe('sweep-1');
+      expect(sweeps[1].id).toBe('sweep-2');
+      expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('model_id', 'model-1');
+    });
+
+    it('deleteSweep deletes by id', async () => {
+      supabase.from('sweeps').delete.mockReturnThis();
+      supabase.from('sweeps').eq.mockResolvedValueOnce({ data: null, error: null });
+
+      const result = await deleteSweep('sweep-1');
+
+      expect(result.ok).toBe(true);
+      expect(supabase.from('sweeps').delete).toHaveBeenCalled();
+      expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('id', 'sweep-1');
     });
   });
 });

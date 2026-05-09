@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-09 | Reflects: Sprint 14 — AI Natural Language Results Queries complete. Current: Sprint 15 — Shareable Results Dashboard*
+*Last updated: 2026-05-09 | Reflects: Sprint 16 — Parametric Sweep & Scenario Comparison complete. Current: Sprint 17 — Statistical Output Analyzer*
 
 ---
 
@@ -1314,7 +1314,7 @@ UI / UX
 | Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
 | Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
 | Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
-| Sprint 16 | ⬜ Not started | — | Parametric Sweep & Scenario Comparison | — | — |
+| Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison | 679 passing | N/A |
 | Sprint 17 | ⬜ Not started | — | Statistical Output Analyzer | — | — |
 | Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
 
@@ -1347,8 +1347,8 @@ UI / UX
 | Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
 | Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
 | Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
-| Sprint 16 | 🔄 Not started | — | Parametric Sweep & Scenario Comparison | — | — |
-| Sprint 17 | ⬜ Not started | — | Statistical Output Analyzer | — | — |
+| Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison | 679 passing | N/A |
+| Sprint 17 | 🔄 Not started | — | Statistical Output Analyzer | — | — |
 | Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
 
 ### Recently Completed
@@ -1381,6 +1381,16 @@ UI / UX
 - Template gallery tab in Model Library
 - Anonymous/local storage mode (localStorage CRUD backend)
 - Template auto-run on open
+
+**Sprint 16 — Parametric Sweep & Scenario Comparison** (2026-05-09):
+- `src/engine/sweep-params.js` — `enumerateSweepableParams()` discovers sweepable distribution/attribute/capacity fields; `applySweepValue()` mutates a cloned model; `generateSweepValues()` produces N uniformly spaced values capped at 50
+- `src/engine/sweep-runner.js` — `runSweep()` orchestrates sequential sweep points, parallel replications at each point via existing `runReplications()` worker pool, with progress/point callbacks and cancellation at point granularity
+- `src/engine/statistics.js` — `pairedTConfidenceInterval(a, b)` for per-replication paired difference CI using `tCritical95(df)`
+- `src/ui/execute/index.jsx` — Sweep accordion section: parameter picker dropdown with optgroups (Entity Type Count, Queue Capacity, B-Event Dist, C-Event Dist, State Variables), min/max/step inputs, Run Sweep / Cancel buttons, live progress, inline SVG SweepChart with CI polygon ribbon, results table with KPI columns and single-value highlight
+- `src/db/models.js` — 4 sweep CRUD functions (`saveSweep`, `getSweep`, `listSweeps`, `deleteSweep`) for Supabase `sweeps` table
+- `src/db/local.js` — `saveLocalSweep()`, `fetchLocalSweeps()` for anonymous/localStorage mode
+- 26 sweep-specific tests: 19 sweep-params, 7 sweep-runner; all passing
+- Build passes with zero errors
 
 ### Recently Completed
 

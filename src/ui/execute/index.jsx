@@ -11,6 +11,8 @@ import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
+import { enumerateSweepableParams } from "../../engine/sweep-params.js";
+import { runSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
 import { qrSvg } from "../share/qr.js";
@@ -370,6 +372,97 @@ function makeSavedRunPromptPayload(row) {
   };
 }
 
+function SweepChart({ results, metric, paramLabel }) {
+  if (!results?.length) return null;
+
+  const values = results.map(r => r.value);
+  const statPath = metric;
+  const means = results.map(r => r.aggregateStats[statPath]?.mean ?? null);
+
+  const finite = means.filter(m => m != null);
+  if (finite.length < 2) {
+    return (
+      <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, padding: 12, textAlign: "center", background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
+        Not enough data points to plot chart (need at least 2).
+      </div>
+    );
+  }
+
+  const W = 400, H = 160, PAD = { top: 16, right: 16, bottom: 28, left: 50 };
+  const plotW = W - PAD.left - PAD.right;
+  const plotH = H - PAD.top - PAD.bottom;
+
+  const valid = results.filter((_, i) => means[i] != null);
+  const vValues = valid.map(r => r.value);
+  const vMeans = valid.map(r => r.aggregateStats[statPath].mean);
+  const vLowers = valid.map(r => r.aggregateStats[statPath]?.lower ?? r.aggregateStats[statPath].mean);
+  const vUppers = valid.map(r => r.aggregateStats[statPath]?.upper ?? r.aggregateStats[statPath].mean);
+
+  const xMin = Math.min(...vValues);
+  const xMax = Math.max(...vValues);
+  const yMin = Math.min(...vLowers);
+  const yMax = Math.max(...vUppers);
+  const yRange = yMax - yMin || 1;
+  const yPad = yRange * 0.1;
+
+  const xScale = (v) => PAD.left + (v - xMin) / (xMax - xMin || 1) * plotW;
+  const yScale = (v) => PAD.top + plotH - (v - (yMin - yPad)) / (yRange + 2 * yPad) * plotH;
+
+  const linePath = vValues.map((v, i) => `${i === 0 ? "M" : "L"}${xScale(v).toFixed(1)},${yScale(vMeans[i]).toFixed(1)}`).join(" ");
+  const ciUpperPath = vValues.map((v, i) => `${i === 0 ? "M" : "L"}${xScale(v).toFixed(1)},${yScale(vUppers[i]).toFixed(1)}`).join(" ");
+  const ciLowerPath = vValues.map((v, i) => `${i === 0 ? "L" : "L"}${xScale(v).toFixed(1)},${yScale(vLowers[i]).toFixed(1)}`).join(" ");
+  const ciPolygon = ciUpperPath + " " + [...vValues].reverse().map((v, i) => {
+    const idx = vValues.length - 1 - i;
+    return `L${xScale(vValues[idx]).toFixed(1)},${yScale(vLowers[idx]).toFixed(1)}`;
+  }).join(" ") + " Z";
+
+  // Y-axis ticks (5 ticks)
+  const yTicks = Array.from({ length: 5 }, (_, i) => {
+    const frac = i / 4;
+    return (yMin - yPad) + frac * (yRange + 2 * yPad);
+  });
+
+  return (
+    <div style={{ background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 12, overflow: "hidden" }}>
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+        {/* Y-axis gridlines + labels */}
+        {yTicks.map((tick, i) => (
+          <g key={i}>
+            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)}
+              stroke="#333" strokeWidth={1} />
+            <text x={PAD.left - 6} y={yScale(tick) + 3} textAnchor="end" fill="#9ca3af" fontSize={9} fontFamily="monospace">
+              {tick.toFixed(1)}
+            </text>
+          </g>
+        ))}
+        {/* CI ribbon */}
+        <path d={ciPolygon} fill="#06b6d422" />
+        {/* CI bounds (dashed) */}
+        <path d={ciUpperPath} fill="none" stroke="#06b6d466" strokeWidth={1} strokeDasharray="4,3" />
+        <path d={[...vValues].reverse().map((v, i) => {
+          const idx = vValues.length - 1 - i;
+          return `${i === 0 ? "M" : "L"}${xScale(vValues[idx]).toFixed(1)},${yScale(vLowers[idx]).toFixed(1)}`;
+        }).join(" ")} fill="none" stroke="#06b6d466" strokeWidth={1} strokeDasharray="4,3" />
+        {/* Mean line */}
+        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={2} />
+        {/* Data points */}
+        {vValues.map((v, i) => (
+          <circle key={i} cx={xScale(v)} cy={yScale(vMeans[i])} r={3} fill={C.accent} stroke="#111" strokeWidth={1} />
+        ))}
+        {/* X-axis label */}
+        <text x={W / 2} y={H - 2} textAnchor="middle" fill="#9ca3af" fontSize={9} fontFamily={FONT}>
+          {paramLabel || "Parameter value"}
+        </text>
+        {/* Y-axis label */}
+        <text x={8} y={H / 2} textAnchor="middle" fill="#9ca3af" fontSize={9} fontFamily={FONT}
+          transform={`rotate(-90, 8, ${H / 2})`}>
+          {METRIC_LABELS[metric] || metric}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 const AiAssistantPanel = ({
   model,
   results,
@@ -704,6 +797,17 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [savedRunHistory, setSavedRunHistory] = useState([]);
   const [runHistoryStatus, setRunHistoryStatus] = useState("idle");
   const [runHistoryError, setRunHistoryError] = useState("");
+  const [sweepOpen, setSweepOpen] = useState(false);
+  const [sweepParams, setSweepParams] = useState([]);
+  const [sweepSelectedParam, setSweepSelectedParam] = useState(null);
+  const [sweepMin, setSweepMin] = useState(1);
+  const [sweepMax, setSweepMax] = useState(5);
+  const [sweepStep, setSweepStep] = useState(1);
+  const [sweepStatus, setSweepStatus] = useState("idle");
+  const [sweepResults, setSweepResults] = useState(null);
+  const [sweepProgress, setSweepProgress] = useState(null);
+  const [sweepKpiMetric, setSweepKpiMetric] = useState("summary.avgWait");
+  const sweepRunnerRef = useRef(null);
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
   const autoRef = useRef(null);
@@ -1194,6 +1298,52 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
 
   const canShare = userId && results && !shareSaving;
 
+  const handleRunSweep = useCallback(() => {
+    if (!sweepSelectedParam || hasErrors) return;
+    setSweepStatus("running");
+    setSweepResults(null);
+    setSweepProgress(null);
+
+    sweepRunnerRef.current = runSweep({
+      model,
+      paramConfig: sweepSelectedParam,
+      min: sweepMin,
+      max: sweepMax,
+      step: sweepStep,
+      replications,
+      baseSeed: seed,
+      warmupPeriod,
+      maxSimTime: terminationMode === "time" ? maxSimTime : null,
+      terminationCondition: terminationMode === "condition" ? terminationCondition : null,
+      collectTimeSeries,
+      onProgress(progress) {
+        setSweepProgress(progress);
+      },
+      onPointComplete(pointResult) {
+        setSweepResults(prev => [...(prev || []), pointResult]);
+      },
+      onError(error) {
+        setSweepStatus("error");
+        setSaveStatus({ state: "error", message: `Sweep error at point ${error.pointIndex}: ${error.message}` });
+      },
+      onComplete(results) {
+        setSweepStatus("complete");
+        setSweepResults(results);
+        setSaveStatus({ state: "success", message: `Sweep complete: ${results.length} points run.` });
+      },
+      onCancelled(partial) {
+        setSweepStatus("complete");
+        setSweepResults(partial.results);
+        setSaveStatus({ state: "success", message: `Sweep cancelled after ${partial.completedPoints} points.` });
+      },
+    });
+  }, [model, sweepSelectedParam, sweepMin, sweepMax, sweepStep, replications, seed,
+      warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, hasErrors]);
+
+  const handleCancelSweep = useCallback(() => {
+    sweepRunnerRef.current?.cancel();
+  }, []);
+
   const baseUrl = window.location.origin + window.location.pathname.replace(/\/+$/, "");
   const copyToClipboard = async (text) => {
     try {
@@ -1305,6 +1455,172 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
               queues={model.queues}
               onChange={setTerminationCondition}
             />
+          </div>
+        )}
+      </div>
+
+      {/* Parametric Sweep Section */}
+      <div style={{ background: "#1a1a1a", border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+        <div
+          onClick={() => {
+            if (!sweepOpen) setSweepParams(enumerateSweepableParams(model));
+            setSweepOpen(o => !o);
+          }}
+          style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, userSelect: "none" }}>
+          <span style={{ fontSize: 14, color: sweepOpen ? C.accent : C.muted }}>{sweepOpen ? "▼" : "▶"}</span>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETRIC SWEEP</span>
+          {sweepStatus === "running" && (
+            <span style={{ fontSize: 10, color: C.amber, fontFamily: FONT }}>Running sweep…</span>
+          )}
+          {sweepStatus === "complete" && (
+            <span style={{ fontSize: 10, color: C.green, fontFamily: FONT }}>Complete ({sweepResults?.length} points)</span>
+          )}
+          {sweepStatus === "error" && (
+            <span style={{ fontSize: 10, color: C.red, fontFamily: FONT }}>Error</span>
+          )}
+        </div>
+        {sweepOpen && (
+          <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 12, borderTop: `1px solid ${C.border}` }}>
+            {/* Parameter picker */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER</span>
+              <select
+                aria-label="Sweep parameter"
+                value={sweepSelectedParam ? `${sweepSelectedParam.type}|${sweepSelectedParam.targetId}|${sweepSelectedParam.paramKey || ""}` : ""}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (!val) { setSweepSelectedParam(null); return; }
+                  const [type, targetId, paramKey] = val.split("|");
+                  const found = sweepParams.find(p => p.type === type && p.targetId === targetId && (p.paramKey || "") === paramKey);
+                  setSweepSelectedParam(found || null);
+                  if (found) {
+                    const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
+                    setSweepMin(cv);
+                    setSweepMax(cv * 3);
+                    setSweepStep(cv > 0 ? cv : 1);
+                  }
+                }}
+                style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
+                <option value="">Select a parameter…</option>
+                <optgroup label="Entity Type Count">
+                  {sweepParams.filter(p => p.type === "entityTypeCount").map(p => (
+                    <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Queue Capacity">
+                  {sweepParams.filter(p => p.type === "queueCapacity").map(p => (
+                    <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue === Infinity ? "∞" : p.currentValue})</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Distribution Parameters (B-Events)">
+                  {sweepParams.filter(p => p.type === "bEventDistParam").map(p => (
+                    <option key={p.path} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Distribution Parameters (C-Events)">
+                  {sweepParams.filter(p => p.type === "cEventDistParam").map(p => (
+                    <option key={p.path} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
+                  ))}
+                </optgroup>
+                <optgroup label="State Variables">
+                  {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
+                    <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
+                  ))}
+                </optgroup>
+              </select>
+            </div>
+
+            {/* Range config */}
+            {sweepSelectedParam && (
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
+                  <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN</span>
+                  <input type="number" aria-label="Sweep min" value={sweepMin}
+                    onChange={e => setSweepMin(parseFloat(e.target.value) || 0)}
+                    style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
+                  <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX</span>
+                  <input type="number" aria-label="Sweep max" value={sweepMax}
+                    onChange={e => setSweepMax(parseFloat(e.target.value) || 0)}
+                    style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
+                  <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP</span>
+                  <input type="number" aria-label="Sweep step" value={sweepStep}
+                    onChange={e => setSweepStep(parseFloat(e.target.value) || 0)}
+                    style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                </div>
+                <Btn variant="primary" onClick={handleRunSweep}
+                  disabled={!sweepSelectedParam || sweepStatus === "running" || hasErrors}>
+                  {sweepStatus === "running" ? "Running…" : "Run Sweep"}
+                </Btn>
+                {sweepStatus === "running" && (
+                  <Btn variant="danger" onClick={handleCancelSweep}>Cancel</Btn>
+                )}
+              </div>
+            )}
+
+            {/* Sweep progress */}
+            {sweepStatus === "running" && sweepProgress && (
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+                Point {sweepProgress.currentPoint + 1} / {sweepProgress.totalPoints}
+                {sweepProgress.pointReplications && (
+                  <span> — Replications: {sweepProgress.pointReplications.completed}/{sweepProgress.pointReplications.total}</span>
+                )}
+              </div>
+            )}
+
+            {/* Sweep results */}
+            {sweepStatus === "complete" && sweepResults && sweepResults.length > 0 && (
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+                {/* KPI metric picker */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>KPI</span>
+                  <select aria-label="Sweep KPI metric"
+                    value={sweepKpiMetric}
+                    onChange={e => setSweepKpiMetric(e.target.value)}
+                    style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                    {CI_METRICS.map(m => (
+                      <option key={m} value={m}>{METRIC_LABELS[m]}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Trade-off chart */}
+                <SweepChart results={sweepResults} metric={sweepKpiMetric} paramLabel={sweepSelectedParam?.label || ""} />
+
+                {/* Results table */}
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
+                    <thead>
+                      <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                        <th style={{ padding: "6px 8px" }}>{sweepSelectedParam?.label || "Value"}</th>
+                        <th style={{ padding: "6px 8px" }}>Served</th>
+                        <th style={{ padding: "6px 8px" }}>Avg wait</th>
+                        <th style={{ padding: "6px 8px" }}>Avg service</th>
+                        <th style={{ padding: "6px 8px" }}>Avg sojourn</th>
+                        <th style={{ padding: "6px 8px" }}>Reneged</th>
+                        <th style={{ padding: "6px 8px" }}>Reps</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sweepResults.map((pt, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                          <td style={{ padding: "6px 8px", color: C.amber, fontWeight: 700 }}>{pt.value}</td>
+                          <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.served"]?.mean)}</td>
+                          <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgWait"]?.mean)}</td>
+                          <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgSvc"]?.mean)}</td>
+                          <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgSojourn"]?.mean)}</td>
+                          <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.reneged"]?.mean)}</td>
+                          <td style={{ padding: "6px 8px" }}>{pt.replications?.length || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

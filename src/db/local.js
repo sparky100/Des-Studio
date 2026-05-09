@@ -74,3 +74,29 @@ export function fetchLocalRunHistory(modelId) {
   const allRuns = readLocalRuns();
   return allRuns[modelId] || [];
 }
+
+// Sweep storage (localStorage)
+const SWEEPS_KEY = "des_studio_sweeps";
+
+function readLocalSweeps() {
+  try { return JSON.parse(localStorage.getItem(SWEEPS_KEY) || "{}"); }
+  catch { return {}; }
+}
+
+export function saveLocalSweep(modelId, config, results) {
+  const allSweeps = readLocalSweeps();
+  if (!allSweeps[modelId]) allSweeps[modelId] = [];
+  allSweeps[modelId].push({
+    id: genId(),
+    createdAt: new Date().toISOString(),
+    config,
+    results,
+  });
+  if (allSweeps[modelId].length > 20) allSweeps[modelId] = allSweeps[modelId].slice(-20);
+  localStorage.setItem(SWEEPS_KEY, JSON.stringify(allSweeps));
+}
+
+export function fetchLocalSweeps(modelId) {
+  const allSweeps = readLocalSweeps();
+  return allSweeps[modelId] || [];
+}

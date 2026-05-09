@@ -449,6 +449,66 @@ export async function revokeShareLink(id, userId) {
   return { ok: true };
 }
 
+export async function saveSweep(modelId, userId, config, results) {
+  const { data, error } = await supabase
+    .from("sweeps")
+    .insert({
+      model_id: modelId,
+      run_by: userId,
+      config,
+      results,
+    })
+    .select("id, config, results, created_at")
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    config: data.config,
+    results: data.results,
+    createdAt: data.created_at,
+  };
+}
+
+export async function getSweep(id) {
+  const { data, error } = await supabase
+    .from("sweeps")
+    .select("id, model_id, config, results, created_at")
+    .eq("id", id)
+    .single();
+  if (error) throw error;
+  return {
+    id: data.id,
+    modelId: data.model_id,
+    config: data.config,
+    results: data.results,
+    createdAt: data.created_at,
+  };
+}
+
+export async function listSweeps(modelId) {
+  const { data, error } = await supabase
+    .from("sweeps")
+    .select("id, config, results, created_at")
+    .eq("model_id", modelId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(s => ({
+    id: s.id,
+    config: s.config,
+    results: s.results,
+    createdAt: s.created_at,
+  }));
+}
+
+export async function deleteSweep(id) {
+  const { error } = await supabase
+    .from("sweeps")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+  return { ok: true };
+}
+
 export async function listShareLinks(runId) {
   const { data, error } = await supabase
     .from("share_links")

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   confidenceInterval95,
   mean,
+  pairedTConfidenceInterval,
   sampleStdDev,
   sampleVariance,
   summarizeReplicationResults,
@@ -36,6 +37,39 @@ describe('statistics helpers', () => {
     expect(tCritical95(10)).toBeCloseTo(2.228);
     expect(tCritical95(30)).toBeCloseTo(2.042);
     expect(tCritical95(31)).toBeCloseTo(1.96);
+  });
+
+  test('pairedTConfidenceInterval returns null for fewer than 2 observations', () => {
+    expect(pairedTConfidenceInterval([], [])).toMatchObject({ n: 0, meanDiff: null });
+    expect(pairedTConfidenceInterval([5], [6])).toMatchObject({ n: 1, meanDiff: null });
+  });
+
+  test('pairedTConfidenceInterval computes correct CI on equal-sized samples', () => {
+    const before = [10, 12, 14, 16, 18];
+    const after = [12, 15, 13, 19, 22];
+    // Differences: -2, -3, 1, -3, -4
+    // Mean diff: -2.2
+    const ci = pairedTConfidenceInterval(before, after);
+    expect(ci.n).toBe(5);
+    expect(ci.meanDiff).toBeCloseTo(-2.2, 4);
+    expect(ci.lower).toBeLessThan(ci.meanDiff);
+    expect(ci.upper).toBeGreaterThan(ci.meanDiff);
+    expect(ci.halfWidth).toBeGreaterThan(0);
+  });
+
+  test('pairedTConfidenceInterval handles non-finite values', () => {
+    const a = [1, 2, null, 4, NaN];
+    const b = [2, 3, 4, 5, 6];
+    const ci = pairedTConfidenceInterval(a, b);
+    // Only pairs 0,1,3 are finite: diffs = [-1, -1, -1] mean = -1
+    expect(ci.n).toBe(3);
+    expect(ci.meanDiff).toBeCloseTo(-1, 4);
+  });
+
+  test('pairedTConfidenceInterval returns null for mismatched lengths past min', () => {
+    const ci = pairedTConfidenceInterval([1, 2, 3], [4, 5]);
+    expect(ci.n).toBe(2);
+    expect(ci.meanDiff).toBeCloseTo(-3, 4);
   });
 
   test('summarizeReplicationResults extracts nested metric paths', () => {

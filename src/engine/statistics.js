@@ -93,3 +93,27 @@ export function summarizeReplicationResults(results = [], metricPaths = []) {
   }
   return summaries;
 }
+
+export function pairedTConfidenceInterval(a = [], b = []) {
+  const n = Math.min(a.length, b.length);
+  if (n < 2) return { n, meanDiff: null, lower: null, upper: null, halfWidth: null };
+  const diffs = [];
+  for (let i = 0; i < n; i++) {
+    if (Number.isFinite(a[i]) && Number.isFinite(b[i])) {
+      diffs.push(a[i] - b[i]);
+    }
+  }
+  const m = diffs.length;
+  if (m < 2) return { n: m, meanDiff: null, lower: null, upper: null, halfWidth: null };
+  const diffMean = diffs.reduce((s, d) => s + d, 0) / m;
+  const variance = diffs.reduce((s, d) => s + (d - diffMean) ** 2, 0) / (m - 1);
+  const halfWidth = tCritical95(m - 1) * Math.sqrt(variance) / Math.sqrt(m);
+  return {
+    n: m,
+    meanDiff: diffMean,
+    lower: diffMean - halfWidth,
+    upper: diffMean + halfWidth,
+    halfWidth,
+    pValue: null, // could add t-distribution CDF lookup if needed
+  };
+}
