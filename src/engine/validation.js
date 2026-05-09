@@ -90,7 +90,7 @@ export function validateModel(model) {
         `Queue '${q.name}' uses PRIORITY discipline but entity class '${q.customerType || '?'}' was not found.`,
         'queues');
     } else {
-      const hasPriority = (ct.attrDefs || []).some(a => (a.name || '').trim() === 'priority');
+      const hasPriority = (ct.attrDefs || []).some(a => (a.name || '').trim().toLowerCase() === 'priority');
       if (!hasPriority) {
         err('V4',
           `Queue '${q.name}' uses PRIORITY discipline but entity class '${ct.name}' has no 'priority' attribute.`,

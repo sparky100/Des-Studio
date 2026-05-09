@@ -171,6 +171,60 @@ describe('ASSIGN(Customer, Server)', () => {
     applyEffect('ASSIGN(Customer, Server)', ctx);
     expect(customer.status).toBe('waiting');
   });
+
+  test('prefers queue-name match over entity-type match to prevent cross-queue theft', () => {
+    // Two customers with same type "Patient", but in different queues
+    const inPatientQ  = { id: 1, type: 'Patient', role: 'customer', status: 'waiting', queue: 'Patient',   arrivalTime: 5, stages: [] };
+    const inTreatmentQ = { id: 2, type: 'Patient', role: 'customer', status: 'waiting', queue: 'Treatment', arrivalTime: 0, stages: [] };
+    const nurse = { id: 3, type: 'Nurse', role: 'server', status: 'idle', arrivalTime: 0, stages: [] };
+    const entities = [inPatientQ, inTreatmentQ, nurse];
+    const model = {
+      entityTypes: [
+        { name: 'Patient', role: 'customer', attrDefs: [] },
+        { name: 'Nurse',   role: 'server',   attrDefs: [] },
+      ],
+      queues: [
+        { name: 'Patient',   discipline: 'FIFO' },
+        { name: 'Treatment', discipline: 'FIFO' },
+      ],
+      bEvents: [], cEvents: [],
+    };
+    const ctx = makeCtx(entities, {}, model, 5);
+    applyEffect('ASSIGN(Patient, Nurse)', ctx);
+    // Should pick from the "Patient" queue (by queue name), not the Treatment queue
+    expect(inPatientQ.status).toBe('serving');
+    expect(inTreatmentQ.status).toBe('waiting');
+  });
+
+  test('falls back to entity-type match when no entity in the named queue', () => {
+    const customer2 = { id: 1, type: 'Customer', role: 'customer', status: 'waiting', queue: 'OtherQueue', arrivalTime: 0, stages: [] };
+    const server2   = { id: 2, type: 'Server',   role: 'server',   status: 'idle',    arrivalTime: 0, stages: [] };
+    const entities = [customer2, server2];
+    // No queue named "Customer" in this model, so queue-name match yields nothing
+    const ctx = makeCtx(entities, {}, baseModel, 5);
+    applyEffect('ASSIGN(Customer, Server)', ctx);
+    expect(customer2.status).toBe('serving');
+  });
+
+  test('applies queue discipline when selecting by queue name', () => {
+    const highPrio = { id: 1, type: 'Patient', role: 'customer', status: 'waiting', queue: 'Treatment', arrivalTime: 10, attrs: { priority: 1 }, stages: [] };
+    const lowPrio  = { id: 2, type: 'Patient', role: 'customer', status: 'waiting', queue: 'Treatment', arrivalTime: 5,  attrs: { priority: 5 }, stages: [] };
+    const doctor   = { id: 3, type: 'Doctor',  role: 'server',   status: 'idle',    arrivalTime: 0, stages: [] };
+    const entities = [highPrio, lowPrio, doctor];
+    const model = {
+      entityTypes: [
+        { name: 'Patient', role: 'customer', attrDefs: [{ name: 'priority' }] },
+        { name: 'Doctor',  role: 'server',   attrDefs: [] },
+      ],
+      queues: [{ name: 'Treatment', discipline: 'PRIORITY' }],
+      bEvents: [], cEvents: [],
+    };
+    const ctx = makeCtx(entities, {}, model, 5);
+    // ASSIGN with queue name "Treatment" matches by queue name
+    applyEffect('ASSIGN(Treatment, Doctor)', ctx);
+    expect(highPrio.status).toBe('serving');
+    expect(lowPrio.status).toBe('waiting');
+  });
 });
 
 // ── COMPLETE ─────────────────────────────────────────────────────────────────

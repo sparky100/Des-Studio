@@ -214,26 +214,28 @@ export const MACROS = [
         ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
 
-      // First try by entity type with discipline; if empty treat cType as queue name
-      let cust = helpers.waitingOf(cType, discipline, filterFn)[0];
+      // Prefer queue-name match first (more specific — prevents cross-queue theft
+      // when e.g. ASSIGN(Patient, Nurse) picks up a patient in the Treatment queue).
+      // Fall back to entity-type match for backward compat (queue name = entity type).
+      let inQueue = entities.filter(e =>
+        e.queue &&
+        e.queue.trim().toLowerCase() === cType.trim().toLowerCase() &&
+        e.status === "waiting"
+      );
+      if (filterFn) inQueue = inQueue.filter(filterFn);
+      inQueue = inQueue.sort((a, b) => {
+        if (discipline.toUpperCase() === 'LIFO')
+          return (b.arrivalTime || 0) - (a.arrivalTime || 0);
+        if (discipline.toUpperCase() === 'PRIORITY') {
+          const pa = Number(a.attrs?.priority ?? Infinity);
+          const pb = Number(b.attrs?.priority ?? Infinity);
+          if (pa !== pb) return pa - pb;
+        }
+        return (a.arrivalTime || 0) - (b.arrivalTime || 0);
+      });
+      let cust = inQueue[0];
       if (!cust) {
-        let inQueue = entities.filter(e =>
-          e.queue &&
-          e.queue.trim().toLowerCase() === cType.trim().toLowerCase() &&
-          e.status === "waiting"
-        );
-        if (filterFn) inQueue = inQueue.filter(filterFn);
-        inQueue = inQueue.sort((a, b) => {
-          if (discipline.toUpperCase() === 'LIFO')
-            return (b.arrivalTime || 0) - (a.arrivalTime || 0);
-          if (discipline.toUpperCase() === 'PRIORITY') {
-            const pa = Number(a.attrs?.priority ?? Infinity);
-            const pb = Number(b.attrs?.priority ?? Infinity);
-            if (pa !== pb) return pa - pb;
-          }
-          return (a.arrivalTime || 0) - (b.arrivalTime || 0);
-        });
-        cust = inQueue[0];
+        cust = helpers.waitingOf(cType, discipline, filterFn)[0];
       }
 
       const srv = helpers.idleOf(sType)[0];
