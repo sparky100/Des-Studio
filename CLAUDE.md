@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-10 | Reflects: Sprint 17 Statistical Output Analyzer complete. Current: Sprint 18 — 2D Parametric Sweeps*
+*Last updated: 2026-05-10 | Reflects: Sprint 19 Model Import/Export & Community Gallery complete. Current: Sprint 20 — TBD*
 
 ---
 
@@ -1342,47 +1342,30 @@ UI / UX
 | Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
 | Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison | 679 passing | N/A |
 | Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer | 37 engine + 14 UI tests | 1.48% error |
-| Sprint 18 | 🔄 Current | — | 2D Parametric Sweeps | — | — |
-| Sprint 19 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
+| Sprint 18 | ✅ Complete | 2026-05-10 | 2D Parametric Sweeps | 35 engine + 6 UI tests | 1.48% error |
+| Sprint 19 | ✅ Complete | 2026-05-10 | Model Import/Export & Community Gallery | 21 new tests | N/A |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 18 — 2D Parametric Sweeps**
+**Sprint 20 — TBD**
 
-**Goal:** Extend the parametric sweep system from one dimension to two, enabling exploration of a model's response surface across a cartesian product of two sweepable parameters.
+**Goal:** To be determined.
 
-**Prerequisites:** Sprint 16 (1D parametric sweep & scenario comparison) and Sprint 17 (statistical output analyzer) complete.
+### Recently Completed
 
-### Design Decisions
+**Sprint 19 — Model Import/Export & Community Gallery** (2026-05-10):
+- Hardened model import — `graph` key preserved; validation rejects files with errors; inline `[code] message` error list
+- Verified model export — includes `appVersion`, `exportedAt`, full `model_json` with `graph`; tests confirm inclusion/omission
+- Community Gallery tab — new `community` tab lists all public models; fork-to-run for non-owned models
+- DB migration `20260510100000_add_des_models_tags.sql` adds `tags jsonb` to `des_models`; `norm()`/`toRow()` updated
+- 21 new tests: 8 import + 7 export + 6 community gallery + 2 DB norm; build passes
 
-- **Visualization:** HTML table with conditional background colors (exact values visible, accessible, faster than SVG heatmap; heatmap toggle deferred to future sprint).
-- **Mode switch:** Toggle between "1D Sweep" and "2D Sweep" modes (preserves existing Sprint 16 UI, unambiguous state).
-- **Point limit:** Hard reject at >50 total grid points (N x M ≤ 50) to prevent accidental browser freeze.
-
-### Tasks
-
-| Task | File | Description |
-|---|---|---|
-| 1 | `src/engine/sweep-params.js` | `applySweepValues(model, sweepConfigs)` — multi-param application |
-| 2 | `src/engine/sweep-params.js` | `generate2DSweepValues(rangeA, rangeB)` — cartesian product + 50-point cap |
-| 3 | `src/engine/sweep-runner.js` | `run2DSweep({ model, paramConfigs, ranges, ... })` — 2D sweep runner |
-| 4 | `src/ui/execute/index.jsx` | Mode toggle + two param pickers + two range rows + point counter + validation |
-| 5 | `src/ui/execute/index.jsx` | 2D results grid table with KPI color legend + cell click stats sidebar |
-| 6 | `src/ui/execute/index.jsx` | Scenario comparison adapted for 2D cell selection (dropdowns with row/col coords) |
-| 7 | Tests | Engine 2D sweep correctness + UI controls/rendering tests |
-| 8 | Docs | Update AGENTS.md, DES_Studio_Build_Plan.md, CLAUDE.md |
-
-### Completion Gate
-
-```bash
-npm test -- sweep-params sweep-runner
-npm test -- --run
-npm run build
-node tests/engine/mm1_benchmark.js
-# Manual: run a 2D sweep on M/M/1 model (servers x arrival rate), verify grid renders
-```
+**Sprint 18 — 2D Parametric Sweeps** (2026-05-10):
+- Engine: `applySweepValues()` multi-param, `generate2DSweepValues()` cartesian product + 50-point cap, `run2DSweep()` nested iteration runner
+- UI: Mode toggle `[1D Sweep | 2D Sweep]`, two param pickers, live point counter, `Sweep2DGrid` with KPI color legend, cell-click stats sidebar, 2D scenario comparison
+- 35 engine + 6 UI tests, M/M/1 1.48% error
 
 ---
 
@@ -1466,14 +1449,15 @@ The following sprints are planned but not yet started. See `docs/DES_Studio_Buil
 
 ### Sprint 19 — Model Import/Export & Community Gallery
 
-**Goal:** CSV/Excel model import, AnyLogic/Simio export report, community template publishing, model cloning and social proof metrics.
+**Goal:** Enable modellers to export their models as portable JSON files, import externally-created models, and browse a community gallery of public models shared by other users.
 
 **Key features:**
-- CSV/Excel import: columns → entity attributes + distribution fitting
-- AnyLogic/Simio export report (removes lock-in fear)
-- Template gallery publishing by users
-- Model cloning count as social proof
-- Featured templates by DES Studio team
+- `graph` key preserved in import/export payloads
+- Import rejects files with validation errors; inline `[code] message` error list
+- Export includes `appVersion`, `exportedAt`, full `model_json` with `graph`
+- Community Gallery tab: all `visibility='public'` models with fork-to-run
+- DB migration: `tags jsonb` column on `des_models`
+- 21 new tests: import (8), export (7), gallery (6), DB norm (2)
 
 ---
 

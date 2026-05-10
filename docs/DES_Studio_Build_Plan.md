@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.48 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.53 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -67,7 +67,7 @@ flowchart LR
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef future fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
-  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S17 done;
+  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S14,S15,S16,S17,S18,S19 done;
 ```
 
 ### Roadmap Snapshot
@@ -88,7 +88,8 @@ flowchart LR
 | Shareable results dashboard | ✅ Complete | Sprint 15: QR code generator, share modal with widget picker, hash-route public DashboardView. |
 | Parametric sweep & scenario comparison | ✅ Complete | Sprint 16: sweep-params, sweep-runner, SweepChart with CI polygon ribbon, paired t-test scenario comparison. |
 | Statistical output analyzer | ✅ Complete | Sprint 17: Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, diagnostics, analysis UI tab. |
-| 2D parametric sweeps | 🔄 Current | Sprint 18: extend sweep to two dimensions — cartesian product grid, HTML table with KPI color legend, 2D scenario comparison. |
+| 2D parametric sweeps | ✅ Complete | Sprint 18: extend sweep to two dimensions — cartesian product grid, HTML table with KPI color legend, 2D scenario comparison. |
+| Model import/export & community gallery | ✅ Complete | Sprint 19: graph-preserving import/export, validation-gated import, Community Gallery tab with fork-to-run, `tags` DB column. |
 
 ### Key Issues and Watchpoints
 
@@ -142,6 +143,9 @@ flowchart LR
 | 1.48 | 2026-05-09 | Post-Sprint 13 features: template gallery (10 pre-built models), anonymous/local storage mode, template auto-run in Execute tab. Updated user guide to reflect all sprints. |
 | 1.49 | 2026-05-09 | Sprint 14 — AI Natural Language Results Queries: `buildResultsQueryPrompt()` for free-form KPI questions, query input + conversation history in AI Assistant panel, follow-up question support, updated forward roadmap flowchart through Sprint 18. |
 | 1.50 | 2026-05-10 | Sprint 15 — Shareable Results Dashboard, Sprint 16 — Parametric Sweep & Scenario Comparison complete. Sprint 17 plan defined: Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, analysis UI tab. |
+| 1.51 | 2026-05-10 | Sprint 17 — Statistical Output Analyzer complete. Welch's warm-up detection, batch-means CI, Bonferroni comparison, diagnostics, Analysis tab in BottomPanel. 37 engine + 14 UI tests. |
+| 1.52 | 2026-05-10 | Sprint 18 — 2D Parametric Sweeps complete. `applySweepValues()`, `generate2DSweepValues()`, `run2DSweep()`, mode toggle, HTML grid with KPI color legend, cell-click stats sidebar, 2D scenario comparison. 35 engine + 6 UI tests. |
+| 1.53 | 2026-05-10 | Sprint 19 — Model Import/Export & Community Gallery complete. graph-preserving import/export, validation-gated import, Community Gallery tab, `tags` DB column, ER Triage template fix, integer formatting (0 d.p.). 21 new tests. |
 
 ---
 
@@ -174,7 +178,9 @@ flowchart LR
 | Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries. | 58 Sprint 14 tests | N/A | Success | F14.1–F14.6 all complete. Voice input, results query prompt, AI Assistant query input/answer rendering, follow-ups, and 58 Sprint 14 tests. |
 | Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard. | 22 Sprint 15 tests | N/A | Success | QR code generator, share modal with widget picker, hash-route DashboardView, copy/revoke per link. |
 | Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison. | 26 sweep tests | N/A | Success | sweep-params, sweep-runner, SweepChart, CI polygon ribbon, paired t-test, sweep CRUD wrappers. |
-| Sprint 17 | 🔄 Not started | -- | Statistical Output Analyzer. | -- | -- | -- | Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, analysis UI tab. |
+| Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer. | 37 engine + 14 UI tests | 1.48% | Success | Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, analysis UI tab. |
+| Sprint 18 | ✅ Complete | 2026-05-10 | 2D Parametric Sweeps. | 35 engine + 6 UI tests | 1.48% | Success | applySweepValues() multi-param, generate2DSweepValues() cartesian product + 50-point cap, run2DSweep() nested iteration, HTML table with KPI color legend, cell-click stats sidebar, 2D scenario comparison. |
+| Sprint 19 | ✅ Complete | 2026-05-10 | Model Import/Export & Community Gallery. | 21 new tests | N/A | Success | graph-preserving import/export, validation-gated import with inline errors, Community Gallery tab with fork-to-run, tags DB column migration. |
 
 ---
 
@@ -205,6 +211,7 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 17 | Statistical Output Analyzer                         | Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, analysis UI tab    |
 | Sprint 18 | 2D Parametric Sweeps                                | Cartesian product exploration of two sweepable parameters; HTML grid with KPI color legend    |
 | Sprint 19 | Model Import/Export & Community Gallery             | Share and discover models in a community gallery                                              |
+| Sprint 20 | TBD                                                 | To be determined                                                                              |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 

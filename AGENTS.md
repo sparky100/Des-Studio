@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-10 | Reflects: Sprint 18 — 2D Parametric Sweeps complete. Current: Sprint 19 — Model Import/Export & Community Gallery*
+*Last updated: 2026-05-10 | Reflects: Sprint 19 — Model Import/Export & Community Gallery complete. Current: Sprint 20 — TBD*
 
 ---
 
@@ -1317,44 +1317,24 @@ UI / UX
 | Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison | 679 passing | N/A |
 | Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer | 37 engine + 14 UI tests | 1.48% error |
 | Sprint 18 | ✅ Complete | 2026-05-10 | 2D Parametric Sweeps | 35 engine + 6 UI tests | 1.48% error |
-| Sprint 19 | 🔄 Not started | — | Model Import/Export & Community Gallery | — | — |
+| Sprint 19 | ✅ Complete | 2026-05-10 | Model Import/Export & Community Gallery | 21 new tests | N/A |
 
 ---
 
-## 21. Current Sprint — Model Import/Export & Community Gallery
+## 21. Current Sprint — Sprint 20 (TBD)
 
-**Goal:** Enable modellers to export their models as portable JSON files, import externally-created models, and browse a community gallery of public models shared by other users.
+**Goal:** To be determined.
 
-### Design Decisions
-- **Import format:** Single JSON file containing `name`, `description`, `model_json` with all model keys. Must pass `validateModel()` before persistence.
-- **Export format:** Identical to import format with added `exportedAt` and `appVersion` metadata.
-- **Community gallery:** A new tab in the Model Library showing all `is_public = true` models from all users, with fork-to-run support.
+### Recently Completed
 
-### Task 1 — Harden model import validation (`src/App.jsx`)
-- Import must reject files with validation errors (not just warnings)
-- Show inline error list with `[code] message` format
-- Support both DES Studio native format and simplified bare-object format
-
-### Task 2 — Model export from ModelDetail (`src/ui/ModelDetail.jsx`)
-- "Export Model" button produces `des-studio-<slug>.json` download
-- Include `appVersion` from `package.json`
-- Include full `model_json` with all keys (entityTypes, stateVariables, bEvents, cEvents, queues, graph)
-
-### Task 3 — Community Gallery tab (`src/App.jsx`)
-- New `community` tab in library alongside `my`, `templates`, `public`
-- Lists all public models with owner avatar, name, description
-- Fork button on each card (reuses existing `confirmFork` flow)
-- Read-only preview before fork
-
-### Task 4 — DB migration for gallery metadata
-- Add `description` and `tags` columns to `des_models` if missing
-- RLS policy: public read for `is_public = true` (already exists)
-
-### Task 5 — Tests
-- Import rejects invalid JSON with inline errors
-- Export produces correct JSON structure with version metadata
-- Gallery tab renders public models without crashing
-- Fork from gallery creates private copy and opens it
+**Sprint 19 — Model Import/Export & Community Gallery** (2026-05-10):
+- Task 1: Hardened model import in `App.jsx` — `graph` key added to `MODEL_JSON_KEYS`; `extractImportedModelPayload()` now treats `graph` as object/null (not array); import rejects files with validation errors; shows inline `[code] message` error list
+- Task 2: Verified model export in `ModelDetail.jsx` — export payload already included `appVersion` (from `package.json`), `exportedAt`, and full `model_json` with `graph`; added tests confirming graph inclusion/omission
+- Task 3: Community Gallery tab in `App.jsx` — new `community` tab alongside `my`, `templates`, `public`; lists all `visibility='public'` models (including user's own); reuses `handleOpenModel` flow: owned models open directly, others trigger fork dialog
+- Task 4: DB migration `20260510100000_add_des_models_tags.sql` adds `tags jsonb` column to `des_models`; updated `norm()` and `toRow()` in `src/db/models.js` to read/write `tags`
+- Task 5: 21 new tests: 8 import (graph preservation, validation blocking, invalid JSON, bare-object format), 7 export (metadata, graph inclusion, warning on invalid models), 6 community gallery (tab render, empty state, list, open owned, fork dialog, fork action), 2 DB norm (tags normalization)
+- ER Triage template fix: `priority` attribute now has `dist: "Uniform", distParams: { min: "1", max: "5" }`
+- Integer formatting (0 d.p.) applied to all result displays across execute panel, bottom panel, sink node, and dashboard view
 
 ### Recently Completed
 
