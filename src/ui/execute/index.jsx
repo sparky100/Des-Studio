@@ -1,8 +1,9 @@
-// ui/execute/index.jsx — CustomerToken, VisualView, ExecutePanel
+// ui/execute/index.jsx — ExecutePanel (slimmed, imports from sibling modules)
+
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 const ExecuteCanvas = lazy(() => import("./ExecuteCanvas.jsx").then(m => ({ default: m.ExecuteCanvas })));
-import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
-import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { C, FONT } from "../shared/tokens.js";
+import { Tag, PhaseTag, Btn, SH, InfoBox } from "../shared/components.jsx";
 import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { buildEngine } from "../../engine/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
@@ -11,888 +12,16 @@ import { compareScenarios, detectWarmupWelch, summarizeReplicationResults } from
 import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink } from "../../db/models.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
+import { CustomerToken, VisualView } from "./VisualView.jsx";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
 import { enumerateSweepableParams, generate2DSweepValues } from "../../engine/sweep-params.js";
 import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
-import { streamNarrative } from "../../llm/apiClient.js";
 import { qrSvg } from "../share/qr.js";
-import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildResultsQueryPrompt, buildSensitivityPrompt, buildSuggestionPrompt } from "../../llm/prompts.js";
-
-const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
-const CI_METRICS = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.served", "summary.reneged"];
-const METRIC_LABELS = {
-  "summary.avgWait": "Avg wait",
-  "summary.avgSvc": "Avg service",
-  "summary.avgSojourn": "Avg sojourn",
-  "summary.served": "Served",
-  "summary.reneged": "Reneged",
-};
-
-const fmt = (value, digits = 0) => Number.isFinite(value) ? value.toFixed(digits) : "—";
-const makeBatchId = () => {
-  const cryptoApi = globalThis.crypto;
-  if (typeof cryptoApi?.randomUUID === "function") {
-    return cryptoApi.randomUUID();
-  }
-  return `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-};
-
-function makeBatchResult(replicationPayloads, aggregateStats, maxTime, warmupPeriod) {
-  const summaries = replicationPayloads.map(payload => payload.result?.summary || {});
-  const total = summaries.reduce((sum, summary) => sum + (summary.total || 0), 0);
-  const served = summaries.reduce((sum, summary) => sum + (summary.served || 0), 0);
-  const reneged = summaries.reduce((sum, summary) => sum + (summary.reneged || 0), 0);
-  const finalTime = Math.max(...replicationPayloads.map(payload => payload.result?.finalTime || 0), 0);
-
-  // Use the last completed replication's time series and wait dist for Charts tab
-  const lastResult = replicationPayloads.filter(Boolean).pop()?.result;
-
-  return {
-    snap: { clock: finalTime },
-    timeSeries: lastResult?.timeSeries,
-    waitDist: lastResult?.waitDist,
-    summary: {
-      total,
-      served,
-      reneged,
-      avgWait: aggregateStats["summary.avgWait"]?.mean ?? null,
-      avgSvc: aggregateStats["summary.avgSvc"]?.mean ?? null,
-      avgSojourn: aggregateStats["summary.avgSojourn"]?.mean ?? null,
-      warmupPeriod,
-      maxSimTime: maxTime,
-    },
-  };
-}
-
-function buildResultsExportPayload({
-  model,
-  results,
-  replicationResults = [],
-  aggregateStats = {},
-  config = {},
-  batchStatus = "idle",
-  exportedAt = new Date().toISOString(),
-} = {}) {
-  return {
-    schema: "des-studio.results.v1",
-    exportedAt,
-    status: results ? "complete" : "partial",
-    batchStatus,
-    model: {
-      id: config.modelId ?? null,
-      name: model?.name ?? "Untitled model",
-    },
-    experiment: {
-      runLabel: config.runLabel ?? null,
-      seed: config.seed ?? null,
-      replications: config.replications ?? Math.max(replicationResults.length, results ? 1 : 0),
-      warmupPeriod: config.warmupPeriod ?? 0,
-      maxSimTime: config.maxSimTime ?? null,
-      terminationMode: config.terminationMode ?? "time",
-      terminationCondition: config.terminationCondition ?? null,
-    },
-    results: results ?? null,
-    replications: replicationResults.map(payload => ({
-      replicationIndex: payload.replicationIndex,
-      seed: payload.seed,
-      summary: payload.result?.summary ?? payload.summary ?? {},
-      finalTime: payload.result?.finalTime ?? payload.finalTime ?? payload.result?.snap?.clock ?? null,
-    })),
-    aggregateStats,
-  };
-}
-
-function csvEscape(value) {
-  if (value == null) return "";
-  const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function buildResultsCsv({ results, replicationResults = [], aggregateStats = {}, config = {} } = {}) {
-  const rows = [["runLabel", "replicationIndex", "seed", "served", "reneged", "avgWait", "avgSvc", "avgSojourn", "finalTime"]];
-
-  const resultRows = replicationResults.length
-    ? replicationResults.map(payload => ({
-        replicationIndex: payload.replicationIndex,
-        runLabel: payload.run_label || payload.label || config.runLabel || "",
-        seed: payload.seed,
-        summary: payload.result?.summary ?? payload.summary ?? {},
-        finalTime: payload.result?.finalTime ?? payload.finalTime ?? payload.result?.snap?.clock ?? null,
-      }))
-    : results
-      ? [{
-          replicationIndex: 0,
-          runLabel: config.runLabel || "",
-          seed: config.seed ?? null,
-          summary: results.summary ?? {},
-          finalTime: results.finalTime ?? results.snap?.clock ?? null,
-        }]
-      : [];
-
-  for (const row of resultRows) {
-    rows.push([
-      row.runLabel,
-      row.replicationIndex,
-      row.seed,
-      row.summary.served,
-      row.summary.reneged,
-      row.summary.avgWait,
-      row.summary.avgSvc,
-      row.summary.avgSojourn,
-      row.finalTime,
-    ]);
-  }
-
-  const aggregateRows = Object.entries(aggregateStats)
-    .filter(([, stat]) => stat && stat.n > 0)
-    .map(([metric, stat]) => [
-      metric,
-      stat.n,
-      stat.mean,
-      stat.lower,
-      stat.upper,
-      stat.halfWidth,
-    ]);
-
-  if (aggregateRows.length) {
-    rows.push([]);
-    rows.push(["metric", "n", "mean", "lower95", "upper95", "halfWidth"]);
-    rows.push(...aggregateRows);
-  }
-
-  return rows.map(row => row.map(csvEscape).join(",")).join("\n");
-}
-
-function downloadTextFile(content, filename, type) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-const CustomerToken = ({ entity, size = 36, showId = true }) => {
-  const col = tokenColor(entity.id);
-  const statusBorder = { waiting: C.waiting, serving: C.serving, done: C.served, reneged: C.reneged, idle: C.green, busy: C.amber }[entity.status] || C.muted;
-  return (
-    <div title={`#${entity.id} ${entity.type} — ${entity.status}\narrived t=${entity.arrivalTime?.toFixed?.(2)}`}
-      style={{
-        width: size, height: size, borderRadius: "50%", background: col + "22", border: `2.5px solid ${statusBorder}`,
-        display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONT, fontSize: size * 0.28,
-        fontWeight: 700, color: col, flexShrink: 0, cursor: "default", transition: "all .2s",
-        boxShadow: entity.status === "serving" ? `0 0 8px ${col}66` : "none"
-      }}>
-      {showId ? `#${entity.id}` : ""}
-    </div>
-  );
-};
-
-const ServerBay = ({ server, customers }) => {
-  const servingCust = customers.find(e => e.id === server.currentCustId);
-  const isB = server.status === "busy";
-  const borderCol = isB ? C.busy : C.idle;
-  return (
-    <div style={{
-      background: C.panel, border: `2px solid ${borderCol}44`, borderRadius: 10, padding: 14,
-      display: "flex", flexDirection: "column", gap: 10, minWidth: 160, position: "relative"
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 12, color: C.server, fontFamily: FONT }}>Server #{server.id}</div>
-          <div style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>{server.type}</div>
-        </div>
-        <Tag label={server.status} color={isB ? C.amber : C.green} />
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center" }}>
-        <div style={{
-          width: 48, height: 48, borderRadius: 8, background: `${C.server}18`, border: `2px solid ${C.server}55`,
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
-        }}>
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <rect x="3" y="6" width="18" height="4" rx="1" stroke={C.server} strokeWidth="1.5" />
-            <rect x="3" y="13" width="18" height="4" rx="1" stroke={C.server} strokeWidth="1.5" />
-            <circle cx="6.5" cy="8" r="1" fill={isB ? C.amber : C.green} />
-          </svg>
-        </div>
-        {servingCust ? (
-          <><div style={{ fontSize: 18, color: C.muted }}>→</div><CustomerToken entity={servingCust} size={44} /></>
-        ) : (
-          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>idle</div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-const VisualView = ({ snap, model, summary }) => {
-  if (!snap) return <Empty icon="▶" msg="Run or step the simulation to see the visual view." />;
-
-  const allEntities = snap.entities || [];
-  const servers = allEntities.filter(e => e.role === "server");
-  const customers = allEntities.filter(e => e.role !== "server");
-  const waiting = customers.filter(e => e.status === "waiting");
-  const definedQueues = model.queues || [];
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {summary?.warmupPeriod > 0 && (
-        <div style={{ background: `${C.warmup}22`, border: `1px solid ${C.amber}44`, borderRadius: 8, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", gap: 16 }}>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>WARM-UP DURATION</span>
-              <span style={{ fontSize: 14, color: C.amber, fontWeight: 700 }}>{summary.warmupPeriod}</span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>OBS. EXCLUDED</span>
-              <span style={{ fontSize: 14, color: C.reneged, fontWeight: 700 }}>{summary.excludedCount || 0}</span>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>OBS. INCLUDED</span>
-              <span style={{ fontSize: 14, color: C.served, fontWeight: 700 }}>{summary.total || 0}</span>
-            </div>
-          </div>
-          <div style={{ fontSize: 10, color: C.amber, fontWeight: 700, fontFamily: FONT, letterSpacing: 1 }}>WARM-UP AUDIT TRAIL</div>
-        </div>
-      )}
-      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 16, alignItems: "start" }}>
-        <div style={{ background: C.bg, border: `2px solid ${C.purple}44`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 140 }}>
-          <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 2, marginBottom: 6 }}>SIM CLOCK</div>
-          <div style={{ fontSize: 42, fontWeight: 300, color: "#fff", fontFamily: FONT, lineHeight: 1 }}>
-            {parseFloat(snap.clock).toFixed(0)}
-          </div>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
-          {[
-            { label: "Arrived", value: customers.length, color: C.kpiArr },
-            { label: "Served", value: snap.served || 0, color: C.kpiSvc },
-            { label: "Reneged", value: snap.reneged || 0, color: C.danger },
-            { label: "Waiting", value: waiting.length, color: C.bEvent },
-          ].map(s => (
-            <div key={s.label} style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, textAlign: "center" }}>
-              <div style={{ fontSize: 9, color: C.label, fontWeight: 700, marginBottom: 4 }}>{s.label.toUpperCase()}</div>
-              <div style={{ fontSize: 20, color: s.color, fontWeight: 700 }}>{s.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        {servers.map(srv => <ServerBay key={srv.id} server={srv} customers={customers} />)}
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>QUEUE LANES</div>
-        {definedQueues.length > 0 ? (
-          definedQueues.map((qDef, idx) => {
-            const qName = qDef.name;
-            const qEntities = waiting.filter(e => e.queue === qName || (idx === 0 && !e.queue));
-            return (
-              <div key={qName} style={{ background: C.bg, border: `1px solid ${C.border}`, borderLeft: `4px solid ${C.cEvent || C.purple}`, borderRadius: 8, padding: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", fontFamily: FONT }}>{qName.toUpperCase()}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: qEntities.length > 0 ? C.bEvent : "#fff", fontFamily: FONT }}>{qEntities.length}</span>
-                </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minHeight: 40 }}>
-                  {qEntities.length === 0 ? <span style={{ fontSize: 11, color: C.muted, fontStyle: "italic" }}>empty</span> : qEntities.map(e => <CustomerToken key={e.id} entity={e} size={32} />)}
-                </div>
-              </div>
-            );
-          })
-        ) : (
-          <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 12 }}>
-            <div style={{ fontSize: 11, color: C.bEvent, fontWeight: 700, marginBottom: 8 }}>GENERAL QUEUE</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{waiting.map(e => <CustomerToken key={e.id} entity={e} size={32} />)}</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-function makeRunLabel(payload) {
-  if (!payload) return "Run";
-  if (payload.run_label) return payload.run_label;
-  if (payload.label) return payload.label;
-  if (payload.replicationIndex != null) return `Replication ${payload.replicationIndex + 1} (seed ${payload.seed ?? "?"})`;
-  return "Completed run";
-}
-
-function makeRunPromptPayload(label, payload) {
-  const summary = payload?.result?.summary || payload?.summary || payload?.results?.summary || {};
-  return {
-    label,
-    experimentConfig: payload?.experiment || payload?.experimentConfig || {},
-    kpis: {
-      served: summary.served ?? null,
-      reneged: summary.reneged ?? null,
-      totalEntities: summary.total ?? null,
-      avgWait: summary.avgWait ?? null,
-      avgService: summary.avgSvc ?? null,
-      avgSojourn: summary.avgSojourn ?? null,
-    },
-    finalTime: payload?.result?.finalTime ?? payload?.finalTime ?? payload?.results?.snap?.clock ?? null,
-  };
-}
-
-function makeSavedRunPromptPayload(row) {
-  const summary = row?.results_json?.summary || {};
-  return {
-    label: row?.run_label || row?.label || row?.ran_at || "Saved run",
-    experimentConfig: {
-      warmupPeriod: row?.warmup_period ?? null,
-      maxSimTime: row?.max_simulation_time ?? row?.results_json?.summary?.maxSimTime ?? null,
-      replications: row?.replications ?? 1,
-      seed: row?.seed ?? null,
-    },
-    kpis: {
-      served: row?.total_served ?? summary.served ?? null,
-      reneged: row?.total_reneged ?? summary.reneged ?? null,
-      totalEntities: row?.total_arrived ?? summary.total ?? null,
-      avgWait: row?.avg_wait_time ?? summary.avgWait ?? null,
-      avgService: row?.avg_service_time ?? summary.avgSvc ?? null,
-      avgSojourn: summary.avgSojourn ?? null,
-      renegeRate: row?.renege_rate ?? null,
-    },
-    finalTime: row?.results_json?.clock ?? row?.results_json?.summary?.finalTime ?? null,
-  };
-}
-
-function SweepChart({ results, metric, paramLabel }) {
-  if (!results?.length) return null;
-
-  const values = results.map(r => r.value);
-  const statPath = metric;
-  const means = results.map(r => r.aggregateStats[statPath]?.mean ?? null);
-
-  const finite = means.filter(m => m != null);
-  if (finite.length < 2) {
-    return (
-      <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, padding: 12, textAlign: "center", background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
-        Not enough data points to plot chart (need at least 2).
-      </div>
-    );
-  }
-
-  const W = 400, H = 160, PAD = { top: 16, right: 16, bottom: 28, left: 50 };
-  const plotW = W - PAD.left - PAD.right;
-  const plotH = H - PAD.top - PAD.bottom;
-
-  const valid = results.filter((_, i) => means[i] != null);
-  const vValues = valid.map(r => r.value);
-  const vMeans = valid.map(r => r.aggregateStats[statPath].mean);
-  const vLowers = valid.map(r => r.aggregateStats[statPath]?.lower ?? r.aggregateStats[statPath].mean);
-  const vUppers = valid.map(r => r.aggregateStats[statPath]?.upper ?? r.aggregateStats[statPath].mean);
-
-  const xMin = Math.min(...vValues);
-  const xMax = Math.max(...vValues);
-  const yMin = Math.min(...vLowers);
-  const yMax = Math.max(...vUppers);
-  const yRange = yMax - yMin || 1;
-  const yPad = yRange * 0.1;
-
-  const xScale = (v) => PAD.left + (v - xMin) / (xMax - xMin || 1) * plotW;
-  const yScale = (v) => PAD.top + plotH - (v - (yMin - yPad)) / (yRange + 2 * yPad) * plotH;
-
-  const linePath = vValues.map((v, i) => `${i === 0 ? "M" : "L"}${xScale(v).toFixed(1)},${yScale(vMeans[i]).toFixed(1)}`).join(" ");
-  const ciUpperPath = vValues.map((v, i) => `${i === 0 ? "M" : "L"}${xScale(v).toFixed(1)},${yScale(vUppers[i]).toFixed(1)}`).join(" ");
-  const ciLowerPath = vValues.map((v, i) => `${i === 0 ? "L" : "L"}${xScale(v).toFixed(1)},${yScale(vLowers[i]).toFixed(1)}`).join(" ");
-  const ciPolygon = ciUpperPath + " " + [...vValues].reverse().map((v, i) => {
-    const idx = vValues.length - 1 - i;
-    return `L${xScale(vValues[idx]).toFixed(1)},${yScale(vLowers[idx]).toFixed(1)}`;
-  }).join(" ") + " Z";
-
-  // Y-axis ticks (5 ticks)
-  const yTicks = Array.from({ length: 5 }, (_, i) => {
-    const frac = i / 4;
-    return (yMin - yPad) + frac * (yRange + 2 * yPad);
-  });
-
-  return (
-    <div style={{ background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 12, overflow: "hidden" }}>
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
-        {/* Y-axis gridlines + labels */}
-        {yTicks.map((tick, i) => (
-          <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)}
-              stroke={C.border} strokeWidth={1} />
-            <text x={PAD.left - 6} y={yScale(tick) + 3} textAnchor="end" fill={C.label} fontSize={9} fontFamily="monospace">
-              {tick.toFixed(1)}
-            </text>
-          </g>
-        ))}
-        {/* CI ribbon */}
-        <path d={ciPolygon} fill={`${C.accent}22`} />
-        {/* CI bounds (dashed) */}
-        <path d={ciUpperPath} fill="none" stroke={`${C.accent}66`} strokeWidth={1} strokeDasharray="4,3" />
-        <path d={[...vValues].reverse().map((v, i) => {
-          const idx = vValues.length - 1 - i;
-          return `${i === 0 ? "M" : "L"}${xScale(vValues[idx]).toFixed(1)},${yScale(vLowers[idx]).toFixed(1)}`;
-        }).join(" ")} fill="none" stroke={`${C.accent}66`} strokeWidth={1} strokeDasharray="4,3" />
-        {/* Mean line */}
-        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={2} />
-        {/* Data points */}
-        {vValues.map((v, i) => (
-          <circle key={i} cx={xScale(v)} cy={yScale(vMeans[i])} r={3} fill={C.accent} stroke={C.bg} strokeWidth={1} />
-        ))}
-        {/* X-axis label */}
-        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.label} fontSize={9} fontFamily={FONT}>
-          {paramLabel || "Parameter value"}
-        </text>
-        {/* Y-axis label */}
-        <text x={8} y={H / 2} textAnchor="middle" fill={C.label} fontSize={9} fontFamily={FONT}
-          transform={`rotate(-90, 8, ${H / 2})`}>
-          {METRIC_LABELS[metric] || metric}
-        </text>
-      </svg>
-    </div>
-  );
-}
-
-function WarmupChart({ series, truncationPoint, width = 320, height = 100 }) {
-  if (!series || series.length < 2) return null;
-  const W = width, H = height, PAD = { top: 8, right: 8, bottom: 18, left: 36 };
-  const plotW = W - PAD.left - PAD.right;
-  const plotH = H - PAD.top - PAD.bottom;
-
-  const values = series.map(p => p.value);
-  const times = series.map(p => p.t);
-  const yMin = Math.min(...values);
-  const yMax = Math.max(...values);
-  const yRange = yMax - yMin || 1;
-  const yPad = yRange * 0.1;
-  const xMin = times[0];
-  const xMax = times[times.length - 1];
-
-  const xScale = (t) => PAD.left + (t - xMin) / (xMax - xMin || 1) * plotW;
-  const yScale = (v) => PAD.top + plotH - (v - (yMin - yPad)) / (yRange + 2 * yPad) * plotH;
-
-  const linePath = series.map((p, i) =>
-    `${i === 0 ? "M" : "L"}${xScale(p.t).toFixed(1)},${yScale(p.value).toFixed(1)}`
-  ).join(" ");
-
-  const kneeX = xScale(truncationPoint);
-
-  const yTicks = Array.from({ length: 3 }, (_, i) =>
-    (yMin - yPad) + (i / 2) * (yRange + 2 * yPad)
-  );
-
-  return (
-    <div style={{ background: C.bg, borderRadius: 4, border: `1px solid ${C.border}`, padding: 6, overflow: "hidden" }}>
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
-        {yTicks.map((tick, i) => (
-          <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} />
-            <text x={PAD.left - 4} y={yScale(tick) + 2} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace">
-              {tick.toFixed(1)}
-            </text>
-          </g>
-        ))}
-        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={1.5} />
-        <line x1={kneeX} y1={PAD.top} x2={kneeX} y2={H - PAD.bottom} stroke={C.amber} strokeWidth={1} strokeDasharray="3,2" />
-        <text x={kneeX + 3} y={PAD.top + 8} fill={C.amber} fontSize={8} fontFamily="monospace">
-          knee t={Math.round(truncationPoint)}
-        </text>
-        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={8} fontFamily="monospace">
-          Time
-        </text>
-      </svg>
-    </div>
-  );
-}
-
-function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellClick }) {
-  if (!results?.length) return null;
-
-  // Build grid: rows = unique valueA, cols = unique valueB
-  const valueAs = [...new Set(results.map(r => r.valueA))].sort((a, b) => a - b);
-  const valueBs = [...new Set(results.map(r => r.valueB))].sort((a, b) => a - b);
-
-  const getCell = (va, vb) => results.find(r => r.valueA === va && r.valueB === vb);
-
-  const means = results.map(r => r.aggregateStats[metric]?.mean).filter(Number.isFinite);
-  const minMean = Math.min(...means);
-  const maxMean = Math.max(...means);
-  const meanRange = maxMean - minMean || 1;
-
-  const colorFor = (mean) => {
-    if (!Number.isFinite(mean)) return "transparent";
-    const t = (mean - minMean) / meanRange;
-    // cool → warm: cyan (#06b6d4) → amber (#f0883e) → red (#f85149)
-    if (t < 0.5) {
-      const s = t * 2;
-      return `rgb(${Math.round(6 + s * (240 - 6))}, ${Math.round(182 + s * (136 - 182))}, ${Math.round(212 + s * (62 - 212))})`;
-    } else {
-      const s = (t - 0.5) * 2;
-      return `rgb(${Math.round(240 + s * (248 - 240))}, ${Math.round(136 + s * (81 - 136))}, ${Math.round(62 + s * (73 - 62))})`;
-    }
-  };
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ overflowX: "auto" }}>
-        <table style={{ borderCollapse: "collapse", color: C.text, fontSize: 11, textAlign: "center" }}>
-          <thead>
-            <tr>
-              <th style={{ padding: "6px 8px", color: C.muted, fontSize: 10 }}>{paramLabelA} \ {paramLabelB}</th>
-              {valueBs.map(vb => (
-                <th key={vb} style={{ padding: "6px 8px", color: C.muted, fontSize: 10 }}>{fmt(vb)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {valueAs.map(va => (
-              <tr key={va}>
-                <td style={{ padding: "6px 8px", color: C.amber, fontWeight: 700, fontSize: 10 }}>{fmt(va)}</td>
-                {valueBs.map(vb => {
-                  const cell = getCell(va, vb);
-                  const mean = cell?.aggregateStats[metric]?.mean;
-                  return (
-                    <td key={vb}
-                      onClick={() => onCellClick?.(cell)}
-                      style={{
-                        padding: "8px 10px",
-                        background: colorFor(mean),
-                        color: C.bg,
-                        fontWeight: 700,
-                        minWidth: 60,
-                        cursor: onCellClick ? "pointer" : "default",
-                        border: "2px solid transparent",
-                        transition: "border-color 0.15s",
-                      }}
-                      onMouseEnter={e => { if (onCellClick) e.currentTarget.style.borderColor = "#fff"; }}
-                      onMouseLeave={e => { if (onCellClick) e.currentTarget.style.borderColor = "transparent"; }}>
-                      {fmt(mean)}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {/* Color legend */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.muted, fontFamily: FONT }}>
-        <span>Low</span>
-        <div style={{ width: 120, height: 10, background: "linear-gradient(to right, #06b6d4, #f0883e, #f85149)", borderRadius: 2 }} />
-        <span>High</span>
-        <span style={{ marginLeft: 8 }}>{METRIC_LABELS[metric] || metric}</span>
-      </div>
-    </div>
-  );
-}
-
-const AiAssistantPanel = ({
-  model,
-  results,
-  exportConfig,
-  aggregateStats,
-  comparisonRuns,
-  comparisonLoading,
-  comparisonError,
-  onClose,
-}) => {
-  const [response, setResponse] = useState("");
-  const [status, setStatus] = useState("idle");
-  const [error, setError] = useState("");
-  const [selectedRunId, setSelectedRunId] = useState(comparisonRuns[0]?.id || "");
-  const [queryText, setQueryText] = useState("");
-  const [conversationHistory, setConversationHistory] = useState([]);
-  const abortRef = useRef(null);
-  const responseAreaRef = useRef(null);
-  const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
-  const sensitivityReady = ciResults.some(item => item.n >= 5);
-  const isStreaming = status === "loading" || status === "streaming";
-  const selectedRun = comparisonRuns.find(run => run.id === selectedRunId);
-
-  useEffect(() => {
-    if (!selectedRunId && comparisonRuns[0]) setSelectedRunId(comparisonRuns[0].id);
-  }, [comparisonRuns, selectedRunId]);
-
-  useEffect(() => () => abortRef.current?.abort(), []);
-
-  useEffect(() => {
-    if (responseAreaRef.current) {
-      responseAreaRef.current.scrollTop = responseAreaRef.current.scrollHeight;
-    }
-  }, [response, conversationHistory]);
-
-  const runPrompt = useCallback((prompt) => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setResponse("");
-    setError("");
-    setStatus("loading");
-
-    streamNarrative(prompt, {
-      signal: controller.signal,
-      onToken: token => {
-        setStatus("streaming");
-        setResponse(prev => `${prev}${token}`);
-      },
-      onComplete: () => {
-        abortRef.current = null;
-        setStatus("complete");
-      },
-      onError: err => {
-        abortRef.current = null;
-        setError(err?.message || "Analysis unavailable");
-        setStatus("error");
-      },
-    });
-  }, []);
-
-  const runQuery = useCallback((question) => {
-    if (!question.trim() || !results) return;
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setError("");
-    setStatus("streaming");
-
-    const userEntry = { role: "user", content: question };
-    setConversationHistory(prev => [...prev, userEntry]);
-    setQueryText("");
-
-    const prompt = buildResultsQueryPrompt(
-      question,
-      model,
-      { ...results, aggregateStats },
-      conversationHistory
-    );
-
-    let accumulated = "";
-    streamNarrative(prompt, {
-      signal: controller.signal,
-      onToken: token => {
-        accumulated += token;
-        setResponse(accumulated);
-      },
-      onComplete: () => {
-        abortRef.current = null;
-        setConversationHistory(prev => [...prev, { role: "assistant", content: accumulated }]);
-        setResponse("");
-        setStatus("complete");
-      },
-      onError: err => {
-        abortRef.current = null;
-        setError(err?.message || "Query unavailable");
-        setStatus("error");
-      },
-    });
-  }, [model, results, aggregateStats, conversationHistory]);
-
-  const stopStream = () => {
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setStatus(response ? "complete" : "idle");
-  };
-
-  const copyResponse = () => {
-    const textToCopy = response || conversationHistory.map(e =>
-      `${e.role === "user" ? "Q" : "A"}: ${e.content}`
-    ).join("\n\n");
-    if (!textToCopy || !navigator.clipboard?.writeText) return;
-    navigator.clipboard.writeText(textToCopy);
-  };
-
-  const clearConversation = () => {
-    setConversationHistory([]);
-    setResponse("");
-    setStatus("idle");
-    setError("");
-  };
-
-  const explainResults = () => {
-    runPrompt(buildNarrativePrompt(model, exportConfig, {
-      ...results,
-      aggregateStats,
-    }));
-  };
-
-  const compareRuns = () => {
-    if (!selectedRun) return;
-    const comparisonPayload = selectedRun.source === "saved"
-      ? makeSavedRunPromptPayload(selectedRun.payload)
-      : makeRunPromptPayload(selectedRun.label, selectedRun.payload);
-
-    runPrompt(buildComparisonPrompt(
-      model.name,
-      makeRunPromptPayload("Current completed run", { results, experiment: exportConfig }),
-      comparisonPayload
-    ));
-  };
-
-  const explainSensitivity = () => {
-    runPrompt(buildSensitivityPrompt(model.name, exportConfig, ciResults));
-  };
-
-  const suggestChanges = () => {
-    runPrompt(buildSuggestionPrompt(model, exportConfig, {
-      ...results,
-      aggregateStats,
-    }));
-  };
-
-  const handleQueryKeyDown = (event) => {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      runQuery(queryText);
-    }
-  };
-
-  const panelButtonStyle = { width: "100%", justifyContent: "center" };
-
-  const renderContent = () => {
-    if (conversationHistory.length > 0) {
-      return conversationHistory.map((entry, i) => (
-        <div key={i} style={{ marginBottom: 10 }}>
-          <div style={{
-            color: entry.role === "user" ? C.accent : C.primary,
-            fontFamily: FONT,
-            fontWeight: 700,
-            fontSize: 10,
-            letterSpacing: 1,
-            marginBottom: 4,
-          }}>
-            {entry.role === "user" ? "YOU" : "AI"}
-          </div>
-          <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-            {entry.content}
-          </div>
-        </div>
-      ));
-    }
-    if (status === "loading") return "Waiting for analysis...";
-    if (response) return response;
-    return "Run the model to generate insights.";
-  };
-
-  return (
-    <aside aria-label="AI assistant" style={{
-      width: 320,
-      flex: "0 0 320px",
-      background: C.panel,
-      border: `1px solid ${C.border}`,
-      borderRadius: 8,
-      padding: 14,
-      display: "flex",
-      flexDirection: "column",
-      gap: 12,
-      minHeight: 520,
-      alignSelf: "stretch",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
-        <div>
-          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>AI Assistant</div>
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Results analysis + natural language queries</div>
-        </div>
-        <Btn small variant="ghost" onClick={onClose} ariaLabel="Close AI assistant">x</Btn>
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <Btn variant="primary" onClick={explainResults} disabled={!results || isStreaming} style={panelButtonStyle}>
-          Explain results
-        </Btn>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE RUNS</label>
-          <select
-            id="compare-run"
-            value={selectedRunId}
-            onChange={event => setSelectedRunId(event.target.value)}
-            disabled={!comparisonRuns.length || isStreaming}
-            style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px" }}
-          >
-            {!comparisonRuns.length && <option value="">{comparisonLoading ? "Loading saved runs..." : "No comparison runs"}</option>}
-            {comparisonRuns.map(run => <option key={run.id} value={run.id}>{run.label}</option>)}
-          </select>
-          {comparisonError && (
-            <div role="status" style={{ color: C.amber, fontFamily: FONT, fontSize: 10 }}>
-              Saved runs unavailable: {comparisonError}
-            </div>
-          )}
-          <Btn variant="ghost" onClick={compareRuns} disabled={!results || !selectedRun || isStreaming} style={panelButtonStyle}>
-            Compare
-          </Btn>
-        </div>
-        <Btn variant="amber" onClick={explainSensitivity} disabled={!sensitivityReady || isStreaming} style={panelButtonStyle}>
-          Sensitivity
-        </Btn>
-        <Btn variant="primary" onClick={suggestChanges} disabled={!results || isStreaming} style={panelButtonStyle}>
-          Suggest model changes
-        </Btn>
-      </div>
-
-      {status === "error" && (
-        <div role="alert" style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
-          Analysis unavailable - try again. {error}
-        </div>
-      )}
-
-      <div ref={responseAreaRef} style={{
-        flex: 1,
-        background: C.bg,
-        border: `1px solid ${C.border}`,
-        borderRadius: 6,
-        padding: 12,
-        overflowY: "auto",
-        color: response ? C.text : C.muted,
-        fontFamily: FONT,
-        fontSize: 12,
-        lineHeight: 1.7,
-        whiteSpace: "pre-wrap",
-      }}>
-        {renderContent()}
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {isStreaming && <Btn small variant="danger" onClick={stopStream}>Stop</Btn>}
-        {status === "complete" && (response || conversationHistory.length > 0) && <Btn small variant="ghost" onClick={copyResponse}>Copy</Btn>}
-        {conversationHistory.length > 0 && !isStreaming && <Btn small variant="ghost" onClick={clearConversation}>Clear</Btn>}
-      </div>
-
-      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-        <label htmlFor="query-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
-          ASK A QUESTION
-        </label>
-        <div style={{ display: "flex", gap: 6 }}>
-          <input
-            id="query-input"
-            type="text"
-            value={queryText}
-            onChange={event => setQueryText(event.target.value)}
-            onKeyDown={handleQueryKeyDown}
-            disabled={!results || isStreaming}
-            placeholder={results ? "e.g. Which queue had the longest wait?" : "Run the model first..."}
-            style={{
-              flex: 1,
-              background: C.bg,
-              border: `1px solid ${C.border}`,
-              borderRadius: 5,
-              color: C.text,
-              fontFamily: FONT,
-              fontSize: 12,
-              padding: "7px 8px",
-            }}
-          />
-          <Btn
-            small
-            variant="primary"
-            onClick={() => runQuery(queryText)}
-            disabled={!results || !queryText.trim() || isStreaming}
-            ariaLabel="Ask question"
-          >
-            Ask
-          </Btn>
-        </div>
-      </div>
-    </aside>
-  );
-};
+import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { SweepChart, WarmupChart, Sweep2DGrid } from "./SweepViews.jsx";
+import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 
 const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) => {
   const [mode, setMode] = useState("idle");
@@ -930,7 +59,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [sweepResults, setSweepResults] = useState(null);
   const [sweepProgress, setSweepProgress] = useState(null);
   const [sweepKpiMetric, setSweepKpiMetric] = useState("summary.avgWait");
-  const [sweepMode, setSweepMode] = useState("1d"); // "1d" | "2d"
+  const [sweepMode, setSweepMode] = useState("1d");
   const [sweepSelectedParamB, setSweepSelectedParamB] = useState(null);
   const [sweepMinB, setSweepMinB] = useState(1);
   const [sweepMaxB, setSweepMaxB] = useState(5);
@@ -946,17 +75,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const autoRef = useRef(null);
   const runnerRef = useRef(null);
   const saveInProgressRef = useRef(false);
-  // F9C.6 — animation toggle
   const [animationEnabled, setAnimationEnabled] = useState(true);
-  // F10.4 — detailed time-series output (default off — zero engine overhead)
   const [collectTimeSeries, setCollectTimeSeries] = useState(true);
-  // F9C.7 — configurable KPI slots
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
-  // F9C.10 — speed multiplier (1× = 400ms interval, 10× = 40ms, 0.5× = 800ms)
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
-  // F9C.11 — node filter for bottom panel log
   const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
-  // F15 — share link state
   const [shareLinks, setShareLinks] = useState([]);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareConfig, setShareConfig] = useState(() => ({
@@ -969,7 +92,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [qrToken, setQrToken] = useState(null);
   const qrRef = useRef(null);
   const [latestRunId, setLatestRunId] = useState(null);
-  // F9C.10 — effective auto-step delay (must be declared before the autoRef useEffect)
   const effectiveAutoSpeed = useMemo(
     () => Math.max(40, Math.round(400 / speedMultiplier)),
     [speedMultiplier]
@@ -981,15 +103,14 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
       maxSimTime: terminationMode === 'time' ? maxSimTime : 0,
       terminationCondition: terminationMode === 'condition' ? terminationCondition : null
     });
-    
-    // F3.4 Additional Validations
+
     if (terminationMode === 'time' && warmupPeriod >= maxSimTime) {
       v.errors.push({ code: 'V14', message: 'Warm-up period must be less than the run duration.', tab: 'execute' });
     }
     if (!Number.isInteger(replications) || replications < 1) {
       v.errors.push({ code: 'V15', message: 'Replication count must be a positive integer.', tab: 'execute' });
     }
-    
+
     return v;
   }, [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
   const hasErrors = validation.errors.length > 0;
@@ -1197,7 +318,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
           }
         },
         onError: error => {
-          setBatchStatus("error");
           setSaveStatus({ state: 'error', message: `✗ Replication failed: ${error.message}` });
           setLog(prev => [...prev, { phase: "ERROR", time: 0, message: `Replication ${error.replicationIndex + 1} failed: ${error.message}` }]);
           runnerRef.current = null;
@@ -1287,7 +407,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
     return () => runnerRef.current?.cancel();
   }, []);
 
-  // Auto-run on mount (used by template quick-start)
   const autoRunRef = useRef(false);
   useEffect(() => {
     if (autoRun && !autoRunRef.current && !hasErrors && modelId) {
@@ -1296,7 +415,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
     }
   }, [autoRun, hasErrors, modelId, doRunAll]);
 
-  // Load execute preferences (animation toggle, KPI slots) on mount
   useEffect(() => {
     if (!userId) return;
     fetchUserSettings(userId)
@@ -1308,7 +426,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
           setKpiSlots(settings.execute.kpiSlots);
         }
       })
-      .catch(() => {}); // keep defaults on error
+      .catch(() => {});
   }, [userId]);
 
   const saveExecuteSetting = useCallback(async (patch) => {
@@ -1319,7 +437,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         ...current.settings,
         execute: { ...current.settings?.execute, ...patch },
       });
-    } catch {} // silently ignore
+    } catch {}
   }, [userId]);
 
   const toggleAnimation = useCallback(() => {
@@ -1475,7 +593,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
     setSweepGridError(null);
 
     if (sweepMode === "2d") {
-      // Validate grid size before running
       try {
         generate2DSweepValues(
           { min: sweepMin, max: sweepMax, step: sweepStep },
@@ -1703,7 +820,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         {terminationMode === "condition" && (
           <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
             <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 8 }}>STOP CONDITION</span>
-            <ConditionBuilder 
+            <ConditionBuilder
               condition={terminationCondition}
               entityTypes={model.entityTypes}
               stateVariables={model.stateVariables}
@@ -1725,7 +842,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
           <span style={{ fontSize: 14, color: sweepOpen ? C.accent : C.muted }}>{sweepOpen ? "▼" : "▶"}</span>
           <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETRIC SWEEP</span>
           {sweepStatus === "running" && (
-            <span style={{ fontSize: 10, color: C.amber, fontFamily: FONT }}>Running sweep…</span>
+            <span style={{ fontSize: 10, color: C.amber, fontFamily: FONT }}>Running sweep...</span>
           )}
           {sweepStatus === "complete" && (
             <span style={{ fontSize: 10, color: C.green, fontFamily: FONT }}>Complete ({sweepResults?.length} points)</span>
@@ -1770,7 +887,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                   }
                 }}
                 style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
-                <option value="">Select a parameter…</option>
+                <option value="">Select a parameter...</option>
                 <optgroup label="Entity Type Count">
                   {sweepParams.filter(p => p.type === "entityTypeCount").map(p => (
                     <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
@@ -1819,7 +936,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                     }
                   }}
                   style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
-                  <option value="">Select a parameter…</option>
+                  <option value="">Select a parameter...</option>
                   <optgroup label="Entity Type Count">
                     {sweepParams.filter(p => p.type === "entityTypeCount").map(p => (
                       <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
@@ -1896,7 +1013,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                   </div>
                 )}
 
-                {/* 2D point counter + validation */}
                 {sweepMode === "2d" && sweepSelectedParamB && (
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
@@ -1926,7 +1042,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <Btn variant="primary" onClick={handleRunSweep}
                     disabled={sweepStatus === "running" || hasErrors || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))}>
-                    {sweepStatus === "running" ? "Running…" : "Run Sweep"}
+                    {sweepStatus === "running" ? "Running..." : "Run Sweep"}
                   </Btn>
                   {sweepStatus === "running" && (
                     <Btn variant="danger" onClick={handleCancelSweep}>Cancel</Btn>
@@ -2053,7 +1169,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                         <select aria-label="Cell B" value={comparisonIdxB ?? ""}
                           onChange={e => { setComparisonIdxB(parseInt(e.target.value) || null); setComparisonResult(null); }}
                           style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
-                          <option value="">Select…</option>
+                          <option value="">Select...</option>
                           {sweepResults.map((pt, i) => (
                             i !== comparisonIdxA ? (
                               <option key={i} value={i}>
@@ -2153,7 +1269,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                         <select aria-label="Scenario B" value={comparisonIdxB ?? ""}
                           onChange={e => { setComparisonIdxB(parseInt(e.target.value) || null); setComparisonResult(null); }}
                           style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
-                          <option value="">Select…</option>
+                          <option value="">Select...</option>
                           {sweepResults.map((pt, i) => (
                             i !== comparisonIdxA ? <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option> : null
                           ))}
@@ -2251,7 +1367,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         </label>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         <div style={{ flex: 1, minWidth: 12 }} />
-        {/* Speed slider (F9C.10) */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, whiteSpace: "nowrap" }}>
             Speed {speedMultiplier.toFixed(1)}×
@@ -2340,7 +1455,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
             )}
           </div>
 
-          {/* Aggregate KPI summary — shown prominently at the top only when complete */}
           {batchStatus === "complete" && Object.values(aggregateStats).some(stat => stat.n >= 2) && (
             <div style={{
               background: `${C.green}0d`,
@@ -2385,7 +1499,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
             </div>
           )}
 
-          {/* Individual replication rows */}
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
               <thead>
@@ -2420,7 +1533,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
             </table>
           </div>
 
-          {/* CI confidence-interval table — live-updates as reps complete, always shown when n≥2 */}
           {Object.values(aggregateStats).some(stat => stat.n >= 2) && (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
