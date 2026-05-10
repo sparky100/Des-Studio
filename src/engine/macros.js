@@ -279,6 +279,7 @@ export const MACROS = [
         if (!cust.stages) cust.stages = [];
         cust.stages.push({
           serverType:   srv?.type || "unknown",
+          queueName:    cust.lastQueue || cust.queue || null,
           stageWait:    +(cust.serviceStart != null
             ? (cust.serviceStart - (cust.lastStageStart ?? cust.arrivalTime))
             : 0).toFixed(4),
@@ -319,6 +320,7 @@ export const MACROS = [
         if (!cust.stages) cust.stages = [];
         cust.stages.push({
           serverType:   srv.type,
+          queueName:    cust.lastQueue || cust.queue || null,
           stageWait:    +(cust.serviceStart != null
             ? (cust.serviceStart - (cust.lastStageStart ?? cust.arrivalTime))
             : 0).toFixed(4),

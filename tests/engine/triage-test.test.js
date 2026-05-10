@@ -1,4 +1,5 @@
 import { describe, test, expect } from 'vitest';
+import { buildEngine } from '../../src/engine/index.js';
 
 function buildTriageModel(arrivalInterval = 8) {
   return {

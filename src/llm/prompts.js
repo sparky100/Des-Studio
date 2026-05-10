@@ -35,27 +35,27 @@ function extractQueues(model = {}, results = {}) {
     }];
   }
 
-  return queues.map(queue => {
-    const qName = queue.name || queue.id || "Queue";
-    const wd = waitDist[qName] || {};
-    const pq = perQueue[qName] || {};
-    return {
-      name: qName,
-      discipline: queue.discipline || "FIFO",
-      capacity: queue.capacity ?? null,
-      customerType: queue.customerType || null,
-      meanWait: finiteOrNull(wd.mean ?? summary.avgWait),
-      maxWait: finiteOrNull(summary.maxWait),
-      p50: finiteOrNull(wd.p50),
-      p90: finiteOrNull(wd.p90),
-      p95: finiteOrNull(wd.p95),
-      p99: finiteOrNull(wd.p99),
-      nServed: finiteOrNull(wd.n),
-      renegeRate: summary.total ? finiteOrNull((summary.reneged || 0) / summary.total) : null,
-      blockingCount: finiteOrNull(pq.blockingCount),
-      balkCount: finiteOrNull(pq.balkCount),
-    };
-  });
+    return queues.map(queue => {
+      const qName = queue.name || queue.id || "Queue";
+      const wd = waitDist[qName] || {};
+      const pq = perQueue[qName] || {};
+      return {
+        name: qName,
+        discipline: queue.discipline || "FIFO",
+        capacity: queue.capacity ?? null,
+        customerType: queue.customerType || null,
+        meanWait: finiteOrNull(wd.mean),
+        maxWait: finiteOrNull(summary.maxWait),
+        p50: finiteOrNull(wd.p50),
+        p90: finiteOrNull(wd.p90),
+        p95: finiteOrNull(wd.p95),
+        p99: finiteOrNull(wd.p99),
+        nServed: finiteOrNull(wd.n),
+        renegeRate: summary.total ? finiteOrNull((summary.reneged || 0) / summary.total) : null,
+        blockingCount: finiteOrNull(pq.blockingCount),
+        balkCount: finiteOrNull(pq.balkCount),
+      };
+    });
 }
 
 function extractResources(model = {}, summary = {}) {

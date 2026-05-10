@@ -402,11 +402,14 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const byQueue = {};
     for (const e of allEntities) {
       if (e.role === "server" || !e.stages || e.stages.length === 0) continue;
-      const qName = e.lastQueue || e.queue;
-      if (!qName) continue;
-      const wait = e.stages[0]?.stageWait ?? 0;
-      if (!byQueue[qName]) byQueue[qName] = [];
-      byQueue[qName].push(wait);
+      // Aggregate waits for ALL stages, keyed by queueName recorded in each stage
+      for (const stage of e.stages) {
+        const qName = stage.queueName || e.lastQueue || e.queue;
+        if (!qName) continue;
+        const wait = stage.stageWait ?? 0;
+        if (!byQueue[qName]) byQueue[qName] = [];
+        byQueue[qName].push(wait);
+      }
     }
     const dist = {};
     for (const [q, waits] of Object.entries(byQueue)) {

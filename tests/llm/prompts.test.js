@@ -21,7 +21,10 @@ describe("LLM prompt builders", () => {
     const prompt = buildNarrativePrompt(
       model,
       { warmupPeriod: 10, maxSimTime: 200, replications: 3, seed: 42 },
-      { summary: { total: 20, served: 18, reneged: 2, avgWait: 9, avgSvc: 3, avgSojourn: 12 } }
+      {
+        summary: { total: 20, served: 18, reneged: 2, avgWait: 9, avgSvc: 3, avgSojourn: 12 },
+        waitDist: { "Main queue": { mean: 9, n: 18, p50: 8, p90: 14, p95: 16, p99: 18, values: [1, 9, 17] } },
+      }
     );
 
     expect(prompt.kind).toBe("narrative");
@@ -72,7 +75,10 @@ describe("LLM prompt builders", () => {
     const prompt = buildSuggestionPrompt(
       model,
       { warmupPeriod: 10, maxSimTime: 200, replications: 3, seed: 42 },
-      { summary: { total: 20, served: 18, reneged: 2, avgWait: 8.2, avgSvc: 4.1, avgSojourn: 12.3 } }
+      {
+        summary: { total: 20, served: 18, reneged: 2, avgWait: 8.2, avgSvc: 4.1, avgSojourn: 12.3 },
+        waitDist: { "Main queue": { mean: 8.2, n: 18, p50: 7, p90: 13, p95: 15, p99: 17, values: [2, 8, 15] } },
+      }
     );
     expect(prompt.kind).toBe("suggestion");
     expect(prompt.messages[0].role).toBe("system");
