@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-09 | Reflects: Sprint 13 AI Model Building Enhancement + Post-Sprint 13 Templates complete. Next: Sprint 14 — AI Natural Language Results Queries*
+*Last updated: 2026-05-10 | Reflects: Sprint 16 Parametric Sweep & Scenario Comparison complete. Current: Sprint 17 — Statistical Output Analyzer*
 
 ---
 
@@ -1417,13 +1417,42 @@ The following sprints are planned but not yet started. See `docs/DES_Studio_Buil
 
 ### Sprint 17 — Statistical Output Analyzer
 
-**Goal:** Professional-grade statistical output analysis: Welch's graphical method for warm-up detection, batch-means for autocorrelated output, scenario comparison with paired-t CIs.
+**Goal:** Professional-grade statistical output analysis: Welch's graphical method for warm-up detection, batch-means for autocorrelated output, scenario comparison with paired-t/Bonferroni CIs.
 
-**Key features:**
-- Welch's method automated warm-up detection
-- Batch-means confidence intervals
-- Scenario comparison with paired-t / Bonferroni CIs
-- Practical defaults with plain-English explanations
+**Task 1 — Engine: Welch's warm-up detection** (`src/engine/statistics.js`)
+- `detectWarmupWelch(replications, metricPath, options)` computes ensemble average across reps, moving average smoothing, detects the "knee" where cumulative mean stabilizes
+- Returns `{ truncationPoint, explanation, series }` for UI rendering
+
+**Task 2 — Engine: Batch-means CI** (`src/engine/statistics.js`)
+- `batchMeansCI(values, batchSize)` divides observations into k batches of size m, computes batch means, returns CI from batch means (correcting for autocorrelation)
+- `suggestBatchSize(values)` heuristic to recommend batch size
+
+**Task 3 — Engine: Bonferroni scenario comparison** (`src/engine/statistics.js`)
+- `bonferroniCI(comparisons, alpha)` applies Bonferroni correction for multiple pairwise comparisons
+- `compareScenarios(scenarioA, scenarioB, metricPaths)` wraps `pairedTConfidenceInterval()` for sweep scenario pairs
+
+**Task 4 — Engine: Summary diagnostics** (`src/engine/statistics.js`)
+- `computeSummaryStats(values)` — skewness, kurtosis, normality diagnostics
+- `computePercentiles(values, [p5, p25, p50, p75, p95])` — reusable percentile function
+
+**Task 5 — UI: Warm-up detection** (`src/ui/execute/index.jsx`)
+- "Detect" button next to warmupPeriod input in Experiment Controls
+- Inline result display: "Welch's method recommends warm-up of t=47" with "Apply" button
+- Mini-chart showing ensemble mean trajectory with knee marker
+
+**Task 6 — UI: Scenario comparison panel** (`src/ui/execute/index.jsx`)
+- New section in sweep results area: pick two sweep points to compare
+- Comparison table: KPI x Scenario A x Scenario B x Difference x 95% CI x Significant?
+- Uses `pairedTConfidenceInterval()` + `bonferroniCI()` for correctness
+
+**Task 7 — UI: Statistical Output Analyzer tab** (`src/ui/execute/BottomPanel.jsx`)
+- New 5th BottomPanel tab: "Analysis"
+- Sections: Warm-up result with chart, Batch-means toggle with plain-English explanation, Distribution diagnostics, Scenario comparison link
+
+**Task 8 — Tests**
+- Engine: `detectWarmupWelch()` on synthetic data, `batchMeansCI()` on autocorrelated series, `bonferroniCI()` on known comparisons
+- UI: detection button renders and fires, comparison table shows significance
+- M/M/1 benchmark still passes
 
 ### Sprint 18 — Model Import/Export & Community Gallery
 

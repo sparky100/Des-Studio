@@ -83,7 +83,10 @@ flowchart LR
 | Execute canvas | ✅ Complete | Sprint 9C: topology-derived live canvas, four live node components, entity token animation, configurable KPI bar, BottomPanel with Stage KPIs. |
 | Modelling expressiveness | ✅ Complete | Sprints 10–12: routing, pooling, time-series, finite queues, balking, entity batching, recirculation. Complete DES vocabulary for healthcare, logistics, and manufacturing. |
 | Template models and anonymous mode | ✅ Complete | Post-Sprint 13: 10 pre-built template models covering healthcare, logistics, manufacturing, and service industries. Anonymous/local storage mode for non-signed-in users. Template auto-run in Execute tab. |
-| AI natural language results queries | 🔄 In progress | Sprint 14: free-form natural language queries against simulation results via the AI Assistant. Query input, context-aware answers with KPI citations, follow-up question support. |
+| AI natural language results queries | ✅ Complete | Sprint 14: free-form natural language queries against simulation results via the AI Assistant. Query input, context-aware answers with KPI citations, follow-up question support. |
+| Shareable results dashboard | ✅ Complete | Sprint 15: QR code generator, share modal with widget picker, hash-route public DashboardView. |
+| Parametric sweep & scenario comparison | ✅ Complete | Sprint 16: sweep-params, sweep-runner, SweepChart with CI polygon ribbon, paired t-test scenario comparison. |
+| Statistical output analyzer | 🔄 Not started | Sprint 17: Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, diagnostics, analysis UI tab. |
 
 ### Key Issues and Watchpoints
 
@@ -136,6 +139,7 @@ flowchart LR
 | 1.47 | 2026-05-08 | Sprint 13 complete — AI Model Building Enhancement. 7-macro prompts, validation feedback loop, results-informed refinement, Suggest Model Changes button. 543 tests. |
 | 1.48 | 2026-05-09 | Post-Sprint 13 features: template gallery (10 pre-built models), anonymous/local storage mode, template auto-run in Execute tab. Updated user guide to reflect all sprints. |
 | 1.49 | 2026-05-09 | Sprint 14 — AI Natural Language Results Queries: `buildResultsQueryPrompt()` for free-form KPI questions, query input + conversation history in AI Assistant panel, follow-up question support, updated forward roadmap flowchart through Sprint 18. |
+| 1.50 | 2026-05-10 | Sprint 15 — Shareable Results Dashboard, Sprint 16 — Parametric Sweep & Scenario Comparison complete. Sprint 17 plan defined: Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, analysis UI tab. |
 
 ---
 
@@ -166,6 +170,9 @@ flowchart LR
 | Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement. | 543 (543) | N/A | Success | 7-macro prompts update, validation feedback loop, results-informed refinement, Suggest Model Changes button. |
 | Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery. | 543 (543) | N/A | Success | 10 pre-built template models, localStorage backend, template gallery tab, templates guide. |
 | Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries. | 58 Sprint 14 tests | N/A | Success | F14.1–F14.6 all complete. Voice input, results query prompt, AI Assistant query input/answer rendering, follow-ups, and 58 Sprint 14 tests. |
+| Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard. | 22 Sprint 15 tests | N/A | Success | QR code generator, share modal with widget picker, hash-route DashboardView, copy/revoke per link. |
+| Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison. | 26 sweep tests | N/A | Success | sweep-params, sweep-runner, SweepChart, CI polygon ribbon, paired t-test, sweep CRUD wrappers. |
+| Sprint 17 | 🔄 Not started | -- | Statistical Output Analyzer. | -- | -- | -- | Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, analysis UI tab. |
 
 ---
 
@@ -192,37 +199,39 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Post-13   | Templates & Anonymous Mode                          | 10 pre-built templates; localStorage backend for non-signed-in users; template gallery tab    |
 | Sprint 14 | AI Natural Language Results Queries                 | Free-form natural language queries against simulation results via the AI Assistant            |
 | Sprint 15 | Shareable Results Dashboard                         | Public share links for run results with live KPI widgets                                      |
-| Sprint 15 | Shareable Results Dashboard                         | Public share links for run results with live KPI widgets                                      |
 | Sprint 16 | Parametric Sweep & Scenario Comparison              | Multi-parameter exploration with side-by-side scenario comparison                             |
-| Sprint 17 | Statistical Output Analyzer                         | Automated distribution fitting, hypothesis tests, ranking & selection                         |
+| Sprint 17 | Statistical Output Analyzer                         | Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, analysis UI tab    |
 | Sprint 18 | Model Import/Export & Community Gallery             | Share and discover models in a community gallery                                              |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
 ### Modelling Capability Coverage
 
-| Capability | Status at Sprint 9 | Target sprint |
-|---|---|---|
+| Capability | Status | Sprint |
+|---|---|---|---|
 | Single/multi-stage sequential pathways | ✅ Supported via RELEASE chain | — |
 | FIFO / LIFO / Priority queue disciplines | ✅ Supported | — |
 | Reneging / abandonment | ✅ RENEGE macro | — |
 | Stochastic service and inter-arrival times | ✅ 8 distribution types + empirical CSV | — |
 | Time-varying arrival rates and shift schedules | ✅ Piecewise distributions + RATE_CHANGE/SHIFT_CHANGE | — |
-| Warm-up period and termination controls | ✅ Sprint 3 | — |
-| Multi-replication with 95% CI | ✅ Sprint 4 | — |
-| AI-generated model authoring | ✅ Sprint 8 | — |
-| Visual graph authoring | ✅ Sprint 9 | — |
-| Conditional routing (entity-attribute branching) | ✅ F10.1: RELEASE routing table; Visual Designer shows labelled condition edges | — |
-| Probabilistic routing (stochastic branch probability) | ✅ F10.2: RELEASE probabilisticRouting; seeded RNG sampling | — |
-| Multi-server resource pooling (capacity > 1) | ✅ F10.3: entity-per-instance model; pool size field in UI; V19 validation | — |
-| Time-series output (queue length / utilisation over time) | ✅ F10.4/5: opt-in collectTimeSeries flag; SVG Charts tab in BottomPanel | — |
-| Finite queues and capacity-limited buffers | ✅ F11.1: capacity field on Queue; ARRIVE enforces limit | — |
-| Balking (probabilistic queue joining) | ✅ F11.2: balkProbability + balkCondition on arrival B-events | — |
-| Waiting time distribution and percentiles | ✅ F10.6: waitDist p50/p90/p95/p99 + 12-bin histogram in Charts tab | — |
+| Warm-up period and termination controls | ✅ Manual warm-up, time/event/condition-based termination | Sprint 3 |
+| Multi-replication with 95% CI | ✅ Worker pool, aggregate stats, CI table | Sprint 4 |
+| AI-generated model authoring | ✅ Chat-based model builder with validation feedback and refinement | Sprint 8 |
+| Visual graph authoring | ✅ @xyflow/react graph-first designer with round-trip parity | Sprint 9 |
+| Conditional routing (entity-attribute branching) | ✅ RELEASE routing table; Visual Designer shows labelled condition edges | Sprint 10 |
+| Probabilistic routing (stochastic branch probability) | ✅ RELEASE probabilisticRouting; seeded RNG sampling | Sprint 10 |
+| Multi-server resource pooling (capacity > 1) | ✅ Entity-per-instance model; pool size field in UI; V19 validation | Sprint 10 |
+| Time-series output (queue length / utilisation over time) | ✅ Opt-in collectTimeSeries flag; SVG Charts tab in BottomPanel | Sprint 10 |
+| Finite queues and capacity-limited buffers | ✅ Capacity field on Queue; ARRIVE enforces limit; overflow routing | Sprint 11 |
+| Balking (probabilistic queue joining) | ✅ balkProbability + balkCondition on arrival B-events | Sprint 11 |
+| Waiting time distribution and percentiles | ✅ waitDist p50/p90/p95/p99 + 12-bin histogram in Charts tab | Sprint 10 |
 | Entity batching / assembly | ✅ BATCH (C-Event) + UNBATCH (B-Event) macros; queue-accumulation model | Sprint 12 |
-| Recirculation / rework loops | ✅ Controlled back-edges with loop:true flag; maxLoopCount guard; Entity.loopCount auto-maintained | Sprint 12 |
+| Recirculation / rework loops | ✅ Controlled back-edges with loop:true flag; maxLoopCount guard | Sprint 12 |
 | Full staff rostering (resource shift schedules) | ~ Partial — piecewise NHPP implemented; full rostering incomplete | Sprint 13+ |
-| AI natural language results queries | 🔄 In progress — query prompt builder, panel input, conversation history, follow-ups | Sprint 14 |
+| AI natural language results queries | ✅ Free-form questions + answers with KPI citations and conversation history | Sprint 14 |
+| Shareable results dashboard | ✅ QR code generator; hash-route public DashboardView; share modal with widget picker and copy/revoke per link | Sprint 15 |
+| Parametric sweep and parameter exploration | ✅ Sweepable param discovery; range+step config; multi-point orchestration; SweepChart with CI polygon ribbon and results table | Sprint 16 |
+| Scenario comparison with statistical confidence | ✅ Paired-t confidence interval on differences; side-by-side KPI comparison for sweep points | Sprint 16 |
 
 ---
 

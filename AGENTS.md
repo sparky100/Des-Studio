@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-09 | Reflects: Sprint 16 — Parametric Sweep & Scenario Comparison complete. Current: Sprint 17 — Statistical Output Analyzer*
+*Last updated: 2026-05-10 | Reflects: Sprint 16 — Parametric Sweep & Scenario Comparison complete. Current: Sprint 17 — Statistical Output Analyzer*
 
 ---
 
@@ -1315,41 +1315,54 @@ UI / UX
 | Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
 | Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
 | Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison | 679 passing | N/A |
-| Sprint 17 | ⬜ Not started | — | Statistical Output Analyzer | — | — |
+| Sprint 17 | 🔄 Not started | — | Statistical Output Analyzer | — | — |
 | Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
 
 ---
 
-## 21. Current Sprint
+## 21. Current Sprint — Statistical Output Analyzer
 
-| Sprint | Status | Completed | Description | Tests | M/M/1 |
-|---|---|---|---|---|---|---|
-| Sprint 1 | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening | 182 passing | 1.48% error |
-| Sprint 2 | ✅ Complete | 2026-05-03 | UI editor completeness | 215 passing | N/A |
-| Sprint 3 | ✅ Complete | 2026-05-04 | Experiment controls: warm-up, termination, fork model | 272 passing | 1.48% error |
-| Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results: workers, batches, CI dashboard | 294 passing | CI contains 9.0 |
-| Sprint 5 | ✅ Complete | 2026-05-04 | Polish, Export & Production | 334 passing | N/A |
-| Sprint 6 | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis | 343 passing | N/A |
-| Sprint 7A | ✅ Complete | 2026-05-05 | Platform Foundation: Roles, Settings & TypeScript | Docs only | N/A |
-| Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation | 33 focused | N/A |
-| Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources | 369 passing | N/A |
-| Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight | 22 focused | N/A |
-| Sprint 8 | ✅ Complete | 2026-05-05 | AI Generated Model Authoring | 385 passing | N/A |
-| Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence | Focused | N/A |
-| Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight | Docs | N/A |
-| Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring | 38 focused | N/A |
-| Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX Hardening | Focused | N/A |
-| Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas — Live Flow View | 464 passing | N/A |
-| Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Routing & Pooling | 508 passing | N/A |
-| Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Capacity & Output | 523 passing | N/A |
-| Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation | 541 passing | 1.48% error |
-| Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement | 543 passing | N/A |
-| Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
-| Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
-| Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
-| Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison | 679 passing | N/A |
-| Sprint 17 | 🔄 Not started | — | Statistical Output Analyzer | — | — |
-| Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
+**Goal:** Professional-grade statistical output analysis: Welch's graphical method for warm-up detection, batch-means for autocorrelated output, scenario comparison with paired-t/Bonferroni CIs.
+
+### Task 1 — Engine: Welch's warm-up detection (`src/engine/statistics.js`)
+- `detectWarmupWelch(replications, metricPath, options)` takes per-replication time series, computes ensemble average across reps, applies moving average smoothing, detects the "knee" where cumulative mean stabilizes
+- Returns `{ truncationPoint, explanation, series }` for UI rendering
+- Uses existing `timeSeries` data collected by the engine
+
+### Task 2 — Engine: Batch-means confidence intervals (`src/engine/statistics.js`)
+- `batchMeansCI(values, batchSize)` divides observations into k batches of size m, computes batch means, returns CI from batch means (correcting for autocorrelation)
+- `suggestBatchSize(values)` heuristic to recommend batch size (sqrt(n) or based on lag-1 autocorrelation)
+
+### Task 3 — Engine: Bonferroni scenario comparison (`src/engine/statistics.js`)
+- `bonferroniCI(comparisons, alpha)` applies Bonferroni correction for multiple pairwise comparisons
+- `compareScenarios(scenarioA, scenarioB, metricPaths)` wraps `pairedTConfidenceInterval()` for sweep scenario pairs
+- Returns significance flags at 95% and 99% levels
+
+### Task 4 — Engine: Summary diagnostics (`src/engine/statistics.js`)
+- `computeSummaryStats(values)` — skewness, kurtosis, normality diagnostics
+- `computePercentiles(values, [p5, p25, p50, p75, p95])` — reusable percentile function with linear interpolation
+
+### Task 5 — UI: Warm-up detection (`src/ui/execute/index.jsx`)
+- "Detect" button next to warmupPeriod input in Experiment Controls
+- Fires Welch's method using existing replication runner
+- Inline result display: "Welch's method recommends warm-up of t=47" with "Apply" button
+- Mini-chart showing ensemble mean trajectory with knee marker
+
+### Task 6 — UI: Scenario comparison panel (`src/ui/execute/index.jsx`)
+- New section in sweep results area: pick two sweep points to compare
+- Comparison table: KPI x Scenario A x Scenario B x Difference x 95% CI x Significant?
+- Uses `pairedTConfidenceInterval()` + `bonferroniCI()` for correctness
+- Highlights statistically significant differences
+
+### Task 7 — UI: Statistical Output Analyzer tab (`src/ui/execute/BottomPanel.jsx`)
+- New 5th BottomPanel tab: "Analysis"
+- Sections: Warm-up result with chart, Batch-means toggle with plain-English explanation, Distribution diagnostics (skew, kurtosis, percentiles), Scenario comparison link
+- Plain-English explanations throughout (e.g. "Batch-means accounts for autocorrelation in your data.")
+
+### Task 8 — Tests
+- Engine: `detectWarmupWelch()` on synthetic data with known warm-up, `batchMeansCI()` on autocorrelated series, `bonferroniCI()` on known comparisons
+- UI: detection button renders and fires, comparison table shows significance correctly
+- M/M/1 benchmark still passes
 
 ### Recently Completed
 
@@ -1382,19 +1395,19 @@ UI / UX
 - Anonymous/local storage mode (localStorage CRUD backend)
 - Template auto-run on open
 
-**Sprint 16 — Parametric Sweep & Scenario Comparison** (2026-05-09):
-- `src/engine/sweep-params.js` — `enumerateSweepableParams()` discovers sweepable distribution/attribute/capacity fields; `applySweepValue()` mutates a cloned model; `generateSweepValues()` produces N uniformly spaced values capped at 50
-- `src/engine/sweep-runner.js` — `runSweep()` orchestrates sequential sweep points, parallel replications at each point via existing `runReplications()` worker pool, with progress/point callbacks and cancellation at point granularity
-- `src/engine/statistics.js` — `pairedTConfidenceInterval(a, b)` for per-replication paired difference CI using `tCritical95(df)`
-- `src/ui/execute/index.jsx` — Sweep accordion section: parameter picker dropdown with optgroups (Entity Type Count, Queue Capacity, B-Event Dist, C-Event Dist, State Variables), min/max/step inputs, Run Sweep / Cancel buttons, live progress, inline SVG SweepChart with CI polygon ribbon, results table with KPI columns and single-value highlight
-- `src/db/models.js` — 4 sweep CRUD functions (`saveSweep`, `getSweep`, `listSweeps`, `deleteSweep`) for Supabase `sweeps` table
-- `src/db/local.js` — `saveLocalSweep()`, `fetchLocalSweeps()` for anonymous/localStorage mode
-- 26 sweep-specific tests: 19 sweep-params, 7 sweep-runner; all passing
-- Build passes with zero errors
-
-### Recently Completed
-
 **Sprint 15 — Shareable Results Dashboard** (2026-05-09):
+- `src/ui/share/qr.js` — inline SVG QR code generator (byte mode, ECC L, versions 1–6, GF(256) Reed-Solomon, best mask selection, no deps)
+- Share modal in execute panel with widget picker (summary/queues/resources/charts checkboxes), active links list, Copy/QR/Revoke per link
+- Copy-to-clipboard via `navigator.clipboard.writeText()` with status feedback
+- Hash route `#share/<token>` wiring in App.jsx to render DashboardView — no auth required for viewer
+- `DashboardView.jsx` refactored: fixed `{textAlign: left}` React child bug in queue table header
+- 22 new Sprint 15 tests: 10 QR code utility + 12 DashboardView rendering (loading, error, KPI cards, queue table, server table, charts, wait distribution, pinned widgets, revoked link)
+- `getShareLink()` returns full `{ share, run, model }` from Supabase (joins `share_links` + `simulation_runs` + `des_models`)
+- `createShareLink()` uses `crypto.randomUUID()` for token generation
+- `revokeShareLink()` sets `revoked_at` with owner guard
+- `listShareLinks()` filters by `run_id` ordered by `created_at` desc
+
+**Sprint 16 — Parametric Sweep & Scenario Comparison** (2026-05-09):
 - `src/ui/share/qr.js` — inline SVG QR code generator (byte mode, ECC L, versions 1–6, GF(256) Reed-Solomon, best mask selection, no deps)
 - Share modal in execute panel with widget picker (summary/queues/resources/charts checkboxes), active links list, Copy/QR/Revoke per link
 - Copy-to-clipboard via `navigator.clipboard.writeText()` with status feedback
