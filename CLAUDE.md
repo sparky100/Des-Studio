@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-10 | Reflects: Sprint 19 Model Import/Export & Community Gallery complete. Current: Sprint 20 — TBD*
+*Last updated: 2026-05-10 | Reflects: Sprint 20 CSV Import Bridge complete. Current: Sprint 21 — TBD*
 
 ---
 
@@ -1344,16 +1344,23 @@ UI / UX
 | Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer | 37 engine + 14 UI tests | 1.48% error |
 | Sprint 18 | ✅ Complete | 2026-05-10 | 2D Parametric Sweeps | 35 engine + 6 UI tests | 1.48% error |
 | Sprint 19 | ✅ Complete | 2026-05-10 | Model Import/Export & Community Gallery | 21 new tests | N/A |
+| Sprint 20 | ✅ Complete | 2026-05-10 | CSV Import Bridge | 24 engine + 6 UI tests | N/A |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 20 — TBD**
+**Sprint 21 — TBD**
 
 **Goal:** To be determined.
 
 ### Recently Completed
+
+**Sprint 20 — CSV Import Bridge** (2026-05-10):
+- `src/engine/distribution-fitting.js` — parse CSV, infer column types, fit distributions (exponential, uniform, normal, lognormal, triangular, fixed, empirical), generate entity type with attrDefs
+- `CsvImportModal.jsx` — file upload, column preview with suggested distributions, entity type name input, Add Entity Type button
+- Wired into ModelDetail `entities` tab via "Import from CSV" button
+- 24 engine + 6 UI tests
 
 **Sprint 19 — Model Import/Export & Community Gallery** (2026-05-10):
 - Hardened model import — `graph` key preserved; validation rejects files with errors; inline `[code] message` error list
@@ -1458,6 +1465,19 @@ The following sprints are planned but not yet started. See `docs/DES_Studio_Buil
 - Community Gallery tab: all `visibility='public'` models with fork-to-run
 - DB migration: `tags jsonb` column on `des_models`
 - 21 new tests: import (8), export (7), gallery (6), DB norm (2)
+
+### Sprint 20 — CSV Import Bridge
+
+**Goal:** Parse CSV files to generate entity types with automatically fitted distributions.
+
+**Key features:**
+- `parseCsv()` — RFC-4180-ish CSV parser (no dependencies)
+- `inferColumns()` — detect number/string/boolean columns
+- `fitDistribution()` — moment-matching + KS goodness-of-fit for exponential, uniform, normal, lognormal, triangular, fixed, empirical
+- `generateEntityType()` — create entity type with attrDefs from inferred columns
+- `CsvImportModal` — file upload, column preview with distribution suggestions, entity type name input
+- Wired into ModelDetail `entities` tab
+- 24 engine + 6 UI tests
 
 ---
 

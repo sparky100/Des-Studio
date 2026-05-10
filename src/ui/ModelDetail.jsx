@@ -6,6 +6,7 @@ import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./sh
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
+import { CsvImportModal } from "./CsvImportModal.jsx";
 
 // Lazy-loaded so @xyflow/react is not included in the initial bundle.
 const VisualDesignerPanel = lazy(() =>
@@ -174,6 +175,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [historyRows,setHistoryRows]=useState([]);
   const [historyLoading,setHistoryLoading]=useState(false);
   const [historyError,setHistoryError]=useState("");
+  const [showCsvImport,setShowCsvImport]=useState(false);
   const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
   const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
 
@@ -502,7 +504,26 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             </div>
           </div>
         )}
-        {tab==="entities"&&<div style={{maxWidth:800}}><TabErrors tabId="entities"/><EntityTypeEditor types={model.entityTypes||[]} onChange={canEdit?v=>setField("entityTypes",v):()=>{}}/></div>}
+        {tab==="entities"&&(
+          <div style={{maxWidth:800,display:"flex",flexDirection:"column",gap:14}}>
+            <TabErrors tabId="entities"/>
+            {canEdit&&(
+              <div style={{display:"flex",justifyContent:"flex-end"}}>
+                <Btn small variant="ghost" onClick={()=>setShowCsvImport(true)}>Import from CSV</Btn>
+              </div>
+            )}
+            <EntityTypeEditor types={model.entityTypes||[]} onChange={canEdit?v=>setField("entityTypes",v):()=>{}}/>
+            {showCsvImport&&(
+              <CsvImportModal
+                onClose={()=>setShowCsvImport(false)}
+                onApply={(et)=>{
+                  const next=[...(model.entityTypes||[]),et];
+                  setField("entityTypes",next);
+                }}
+              />
+            )}
+          </div>
+        )}
         {tab==="state"&&<div style={{maxWidth:750}}><TabErrors tabId="state"/><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>}
         {tab==="bevents"&&<div style={{maxWidth:880}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
         {tab==="cevents"&&<div style={{maxWidth:860}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}

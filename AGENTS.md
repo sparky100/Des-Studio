@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-10 | Reflects: Sprint 19 — Model Import/Export & Community Gallery complete. Current: Sprint 20 — TBD*
+*Last updated: 2026-05-10 | Reflects: Sprint 20 — CSV Import Bridge complete. Current: Sprint 21 — TBD*
 
 ---
 
@@ -1318,14 +1318,23 @@ UI / UX
 | Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer | 37 engine + 14 UI tests | 1.48% error |
 | Sprint 18 | ✅ Complete | 2026-05-10 | 2D Parametric Sweeps | 35 engine + 6 UI tests | 1.48% error |
 | Sprint 19 | ✅ Complete | 2026-05-10 | Model Import/Export & Community Gallery | 21 new tests | N/A |
+| Sprint 20 | ✅ Complete | 2026-05-10 | CSV Import Bridge | 30 new tests | N/A |
 
 ---
 
-## 21. Current Sprint — Sprint 20 (TBD)
+## 21. Current Sprint — Sprint 21 (TBD)
 
 **Goal:** To be determined.
 
 ### Recently Completed
+
+**Sprint 20 — CSV Import Bridge** (2026-05-10):
+- `src/engine/distribution-fitting.js` — parse CSV, infer column types (number/string/boolean), fit distributions (exponential, uniform, normal, lognormal, triangular, fixed, empirical), generate entity type with attrDefs
+- `CsvImportModal.jsx` — modal with file upload, column preview table with suggested distributions, entity type name input, Add Entity Type button
+- Wired into ModelDetail `entities` tab via "Import from CSV" button (owner-only)
+- Distribution fitting: moment-matching + Kolmogorov-Smirnov goodness-of-fit; parametric fits preferred over empirical when KS <= 0.35
+- 24 engine tests (parseCsv, fitDistribution, inferColumns, generateEntityType, csvToEntityType)
+- 6 UI tests (render, entity name input, valid CSV preview, apply entity type, empty CSV error, cancel)
 
 **Sprint 19 — Model Import/Export & Community Gallery** (2026-05-10):
 - Task 1: Hardened model import in `App.jsx` — `graph` key added to `MODEL_JSON_KEYS`; `extractImportedModelPayload()` now treats `graph` as object/null (not array); import rejects files with validation errors; shows inline `[code] message` error list

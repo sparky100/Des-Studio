@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.53 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.54 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -64,10 +64,11 @@ flowchart LR
   S16 --> S17["Sprint 17<br/>Statistical Output<br/>Analyzer"]
   S17 --> S18["Sprint 18<br/>2D Parametric<br/>Sweeps"]
   S18 --> S19["Sprint 19<br/>Model Import/Export &<br/>Community Gallery"]
+  S19 --> S20["Sprint 20<br/>CSV Import Bridge"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef future fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
-  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S14,S15,S16,S17,S18,S19 done;
+  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S14,S15,S16,S17,S18,S19,S20 done;
 ```
 
 ### Roadmap Snapshot
@@ -90,6 +91,7 @@ flowchart LR
 | Statistical output analyzer | ✅ Complete | Sprint 17: Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, diagnostics, analysis UI tab. |
 | 2D parametric sweeps | ✅ Complete | Sprint 18: extend sweep to two dimensions — cartesian product grid, HTML table with KPI color legend, 2D scenario comparison. |
 | Model import/export & community gallery | ✅ Complete | Sprint 19: graph-preserving import/export, validation-gated import, Community Gallery tab with fork-to-run, `tags` DB column. |
+| CSV import bridge | ✅ Complete | Sprint 20: parse CSV, infer column types, fit distributions, generate entity type with attrDefs, CsvImportModal in Entity Types tab. |
 
 ### Key Issues and Watchpoints
 
@@ -211,7 +213,7 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 17 | Statistical Output Analyzer                         | Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, analysis UI tab    |
 | Sprint 18 | 2D Parametric Sweeps                                | Cartesian product exploration of two sweepable parameters; HTML grid with KPI color legend    |
 | Sprint 19 | Model Import/Export & Community Gallery             | Share and discover models in a community gallery                                              |
-| Sprint 20 | TBD                                                 | To be determined                                                                              |
+| Sprint 20 | CSV Import Bridge                                   | Import CSV data to infer entity types and distributions via modal in Entity Types tab           |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
