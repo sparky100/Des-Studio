@@ -1,5 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  norm,
+  fetchModels,
+  fetchProfiles,
+  fetchUserSettings,
+  normalizeProfileRole,
+  normalizeProfile,
+  normalizeUserSettings,
+  saveUserSettings,
+  saveModel,
+  deleteModel,
+  saveSimulationRun,
+  normalizeRunHistoryRow,
+  fetchRunStatsForModels,
+  fetchRunHistory,
+  forkModel,
   createShareLink,
   getShareLink,
   revokeShareLink,
@@ -78,6 +93,46 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from).toHaveBeenCalledWith('des_models');
       expect(supabase.from('des_models').eq).toHaveBeenCalledWith('visibility', 'public');
       expect(supabase.from('des_models').order).toHaveBeenCalledWith('updated_at', { ascending: false });
+    });
+  });
+
+  describe('norm row normalization', () => {
+    it('includes tags array when present in the database row', () => {
+      const result = norm({
+        id: 'm1',
+        name: 'Test',
+        description: 'Desc',
+        tags: ['queueing', 'healthcare'],
+        visibility: 'public',
+        owner_id: 'u1',
+        entity_types: [],
+        state_variables: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+        created_at: '2026-05-01T00:00:00Z',
+        updated_at: '2026-05-02T00:00:00Z',
+      });
+
+      expect(result.tags).toEqual(['queueing', 'healthcare']);
+    });
+
+    it('defaults tags to an empty array when missing from the row', () => {
+      const result = norm({
+        id: 'm2',
+        name: 'No tags',
+        visibility: 'private',
+        owner_id: 'u2',
+        entity_types: [],
+        state_variables: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+        created_at: '2026-05-01T00:00:00Z',
+        updated_at: '2026-05-02T00:00:00Z',
+      });
+
+      expect(result.tags).toEqual([]);
     });
   });
 

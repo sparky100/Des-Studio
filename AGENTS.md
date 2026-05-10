@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-10 | Reflects: Sprint 16 — Parametric Sweep & Scenario Comparison complete. Current: Sprint 17 — Statistical Output Analyzer*
+*Last updated: 2026-05-10 | Reflects: Sprint 18 — 2D Parametric Sweeps complete. Current: Sprint 19 — Model Import/Export & Community Gallery*
 
 ---
 

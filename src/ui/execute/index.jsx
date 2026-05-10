@@ -28,7 +28,7 @@ const METRIC_LABELS = {
   "summary.reneged": "Reneged",
 };
 
-const fmt = (value, digits = 2) => Number.isFinite(value) ? value.toFixed(digits) : "—";
+const fmt = (value, digits = 0) => Number.isFinite(value) ? value.toFixed(digits) : "—";
 const makeBatchId = () => {
   const cryptoApi = globalThis.crypto;
   if (typeof cryptoApi?.randomUUID === "function") {

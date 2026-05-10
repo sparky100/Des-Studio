@@ -53,7 +53,7 @@ const ER_TRIAGE = {
   description: "Two-stage emergency room. Patients arrive, see a triage nurse (2 nurses), then queue for a doctor (3 doctors). Priority queue for treatment.",
   entityTypes: [
     { id: "et_patient", name: "Patient", role: "customer", count: 0, attrDefs: [
-      { id: "a_priority", name: "priority", valueType: "number", defaultValue: 3, mutable: true },
+      { id: "a_priority", name: "priority", valueType: "number", defaultValue: 3, mutable: true, dist: "Uniform", distParams: { min: "1", max: "5" } },
     ]},
     { id: "et_nurse", name: "Nurse", role: "server", count: 2, attrDefs: [] },
     { id: "et_doctor", name: "Doctor", role: "server", count: 3, attrDefs: [] },

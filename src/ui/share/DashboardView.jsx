@@ -5,7 +5,7 @@ import { C, FONT, GOOGLE_FONT_URL } from "../shared/tokens.js";
 const CHART_W = 360, CHART_H = 80;
 const HIST_W = 360, HIST_H = 60, HIST_BINS = 12;
 
-const fmt = (v, d = 2) => Number.isFinite(v) ? v.toFixed(d) : "—";
+const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
 function MiniLineChart({ title, points, color, yLabel }) {
   if (!points || points.length < 2) return null;

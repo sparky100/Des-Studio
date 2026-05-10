@@ -18,7 +18,7 @@ import { validateModel }                    from "./engine/validation.js";
 import { TEMPLATES }                        from "./engine/templates.js";
 import DashboardView                        from "./ui/share/DashboardView.jsx";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues"];
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph"];
 
 function createSampleMm1Model() {
   return {
@@ -99,7 +99,13 @@ function extractImportedModelPayload(payload) {
   };
 
   for (const key of MODEL_JSON_KEYS) {
-    model[key] = Array.isArray(source[key]) ? source[key] : [];
+    if (key === 'graph') {
+      model[key] = source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])
+        ? source[key]
+        : null;
+    } else {
+      model[key] = Array.isArray(source[key]) ? source[key] : [];
+    }
   }
 
   return model;
@@ -363,6 +369,7 @@ export default function App(){
 
   const myModels=models.filter(m=>m.owner_id===uid||m.access?.[uid])
   const pubModels=models.filter(m=>m.visibility==='public'&&m.owner_id!==uid)
+  const communityModels=models.filter(m=>m.visibility==='public')
 
   if(shareToken){
     return <DashboardView token={shareToken} onBack={()=>{setShareToken(null);window.location.hash=''}} />
@@ -549,7 +556,7 @@ export default function App(){
           </div>
         )}
         <div role="tablist" aria-label="Model library sections" style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:24}}>
-          {[{id:'my',label:`My Models (${myModels.length})`},{id:'templates',label:`Templates (${TEMPLATES.length})`},{id:'public',label:`Public Library (${pubModels.length})`}].map(t=>(
+          {[{id:'my',label:`My Models (${myModels.length})`},{id:'templates',label:`Templates (${TEMPLATES.length})`},{id:'public',label:`Public Library (${pubModels.length})`},{id:'community',label:`Community (${communityModels.length})`}].map(t=>(
             <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} style={{background:'none',border:'none',borderBottom:tab===t.id?`2px solid ${C.accent}`:'2px solid transparent',color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'10px 18px',cursor:'pointer',fontWeight:tab===t.id?700:400}}>{t.label}</button>
           ))}
         </div>
@@ -586,6 +593,11 @@ export default function App(){
             ?<Empty icon="🌐" msg="No public models available."/>
             :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:14}}>
               {pubModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>handleOpenModel(m)} onDelete={handleDeleteModel} currentUserId={uid} profiles={profiles}/>)}
+            </div>)}
+          {tab==='community'&&(communityModels.length===0
+            ?<Empty icon="🌐" msg="No community models shared yet."/>
+            :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:14}}>
+              {communityModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>handleOpenModel(m)} onDelete={handleDeleteModel} currentUserId={uid} profiles={profiles}/>)}
             </div>)}
         </ErrorBoundary>
       </div>

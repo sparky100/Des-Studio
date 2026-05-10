@@ -73,6 +73,23 @@ describe('model JSON export', () => {
     );
   });
 
+  it('includes graph in export payload when model has a graph object', () => {
+    const payload = buildModelExportPayload({
+      ...baseModel,
+      graph: { nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] },
+    });
+
+    expect(payload.model_json).toEqual(expect.objectContaining({
+      graph: { nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] },
+    }));
+  });
+
+  it('omits graph from export payload when model has no graph', () => {
+    const payload = buildModelExportPayload(baseModel);
+
+    expect(payload.model_json).not.toHaveProperty('graph');
+  });
+
   it('generates stable filename slugs from model names', () => {
     expect(slugifyModelName('Emergency Desk v2!')).toBe('emergency-desk-v2');
     expect(slugifyModelName('   ')).toBe('untitled');

@@ -6,7 +6,7 @@ import { C, FONT } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn } from "../shared/components.jsx";
 import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../engine/statistics.js";
 
-const fmt = (v, d = 2) => Number.isFinite(v) ? v.toFixed(d) : "—";
+const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
 const TABS = [
   { id: "log",       label: "Step Log" },

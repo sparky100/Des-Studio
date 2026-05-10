@@ -25,6 +25,7 @@ const emptyModelJson = {
   bEvents: [],
   cEvents: [],
   queues: [],
+  graph: null,
 };
 
 function jsonFile(name, payload) {
@@ -142,5 +143,39 @@ describe('model JSON import', () => {
     expect(await screen.findByText('Import blocked by validation errors.')).toBeInTheDocument();
     expect(screen.getByText(/\[V1\]/)).toBeInTheDocument();
     expect(mockSaveModel).not.toHaveBeenCalled();
+  });
+
+  it('preserves graph key when present in imported model_json', async () => {
+    await renderLibrary();
+
+    fireEvent.change(screen.getByLabelText('Import model file'), {
+      target: {
+        files: [jsonFile('with-graph.json', {
+          name: 'Graph model',
+          model_json: {
+            ...emptyModelJson,
+            graph: { nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] },
+          },
+        })],
+      },
+    });
+
+    await waitFor(() => expect(mockSaveModel).toHaveBeenCalledTimes(1));
+    const savedPayload = mockSaveModel.mock.calls[0][0];
+    expect(savedPayload.graph).toEqual({ nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] });
+  });
+
+  it('normalizes missing graph to null in imported payload', () => {
+    const imported = extractImportedModelPayload({
+      name: 'No graph',
+      model_json: {
+        entityTypes: [],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+      },
+    });
+    expect(imported.graph).toBeNull();
   });
 });

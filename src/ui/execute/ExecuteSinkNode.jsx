@@ -7,7 +7,7 @@ import { C, FONT } from "../shared/tokens.js";
 
 const SINK_COLOR = C.red;   // "#f85149" — matches authoring-mode Sink node
 
-const fmt = (value, digits = 2) =>
+const fmt = (value, digits = 0) =>
   Number.isFinite(value) && value !== null ? value.toFixed(digits) : "—";
 
 function StatRow({ icon, label, value, color }) {

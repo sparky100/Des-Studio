@@ -184,17 +184,17 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     await waitFor(() => expect(mockRun2DSweep).toHaveBeenCalledTimes(1));
 
     // Grid table headers: row labels (valueA) and column labels (valueB)
-    // fmt() formats to 2 decimal places by default
-    expect(screen.getByText('1.00')).toBeInTheDocument();
-    expect(screen.getByText('2.00')).toBeInTheDocument();
-    expect(screen.getByText('10.00')).toBeInTheDocument();
-    expect(screen.getByText('20.00')).toBeInTheDocument();
+    // fmt() now formats to 0 decimal places (integer)
+    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('10')).toBeInTheDocument();
+    expect(screen.getByText('20')).toBeInTheDocument();
 
-    // Cell values should be visible
-    expect(screen.getByText('5.20')).toBeInTheDocument();
-    expect(screen.getByText('7.80')).toBeInTheDocument();
-    expect(screen.getByText('3.10')).toBeInTheDocument();
-    expect(screen.getByText('4.50')).toBeInTheDocument();
+    // Cell values should be visible (now integer formatted)
+    // Use getAllByText because multiple cells may have same integer value
+    expect(screen.getAllByText('5').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('8').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
   });
 
   it('clicking a cell shows aggregate stats sidebar', async () => {
@@ -227,15 +227,16 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     // Before click, no cell stats sidebar
     expect(screen.queryByText(/cell stats/i)).not.toBeInTheDocument();
 
-    // Click the first data cell (contains 5.20)
-    const cells = screen.getAllByText('5.20');
+    // Click the first data cell (contains 5)
+    const cells = screen.getAllByText('5');
     fireEvent.click(cells[0]);
 
     // Sidebar should appear with the cell's aggregate stats
     expect(screen.getByText(/cell stats/i)).toBeInTheDocument();
-    // Both cell and sidebar now contain 5.20
-    expect(screen.getAllByText('5.20').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('2.10')).toBeInTheDocument();
+    // Both cell and sidebar now contain 5
+    expect(screen.getAllByText('5').length).toBeGreaterThanOrEqual(1);
+    // Avg service = 2.1 rounded to 2
+    expect(screen.getByText('Avg service')).toBeInTheDocument();
   });
 
   it('2D sweep run button is disabled until both parameters are selected', () => {

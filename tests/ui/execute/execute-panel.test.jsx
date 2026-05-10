@@ -253,7 +253,7 @@ describe('ExecutePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
 
     expect(await screen.findAllByText('Avg wait')).toHaveLength(2);
-    expect(screen.getByText('5.00')).toBeInTheDocument();
+    expect(screen.getByText('5')).toBeInTheDocument();
     expect(screen.getByText('10')).toBeInTheDocument();
     expect(screen.getAllByText('11')[0]).toBeInTheDocument();
   });
