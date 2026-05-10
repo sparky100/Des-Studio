@@ -395,7 +395,7 @@ export async function getShareLink(token) {
 
   const { data: run, error: runError } = await supabase
     .from("simulation_runs")
-    .select("id, ran_at, replications, seed, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, max_simulation_time, warmup_period, results_json")
+    .select("id, model_id, ran_at, replications, seed, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, max_simulation_time, warmup_period, results_json")
     .eq("id", link.run_id)
     .single();
   if (runError) throw runError;
