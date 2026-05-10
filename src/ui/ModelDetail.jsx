@@ -482,7 +482,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           </Suspense>
         )}
         {tab==="overview"&&(
-          <div style={{maxWidth:700,display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
             <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null}/>
             <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4}/>
             <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:14}}>
@@ -505,7 +505,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           </div>
         )}
         {tab==="entities"&&(
-          <div style={{maxWidth:800,display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{maxWidth:1100,display:"flex",flexDirection:"column",gap:14}}>
             <TabErrors tabId="entities"/>
             {canEdit&&(
               <div style={{display:"flex",justifyContent:"flex-end"}}>
@@ -524,20 +524,20 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             )}
           </div>
         )}
-        {tab==="state"&&<div style={{maxWidth:750}}><TabErrors tabId="state"/><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>}
-        {tab==="bevents"&&<div style={{maxWidth:880}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
-        {tab==="cevents"&&<div style={{maxWidth:860}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
-        {tab==="queues"&&<div style={{maxWidth:800}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?v=>setField("queues",v):()=>{}}/></div>}
+        {tab==="state"&&<div style={{maxWidth:900}}><TabErrors tabId="state"/><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>}
+        {tab==="bevents"&&<div style={{maxWidth:1100}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
+        {tab==="cevents"&&<div style={{maxWidth:1100}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
+        {tab==="queues"&&<div style={{maxWidth:900}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?v=>setField("queues",v):()=>{}}/></div>}
         {tab==="execute"&&(
           <ErrorBoundary
             title="Execute panel crashed"
             message="The simulation controls could not render."
           >
-            <div style={{maxWidth:1080}}><ExecutePanel model={model} modelId={modelId} userId={overrides.userId} onRunSaved={handleRunSaved} autoRun={overrides.autoRun}/></div>
+            <ExecutePanel model={model} modelId={modelId} userId={overrides.userId} onRunSaved={handleRunSaved} autoRun={overrides.autoRun}/>
           </ErrorBoundary>
         )}
         {tab==="history"&&(
-          <div style={{maxWidth:960}}>
+          <div style={{maxWidth:1200}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
               <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,flex:1,minWidth:180}}>RUN HISTORY (LAST 20)</div>
               <Btn small variant="ghost" onClick={exportRunHistoryJson} disabled={!historyRows.length}>Export History</Btn>

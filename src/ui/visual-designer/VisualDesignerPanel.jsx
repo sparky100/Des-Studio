@@ -347,7 +347,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
   }, [message]);
 
   return (
-    <div aria-label="Visual Designer" style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 1280 }}>
+    <div aria-label="Visual Designer" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <SH label="Visual Designer" color={C.accent}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <Tag label={`${graph.nodes.length} nodes`} color={C.accent} />
@@ -377,7 +377,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
 
       <div style={{
         display: "grid",
-        gridTemplateColumns: "180px minmax(0, 1fr) 320px",
+        gridTemplateColumns: "160px minmax(0, 1fr) 280px",
         gap: 12,
         alignItems: "stretch",
       }}>
