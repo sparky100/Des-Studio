@@ -1,0 +1,9 @@
+"Review the codebase for security, performance, and maintainability issues. Focus on:
+
+Security: XSS vectors, innerHTML usage, insecure Supabase queries (missing user_id filters), RLS bypasses, hardcoded secrets, unsafe eval/new Function() patterns.
+
+Performance: Unnecessary re-renders (missing useMemo/useCallback on expensive computations), large bundle contributors, map/filter chains creating intermediate arrays in hot paths, overflowX:"auto" on tables that could virtualize.
+
+Maintainability: Duplicated logic between files, overly long components (1000+ lines), prop-drilling that could use context, inconsistent patterns, dead code, hardcoded style values outside tokens.js.
+
+For each finding, include the file path, line number, severity (low/medium/high/critical), and a concrete fix suggestion. Group by category."

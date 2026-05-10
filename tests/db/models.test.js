@@ -697,13 +697,14 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
 
     it('deleteSweep deletes by id', async () => {
       supabase.from('sweeps').delete.mockReturnThis();
-      supabase.from('sweeps').eq.mockResolvedValueOnce({ data: null, error: null });
+      supabase.from('sweeps').eq.mockReturnThis();
 
-      const result = await deleteSweep('sweep-1');
+      const result = await deleteSweep('sweep-1', 'user-1');
 
       expect(result.ok).toBe(true);
       expect(supabase.from('sweeps').delete).toHaveBeenCalled();
       expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('id', 'sweep-1');
+      expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('run_by', 'user-1');
     });
   });
 });

@@ -402,8 +402,8 @@ export default function App(){
               onDelete: isLocal
                 ? async (id) => { deleteLocalModel(id); setOpenId(null); setLocalModel(null); }
                 : async (id) => { await deleteModel(id, uid); },
-              onSetVisibility: setVisibility,
-              onSetAccess: setAccess,
+              onSetVisibility: (id, vis) => setVisibility(id, vis, uid),
+              onSetAccess: (id, acc) => setAccess(id, acc, uid),
               onFork: session ? confirmFork : undefined,
             }}
           />

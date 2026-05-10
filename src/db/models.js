@@ -223,19 +223,21 @@ export async function deleteModel(id, userId) {
   return { ok: true };
 }
 
-export async function setVisibility(id, visibility) {
+export async function setVisibility(id, visibility, userId) {
   const { error } = await supabase
     .from("des_models")
     .update({ visibility })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("owner_id", userId);
   if (error) throw error;
 }
 
-export async function setAccess(id, access) {
+export async function setAccess(id, access, userId) {
   const { error } = await supabase
     .from("des_models")
     .update({ access })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("owner_id", userId);
   if (error) throw error;
 }
 
@@ -502,11 +504,12 @@ export async function listSweeps(modelId) {
   }));
 }
 
-export async function deleteSweep(id) {
+export async function deleteSweep(id, userId) {
   const { error } = await supabase
     .from("sweeps")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .eq("run_by", userId);
   if (error) throw error;
   return { ok: true };
 }

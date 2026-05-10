@@ -978,6 +978,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [justCreatedLink, setJustCreatedLink] = useState(null);
   const [shareLinksLoading, setShareLinksLoading] = useState(false);
   const [qrToken, setQrToken] = useState(null);
+  const qrRef = useRef(null);
   const [latestRunId, setLatestRunId] = useState(null);
   // F9C.10 — effective auto-step delay (must be declared before the autoRef useEffect)
   const effectiveAutoSpeed = useMemo(
@@ -1583,6 +1584,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
       setSaveStatus({ state: 'error', message: 'Failed to copy to clipboard.' });
     }
   };
+
+  useEffect(() => {
+    if (qrRef.current && qrToken) {
+      qrRef.current.innerHTML = qrSvg(`${baseUrl}/#share/${qrToken}`, 180);
+    }
+  }, [qrToken, baseUrl]);
 
   return (
     <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
@@ -2649,7 +2656,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
             {qrToken && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: 12 }}>
                 <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>QR CODE</div>
-                <div dangerouslySetInnerHTML={{ __html: qrSvg(`${baseUrl}/#share/${qrToken}`, 180) }}
+                <div ref={qrRef}
                   style={{ width: 180, height: 180, background: "#fff", borderRadius: 6, padding: 8 }} />
                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, textAlign: "center", wordBreak: "break-all" }}>
                   {`${baseUrl}/#share/${qrToken}`}
