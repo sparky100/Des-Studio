@@ -91,6 +91,7 @@ export function makeHelpers(entities, model = null) {
     entities,
     model,
     waitingOf: (type, discipline = 'FIFO', filterFn = null) => {
+      // O(n log n) due to sort — revisit if entity pools exceed 10k
       let waiting = entities.filter(e => match(e.type, type) && e.status === 'waiting');
       if (filterFn) {
         waiting = waiting.filter(filterFn);

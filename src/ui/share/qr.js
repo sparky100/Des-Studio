@@ -178,6 +178,16 @@ export function generateQrMatrix(text) {
   }
 
   // Evaluate masks and pick best
+  const maskModule = (m, v, x, y) => {
+    if (m === 0) return v ^ ((x + y) % 2 === 0 ? 1 : 0);
+    if (m === 1) return v ^ (y % 2 === 0 ? 1 : 0);
+    if (m === 2) return v ^ (x % 3 === 0 ? 1 : 0);
+    if (m === 3) return v ^ ((x + y) % 3 === 0 ? 1 : 0);
+    if (m === 4) return v ^ ((Math.floor(y / 2) + Math.floor(x / 3)) % 2 === 0 ? 1 : 0);
+    if (m === 5) return v ^ (((x * y) % 2) + ((x * y) % 3) === 0 ? 1 : 0);
+    if (m === 6) return v ^ (((x * y) % 2 + (x * y) % 3) % 2 === 0 ? 1 : 0);
+    return v ^ (((x + y) % 2 + (x * y) % 3) % 2 === 0 ? 1 : 0);
+  };
   let bestMask = 0, bestScore = Infinity;
   for (let m = 0; m < 8; m++) {
     const score = (() => {
