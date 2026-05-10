@@ -20,7 +20,10 @@
       "Bash(git push *)",
       "Bash(git commit --amend -m ' *)",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('@xyflow/react:', p.dependencies['@xyflow/react'] || p.devDependencies?.['@xyflow/react']\\)\")",
-      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('@xyflow/react:', p.dependencies['@xyflow/react']\\)\")"
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('@xyflow/react:', p.dependencies['@xyflow/react']\\)\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\Des-Studio\\\\src\\\\ui\" -Directory)",
+      "Bash(grep -v \"^$\")",
+      "Bash(git commit *)"
     ]
   }
 }

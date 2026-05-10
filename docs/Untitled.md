@@ -1,6 +1,52 @@
-# DES Studio — AGENTS.md
-*Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-10 | Reflects: Sprint 16 — Parametric Sweep & Scenario Comparison complete. Current: Sprint 17 — Statistical Output Analyzer*
+Sprint 9B of DES Studio is complete and committed.
+
+## What was built
+- F9B.1: Activity inspector resource/server picker — dropdown populated
+  from server entity types, writes back to canonical C-event condition
+  and effect strings
+- F9B.2: Safe node deletion — dependency check surfaces named dependents
+  in a confirmation dialog; canonical model mutated first, graph
+  re-derived after
+- F9B.3: Connection editing polish — inline rejection reason on invalid
+  connection attempts; edge delete gesture; edge deletion updates
+  canonical routing
+- F9B.4: Richer validation panel — node-linked checklist; clicking an
+  error pans/selects the offending node and opens its inspector; error
+  badges clear reactively
+- F9B.5: Palette affordances — fit-to-canvas reset, drop-zone highlight,
+  selected-node ring clarity
+- F9B.6: Round-trip regression tests and scripted manual review complete
+- F9B.7: Visual Designer lazy-loaded via React.lazy() / Suspense
+- F9B.8 and F9B.9: Completed prior to this session
+
+## Issues encountered
+None
+
+## Test summary
+| Check                                    | Result                                                 |
+| ---------------------------------------- | ------------------------------------------------------ |
+| `npm run build`                          | ✅ succeeds — main 540 kB (was 758 kB), VD chunk 220 kB |
+| `npx tsc --noEmit`                       | ✅ zero errors                                          |
+| `npm run lint`                           | N/A — ESLint not installed per CLAUDE.md               |
+| `npm test -- --run`                      | ✅ 451/451, 51 files                                    |
+| `npm test -- visual-designer`            | ✅ 31/31, 4 files                                       |
+| `npm test -- c-event-editor`             | ✅ 12/12                                                |
+| `npm test -- b-event-editor`             | ✅ 3/3                                                  |
+| `npm test -- model-export`               | ✅ 5/5                                                  |
+| `npm test -- model-import`               | ✅ 6/6                                                  |
+| `npm test -- accessibility`              | ✅ 4/4                                                  |
+| `npm test -- execute-panel`              | ✅ 12/12                                                |
+| `npm test -- ai-generated-model-panel`   | ✅ 6/6                                                  |
+| No `console.log` in visual-designer/     | ✅                                                      |
+| `docs/sprint-9b-review.md` fully checked | ✅ 10/10 `[x]`                                          |
+
+## Bundle size delta
+[Paste build output before and after F9B.7 if available]
+
+## Current CLAUDE.md
+# DES Studio — CLAUDE.md
+*Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
+*Last updated: 2026-05-07 | Reflects: Sprint 9B Visual Designer UX hardening complete + ADR-010 + Known Issues*
 
 ---
 
@@ -24,8 +70,7 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 | Styling | Inline style objects | — | No CSS classes. No CSS framework. Tokens in `ui/shared/tokens.js` |
 | Database / auth | Supabase JS client | 2.45.0 | PostgreSQL backend. Auth via Supabase Auth. |
 | Test runner | Vitest | 1.6.0 | Engine layer only. Node environment. |
-| Canvas / DAG | `@xyflow/react` | — | ADR-010. Visual Designer authoring canvas and Execute live flow view, both lazy-loaded. `model_json.graph` drives layout. |
-| Animation | SVG `<animateMotion>` | — | Entity token animation on execute canvas edges. Toggle in `user_settings`. |
+| Canvas / DAG | `@xyflow/react` ^12.10.2 | — | ADR-010 governs canvas design. Lazy-loaded via `React.lazy()` + `<Suspense>` in `ModelDetail.jsx` — never import `VisualDesignerPanel` statically from `ModelDetail`. |
 
 **Do not introduce new dependencies without flagging them first.** The dependency list is intentionally minimal.
 
@@ -35,7 +80,7 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 
 ```
 project root
-├── AGENTS.md                        ← this file
+├── CLAUDE.md                        ← this file
 ├── docs/
 │   ├── addition1_entity_model.md   ← READ for Sprints 1–3 (entity schema, macros, distributions)
 │   └── decisions/                  ← Architectural Decision Records (ADRs)
@@ -89,26 +134,26 @@ project root
 
 ## 3a. Build-On Rule — Read Before Changing
 
-This project has an **existing working application**. Codex must never rewrite a working component from scratch. The correct approach for every task is:
+This project has an **existing working application**. Claude Code must never rewrite a working component from scratch. The correct approach for every task is:
 
 1. **READ** the target file and show the relevant current code
 2. **IDENTIFY** what already works and must be preserved
 3. **EXTEND or FIX** only what the audit says is wrong
 4. **CONFIRM** the change is minimal — not a rewrite
 
-If Codex finds itself rewriting a file that the audit marked as working (✓), stop and flag it. The correct action is always extension or targeted fix.
+If Claude Code finds itself rewriting a file that the audit marked as working (✓), stop and flag it. The correct action is always extension or targeted fix.
 
 **Working components that must not be replaced — only extended:**
 
 | File | What works | What is wrong |
 |---|---|---|
 | `src/engine/index.js` | Three-Phase A/B/C loop structure | C-scan restart granularity (fix in place) |
-| `src/engine/macros.js` | All seven macros correct (ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE, BATCH, UNBATCH) | Nothing — preserve entirely |
+| `src/engine/macros.js` | All five macros correct | Nothing — preserve entirely |
 | `src/engine/entities.js` | FIFO discipline correct | LIFO/Priority never read (extend waitingOf) |
 | `src/engine/conditions.js` | Condition evaluation structure | new Function() call (replace with safe eval) |
 | `src/engine/distributions.js` | All sampler functions | Math.random() (add seeded RNG) |
 | `src/ui/editors/index.jsx` | All five editors work | Operator filtering, priority field, token staleness |
-| `src/ui/execute/index.jsx` | ExecuteCanvas, BottomPanel, StepLog, EntityTable, run history, replication runner | VisualView retained as fallback for empty models |
+| `src/ui/execute/index.jsx` | VisualView, StepLog, EntityTable, run history | No validation, no seed field, silent truncation |
 | `src/db/models.js` | Multi-user CRUD wrappers | User-scoped model/run queries, run stats, result persistence, owner-guarded delete |
 | `src/App.jsx` | Auth listener, model library shell | Back button discards silently (Sprint 2) |
 | `tests/` | ~120 engine tests passing | UI and DB layers untested |
@@ -177,7 +222,7 @@ while (fel.length > 0 && !terminationConditionMet()) {
 
 **Full specification:** `docs/addition1_entity_model.md` — read this before any Sprint 1–3 work.
 
-### 5.1 The Seven Permitted Macros
+### 5.1 The Five Permitted Macros
 
 | Macro | Phase | Purpose |
 |---|---|---|
@@ -186,10 +231,28 @@ while (fel.length > 0 && !terminationConditionMet()) {
 | `COMPLETE` | B-Event | Releases resource, records stats, routes entity to next node |
 | `ASSIGN` | B or C | Modifies a mutable entity attribute or user-defined state variable |
 | `RENEGE` | B-Event | Removes entity from queue after patience timeout, routes to Sink |
-| `BATCH` | C-Event | Accumulates N entities per queue discipline; creates parent batch entity with `batch.children` |
-| `UNBATCH` | B-Event | Restores children from parent.batch to target queue; parent marked done |
 
-**These seven macros are the complete and closed set.** No other macros may be added without updating `docs/addition1_entity_model.md` first.
+**These five macros are the complete and closed set.** No other macros may be added without updating `docs/addition1_entity_model.md` first.
+
+### 5.1a Sprint 8B — Model Definition Coherence Rules
+
+The modeller-facing UI must describe actions in DES language, not as raw macro programming. Macro strings may remain the current internal representation, but dropdowns and AI proposal summaries should use clear labels such as:
+
+- `Add Patient to Triage Queue` for internal `ARRIVE(Patient, Triage Queue)`
+- `Start Triage with Triage Nurse` for internal `ASSIGN(Triage Queue, Triage Nurse)`
+- `Schedule Triage Complete` for C-event follow-on schedules
+- `Complete Patient Journey` or `Finish Service` for internal `COMPLETE()`
+
+Rules:
+
+- Prefer explicit `ARRIVE(CustomerType, QueueName)` over legacy `ARRIVE(CustomerType)` in all new UI and AI-generated models.
+- Queue names may contain spaces. Engine macros, condition evaluation, validation, and dropdown-generated values must support names such as `Triage Queue`.
+- Each queue should declare the customer/entity type it accepts via `customerType`; ARRIVE dropdown options must respect that binding.
+- A service-start C-event must have both a queue-availability condition and a server-availability condition: `queue(QueueName).length > 0 AND idle(ServerType).count > 0`.
+- A service-start C-event must assign from the queue or customer to the server and schedule a follow-on completion B-event.
+- `COMPLETE()` is a Phase B follow-on event that completes the currently scheduled customer/server service context. It should not be placed in the initial FEL for normal service completion.
+- Never expose the word `template` to users for follow-on completion or reneging B-events. Use `scheduled follow-on` where a category label is needed.
+- Multi-stage routing is a first-class modelling requirement. Sprint 8B must establish a tested two-stage reference model before visual designer work proceeds.
 
 ### 5.2 Prohibited Action Patterns
 
@@ -347,7 +410,7 @@ ModelDetail (parent)
 **What it must do:**
 - Render as a two-step picker: first select distribution type from a dropdown, then display parameter inputs appropriate for that type.
 - Parameter inputs must use `type="number"` for all numeric parameters.
-- Must include a "Import from CSV" option that triggers file selection, parses the CSV in the browser, lets the modeller select a column, and stores the extracted values array in the distribution object (see AGENTS.md Section 7.3 and `docs/addition1_entity_model.md` Section 6.3).
+- Must include a "Import from CSV" option that triggers file selection, parses the CSV in the browser, lets the modeller select a column, and stores the extracted values array in the distribution object (see CLAUDE.md Section 7.3 and `docs/addition1_entity_model.md` Section 6.3).
 - The picker must be usable anywhere a Distribution is required: B-Event schedule rows, Source node inter-arrival configuration, RENEGE patience time.
 - The distribution registry in `distributions.js` drives the picker — the picker reads registered types to build its dropdown. Adding a new distribution type to the registry automatically makes it available in the picker.
 
@@ -358,17 +421,20 @@ ModelDetail (parent)
 
 ### 7.8 Execute Panel (`execute/index.jsx`)
 
-**What exists:** Working. The execute panel provides: a Run button, an ExecuteCanvas (topology-derived live flow view with @xyflow/react), a StepLog (phase-tagged event log with clock timestamps), an EntityTable (entity status), a BottomPanel (collapsible tabs for log, entities, stage KPIs, charts), and a run history tab showing last 20 runs.
+**What exists:** Working. The execute panel provides: a Run button, a VisualView (server bays, queue lanes, entity tokens), a StepLog (phase-tagged event log with clock timestamps), an EntityTable (entity status), and a run history tab showing last 20 runs.
 
 **What it must do:**
 - Validate the model (V1–V11) before calling `buildEngine()`. Block Run if validation fails. Surface errors inline in the relevant editor tab, not only in the execute panel.
 - Accept a seed input field — the modeller can set or randomise the seed. The seed is stored with the run record.
 - Display the Phase C truncation warning if the cap is hit during a run.
 - The stats panel overview tab currently always shows Runs count as 0 (`model.stats` never populated). This must be fixed so that completed runs update the stats count.
-- The ExecuteCanvas, StepLog, and EntityTable are working and must not be broken by any changes.
+- The VisualView, StepLog, and EntityTable are working and must not be broken by any Sprint 1 changes.
 
 **Known gaps:**
-- All Sprint 1–5 gaps resolved.
+- No pre-run validation (C5) — fix in Sprint 1 Task 5.
+- No seed field — fix in Sprint 1 Task 4.
+- Silent Phase C truncation (C4) — fix in Sprint 1 Task 6.
+- Stats panel always shows 0 runs (C9 adjacent) — fix in Sprint 2.
 
 ### 7.9 Model Library (`App.jsx` + `ModelCard`)
 
@@ -654,24 +720,15 @@ tests/
 │   ├── entities.test.js          ← Queue disciplines: FIFO, LIFO, PRIORITY
 │   └── mm1_benchmark.js          ← M/M/1 correctness gate (not a unit test — run manually)
 ├── ui/
-│   ├── editors/                 ← EntityTypeEditor, BEventEditor, CEventEditor, QueueEditor
-│   │   ├── index.jsx
-│   │   ├── AiGeneratedModelPanel.jsx  ← AI model building chat interface
-│   │   └── ModelDiffPreview.jsx       ← Diff view for AI proposals
-│   ├── execute/                 ← Run panel, VisualView, StepLog, EntityTable
-│   │   ├── index.jsx
-│   │   ├── ExecuteCanvas.jsx         ← @xyflow/react live flow canvas
-│   │   ├── ExecuteSourceNode.jsx     ← Live Source node
-│   │   ├── ExecuteQueueNode.jsx      ← Live Queue node (depth, dots, sparkline)
-│   │   ├── ExecuteActivityNode.jsx   ← Live Activity node (server pool, utilisation)
-│   │   ├── ExecuteSinkNode.jsx       ← Live Sink node (served, throughput, sojourn)
-│   │   ├── AnimatedEdge.jsx          ← Entity token animation along edges
-│   │   ├── BottomPanel.jsx           ← Collapsible tabbed panel (log · entities · stage KPIs · charts)
-│   │   └── BottomPanelHelpers.js     ← Stage KPIs computation
-│   ├── visual-designer/         ← @xyflow/react authoring canvas
-│   │   ├── VisualDesignerPanel.jsx   ← Lazy-loaded Visual Designer
-│   │   └── graph.js                  ← Graph derivation helpers
-│   ├── shared/
+│   ├── editors/
+│   │   ├── entity-type-editor.test.jsx   ← EntityTypeEditor render and interactions
+│   │   ├── b-event-editor.test.jsx        ← BEventEditor, deletion reference guard
+│   │   ├── c-event-editor.test.jsx        ← CEventEditor, priority field, ConditionBuilder
+│   │   ├── queue-editor.test.jsx          ← QueueEditor, discipline dropdown state
+│   │   └── dist-picker.test.jsx           ← DistPicker, CSV import, registry sourcing
+│   ├── execute/
+│   │   └── execute-panel.test.jsx         ← Validation block, seed field, run flow
+│   └── shared/
 │       └── predicate-builder.test.jsx     ← Type safety, operator filtering, compound clauses
 ├── db/
 │   └── models.test.js            ← CRUD wrappers, user_id filtering (mocked Supabase)
@@ -942,7 +999,7 @@ const TOLERANCE = 0.05; // 5%
 
 ### 12.8 Completion Gates by Sprint
 
-These are the minimum test requirements before a sprint can be declared done. Codex must run all gates and report pass/fail before closing a sprint.
+These are the minimum test requirements before a sprint can be declared done. Claude Code must run all gates and report pass/fail before closing a sprint.
 
 | Sprint | Gate | Command |
 |---|---|---|
@@ -1114,7 +1171,7 @@ Create an ADR whenever a decision meets any of these criteria:
 - It would be difficult or expensive to reverse later
 - A reasonable developer could have made a different choice
 - It was explicitly discussed and rejected an alternative
-- It resolves a question marked as "open" or "deferred" in AGENTS.md
+- It resolves a question marked as "open" or "deferred" in CLAUDE.md
 
 **You do not need an ADR for:** implementation details within a single file, choice of variable names, which utility library to use for a minor task.
 
@@ -1146,30 +1203,30 @@ All ADRs live in `docs/decisions/`. File naming: `ADR-NNN-short-title.md` where 
 ### Negative
 - [What does this constrain or make harder?]
 
-### Rules added to AGENTS.md
-- [List any new rules added to AGENTS.md as a result of this decision]
+### Rules added to CLAUDE.md
+- [List any new rules added to CLAUDE.md as a result of this decision]
 
 ## Open Questions
 [Anything not yet resolved that a future ADR should address]
 ```
 
-### 17.3 How ADRs Interact With AGENTS.md
+### 17.3 How ADRs Interact With CLAUDE.md
 
-AGENTS.md contains the **rules**. ADRs contain the **reasoning**. The relationship is:
+CLAUDE.md contains the **rules**. ADRs contain the **reasoning**. The relationship is:
 
-- When a decision produces a new rule, the rule goes into AGENTS.md and the ADR is referenced in the relevant section.
-- When a rule in AGENTS.md is questioned or needs to change, a new ADR is written first, then AGENTS.md is updated to reflect it.
-- Codex must never change an architectural rule in AGENTS.md without an ADR being created in the same commit.
+- When a decision produces a new rule, the rule goes into CLAUDE.md and the ADR is referenced in the relevant section.
+- When a rule in CLAUDE.md is questioned or needs to change, a new ADR is written first, then CLAUDE.md is updated to reflect it.
+- Claude Code must never change an architectural rule in CLAUDE.md without an ADR being created in the same commit.
 
-### 17.4 How to Trigger an ADR During a Codex Session
+### 17.4 How to Trigger an ADR During a Claude Code Session
 
-If Codex encounters a situation where a reasonable implementation choice conflicts with AGENTS.md, or where AGENTS.md is silent on something important, it must stop and flag it:
+If Claude Code encounters a situation where a reasonable implementation choice conflicts with CLAUDE.md, or where CLAUDE.md is silent on something important, it must stop and flag it:
 
 ```
 ARCHITECTURAL DECISION REQUIRED
 
 I have reached a point where I need to make a choice that is not
-covered by AGENTS.md or that conflicts with an existing rule.
+covered by CLAUDE.md or that conflicts with an existing rule.
 
 Question: [state the specific question]
 Option A: [describe first approach and its tradeoffs]
@@ -1178,7 +1235,7 @@ My recommendation: [state which option and why]
 
 Please confirm your decision. I will then:
 1. Create docs/decisions/ADR-NNN-[title].md recording the decision
-2. Update AGENTS.md with any new rules it produces
+2. Update CLAUDE.md with any new rules it produces
 3. Proceed with implementation
 ```
 
@@ -1186,7 +1243,7 @@ This prevents silent architectural drift — the most common way AI-assisted pro
 
 ### 17.5 ADR Register
 
-| ADR | Title | Status | Sprint | AGENTS.md Sections Affected |
+| ADR | Title | Status | Sprint | CLAUDE.md Sections Affected |
 |---|---|---|---|---|
 | ADR-001 | Multi-user auth model and public model rules | Accepted | Pre-Sprint 1 | §16 |
 | ADR-002 | Public model run permissions | Accepted | Sprint 3 | §16.5 |
@@ -1260,6 +1317,14 @@ ARCHITECTURE
 ✗  Free-text condition field       — all logic via Predicate Builder. No exceptions.
 ✗  'Custom...' escape hatch        — removed. Do not recreate under any name.
 ✗  Architectural rule change without ADR — create docs/decisions/ADR-NNN.md first.
+✗  Static import of VisualDesignerPanel in ModelDetail
+   — lazy-loaded via React.lazy(). Tests must await screen.findByLabelText()
+     after the Visual Designer tab click; do not use screen.getByLabelText() there.
+✗  Mutating graph metadata before canonical model_json in Visual Designer
+   — deletion, patching, and connection must update model_json first, then
+     re-derive the graph. See deleteVisualNode(), updateVisualNode(), connectVisualNodes().
+✗  Duplicating validateModel() logic in Visual Designer UI components
+   — ValidationChecklist reads from validateModel() directly. No parallel validation.
 
 UI / UX
 ✗  LIFO or Priority in QueueEditor dropdown if engine does not implement it.
@@ -1290,7 +1355,7 @@ UI / UX
 ## 20. Sprint History
 
 | Sprint | Status | Completed | Description | Tests | M/M/1 |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|
 | Sprint 1 | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening | 182 passing | 1.48% error |
 | Sprint 2 | ✅ Complete | 2026-05-03 | UI editor completeness | 215 passing | N/A |
 | Sprint 3 | ✅ Complete | 2026-05-04 | Experiment controls: warm-up, termination, fork model | 272 passing | 1.48% error |
@@ -1301,125 +1366,232 @@ UI / UX
 | Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation | 33 focused | N/A |
 | Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources | 369 passing | N/A |
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight | 22 focused | N/A |
-| Sprint 8 | ✅ Complete | 2026-05-05 | AI Generated Model Authoring | 385 passing | N/A |
-| Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence | Focused | N/A |
-| Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight | Docs | N/A |
-| Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring | 38 focused | N/A |
-| Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX Hardening | Focused | N/A |
-| Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas — Live Flow View | 464 passing | N/A |
-| Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Routing & Pooling | 508 passing | N/A |
-| Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Capacity & Output | 523 passing | N/A |
-| Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation | 541 passing | 1.48% error |
-| Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement | 543 passing | N/A |
-| Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
-| Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
-| Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
-| Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison | 679 passing | N/A |
-| Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer | 37 engine + 14 UI tests | 1.48% error |
-| Sprint 18 | ✅ Complete | 2026-05-10 | 2D Parametric Sweeps | 35 engine + 6 UI tests | 1.48% error |
-| Sprint 19 | 🔄 Not started | — | Model Import/Export & Community Gallery | — | — |
+| Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX hardening: safe deletion, connection feedback, validation checklist, palette affordances, lazy bundle split | 451 passing | N/A |
 
 ---
 
-## 21. Current Sprint — Model Import/Export & Community Gallery
+## 21. Current Sprint
 
-**Goal:** Enable modellers to export their models as portable JSON files, import externally-created models, and browse a community gallery of public models shared by other users.
+**Sprint 9A — Visual Designer Architecture Preflight**
 
-### Design Decisions
-- **Import format:** Single JSON file containing `name`, `description`, `model_json` with all model keys. Must pass `validateModel()` before persistence.
-- **Export format:** Identical to import format with added `exportedAt` and `appVersion` metadata.
-- **Community gallery:** A new tab in the Model Library showing all `is_public = true` models from all users, with fork-to-run support.
+Goal: Lock the Visual Designer canvas, graph metadata, round-trip, and inspector reuse decisions before Sprint 9 coding.
 
-### Task 1 — Harden model import validation (`src/App.jsx`)
-- Import must reject files with validation errors (not just warnings)
-- Show inline error list with `[code] message` format
-- Support both DES Studio native format and simplified bare-object format
+**Status:** Sprint 9 is complete as the initial reviewable Visual Designer authoring model. Sprint 9B is the current visual-designer UX hardening pass. ADR-010 remains the governing architecture.
 
-### Task 2 — Model export from ModelDetail (`src/ui/ModelDetail.jsx`)
-- "Export Model" button produces `des-studio-<slug>.json` download
-- Include `appVersion` from `package.json`
-- Include full `model_json` with all keys (entityTypes, stateVariables, bEvents, cEvents, queues, graph)
+### Sprint 9A Accepted Decisions
 
-### Task 3 — Community Gallery tab (`src/App.jsx`)
-- New `community` tab in library alongside `my`, `templates`, `public`
-- Lists all public models with owner avatar, name, description
-- Fork button on each card (reuses existing `confirmFork` flow)
-- Read-only preview before fork
+- Use `@xyflow/react` for the Visual Designer canvas. Do not use the older `reactflow` package name.
+- Allow `@xyflow/react/dist/style.css` as a narrow vendor-CSS exception. DES Studio-owned styles still use inline token-driven style objects.
+- Persist `model_json.graph` only as optional layout metadata: positions, viewport, and graph metadata version.
+- Do not persist graph topology as a second model. Derive edges from canonical DES model logic.
+- Visual Designer edits canonical `model_json`; Forms/Tabs and AI Generated Model remain first-class authoring modes over the same data.
+- If graph metadata is missing or stale, regenerate it from canonical model data.
+- Initial node mapping:
+  - Source: arrival B-event with `ARRIVE(CustomerType, QueueName)`
+  - Queue: `queues[]`
+  - Activity: service-start C-event plus scheduled completion B-event
+  - Sink: terminal completion/routing outcome, initially derived rather than a new engine schema element
+- Visual node inspectors should reuse small editor building blocks where practical: `DistPicker`, `ConditionBuilder`, `EntityFilterBuilder`, queue/customer/resource option helpers.
+- Do not embed full `BEventEditor` or `CEventEditor` panels inside a node inspector.
+- Do not implement the retired split-pane SVG hybrid designer or `FlowDiagramSVG` bridge.
 
-### Task 4 — DB migration for gallery metadata
-- Add `description` and `tags` columns to `des_models` if missing
-- RLS policy: public read for `is_public = true` (already exists)
+### Sprint 9 Implementation Notes
 
-### Task 5 — Tests
-- Import rejects invalid JSON with inline errors
-- Export produces correct JSON structure with version metadata
-- Gallery tab renders public models without crashing
-- Fork from gallery creates private copy and opens it
+- First implementation slice adds dependency-free graph derivation in `src/ui/visual-designer/graph.js`.
+- Visual Designer shell is exposed as a `ModelDetail` tab and now renders the derived graph through an editable `@xyflow/react` canvas, with node/edge summaries retained below it for verification.
+- The initial Sprint 9 implementation is review/test-first, not final UX polish: button-based node creation, draggable layout persistence, conservative connection creation, and a compact inspector are implemented.
+- The first UX refinement slice adds drag-to-place palette creation, Source/Queue/Activity/Sink port-rule handles, and a compact visual validation summary for incomplete routes.
+- The compact inspector reuses `DistPicker` for Source inter-arrival schedules and Activity service-time schedules, writing back to canonical B-event/C-event schedule rows.
+- Visual Designer mutations must update canonical `model_json` first. Graph edges remain derived; `model_json.graph` stores layout metadata only.
+- Graph topology is derived from canonical model logic:
+  - `ARRIVE(Customer, Queue)` creates Source → Queue.
+  - C-event queue conditions and `ASSIGN(Queue, Server)` create Queue → Activity.
+  - scheduled B-event `RELEASE(Server, Queue)` creates Activity → Queue.
+  - scheduled B-event `COMPLETE()` or `RENEGE()` creates Activity → Sink.
+- `graphLayoutFromDerivedGraph()` serializes layout metadata without derived edges.
+- `model_json.graph` is preserved by model export/apply paths when present.
+- Keep this helper pure and testable; do not import React, DOM, Supabase, or engine internals.
 
-### Recently Completed
+### Sprint 9B — Visual Designer UX Hardening
 
-**Sprint 18 — 2D Parametric Sweeps** (2026-05-10):
-- Engine: `applySweepValues()` applies multiple param configs to a model clone independently
-- Engine: `generate2DSweepValues()` cartesian product with hard 50-point grid cap
-- Engine: `run2DSweep()` nested iteration runner with `gridSize` progress callbacks
-- UI: Mode toggle `[1D Sweep | 2D Sweep]`, two param pickers, live point counter
-- UI: `Sweep2DGrid` HTML table with conditional background colors (cool→warm = low→high KPI)
-- UI: Cell-click aggregate stats sidebar with all CI metrics
-- UI: 2D scenario comparison with cell dropdown selectors and difference/CI table
-- 35 engine + 6 UI tests, M/M/1 1.48% error
+Sprint 9B completed on 2026-05-07.
 
-**Sprint 14 — AI Natural Language Results Queries** (2026-05-09):
-- `buildResultsQueryPrompt()` transforms free-form natural language questions + structured KPI data into LLM prompts with conversation history for follow-ups
-- Query text input in AI Assistant panel with Enter-to-submit, disabled before results available
-- Context-aware answer rendering with "YOU" / "AI" role headers and cited KPI values
-- Follow-up question support via conversationHistory state array with Clear button
-- Voice input for AI model building via browser Web Speech API (mic/stop toggle, real-time transcription, cleanup on unmount, graceful fallback)
-- 58 Sprint 14 tests: 8 prompt tests, 8 UI component tests (7 query + 1 error), 7 voice input tests, 1 query-kind API client test, plus edge case tests for empty question and missing results
+- F9B.1: Activity inspector server/resource picker — populated from `model.entityTypes` filtered by `role: "server"`, writes back to C-event condition `idle()` clause and `ASSIGN()` effect via `updateVisualNode`.
+- F9B.2: Safe node deletion — `findNodeDependents()` checks cascade before any mutation; named dependents listed in a confirmation dialog; `deleteVisualNode()` mutates canonical `model_json` first, then re-derives the graph.
+- F9B.3: Connection editing polish — `isValidConnection` prop wires `validateVisualConnection` for live handle feedback; `onEdgeContextMenu` + `window.confirm` for edge deletion; `deleteVisualEdge()` reverses canonical routing by edge source type.
+- F9B.4: Node-linked validation checklist — `ValidationChecklist` replaces `ValidationSummary`; combines `validateVisualGraph` and `validateModel` results; clicking a row calls `fitNodeRef.current(nodeId)` and opens the inspector; `errorNodeIds` Set drives red `!` badge on `DesNode` as derived state only.
+- F9B.5: Palette affordances — `CanvasControls` Panel adds ⊡ Fit and ↺ Layout buttons inside ReactFlow; drop-zone highlight via `dragOver` state; selected-node ring strengthened to `0 0 0 3px color88`.
+- F9B.6: Round-trip regression tests (5 new in `sprint-9b-roundtrip.test.jsx`) + `docs/sprint-9b-review.md` walkthrough checklist fully checked.
+- F9B.7: `VisualDesignerPanel` lazy-loaded via `React.lazy()` + `<Suspense>` in `ModelDetail.jsx`; main bundle shrank from 758 kB → 540 kB (−28%); Visual Designer chunk 220 kB loaded on first tab open.
+- Execute save guard hardened: `saveInProgressRef` (useRef) replaces stale-closure `saveStatus` guard; batch `onComplete` wrapped in outer try/catch so display and save both survive setup errors; 10-run and batch-completion tests added.
 
-**Flow-first AI reasoning** (2026-05-09):
-- `buildModelBuilderSystemPrompt()` now instructs AI to describe entity flow in a `flowDescription` field *before* proposing a model
-- Response schema extended: `{"intent","questions","flowDescription","proposedModel","explanation"}`
-- Explicit C-event→B-event pattern documented in prompt: C-events START (ASSIGN), B-events COMPLETE (COMPLETE)
-- Queue-entity association strengthened: every queue's `customerType` must match an entity type name
-- `flowDescription` displayed as a distinct bubble in AI conversation
-- `buildSuggestionPrompt()` now includes `flowSummary` (queue→customerType links)
+### Review Observations 0605 — Coherence Rules
 
-**Voice input for AI modelling** (2026-05-09):
-- Microphone button with Mic/Stop toggle in "Use AI" panel
-- Browser-native Web Speech API for speech-to-text (no dependencies)
-- Real-time transcription appends to draft text field
-- Cleanup on unmount via useEffect
-- Graceful fallback: error message for unsupported browsers
+Manual review on 2026-05-06 identified a cross-surface coherence pass that should be handled before larger Visual Designer expansion:
 
-**Post-Sprint 13 — Templates & Anonymous Mode** (2026-05-09):
-- 10 pre-built template models (M/M/1, Call Center, ER Triage, Fast Food, Factory Assembly, Airport Security, etc.)
-- Template gallery tab in Model Library
-- Anonymous/local storage mode (localStorage CRUD backend)
-- Template auto-run on open
+- UI labels should say `Import Model` / `Export Model`, not `Import JSON` / `Export JSON`.
+- The model authoring tab should say `Use AI`, not `AI Generated Model`.
+- B-event start behavior should be phrased as `Fire at start`; scheduled completion/reneging events should remain labelled as scheduled follow-ons.
+- User-facing B-event labels must spell out queues clearly, e.g. `Add Customer to Waiting Queue`.
+- User-facing C-event service labels should describe the service action, e.g. `Start service with Server and Customer from Waiting Queue`.
+- AI-generated proposals must infer `ARRIVE(Customer, Queue)` when an arrival pattern and a compatible queue are present.
+- AI-generated service C-events must infer `ASSIGN(Queue, Server)` from queue/idle conditions or explicit service fields.
+- AI-generated C-event follow-on B-event schedules should default `useEntityCtx` to true so `COMPLETE()` receives the customer/server context.
+- Model run counts should refresh immediately after a run history record is saved, while still using user-scoped run stats as the persisted source of truth.
+- Visual Designer Activity inspector must support `entityFilter` so Attribute-Based Routing can be configured from the canvas.
+- Entity Types attribute editor must use the advanced `DistPicker` to allow non-Fixed distributions (like Empirical) and CSV import.
 
-**Sprint 15 — Shareable Results Dashboard** (2026-05-09):
-- `src/ui/share/qr.js` — inline SVG QR code generator (byte mode, ECC L, versions 1–6, GF(256) Reed-Solomon, best mask selection, no deps)
-- Share modal in execute panel with widget picker (summary/queues/resources/charts checkboxes), active links list, Copy/QR/Revoke per link
-- Copy-to-clipboard via `navigator.clipboard.writeText()` with status feedback
-- Hash route `#share/<token>` wiring in App.jsx to render DashboardView — no auth required for viewer
-- `DashboardView.jsx` refactored: fixed `{textAlign: left}` React child bug in queue table header
-- 22 new Sprint 15 tests: 10 QR code utility + 12 DashboardView rendering (loading, error, KPI cards, queue table, server table, charts, wait distribution, pinned widgets, revoked link)
-- `getShareLink()` returns full `{ share, run, model }` from Supabase (joins `share_links` + `simulation_runs` + `des_models`)
-- `createShareLink()` uses `crypto.randomUUID()` for token generation
-- `revokeShareLink()` sets `revoked_at` with owner guard
-- `listShareLinks()` filters by `run_id` ordered by `created_at` desc
+### Recently Completed — Sprint 8B
 
-**Sprint 16 — Parametric Sweep & Scenario Comparison** (2026-05-09):
-- `src/ui/share/qr.js` — inline SVG QR code generator (byte mode, ECC L, versions 1–6, GF(256) Reed-Solomon, best mask selection, no deps)
-- Share modal in execute panel with widget picker (summary/queues/resources/charts checkboxes), active links list, Copy/QR/Revoke per link
-- Copy-to-clipboard via `navigator.clipboard.writeText()` with status feedback
-- Hash route `#share/<token>` wiring in App.jsx to render DashboardView — no auth required for viewer
-- `DashboardView.jsx` refactored: fixed `{textAlign: left}` React child bug in queue table header
-- 22 new Sprint 15 tests: 10 QR code utility + 12 DashboardView rendering (loading, error, KPI cards, queue table, server table, charts, wait distribution, pinned widgets, revoked link)
-- `getShareLink()` returns full `{ share, run, model }` from Supabase (joins `share_links` + `simulation_runs` + `des_models`)
-- `createShareLink()` uses `crypto.randomUUID()` for token generation
-- `revokeShareLink()` sets `revoked_at` with owner guard
-- `listShareLinks()` filters by `run_id` ordered by `created_at` desc
+Sprint 8B completed on 2026-05-05.
+
+- `validateModel()` recognises ARRIVE/COMPLETE effects from manual and generated models without false V8 warnings.
+- Queue names with spaces work in macros, condition strings, validation, and generated dropdown values.
+- Queue `customerType` is used to filter ARRIVE options so servers or wrong customer types cannot be added to incompatible queues.
+- User-facing labels avoid raw macro vocabulary where possible and never show `template`.
+- AI proposals produce service-start C-events with queue-size and idle-server conditions.
+- A two-stage Patient -> Queue 1 -> Service 1 -> Queue 2 -> Service 2 -> Complete reference model is added as a regression gate.
+- Remaining observation polish completed: clearer queue/entity/B-event/C-event wording, visible in-panel dirty/save state, concise server resource count on model cards, and friendly proposal modification summaries instead of raw JSON blocks.
+
+### Recently Completed — Sprint 8
+
+Sprint 8 implementation pass completed on 2026-05-05, but manual verification exposed model-definition coherence blockers that are now Sprint 8B.
+
+- Added AI Generated Model tab, model-builder prompts, non-streaming provider-neutral model-builder calls, structured diff preview, validation-before-apply, partial section apply, and direct Apply & Save actions.
+- Sprint 8 files include `src/ui/editors/AiGeneratedModelPanel.jsx`, `src/ui/editors/ModelDiffPreview.jsx`, `src/llm/model-builder-prompts.js`, and `src/llm/apiClient.js`.
+
+### Recently Completed — Sprint 8A
+
+Sprint 8A completed on 2026-05-05.
+
+- Added `src/llm/contracts.js` for provider-neutral LLM requests.
+- Preserved `streamNarrative()` while changing browser calls to send `kind`, `messages`, `maxTokens`, `stream`, and `responseFormat`.
+- Refactored `supabase/functions/llm-proxy/index.ts` so provider and model selection are server-side.
+- Added server-side config path: `LLM_PROVIDER`, `LLM_MODEL`, and `ANTHROPIC_MODEL`; `ANTHROPIC_API_KEY` remains server-only.
+- Kept legacy Sprint 6 proxy payload compatibility for rollout.
+- Focused tests passed: `npm test -- llm execute-panel`; typecheck passed.
+
+### Recently Completed — Sprint 7
+
+Sprint 7 completed on 2026-05-05.
+
+- Added piecewise time-varying distributions with clock-aware sampling.
+- Added `RATE_CHANGE` and `SHIFT_CHANGE` B-event markers.
+- Added server shift schedules using server instance scaling.
+- Extended validation, typed contracts, editor controls, and schema docs.
+- Added focused engine and UI tests for time-varying distributions and shift schedules.
+
+### Recently Completed — Sprint 7A
+
+Sprint 7A completed on 2026-05-05.
+
+- Accepted ADR-008 for near-term platform roles and durable user settings.
+- `profiles.role` is the platform-role source of truth with initial roles `user` and `admin`.
+- Model-level owner/editor/viewer access remains separate from platform roles.
+- Durable user preferences should use a dedicated `user_settings` table.
+- SaaS tenancy/workspaces and LLM provider switching are explicitly deferred follow-on architecture decisions.
+- Accepted ADR-009: TypeScript is allowed incrementally, starting with schema/domain contracts rather than broad UI conversion.
+
+### Recently Completed — Sprint 7B
+
+Sprint 7B completed on 2026-05-05.
+
+- Added Supabase migration for `profiles.role`, `is_platform_admin()`, and `user_settings`.
+- Added owner-only `user_settings` RLS policies and updated timestamp trigger.
+- Added `fetchUserSettings()` and `saveUserSettings()` DB wrappers.
+- Normalized profile roles in the DB layer and exposed `isAdmin` without changing model permissions.
+- Added TypeScript tooling, `npm run typecheck`, and first typed contracts for model JSON, run/result payloads, and user settings.
+- Focused tests passed: `npm test -- db onboarding model-export contracts`.
+
+### Previously Completed — Sprint 6
+
+Sprint 6 completed on 2026-05-04.
+
+- Added a collapsible AI Insights panel to the Execute view.
+- Added prompt builders for KPI narrative, scenario comparison, and sensitivity commentary.
+- Added a streaming LLM API client with cancellation, error fallback, and safe plain-text rendering.
+- Added local Supabase Edge Function source for `llm-proxy`.
+- Deployed `llm-proxy` to Supabase project `znkknldzdfajcrpabtmg`.
+- Stored `ANTHROPIC_API_KEY` as a Supabase Edge Function secret.
+- Installed the Supabase CLI as a local dev dependency.
+- Added LLM prompt tests and Execute panel AI tests.
+
+### Sprint 7A Completion Gate
+
+```text
+git diff --check -> succeeds
+No product code changed
+```
+
+### Sprint 6 Completion Gate
+
+```text
+npm test       -> 32 files, 343 tests passed
+npm test -- llm execute-panel -> 2 files, 14 tests passed
+npm run build  -> succeeds
+```
+
+### Recent Architectural Decisions
+
+- Use a bounded Web Worker pool rather than one worker per replication.
+- Use local runner callbacks for same-browser live progress; persist final batch results to Supabase.
+- Store one run row per replication batch with per-replication results and aggregate CI in `results_json`.
+- Provide cancellation for active replication batches.
+- See `docs/decisions/ADR-006-replication-runner-architecture.md`.
+- No committed schema file confirms `simulation_runs` cascade on model delete; carry this as a data integrity risk until the next schema migration.
+- ADR-008 is accepted: `profiles.role` stores platform roles (`user`, `admin`) and durable user settings belong in a dedicated `user_settings` table.
+- ADR-009 is accepted: TypeScript may be introduced incrementally for shared contracts/domain boundaries. Existing JavaScript remains valid.
+- Sprint 7B implemented the accepted ADR-008/ADR-009 foundation before dynamic distributions.
+- Sprint 8A keeps provider and model choice server-side; browser code should use the neutral LLM request contract rather than provider-specific fields.
+
+### Future-Claude Notes
+
+- Sprint 6 LLM analysis is implemented in `src/ui/execute/index.jsx`, `src/llm/prompts.js`, `src/llm/apiClient.js`, and `supabase/functions/llm-proxy/index.ts`.
+- Do not introduce client-side LLM API keys. `ANTHROPIC_API_KEY` belongs only in Supabase Edge Function secrets.
+- `llm-proxy` is deployed to Supabase project `znkknldzdfajcrpabtmg`.
+- Treat Anthropic as the first provider implementation behind `llm-proxy`, not as a browser-facing contract.
+- Sprint 8 model-builder calls should use `src/llm/contracts.js` and the provider-neutral proxy request shape.
+- Sprint 8 implementation files are `src/ui/editors/AiGeneratedModelPanel.jsx`, `src/ui/editors/ModelDiffPreview.jsx`, `src/llm/model-builder-prompts.js`, and `src/llm/apiClient.js`.
+- Do not add local-only user settings that would need to follow a user across devices. Use the ADR-008 `user_settings` direction.
+- Do not add tenant/workspace assumptions ad hoc. SaaS tenancy is not part of Sprint 7A and needs a later explicit schema/RLS planning pass.
+- Execute panel is an MVP surface. Execute UX redesign is not part of Sprint 7A; keep it as a later design/refinement sprint.
+- Sprint 8 may use or extend the typed contracts, but broad TypeScript conversion remains out of scope.
+- ADR-007 establishes the product architecture for model creation: Forms/Tabs, AI Generated Model, and Visual Designer are three authoring modes over one canonical `model_json`.
+- Do not build the old split-pane SVG hybrid visual designer as a bridge phase; plan the visual designer as the final graph-first authoring surface.
+- Keep model import/export validation compatible with the current model JSON shape and the first-run M/M/1 sample in `src/App.jsx`.
+- `deleteModel(id, userId)` is intentionally owner-guarded via `owner_id`; keep destructive model actions user-scoped.
+- `ModelCard` behaves as a keyboard-reachable model selector with a nested delete action; preserve event isolation between select and delete.
+
+### New Commands Or Environment Variables
+
+- No new environment variables were introduced in Sprint 5.
+- Useful Sprint 5 verification commands:
+  - `npm test -- model-export model-import results-export`
+  - `npm test -- accessibility delete-model onboarding`
+  - `npm test`
+  - `npm run build`
+- Useful Sprint 6 verification commands:
+  - `npm test -- llm execute-panel`
+  - `npm test`
+  - `npm run build`
+- Useful Sprint 8A verification commands:
+  - `npm test -- llm execute-panel`
+  - `npm run typecheck`
+  - `npm run build`
+- Useful Sprint 8 verification commands:
+  - `npm test -- llm ai-generated-model-panel model-diff-preview accessibility execute-panel`
+  - `npm test`
+  - `npm run typecheck`
+  - `npm run build`
+
+Server-side LLM deployment variables:
+
+```text
+ANTHROPIC_API_KEY
+LLM_PROVIDER=anthropic
+LLM_MODEL=claude-sonnet-4-20250514
+ANTHROPIC_MODEL=claude-sonnet-4-20250514
+```
 
 ---
 
@@ -1446,18 +1618,17 @@ UI / UX
 
 ---
 
-### 22.2 Vite Import Analysis Fails on UTF-8 Multi-Byte Characters (Em Dashes) in `.js` Test Files
+*End of CLAUDE.md — if any section contradicts a prompt given during a session, this file takes precedence. Flag the contradiction rather than resolving it silently.*
 
-**Issue:** A `.js` test file containing em dash characters (U+2014) inside string literals caused Vite's import analysis to fail with: `Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.`
 
-**Root cause:** Vite's `TransformPluginContext.transform` (esbuild-based pre-bundling/analysis pass) chokes on certain multi-byte UTF-8 characters - specifically em dashes - even when they are safely inside JavaScript string literals. The file is `.js` (not `.jsx`) and contains no JSX syntax, but the parser reports a parse failure anyway.
-
-**Workaround:** Replace em dashes (U+2014) with regular hyphens (U+002D) in test descriptions and all string literals within `.js` test files.
-
-**Affected file:** `tests/engine/multi-stage-queue.test.js` (2026-05-10) - rewrote the file with plain hyphens; Vitest runs the file successfully after the change.
-
-**Lesson:** Avoid non-ASCII punctuation in `.js` test files that go through Vite's esbuild transform pipeline. Stick to ASCII-only for all source/test content.
-
----
-
-*End of AGENTS.md — if any section contradicts a prompt given during a session, this file takes precedence. Flag the contradiction rather than resolving it silently.*
+Please:
+1. Update DES_Studio_Build_Plan.md to mark Sprint 9B as complete,
+   record today's completion date, add a completion note summarising
+   what was delivered, and update the Sprint History table row for 9B
+2. Confirm whether any CLAUDE.md rules need adding or updating based
+   on patterns introduced this sprint (lazy boundary, canonical-first
+   delete, inspector dropdown pattern)
+3. Identify the next sprint from the Forward Product Roadmap and
+   confirm whether any prerequisites need to be resolved before starting
+4. Flag any technical debt introduced that should be logged in the
+   Deferred Features Register

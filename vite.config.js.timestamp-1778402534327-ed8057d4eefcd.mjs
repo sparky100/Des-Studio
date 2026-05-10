@@ -1,0 +1,18 @@
+// vite.config.js
+import { defineConfig } from "file:///C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/node_modules/vite/dist/node/index.js";
+import react from "file:///C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/node_modules/@vitejs/plugin-react/dist/index.js";
+var vite_config_default = defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "node",
+    environmentMatchGlobs: [
+      ["tests/ui/**", "jsdom"]
+    ],
+    globals: true,
+    setupFiles: ["tests/setup.js"]
+  }
+});
+export {
+  vite_config_default as default
+};
+//# sourceMappingURL=data:application/json;base64,ewogICJ2ZXJzaW9uIjogMywKICAic291cmNlcyI6IFsidml0ZS5jb25maWcuanMiXSwKICAic291cmNlc0NvbnRlbnQiOiBbImNvbnN0IF9fdml0ZV9pbmplY3RlZF9vcmlnaW5hbF9kaXJuYW1lID0gXCJDOlxcXFxVc2Vyc1xcXFxwYXJraVxcXFxPbmVEcml2ZVxcXFxEb2N1bWVudHNcXFxcUHJvamVjdHNcXFxcRGVzLVN0dWRpb1wiO2NvbnN0IF9fdml0ZV9pbmplY3RlZF9vcmlnaW5hbF9maWxlbmFtZSA9IFwiQzpcXFxcVXNlcnNcXFxccGFya2lcXFxcT25lRHJpdmVcXFxcRG9jdW1lbnRzXFxcXFByb2plY3RzXFxcXERlcy1TdHVkaW9cXFxcdml0ZS5jb25maWcuanNcIjtjb25zdCBfX3ZpdGVfaW5qZWN0ZWRfb3JpZ2luYWxfaW1wb3J0X21ldGFfdXJsID0gXCJmaWxlOi8vL0M6L1VzZXJzL3BhcmtpL09uZURyaXZlL0RvY3VtZW50cy9Qcm9qZWN0cy9EZXMtU3R1ZGlvL3ZpdGUuY29uZmlnLmpzXCI7aW1wb3J0IHsgZGVmaW5lQ29uZmlnIH0gZnJvbSAndml0ZSdcclxuaW1wb3J0IHJlYWN0IGZyb20gJ0B2aXRlanMvcGx1Z2luLXJlYWN0J1xyXG5cclxuZXhwb3J0IGRlZmF1bHQgZGVmaW5lQ29uZmlnKHtcclxuICBwbHVnaW5zOiBbcmVhY3QoKV0sXHJcbiAgdGVzdDoge1xyXG4gICAgZW52aXJvbm1lbnQ6ICdub2RlJyxcclxuICAgIGVudmlyb25tZW50TWF0Y2hHbG9iczogW1xyXG4gICAgICBbJ3Rlc3RzL3VpLyoqJywgJ2pzZG9tJ10sXHJcbiAgICBdLFxyXG4gICAgZ2xvYmFsczogdHJ1ZSxcclxuICAgIHNldHVwRmlsZXM6IFsndGVzdHMvc2V0dXAuanMnXSxcclxuICB9LFxyXG59KVxyXG4iXSwKICAibWFwcGluZ3MiOiAiO0FBQStWLFNBQVMsb0JBQW9CO0FBQzVYLE9BQU8sV0FBVztBQUVsQixJQUFPLHNCQUFRLGFBQWE7QUFBQSxFQUMxQixTQUFTLENBQUMsTUFBTSxDQUFDO0FBQUEsRUFDakIsTUFBTTtBQUFBLElBQ0osYUFBYTtBQUFBLElBQ2IsdUJBQXVCO0FBQUEsTUFDckIsQ0FBQyxlQUFlLE9BQU87QUFBQSxJQUN6QjtBQUFBLElBQ0EsU0FBUztBQUFBLElBQ1QsWUFBWSxDQUFDLGdCQUFnQjtBQUFBLEVBQy9CO0FBQ0YsQ0FBQzsiLAogICJuYW1lcyI6IFtdCn0K

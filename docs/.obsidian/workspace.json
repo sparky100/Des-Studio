@@ -8,7 +8,7 @@
         "type": "tabs",
         "children": [
           {
-            "id": "f6a3d11787bccdd9",
+            "id": "ef99914b48dd2efc",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -19,18 +19,6 @@
               },
               "icon": "lucide-file",
               "title": "DES_Studio_Build_Plan"
-            }
-          },
-          {
-            "id": "154c98e4b48188a2",
-            "type": "leaf",
-            "state": {
-              "type": "release-notes",
-              "state": {
-                "currentVersion": "1.12.7"
-              },
-              "icon": "lucide-book-up",
-              "title": "Release Notes 1.12.7"
             }
           }
         ]
@@ -65,7 +53,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "time",
+                "query": "\"sprint 16",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -196,17 +184,33 @@
       "bases:Create new base": false
     }
   },
-  "active": "f6a3d11787bccdd9",
+  "active": "ef99914b48dd2efc",
   "lastOpenFiles": [
-    "branching-model.json",
-    "Modelling Branching.md",
+    "agent-sessions/2026-05-10-session.md",
+    "agent-sessions",
+    "DES_Studio_User_Guide.md",
+    "sprint-9b-review.md",
     "Review Observations 0605.md",
+    "Instructs.md",
+    "DES_Studio_Build_Plan.md",
+    "DES_Studio_Template_Models.md",
+    "DES_Studio_Build_Plan.pdf",
+    "des-studio-product-next-steps.md",
+    "des-studio-professional-gap-analysis.md",
+    "Modelling Branching.md",
+    "Template Models Guide.md",
+    "Untitled.md",
+    "decisions/ADR-012-recirculation-batching.md",
+    "DES_Studio_Specification.md",
+    "Untitled 1.md",
+    "decisions/ADR-011-conditional-routing-schema.md",
+    "DES_Studio_Build_Plan_1.md",
+    "sedMCENVL",
+    "branching-model.json",
     "decisions/ADR-010-visual-designer-canvas-graph-metadata.md",
     "UI - Observations.md",
     "Pasted image 20260505144753.png",
-    "DES_Studio_User_Guide.md",
     "Sorint 8 - Observations.md",
-    "DES_Studio_Build_Plan.md",
     "Gemini Key and Project Number.md",
     "decisions/ADR-005-queue-discipline-lookup.md",
     "decisions/ADR-004-mulberry32-prng.md",
