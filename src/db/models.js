@@ -263,7 +263,7 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     resultsJson.runLabel = runLabel;
   }
 
-  const { error } = await supabase.from("simulation_runs").insert({
+  const { data, error } = await supabase.from("simulation_runs").insert({
     model_id:            modelId,
     run_by:              userId,
     replications:        config.replications || 1,
@@ -278,8 +278,9 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     renege_rate:         s.total ? (s.reneged / s.total) : 0,
     results_json:        resultsJson,
     duration_ms:         config.durationMs || null,
-  });
+  }).select("id").single();
   if (error) throw error;
+  return data?.id;
 }
 
 export function normalizeRunHistoryRow(row = {}) {
@@ -509,11 +510,20 @@ export async function deleteSweep(id) {
   return { ok: true };
 }
 
-export async function listShareLinks(runId) {
+export async function listShareLinks(modelId) {
+  const { data: runs, error: runsError } = await supabase
+    .from("simulation_runs")
+    .select("id")
+    .eq("model_id", modelId);
+  if (runsError) throw runsError;
+
+  const runIds = (runs || []).map(r => r.id);
+  if (runIds.length === 0) return [];
+
   const { data, error } = await supabase
     .from("share_links")
     .select("id, token, config, created_at, revoked_at")
-    .eq("run_id", runId)
+    .in("run_id", runIds)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data || []).map(link => ({

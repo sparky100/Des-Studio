@@ -244,7 +244,7 @@ describe('two-stage model (TriageNurse + Doctor)', () => {
   });
 });
 
-describe('seed reproducibility', () => {
+
   test('two runs with the same seed produce identical summary.served', () => {
     const r1 = buildEngine(mm1Model, 42, 0, 50).runAll();
     const r2 = buildEngine(mm1Model, 42, 0, 50).runAll();

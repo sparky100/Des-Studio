@@ -534,6 +534,20 @@ export default function App(){
             {actionError}
           </div>
         )}
+        {error&&(
+          <div role="alert" style={{
+            background: C.red+"18",
+            border: `1px solid ${C.red}44`,
+            borderRadius: 6,
+            color: C.red,
+            fontSize: 12,
+            fontFamily: FONT,
+            marginBottom: 16,
+            padding: "10px 12px",
+          }}>
+            {error}
+          </div>
+        )}
         <div role="tablist" aria-label="Model library sections" style={{display:'flex',borderBottom:`1px solid ${C.border}`,marginBottom:24}}>
           {[{id:'my',label:`My Models (${myModels.length})`},{id:'templates',label:`Templates (${TEMPLATES.length})`},{id:'public',label:`Public Library (${pubModels.length})`}].map(t=>(
             <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} style={{background:'none',border:'none',borderBottom:tab===t.id?`2px solid ${C.accent}`:'2px solid transparent',color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'10px 18px',cursor:'pointer',fontWeight:tab===t.id?700:400}}>{t.label}</button>

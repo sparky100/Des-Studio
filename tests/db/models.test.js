@@ -463,9 +463,30 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       vi.clearAllMocks();
     });
 
+    function makeQuery() {
+      const q = {
+        select: vi.fn(() => q),
+        insert: vi.fn(() => q),
+        upsert: vi.fn(() => q),
+        update: vi.fn(() => q),
+        delete: vi.fn(() => q),
+        eq: vi.fn(() => q),
+        in: vi.fn(() => q),
+        or: vi.fn(() => q),
+        contains: vi.fn(() => q),
+        order: vi.fn(() => q),
+        limit: vi.fn(() => q),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+      };
+      return q;
+    }
+    beforeEach(() => {
+      const q = makeQuery();
+      supabase.from.mockReturnValue(q);
+    });
+
     it('createShareLink inserts a row with a UUID token', async () => {
-      supabase.from('share_links').insert.mockReturnThis();
-      supabase.from('share_links').select().single.mockResolvedValueOnce({
+      supabase.from('share_links').single.mockResolvedValueOnce({
         data: { id: 'link-1', token: 'abc-123', created_at: '2026-05-09T12:00:00Z' },
         error: null,
       });
@@ -485,26 +506,19 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
     });
 
     it('getShareLink fetches run and model data by token', async () => {
-      supabase.from('share_links').select().eq.mockReturnThis();
-      supabase.from('share_links').single
-        .mockResolvedValueOnce({
-          data: { id: 'link-1', run_id: 'run-1', config: { pinnedWidgets: [] }, created_at: '2026-05-09T12:00:00Z', revoked_at: null },
-          error: null,
-        });
-
-      supabase.from('simulation_runs').select().eq.mockReturnThis();
-      supabase.from('simulation_runs').single
-        .mockResolvedValueOnce({
-          data: { id: 'run-1', ran_at: '2026-05-09T11:00:00Z', replications: 1, seed: 42, total_arrived: 100, total_served: 95, total_reneged: 5, avg_wait_time: 8.2, avg_service_time: 1.1, max_simulation_time: 500, warmup_period: 0, results_json: { summary: { avgWait: 8.2 } } },
-          error: null,
-        });
-
-      supabase.from('des_models').select().eq.mockReturnThis();
-      supabase.from('des_models').single
-        .mockResolvedValueOnce({
-          data: { name: 'Test Model', entity_types: [{ id: 'et_1', name: 'Customer' }], queues: [{ id: 'q_1', name: 'Queue' }] },
-          error: null,
-        });
+      const q = supabase.from('share_links');
+      q.single.mockResolvedValueOnce({
+        data: { id: 'link-1', run_id: 'run-1', config: { pinnedWidgets: [] }, created_at: '2026-05-09T12:00:00Z', revoked_at: null },
+        error: null,
+      });
+      supabase.from('simulation_runs').single.mockResolvedValueOnce({
+        data: { id: 'run-1', ran_at: '2026-05-09T11:00:00Z', replications: 1, seed: 42, total_arrived: 100, total_served: 95, total_reneged: 5, avg_wait_time: 8.2, avg_service_time: 1.1, max_simulation_time: 500, warmup_period: 0, results_json: { summary: { avgWait: 8.2 } } },
+        error: null,
+      });
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { name: 'Test Model', entity_types: [{ id: 'et_1', name: 'Customer' }], queues: [{ id: 'q_1', name: 'Queue' }] },
+        error: null,
+      });
 
       const result = await getShareLink('abc-123');
 
@@ -515,20 +529,16 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
     });
 
     it('getShareLink throws when share link is revoked', async () => {
-      supabase.from('share_links').select().eq.mockReturnThis();
-      supabase.from('share_links').single
-        .mockResolvedValueOnce({
-          data: { id: 'link-1', run_id: 'run-1', config: {}, created_at: '2026-05-09T12:00:00Z', revoked_at: '2026-05-09T13:00:00Z' },
-          error: null,
-        });
+      supabase.from('share_links').single.mockResolvedValueOnce({
+        data: { id: 'link-1', run_id: 'run-1', config: {}, created_at: '2026-05-09T12:00:00Z', revoked_at: '2026-05-09T13:00:00Z' },
+        error: null,
+      });
 
       await expect(getShareLink('revoked-token')).rejects.toThrow('revoked');
     });
 
     it('revokeShareLink sets revoked_at and guards by userId', async () => {
-      supabase.from('share_links').update.mockReturnThis();
-      supabase.from('share_links').eq.mockReturnThis();
-      supabase.from('share_links').select().single.mockResolvedValueOnce({
+      supabase.from('share_links').single.mockResolvedValueOnce({
         data: { id: 'link-1' },
         error: null,
       });
@@ -542,8 +552,11 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from('share_links').eq).toHaveBeenCalledWith('created_by', 'user-1');
     });
 
-    it('listShareLinks returns active and revoked links for a run', async () => {
-      supabase.from('share_links').select().eq.mockReturnThis();
+    it('listShareLinks returns active and revoked links for a model', async () => {
+      supabase.from('simulation_runs').eq.mockResolvedValueOnce({
+        data: [{ id: 'run-1' }, { id: 'run-2' }],
+        error: null,
+      });
       supabase.from('share_links').order.mockResolvedValueOnce({
         data: [
           { id: 'link-1', token: 'tok-1', config: { pinnedWidgets: ['arrived'] }, created_at: '2026-05-09T12:00:00Z', revoked_at: null },
@@ -552,11 +565,13 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
         error: null,
       });
 
-      const links = await listShareLinks('run-1');
+      const links = await listShareLinks('model-1');
 
       expect(links).toHaveLength(2);
       expect(links[0].isActive).toBe(true);
       expect(links[1].isActive).toBe(false);
+      expect(supabase.from('simulation_runs').eq).toHaveBeenCalledWith('model_id', 'model-1');
+      expect(supabase.from('share_links').in).toHaveBeenCalledWith('run_id', ['run-1', 'run-2']);
     });
   });
 
