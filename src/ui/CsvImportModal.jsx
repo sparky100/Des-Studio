@@ -81,14 +81,20 @@ export function CsvImportModal({ onClose, onApply }) {
               />
             </div>
             <input ref={fileRef} aria-label="CSV file" type="file" accept=".csv" style={{ display: "none" }} onChange={handleFile} />
-            <Btn variant="primary" onClick={() => fileRef.current?.click()}>Select CSV File</Btn>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+              <Btn variant="primary" onClick={() => fileRef.current?.click()}>Select CSV File</Btn>
+            </div>
           </>
         )}
 
         {step === "error" && (
           <>
             <div style={{ fontSize: 12, color: C.red, lineHeight: 1.5 }}>{error}</div>
-            <Btn variant="ghost" onClick={() => setStep("upload")}>Try Again</Btn>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+              <Btn variant="ghost" onClick={() => setStep("upload")}>Try Again</Btn>
+            </div>
           </>
         )}
 

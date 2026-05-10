@@ -62,7 +62,6 @@ function toRow(model, userId) {
   return {
     name:            model.name,
     description:     model.description    || "",
-    tags:            model.tags           || [],
     visibility:      model.visibility     || "private",
     access:          model.access         || {},
     entity_types:    model.entityTypes    || [],
