@@ -279,15 +279,15 @@ function EntitiesTab({ snap }) {
 // Percentile marker lines (p50 green, p90/p95 amber, p99 red) overlaid.
 
 const HIST_W = 360;
-const HIST_H = 60;
-const HIST_BINS = 12;
+const HIST_H = 90;
+const HIST_BINS = 16;
 
 function WaitHistogram({ dist, color }) {
   if (!dist || dist.n < 2) return null;
-  const vals = dist.values; // already sorted ascending from engine
+  const vals = dist.values;
   const minV = vals[0];
   const maxV = vals[vals.length - 1];
-  if (maxV === minV) return null; // degenerate — all waits identical
+  if (maxV === minV) return null;
 
   const binWidth = (maxV - minV) / HIST_BINS;
   const counts = Array(HIST_BINS).fill(0);
@@ -297,9 +297,11 @@ function WaitHistogram({ dist, color }) {
   }
   const maxCount = Math.max(...counts, 1);
   const barW = HIST_W / HIST_BINS;
-
-  // Percentile → x position
-  const toX = (v) => ((v - minV) / (maxV - minV)) * HIST_W;
+  const PAD = { top: 14, right: 6, bottom: 16, left: 36 };
+  const w = HIST_W - PAD.left - PAD.right;
+  const h = HIST_H - PAD.top - PAD.bottom;
+  const toX = (v) => PAD.left + ((v - minV) / (maxV - minV)) * w;
+  const barToX = (i) => PAD.left + (i / HIST_BINS) * w;
 
   const MARKERS = [
     { label: "p50", value: dist.p50, color: C.green  },
@@ -307,67 +309,121 @@ function WaitHistogram({ dist, color }) {
     { label: "p99", value: dist.p99, color: C.red    },
   ];
 
+  const yTicks = [0, Math.round(maxCount / 2) || 1, maxCount];
+
   return (
-    <svg width={HIST_W} height={HIST_H} aria-label="Wait time histogram"
-      viewBox={`0 0 ${HIST_W} ${HIST_H}`} style={{ display: "block", width: "100%", overflow: "visible" }}>
-      {/* Bars */}
-      {counts.map((cnt, i) => {
-        const barH = (cnt / maxCount) * (HIST_H - 8);
-        return (
-          <rect key={i}
-            x={i * barW + 1} y={HIST_H - barH - 2}
-            width={Math.max(barW - 2, 1)} height={barH}
-            fill={color} fillOpacity={0.45} rx={1}
-          />
-        );
-      })}
-      {/* Percentile marker lines */}
-      {MARKERS.map(m => {
-        const x = toX(m.value);
-        if (x < 0 || x > HIST_W) return null;
-        return (
-          <g key={m.label}>
-            <line x1={x} y1={0} x2={x} y2={HIST_H - 2}
-              stroke={m.color} strokeWidth={1.5} strokeDasharray="3,2" />
-            <text x={x + 2} y={10} fontSize={7} fill={m.color} fontFamily="monospace">{m.label}</text>
-          </g>
-        );
-      })}
-      {/* X axis labels */}
-      <text x={2}    y={HIST_H} fontSize={7} fill={C.muted} fontFamily="monospace">{Math.round(minV)}</text>
-      <text x={HIST_W - 28} y={HIST_H} fontSize={7} fill={C.muted} fontFamily="monospace">{Math.round(maxV)}</text>
-    </svg>
+    <div>
+      <svg width={HIST_W} height={HIST_H} aria-label="Wait time histogram"
+        viewBox={`0 0 ${HIST_W} ${HIST_H}`} style={{ display: "block", width: "100%", overflow: "visible" }}>
+        {/* Gridlines */}
+        {yTicks.map(t => {
+          const y = PAD.top + h - (t / maxCount) * h;
+          return (
+            <g key={t}>
+              <line x1={PAD.left} y1={y} x2={PAD.left + w} y2={y}
+                stroke={C.border} strokeWidth={0.5} strokeDasharray="3,3" />
+              <text x={PAD.left - 4} y={y + 3} textAnchor="end" fontSize={7}
+                fill={C.muted} fontFamily="monospace">{t}</text>
+            </g>
+          );
+        })}
+        {/* Bars */}
+        {counts.map((cnt, i) => {
+          const barH = (cnt / maxCount) * h;
+          return (
+            <rect key={i}
+              x={barToX(i) + 1} y={PAD.top + h - barH}
+              width={Math.max(barW - 2, 1)} height={barH}
+              fill={color} fillOpacity={0.4} rx={1}
+            />
+          );
+        })}
+        {/* Percentile marker lines */}
+        {MARKERS.map(m => {
+          const x = toX(m.value);
+          if (x < PAD.left || x > PAD.left + w) return null;
+          return (
+            <g key={m.label}>
+              <line x1={x} y1={PAD.top} x2={x} y2={PAD.top + h}
+                stroke={m.color} strokeWidth={1.5} strokeDasharray="3,2" />
+              <text x={x + 2} y={PAD.top - 2} fontSize={7} fill={m.color} fontFamily="monospace">{m.label}</text>
+            </g>
+          );
+        })}
+        {/* X axis labels */}
+        <text x={PAD.left} y={HIST_H - 2} fontSize={7} fill={C.muted} fontFamily="monospace">{Math.round(minV)}</text>
+        <text x={PAD.left + w - 28} y={HIST_H - 2} fontSize={7} fill={C.muted} fontFamily="monospace">{Math.round(maxV)}</text>
+      </svg>
+      {/* Percentile stats bar */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 6, marginTop: 8 }}>
+        {[
+          { label: "n",   value: dist.n,   color: C.muted, desc: "samples" },
+          { label: "avg", value: dist.mean, color: C.accent, desc: "mean wait" },
+          { label: "p50", value: dist.p50,  color: C.green, desc: "median" },
+          { label: "p90", value: dist.p90,  color: C.amber, desc: "90th %ile" },
+          { label: "p95", value: dist.p95,  color: C.amber, desc: "95th %ile" },
+          { label: "p99", value: dist.p99,  color: C.red, desc: "99th %ile" },
+        ].map(s => (
+          <div key={s.label} style={{ background: C.bg, border: `1px solid ${s.color}44`, borderRadius: 5, padding: "6px 8px", textAlign: "center" }}>
+            <div style={{ fontSize: 9, fontWeight: 700, color: s.color, fontFamily: FONT, letterSpacing: 1, marginBottom: 2 }}>{s.label.toUpperCase()}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>{typeof s.value === "number" ? Math.round(s.value) : s.value}</div>
+            <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT }}>{s.desc}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
 // ── Charts tab (F10.5) ────────────────────────────────────────────────────────
 
-const CHART_W = 360;
-const CHART_H = 80;
-const CHART_COLORS = ["#06b6d4", "#f59e0b", "#8b5cf6", "#3fb950", "#f87171", "#a78bfa"];
+const CHART_W = 400;
+const CHART_H = 120;
+const CHART_COLORS = [C.accent, C.bEvent, C.purple, C.green, C.red, C.server];
 
 function MiniLineChart({ title, points, color, yLabel }) {
   if (!points || points.length < 2) return null;
   const maxY = Math.max(...points.map(p => p.value), 1);
   const maxT = points[points.length - 1].t || 1;
-  const toX = t  => (t  / maxT)  * CHART_W;
-  const toY = v  => CHART_H - 4 - (v / maxY) * (CHART_H - 8);
+  const PAD = { top: 6, right: 6, bottom: 16, left: 36 };
+  const w = CHART_W - PAD.left - PAD.right;
+  const h = CHART_H - PAD.top - PAD.bottom;
+  const toX = t  => PAD.left + (t  / maxT)  * w;
+  const toY = v  => PAD.top + h - (v / maxY) * h;
   const linePts = points.map(p => `${toX(p.t).toFixed(1)},${toY(p.value).toFixed(1)}`).join(" ");
   const fillPts = [
     ...points.map(p => `${toX(p.t).toFixed(1)},${toY(p.value).toFixed(1)}`),
-    `${CHART_W},${CHART_H}`, `0,${CHART_H}`,
+    `${toX(maxT)},${PAD.top + h}`, `${PAD.left},${PAD.top + h}`,
   ].join(" ");
+  const yTicks = [0, Math.round(maxY / 2) || 1, maxY];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <span style={{ fontSize: 10, color, fontFamily: FONT, fontWeight: 700 }}>{title}</span>
-        <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{yLabel} · max {maxY.toFixed(0)}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 11, color, fontFamily: FONT, fontWeight: 700 }}>{title}</span>
+        <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{yLabel} · max {Math.round(maxY)}</span>
       </div>
-      <svg width={CHART_W} height={CHART_H} style={{ display: "block", width: "100%" }}
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="none" aria-hidden="true">
+      <svg width={CHART_W} height={CHART_H} style={{ display: "block", width: "100%", minHeight: 100 }}
+        viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        {/* Gridlines */}
+        {yTicks.map(t => {
+          const y = toY(t);
+          return (
+            <g key={t}>
+              <line x1={PAD.left} y1={y} x2={PAD.left + w} y2={y}
+                stroke={C.border} strokeWidth={0.5} strokeDasharray="3,3" />
+              <text x={PAD.left - 4} y={y + 3} textAnchor="end" fontSize={8}
+                fill={C.muted} fontFamily="monospace">{Math.round(t)}</text>
+            </g>
+          );
+        })}
+        {/* Area fill */}
         <polygon points={fillPts} fill={color} fillOpacity={0.1} />
+        {/* Line */}
         <polyline points={linePts} fill="none" stroke={color} strokeWidth="1.5"
           strokeLinejoin="round" strokeLinecap="round" />
+        {/* X axis label */}
+        <text x={PAD.left + w / 2} y={CHART_H - 2} textAnchor="middle" fontSize={8}
+          fill={C.muted} fontFamily="monospace">simulation time</text>
       </svg>
     </div>
   );
@@ -396,17 +452,8 @@ function ChartsTab({ results, model }) {
           <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
             QUEUE DEPTH OVER TIME
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: 16 }}>
             {queues.map((q, idx) => {
-              const points = ts.map(entry => ({
-                t: entry.t,
-                value: entry.byType[q.customerType || q.name]?.waiting ??
-                       Object.values(entry.byType).reduce((s, bt) => s + bt.waiting, 0),
-              }));
-              // Use the exact customer type for this queue
-              const custType = (model.entityTypes || []).find(
-                et => et.role !== "server" && (et.name === q.customerType || idx === 0)
-              );
               const depthPoints = ts.map(entry => ({
                 t: entry.t,
                 value: Object.entries(entry.byType)
@@ -433,7 +480,7 @@ function ChartsTab({ results, model }) {
           <div style={{ fontSize: 10, color: C.purple, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
             SERVER UTILISATION OVER TIME
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: 16 }}>
             {serverTypes.map((et, idx) => {
               const capacity = parseInt(et.count || "1", 10) || 1;
               const points = ts.map(entry => ({
