@@ -1,6 +1,6 @@
 # DES Studio — CLAUDE.md
 *Architectural contract for all Claude Code sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-10 | Reflects: Sprint 16 Parametric Sweep & Scenario Comparison complete. Current: Sprint 17 — Statistical Output Analyzer*
+*Last updated: 2026-05-10 | Reflects: Sprint 17 Statistical Output Analyzer complete. Current: Sprint 18 — 2D Parametric Sweeps*
 
 ---
 
@@ -1338,58 +1338,55 @@ UI / UX
 | Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness: Assembly & Recirculation | 541 passing | 1.48% error |
 | Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement | 543 passing | N/A |
 | Post-Sprint 13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
-| Sprint 14 | 🔄 In progress | — | AI Natural Language Results Queries | — | — |
-| Sprint 15 | ⬜ Not started | — | Shareable Results Dashboard | — | — |
-| Sprint 16 | ⬜ Not started | — | Parametric Sweep & Scenario Comparison | — | — |
-| Sprint 17 | ⬜ Not started | — | Statistical Output Analyzer | — | — |
-| Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
+| Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
+| Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
+| Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison | 679 passing | N/A |
+| Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer | 37 engine + 14 UI tests | 1.48% error |
+| Sprint 18 | 🔄 Current | — | 2D Parametric Sweeps | — | — |
+| Sprint 19 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
 
 ---
 
 ## 21. Current Sprint
 
-**Sprint 14 — AI Natural Language Results Queries**
+**Sprint 18 — 2D Parametric Sweeps**
 
-Goal: Enable free-form natural language queries against simulation results via the AI Assistant. Users ask questions like "Which queue had the longest wait?" or "What was the average utilisation of Clerk?" and the AI answers directly from the results object — no need to navigate tabs.
+**Goal:** Extend the parametric sweep system from one dimension to two, enabling exploration of a model's response surface across a cartesian product of two sweepable parameters.
 
-**Prerequisites:** All modelling vocabulary sprints (10–12), AI model building (13), templates (Post-13) complete.
+**Prerequisites:** Sprint 16 (1D parametric sweep & scenario comparison) and Sprint 17 (statistical output analyzer) complete.
 
-### Rationale
+### Design Decisions
 
-From `docs/des-studio-product-next-steps.md` Phase 2: "Natural language results queries — 'Which queue had the longest wait?' answered directly from the results object — no need to navigate tabs." This is the highest-differentiation AI feature after model building. No competitor (AnyLogic, Simio, Arena) has an AI analyst that connects model → run → insight in one loop.
+- **Visualization:** HTML table with conditional background colors (exact values visible, accessible, faster than SVG heatmap; heatmap toggle deferred to future sprint).
+- **Mode switch:** Toggle between "1D Sweep" and "2D Sweep" modes (preserves existing Sprint 16 UI, unambiguous state).
+- **Point limit:** Hard reject at >50 total grid points (N x M ≤ 50) to prevent accidental browser freeze.
 
-### Features
+### Tasks
 
-| Feature | Status | Description |
+| Task | File | Description |
 |---|---|---|
-| F14.1 — Results query prompt builder | ⬜ | `buildResultsQueryPrompt(question, model, results)` transforms a natural language question + structured KPI data into an LLM prompt. Must include only the relevant subset of results data to fit token limits. |
-| F14.2 — Query input in AI Assistant panel | ⬜ | Text input at bottom of AI Assistant panel for free-form questions. Sits below the existing Explain/Compare/Sensitivity/Suggest buttons. |
-| F14.3 — Context-aware answer rendering | ⬜ | AI response rendered as plain text in the assistant panel. Answers cite specific KPI values (e.g. "The Triage Queue had mean wait of 8.2 minutes"). |
-| F14.4 — Follow-up question support | ⬜ | Conversation history preserved within the query session so users can ask "What about the second queue?" as a follow-up. |
-| F14.5 — Documentation & tests | ⬜ | Prompt tests, UI component tests, model integration test. |
-
-### Architecture Rules
-
-- Queries are text-only responses streamed via `streamNarrative()` — same mechanism as existing narrative/comparison/sensitivity/suggestion. No JSON response format required.
-- The LLM never receives the full results object — only a structured subset via `buildKpis()` + relevant time-series snippets. Token budget: max 600 tokens for results data.
-- Results query shares the AI Assistant panel — no new UI surface. The panel gets a collapsible query section below the analysis buttons.
-- Query history is per-session (component state) — not persisted to Supabase.
-- The existing Explain/Compare/Sensitivity/Suggest buttons are not affected.
+| 1 | `src/engine/sweep-params.js` | `applySweepValues(model, sweepConfigs)` — multi-param application |
+| 2 | `src/engine/sweep-params.js` | `generate2DSweepValues(rangeA, rangeB)` — cartesian product + 50-point cap |
+| 3 | `src/engine/sweep-runner.js` | `run2DSweep({ model, paramConfigs, ranges, ... })` — 2D sweep runner |
+| 4 | `src/ui/execute/index.jsx` | Mode toggle + two param pickers + two range rows + point counter + validation |
+| 5 | `src/ui/execute/index.jsx` | 2D results grid table with KPI color legend + cell click stats sidebar |
+| 6 | `src/ui/execute/index.jsx` | Scenario comparison adapted for 2D cell selection (dropdowns with row/col coords) |
+| 7 | Tests | Engine 2D sweep correctness + UI controls/rendering tests |
+| 8 | Docs | Update AGENTS.md, DES_Studio_Build_Plan.md, CLAUDE.md |
 
 ### Completion Gate
 
 ```bash
-npm test -- llm prompts execute-panel ai-generated-model-panel
+npm test -- sweep-params sweep-runner
 npm test -- --run
 npm run build
-# Manual: run an M/M/1 model, ask "What was the mean waiting time?" — correct answer displayed
-# Manual: ask follow-up "Which queue had the longest wait?" — correct answer
-# Manual: ask before any run — informative message about no results available
+node tests/engine/mm1_benchmark.js
+# Manual: run a 2D sweep on M/M/1 model (servers x arrival rate), verify grid renders
 ```
 
 ---
 
-## 22. Forward Sprint Plan (Sprints 15–18)
+## 22. Forward Sprint Plan (Sprints 15–19)
 
 The following sprints are planned but not yet started. See `docs/DES_Studio_Build_Plan.md` for full feature prompts.
 
@@ -1454,7 +1451,20 @@ The following sprints are planned but not yet started. See `docs/DES_Studio_Buil
 - UI: detection button renders and fires, comparison table shows significance
 - M/M/1 benchmark still passes
 
-### Sprint 18 — Model Import/Export & Community Gallery
+### Sprint 18 — 2D Parametric Sweeps
+
+**Goal:** Extend the parametric sweep system from one dimension to two, enabling exploration of a model's response surface across a cartesian product of two sweepable parameters.
+
+**Key features:**
+- `applySweepValues()` multi-param application
+- `generate2DSweepValues()` cartesian product with 50-point hard cap
+- `run2DSweep()` nested iteration runner with grid progress callbacks
+- Mode toggle: 1D Sweep / 2D Sweep
+- HTML table grid with KPI color legend (cool→warm = low→high)
+- Cell click shows aggregate stats sidebar
+- Scenario comparison adapted for 2D cell selection
+
+### Sprint 19 — Model Import/Export & Community Gallery
 
 **Goal:** CSV/Excel model import, AnyLogic/Simio export report, community template publishing, model cloning and social proof metrics.
 

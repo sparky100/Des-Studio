@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { enumerateSweepableParams, applySweepValue, generateSweepValues } from "../../src/engine/sweep-params.js";
+import { enumerateSweepableParams, applySweepValue, applySweepValues, generateSweepValues, generate2DSweepValues } from "../../src/engine/sweep-params.js";
 import { TEMPLATES } from "../../src/engine/templates.js";
 
 describe("generateSweepValues", () => {
@@ -161,5 +161,84 @@ describe("M/M/1 template sweep", () => {
     const cloned = applySweepValue(mm1, param, 2);
     const serverType = cloned.entityTypes.find(e => e.name === "Server");
     expect(serverType.count).toBe("2");
+  });
+});
+
+describe("applySweepValues", () => {
+  test("applies a single config-value pair", () => {
+    const model = { entityTypes: [{ id: "et_srv", name: "Server", count: "1" }] };
+    const cloned = applySweepValues(model, [
+      { paramConfig: { type: "entityTypeCount", targetId: "et_srv" }, value: 3 },
+    ]);
+    expect(cloned.entityTypes[0].count).toBe("3");
+    expect(model.entityTypes[0].count).toBe("1");
+  });
+
+  test("applies two independent config-value pairs", () => {
+    const model = {
+      entityTypes: [{ id: "et_srv", name: "Server", count: "1" }],
+      queues: [{ id: "q_cust", name: "Queue", capacity: "10" }],
+    };
+    const cloned = applySweepValues(model, [
+      { paramConfig: { type: "entityTypeCount", targetId: "et_srv" }, value: 3 },
+      { paramConfig: { type: "queueCapacity", targetId: "q_cust" }, value: 20 },
+    ]);
+    expect(cloned.entityTypes[0].count).toBe("3");
+    expect(cloned.queues[0].capacity).toBe("20");
+    expect(model.entityTypes[0].count).toBe("1");
+    expect(model.queues[0].capacity).toBe("10");
+  });
+
+  test("applies three config-value pairs", () => {
+    const model = {
+      entityTypes: [{ id: "et_srv", name: "Server", count: "1" }],
+      queues: [{ id: "q_cust", name: "Queue", capacity: "10" }],
+      stateVariables: [{ name: "threshold", initialValue: "10" }],
+    };
+    const cloned = applySweepValues(model, [
+      { paramConfig: { type: "entityTypeCount", targetId: "et_srv" }, value: 3 },
+      { paramConfig: { type: "queueCapacity", targetId: "q_cust" }, value: 20 },
+      { paramConfig: { type: "stateVarInit", targetId: "threshold" }, value: 25 },
+    ]);
+    expect(cloned.entityTypes[0].count).toBe("3");
+    expect(cloned.queues[0].capacity).toBe("20");
+    expect(cloned.stateVariables[0].initialValue).toBe("25");
+  });
+
+  test("returns unmodified clone when sweepConfigs is empty", () => {
+    const model = { entityTypes: [{ id: "et_srv", name: "Server", count: "1" }] };
+    const cloned = applySweepValues(model, []);
+    expect(cloned.entityTypes[0].count).toBe("1");
+  });
+});
+
+describe("generate2DSweepValues", () => {
+  test("produces cartesian product of two ranges", () => {
+    const pairs = generate2DSweepValues({ min: 1, max: 3, step: 1 }, { min: 10, max: 30, step: 10 });
+    expect(pairs).toHaveLength(9); // 3 x 3
+    expect(pairs[0]).toEqual({ valueA: 1, valueB: 10 });
+    expect(pairs[8]).toEqual({ valueA: 3, valueB: 30 });
+  });
+
+  test("produces correct grid size for asymmetric ranges", () => {
+    const pairs = generate2DSweepValues({ min: 0, max: 2, step: 1 }, { min: 5, max: 5, step: 1 });
+    expect(pairs).toHaveLength(3); // 3 x 1
+  });
+
+  test("throws when grid exceeds 50 points", () => {
+    expect(() =>
+      generate2DSweepValues({ min: 0, max: 10, step: 1 }, { min: 0, max: 10, step: 1 })
+    ).toThrow(/exceeds 50/);
+  });
+
+  test("allows exactly 50 points", () => {
+    const pairs = generate2DSweepValues({ min: 0, max: 4, step: 1 }, { min: 0, max: 9, step: 1 });
+    expect(pairs).toHaveLength(50); // 5 x 10 = 50
+  });
+
+  test("throws descriptive error with dimensions", () => {
+    expect(() =>
+      generate2DSweepValues({ min: 0, max: 10, step: 1 }, { min: 0, max: 10, step: 1 })
+    ).toThrow(/11 x 11 = 121/);
   });
 });

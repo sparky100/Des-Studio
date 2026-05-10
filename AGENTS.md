@@ -1315,54 +1315,76 @@ UI / UX
 | Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
 | Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
 | Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison | 679 passing | N/A |
-| Sprint 17 | 🔄 Not started | — | Statistical Output Analyzer | — | — |
-| Sprint 18 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
+| Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer | 37 engine + 14 UI tests | 1.48% error |
+| Sprint 18 | 🔄 Not started | — | 2D Parametric Sweeps | — | — |
+| Sprint 19 | ⬜ Not started | — | Model Import/Export & Community Gallery | — | — |
 
 ---
 
-## 21. Current Sprint — Statistical Output Analyzer
+## 21. Current Sprint — 2D Parametric Sweeps
 
-**Goal:** Professional-grade statistical output analysis: Welch's graphical method for warm-up detection, batch-means for autocorrelated output, scenario comparison with paired-t/Bonferroni CIs.
+**Goal:** Extend the parametric sweep system from one dimension to two, enabling exploration of a model's response surface across a cartesian product of two sweepable parameters.
 
-### Task 1 — Engine: Welch's warm-up detection (`src/engine/statistics.js`)
-- `detectWarmupWelch(replications, metricPath, options)` takes per-replication time series, computes ensemble average across reps, applies moving average smoothing, detects the "knee" where cumulative mean stabilizes
-- Returns `{ truncationPoint, explanation, series }` for UI rendering
-- Uses existing `timeSeries` data collected by the engine
+### Design Decisions (see reasoning in session 2026-05-10)
+- **Visualization:** HTML table with conditional background colors (exact values visible, accessible, faster to implement than SVG heatmap; heatmap toggle deferred).
+- **Mode switch:** Toggle between "1D Sweep" and "2D Sweep" modes (preserves existing Sprint 16 UI, unambiguous state).
+- **Point limit:** Hard reject at >50 total grid points (N x M ≤ 50) to prevent accidental browser freeze.
 
-### Task 2 — Engine: Batch-means confidence intervals (`src/engine/statistics.js`)
-- `batchMeansCI(values, batchSize)` divides observations into k batches of size m, computes batch means, returns CI from batch means (correcting for autocorrelation)
-- `suggestBatchSize(values)` heuristic to recommend batch size (sqrt(n) or based on lag-1 autocorrelation)
+### Task 1 — Engine: `applySweepValues()` multi-param application (`src/engine/sweep-params.js`)
+- Accepts array of `{ paramConfig, value }` pairs
+- Applies each in sequence to a single deep-cloned model
+- Returns one modified model
+- Preserves existing `applySweepValue()` as a single-pair convenience wrapper
 
-### Task 3 — Engine: Bonferroni scenario comparison (`src/engine/statistics.js`)
-- `bonferroniCI(comparisons, alpha)` applies Bonferroni correction for multiple pairwise comparisons
-- `compareScenarios(scenarioA, scenarioB, metricPaths)` wraps `pairedTConfidenceInterval()` for sweep scenario pairs
-- Returns significance flags at 95% and 99% levels
+### Task 2 — Engine: `generate2DSweepValues()` cartesian product (`src/engine/sweep-params.js`)
+- Takes two `{ min, max, step }` range objects
+- Returns array of `{ valueA, valueB }` pairs = cartesian product
+- Validates `valuesA.length × valuesB.length ≤ 50`, throws descriptive error if exceeded
 
-### Task 4 — Engine: Summary diagnostics (`src/engine/statistics.js`)
-- `computeSummaryStats(values)` — skewness, kurtosis, normality diagnostics
-- `computePercentiles(values, [p5, p25, p50, p75, p95])` — reusable percentile function with linear interpolation
+### Task 3 — Engine: `run2DSweep()` 2D sweep runner (`src/engine/sweep-runner.js`)
+- Same callback contract as `runSweep` but:
+  - Accepts `paramConfigs: [pA, pB]` and `ranges: [rangeA, rangeB]`
+  - `onProgress` includes `gridSize: { rows, cols }`
+  - Each result entry: `{ valueA, valueB, seed, replications, aggregateStats, pointModel }`
+- Nested iteration: for each A value, for each B value, run `runReplications()`
+- Cancellation propagates correctly (cancel current point + stop iterating)
 
-### Task 5 — UI: Warm-up detection (`src/ui/execute/index.jsx`)
-- "Detect" button next to warmupPeriod input in Experiment Controls
-- Fires Welch's method using existing replication runner
-- Inline result display: "Welch's method recommends warm-up of t=47" with "Apply" button
-- Mini-chart showing ensemble mean trajectory with knee marker
+### Task 4 — UI: 2D sweep controls (`src/ui/execute/index.jsx`)
+- Mode toggle: `[1D Sweep | 2D Sweep]` segmented button in sweep section header
+- In 2D mode:
+  - Two parameter picker dropdowns (Parameter X, Parameter Y)
+  - Two Min/Max/Step rows (one per parameter)
+  - Live total-point counter: "6 x 5 = 30 points"
+  - Validation banner if N x M > 50 (blocks Run)
+- In 1D mode: preserve existing Sprint 16 UI exactly
 
-### Task 6 — UI: Scenario comparison panel (`src/ui/execute/index.jsx`)
-- New section in sweep results area: pick two sweep points to compare
-- Comparison table: KPI x Scenario A x Scenario B x Difference x 95% CI x Significant?
-- Uses `pairedTConfidenceInterval()` + `bonferroniCI()` for correctness
-- Highlights statistically significant differences
+### Task 5 — UI: 2D results grid table with KPI color legend (`src/ui/execute/index.jsx`)
+- HTML table: rows = Parameter X values, columns = Parameter Y values
+- Each cell background color = selected KPI magnitude (low→high = cool→warm color scale)
+- Cell shows exact mean value (readable, selectable)
+- Click a cell to see its aggregate stats sidebar
+- KPI picker dropdown above table (same metrics as 1D sweep)
+- Color legend bar below table
 
-### Task 7 — UI: Statistical Output Analyzer tab (`src/ui/execute/BottomPanel.jsx`)
-- New 5th BottomPanel tab: "Analysis"
-- Sections: Warm-up result with chart, Batch-means toggle with plain-English explanation, Distribution diagnostics (skew, kurtosis, percentiles), Scenario comparison link
-- Plain-English explanations throughout (e.g. "Batch-means accounts for autocorrelation in your data.")
+### Task 6 — UI: Scenario comparison adapted for 2D cell selection (`src/ui/execute/index.jsx`)
+- Two cell selectors: dropdown with (row, col) coordinate labels
+- Reuses Sprint 17 `compareScenarios()` engine function
+- Comparison table: KPI x Cell A x Cell B x Difference x 95% CI x Significant?
 
-### Task 8 — Tests
-- Engine: `detectWarmupWelch()` on synthetic data with known warm-up, `batchMeansCI()` on autocorrelated series, `bonferroniCI()` on known comparisons
-- UI: detection button renders and fires, comparison table shows significance correctly
+### Task 7 — Tests
+- Engine: `applySweepValues()` applies two params independently to model clone
+- Engine: `generate2DSweepValues()` produces correct cartesian product, enforces 50-point cap
+- Engine: `run2DSweep()` progress callbacks fire with correct `gridSize` and `currentPoint`
+- UI: mode toggle switches between 1D and 2D controls
+- UI: validation blocks run when grid exceeds 50 points
+- UI: 2D results table renders with correct row/column labels
+- UI: cell click shows aggregate stats
 - M/M/1 benchmark still passes
+
+### Task 8 — Documentation
+- Update AGENTS.md §21 (this section), §20 Sprint History, and §1 project description if needed
+- Update `DES_Studio_Build_Plan.md` flowchart and Roadmap Snapshot
+- Update `CLAUDE.md` sprint header
 
 ### Recently Completed
 

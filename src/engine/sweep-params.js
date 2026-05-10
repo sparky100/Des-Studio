@@ -86,47 +86,53 @@ export function enumerateSweepableParams(model) {
 }
 
 export function applySweepValue(model, paramConfig, value) {
-  const clone = deepClone(model);
+  return applySweepValues(model, [{ paramConfig, value }]);
+}
 
-  switch (paramConfig.type) {
-    case "entityTypeCount": {
-      const et = (clone.entityTypes || []).find(e => e.id === paramConfig.targetId);
-      if (et) et.count = String(Math.max(0, Math.round(value)));
-      break;
-    }
-    case "queueCapacity": {
-      const q = (clone.queues || []).find(q => q.id === paramConfig.targetId);
-      if (q) {
-        q.capacity = value === Infinity || value <= 0 ? "" : String(Math.round(value));
+export function applySweepValues(model, sweepConfigs = []) {
+  let clone = deepClone(model);
+
+  for (const { paramConfig, value } of sweepConfigs) {
+    switch (paramConfig.type) {
+      case "entityTypeCount": {
+        const et = (clone.entityTypes || []).find(e => e.id === paramConfig.targetId);
+        if (et) et.count = String(Math.max(0, Math.round(value)));
+        break;
       }
-      break;
-    }
-    case "bEventDistParam": {
-      const b = (clone.bEvents || []).find(e => e.id === paramConfig.targetId);
-      if (b) {
-        for (const s of (b.schedules || [])) {
-          if (s.distParams && paramConfig.paramKey in s.distParams) {
-            s.distParams[paramConfig.paramKey] = String(Math.max(0.001, value));
+      case "queueCapacity": {
+        const q = (clone.queues || []).find(q => q.id === paramConfig.targetId);
+        if (q) {
+          q.capacity = value === Infinity || value <= 0 ? "" : String(Math.round(value));
+        }
+        break;
+      }
+      case "bEventDistParam": {
+        const b = (clone.bEvents || []).find(e => e.id === paramConfig.targetId);
+        if (b) {
+          for (const s of (b.schedules || [])) {
+            if (s.distParams && paramConfig.paramKey in s.distParams) {
+              s.distParams[paramConfig.paramKey] = String(Math.max(0.001, value));
+            }
           }
         }
+        break;
       }
-      break;
-    }
-    case "cEventDistParam": {
-      const c = (clone.cEvents || []).find(e => e.id === paramConfig.targetId);
-      if (c) {
-        for (const s of (c.cSchedules || [])) {
-          if (s.distParams && paramConfig.paramKey in s.distParams) {
-            s.distParams[paramConfig.paramKey] = String(Math.max(0.001, value));
+      case "cEventDistParam": {
+        const c = (clone.cEvents || []).find(e => e.id === paramConfig.targetId);
+        if (c) {
+          for (const s of (c.cSchedules || [])) {
+            if (s.distParams && paramConfig.paramKey in s.distParams) {
+              s.distParams[paramConfig.paramKey] = String(Math.max(0.001, value));
+            }
           }
         }
+        break;
       }
-      break;
-    }
-    case "stateVarInit": {
-      const sv = (clone.stateVariables || []).find(s => s.name === paramConfig.targetId);
-      if (sv) sv.initialValue = String(value);
-      break;
+      case "stateVarInit": {
+        const sv = (clone.stateVariables || []).find(s => s.name === paramConfig.targetId);
+        if (sv) sv.initialValue = String(value);
+        break;
+      }
     }
   }
 
@@ -146,4 +152,33 @@ export function generateSweepValues(min, max, step) {
     return values.filter((_, i) => i % everyN === 0).slice(0, 50);
   }
   return values;
+}
+
+/**
+ * Generate a cartesian product of two 1D sweep ranges.
+ *
+ * @param {Object} rangeA — { min, max, step }
+ * @param {Object} rangeB — { min, max, step }
+ * @returns {Array<{ valueA, valueB }>} cartesian product pairs
+ * @throws if total grid points exceed 50
+ */
+export function generate2DSweepValues(rangeA, rangeB) {
+  const valuesA = generateSweepValues(rangeA.min, rangeA.max, rangeA.step);
+  const valuesB = generateSweepValues(rangeB.min, rangeB.max, rangeB.step);
+  const total = valuesA.length * valuesB.length;
+
+  if (total > 50) {
+    throw new Error(
+      `2D sweep grid exceeds 50 points (${valuesA.length} x ${valuesB.length} = ${total}). ` +
+      `Reduce one range or increase step size.`
+    );
+  }
+
+  const pairs = [];
+  for (const valueA of valuesA) {
+    for (const valueB of valuesB) {
+      pairs.push({ valueA, valueB });
+    }
+  }
+  return pairs;
 }

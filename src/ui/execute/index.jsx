@@ -11,8 +11,8 @@ import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
-import { enumerateSweepableParams } from "../../engine/sweep-params.js";
-import { runSweep } from "../../engine/sweep-runner.js";
+import { enumerateSweepableParams, generate2DSweepValues } from "../../engine/sweep-params.js";
+import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
 import { qrSvg } from "../share/qr.js";
@@ -515,6 +515,80 @@ function WarmupChart({ series, truncationPoint, width = 320, height = 100 }) {
   );
 }
 
+function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB }) {
+  if (!results?.length) return null;
+
+  // Build grid: rows = unique valueA, cols = unique valueB
+  const valueAs = [...new Set(results.map(r => r.valueA))].sort((a, b) => a - b);
+  const valueBs = [...new Set(results.map(r => r.valueB))].sort((a, b) => a - b);
+
+  const getCell = (va, vb) => results.find(r => r.valueA === va && r.valueB === vb);
+
+  const means = results.map(r => r.aggregateStats[metric]?.mean).filter(Number.isFinite);
+  const minMean = Math.min(...means);
+  const maxMean = Math.max(...means);
+  const meanRange = maxMean - minMean || 1;
+
+  const colorFor = (mean) => {
+    if (!Number.isFinite(mean)) return "transparent";
+    const t = (mean - minMean) / meanRange;
+    // cool → warm: cyan (#06b6d4) → amber (#f0883e) → red (#f85149)
+    if (t < 0.5) {
+      const s = t * 2;
+      return `rgb(${Math.round(6 + s * (240 - 6))}, ${Math.round(182 + s * (136 - 182))}, ${Math.round(212 + s * (62 - 212))})`;
+    } else {
+      const s = (t - 0.5) * 2;
+      return `rgb(${Math.round(240 + s * (248 - 240))}, ${Math.round(136 + s * (81 - 136))}, ${Math.round(62 + s * (73 - 62))})`;
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ borderCollapse: "collapse", color: C.text, fontSize: 11, textAlign: "center" }}>
+          <thead>
+            <tr>
+              <th style={{ padding: "6px 8px", color: C.muted, fontSize: 10 }}>{paramLabelA} \ {paramLabelB}</th>
+              {valueBs.map(vb => (
+                <th key={vb} style={{ padding: "6px 8px", color: C.muted, fontSize: 10 }}>{fmt(vb)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {valueAs.map(va => (
+              <tr key={va}>
+                <td style={{ padding: "6px 8px", color: C.amber, fontWeight: 700, fontSize: 10 }}>{fmt(va)}</td>
+                {valueBs.map(vb => {
+                  const cell = getCell(va, vb);
+                  const mean = cell?.aggregateStats[metric]?.mean;
+                  return (
+                    <td key={vb} style={{
+                      padding: "8px 10px",
+                      background: colorFor(mean),
+                      color: "#111",
+                      fontWeight: 700,
+                      minWidth: 60,
+                    }}>
+                      {fmt(mean)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {/* Color legend */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.muted, fontFamily: FONT }}>
+        <span>Low</span>
+        <div style={{ width: 120, height: 10, background: "linear-gradient(to right, #06b6d4, #f0883e, #f85149)", borderRadius: 2 }} />
+        <span>High</span>
+        <span style={{ marginLeft: 8 }}>{METRIC_LABELS[metric] || metric}</span>
+      </div>
+    </div>
+  );
+}
+
 const AiAssistantPanel = ({
   model,
   results,
@@ -860,6 +934,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [sweepResults, setSweepResults] = useState(null);
   const [sweepProgress, setSweepProgress] = useState(null);
   const [sweepKpiMetric, setSweepKpiMetric] = useState("summary.avgWait");
+  const [sweepMode, setSweepMode] = useState("1d"); // "1d" | "2d"
+  const [sweepSelectedParamB, setSweepSelectedParamB] = useState(null);
+  const [sweepMinB, setSweepMinB] = useState(1);
+  const [sweepMaxB, setSweepMaxB] = useState(5);
+  const [sweepStepB, setSweepStepB] = useState(1);
+  const [sweepGridError, setSweepGridError] = useState(null);
   const [comparisonIdxA, setComparisonIdxA] = useState(0);
   const [comparisonIdxB, setComparisonIdxB] = useState(null);
   const [comparisonResult, setComparisonResult] = useState(null);
@@ -890,6 +970,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [justCreatedLink, setJustCreatedLink] = useState(null);
   const [shareLinksLoading, setShareLinksLoading] = useState(false);
   const [qrToken, setQrToken] = useState(null);
+  const [latestRunId, setLatestRunId] = useState(null);
   // F9C.10 — effective auto-step delay (must be declared before the autoRef useEffect)
   const effectiveAutoSpeed = useMemo(
     () => Math.max(40, Math.round(400 / speedMultiplier)),
@@ -977,7 +1058,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         const config = { seed: runSeedRef.current, runLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null };
         const save = userId ? saveSimulationRun(modelId, userId, fullResult, config) : saveLocalRun(modelId, fullResult, config);
         save
-          .then(() => {
+          .then((runId) => {
+            if (runId) setLatestRunId(runId);
             setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
             onRunSaved?.();
@@ -1095,7 +1177,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                 })),
               };
               if (userId) {
-                await saveSimulationRun(modelId, userId, batchResult, batchConfig);
+                const runId = await saveSimulationRun(modelId, userId, batchResult, batchConfig);
+                if (runId) setLatestRunId(runId);
               } else {
                 saveLocalRun(modelId, batchResult, batchConfig);
               }
@@ -1163,7 +1246,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
     try {
       const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun };
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
-      await save;
+      const runId = await save;
+      if (runId) setLatestRunId(runId);
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
       onRunSaved?.();
@@ -1350,16 +1434,16 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   }, [modelId]);
 
   const handleCreateShareLink = useCallback(async () => {
-    if (!userId || !results) return;
+    if (!userId || !results || !latestRunId) return;
     setShareSaving(true);
     try {
-      const result = await createShareLink(modelId, userId, shareConfig);
+      const result = await createShareLink(latestRunId, userId, shareConfig);
       setJustCreatedLink(result);
       await loadShareLinks();
     } catch (e) {
       setSaveStatus({ state: "error", message: `Share link failed: ${e.message}` });
     } finally { setShareSaving(false); }
-  }, [userId, results, modelId, shareConfig, loadShareLinks]);
+  }, [userId, results, latestRunId, shareConfig, loadShareLinks]);
 
   const handleRevokeShareLink = useCallback(async (id) => {
     if (!userId) return;
@@ -1380,49 +1464,103 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
     }));
   }, []);
 
-  const canShare = userId && results && !shareSaving;
+  const canShare = userId && results && latestRunId && !shareSaving;
 
   const handleRunSweep = useCallback(() => {
-    if (!sweepSelectedParam || hasErrors) return;
+    if (hasErrors) return;
+    if (sweepMode === "1d" && !sweepSelectedParam) return;
+    if (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB)) return;
+
     setSweepStatus("running");
     setSweepResults(null);
     setSweepProgress(null);
+    setSweepGridError(null);
 
-    sweepRunnerRef.current = runSweep({
-      model,
-      paramConfig: sweepSelectedParam,
-      min: sweepMin,
-      max: sweepMax,
-      step: sweepStep,
-      replications,
-      baseSeed: seed,
-      warmupPeriod,
-      maxSimTime: terminationMode === "time" ? maxSimTime : null,
-      terminationCondition: terminationMode === "condition" ? terminationCondition : null,
-      collectTimeSeries,
-      onProgress(progress) {
-        setSweepProgress(progress);
-      },
-      onPointComplete(pointResult) {
-        setSweepResults(prev => [...(prev || []), pointResult]);
-      },
-      onError(error) {
-        setSweepStatus("error");
-        setSaveStatus({ state: "error", message: `Sweep error at point ${error.pointIndex}: ${error.message}` });
-      },
-      onComplete(results) {
-        setSweepStatus("complete");
-        setSweepResults(results);
-        setSaveStatus({ state: "success", message: `Sweep complete: ${results.length} points run.` });
-      },
-      onCancelled(partial) {
-        setSweepStatus("complete");
-        setSweepResults(partial.results);
-        setSaveStatus({ state: "success", message: `Sweep cancelled after ${partial.completedPoints} points.` });
-      },
-    });
-  }, [model, sweepSelectedParam, sweepMin, sweepMax, sweepStep, replications, seed,
-      warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, hasErrors]);
+    if (sweepMode === "2d") {
+      // Validate grid size before running
+      try {
+        generate2DSweepValues(
+          { min: sweepMin, max: sweepMax, step: sweepStep },
+          { min: sweepMinB, max: sweepMaxB, step: sweepStepB }
+        );
+      } catch (err) {
+        setSweepGridError(err.message);
+        setSweepStatus("idle");
+        return;
+      }
+
+      sweepRunnerRef.current = run2DSweep({
+        model,
+        paramConfigs: [sweepSelectedParam, sweepSelectedParamB],
+        ranges: [
+          { min: sweepMin, max: sweepMax, step: sweepStep },
+          { min: sweepMinB, max: sweepMaxB, step: sweepStepB },
+        ],
+        replications,
+        baseSeed: seed,
+        warmupPeriod,
+        maxSimTime: terminationMode === "time" ? maxSimTime : null,
+        terminationCondition: terminationMode === "condition" ? terminationCondition : null,
+        collectTimeSeries,
+        onProgress(progress) {
+          setSweepProgress(progress);
+        },
+        onPointComplete(pointResult) {
+          setSweepResults(prev => [...(prev || []), pointResult]);
+        },
+        onError(error) {
+          setSweepStatus("error");
+          setSaveStatus({ state: "error", message: `Sweep error at point ${error.pointIndex}: ${error.message}` });
+        },
+        onComplete(results) {
+          setSweepStatus("complete");
+          setSweepResults(results);
+          setSaveStatus({ state: "success", message: `Sweep complete: ${results.length} points run.` });
+        },
+        onCancelled(partial) {
+          setSweepStatus("complete");
+          setSweepResults(partial.results);
+          setSaveStatus({ state: "success", message: `Sweep cancelled after ${partial.completedPoints} points.` });
+        },
+      });
+    } else {
+      sweepRunnerRef.current = runSweep({
+        model,
+        paramConfig: sweepSelectedParam,
+        min: sweepMin,
+        max: sweepMax,
+        step: sweepStep,
+        replications,
+        baseSeed: seed,
+        warmupPeriod,
+        maxSimTime: terminationMode === "time" ? maxSimTime : null,
+        terminationCondition: terminationMode === "condition" ? terminationCondition : null,
+        collectTimeSeries,
+        onProgress(progress) {
+          setSweepProgress(progress);
+        },
+        onPointComplete(pointResult) {
+          setSweepResults(prev => [...(prev || []), pointResult]);
+        },
+        onError(error) {
+          setSweepStatus("error");
+          setSaveStatus({ state: "error", message: `Sweep error at point ${error.pointIndex}: ${error.message}` });
+        },
+        onComplete(results) {
+          setSweepStatus("complete");
+          setSweepResults(results);
+          setSaveStatus({ state: "success", message: `Sweep complete: ${results.length} points run.` });
+        },
+        onCancelled(partial) {
+          setSweepStatus("complete");
+          setSweepResults(partial.results);
+          setSaveStatus({ state: "success", message: `Sweep cancelled after ${partial.completedPoints} points.` });
+        },
+      });
+    }
+  }, [model, sweepMode, sweepSelectedParam, sweepSelectedParamB, sweepMin, sweepMax, sweepStep,
+      sweepMinB, sweepMaxB, sweepStepB, replications, seed, warmupPeriod, maxSimTime,
+      terminationMode, terminationCondition, collectTimeSeries, hasErrors]);
 
   const handleCancelSweep = useCallback(() => {
     sweepRunnerRef.current?.cancel();
@@ -1594,11 +1732,25 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         </div>
         {sweepOpen && (
           <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 12, borderTop: `1px solid ${C.border}` }}>
-            {/* Parameter picker */}
+            {/* Mode toggle */}
+            <div style={{ display: "flex", gap: 2, background: C.bg, borderRadius: 5, padding: 2, width: "fit-content" }}>
+              <button
+                onClick={() => { setSweepMode("1d"); setSweepResults(null); setComparisonResult(null); }}
+                style={{ background: sweepMode === "1d" ? "#333" : "transparent", border: "none", borderRadius: 4, color: sweepMode === "1d" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
+                1D Sweep
+              </button>
+              <button
+                onClick={() => { setSweepMode("2d"); setSweepResults(null); setComparisonResult(null); }}
+                style={{ background: sweepMode === "2d" ? "#333" : "transparent", border: "none", borderRadius: 4, color: sweepMode === "2d" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
+                2D Sweep
+              </button>
+            </div>
+
+            {/* Parameter picker(s) */}
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER</span>
+              <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>{sweepMode === "2d" ? "PARAMETER X" : "PARAMETER"}</span>
               <select
-                aria-label="Sweep parameter"
+                aria-label={sweepMode === "2d" ? "Sweep parameter X" : "Sweep parameter"}
                 value={sweepSelectedParam ? `${sweepSelectedParam.type}|${sweepSelectedParam.targetId}|${sweepSelectedParam.paramKey || ""}` : ""}
                 onChange={e => {
                   const val = e.target.value;
@@ -1643,34 +1795,139 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
               </select>
             </div>
 
+            {sweepMode === "2d" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER Y</span>
+                <select
+                  aria-label="Sweep parameter Y"
+                  value={sweepSelectedParamB ? `${sweepSelectedParamB.type}|${sweepSelectedParamB.targetId}|${sweepSelectedParamB.paramKey || ""}` : ""}
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (!val) { setSweepSelectedParamB(null); return; }
+                    const [type, targetId, paramKey] = val.split("|");
+                    const found = sweepParams.find(p => p.type === type && p.targetId === targetId && (p.paramKey || "") === paramKey);
+                    setSweepSelectedParamB(found || null);
+                    if (found) {
+                      const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
+                      setSweepMinB(cv);
+                      setSweepMaxB(cv * 3);
+                      setSweepStepB(cv > 0 ? cv : 1);
+                    }
+                  }}
+                  style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
+                  <option value="">Select a parameter…</option>
+                  <optgroup label="Entity Type Count">
+                    {sweepParams.filter(p => p.type === "entityTypeCount").map(p => (
+                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Queue Capacity">
+                    {sweepParams.filter(p => p.type === "queueCapacity").map(p => (
+                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue === Infinity ? "∞" : p.currentValue})</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Distribution Parameters (B-Events)">
+                    {sweepParams.filter(p => p.type === "bEventDistParam").map(p => (
+                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Distribution Parameters (C-Events)">
+                    {sweepParams.filter(p => p.type === "cEventDistParam").map(p => (
+                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="State Variables">
+                    {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
+                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+            )}
+
             {/* Range config */}
             {sweepSelectedParam && (
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
-                  <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN</span>
-                  <input type="number" aria-label="Sweep min" value={sweepMin}
-                    onChange={e => setSweepMin(parseFloat(e.target.value) || 0)}
-                    style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
+                    <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN {sweepMode === "2d" ? "X" : ""}</span>
+                    <input type="number" aria-label="Sweep min" value={sweepMin}
+                      onChange={e => setSweepMin(parseFloat(e.target.value) || 0)}
+                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
+                    <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX {sweepMode === "2d" ? "X" : ""}</span>
+                    <input type="number" aria-label="Sweep max" value={sweepMax}
+                      onChange={e => setSweepMax(parseFloat(e.target.value) || 0)}
+                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
+                    <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP {sweepMode === "2d" ? "X" : ""}</span>
+                    <input type="number" aria-label="Sweep step" value={sweepStep}
+                      onChange={e => setSweepStep(parseFloat(e.target.value) || 0)}
+                      style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                  </div>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
-                  <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX</span>
-                  <input type="number" aria-label="Sweep max" value={sweepMax}
-                    onChange={e => setSweepMax(parseFloat(e.target.value) || 0)}
-                    style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
-                  <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP</span>
-                  <input type="number" aria-label="Sweep step" value={sweepStep}
-                    onChange={e => setSweepStep(parseFloat(e.target.value) || 0)}
-                    style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
-                </div>
-                <Btn variant="primary" onClick={handleRunSweep}
-                  disabled={!sweepSelectedParam || sweepStatus === "running" || hasErrors}>
-                  {sweepStatus === "running" ? "Running…" : "Run Sweep"}
-                </Btn>
-                {sweepStatus === "running" && (
-                  <Btn variant="danger" onClick={handleCancelSweep}>Cancel</Btn>
+
+                {sweepMode === "2d" && sweepSelectedParamB && (
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
+                      <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN Y</span>
+                      <input type="number" aria-label="Sweep min Y" value={sweepMinB}
+                        onChange={e => setSweepMinB(parseFloat(e.target.value) || 0)}
+                        style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
+                      <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX Y</span>
+                      <input type="number" aria-label="Sweep max Y" value={sweepMaxB}
+                        onChange={e => setSweepMaxB(parseFloat(e.target.value) || 0)}
+                        style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
+                      <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP Y</span>
+                      <input type="number" aria-label="Sweep step Y" value={sweepStepB}
+                        onChange={e => setSweepStepB(parseFloat(e.target.value) || 0)}
+                        style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
+                    </div>
+                  </div>
                 )}
+
+                {/* 2D point counter + validation */}
+                {sweepMode === "2d" && sweepSelectedParamB && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+                      {(() => {
+                        try {
+                          const grid = generate2DSweepValues(
+                            { min: sweepMin, max: sweepMax, step: sweepStep },
+                            { min: sweepMinB, max: sweepMaxB, step: sweepStepB }
+                          );
+                          const rows = Math.round(grid.length / (grid.filter(p => p.valueA === grid[0].valueA).length || 1));
+                          const cols = grid.filter(p => p.valueA === grid[0].valueA).length;
+                          return `${rows} x ${cols} = ${grid.length} points`;
+                        } catch (err) {
+                          return err.message;
+                        }
+                      })()}
+                    </span>
+                  </div>
+                )}
+
+                {sweepGridError && (
+                  <div style={{ fontSize: 11, color: C.red, fontFamily: FONT, background: C.red + "12", border: `1px solid ${C.red}44`, borderRadius: 4, padding: "6px 10px" }}>
+                    {sweepGridError}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <Btn variant="primary" onClick={handleRunSweep}
+                    disabled={sweepStatus === "running" || hasErrors || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))}>
+                    {sweepStatus === "running" ? "Running…" : "Run Sweep"}
+                  </Btn>
+                  {sweepStatus === "running" && (
+                    <Btn variant="danger" onClick={handleCancelSweep}>Cancel</Btn>
+                  )}
+                </div>
               </div>
             )}
 
@@ -1678,6 +1935,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
             {sweepStatus === "running" && sweepProgress && (
               <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
                 Point {sweepProgress.currentPoint + 1} / {sweepProgress.totalPoints}
+                {sweepMode === "2d" && sweepProgress.gridSize && (
+                  <span> — Grid: {sweepProgress.gridSize.rows} x {sweepProgress.gridSize.cols}</span>
+                )}
                 {sweepProgress.pointReplications && (
                   <span> — Replications: {sweepProgress.pointReplications.completed}/{sweepProgress.pointReplications.total}</span>
                 )}
@@ -1700,142 +1960,139 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                   </select>
                 </div>
 
-                {/* Trade-off chart */}
-                <SweepChart results={sweepResults} metric={sweepKpiMetric} paramLabel={sweepSelectedParam?.label || ""} />
-
-                {/* Results table */}
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
-                    <thead>
-                      <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                        <th style={{ padding: "6px 8px" }}>{sweepSelectedParam?.label || "Value"}</th>
-                        <th style={{ padding: "6px 8px" }}>Served</th>
-                        <th style={{ padding: "6px 8px" }}>Avg wait</th>
-                        <th style={{ padding: "6px 8px" }}>Avg service</th>
-                        <th style={{ padding: "6px 8px" }}>Avg sojourn</th>
-                        <th style={{ padding: "6px 8px" }}>Reneged</th>
-                        <th style={{ padding: "6px 8px" }}>Reps</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sweepResults.map((pt, i) => (
-                        <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                          <td style={{ padding: "6px 8px", color: C.amber, fontWeight: 700 }}>{pt.value}</td>
-                          <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.served"]?.mean)}</td>
-                          <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgWait"]?.mean)}</td>
-                          <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgSvc"]?.mean)}</td>
-                          <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgSojourn"]?.mean)}</td>
-                          <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.reneged"]?.mean)}</td>
-                          <td style={{ padding: "6px 8px" }}>{pt.replications?.length || 0}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Scenario comparison */}
-                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-                  <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SCENARIO COMPARISON</span>
-                  <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Scenario A</span>
-                      <select aria-label="Scenario A" value={comparisonIdxA}
-                        onChange={e => { setComparisonIdxA(parseInt(e.target.value)); setComparisonResult(null); }}
-                        style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
-                        {sweepResults.map((pt, i) => (
-                          <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Scenario B</span>
-                      <select aria-label="Scenario B" value={comparisonIdxB ?? ""}
-                        onChange={e => { setComparisonIdxB(parseInt(e.target.value) || null); setComparisonResult(null); }}
-                        style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
-                        <option value="">Select…</option>
-                        {sweepResults.map((pt, i) => (
-                          i !== comparisonIdxA ? <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option> : null
-                        ))}
-                      </select>
-                    </div>
-                    <Btn variant="primary" onClick={() => {
-                      if (comparisonIdxB == null) return;
-                      const repsA = sweepResults[comparisonIdxA]?.replications || [];
-                      const repsB = sweepResults[comparisonIdxB]?.replications || [];
-                      const result = compareScenarios(repsA, repsB, CI_METRICS, {
-                        labelA: `${sweepSelectedParam?.label || "Value"} = ${sweepResults[comparisonIdxA].value}`,
-                        labelB: `${sweepSelectedParam?.label || "Value"} = ${sweepResults[comparisonIdxB].value}`,
-                      });
-                      // Compute scenario means alongside comparison
-                      const meansA = {};
-                      const meansB = {};
-                      for (const m of CI_METRICS) {
-                        const valsA = repsA.map(r => {
-                          const parts = m.split(".");
-                          let v = r?.result || r;
-                          for (const p of parts) v = v?.[p];
-                          return v;
-                        }).filter(Number.isFinite);
-                        const valsB = repsB.map(r => {
-                          const parts = m.split(".");
-                          let v = r?.result || r;
-                          for (const p of parts) v = v?.[p];
-                          return v;
-                        }).filter(Number.isFinite);
-                        meansA[m] = valsA.length > 0 ? valsA.reduce((s, v) => s + v, 0) / valsA.length : null;
-                        meansB[m] = valsB.length > 0 ? valsB.reduce((s, v) => s + v, 0) / valsB.length : null;
-                      }
-                      setComparisonResult({ ...result, meansA, meansB });
-                    }} disabled={comparisonIdxB == null}>
-                      Compare
-                    </Btn>
-                  </div>
-
-                  {comparisonResult && (
+                {/* 1D results: line chart + table */}
+                {sweepMode === "1d" && (
+                  <>
+                    <SweepChart results={sweepResults} metric={sweepKpiMetric} paramLabel={sweepSelectedParam?.label || ""} />
                     <div style={{ overflowX: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
                         <thead>
                           <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                            <th style={{ padding: "6px 8px" }}>KPI</th>
-                            <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.a}</th>
-                            <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.b}</th>
-                            <th style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
-                            <th style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
-                            <th style={{ padding: "6px 8px" }}>Significant?</th>
+                            <th style={{ padding: "6px 8px" }}>{sweepSelectedParam?.label || "Value"}</th>
+                            <th style={{ padding: "6px 8px" }}>Served</th>
+                            <th style={{ padding: "6px 8px" }}>Avg wait</th>
+                            <th style={{ padding: "6px 8px" }}>Avg service</th>
+                            <th style={{ padding: "6px 8px" }}>Avg sojourn</th>
+                            <th style={{ padding: "6px 8px" }}>Reneged</th>
+                            <th style={{ padding: "6px 8px" }}>Reps</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {comparisonResult.comparisons.map((c, i) => {
-                            const meanA = comparisonResult.meansA?.[c.metric];
-                            const meanB = comparisonResult.meansB?.[c.metric];
-                            return (
-                              <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                                <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
-                                <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanA != null ? fmt(meanA) : "—"}</td>
-                                <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanB != null ? fmt(meanB) : "—"}</td>
-                                <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
-                                  {c.meanDiff != null ? (c.meanDiff > 0 ? "+" : "") + fmt(c.meanDiff) : "—"}
-                                </td>
-                                <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>
-                                  {c.lower != null && c.upper != null ? `[${fmt(c.lower)}, ${fmt(c.upper)}]` : "—"}
-                                </td>
-                                <td style={{ padding: "6px 8px" }}>
-                                  {c.significant95 ? (
-                                    <span style={{ color: c.significant99 ? C.green : C.amber, fontWeight: 700 }}>
-                                      {c.significant99 ? "Yes (99%)" : "Yes (95%)"}
-                                    </span>
-                                  ) : (
-                                    <span style={{ color: C.muted }}>No</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
+                          {sweepResults.map((pt, i) => (
+                            <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                              <td style={{ padding: "6px 8px", color: C.amber, fontWeight: 700 }}>{pt.value}</td>
+                              <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.served"]?.mean)}</td>
+                              <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgWait"]?.mean)}</td>
+                              <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgSvc"]?.mean)}</td>
+                              <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgSojourn"]?.mean)}</td>
+                              <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.reneged"]?.mean)}</td>
+                              <td style={{ padding: "6px 8px" }}>{pt.replications?.length || 0}</td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
-                  )}
-                </div>
+                  </>
+                )}
+
+                {/* 2D results: grid table with color */}
+                {sweepMode === "2d" && (
+                  <Sweep2DGrid results={sweepResults} metric={sweepKpiMetric} paramLabelA={sweepSelectedParam?.label || "X"} paramLabelB={sweepSelectedParamB?.label || "Y"} />
+                )}
+
+                {/* Scenario comparison — 1D flat index */}
+                {sweepMode === "1d" && (
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                    <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SCENARIO COMPARISON</span>
+                    <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
+                        <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Scenario A</span>
+                        <select aria-label="Scenario A" value={comparisonIdxA}
+                          onChange={e => { setComparisonIdxA(parseInt(e.target.value)); setComparisonResult(null); }}
+                          style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          {sweepResults.map((pt, i) => (
+                            <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
+                        <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Scenario B</span>
+                        <select aria-label="Scenario B" value={comparisonIdxB ?? ""}
+                          onChange={e => { setComparisonIdxB(parseInt(e.target.value) || null); setComparisonResult(null); }}
+                          style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          <option value="">Select…</option>
+                          {sweepResults.map((pt, i) => (
+                            i !== comparisonIdxA ? <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option> : null
+                          ))}
+                        </select>
+                      </div>
+                      <Btn variant="primary" onClick={() => {
+                        if (comparisonIdxB == null) return;
+                        const repsA = sweepResults[comparisonIdxA]?.replications || [];
+                        const repsB = sweepResults[comparisonIdxB]?.replications || [];
+                        const result = compareScenarios(repsA, repsB, CI_METRICS, {
+                          labelA: `${sweepSelectedParam?.label || "Value"} = ${sweepResults[comparisonIdxA].value}`,
+                          labelB: `${sweepSelectedParam?.label || "Value"} = ${sweepResults[comparisonIdxB].value}`,
+                        });
+                        const meansA = {}; const meansB = {};
+                        for (const m of CI_METRICS) {
+                          const valsA = repsA.map(r => { const parts = m.split("."); let v = r?.result || r; for (const p of parts) v = v?.[p]; return v; }).filter(Number.isFinite);
+                          const valsB = repsB.map(r => { const parts = m.split("."); let v = r?.result || r; for (const p of parts) v = v?.[p]; return v; }).filter(Number.isFinite);
+                          meansA[m] = valsA.length > 0 ? valsA.reduce((s, v) => s + v, 0) / valsA.length : null;
+                          meansB[m] = valsB.length > 0 ? valsB.reduce((s, v) => s + v, 0) / valsB.length : null;
+                        }
+                        setComparisonResult({ ...result, meansA, meansB });
+                      }} disabled={comparisonIdxB == null}>
+                        Compare
+                      </Btn>
+                    </div>
+
+                    {comparisonResult && (
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
+                          <thead>
+                            <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                              <th style={{ padding: "6px 8px" }}>KPI</th>
+                              <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.a}</th>
+                              <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.b}</th>
+                              <th style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
+                              <th style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
+                              <th style={{ padding: "6px 8px" }}>Significant?</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {comparisonResult.comparisons.map((c, i) => {
+                              const meanA = comparisonResult.meansA?.[c.metric];
+                              const meanB = comparisonResult.meansB?.[c.metric];
+                              return (
+                                <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                                  <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
+                                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanA != null ? fmt(meanA) : "—"}</td>
+                                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanB != null ? fmt(meanB) : "—"}</td>
+                                  <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
+                                    {c.meanDiff != null ? (c.meanDiff > 0 ? "+" : "") + fmt(c.meanDiff) : "—"}
+                                  </td>
+                                  <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>
+                                    {c.lower != null && c.upper != null ? `[${fmt(c.lower)}, ${fmt(c.upper)}]` : "—"}
+                                  </td>
+                                  <td style={{ padding: "6px 8px" }}>
+                                    {c.significant95 ? (
+                                      <span style={{ color: c.significant99 ? C.green : C.amber, fontWeight: 700 }}>
+                                        {c.significant99 ? "Yes (99%)" : "Yes (95%)"}
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: C.muted }}>No</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
