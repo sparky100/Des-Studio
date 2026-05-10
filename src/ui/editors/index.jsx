@@ -1,11 +1,10 @@
 // ui/editors/index.jsx — All model editor components
 import { useState, useRef, useMemo, useEffect } from "react";
-import { C, FONT, normTypeName } from "../shared/tokens.js";
+import { C, FONT, toTitleCase, normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, Field, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
 
 // ── UI Polish Helpers ─────────────────────────────────────────────────────────
-const toTitleCase = s => s.trim().replace(/\b\w/g, c => c.toUpperCase());
 const displayEventName = name => String(name || "").replace(/\s*\((template|tmpl)\)\s*/gi, "").trim();
 const queueDisplayName = name => {
   const text = String(name || "").trim();
@@ -676,7 +675,7 @@ const parseConditionStr = (str, tokens) => {
       const val   = m[3].trim();
       const knownToken = tokens.find(t=>t.value===token);
       rows.push({
-        id: 'r'+Date.now()+Math.random(),
+        id: 'r'+crypto.randomUUID(),
         token: knownToken ? token : (tokens[0]?.value||''),
         operator: ['>=','<=','==','!=','>','<'].includes(op) ? op : '>',
         value: val || defaultConditionValueForType(knownToken?.valueType || tokens[0]?.valueType || 'number'),

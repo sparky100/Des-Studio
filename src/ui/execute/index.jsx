@@ -4,6 +4,7 @@ const ExecuteCanvas = lazy(() => import("./ExecuteCanvas.jsx").then(m => ({ defa
 import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildEngine } from "../../engine/index.js";
+import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults } from "../../engine/statistics.js";
 import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink } from "../../db/models.js";
@@ -919,7 +920,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [batchProgress, setBatchProgress] = useState(null);
   const [replicationResults, setReplicationResults] = useState([]);
   const [aggregateStats, setAggregateStats] = useState({});
-  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
+  const [seed, setSeed] = useState(() => Math.floor(mulberry32(Date.now())() * 1e9));
   const [warmupPeriod, setWarmupPeriod] = useState(0);
   const [warmupDetection, setWarmupDetection] = useState(null);
   const [maxSimTime, setMaxSimTime] = useState(500);
@@ -2510,7 +2511,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
           <div style={{ maxHeight: 350, overflowY: 'auto' }}>
             {log.length === 0 ? <div style={{ color: "#444", fontSize: 12 }}>Log empty. Run simulation to see events.</div> :
               [...log].reverse().map((r, i) => (
-                <div key={i}>
+              <div key={i}>
                   {r.phase === "WARMUP" && (
                     <div style={{ padding: "12px 0", borderBottom: "1px solid #333", borderTop: "1px solid #333", margin: "8px 0", textAlign: "center", color: C.amber, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, background: "#78350f22" }}>
                       ──── WARM-UP ENDED AT T={r.time?.toFixed(0)} ────

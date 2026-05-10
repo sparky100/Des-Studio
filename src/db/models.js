@@ -302,12 +302,6 @@ export async function fetchRunHistory(modelId) {
     .order("ran_at", { ascending: false })
     .limit(20);
   if (error) throw error;
-  if (data && data.length > 0 && data[0].warmup_period === undefined) {
-    console.warn(
-      "Supabase simulation_runs table missing warmup_period column. " +
-      "Run: ALTER TABLE simulation_runs ADD COLUMN IF NOT EXISTS warmup_period REAL;"
-    );
-  }
   return (data || []).map(normalizeRunHistoryRow);
 }
 
