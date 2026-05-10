@@ -240,7 +240,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
     // Condition-based termination check
     if (terminationCondition) {
-      const h = makeHelpers(entities);
+      const h = makeHelpers(entities, runtimeModel);
       if (evalCondition(terminationCondition, h, state, clock)) {
         _terminationConditionMet = true;
         const msg = "Termination condition met — simulation complete";
@@ -298,7 +298,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     while (cFired && cPass < maxCPasses) {
       cFired = false; cPass++;
       for (const ev of sortedCEvents) {
-        const h = makeHelpers(entities);
+        const h = makeHelpers(entities, runtimeModel);
         if (!evalCondition(ev.condition, h, state, clock)) continue;
         const ctx = makeCtx(null);
         ctx.clock = clock;
@@ -327,7 +327,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
     // Condition-based termination check (post-step)
     if (terminationCondition) {
-      const h = makeHelpers(entities);
+      const h = makeHelpers(entities, runtimeModel);
       if (evalCondition(terminationCondition, h, state, clock)) {
         _terminationConditionMet = true;
         const msg = "Termination condition met — simulation complete";
@@ -349,7 +349,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
     // Initial termination check
     if (terminationCondition) {
-      const h = makeHelpers(entities);
+      const h = makeHelpers(entities, runtimeModel);
       if (evalCondition(terminationCondition, h, state, clock)) {
         _terminationConditionMet = true;
         log.push({ phase: "END", time: clock, message: "Termination condition met at start", snap: snap(clock) });
@@ -402,7 +402,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const byQueue = {};
     for (const e of allEntities) {
       if (e.role === "server" || !e.stages || e.stages.length === 0) continue;
-      const qName = e.queue;
+      const qName = e.lastQueue || e.queue;
       if (!qName) continue;
       const wait = e.stages[0]?.stageWait ?? 0;
       if (!byQueue[qName]) byQueue[qName] = [];

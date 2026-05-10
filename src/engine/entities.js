@@ -84,11 +84,12 @@ export function createServerEntities(entityTypes, sampleAttrsFn) {
 /**
  * Status filter helpers — all case-insensitive on type name.
  */
-export function makeHelpers(entities) {
+export function makeHelpers(entities, model = null) {
   const match = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
   return {
     entities,
+    model,
     waitingOf: (type, discipline = 'FIFO', filterFn = null) => {
       let waiting = entities.filter(e => match(e.type, type) && e.status === 'waiting');
       if (filterFn) {

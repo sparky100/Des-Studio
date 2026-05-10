@@ -1431,4 +1431,18 @@ UI / UX
 
 ---
 
+### 22.2 Vite Import Analysis Fails on UTF-8 Multi-Byte Characters (Em Dashes) in `.js` Test Files
+
+**Issue:** A `.js` test file containing em dash characters (U+2014) inside string literals caused Vite's import analysis to fail with: `Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.`
+
+**Root cause:** Vite's `TransformPluginContext.transform` (esbuild-based pre-bundling/analysis pass) chokes on certain multi-byte UTF-8 characters - specifically em dashes - even when they are safely inside JavaScript string literals. The file is `.js` (not `.jsx`) and contains no JSX syntax, but the parser reports a parse failure anyway.
+
+**Workaround:** Replace em dashes (U+2014) with regular hyphens (U+002D) in test descriptions and all string literals within `.js` test files.
+
+**Affected file:** `tests/engine/multi-stage-queue.test.js` (2026-05-10) - rewrote the file with plain hyphens; Vitest runs the file successfully after the change.
+
+**Lesson:** Avoid non-ASCII punctuation in `.js` test files that go through Vite's esbuild transform pipeline. Stick to ASCII-only for all source/test content.
+
+---
+
 *End of AGENTS.md — if any section contradicts a prompt given during a session, this file takes precedence. Flag the contradiction rather than resolving it silently.*

@@ -214,16 +214,16 @@ export const MACROS = [
         ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
 
-      // Prefer queue-name match first (more specific — prevents cross-queue theft
-      // when e.g. ASSIGN(Patient, Nurse) picks up a patient in the Treatment queue).
-      // Fall back to entity-type match for backward compat (queue name = entity type).
-      let inQueue = entities.filter(e =>
+      // Queue-name match: filter entities by queue field + status.
+      // This prevents cross-queue theft (e.g. ASSIGN(Patient, Nurse) must not
+      // pick up a patient waiting in the Treatment queue).
+      let cust = (entities.filter(e =>
         e.queue &&
         e.queue.trim().toLowerCase() === cType.trim().toLowerCase() &&
         e.status === "waiting"
-      );
-      if (filterFn) inQueue = inQueue.filter(filterFn);
-      inQueue = inQueue.sort((a, b) => {
+      ));
+      if (filterFn) cust = cust.filter(filterFn);
+      cust = cust.sort((a, b) => {
         if (discipline.toUpperCase() === 'LIFO')
           return (b.arrivalTime || 0) - (a.arrivalTime || 0);
         if (discipline.toUpperCase() === 'PRIORITY') {
@@ -233,17 +233,23 @@ export const MACROS = [
         }
         return (a.arrivalTime || 0) - (b.arrivalTime || 0);
       });
-      let cust = inQueue[0];
-      if (!cust) {
+      cust = cust[0];
+
+      // No match by queue name. If cType is NOT a known queue name, fall back
+      // to entity-type match for backward compat (e.g. ARRIVE(Customer) creates
+      // queue "CustomerQueue", and ASSIGN(Customer, Server) should still work).
+      if (!cust && !matchedQ) {
         cust = helpers.waitingOf(cType, discipline, filterFn)[0];
       }
 
       const srv = helpers.idleOf(sType)[0];
 
       if (cust && srv) {
-        cust.status       = "serving";
-        cust.serviceStart = clock;
-        cust.serverId     = srv.id;
+        cust.status        = "serving";
+        cust.serviceStart  = clock;
+        cust.serverId      = srv.id;
+        cust.lastQueue     = cust.queue;
+        delete cust.queue;
         srv.status        = "busy";
         srv.currentCustId = cust.id;
         setLastCustId(cust.id);

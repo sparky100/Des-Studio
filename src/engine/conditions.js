@@ -147,7 +147,9 @@ export function evalCondition(condition, helpers, state, clock) {
   try {
     let expr = condition;
 
-    // queue(Type).length — check by queue field first, fall back to entity type with discipline
+    // queue(Name).length — check by queue field first.
+    // Only fall back to entity type match when no queue has this name (backward compat
+    // for models using ARRIVE(EntityType) without explicit queues).
     expr = expr.replace(/queue\(([^)]+)\)\.length/g, (_, rawName) => {
       const name = rawName.trim();
       const inQueue = helpers.entities
@@ -155,7 +157,10 @@ export function evalCondition(condition, helpers, state, clock) {
             e.queue?.toLowerCase() === name.toLowerCase() && e.status === 'waiting'
           ).length
         : 0;
-      if (inQueue > 0) return String(inQueue);
+      const hasQueue = helpers.model?.queues?.some(q =>
+        (q.name || '').toLowerCase() === name.toLowerCase()
+      );
+      if (inQueue > 0 || hasQueue) return String(inQueue);
       const discipline = helpers.model?.queues?.find(q =>
         (q.name || '').toLowerCase() === name.toLowerCase()
       )?.discipline || 'FIFO';
