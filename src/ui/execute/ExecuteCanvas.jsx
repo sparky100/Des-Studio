@@ -31,11 +31,11 @@ const NODE_COLOR = {
 // ── Configurable KPI bar (F9C.7) ─────────────────────────────────────────────
 
 const KPI_METRICS = {
-  arrived: { label: "Arrived",       color: "#38bdf8" },
-  served:  { label: "Served",        color: "#10b981" },
-  reneged: { label: "Reneged",       color: "#ef4444" },
-  waiting: { label: "Waiting",       color: "#f59e0b" },
-  clock:   { label: "Sim Clock",     color: "#a78bfa" },
+  arrived: { label: "Arrived",       color: C.kpiArr },
+  served:  { label: "Served",        color: C.kpiSvc },
+  reneged: { label: "Reneged",       color: C.danger },
+  waiting: { label: "Waiting",       color: C.bEvent },
+  clock:   { label: "Sim Clock",     color: C.server },
   active:  { label: "Active",        color: C.cEvent  },
 };
 
@@ -63,7 +63,7 @@ function KpiSlot({ metricKey, snap, entities, onEdit }) {
 
   return (
     <div
-      style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 10,
+      style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10,
         textAlign: "center", position: "relative" }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => { setHovered(false); setEditing(false); }}
@@ -93,7 +93,7 @@ function KpiSlot({ metricKey, snap, entities, onEdit }) {
           ))}
         </div>
       )}
-      <div style={{ fontSize: 9, color: "#888", fontWeight: 700, marginBottom: 4 }}>
+      <div style={{ fontSize: 9, color: C.label, fontWeight: 700, marginBottom: 4 }}>
         {meta.label.toUpperCase()}
       </div>
       <div style={{ fontSize: 20, color: meta.color, fontWeight: 700 }}>{value}</div>
@@ -559,20 +559,20 @@ export function ExecuteCanvas({
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {summary?.warmupPeriod > 0 && (
         <div style={{
-          background: "#78350f22", border: `1px solid ${C.amber}44`, borderRadius: 8,
+          background: `${C.warmup}22`, border: `1px solid ${C.amber}44`, borderRadius: 8,
           padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
           <div style={{ display: "flex", gap: 16 }}>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: "#888", fontWeight: 700 }}>WARM-UP DURATION</span>
+              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>WARM-UP DURATION</span>
               <span style={{ fontSize: 14, color: C.amber, fontWeight: 700 }}>{summary.warmupPeriod}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: "#888", fontWeight: 700 }}>OBS. EXCLUDED</span>
+              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>OBS. EXCLUDED</span>
               <span style={{ fontSize: 14, color: C.reneged, fontWeight: 700 }}>{summary.excludedCount || 0}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: "#888", fontWeight: 700 }}>OBS. INCLUDED</span>
+              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>OBS. INCLUDED</span>
               <span style={{ fontSize: 14, color: C.served, fontWeight: 700 }}>{summary.total || 0}</span>
             </div>
           </div>
@@ -584,8 +584,8 @@ export function ExecuteCanvas({
 
       {snap && (
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 16, alignItems: "start" }}>
-          <div style={{ background: "#111", border: `2px solid #a855f744`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 140 }}>
-            <div style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 2, marginBottom: 6 }}>SIM CLOCK</div>
+          <div style={{ background: C.bg, border: `2px solid ${C.purple}44`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 140 }}>
+            <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 2, marginBottom: 6 }}>SIM CLOCK</div>
             <div style={{ fontSize: 42, fontWeight: 300, color: "#fff", fontFamily: FONT, lineHeight: 1 }}>
               {parseFloat(snap.clock).toFixed(0)}
             </div>

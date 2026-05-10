@@ -202,26 +202,26 @@ const ServerBay = ({ server, customers }) => {
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 12, color: "#a78bfa", fontFamily: FONT }}>Server #{server.id}</div>
-          <div style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>{server.type}</div>
+          <div style={{ fontWeight: 700, fontSize: 12, color: C.server, fontFamily: FONT }}>Server #{server.id}</div>
+          <div style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>{server.type}</div>
         </div>
         <Tag label={server.status} color={isB ? C.amber : C.green} />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center" }}>
         <div style={{
-          width: 48, height: 48, borderRadius: 8, background: "#a78bfa18", border: `2px solid #a78bfa55`,
+          width: 48, height: 48, borderRadius: 8, background: `${C.server}18`, border: `2px solid ${C.server}55`,
           display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0
         }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-            <rect x="3" y="6" width="18" height="4" rx="1" stroke="#a78bfa" strokeWidth="1.5" />
-            <rect x="3" y="13" width="18" height="4" rx="1" stroke="#a78bfa" strokeWidth="1.5" />
+            <rect x="3" y="6" width="18" height="4" rx="1" stroke={C.server} strokeWidth="1.5" />
+            <rect x="3" y="13" width="18" height="4" rx="1" stroke={C.server} strokeWidth="1.5" />
             <circle cx="6.5" cy="8" r="1" fill={isB ? C.amber : C.green} />
           </svg>
         </div>
         {servingCust ? (
-          <><div style={{ fontSize: 18, color: "#4b5563" }}>→</div><CustomerToken entity={servingCust} size={44} /></>
+          <><div style={{ fontSize: 18, color: C.muted }}>→</div><CustomerToken entity={servingCust} size={44} /></>
         ) : (
-          <div style={{ fontSize: 11, color: "#4b5563", fontFamily: FONT, fontStyle: "italic" }}>idle</div>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>idle</div>
         )}
       </div>
     </div>
@@ -240,18 +240,18 @@ const VisualView = ({ snap, model, summary }) => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {summary?.warmupPeriod > 0 && (
-        <div style={{ background: "#78350f22", border: `1px solid ${C.amber}44`, borderRadius: 8, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ background: `${C.warmup}22`, border: `1px solid ${C.amber}44`, borderRadius: 8, padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", gap: 16 }}>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: "#888", fontWeight: 700 }}>WARM-UP DURATION</span>
+              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>WARM-UP DURATION</span>
               <span style={{ fontSize: 14, color: C.amber, fontWeight: 700 }}>{summary.warmupPeriod}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: "#888", fontWeight: 700 }}>OBS. EXCLUDED</span>
+              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>OBS. EXCLUDED</span>
               <span style={{ fontSize: 14, color: C.reneged, fontWeight: 700 }}>{summary.excludedCount || 0}</span>
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
-              <span style={{ fontSize: 9, color: "#888", fontWeight: 700 }}>OBS. INCLUDED</span>
+              <span style={{ fontSize: 9, color: C.label, fontWeight: 700 }}>OBS. INCLUDED</span>
               <span style={{ fontSize: 14, color: C.served, fontWeight: 700 }}>{summary.total || 0}</span>
             </div>
           </div>
@@ -259,21 +259,21 @@ const VisualView = ({ snap, model, summary }) => {
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 16, alignItems: "start" }}>
-        <div style={{ background: "#111", border: `2px solid #a855f744`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 140 }}>
-          <div style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 2, marginBottom: 6 }}>SIM CLOCK</div>
+        <div style={{ background: C.bg, border: `2px solid ${C.purple}44`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 140 }}>
+          <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 2, marginBottom: 6 }}>SIM CLOCK</div>
           <div style={{ fontSize: 42, fontWeight: 300, color: "#fff", fontFamily: FONT, lineHeight: 1 }}>
             {parseFloat(snap.clock).toFixed(0)}
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
           {[
-            { label: "Arrived", value: customers.length, color: "#38bdf8" },
-            { label: "Served", value: snap.served || 0, color: "#10b981" },
-            { label: "Reneged", value: snap.reneged || 0, color: "#ef4444" },
-            { label: "Waiting", value: waiting.length, color: "#f59e0b" },
+            { label: "Arrived", value: customers.length, color: C.kpiArr },
+            { label: "Served", value: snap.served || 0, color: C.kpiSvc },
+            { label: "Reneged", value: snap.reneged || 0, color: C.danger },
+            { label: "Waiting", value: waiting.length, color: C.bEvent },
           ].map(s => (
-            <div key={s.label} style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 10, textAlign: "center" }}>
-              <div style={{ fontSize: 9, color: "#888", fontWeight: 700, marginBottom: 4 }}>{s.label.toUpperCase()}</div>
+            <div key={s.label} style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, textAlign: "center" }}>
+              <div style={{ fontSize: 9, color: C.label, fontWeight: 700, marginBottom: 4 }}>{s.label.toUpperCase()}</div>
               <div style={{ fontSize: 20, color: s.color, fontWeight: 700 }}>{s.value}</div>
             </div>
           ))}
@@ -285,26 +285,26 @@ const VisualView = ({ snap, model, summary }) => {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>QUEUE LANES</div>
+        <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>QUEUE LANES</div>
         {definedQueues.length > 0 ? (
           definedQueues.map((qDef, idx) => {
             const qName = qDef.name;
             const qEntities = waiting.filter(e => e.queue === qName || (idx === 0 && !e.queue));
             return (
-              <div key={qName} style={{ background: "#111", border: `1px solid #333`, borderLeft: `4px solid ${C.cEvent || '#8b5cf6'}`, borderRadius: 8, padding: 12 }}>
+              <div key={qName} style={{ background: C.bg, border: `1px solid ${C.border}`, borderLeft: `4px solid ${C.cEvent || C.purple}`, borderRadius: 8, padding: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", fontFamily: FONT }}>{qName.toUpperCase()}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: qEntities.length > 0 ? "#f59e0b" : "#fff", fontFamily: FONT }}>{qEntities.length}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: qEntities.length > 0 ? C.bEvent : "#fff", fontFamily: FONT }}>{qEntities.length}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minHeight: 40 }}>
-                  {qEntities.length === 0 ? <span style={{ fontSize: 11, color: "#444", fontStyle: "italic" }}>empty</span> : qEntities.map(e => <CustomerToken key={e.id} entity={e} size={32} />)}
+                  {qEntities.length === 0 ? <span style={{ fontSize: 11, color: C.muted, fontStyle: "italic" }}>empty</span> : qEntities.map(e => <CustomerToken key={e.id} entity={e} size={32} />)}
                 </div>
               </div>
             );
           })
         ) : (
-          <div style={{ background: "#111", border: `1px solid #333`, borderRadius: 8, padding: 12 }}>
-            <div style={{ fontSize: 11, color: "#f59e0b", fontWeight: 700, marginBottom: 8 }}>GENERAL QUEUE</div>
+          <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 12 }}>
+            <div style={{ fontSize: 11, color: C.bEvent, fontWeight: 700, marginBottom: 8 }}>GENERAL QUEUE</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{waiting.map(e => <CustomerToken key={e.id} entity={e} size={32} />)}</div>
           </div>
         )}
@@ -418,32 +418,32 @@ function SweepChart({ results, metric, paramLabel }) {
         {yTicks.map((tick, i) => (
           <g key={i}>
             <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)}
-              stroke="#333" strokeWidth={1} />
-            <text x={PAD.left - 6} y={yScale(tick) + 3} textAnchor="end" fill="#9ca3af" fontSize={9} fontFamily="monospace">
+              stroke={C.border} strokeWidth={1} />
+            <text x={PAD.left - 6} y={yScale(tick) + 3} textAnchor="end" fill={C.label} fontSize={9} fontFamily="monospace">
               {tick.toFixed(1)}
             </text>
           </g>
         ))}
         {/* CI ribbon */}
-        <path d={ciPolygon} fill="#06b6d422" />
+        <path d={ciPolygon} fill={`${C.accent}22`} />
         {/* CI bounds (dashed) */}
-        <path d={ciUpperPath} fill="none" stroke="#06b6d466" strokeWidth={1} strokeDasharray="4,3" />
+        <path d={ciUpperPath} fill="none" stroke={`${C.accent}66`} strokeWidth={1} strokeDasharray="4,3" />
         <path d={[...vValues].reverse().map((v, i) => {
           const idx = vValues.length - 1 - i;
           return `${i === 0 ? "M" : "L"}${xScale(vValues[idx]).toFixed(1)},${yScale(vLowers[idx]).toFixed(1)}`;
-        }).join(" ")} fill="none" stroke="#06b6d466" strokeWidth={1} strokeDasharray="4,3" />
+        }).join(" ")} fill="none" stroke={`${C.accent}66`} strokeWidth={1} strokeDasharray="4,3" />
         {/* Mean line */}
         <path d={linePath} fill="none" stroke={C.accent} strokeWidth={2} />
         {/* Data points */}
         {vValues.map((v, i) => (
-          <circle key={i} cx={xScale(v)} cy={yScale(vMeans[i])} r={3} fill={C.accent} stroke="#111" strokeWidth={1} />
+          <circle key={i} cx={xScale(v)} cy={yScale(vMeans[i])} r={3} fill={C.accent} stroke={C.bg} strokeWidth={1} />
         ))}
         {/* X-axis label */}
-        <text x={W / 2} y={H - 2} textAnchor="middle" fill="#9ca3af" fontSize={9} fontFamily={FONT}>
+        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.label} fontSize={9} fontFamily={FONT}>
           {paramLabel || "Parameter value"}
         </text>
         {/* Y-axis label */}
-        <text x={8} y={H / 2} textAnchor="middle" fill="#9ca3af" fontSize={9} fontFamily={FONT}
+        <text x={8} y={H / 2} textAnchor="middle" fill={C.label} fontSize={9} fontFamily={FONT}
           transform={`rotate(-90, 8, ${H / 2})`}>
           {METRIC_LABELS[metric] || metric}
         </text>
@@ -485,8 +485,8 @@ function WarmupChart({ series, truncationPoint, width = 320, height = 100 }) {
       <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
         {yTicks.map((tick, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke="#333" strokeWidth={1} />
-            <text x={PAD.left - 4} y={yScale(tick) + 2} textAnchor="end" fill="#5c7a99" fontSize={8} fontFamily="monospace">
+            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} />
+            <text x={PAD.left - 4} y={yScale(tick) + 2} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace">
               {tick.toFixed(1)}
             </text>
           </g>
@@ -496,7 +496,7 @@ function WarmupChart({ series, truncationPoint, width = 320, height = 100 }) {
         <text x={kneeX + 3} y={PAD.top + 8} fill={C.amber} fontSize={8} fontFamily="monospace">
           knee t={Math.round(truncationPoint)}
         </text>
-        <text x={W / 2} y={H - 2} textAnchor="middle" fill="#5c7a99" fontSize={8} fontFamily="monospace">
+        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={8} fontFamily="monospace">
           Time
         </text>
       </svg>
@@ -556,7 +556,7 @@ function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellClick })
                       style={{
                         padding: "8px 10px",
                         background: colorFor(mean),
-                        color: "#111",
+                        color: C.bg,
                         fontWeight: 700,
                         minWidth: 60,
                         cursor: onCellClick ? "pointer" : "default",
@@ -1584,10 +1584,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
     <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1, minWidth: 0 }}>
       {/* Experiment Controls Section */}
-      <div style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WARM-UP PERIOD</span>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WARM-UP PERIOD</span>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <input
                 aria-label="Warm-up period"
@@ -1629,7 +1629,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>REPLICATIONS</span>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>REPLICATIONS</span>
             <input
               aria-label="Replication count"
               type="number"
@@ -1642,7 +1642,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SEED</span>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SEED</span>
             <div style={{ display: "flex", gap: 6 }}>
               <input
                 aria-label="Simulation seed"
@@ -1658,7 +1658,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN LABEL</span>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN LABEL</span>
             <input
               aria-label="Run label"
               value={runLabel}
@@ -1671,7 +1671,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>TERMINATION MODE</span>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>TERMINATION MODE</span>
             <div style={{ display: "flex", gap: 12, alignItems: "center", height: 32 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
                 <input type="radio" name="terminationMode" checked={terminationMode === "time"} onChange={() => setTerminationMode("time")} />
@@ -1686,7 +1686,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
 
           {terminationMode === "time" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN DURATION</span>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN DURATION</span>
               <input
                 aria-label="Run duration"
                 type="number"
@@ -1701,8 +1701,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         </div>
 
         {terminationMode === "condition" && (
-          <div style={{ borderTop: `1px solid #333`, paddingTop: 14 }}>
-            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 8 }}>STOP CONDITION</span>
+          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 8 }}>STOP CONDITION</span>
             <ConditionBuilder 
               condition={terminationCondition}
               entityTypes={model.entityTypes}
@@ -1715,7 +1715,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
       </div>
 
       {/* Parametric Sweep Section */}
-      <div style={{ background: "#1a1a1a", border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div
           onClick={() => {
             if (!sweepOpen) setSweepParams(enumerateSweepableParams(model));
@@ -1740,19 +1740,19 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
             <div style={{ display: "flex", gap: 2, background: C.bg, borderRadius: 5, padding: 2, width: "fit-content" }}>
               <button
                 onClick={() => { setSweepMode("1d"); setSweepResults(null); setComparisonResult(null); }}
-                style={{ background: sweepMode === "1d" ? "#333" : "transparent", border: "none", borderRadius: 4, color: sweepMode === "1d" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
+                style={{ background: sweepMode === "1d" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepMode === "1d" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
                 1D Sweep
               </button>
               <button
                 onClick={() => { setSweepMode("2d"); setSweepResults(null); setComparisonResult(null); }}
-                style={{ background: sweepMode === "2d" ? "#333" : "transparent", border: "none", borderRadius: 4, color: sweepMode === "2d" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
+                style={{ background: sweepMode === "2d" ? C.border : "transparent", border: "none", borderRadius: 4, color: sweepMode === "2d" ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}>
                 2D Sweep
               </button>
             </div>
 
             {/* Parameter picker(s) */}
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>{sweepMode === "2d" ? "PARAMETER X" : "PARAMETER"}</span>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>{sweepMode === "2d" ? "PARAMETER X" : "PARAMETER"}</span>
               <select
                 aria-label={sweepMode === "2d" ? "Sweep parameter X" : "Sweep parameter"}
                 value={sweepSelectedParam ? `${sweepSelectedParam.type}|${sweepSelectedParam.targetId}|${sweepSelectedParam.paramKey || ""}` : ""}
@@ -1769,7 +1769,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                     setSweepStep(cv > 0 ? cv : 1);
                   }
                 }}
-                style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
+                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
                 <option value="">Select a parameter…</option>
                 <optgroup label="Entity Type Count">
                   {sweepParams.filter(p => p.type === "entityTypeCount").map(p => (
@@ -1801,7 +1801,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
 
             {sweepMode === "2d" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER Y</span>
+                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER Y</span>
                 <select
                   aria-label="Sweep parameter Y"
                   value={sweepSelectedParamB ? `${sweepSelectedParamB.type}|${sweepSelectedParamB.targetId}|${sweepSelectedParamB.paramKey || ""}` : ""}
@@ -1818,7 +1818,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                       setSweepStepB(cv > 0 ? cv : 1);
                     }
                   }}
-                  style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
+                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
                   <option value="">Select a parameter…</option>
                   <optgroup label="Entity Type Count">
                     {sweepParams.filter(p => p.type === "entityTypeCount").map(p => (
@@ -1854,19 +1854,19 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
-                    <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN {sweepMode === "2d" ? "X" : ""}</span>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN {sweepMode === "2d" ? "X" : ""}</span>
                     <input type="number" aria-label="Sweep min" value={sweepMin}
                       onChange={e => setSweepMin(parseFloat(e.target.value) || 0)}
                       style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
-                    <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX {sweepMode === "2d" ? "X" : ""}</span>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX {sweepMode === "2d" ? "X" : ""}</span>
                     <input type="number" aria-label="Sweep max" value={sweepMax}
                       onChange={e => setSweepMax(parseFloat(e.target.value) || 0)}
                       style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
-                    <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP {sweepMode === "2d" ? "X" : ""}</span>
+                    <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP {sweepMode === "2d" ? "X" : ""}</span>
                     <input type="number" aria-label="Sweep step" value={sweepStep}
                       onChange={e => setSweepStep(parseFloat(e.target.value) || 0)}
                       style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
@@ -1876,19 +1876,19 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                 {sweepMode === "2d" && sweepSelectedParamB && (
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN Y</span>
+                      <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MIN Y</span>
                       <input type="number" aria-label="Sweep min Y" value={sweepMinB}
                         onChange={e => setSweepMinB(parseFloat(e.target.value) || 0)}
                         style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX Y</span>
+                      <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MAX Y</span>
                       <input type="number" aria-label="Sweep max Y" value={sweepMaxB}
                         onChange={e => setSweepMaxB(parseFloat(e.target.value) || 0)}
                         style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 80 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP Y</span>
+                      <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STEP Y</span>
                       <input type="number" aria-label="Sweep step Y" value={sweepStepB}
                         onChange={e => setSweepStepB(parseFloat(e.target.value) || 0)}
                         style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", width: "100%" }} />
@@ -1953,11 +1953,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
                 {/* KPI metric picker */}
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>KPI</span>
+                  <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>KPI</span>
                   <select aria-label="Sweep KPI metric"
                     value={sweepKpiMetric}
                     onChange={e => setSweepKpiMetric(e.target.value)}
-                    style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                    style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
                     {CI_METRICS.map(m => (
                       <option key={m} value={m}>{METRIC_LABELS[m]}</option>
                     ))}
@@ -2018,7 +2018,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                           {CI_METRICS.map(m => {
                             const s = selectedCell.aggregateStats[m];
                             return (
-                              <div key={m} style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+                              <div key={m} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
                                 <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, marginBottom: 2 }}>{METRIC_LABELS[m] || m}</div>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, fontFamily: FONT }}>{s?.mean != null ? fmt(s.mean) : "—"}</div>
                                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>n={s?.n || 0}</div>
@@ -2037,10 +2037,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                     <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SCENARIO COMPARISON</span>
                     <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
-                        <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Cell A</span>
+                        <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Cell A</span>
                         <select aria-label="Cell A" value={comparisonIdxA}
                           onChange={e => { setComparisonIdxA(parseInt(e.target.value)); setComparisonResult(null); }}
-                          style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
                           {sweepResults.map((pt, i) => (
                             <option key={i} value={i}>
                               {sweepSelectedParam?.label || "X"}={fmt(pt.valueA)}, {sweepSelectedParamB?.label || "Y"}={fmt(pt.valueB)}
@@ -2049,10 +2049,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                         </select>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
-                        <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Cell B</span>
+                        <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Cell B</span>
                         <select aria-label="Cell B" value={comparisonIdxB ?? ""}
                           onChange={e => { setComparisonIdxB(parseInt(e.target.value) || null); setComparisonResult(null); }}
-                          style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
                           <option value="">Select…</option>
                           {sweepResults.map((pt, i) => (
                             i !== comparisonIdxA ? (
@@ -2139,20 +2139,20 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                     <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SCENARIO COMPARISON</span>
                     <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
-                        <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Scenario A</span>
+                        <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Scenario A</span>
                         <select aria-label="Scenario A" value={comparisonIdxA}
                           onChange={e => { setComparisonIdxA(parseInt(e.target.value)); setComparisonResult(null); }}
-                          style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
                           {sweepResults.map((pt, i) => (
                             <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option>
                           ))}
                         </select>
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
-                        <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Scenario B</span>
+                        <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Scenario B</span>
                         <select aria-label="Scenario B" value={comparisonIdxB ?? ""}
                           onChange={e => { setComparisonIdxB(parseInt(e.target.value) || null); setComparisonResult(null); }}
-                          style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
                           <option value="">Select…</option>
                           {sweepResults.map((pt, i) => (
                             i !== comparisonIdxA ? <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option> : null
@@ -2232,7 +2232,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         )}
       </div>
 
-      <div style={{ background: "#1a1a1a", border: `1px solid #333`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive}>⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
@@ -2244,7 +2244,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         <Btn variant="ghost" onClick={toggleAnimation} title="Toggle entity token animation">
           {animationEnabled ? "● Animate" : "○ Animate"}
         </Btn>
-        <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 11, color: collectTimeSeries ? C.accent : "#9ca3af", fontFamily: FONT }}
+        <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 11, color: collectTimeSeries ? C.accent : C.label, fontFamily: FONT }}
           title="Disable to reduce memory on long runs (charts won't have queue depth / utilisation)">
           <input type="checkbox" checked={collectTimeSeries} onChange={e => setCollectTimeSeries(e.target.checked)} style={{ accentColor: C.accent }}/>
           Collect time-series
@@ -2253,7 +2253,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         <div style={{ flex: 1, minWidth: 12 }} />
         {/* Speed slider (F9C.10) */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, whiteSpace: "nowrap" }}>
+          <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, whiteSpace: "nowrap" }}>
             Speed {speedMultiplier.toFixed(1)}×
           </span>
           <input
@@ -2262,19 +2262,19 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
             min={0.5} max={10} step={0.5}
             value={speedMultiplier}
             onChange={e => setSpeedMultiplier(parseFloat(e.target.value))}
-            style={{ width: 80, accentColor: "#06b6d4" }}
+            style={{ width: 80, accentColor: C.accent }}
           />
         </div>
       </div>
 
       {validation.errors.length > 0 && (
-        <div role="alert" style={{ background: '#7f1d1d', border: '1px solid #dc2626', borderRadius: 6,
+        <div role="alert" style={{ background: C.errorBg, border: `1px solid ${C.danger}`, borderRadius: 6,
           padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#fca5a5', fontFamily: FONT, marginBottom: 4 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.error, fontFamily: FONT, marginBottom: 4 }}>
             Model has {validation.errors.length} blocking error{validation.errors.length > 1 ? 's' : ''} — fix before running:
           </div>
           {validation.errors.map((e, i) => (
-            <div key={i} style={{ fontSize: 12, color: '#fca5a5', fontFamily: FONT }}>
+            <div key={i} style={{ fontSize: 12, color: C.error, fontFamily: FONT }}>
               [{e.code}] {e.message}
             </div>
           ))}
@@ -2282,12 +2282,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
       )}
 
       {validation.errors.length === 0 && validation.warnings.length > 0 && (
-        <div style={{ background: '#78350f', border: '1px solid #d97706', borderRadius: 6, padding: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#fde68a', fontFamily: FONT, marginBottom: 4 }}>
+        <div style={{ background: C.warmup, border: `1px solid ${C.amber}`, borderRadius: 6, padding: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.warnBg, fontFamily: FONT, marginBottom: 4 }}>
             {validation.warnings.length} warning{validation.warnings.length > 1 ? 's' : ''} — run will proceed:
           </div>
           {validation.warnings.map((w, i) => (
-            <div key={i} style={{ fontSize: 12, color: '#fde68a', fontFamily: FONT }}>
+            <div key={i} style={{ fontSize: 12, color: C.warnBg, fontFamily: FONT }}>
               [{w.code}] {w.message}
             </div>
           ))}
@@ -2307,9 +2307,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
 
       {saveStatus && (
         <div style={{
-          background: saveStatus.state === 'error' ? '#7f1d1d' : saveStatus.state === 'success' ? '#1b4332' : '#1f2937',
-          border: `1px solid ${saveStatus.state === 'error' ? '#dc2626' : saveStatus.state === 'success' ? '#31a24c' : '#4b5563'}`,
-          borderRadius: 6, padding: 12, color: saveStatus.state === 'error' ? '#fca5a5' : saveStatus.state === 'success' ? '#86efac' : '#e5e7eb',
+          background: saveStatus.state === 'error' ? C.errorBg : saveStatus.state === 'success' ? '#1b4332' : '#1f2937',
+          border: `1px solid ${saveStatus.state === 'error' ? C.danger : saveStatus.state === 'success' ? '#31a24c' : '#4b5563'}`,
+          borderRadius: 6, padding: 12, color: saveStatus.state === 'error' ? C.error : saveStatus.state === 'success' ? '#86efac' : '#e5e7eb',
           fontSize: 12, fontFamily: FONT,
         }}>
           {saveStatus.message}
@@ -2489,24 +2489,24 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
       })()}
 
       {view === "log" && (
-        <div style={{ background: "#050505", border: `1px solid #333`, borderRadius: 6, padding: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid #333` }}>
-            <div style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>SIMULATION LOG (NEWEST FIRST)</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: "#a78bfa", fontFamily: FONT }}>
+        <div style={{ background: C.logBg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>SIMULATION LOG (NEWEST FIRST)</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.server, fontFamily: FONT }}>
               Steps: {log.length} | Clock: {currentSnap?.clock?.toFixed(0) || '—'}
             </div>
           </div>
           <div style={{ maxHeight: 350, overflowY: 'auto' }}>
-            {log.length === 0 ? <div style={{ color: "#444", fontSize: 12 }}>Log empty. Run simulation to see events.</div> :
+            {log.length === 0 ? <div style={{ color: C.muted, fontSize: 12 }}>Log empty. Run simulation to see events.</div> :
               [...log].reverse().map((r, i) => (
               <div key={i}>
                   {r.phase === "WARMUP" && (
-                    <div style={{ padding: "12px 0", borderBottom: "1px solid #333", borderTop: "1px solid #333", margin: "8px 0", textAlign: "center", color: C.amber, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, background: "#78350f22" }}>
+                    <div style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, borderTop: `1px solid ${C.border}`, margin: "8px 0", textAlign: "center", color: C.amber, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, background: `${C.warmup}22` }}>
                       ──── WARM-UP ENDED AT T={r.time?.toFixed(0)} ────
                     </div>
                   )}
-                  <div style={{ fontSize: 12, fontFamily: "monospace", color: r.phase === "WARMUP" ? C.amber : "#10b981", borderBottom: "1px solid #1a1a1a", padding: "4px 0" }}>
-                    <span style={{ color: "#666" }}>[t={r.time?.toFixed(0)}]</span> <PhaseTag phase={r.phase} /> {r.message}
+                  <div style={{ fontSize: 12, fontFamily: "monospace", color: r.phase === "WARMUP" ? C.amber : C.kpiSvc, borderBottom: `1px solid ${C.cardBg}`, padding: "4px 0" }}>
+                    <span style={{ color: C.label }}>[t={r.time?.toFixed(0)}]</span> <PhaseTag phase={r.phase} /> {r.message}
                   </div>
                 </div>
               ))
@@ -2516,20 +2516,20 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
       )}
 
       {view === "entities" && currentSnap && (
-        <div style={{ background: "#050505", border: `1px solid #333`, borderRadius: 6, padding: 14 }}>
+        <div style={{ background: C.logBg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", color: "#fff", fontSize: 12, textAlign: "left" }}>
             <thead>
-              <tr style={{ color: "#888", borderBottom: "2px solid #333" }}>
+              <tr style={{ color: C.label, borderBottom: `2px solid ${C.border}` }}>
                 <th style={{ padding: 8 }}>Entity</th><th style={{ padding: 8 }}>Type</th><th style={{ padding: 8 }}>Status</th><th style={{ padding: 8 }}>Queue</th>
               </tr>
             </thead>
             <tbody>
               {currentSnap.entities.map(e => (
-                <tr key={e.id} style={{ borderBottom: "1px solid #1a1a1a" }}>
-                  <td style={{ padding: 8, color: "#38bdf8" }}>#{e.id}</td>
+                <tr key={e.id} style={{ borderBottom: `1px solid ${C.cardBg}` }}>
+                  <td style={{ padding: 8, color: C.kpiArr }}>#{e.id}</td>
                   <td style={{ padding: 8 }}>{e.type}</td>
-                  <td style={{ padding: 8 }}><Tag label={e.status} color={e.status === 'waiting' ? "#f59e0b" : "#10b981"} /></td>
-                  <td style={{ padding: 8, color: "#666" }}>{e.queue || "None"}</td>
+                  <td style={{ padding: 8 }}><Tag label={e.status} color={e.status === 'waiting' ? C.bEvent : C.kpiSvc} /></td>
+                  <td style={{ padding: 8, color: C.label }}>{e.queue || "None"}</td>
                 </tr>
               ))}
             </tbody>

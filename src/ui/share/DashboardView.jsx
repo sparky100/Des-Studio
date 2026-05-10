@@ -172,12 +172,12 @@ export default function DashboardView({ token, onBack }) {
         {/* KPI Cards */}
         {hasWidget("summary") && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
-            <KpiCard label="ARRIVED" value={summary.total || run.totalArrived || 0} color="#38bdf8" />
-            <KpiCard label="SERVED" value={summary.served || run.totalServed || 0} color="#10b981" />
-            <KpiCard label="RENEGED" value={summary.reneged || run.totalReneged || 0} color="#ef4444" />
-            <KpiCard label="MEAN WAIT" value={fmt(summary.avgWait ?? run.avgWaitTime)} color="#f59e0b" sub="time units" />
-            <KpiCard label="MEAN SERVICE" value={fmt(summary.avgSvc ?? run.avgServiceTime)} color="#8b5cf6" sub="time units" />
-            {util !== null && <KpiCard label="UTILISATION" value={`${util.toFixed(1)}%`} color="#06b6d4" />}
+            <KpiCard label="ARRIVED" value={summary.total || run.totalArrived || 0} color={C.kpiArr} />
+            <KpiCard label="SERVED" value={summary.served || run.totalServed || 0} color={C.kpiSvc} />
+            <KpiCard label="RENEGED" value={summary.reneged || run.totalReneged || 0} color={C.danger} />
+            <KpiCard label="MEAN WAIT" value={fmt(summary.avgWait ?? run.avgWaitTime)} color={C.bEvent} sub="time units" />
+            <KpiCard label="MEAN SERVICE" value={fmt(summary.avgSvc ?? run.avgServiceTime)} color={C.purple} sub="time units" />
+            {util !== null && <KpiCard label="UTILISATION" value={`${util.toFixed(1)}%`} color={C.accent} />}
           </div>
         )}
 
@@ -202,9 +202,9 @@ export default function DashboardView({ token, onBack }) {
                     <tr key={q.id} style={{ borderBottom: `1px solid ${C.border}18` }}>
                       <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "left" }}>{q.name}</td>
                       <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{qWait?.n ? Math.round(qWait.n / (run.replications || 1)) : "—"}</td>
-                      <td style={{ padding: "4px 8px", color: "#f59e0b", fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmt(qWait?.mean)}</td>
+                      <td style={{ padding: "4px 8px", color: C.bEvent, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmt(qWait?.mean)}</td>
                       <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{qWait?.n || "—"}</td>
-                      <td style={{ padding: "4px 8px", color: "#ef4444", fontFamily: FONT, fontSize: 11, textAlign: "right" }}>—</td>
+                      <td style={{ padding: "4px 8px", color: C.danger, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>—</td>
                     </tr>
                   );
                 })}
@@ -230,8 +230,8 @@ export default function DashboardView({ token, onBack }) {
                   <tr key={st.id} style={{ borderBottom: `1px solid ${C.border}18` }}>
                     <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "left" }}>{st.name}</td>
                     <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{st.count || 1}</td>
-                    <td style={{ padding: "4px 8px", color: "#06b6d4", fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{util !== null ? `${util.toFixed(1)}%` : "—"}</td>
-                    <td style={{ padding: "4px 8px", color: "#8b5cf6", fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmt(summary.avgSvc)}</td>
+                    <td style={{ padding: "4px 8px", color: C.accent, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{util !== null ? `${util.toFixed(1)}%` : "—"}</td>
+                    <td style={{ padding: "4px 8px", color: C.purple, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmt(summary.avgSvc)}</td>
                   </tr>
                 ))}
               </tbody>

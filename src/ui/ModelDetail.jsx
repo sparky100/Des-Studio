@@ -364,14 +364,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
         {errs.map((e, i) => (
-          <div key={i} role="alert" style={{ background: '#7f1d1d', border: '1px solid #dc2626', borderRadius: 6,
-            padding: '8px 12px', color: '#fca5a5', fontFamily: FONT, fontSize: 12 }}>
+          <div key={i} role="alert" style={{ background: C.errorBg, border: `1px solid ${C.danger}`, borderRadius: 6,
+            padding: '8px 12px', color: C.error, fontFamily: FONT, fontSize: 12 }}>
             [{e.code}] {e.message}
           </div>
         ))}
         {warns.map((w, i) => (
-          <div key={i} style={{ background: '#78350f', border: '1px solid #d97706', borderRadius: 6,
-            padding: '8px 12px', color: '#fde68a', fontFamily: FONT, fontSize: 12 }}>
+          <div key={i} style={{ background: C.warmup, border: `1px solid ${C.amber}`, borderRadius: 6,
+            padding: '8px 12px', color: C.warnBg, fontFamily: FONT, fontSize: 12 }}>
             [{w.code}] {w.message}
           </div>
         ))}

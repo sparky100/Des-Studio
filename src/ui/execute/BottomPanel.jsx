@@ -224,11 +224,11 @@ function LogTab({ log, selectedNodeLabel, onClearFilter }) {
             {r.phase === "WARMUP" && (
               <div style={{ padding: "8px 0", borderBottom: `1px solid ${C.border}`,
                 textAlign: "center", color: C.amber, fontSize: 11, fontWeight: 700,
-                letterSpacing: 1.5, background: "#78350f22" }}>
+                letterSpacing: 1.5, background: `${C.warmup}22` }}>
                 ──── WARM-UP ENDED AT T={r.time?.toFixed(0)} ────
               </div>
             )}
-            <div style={{ fontSize: 11, fontFamily: "monospace", color: "#10b981",
+            <div style={{ fontSize: 11, fontFamily: "monospace", color: C.kpiSvc,
               borderBottom: `1px solid ${C.bg}`, padding: "3px 0" }}>
               <span style={{ color: C.muted }}>[t={r.time?.toFixed(0)}]</span>{" "}
               <PhaseTag phase={r.phase} /> {r.message}
@@ -259,7 +259,7 @@ function EntitiesTab({ snap }) {
       <tbody>
         {snap.entities.map(e => (
           <tr key={e.id} style={{ borderBottom: `1px solid ${C.bg}` }}>
-            <td style={{ padding: "4px 8px", color: "#38bdf8" }}>#{e.id}</td>
+            <td style={{ padding: "4px 8px", color: C.kpiArr }}>#{e.id}</td>
             <td style={{ padding: "4px 8px", fontFamily: FONT }}>{e.type}</td>
             <td style={{ padding: "4px 8px" }}>
               <Tag label={e.status} color={e.status === "waiting" ? C.amber : C.green} />
@@ -569,10 +569,10 @@ function AnalysisTab({ results, replicationResults, warmupDetection }) {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 8 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
-            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Metric</span>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Metric</span>
             <select aria-label="Batch-means metric" value={batchMetric}
               onChange={e => { setBatchMetric(e.target.value); setBatchResult(null); }}
-              style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+              style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
               {ANALYSIS_METRICS.map(m => (
                 <option key={m.path} value={m.path}>{m.label}</option>
               ))}
@@ -650,7 +650,7 @@ export function BottomPanel({ log, snap, model, results, selectedNodeLabel, onCl
   const [collapsed,  setCollapsed]  = useState(false);
 
   const tabBtnStyle = (id) => ({
-    background: activeTab === id ? "#333" : "transparent",
+    background: activeTab === id ? C.border : "transparent",
     border: "none",
     borderRadius: 4,
     color: activeTab === id ? C.text : C.muted,

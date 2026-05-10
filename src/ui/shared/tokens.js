@@ -24,6 +24,16 @@ export const C = {
   reneged: "#f85149",
   idle:    "#3fb950",
   busy:    "#f59e0b",
+  label:   "#9ca3af",
+  cardBg:  "#1a1a1a",
+  logBg:   "#050505",
+  danger:  "#ef4444",
+  warmup:  "#78350f",
+  errorBg:"#7f1d1d",
+  error:   "#fca5a5",
+  warnBg:  "#fde68a",
+  kpiArr:  "#38bdf8",
+  kpiSvc:  "#10b981",
 };
 
 export const FONT = "'JetBrains Mono','Fira Code',monospace";
