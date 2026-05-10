@@ -515,7 +515,7 @@ function WarmupChart({ series, truncationPoint, width = 320, height = 100 }) {
   );
 }
 
-function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB }) {
+function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellClick }) {
   if (!results?.length) return null;
 
   // Build grid: rows = unique valueA, cols = unique valueB
@@ -562,13 +562,20 @@ function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB }) {
                   const cell = getCell(va, vb);
                   const mean = cell?.aggregateStats[metric]?.mean;
                   return (
-                    <td key={vb} style={{
-                      padding: "8px 10px",
-                      background: colorFor(mean),
-                      color: "#111",
-                      fontWeight: 700,
-                      minWidth: 60,
-                    }}>
+                    <td key={vb}
+                      onClick={() => onCellClick?.(cell)}
+                      style={{
+                        padding: "8px 10px",
+                        background: colorFor(mean),
+                        color: "#111",
+                        fontWeight: 700,
+                        minWidth: 60,
+                        cursor: onCellClick ? "pointer" : "default",
+                        border: "2px solid transparent",
+                        transition: "border-color 0.15s",
+                      }}
+                      onMouseEnter={e => { if (onCellClick) e.currentTarget.style.borderColor = "#fff"; }}
+                      onMouseLeave={e => { if (onCellClick) e.currentTarget.style.borderColor = "transparent"; }}>
                       {fmt(mean)}
                     </td>
                   );
@@ -940,6 +947,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [sweepMaxB, setSweepMaxB] = useState(5);
   const [sweepStepB, setSweepStepB] = useState(1);
   const [sweepGridError, setSweepGridError] = useState(null);
+  const [selectedCell, setSelectedCell] = useState(null);
   const [comparisonIdxA, setComparisonIdxA] = useState(0);
   const [comparisonIdxB, setComparisonIdxB] = useState(null);
   const [comparisonResult, setComparisonResult] = useState(null);
@@ -1997,7 +2005,136 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
 
                 {/* 2D results: grid table with color */}
                 {sweepMode === "2d" && (
-                  <Sweep2DGrid results={sweepResults} metric={sweepKpiMetric} paramLabelA={sweepSelectedParam?.label || "X"} paramLabelB={sweepSelectedParamB?.label || "Y"} />
+                  <>
+                    <Sweep2DGrid
+                      results={sweepResults}
+                      metric={sweepKpiMetric}
+                      paramLabelA={sweepSelectedParam?.label || "X"}
+                      paramLabelB={sweepSelectedParamB?.label || "Y"}
+                      onCellClick={cell => setSelectedCell(cell)}
+                    />
+                    {selectedCell && (
+                      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                        <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
+                          CELL STATS — {sweepSelectedParam?.label || "X"}={fmt(selectedCell.valueA)}, {sweepSelectedParamB?.label || "Y"}={fmt(selectedCell.valueB)}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+                          {CI_METRICS.map(m => {
+                            const s = selectedCell.aggregateStats[m];
+                            return (
+                              <div key={m} style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+                                <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, marginBottom: 2 }}>{METRIC_LABELS[m] || m}</div>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, fontFamily: FONT }}>{s?.mean != null ? fmt(s.mean) : "—"}</div>
+                                <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>n={s?.n || 0}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Scenario comparison — 2D cell selector */}
+                {sweepMode === "2d" && sweepResults && sweepResults.length > 0 && (
+                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                    <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SCENARIO COMPARISON</span>
+                    <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
+                        <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Cell A</span>
+                        <select aria-label="Cell A" value={comparisonIdxA}
+                          onChange={e => { setComparisonIdxA(parseInt(e.target.value)); setComparisonResult(null); }}
+                          style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          {sweepResults.map((pt, i) => (
+                            <option key={i} value={i}>
+                              {sweepSelectedParam?.label || "X"}={fmt(pt.valueA)}, {sweepSelectedParamB?.label || "Y"}={fmt(pt.valueB)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
+                        <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Cell B</span>
+                        <select aria-label="Cell B" value={comparisonIdxB ?? ""}
+                          onChange={e => { setComparisonIdxB(parseInt(e.target.value) || null); setComparisonResult(null); }}
+                          style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                          <option value="">Select…</option>
+                          {sweepResults.map((pt, i) => (
+                            i !== comparisonIdxA ? (
+                              <option key={i} value={i}>
+                                {sweepSelectedParam?.label || "X"}={fmt(pt.valueA)}, {sweepSelectedParamB?.label || "Y"}={fmt(pt.valueB)}
+                              </option>
+                            ) : null
+                          ))}
+                        </select>
+                      </div>
+                      <Btn variant="primary" onClick={() => {
+                        if (comparisonIdxB == null) return;
+                        const repsA = sweepResults[comparisonIdxA]?.replications || [];
+                        const repsB = sweepResults[comparisonIdxB]?.replications || [];
+                        const ptA = sweepResults[comparisonIdxA];
+                        const ptB = sweepResults[comparisonIdxB];
+                        const result = compareScenarios(repsA, repsB, CI_METRICS, {
+                          labelA: `${sweepSelectedParam?.label || "X"}=${fmt(ptA.valueA)}, ${sweepSelectedParamB?.label || "Y"}=${fmt(ptA.valueB)}`,
+                          labelB: `${sweepSelectedParam?.label || "X"}=${fmt(ptB.valueA)}, ${sweepSelectedParamB?.label || "Y"}=${fmt(ptB.valueB)}`,
+                        });
+                        const meansA = {}; const meansB = {};
+                        for (const m of CI_METRICS) {
+                          const valsA = repsA.map(r => { const parts = m.split("."); let v = r?.result || r; for (const p of parts) v = v?.[p]; return v; }).filter(Number.isFinite);
+                          const valsB = repsB.map(r => { const parts = m.split("."); let v = r?.result || r; for (const p of parts) v = v?.[p]; return v; }).filter(Number.isFinite);
+                          meansA[m] = valsA.length > 0 ? valsA.reduce((s, v) => s + v, 0) / valsA.length : null;
+                          meansB[m] = valsB.length > 0 ? valsB.reduce((s, v) => s + v, 0) / valsB.length : null;
+                        }
+                        setComparisonResult({ ...result, meansA, meansB });
+                      }} disabled={comparisonIdxB == null}>
+                        Compare
+                      </Btn>
+                    </div>
+
+                    {comparisonResult && (
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
+                          <thead>
+                            <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                              <th style={{ padding: "6px 8px" }}>KPI</th>
+                              <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.a}</th>
+                              <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.b}</th>
+                              <th style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
+                              <th style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
+                              <th style={{ padding: "6px 8px" }}>Significant?</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {comparisonResult.comparisons.map((c, i) => {
+                              const meanA = comparisonResult.meansA?.[c.metric];
+                              const meanB = comparisonResult.meansB?.[c.metric];
+                              return (
+                                <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                                  <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
+                                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanA != null ? fmt(meanA) : "—"}</td>
+                                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanB != null ? fmt(meanB) : "—"}</td>
+                                  <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
+                                    {c.meanDiff != null ? (c.meanDiff > 0 ? "+" : "") + fmt(c.meanDiff) : "—"}
+                                  </td>
+                                  <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>
+                                    {c.lower != null && c.upper != null ? `[${fmt(c.lower)}, ${fmt(c.upper)}]` : "—"}
+                                  </td>
+                                  <td style={{ padding: "6px 8px" }}>
+                                    {c.significant95 ? (
+                                      <span style={{ color: c.significant99 ? C.green : C.amber, fontWeight: 700 }}>
+                                        {c.significant99 ? "Yes (99%)" : "Yes (95%)"}
+                                      </span>
+                                    ) : (
+                                      <span style={{ color: C.muted }}>No</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* Scenario comparison — 1D flat index */}
