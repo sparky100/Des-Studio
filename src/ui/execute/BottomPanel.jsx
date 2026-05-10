@@ -1,9 +1,10 @@
 // ui/execute/BottomPanel.jsx — collapsible tabbed detail area below the Execute canvas
-// Tabs: Step Log | Entities | Stage KPIs | Charts (disabled placeholder)
+// Tabs: Step Log | Entities | Stage KPIs | Charts | Analysis (Sprint 17)
 // F9C.8 + F9C.9 + F9C.11 node-filtered log
 import { useState, useMemo } from "react";
 import { C, FONT } from "../shared/tokens.js";
-import { Tag, PhaseTag } from "../shared/components.jsx";
+import { Tag, PhaseTag, Btn } from "../shared/components.jsx";
+import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../engine/statistics.js";
 
 const fmt = (v, d = 2) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
@@ -12,6 +13,7 @@ const TABS = [
   { id: "entities",  label: "Entities" },
   { id: "stagekpis", label: "Stage KPIs" },
   { id: "charts",    label: "Charts" },
+  { id: "analysis",  label: "Analysis" },
 ];
 
 // ── Stage KPIs ────────────────────────────────────────────────────────────────
@@ -487,7 +489,163 @@ function ChartsTab({ results, model }) {
   );
 }
 
-export function BottomPanel({ log, snap, model, results, selectedNodeLabel, onClearFilter }) {
+// ── Analysis tab (Sprint 17) ───────────────────────────────────────────────────
+
+const ANALYSIS_METRICS = [
+  { path: "summary.avgWait", label: "Avg wait" },
+  { path: "summary.avgSvc", label: "Avg service" },
+  { path: "summary.avgSojourn", label: "Avg sojourn" },
+  { path: "summary.served", label: "Served" },
+];
+
+function AnalysisTab({ results, replicationResults, warmupDetection }) {
+  const [batchMetric, setBatchMetric] = useState("summary.avgWait");
+  const [batchResult, setBatchResult] = useState(null);
+
+  // Extract values for a metric from replication results
+  const extractValues = (path) => {
+    if (!replicationResults || replicationResults.length === 0) return [];
+    return replicationResults
+      .map(r => {
+        const parts = path.split(".");
+        let v = r?.result || r;
+        for (const p of parts) v = v?.[p];
+        return v;
+      })
+      .filter(Number.isFinite);
+  };
+
+  const runBatchMeans = () => {
+    const values = extractValues(batchMetric);
+    if (values.length < 2) return;
+    const ci = batchMeansCI(values);
+    setBatchResult(ci);
+  };
+
+  const summaryStats = useMemo(() => {
+    if (!replicationResults || replicationResults.length === 0) return null;
+    const values = extractValues("summary.avgWait");
+    if (values.length < 3) return null;
+    return {
+      avgWait: computeSummaryStats(values),
+      percentiles: computePercentiles(values),
+    };
+  }, [replicationResults]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Warm-up detection section */}
+      <div>
+        <div style={{ fontSize: 10, color: C.amber, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
+          WARM-UP DETECTION
+        </div>
+        {warmupDetection && warmupDetection.series.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 11, color: C.text, fontFamily: FONT, lineHeight: 1.6 }}>
+              {warmupDetection.explanation}
+            </div>
+            {warmupDetection.series.length > 1 && (
+              <div style={{ background: C.bg, borderRadius: 4, border: `1px solid ${C.border}`, padding: 8 }}>
+                <MiniLineChart
+                  title="Ensemble average trajectory"
+                  points={warmupDetection.series}
+                  color={C.accent}
+                  yLabel="metric"
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+            Run a replication batch and press <strong style={{ color: C.accent }}>Detect</strong> in the warm-up input to see Welch's method results here.
+          </div>
+        )}
+      </div>
+
+      {/* Batch-means CI section */}
+      <div>
+        <div style={{ fontSize: 10, color: C.green, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
+          BATCH-MEANS CONFIDENCE INTERVAL
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
+            <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Metric</span>
+            <select aria-label="Batch-means metric" value={batchMetric}
+              onChange={e => { setBatchMetric(e.target.value); setBatchResult(null); }}
+              style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+              {ANALYSIS_METRICS.map(m => (
+                <option key={m.path} value={m.path}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+          <Btn small variant="primary" onClick={runBatchMeans} disabled={!replicationResults || replicationResults.length < 2}>
+            Compute
+          </Btn>
+        </div>
+        {batchResult && (
+          <div>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.8, marginBottom: 6 }}>
+              Batch-means accounts for autocorrelation by grouping observations into <strong>{batchResult.batchCount}</strong> batches of size <strong>{batchResult.batchSize}</strong>.
+              The batch means are approximately independent, so a standard t-confidence interval on them is valid.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+              {[
+                { label: "n",    value: batchResult.n,          color: C.muted  },
+                { label: "mean", value: batchResult.mean,       color: C.accent },
+                { label: "CI low", value: batchResult.lower,    color: C.muted  },
+                { label: "CI high",value: batchResult.upper,    color: C.muted  },
+                { label: "lag-1 rho", value: batchResult.lag1Rho, color: C.amber },
+              ].map(s => (
+                <div key={s.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+                  <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, marginBottom: 2 }}>{s.label.toUpperCase()}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: s.color, fontFamily: FONT }}>{fmt(s.value)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {!batchResult && replicationResults && replicationResults.length >= 2 && (
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+            Select a metric and press <strong style={{ color: C.accent }}>Compute</strong> to calculate a batch-means confidence interval.
+          </div>
+        )}
+      </div>
+
+      {/* Distribution diagnostics section */}
+      {summaryStats && (
+        <div>
+          <div style={{ fontSize: 10, color: C.purple, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
+            DISTRIBUTION DIAGNOSTICS (Avg Wait)
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6, marginBottom: 10 }}>
+            {[
+              { label: "n",        value: summaryStats.avgWait.n,              color: C.muted  },
+              { label: "mean",     value: summaryStats.avgWait.mean,          color: C.accent },
+              { label: "stdDev",   value: summaryStats.avgWait.stdDev,        color: C.muted  },
+              { label: "skewness", value: summaryStats.avgWait.skewness,      color: C.amber  },
+              { label: "kurtosis", value: summaryStats.avgWait.kurtosis,      color: C.amber  },
+              { label: "p50",      value: summaryStats.percentiles.p50,       color: C.green  },
+              { label: "p90",      value: summaryStats.percentiles.p90,       color: C.amber  },
+              { label: "p95",      value: summaryStats.percentiles.p95,       color: C.red    },
+            ].map(s => (
+              <div key={s.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
+                <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, marginBottom: 2 }}>{s.label.toUpperCase()}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: s.color, fontFamily: FONT }}>{fmt(s.value)}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.8 }}>
+            {summaryStats.avgWait.isApproxNormal
+              ? "The distribution of replication means is approximately normal (skewness and kurtosis within expected ranges)."
+              : "The distribution of replication means deviates from normality. Consider using batch-means or a larger number of replications."}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function BottomPanel({ log, snap, model, results, selectedNodeLabel, onClearFilter, replicationResults, warmupDetection }) {
   const [activeTab,  setActiveTab]  = useState("log");
   const [collapsed,  setCollapsed]  = useState(false);
 
@@ -561,6 +719,7 @@ export function BottomPanel({ log, snap, model, results, selectedNodeLabel, onCl
             </div>
           )}
           {activeTab === "charts"    && <ChartsTab results={results} model={model} />}
+          {activeTab === "analysis" && <AnalysisTab results={results} model={model} replicationResults={replicationResults} warmupDetection={warmupDetection} />}
         </div>
       )}
     </div>

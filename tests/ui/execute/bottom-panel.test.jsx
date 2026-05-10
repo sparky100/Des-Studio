@@ -1,4 +1,5 @@
 // F9C.8 + F9C.9 — BottomPanel: tabs, collapse, Stage KPIs
+// S17 — Analysis tab, warm-up detection display, batch-means, distribution diagnostics
 import { render, screen, fireEvent } from "@testing-library/react";
 import { vi, describe, test, expect } from "vitest";
 import { BottomPanel } from "../../../src/ui/execute/BottomPanel.jsx";
@@ -6,6 +7,8 @@ import { BottomPanel } from "../../../src/ui/execute/BottomPanel.jsx";
 vi.mock("../../../src/ui/shared/components.jsx", () => ({
   Tag:      ({ label }) => <span>{label}</span>,
   PhaseTag: ({ phase }) => <span>{phase}</span>,
+  Btn:      ({ children, onClick, disabled, small, variant }) =>
+    <button onClick={onClick} disabled={disabled} data-variant={variant} data-small={small}>{children}</button>,
 }));
 
 const log = [
@@ -29,14 +32,31 @@ const model = {
   ],
 };
 
+const makeReplicationResult = (avgWait, avgSvc = 5, served = 100) => ({
+  result: {
+    summary: { avgWait, avgSvc, avgSojourn: avgWait + avgSvc, served, reneged: 0 },
+    timeSeries: Array.from({ length: 20 }, (_, i) => ({
+      t: i * 5,
+      byType: { Customer: { waiting: avgWait + Math.sin(i) } },
+    })),
+  },
+});
+
+const warmupDetection = {
+  truncationPoint: 35,
+  explanation: "Welch's method detected a warm-up truncation at t=35.00. The smoothed ensemble average stabilised strongly after this point (relative change 45.0%).",
+  series: Array.from({ length: 20 }, (_, i) => ({ t: i * 5, value: 10 - i * 0.4 })),
+  confidence: "high",
+};
+
 describe("BottomPanel — F9C.8", () => {
-  test("renders four active tabs including Charts", () => {
+  test("renders all five active tabs including Analysis", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
     expect(screen.getByRole("tab", { name: /step log/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /entities/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /stage kpis/i })).toBeInTheDocument();
-    // Charts tab is now enabled (F10.5)
     expect(screen.getByRole("tab", { name: /charts/i })).not.toBeDisabled();
+    expect(screen.getByRole("tab", { name: /analysis/i })).toBeInTheDocument();
   });
 
   test("collapse toggle hides the panel body", () => {
@@ -96,5 +116,69 @@ describe("BottomPanel — F9C.11 node-filtered log", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
     expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
     expect(screen.getByText(/ASSIGN Customer/)).toBeInTheDocument();
+  });
+});
+
+describe("BottomPanel — S17 Analysis tab", () => {
+  test("Analysis tab shows warm-up detection section when warmupDetection is provided", () => {
+    render(
+      <BottomPanel log={log} snap={snap} model={model}
+        warmupDetection={warmupDetection} />
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /analysis/i }));
+    expect(screen.getByText(/WARM-UP DETECTION/i)).toBeInTheDocument();
+    expect(screen.getByText(/Welch's method/i)).toBeInTheDocument();
+    expect(screen.getByText(/t=35.00/)).toBeInTheDocument();
+  });
+
+  test("Analysis tab shows batch-means section with metric picker", () => {
+    render(
+      <BottomPanel log={log} snap={snap} model={model}
+        replicationResults={[makeReplicationResult(8), makeReplicationResult(10), makeReplicationResult(12)]} />
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /analysis/i }));
+    expect(screen.getAllByText(/BATCH-MEANS CONFIDENCE INTERVAL/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("combobox", { name: /batch-means metric/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /compute/i })).toBeInTheDocument();
+  });
+
+  test("Analysis tab batch-means Compute button is enabled when replicationResults exist", () => {
+    render(
+      <BottomPanel log={log} snap={snap} model={model}
+        replicationResults={[makeReplicationResult(8), makeReplicationResult(10)]} />
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /analysis/i }));
+    expect(screen.getByRole("button", { name: /compute/i })).not.toBeDisabled();
+  });
+
+  test("Analysis tab batch-means Compute button is disabled without replicationResults", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} />);
+    fireEvent.click(screen.getByRole("tab", { name: /analysis/i }));
+    expect(screen.getByRole("button", { name: /compute/i })).toBeDisabled();
+  });
+
+  test("Analysis tab shows distribution diagnostics when enough replications exist", () => {
+    render(
+      <BottomPanel log={log} snap={snap} model={model}
+        replicationResults={[
+          makeReplicationResult(8, 5, 100),
+          makeReplicationResult(10, 6, 110),
+          makeReplicationResult(12, 7, 120),
+          makeReplicationResult(9, 5, 105),
+          makeReplicationResult(11, 6, 115),
+        ]} />
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /analysis/i }));
+    expect(screen.getByText(/DISTRIBUTION DIAGNOSTICS/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/skewness/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/kurtosis/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/p50/i)).toBeInTheDocument();
+    expect(screen.getByText(/p90/i)).toBeInTheDocument();
+  });
+
+  test("Analysis tab shows placeholder when warmupDetection is null", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} />);
+    fireEvent.click(screen.getByRole("tab", { name: /analysis/i }));
+    expect(screen.getByText(/run a replication batch/i)).toBeInTheDocument();
   });
 });

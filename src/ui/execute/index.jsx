@@ -5,7 +5,7 @@ import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildEngine } from "../../engine/index.js";
 import { runReplications } from "../../engine/replication-runner.js";
-import { summarizeReplicationResults } from "../../engine/statistics.js";
+import { compareScenarios, detectWarmupWelch, summarizeReplicationResults } from "../../engine/statistics.js";
 import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink } from "../../db/models.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
@@ -463,6 +463,58 @@ function SweepChart({ results, metric, paramLabel }) {
   );
 }
 
+function WarmupChart({ series, truncationPoint, width = 320, height = 100 }) {
+  if (!series || series.length < 2) return null;
+  const W = width, H = height, PAD = { top: 8, right: 8, bottom: 18, left: 36 };
+  const plotW = W - PAD.left - PAD.right;
+  const plotH = H - PAD.top - PAD.bottom;
+
+  const values = series.map(p => p.value);
+  const times = series.map(p => p.t);
+  const yMin = Math.min(...values);
+  const yMax = Math.max(...values);
+  const yRange = yMax - yMin || 1;
+  const yPad = yRange * 0.1;
+  const xMin = times[0];
+  const xMax = times[times.length - 1];
+
+  const xScale = (t) => PAD.left + (t - xMin) / (xMax - xMin || 1) * plotW;
+  const yScale = (v) => PAD.top + plotH - (v - (yMin - yPad)) / (yRange + 2 * yPad) * plotH;
+
+  const linePath = series.map((p, i) =>
+    `${i === 0 ? "M" : "L"}${xScale(p.t).toFixed(1)},${yScale(p.value).toFixed(1)}`
+  ).join(" ");
+
+  const kneeX = xScale(truncationPoint);
+
+  const yTicks = Array.from({ length: 3 }, (_, i) =>
+    (yMin - yPad) + (i / 2) * (yRange + 2 * yPad)
+  );
+
+  return (
+    <div style={{ background: C.bg, borderRadius: 4, border: `1px solid ${C.border}`, padding: 6, overflow: "hidden" }}>
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+        {yTicks.map((tick, i) => (
+          <g key={i}>
+            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke="#333" strokeWidth={1} />
+            <text x={PAD.left - 4} y={yScale(tick) + 2} textAnchor="end" fill="#5c7a99" fontSize={8} fontFamily="monospace">
+              {tick.toFixed(1)}
+            </text>
+          </g>
+        ))}
+        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={1.5} />
+        <line x1={kneeX} y1={PAD.top} x2={kneeX} y2={H - PAD.bottom} stroke={C.amber} strokeWidth={1} strokeDasharray="3,2" />
+        <text x={kneeX + 3} y={PAD.top + 8} fill={C.amber} fontSize={8} fontFamily="monospace">
+          knee t={Math.round(truncationPoint)}
+        </text>
+        <text x={W / 2} y={H - 2} textAnchor="middle" fill="#5c7a99" fontSize={8} fontFamily="monospace">
+          Time
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 const AiAssistantPanel = ({
   model,
   results,
@@ -788,6 +840,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [aggregateStats, setAggregateStats] = useState({});
   const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
   const [warmupPeriod, setWarmupPeriod] = useState(0);
+  const [warmupDetection, setWarmupDetection] = useState(null);
   const [maxSimTime, setMaxSimTime] = useState(500);
   const [terminationMode, setTerminationMode] = useState("time");
   const [terminationCondition, setTerminationCondition] = useState(null);
@@ -807,6 +860,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
   const [sweepResults, setSweepResults] = useState(null);
   const [sweepProgress, setSweepProgress] = useState(null);
   const [sweepKpiMetric, setSweepKpiMetric] = useState("summary.avgWait");
+  const [comparisonIdxA, setComparisonIdxA] = useState(0);
+  const [comparisonIdxB, setComparisonIdxB] = useState(null);
+  const [comparisonResult, setComparisonResult] = useState(null);
   const sweepRunnerRef = useRef(null);
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
@@ -933,6 +989,34 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
       }
     }
   }, [userId, modelId, runLabel, warmupPeriod, maxSimTime, terminationMode, stopAuto, onRunSaved]);
+
+  const handleDetectWarmup = useCallback(() => {
+    if (!replicationResults || replicationResults.length === 0) {
+      setWarmupDetection({
+        truncationPoint: warmupPeriod,
+        explanation: "No replication results available. Run at least one replication first.",
+        series: [],
+        confidence: "low",
+      });
+      return;
+    }
+    const defaultMetrics = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn"];
+    let result = null;
+    for (const metric of defaultMetrics) {
+      result = detectWarmupWelch(replicationResults, metric, { minWarmup: warmupPeriod });
+      if (result.series.length > 0) break;
+    }
+    if (!result || result.series.length === 0) {
+      setWarmupDetection({
+        truncationPoint: warmupPeriod,
+        explanation: "Could not detect warm-up — no time-series data found in replication results.",
+        series: [],
+        confidence: "low",
+      });
+      return;
+    }
+    setWarmupDetection(result);
+  }, [replicationResults, warmupPeriod]);
 
   const doRunAll = useCallback(async () => {
     stopAuto();
@@ -1362,15 +1446,44 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WARM-UP PERIOD</span>
-            <input
-              aria-label="Warm-up period"
-              type="number"
-              value={warmupPeriod}
-              onChange={e => setWarmupPeriod(parseFloat(e.target.value) || 0)}
-              style={{ width: 100, background: "transparent", border: `1px solid ${C.border}`,
-                borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
-                padding: "6px 8px", outline: "none" }}
-            />
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <input
+                aria-label="Warm-up period"
+                type="number"
+                value={warmupPeriod}
+                onChange={e => { setWarmupPeriod(parseFloat(e.target.value) || 0); setWarmupDetection(null); }}
+                style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`,
+                  borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
+                  padding: "6px 8px", outline: "none" }}
+              />
+              <Btn small variant="ghost" onClick={handleDetectWarmup} disabled={replicationResults.length === 0}>
+                Detect
+              </Btn>
+            </div>
+            {warmupDetection && warmupDetection.series.length > 0 && (
+              <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT }}>
+                  {warmupDetection.explanation}
+                </div>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <Btn small variant="primary" onClick={() => {
+                    setWarmupPeriod(Math.round(warmupDetection.truncationPoint));
+                    setWarmupDetection(null);
+                  }}>
+                    Apply t={Math.round(warmupDetection.truncationPoint)}
+                  </Btn>
+                  <Btn small variant="ghost" onClick={() => setWarmupDetection(null)}>Dismiss</Btn>
+                </div>
+                {warmupDetection.series.length > 1 && (
+                  <WarmupChart series={warmupDetection.series} truncationPoint={warmupDetection.truncationPoint} />
+                )}
+              </div>
+            )}
+            {warmupDetection && warmupDetection.series.length === 0 && (
+              <div style={{ marginTop: 4, fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                {warmupDetection.explanation}
+              </div>
+            )}
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1618,6 +1731,110 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Scenario comparison */}
+                <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SCENARIO COMPARISON</span>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
+                      <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Scenario A</span>
+                      <select aria-label="Scenario A" value={comparisonIdxA}
+                        onChange={e => { setComparisonIdxA(parseInt(e.target.value)); setComparisonResult(null); }}
+                        style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                        {sweepResults.map((pt, i) => (
+                          <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 120 }}>
+                      <span style={{ fontSize: 10, color: "#9ca3af", fontFamily: FONT }}>Scenario B</span>
+                      <select aria-label="Scenario B" value={comparisonIdxB ?? ""}
+                        onChange={e => { setComparisonIdxB(parseInt(e.target.value) || null); setComparisonResult(null); }}
+                        style={{ background: "#111", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}>
+                        <option value="">Select…</option>
+                        {sweepResults.map((pt, i) => (
+                          i !== comparisonIdxA ? <option key={i} value={i}>{sweepSelectedParam?.label || "Value"} = {pt.value}</option> : null
+                        ))}
+                      </select>
+                    </div>
+                    <Btn variant="primary" onClick={() => {
+                      if (comparisonIdxB == null) return;
+                      const repsA = sweepResults[comparisonIdxA]?.replications || [];
+                      const repsB = sweepResults[comparisonIdxB]?.replications || [];
+                      const result = compareScenarios(repsA, repsB, CI_METRICS, {
+                        labelA: `${sweepSelectedParam?.label || "Value"} = ${sweepResults[comparisonIdxA].value}`,
+                        labelB: `${sweepSelectedParam?.label || "Value"} = ${sweepResults[comparisonIdxB].value}`,
+                      });
+                      // Compute scenario means alongside comparison
+                      const meansA = {};
+                      const meansB = {};
+                      for (const m of CI_METRICS) {
+                        const valsA = repsA.map(r => {
+                          const parts = m.split(".");
+                          let v = r?.result || r;
+                          for (const p of parts) v = v?.[p];
+                          return v;
+                        }).filter(Number.isFinite);
+                        const valsB = repsB.map(r => {
+                          const parts = m.split(".");
+                          let v = r?.result || r;
+                          for (const p of parts) v = v?.[p];
+                          return v;
+                        }).filter(Number.isFinite);
+                        meansA[m] = valsA.length > 0 ? valsA.reduce((s, v) => s + v, 0) / valsA.length : null;
+                        meansB[m] = valsB.length > 0 ? valsB.reduce((s, v) => s + v, 0) / valsB.length : null;
+                      }
+                      setComparisonResult({ ...result, meansA, meansB });
+                    }} disabled={comparisonIdxB == null}>
+                      Compare
+                    </Btn>
+                  </div>
+
+                  {comparisonResult && (
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
+                        <thead>
+                          <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                            <th style={{ padding: "6px 8px" }}>KPI</th>
+                            <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.a}</th>
+                            <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.b}</th>
+                            <th style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
+                            <th style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
+                            <th style={{ padding: "6px 8px" }}>Significant?</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {comparisonResult.comparisons.map((c, i) => {
+                            const meanA = comparisonResult.meansA?.[c.metric];
+                            const meanB = comparisonResult.meansB?.[c.metric];
+                            return (
+                              <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                                <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
+                                <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanA != null ? fmt(meanA) : "—"}</td>
+                                <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanB != null ? fmt(meanB) : "—"}</td>
+                                <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
+                                  {c.meanDiff != null ? (c.meanDiff > 0 ? "+" : "") + fmt(c.meanDiff) : "—"}
+                                </td>
+                                <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>
+                                  {c.lower != null && c.upper != null ? `[${fmt(c.lower)}, ${fmt(c.upper)}]` : "—"}
+                                </td>
+                                <td style={{ padding: "6px 8px" }}>
+                                  {c.significant95 ? (
+                                    <span style={{ color: c.significant99 ? C.green : C.amber, fontWeight: 700 }}>
+                                      {c.significant99 ? "Yes (99%)" : "Yes (95%)"}
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: C.muted }}>No</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1872,6 +2089,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
                 results={results}
                 selectedNodeLabel={selectedNodeLabel}
                 onClearFilter={() => setSelectedNodeLabel(null)}
+                replicationResults={replicationResults}
+                warmupDetection={warmupDetection}
               />
             </>
           );
