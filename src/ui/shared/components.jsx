@@ -1,5 +1,5 @@
 // ui/shared/components.jsx — Reusable micro-components
-import { Component, useId, useState, useRef } from "react";
+import React, { Component, useId, useState, useRef } from "react";
 import { C, FONT } from "./tokens.js";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
 
@@ -60,16 +60,16 @@ class ErrorBoundary extends Component {
   }
 }
 
-const Tag=({label,color=C.muted})=>(
+const Tag=React.memo(({label,color=C.muted})=>(
   <span style={{background:color+"18",border:`1px solid ${color}44`,color,borderRadius:3,padding:"2px 7px",fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",fontFamily:FONT}}>{label}</span>
-);
-const PhaseTag=({phase})=>{
+));
+const PhaseTag=React.memo(({phase})=>{
   const cfg={A:{color:C.phaseA,label:"Phase A"},B:{color:C.phaseB,label:"Phase B"},
              C:{color:C.phaseC,label:"Phase C"},INIT:{color:C.muted,label:"Init"},END:{color:C.green,label:"Done"},
              WARMUP:{color:C.amber,label:"Warmup"}};
   const c=cfg[phase]||{color:C.muted,label:phase};
   return <Tag label={c.label} color={c.color}/>;
-};
+});
 const Avatar=({u,size=28})=>(
   <div style={{width:size,height:size,borderRadius:"50%",background:u.color+"22",border:`1.5px solid ${u.color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.38,fontWeight:700,color:u.color,fontFamily:FONT,flexShrink:0}}>{u.initials}</div>
 );

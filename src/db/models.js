@@ -82,17 +82,17 @@ export async function fetchModels(userId) {
     const [visible, sharedViewer, sharedEditor] = await Promise.all([
       supabase
         .from("des_models")
-        .select("*")
+        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
         .or(`owner_id.eq.${userId},visibility.eq.public`)
         .order("updated_at", sort),
       supabase
         .from("des_models")
-        .select("*")
+        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
         .contains("access", { [userId]: "viewer" })
         .order("updated_at", sort),
       supabase
         .from("des_models")
-        .select("*")
+        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
         .contains("access", { [userId]: "editor" })
         .order("updated_at", sort),
     ]);
@@ -114,7 +114,7 @@ export async function fetchModels(userId) {
   } else {
     const { data: publicData, error } = await supabase
       .from("des_models")
-      .select("*")
+      .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
       .eq("visibility", "public")
       .order("updated_at", { ascending: false });
     if (error) throw error;
@@ -328,7 +328,7 @@ export async function forkModel(sourceModelId, newUserId, newName = "") {
   // 1. Fetch the original model
   const { data: sourceModel, error: fetchError } = await supabase
     .from("des_models")
-    .select("*")
+    .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
     .eq("id", sourceModelId)
     .single();
   if (fetchError) throw fetchError;

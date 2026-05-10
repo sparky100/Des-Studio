@@ -3,6 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 const ExecuteCanvas = lazy(() => import("./ExecuteCanvas.jsx").then(m => ({ default: m.ExecuteCanvas })));
 import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { buildEngine } from "../../engine/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
@@ -63,19 +64,6 @@ function makeBatchResult(replicationPayloads, aggregateStats, maxTime, warmupPer
       maxSimTime: maxTime,
     },
   };
-}
-
-function slugifyResultName(name = "model") {
-  const slug = String(name || "model")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return slug || "model";
-}
-
-function timestampForFilename(date = new Date()) {
-  return date.toISOString().replace(/[:.]/g, "-");
 }
 
 function buildResultsExportPayload({
@@ -2680,7 +2668,5 @@ export {
   buildResultsExportPayload,
   CustomerToken,
   ExecutePanel,
-  slugifyResultName,
-  timestampForFilename,
   VisualView,
 };
