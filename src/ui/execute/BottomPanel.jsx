@@ -334,8 +334,8 @@ function WaitHistogram({ dist, color }) {
         );
       })}
       {/* X axis labels */}
-      <text x={2}    y={HIST_H} fontSize={7} fill={C.muted} fontFamily="monospace">{minV.toFixed(1)}</text>
-      <text x={HIST_W - 28} y={HIST_H} fontSize={7} fill={C.muted} fontFamily="monospace">{maxV.toFixed(1)}</text>
+      <text x={2}    y={HIST_H} fontSize={7} fill={C.muted} fontFamily="monospace">{Math.round(minV)}</text>
+      <text x={HIST_W - 28} y={HIST_H} fontSize={7} fill={C.muted} fontFamily="monospace">{Math.round(maxV)}</text>
     </svg>
   );
 }
@@ -476,7 +476,7 @@ function ChartsTab({ results, model }) {
                   ].map(s => (
                     <div key={s.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
                       <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, marginBottom: 2 }}>{s.label.toUpperCase()}</div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: s.color, fontFamily: FONT }}>{s.value}</div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: s.color, fontFamily: FONT }}>{typeof s.value === "number" ? Math.round(s.value) : s.value}</div>
                     </div>
                   ))}
                 </div>
