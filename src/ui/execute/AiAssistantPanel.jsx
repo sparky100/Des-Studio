@@ -16,6 +16,7 @@ export const AiAssistantPanel = ({
   comparisonLoading,
   comparisonError,
   onClose,
+  onSaveInsights,
 }) => {
   const [response, setResponse] = useState("");
   const [status, setStatus] = useState("idle");
@@ -23,6 +24,7 @@ export const AiAssistantPanel = ({
   const [selectedRunId, setSelectedRunId] = useState(comparisonRuns[0]?.id || "");
   const [queryText, setQueryText] = useState("");
   const [conversationHistory, setConversationHistory] = useState([]);
+  const [savedSummary, setSavedSummary] = useState(null);
   const abortRef = useRef(null);
   const responseAreaRef = useRef(null);
   const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
@@ -274,6 +276,14 @@ export const AiAssistantPanel = ({
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {isStreaming && <Btn small variant="danger" onClick={stopStream}>Stop</Btn>}
         {status === "complete" && (response || conversationHistory.length > 0) && <Btn small variant="ghost" onClick={copyResponse}>Copy</Btn>}
+        {status === "complete" && response && !savedSummary && onSaveInsights && (
+          <Btn small variant="primary" onClick={() => {
+            const insights = { summary: response.slice(0, 500), recommendation: "", savedAt: new Date().toISOString() };
+            onSaveInsights(insights);
+            setSavedSummary(insights);
+          }}>Save to run</Btn>
+        )}
+        {savedSummary && <span style={{ fontSize: 10, color: C.green, fontFamily: FONT, fontWeight: 700, alignSelf: "center" }}>✓ Saved</span>}
         {conversationHistory.length > 0 && !isStreaming && <Btn small variant="ghost" onClick={clearConversation}>Clear</Btn>}
       </div>
 

@@ -288,18 +288,28 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
   return data?.id;
 }
 
+export async function saveAiInsights(runId, insights) {
+  const { error } = await supabase
+    .from("simulation_runs")
+    .update({ ai_insights: insights })
+    .eq("id", runId);
+  if (error) throw error;
+  return { ok: true };
+}
+
 export function normalizeRunHistoryRow(row = {}) {
   return {
     ...row,
     avg_service_time: row.avg_service_time ?? row.results_json?.summary?.avgSvc ?? null,
     run_label: row.results_json?.runLabel || row.results_json?.run_label || "",
+    ai_insights: row.ai_insights || null,
   };
 }
 
 export async function fetchRunHistory(modelId) {
   const { data, error } = await supabase
     .from("simulation_runs")
-    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, seed, max_simulation_time, results_json, warmup_period")
+    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, seed, max_simulation_time, results_json, warmup_period, ai_insights")
     .eq("model_id", modelId)
     .order("ran_at", { ascending: false })
     .limit(20);
@@ -395,7 +405,7 @@ export async function getShareLink(token) {
 
   const { data: run, error: runError } = await supabase
     .from("simulation_runs")
-    .select("id, model_id, ran_at, replications, seed, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, max_simulation_time, warmup_period, results_json")
+    .select("id, model_id, ran_at, replications, seed, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, max_simulation_time, warmup_period, results_json, ai_insights")
     .eq("id", link.run_id)
     .single();
   if (runError) throw runError;
@@ -428,6 +438,7 @@ export async function getShareLink(token) {
       maxSimulationTime: run.max_simulation_time,
       warmupPeriod: run.warmup_period,
       resultsJson: run.results_json,
+      aiInsights: run.ai_insights || null,
     },
     model: {
       name: model.name,

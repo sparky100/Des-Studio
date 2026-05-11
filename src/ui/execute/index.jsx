@@ -9,7 +9,7 @@ import { buildEngine } from "../../engine/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink } from "../../db/models.js";
+import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights } from "../../db/models.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { CustomerToken, VisualView } from "./VisualView.jsx";
@@ -1674,6 +1674,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, ana
           comparisonLoading={runHistoryStatus === "loading"}
           comparisonError={runHistoryError}
           onClose={() => setAiPanelOpen(false)}
+          onSaveInsights={async (insights) => {
+            if (!latestRunId) return;
+            try { await saveAiInsights(latestRunId, insights); } catch {}
+          }}
         />
       )}
 

@@ -251,6 +251,7 @@ export default function DashboardView({ token, onBack }) {
   const hasWidget = (key) => pinned.length === 0 || pinned.includes(key);
   const serverTypes = (model.entityTypes || []).filter(et => et.role === "server");
   const queueDefs = model.queues || [];
+  const aiInsights = run.aiInsights && run.aiInsights.summary ? run.aiInsights : null;
   const totalServed = summary.served || run.totalServed || 0;
   const totalServedPerQ = queueDefs.length ? Math.round(totalServed / Math.max(queueDefs.length, 1)) : totalServed;
   const throughput = run.maxSimulationTime ? (totalServed / run.maxSimulationTime).toFixed(2) : null;
@@ -314,6 +315,24 @@ export default function DashboardView({ token, onBack }) {
             <KpiCard label="MEAN WAIT" value={fmt(summary.avgWait ?? run.avgWaitTime)} color={C.bEvent} sub="time units" />
             <KpiCard label="MEAN SERVICE" value={fmt(summary.avgSvc ?? run.avgServiceTime)} color={C.purple} sub="time units per entity" />
             <KpiCard label="JOURNEY TIME" value={fmt(summary.avgSojourn)} color={C.amber} sub="wait + service" />
+          </div>
+        )}
+
+        {/* AI Insights — saved analysis from the modeller */}
+        {hasWidget("summary") && aiInsights && (
+          <div style={{ background: C.panel, border: `1px solid ${C.purple}44`, borderRadius: 8, padding: 16 }}>
+            <div style={{ fontSize: 10, color: C.purple, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>AI INSIGHTS</div>
+            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiInsights.summary}</div>
+            {aiInsights.recommendation && (
+              <div style={{ marginTop: 8, fontSize: 11, color: C.accent, fontFamily: FONT, fontWeight: 700 }}>
+                Recommendation: {aiInsights.recommendation}
+              </div>
+            )}
+            {aiInsights.savedAt && (
+              <div style={{ marginTop: 6, fontSize: 9, color: C.muted, fontFamily: FONT }}>
+                Saved {new Date(aiInsights.savedAt).toLocaleString()}
+              </div>
+            )}
           </div>
         )}
 
