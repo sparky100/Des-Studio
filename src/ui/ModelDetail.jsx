@@ -1,5 +1,5 @@
 // ui/ModelDetail.jsx — ModelDetail, ModelCard, NewModelModal
-import { lazy, Suspense, useState, useEffect, useMemo, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import pkg from '../../package.json';
 import { C, FONT } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
@@ -177,6 +177,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [historyLoading,setHistoryLoading]=useState(false);
   const [historyError,setHistoryError]=useState("");
   const [showCsvImport,setShowCsvImport]=useState(false);
+  const [analyseRun,setAnalyseRun]=useState(null);
+
+  const handleAnalyseRun=useCallback((row)=>{setAnalyseRun(row);setTab("execute");},[]);
   const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
   const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
 
@@ -559,7 +562,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             title="Execute panel crashed"
             message="The simulation controls could not render."
           >
-            <ExecutePanel model={model} modelId={modelId} userId={overrides.userId} onRunSaved={handleRunSaved} autoRun={overrides.autoRun}/>
+            <ExecutePanel model={model} modelId={modelId} userId={overrides.userId} onRunSaved={handleRunSaved} autoRun={overrides.autoRun} analyseRun={analyseRun} onClearAnalyse={()=>setAnalyseRun(null)}/>
           </ErrorBoundary>
         )}
         {tab==="history"&&(
@@ -577,7 +580,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FONT,fontSize:11}}>
                   <thead>
-                    <tr>{["Date / Time","Label","Arrived","Served","Reneged","Renege %","Avg Wait","Avg Sojourn","Duration (ms)"].map(h=>(
+                    <tr>                    {["Date / Time","Label","Served","Reneged","Avg Wait","Analyse"].map(h=>(
                       <th key={h} style={{textAlign:"left",padding:"6px 12px",color:C.muted,borderBottom:`1px solid ${C.border}`,fontSize:10,letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
                     ))}</tr>
                   </thead>
@@ -591,13 +594,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                         <tr key={row.id} style={{background:i%2===0?C.surface+"60":"transparent"}}>
                           <td style={{padding:"6px 12px",color:C.muted,whiteSpace:"nowrap"}}>{dateStr} {timeStr}</td>
                           <td style={{padding:"6px 12px",color:row.run_label?C.text:C.muted,whiteSpace:"nowrap"}}>{row.run_label || "-"}</td>
-                          <td style={{padding:"6px 12px",color:C.accent,fontWeight:700}}>{row.total_arrived}</td>
-                          <td style={{padding:"6px 12px",color:C.served,fontWeight:700}}>{row.total_served}</td>
-                          <td style={{padding:"6px 12px",color:C.reneged,fontWeight:700}}>{row.total_reneged}</td>
-                          <td style={{padding:"6px 12px",color:row.total_reneged>0?C.reneged:C.muted}}>{renPct}{renPct!=="—"?"%":""}</td>
-                          <td style={{padding:"6px 12px",color:C.amber}}>{row.avg_wait_time!=null?row.avg_wait_time.toFixed(2)+" t":"—"}</td>
-                          <td style={{padding:"6px 12px",color:C.server}}>{row.avg_service_time!=null?row.avg_service_time.toFixed(2)+" t":"—"}</td>
-                          <td style={{padding:"6px 12px",color:C.muted}}>{row.duration_ms!=null?row.duration_ms:"—"}</td>
+                          <td style={{padding:"6px 12px",color:C.served,fontWeight:700}}>{row.total_served||0}</td>
+                          <td style={{padding:"6px 12px",color:row.total_reneged>0?C.reneged:C.muted}}>{row.total_reneged||0}</td>
+                          <td style={{padding:"6px 12px",color:C.amber}}>{row.avg_wait_time!=null?row.avg_wait_time.toFixed(2):"—"}t</td>
+                          <td style={{padding:"6px 12px"}}>
+                            <Btn small variant="ghost" onClick={()=>handleAnalyseRun(row)}>Analyse</Btn>
+                          </td>
                         </tr>
                       );
                     })}

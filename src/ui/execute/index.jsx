@@ -23,7 +23,7 @@ import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResu
 import { SweepChart, WarmupChart, Sweep2DGrid } from "./SweepViews.jsx";
 import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 
-const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) => {
+const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, analyseRun = null, onClearAnalyse }) => {
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
   const [log, setLog] = useState([]);
@@ -477,6 +477,20 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false }) =
       cancelled = true;
     };
   }, [aiPanelOpen, modelId]);
+
+  // Handle Analyse button from History tab — load saved run into AI panel
+  useEffect(() => {
+    if (!analyseRun || !modelId) return;
+    const resultsJson = analyseRun.results_json || {};
+    if (resultsJson.summary) {
+      setResults(resultsJson);
+      setAggregateStats(resultsJson.aggregateStats || {});
+      setBatchStatus("complete");
+      setReplicationResults(resultsJson.replicationResults || []);
+    }
+    setAiPanelOpen(true);
+    onClearAnalyse?.();
+  }, [analyseRun, modelId, onClearAnalyse]);
 
   const batchActive = batchStatus === "running" || batchStatus === "cancelling";
   const partialBatchStatus = batchStatus === "cancelled" || batchStatus === "error";
