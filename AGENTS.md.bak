@@ -1,8 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-11 | Reflects: Sprint 20 — CSV Import Bridge complete. Current: Sprint 21 — TBD*
-
-**Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
+*Last updated: 2026-05-10 | Reflects: Sprint 20 — CSV Import Bridge complete. Current: Sprint 21 — TBD*
 
 ---
 
@@ -1291,31 +1289,36 @@ UI / UX
 
 ## 20. Sprint History
 
-See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Latest completed sprint details below.
-
-| Sprint | Status | Completed | Description |
-|---|---|---|---|
-| Sprint 1  | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening |
-| Sprint 2  | ✅ Complete | 2026-05-03 | UI editor completeness |
-| Sprint 3  | ✅ Complete | 2026-05-04 | Experiment controls: warm-up, termination, fork model |
-| Sprint 4  | ✅ Complete | 2026-05-04 | Replication & Results: workers, batches, CI dashboard |
-| Sprint 5  | ✅ Complete | 2026-05-04 | Polish, Export & Production |
-| Sprint 6  | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis |
-| Sprint 7  | ✅ Complete | 2026-05-05 | Platform Foundation, Dynamic Distributions |
-| Sprint 8  | ✅ Complete | 2026-05-05 | AI Generated Model Authoring |
-| Sprint 9  | ✅ Complete | 2026-05-06 | Visual Designer & Execute Canvas |
-| Sprint 10 | ✅ Complete | 2026-05-08 | Routing & Pooling |
-| Sprint 11 | ✅ Complete | 2026-05-08 | Capacity & Output |
-| Sprint 12 | ✅ Complete | 2026-05-08 | Assembly & Recirculation |
-| Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement |
-| Post-13  | ✅ Complete | 2026-05-09 | Templates & Anonymous Mode |
-| Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries |
-| Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard |
-| Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison |
-| Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer |
-| Sprint 18 | ✅ Complete | 2026-05-10 | 2D Parametric Sweeps |
-| Sprint 19 | ✅ Complete | 2026-05-10 | Model Import/Export & Community Gallery |
-| Sprint 20 | ✅ Complete | 2026-05-10 | CSV Import Bridge |
+| Sprint | Status | Completed | Description | Tests | M/M/1 |
+|---|---|---|---|---|---|---|
+| Sprint 1 | ✅ Complete | 2026-05-03 | Engine safety and correctness hardening | 182 passing | 1.48% error |
+| Sprint 2 | ✅ Complete | 2026-05-03 | UI editor completeness | 215 passing | N/A |
+| Sprint 3 | ✅ Complete | 2026-05-04 | Experiment controls: warm-up, termination, fork model | 272 passing | 1.48% error |
+| Sprint 4 | ✅ Complete | 2026-05-04 | Replication & Results: workers, batches, CI dashboard | 294 passing | CI contains 9.0 |
+| Sprint 5 | ✅ Complete | 2026-05-04 | Polish, Export & Production | 334 passing | CI contains 9.0 |
+| Sprint 6 | ✅ Complete | 2026-05-04 | LLM Integration & Results Analysis | 343 passing | N/A |
+| Sprint 7A | ✅ Complete | 2026-05-05 | Platform Foundation: Roles, Settings & TypeScript | Docs only | N/A |
+| Sprint 7B | ✅ Complete | 2026-05-05 | Platform Foundation Implementation | 33 focused | N/A |
+| Sprint 7 | ✅ Complete | 2026-05-05 | Dynamic Distributions & Time-Varying Resources | 369 passing | N/A |
+| Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight | 22 focused | N/A |
+| Sprint 8 | ✅ Complete | 2026-05-05 | AI Generated Model Authoring | 385 passing | N/A |
+| Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence | Focused | N/A |
+| Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight | Docs | N/A |
+| Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring | 38 focused | N/A |
+| Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX Hardening | Focused | N/A |
+| Sprint 9C | ✅ Complete | 2026-05-07 | Execute Canvas — Live Flow View | 464 passing | N/A |
+| Sprint 10 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Routing & Pooling | 508 passing | N/A |
+| Sprint 11 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Capacity & Output | 523 passing | N/A |
+| Sprint 12 | ✅ Complete | 2026-05-08 | Modelling Expressiveness — Assembly & Recirculation | 541 passing | 1.48% error |
+| Sprint 13 | ✅ Complete | 2026-05-08 | AI Model Building Enhancement | 543 passing | N/A |
+| Post-13 | ✅ Complete | 2026-05-09 | Templates, Anonymous Mode & Template Gallery | 543 passing | N/A |
+| Sprint 14 | ✅ Complete | 2026-05-09 | AI Natural Language Results Queries | 58 Sprint 14 tests | N/A |
+| Sprint 15 | ✅ Complete | 2026-05-09 | Shareable Results Dashboard | 649 passing | N/A |
+| Sprint 16 | ✅ Complete | 2026-05-09 | Parametric Sweep & Scenario Comparison | 679 passing | N/A |
+| Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer | 37 engine + 14 UI tests | 1.48% error |
+| Sprint 18 | ✅ Complete | 2026-05-10 | 2D Parametric Sweeps | 35 engine + 6 UI tests | 1.48% error |
+| Sprint 19 | ✅ Complete | 2026-05-10 | Model Import/Export & Community Gallery | 21 new tests | N/A |
+| Sprint 20 | ✅ Complete | 2026-05-10 | CSV Import Bridge | 30 new tests | N/A |
 
 ---
 

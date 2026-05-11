@@ -1,0 +1,78 @@
+{
+ "$schema": "https://opencode.ai/config.json",
+ "agent": {
+   "build": {
+     "description": "Default development agent with full tool access",
+     "mode": "primary",
+     "temperature": 0.3,
+     "permission": { "edit": "allow", "bash": "allow" }
+   },
+   "plan": {
+     "description": "Architecture and planning agent — read-only",
+     "mode": "primary",
+     "model": "anthropic/claude-haiku-4-20250514",
+     "temperature": 0.1,
+     "permission": { "edit": "deny", "bash": "deny" }
+   },
+   "explore": {
+     "description": "Fast codebase search and analysis — read-only",
+     "mode": "subagent",
+     "model": "anthropic/claude-haiku-4-20250514",
+     "temperature": 0.1,
+     "prompt": "You are a fast codebase explorer. Search for files, grep for patterns, and answer structural questions. Do NOT make any edits.",
+     "permission": { "edit": "deny", "bash": { "*": "ask", "grep *": "allow", "rg *": "allow", "Select-String *": "allow" } }
+   },
+   "code-reviewer": {
+     "description": "Reviews code for best practices, security, and potential issues",
+     "mode": "subagent",
+     "temperature": 0.1,
+     "prompt": "{file:./prompts/code-review.txt}",
+     "permission": { "edit": "deny", "bash": "deny", "webfetch": "deny" }
+   },
+   "test-runner": {
+     "description": "Runs and debugs tests — write access limited to test files",
+     "mode": "subagent",
+     "temperature": 0.2,
+     "prompt": "{file:./prompts/test-runner.txt}",
+     "permission": { "edit": { "tests/**": "allow", "*.test.js": "allow", "*.test.jsx": "allow" }, "bash": "allow" }
+   },
+   "ui-polish": {
+     "description": "UI component work — limited to src/ui/",
+     "mode": "subagent",
+     "temperature": 0.4,
+     "prompt": "{file:./prompts/ui-polish.txt}",
+     "permission": { "edit": { "src/ui/**": "allow", "src/ui/shared/tokens.js": "allow" }, "bash": { "*": "ask", "npm run build": "allow" } }
+   },
+   "db-migrate": {
+     "description": "Supabase schema and DB wrapper changes",
+     "mode": "subagent",
+     "temperature": 0.2,
+     "prompt": "{file:./prompts/db-migrate.txt}",
+     "permission": { "edit": { "src/db/**": "allow", "supabase/**": "allow" }, "bash": "allow" }
+   },
+   "security-audit": {
+     "description": "Security-focused code review",
+     "mode": "subagent",
+     "temperature": 0.1,
+     "prompt": "{file:./prompts/security-audit.txt}",
+     "permission": { "edit": "deny", "bash": { "*": "ask", "grep *": "allow" } }
+   },
+   "docs": {
+     "description": "Documentation writing and ADR management",
+     "mode": "subagent",
+     "temperature": 0.2,
+     "prompt": "{file:./prompts/docs-writer.txt}",
+     "permission": { "edit": { "docs/**": "allow", "*.md": "allow" }, "bash": { "git status *": "allow", "git diff *": "allow" } }
+   }
+ },
+ "mcp": {
+   "github": {
+     "type": "local",
+     "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+     "enabled": false
+   }
+ },
+ "tools": {
+   "github_*": false
+ }
+}

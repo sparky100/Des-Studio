@@ -325,10 +325,11 @@ export async function fetchRunStatsForModels(modelIds = [], userId) {
 }
 
 export async function forkModel(sourceModelId, newUserId, newName = "") {
-  // 1. Fetch the original model
+  // 1. Fetch the original model — must be owned by or accessible to the user
   const { data: sourceModel, error: fetchError } = await supabase
     .from("des_models")
     .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
+    .or(`owner_id.eq.${newUserId},visibility.eq.public`)
     .eq("id", sourceModelId)
     .single();
   if (fetchError) throw fetchError;

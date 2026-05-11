@@ -419,7 +419,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       };
 
       // Mock the fetch of the source model
-      supabase.from('des_models').select().eq.mockReturnThis();
+      supabase.from('des_models').select().or.mockReturnThis();
       supabase.from('des_models').single.mockResolvedValueOnce({ data: sourceModelData, error: null });
 
       // Mock the insert of the new model
@@ -439,7 +439,8 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
 
       // Verify fetch call
       expect(supabase.from).toHaveBeenCalledWith('des_models');
-      expect(supabase.from('des_models').select).toHaveBeenCalledWith('*');
+      expect(supabase.from('des_models').select).toHaveBeenCalled();
+      expect(supabase.from('des_models').or).toHaveBeenCalledWith(expect.stringContaining(newUserId));
       expect(supabase.from('des_models').eq).toHaveBeenCalledWith('id', sourceModelId);
       expect(supabase.from('des_models').single).toHaveBeenCalled();
 
