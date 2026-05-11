@@ -552,3 +552,41 @@ export async function listShareLinks(modelId) {
   }));
 }
 
+// ── Platform config (admin only) ──────────────────────────────────────────────
+
+export async function getPlatformConfig(key) {
+  const { data, error } = await supabase
+    .from("platform_config")
+    .select("value")
+    .eq("key", key)
+    .single();
+  if (error && error.code !== "PGRST116") throw error; // PGRST116 = not found
+  return data?.value ?? null;
+}
+
+export async function setPlatformConfig(key, value, userId) {
+  const { error } = await supabase
+    .from("platform_config")
+    .upsert({ key, value, updated_by: userId, updated_at: new Date().toISOString() }, { onConflict: "key" });
+  if (error) throw error;
+  return { ok: true };
+}
+
+export async function fetchAllUsers() {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(normalizeProfile);
+}
+
+export async function updateUserRole(userId, role) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ role })
+    .eq("id", userId);
+  if (error) throw error;
+  return { ok: true };
+}
+

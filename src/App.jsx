@@ -17,6 +17,7 @@ import { ModelCard, ModelDetail,
 import { validateModel }                    from "./engine/validation.js";
 import { TEMPLATES }                        from "./engine/templates.js";
 import DashboardView                        from "./ui/share/DashboardView.jsx";
+import { AdminPanel }                       from "./ui/AdminPanel.jsx";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph"];
 
@@ -135,6 +136,7 @@ export default function App(){
   const [models,setModels]=useState([])
   const [tab,setTab]=useState('my')
   const [openId,setOpenId]=useState(null)
+  const [showAdmin,setShowAdmin]=useState(false)
   const [showNew,setShowNew]=useState(false)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
@@ -375,6 +377,15 @@ export default function App(){
     return <DashboardView token={shareToken} onBack={()=>{setShareToken(null);window.location.hash=''}} />
   }
 
+  if(showAdmin){
+    return (
+      <div style={{background:C.bg,minHeight:'100vh'}}>
+        <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');`}</style>
+        <AdminPanel userId={uid} isAdmin={true} onClose={()=>setShowAdmin(false)} />
+      </div>
+    );
+  }
+
   if(openId){
     const model = models.find(m => m.id === openId) || localModel;
     const isOwner = model?.owner_id === uid;
@@ -471,6 +482,12 @@ export default function App(){
             </div>
             <span style={{fontSize:12,color:C.muted}}>{profile.full_name}</span>
           </div>
+        )}
+        {session && isAdmin && (
+          <button type="button" onClick={()=>{setShowAdmin(true);setOpenId(null)}}
+            style={{background:showAdmin?C.accent+'33':'#ffffff08',border:`1px solid ${showAdmin?C.accent:C.border}`,borderRadius:5,color:showAdmin?C.accent:C.muted,fontFamily:FONT,fontSize:11,padding:'5px 12px',cursor:'pointer',fontWeight:600}}>
+            Admin
+          </button>
         )}
         <button type="button" onClick={signOut} style={{background:'#ffffff08',border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,fontFamily:FONT,fontSize:11,padding:'5px 12px',cursor:'pointer',fontWeight:600}}>Sign Out</button>
       </div>
