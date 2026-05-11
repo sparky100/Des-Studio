@@ -249,6 +249,7 @@ export const MACROS = [
         cust.serviceStart  = clock;
         cust.serverId      = srv.id;
         cust.lastQueue     = cust.queue;
+        cust.ceventName    = ctx.ceventName;
         delete cust.queue;
         srv.status        = "busy";
         srv.currentCustId = cust.id;

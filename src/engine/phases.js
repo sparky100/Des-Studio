@@ -263,7 +263,7 @@ export function fireCEvent(ev, ctx) {
   if (ev.id) ctx.incEventCount?.(ev.id);
 
   const { clock, model } = ctx;
-  const effectCtx = { ...ctx, felRef: null, entityFilter: ev.entityFilter ?? null };
+  const effectCtx = { ...ctx, felRef: null, entityFilter: ev.entityFilter ?? null, ceventName: ev.name };
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
   const { msgs, felEntries } = applyEffect(effectStr, effectCtx);
 

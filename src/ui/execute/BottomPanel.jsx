@@ -278,7 +278,7 @@ function EntitiesTab({ snap }) {
               const location = e.status === "waiting"
                 ? (e.queue || "queue")
                 : e.status === "serving"
-                  ? (e.queue ? `serving in ${e.queue}` : "in service")
+                  ? (e.ceventName || "serving")
                   : e.queue || "—";
               return (
                 <tr key={e.id} style={{ borderBottom: `1px solid ${C.bg}` }}>
