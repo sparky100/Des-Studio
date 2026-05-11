@@ -580,7 +580,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FONT,fontSize:11}}>
                   <thead>
-                    <tr>                    {["Date / Time","Label","Served","Reneged","Avg Wait","Analyse"].map(h=>(
+                    <tr>                    {["Date / Time","Label","Served","Reneged","Avg Wait","Summary",""].map(h=>(
                       <th key={h} style={{textAlign:"left",padding:"6px 12px",color:C.muted,borderBottom:`1px solid ${C.border}`,fontSize:10,letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
                     ))}</tr>
                   </thead>
@@ -590,6 +590,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                       const dateStr=dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
                       const timeStr=dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
                       const renPct=row.total_arrived>0?((row.total_reneged/row.total_arrived)*100).toFixed(1):"—";
+                      const insight = row.ai_insights?.summary || null;
                       return(
                         <tr key={row.id} style={{background:i%2===0?C.surface+"60":"transparent"}}>
                           <td style={{padding:"6px 12px",color:C.muted,whiteSpace:"nowrap"}}>{dateStr} {timeStr}</td>
@@ -597,6 +598,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                           <td style={{padding:"6px 12px",color:C.served,fontWeight:700}}>{row.total_served||0}</td>
                           <td style={{padding:"6px 12px",color:row.total_reneged>0?C.reneged:C.muted}}>{row.total_reneged||0}</td>
                           <td style={{padding:"6px 12px",color:C.amber}}>{row.avg_wait_time!=null?row.avg_wait_time.toFixed(2):"—"}t</td>
+                          <td style={{padding:"6px 12px",fontSize:10,color:insight?C.purple:C.muted,fontFamily:FONT,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={insight||""}>{insight||"—"}</td>
                           <td style={{padding:"6px 12px"}}>
                             <Btn small variant="ghost" onClick={()=>handleAnalyseRun(row)}>Analyse</Btn>
                           </td>
