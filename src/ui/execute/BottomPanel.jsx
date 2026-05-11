@@ -122,7 +122,7 @@ function StageKpisTable({ snap, model }) {
             </thead>
             <tbody>
               {queues.map(q => {
-                const inQueue  = entities.filter(e => e.role !== "server" && e.queue === q.name);
+                const inQueue  = entities.filter(e => e.role !== "server" && (e.queue === q.name || e.lastQueue === q.name));
                 const waiting  = inQueue.filter(e => e.status === "waiting");
                 const waits    = inQueue
                   .filter(e => e.serviceStart != null)
