@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-11 | Reflects: Sprint 20 — CSV Import Bridge complete. Current: Sprint 21 — TBD*
+*Last updated: 2026-05-11 | Reflects: Sprint 21 — SaaS Admin Platform complete. Current: Sprint 22 — TBD*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
@@ -1316,6 +1316,7 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 18 | ✅ Complete | 2026-05-10 | 2D Parametric Sweeps |
 | Sprint 19 | ✅ Complete | 2026-05-10 | Model Import/Export & Community Gallery |
 | Sprint 20 | ✅ Complete | 2026-05-10 | CSV Import Bridge |
+| Sprint 21 | ✅ Complete | 2026-05-11 | SaaS Admin Platform (config, admin panel, multi-provider LLM) |
 
 ---
 
