@@ -5,7 +5,8 @@ import { C, FONT, GOOGLE_FONT_URL } from "../shared/tokens.js";
 const CHART_W = 360, CHART_H = 80;
 const HIST_W = 360, HIST_H = 60, HIST_BINS = 12;
 
-const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
+const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : "—";
+const fmtInt = (v) => Number.isFinite(v) ? v.toFixed(0) : "—";
 
 function MiniLineChart({ title, points, color, yLabel }) {
   if (!points || points.length < 2) return null;
@@ -88,6 +89,60 @@ function KpiCard({ label, value, color, sub }) {
   );
 }
 
+function ModelTopology({ model }) {
+  const types = model.entityTypes || [];
+  const queues = model.queues || [];
+  const customers = types.filter(t => t.role !== "server");
+  const servers = types.filter(t => t.role === "server");
+  const gapX = 160, gapY = 40;
+  const w = 120, h = 36;
+  const cX = 50, cY = 50 + customers.length * gapY;
+  const qX = cX + gapX, qY = 50;
+  const sX = qX + gapX, sY = cY;
+  const totalW = sX + w + 40;
+  const totalH = Math.max(qY + queues.length * gapY + h, cY + h + gapY) + 40;
+
+  return (
+    <svg width={totalW} height={totalH} style={{ display: "block", width: "100%", maxWidth: 600 }}
+      viewBox={`0 0 ${totalW} ${totalH}`} aria-label="Model topology">
+      <style>{`.topo-node{font-family:monospace;font-size:9px;font-weight:700;}.topo-line{stroke:${C.border};stroke-width:1;fill:none;}.topo-label{font-family:monospace;font-size:8px;fill:${C.muted};}`}</style>
+      {customers.map((t, i) => (
+        <g key={t.id || t.name}>
+          <rect x={cX} y={50 + i * gapY} width={w} height={h} rx={6} fill={C.green + "22"} stroke={C.green} strokeWidth={1.5} />
+          <text x={cX + w / 2} y={50 + i * gapY + h / 2 + 3} textAnchor="middle" className="topo-node" fill={C.green}>{t.name}</text>
+        </g>
+      ))}
+      {customers.length > 0 && <text x={cX + w / 2} y={42} textAnchor="middle" className="topo-label">Entity Types</text>}
+
+      {queues.map((q, i) => {
+        const match = customers.find(c => c.name === q.customerType);
+        const srcIdx = match ? customers.indexOf(match) : 0;
+        return (
+          <g key={q.id || q.name}>
+            <line x1={cX + w} y1={50 + srcIdx * gapY + h / 2} x2={qX} y2={qY + i * gapY + h / 2} className="topo-line" />
+            <rect x={qX} y={qY + i * gapY} width={w} height={h} rx={6} fill={C.cEvent + "22"} stroke={C.cEvent} strokeWidth={1.5} />
+            <text x={qX + w / 2} y={qY + i * gapY + h / 2 + 3} textAnchor="middle" className="topo-node" fill={C.cEvent}>{q.name}</text>
+          </g>
+        );
+      })}
+      {queues.length > 0 && <text x={qX + w / 2} y={42} textAnchor="middle" className="topo-label">Queues</text>}
+
+      {servers.map((s, i) => {
+        const fromQ = i < queues.length ? queues[i] : null;
+        const fromY = fromQ ? qY + queues.indexOf(fromQ) * gapY + h / 2 : (sY - gapY + i * gapY + h / 2);
+        return (
+          <g key={s.id || s.name}>
+            <line x1={qX + w} y1={fromY} x2={sX} y2={sY + i * gapY + h / 2} className="topo-line" />
+            <rect x={sX} y={sY + i * gapY} width={w} height={h} rx={6} fill={C.server + "22"} stroke={C.server} strokeWidth={1.5} />
+            <text x={sX + w / 2} y={sY + i * gapY + h / 2 + 3} textAnchor="middle" className="topo-node" fill={C.server}>{s.name} ({s.count || 1})</text>
+          </g>
+        );
+      })}
+      {servers.length > 0 && <text x={sX + w / 2} y={42} textAnchor="middle" className="topo-label">Servers</text>}
+    </svg>
+  );
+}
+
 export default function DashboardView({ token, onBack }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -130,12 +185,12 @@ export default function DashboardView({ token, onBack }) {
   const pinned = share.config?.pinnedWidgets || [];
 
   const hasWidget = (key) => pinned.length === 0 || pinned.includes(key);
-  const util = summary.avgSvc && summary.avgWait
-    ? (summary.avgSvc / (summary.avgSvc + summary.avgWait) * 100)
-    : null;
-
   const serverTypes = (model.entityTypes || []).filter(et => et.role === "server");
   const queueDefs = model.queues || [];
+  const totalServed = summary.served || run.totalServed || 0;
+  const totalServedPerQ = queueDefs.length ? Math.round(totalServed / Math.max(queueDefs.length, 1)) : totalServed;
+  const throughput = run.maxSimulationTime ? (totalServed / run.maxSimulationTime).toFixed(2) : null;
+  const renegeRate = (summary.reneged && totalServed) ? ((summary.reneged / (summary.reneged + totalServed)) * 100).toFixed(1) : null;
 
   return (
     <div style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: FONT }}>
@@ -160,35 +215,52 @@ export default function DashboardView({ token, onBack }) {
         )}
       </div>
 
-      {/* Model info */}
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "28px 24px", display: "flex", flexDirection: "column", gap: 24 }}>
-        <div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>{model.name}</div>
-          <div style={{ fontSize: 11, color: C.muted }}>
-            Ran {new Date(run.ranAt).toLocaleString()} · {run.replications} replication{run.replications > 1 ? "s" : ""} · Seed {run.seed}
+        {/* Model info */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>{model.name}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>
+              Ran {new Date(run.ranAt).toLocaleString()} · {run.replications} replication{run.replications > 1 ? "s" : ""} · Seed {run.seed}
+              {run.maxSimulationTime ? ` · ${run.maxSimulationTime} time units` : ""}
+            </div>
           </div>
+          {throughput && <KpiCard label="THROUGHPUT" value={`${throughput}/tu`} color={C.accent} />}
         </div>
 
-        {/* KPI Cards */}
+        {/* Model Topology */}
         {hasWidget("summary") && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
-            <KpiCard label="ARRIVED" value={summary.total || run.totalArrived || 0} color={C.kpiArr} />
-            <KpiCard label="SERVED" value={summary.served || run.totalServed || 0} color={C.kpiSvc} />
-            <KpiCard label="RENEGED" value={summary.reneged || run.totalReneged || 0} color={C.danger} />
-            <KpiCard label="MEAN WAIT" value={fmt(summary.avgWait ?? run.avgWaitTime)} color={C.bEvent} sub="time units" />
-            <KpiCard label="MEAN SERVICE" value={fmt(summary.avgSvc ?? run.avgServiceTime)} color={C.purple} sub="time units" />
-            {util !== null && <KpiCard label="UTILISATION" value={`${util.toFixed(1)}%`} color={C.accent} />}
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
+            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>MODEL STRUCTURE</div>
+            <ModelTopology model={model} />
+            <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10, color: C.green, fontFamily: FONT }}>● {(model.entityTypes || []).filter(e => e.role !== "server").length} entity types</span>
+              <span style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT }}>● {queueDefs.length} queues</span>
+              <span style={{ fontSize: 10, color: C.server, fontFamily: FONT }}>● {serverTypes.length} server types</span>
+            </div>
           </div>
         )}
 
-        {/* Queue table */}
+        {/* KPI Cards — overall simulation results */}
+        {hasWidget("summary") && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
+            <KpiCard label="ARRIVED" value={fmtInt(summary.total || run.totalArrived || 0)} color={C.kpiArr} sub="total entities" />
+            <KpiCard label="SERVED" value={fmtInt(totalServed)} color={C.kpiSvc} sub={`${queueDefs.length} queue${queueDefs.length !== 1 ? "s" : ""}`} />
+            <KpiCard label="RENEGED" value={fmtInt(summary.reneged || run.totalReneged || 0)} color={C.danger} sub={renegeRate ? `${renegeRate}% of arrivals` : undefined} />
+            <KpiCard label="MEAN WAIT" value={fmt(summary.avgWait ?? run.avgWaitTime)} color={C.bEvent} sub="time units" />
+            <KpiCard label="MEAN SERVICE" value={fmt(summary.avgSvc ?? run.avgServiceTime)} color={C.purple} sub="time units per entity" />
+            <KpiCard label="JOURNEY TIME" value={fmt(summary.avgSojourn)} color={C.amber} sub="wait + service" />
+          </div>
+        )}
+
+        {/* Queue performance — overall cumulative stats */}
         {hasWidget("queues") && queueDefs.length > 0 && (
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-            <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>QUEUES</div>
+            <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>QUEUE PERFORMANCE</div>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {["Queue", "Depth", "Mean wait", "Arrivals", "Reneged"].map(h => (
+                  {["Queue", "Served", "Mean wait", "p50", "p90", "p99"].map(h => (
                     <th key={h} style={{ padding: "4px 8px", textAlign: h === "Queue" ? "left" : "right", fontWeight: 600, color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 0.8 }}>
                       {h}
                     </th>
@@ -201,10 +273,11 @@ export default function DashboardView({ token, onBack }) {
                   return (
                     <tr key={q.id} style={{ borderBottom: `1px solid ${C.border}18` }}>
                       <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "left" }}>{q.name}</td>
-                      <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{qWait?.n ? Math.round(qWait.n / (run.replications || 1)) : "—"}</td>
+                      <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmtInt(qWait?.n)}</td>
                       <td style={{ padding: "4px 8px", color: C.bEvent, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmt(qWait?.mean)}</td>
-                      <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{qWait?.n || "—"}</td>
-                      <td style={{ padding: "4px 8px", color: C.danger, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>—</td>
+                      <td style={{ padding: "4px 8px", color: C.green, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmt(qWait?.p50)}</td>
+                      <td style={{ padding: "4px 8px", color: C.amber, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmt(qWait?.p90)}</td>
+                      <td style={{ padding: "4px 8px", color: C.danger, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmt(qWait?.p99)}</td>
                     </tr>
                   );
                 })}
@@ -213,27 +286,32 @@ export default function DashboardView({ token, onBack }) {
           </div>
         )}
 
-        {/* Resource table */}
+        {/* Server performance */}
         {hasWidget("resources") && serverTypes.length > 0 && (
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>SERVERS</div>
+            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>SERVER PERFORMANCE</div>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                  {["Type", "Count", "Utilisation", "Mean svc time"].map(h => (
+                  {["Type", "Count", "Mean svc time", "Completions"].map(h => (
                     <th key={h} style={{ padding: "4px 8px", textAlign: h === "Type" ? "left" : "right", fontWeight: 600, color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 0.8 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {serverTypes.map(st => (
-                  <tr key={st.id} style={{ borderBottom: `1px solid ${C.border}18` }}>
-                    <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "left" }}>{st.name}</td>
-                    <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{st.count || 1}</td>
-                    <td style={{ padding: "4px 8px", color: C.accent, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{util !== null ? `${util.toFixed(1)}%` : "—"}</td>
-                    <td style={{ padding: "4px 8px", color: C.purple, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmt(summary.avgSvc)}</td>
-                  </tr>
-                ))}
+                {serverTypes.map(st => {
+                  const perRes = summary.perResource?.[st.name] || {};
+                  const completions = perRes.completions ?? (summary.served ? Math.round(summary.served / serverTypes.length) : null);
+                  const svcTime = perRes.avgServiceTime ?? summary.avgSvc;
+                  return (
+                    <tr key={st.id} style={{ borderBottom: `1px solid ${C.border}18` }}>
+                      <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "left" }}>{st.name}</td>
+                      <td style={{ padding: "4px 8px", color: C.text, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{st.count || 1}</td>
+                      <td style={{ padding: "4px 8px", color: C.purple, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmt(svcTime)}</td>
+                      <td style={{ padding: "4px 8px", color: C.accent, fontFamily: FONT, fontSize: 11, textAlign: "right" }}>{fmtInt(completions)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -243,32 +321,32 @@ export default function DashboardView({ token, onBack }) {
         {hasWidget("charts") && ts && (
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
             <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>QUEUE DEPTH OVER TIME</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
               {queueDefs.map((q, idx) => {
                 const points = ts.map(entry => ({
                   t: entry.t,
                   value: entry.byType?.[q.customerType || q.name]?.waiting ?? 0,
                 }));
-                const colors = ["#06b6d4", "#f59e0b", "#8b5cf6", "#3fb950", "#f87171", "#a78bfa"];
+                const colors = [C.accent, C.bEvent, C.purple, C.green, C.danger, C.server];
                 return <MiniLineChart key={q.id} title={q.name} points={points} color={colors[idx % colors.length]} yLabel="waiting" />;
               })}
             </div>
           </div>
         )}
 
-        {/* Wait distribution histogram */}
+        {/* Wait distribution */}
         {hasWidget("charts") && wd && Object.keys(wd).length > 0 && (
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
             <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>WAIT TIME DISTRIBUTION</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {Object.entries(wd).map(([queueName, dist], idx) => {
-                const colors = ["#f59e0b", "#8b5cf6", "#06b6d4", "#3fb950", "#f87171"];
+                const colors = [C.bEvent, C.purple, C.accent, C.green, C.danger];
                 return (
                   <div key={queueName}>
                     <div style={{ fontSize: 11, color: C.text, fontFamily: FONT, fontWeight: 600, marginBottom: 4 }}>{queueName}</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 6 }}>
+                    <div style={{ display: "flex", gap: 12, fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 6, flexWrap: "wrap" }}>
                       <span>n={dist.n} · mean={fmt(dist.mean)}</span>
-                      <span style={{ textAlign: "right" }}>p50={fmt(dist.p50)} · p90={fmt(dist.p90)} · p99={fmt(dist.p99)}</span>
+                      <span>median={fmt(dist.p50)} · p90={fmt(dist.p90)} · p99={fmt(dist.p99)}</span>
                     </div>
                     <WaitHistogram dist={dist} color={colors[idx % colors.length]} />
                   </div>
