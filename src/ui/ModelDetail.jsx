@@ -14,7 +14,8 @@ const VisualDesignerPanel = lazy(() =>
   import("./visual-designer/VisualDesignerPanel.jsx").then(m => ({ default: m.VisualDesignerPanel }))
 );
 import { fetchRunHistory, listShareLinks } from "../db/models.js";
-import { validateModel } from "../engine/validation.js";
+import { validateModel }                    from "../engine/validation.js";
+import { renameQueue }                      from "../engine/queue-refs.js";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph"];
 
@@ -563,7 +564,19 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         {tab==="state"&&<div style={{maxWidth:900}}><TabErrors tabId="state"/><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>}
         {tab==="bevents"&&<div style={{maxWidth:1100}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
         {tab==="cevents"&&<div style={{maxWidth:1100}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
-        {tab==="queues"&&<div style={{maxWidth:900}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?v=>setField("queues",v):()=>{}}/></div>}
+        {tab==="queues"&&<div style={{maxWidth:900}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
+  // Propagate queue renames through the entire model
+  const oldQueues = model.queues || [];
+  let updated = { ...model, queues: newQueues };
+  for (let i = 0; i < newQueues.length; i++) {
+    const oldName = oldQueues[i]?.name?.trim();
+    const newName = newQueues[i]?.name?.trim();
+    if (oldName && newName && oldName !== newName) {
+      updated = renameQueue(updated, oldName, newName);
+    }
+  }
+  setWholeModel(updated);
+}:()=>{}}/></div>}
         {tab==="goals"&&<div style={{maxWidth:800}}><GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/></div>}
         {tab==="execute"&&(
           <ErrorBoundary
