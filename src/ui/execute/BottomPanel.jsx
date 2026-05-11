@@ -134,8 +134,8 @@ function StageKpisTable({ snap, model }) {
                   <tr key={q.name} style={{ borderBottom: `1px solid ${C.border}` }}>
                     {td(q.name, C.cEvent)}
                     {td(waiting.length, waiting.length > 0 ? C.amber : C.text, true)}
-                    {td(fmt(meanWait), null, true)}
-                    {td(fmt(maxWait),  null, true)}
+                    {td(fmt(meanWait, 1), null, true)}
+                    {td(fmt(maxWait, 1),  null, true)}
                     {td(inQueue.length, null, true)}
                     {td(snap.reneged || 0, C.reneged, true)}
                   </tr>
@@ -176,7 +176,7 @@ function StageKpisTable({ snap, model }) {
                     {td(capacity, null, true)}
                     {td(busy, busy > 0 ? C.amber : C.text, true)}
                     {td(`${util}%`, null, true)}
-                    {td(fmt(meanSvc), null, true)}
+                    {td(fmt(meanSvc, 1), null, true)}
                     {td(snap.served || 0, C.served, true)}
                   </tr>
                 );
