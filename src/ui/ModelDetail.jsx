@@ -389,7 +389,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const TABS=[
     // ── DESIGN ──
     {id:"overview",label:"Overview"},
-    {id:"goals",label:"Goals"},
     {id:"visual",label:"Visual Designer"},
     {id:"ai",label:"AI Designer"},
     {id:"_model",label:"─── Model ───",disabled:true},
@@ -525,6 +524,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 ))}
               </div>
             </div>
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
+              <GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
+            </div>
             {/* Startup prompt for empty models */}
             {canEdit&&!(model.entityTypes||[]).length&&!runCountValue&&(
               <div style={{background:C.surface,border:`1px solid ${C.accent}44`,borderRadius:8,padding:18,display:"flex",flexDirection:"column",gap:12}}>
@@ -577,7 +579,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   }
   setWholeModel(updated);
 }:()=>{}}/></div>}
-        {tab==="goals"&&<div style={{maxWidth:800}}><GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/></div>}
+
         {tab==="execute"&&(
           <ErrorBoundary
             title="Execute panel crashed"

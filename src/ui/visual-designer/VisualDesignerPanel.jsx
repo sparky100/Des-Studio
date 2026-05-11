@@ -1,27 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
-import { Btn, SH, Tag } from "../shared/components.jsx";
-import { validateModel } from "../../engine/validation.js";
-import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
-import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
-import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
-import {
-  addVisualNode,
-  connectVisualNodes,
-  deleteVisualEdge,
-  deleteVisualNode,
-  findNodeDependents,
-  updateGraphLayout,
-  updateVisualNode,
-  validateVisualGraph,
-} from "./graph-operations.js";
-
-const NODE_COLOR = {
-  source: C.green,
-  queue: C.cEvent,
-  activity: C.purple,
-  sink: C.red,
-};
+import { Tag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 
 function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
   return (
@@ -348,32 +327,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
 
   return (
     <div aria-label="Visual Designer" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <SH label="Visual Designer" color={C.accent}>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          <Tag label={`${graph.nodes.length} nodes`} color={C.accent} />
-          <Tag label={`${graph.edges.length} edges`} color={C.muted} />
-        </div>
-      </SH>
-
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-        gap: 10,
-      }}>
-        {["source", "queue", "activity", "sink"].map(type => (
-          <div key={type} style={{
-            background: C.panel,
-            border: `1px solid ${(NODE_COLOR[type] || C.accent)}33`,
-            borderRadius: 6,
-            padding: "10px 12px",
-          }}>
-            <div style={{ color: NODE_COLOR[type] || C.accent, fontFamily: FONT, fontSize: 20, fontWeight: 700 }}>
-              {counts[type] || 0}
-            </div>
-            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>{type}</div>
-          </div>
-        ))}
-      </div>
 
       <div style={{
         display: "grid",
