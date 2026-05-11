@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.55 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.56 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -66,10 +66,11 @@ flowchart LR
   S18 --> S19["Sprint 19<br/>Model Import/Export &<br/>Community Gallery"]
   S19 --> S20["Sprint 20<br/>CSV Import Bridge"]
   S20 --> S21["Sprint 21<br/>SaaS Admin<br/>Platform"]
+  S21 --> S22["Sprint 22<br/>Results Workspace"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef future fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
-  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S14,S15,S16,S17,S18,S19,S20,S21 done;
+  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S14,S15,S16,S17,S18,S19,S20,S21,S22 done;
 ```
 
 ### Roadmap Snapshot
@@ -94,6 +95,7 @@ flowchart LR
 | Model import/export & community gallery | ✅ Complete | Sprint 19: graph-preserving import/export, validation-gated import, Community Gallery tab with fork-to-run, `tags` DB column. |
 | CSV import bridge | ✅ Complete | Sprint 20: parse CSV, infer column types, fit distributions, generate entity type with attrDefs, CsvImportModal in Entity Types tab. |
 | SaaS admin platform | ✅ Complete | Sprint 21: platform_config table, admin panel (LLM config, users, limits), multi-provider edge function (Anthropic/OpenAI/OpenCode Go), user role management. |
+| Results workspace | ✅ Complete | Sprint 22: queue-specific time-series data, tested results view model, reusable ResultsWorkspace, top-level Results tab with saved-run selector and chart provenance labels. |
 
 ### Key Issues and Watchpoints
 
@@ -150,6 +152,7 @@ flowchart LR
 | 1.51 | 2026-05-10 | Sprint 17 — Statistical Output Analyzer complete. Welch's warm-up detection, batch-means CI, Bonferroni comparison, diagnostics, Analysis tab in BottomPanel. 37 engine + 14 UI tests. |
 | 1.52 | 2026-05-10 | Sprint 18 — 2D Parametric Sweeps complete. `applySweepValues()`, `generate2DSweepValues()`, `run2DSweep()`, mode toggle, HTML grid with KPI color legend, cell-click stats sidebar, 2D scenario comparison. 35 engine + 6 UI tests. |
 | 1.53 | 2026-05-10 | Sprint 19 — Model Import/Export & Community Gallery complete. graph-preserving import/export, validation-gated import, Community Gallery tab, `tags` DB column, ER Triage template fix, integer formatting (0 d.p.). 21 new tests. |
+| 1.56 | 2026-05-11 | Sprint 22 — Results Workspace & Chart Data Trust complete. Added queue-specific time-series data, results view model, reusable ResultsWorkspace, top-level Results tab, saved-run selector, and chart provenance labels. 44 focused tests passed; production build passed. |
 
 ---
 
@@ -185,6 +188,9 @@ flowchart LR
 | Sprint 17 | ✅ Complete | 2026-05-10 | Statistical Output Analyzer. | 37 engine + 14 UI tests | 1.48% | Success | Welch's warm-up detection, batch-means CI, Bonferroni scenario comparison, analysis UI tab. |
 | Sprint 18 | ✅ Complete | 2026-05-10 | 2D Parametric Sweeps. | 35 engine + 6 UI tests | 1.48% | Success | applySweepValues() multi-param, generate2DSweepValues() cartesian product + 50-point cap, run2DSweep() nested iteration, HTML table with KPI color legend, cell-click stats sidebar, 2D scenario comparison. |
 | Sprint 19 | ✅ Complete | 2026-05-10 | Model Import/Export & Community Gallery. | 21 new tests | N/A | Success | graph-preserving import/export, validation-gated import with inline errors, Community Gallery tab with fork-to-run, tags DB column migration. |
+| Sprint 20 | ✅ Complete | 2026-05-10 | CSV Import Bridge. | 30 focused | N/A | Success | CSV parsing, inferred entity types, distribution fitting, CsvImportModal in Entity Types. |
+| Sprint 21 | ✅ Complete | 2026-05-11 | SaaS Admin Platform. | Focused | N/A | Success | platform_config, admin panel, role management, multi-provider LLM routing. |
+| Sprint 22 | ✅ Complete | 2026-05-11 | Results Workspace & Chart Data Trust. | 44 focused | N/A | Success | queue-specific chart data, results view model, reusable ResultsWorkspace, top-level Results tab with saved-run selector and provenance labels. |
 
 ---
 
@@ -217,6 +223,7 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 19 | Model Import/Export & Community Gallery             | Share and discover models in a community gallery                                              |
 | Sprint 20 | CSV Import Bridge                                   | Import CSV data to infer entity types and distributions via modal in Entity Types tab           |
 | Sprint 21 | SaaS Admin Platform                                 | platform_config, admin panel (LLM config/users/limits), multi-provider edge function           |
+| Sprint 22 | Results Workspace & Chart Data Trust                | standalone Results tab, saved-run selector, queue-specific chart data, chart provenance labels  |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 

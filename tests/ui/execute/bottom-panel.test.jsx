@@ -182,3 +182,41 @@ describe("BottomPanel — S17 Analysis tab", () => {
     expect(screen.getByText(/run a replication batch/i)).toBeInTheDocument();
   });
 });
+
+describe("BottomPanel — Results charts", () => {
+  const chartResults = {
+    timeSeries: [
+      {
+        t: 0,
+        byQueue: { "Queue A": { waiting: 1 } },
+        byType: { Customer: { waiting: 1 }, Clerk: { busy: 0 } },
+      },
+      {
+        t: 5,
+        byQueue: { "Queue A": { waiting: 3 } },
+        byType: { Customer: { waiting: 3 }, Clerk: { busy: 1 } },
+      },
+    ],
+    waitDist: {
+      "Queue A": { n: 3, mean: 4, p50: 4, p90: 8, p95: 8, p99: 8, values: [1, 4, 8] },
+    },
+  };
+
+  test("Charts tab frames charts as modelling questions", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} results={chartResults} />);
+    fireEvent.click(screen.getByRole("tab", { name: /charts/i }));
+
+    expect(screen.getByText(/Where are queues forming/i)).toBeInTheDocument();
+    expect(screen.getByText(/Are resources under- or over-utilised/i)).toBeInTheDocument();
+    expect(screen.getByText(/How variable is customer waiting time/i)).toBeInTheDocument();
+  });
+
+  test("Charts tab shows data provenance labels", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} results={chartResults} />);
+    fireEvent.click(screen.getByRole("tab", { name: /charts/i }));
+
+    expect(screen.getByText(/Data: Queue-specific runtime counts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Data: Busy Clerk resources divided by capacity 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Data: 3 completed waits from engine waitDist/i)).toBeInTheDocument();
+  });
+});

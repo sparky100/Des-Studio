@@ -23,7 +23,7 @@ import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResu
 import { SweepChart, WarmupChart, Sweep2DGrid } from "./SweepViews.jsx";
 import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 
-const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, analyseRun = null, onClearAnalyse }) => {
+const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, autoRun = false, analyseRun = null, onClearAnalyse }) => {
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
   const [log, setLog] = useState([]);
@@ -133,6 +133,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, ana
     setSaveStatus(null);
     setPhaseCTruncated(false);
     setResults(null);
+    onResultsReady?.(null);
     setBatchStatus("idle");
     setBatchProgress(null);
     setReplicationResults([]);
@@ -171,6 +172,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, ana
         entitySummary: engineRef.current.getEntitySummary?.(),
       };
       setResults(fullResult);
+      onResultsReady?.(fullResult);
       if (modelId) {
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
@@ -189,7 +191,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, ana
           });
       }
     }
-  }, [userId, modelId, runLabel, warmupPeriod, maxSimTime, terminationMode, stopAuto, onRunSaved]);
+  }, [userId, modelId, runLabel, warmupPeriod, maxSimTime, terminationMode, stopAuto, onRunSaved, onResultsReady]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -239,6 +241,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, ana
       setMode("running");
       setCurrentSnap(null);
       setResults(null);
+      onResultsReady?.(null);
       setLog([{ phase: "INIT", time: 0, message: `Replication batch started  (N=${replications}, base seed: ${runSeed})` }]);
       setSaveStatus(null);
       setPhaseCTruncated(false);
@@ -283,6 +286,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, ana
 
             setBatchStatus("complete");
             setResults(batchResult);
+            onResultsReady?.(batchResult);
             setAggregateStats(stats);
             setSaveStatus({ state: 'saving', message: 'Saving replication batch...' });
 
@@ -335,6 +339,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, ana
     }
 
     setResults(null);
+    onResultsReady?.(null);
     setSaveStatus(null);
     setPhaseCTruncated(false);
     setLog([{ phase: "INIT", time: 0, message: `Run started  (seed: ${runSeed})` }]);
@@ -353,6 +358,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, ana
 
     setCurrentSnap(result.snap);
     setResults(result);
+    onResultsReady?.(result);
     setLog(result.log);
     setMode("done");
     if (result.summary?.phaseCTruncated) setPhaseCTruncated(true);
@@ -375,7 +381,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, ana
     } finally {
       saveInProgressRef.current = false;
     }
-  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, stopAuto, onRunSaved]);
+  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, stopAuto, onRunSaved, onResultsReady]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -484,13 +490,14 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, autoRun = false, ana
     const resultsJson = analyseRun.results_json || {};
     if (resultsJson.summary) {
       setResults(resultsJson);
+      onResultsReady?.(resultsJson);
       setAggregateStats(resultsJson.aggregateStats || {});
       setBatchStatus("complete");
       setReplicationResults(resultsJson.replicationResults || []);
     }
     setAiPanelOpen(true);
     onClearAnalyse?.();
-  }, [analyseRun, modelId, onClearAnalyse]);
+  }, [analyseRun, modelId, onClearAnalyse, onResultsReady]);
 
   const batchActive = batchStatus === "running" || batchStatus === "cancelling";
   const partialBatchStatus = batchStatus === "cancelled" || batchStatus === "error";

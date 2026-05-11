@@ -8,6 +8,7 @@ import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
 import { GoalsEditor } from "./editors/GoalsEditor.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
 import { CsvImportModal } from "./CsvImportModal.jsx";
+import { ResultsWorkspace } from "./results/ResultsWorkspace.jsx";
 
 // Lazy-loaded so @xyflow/react is not included in the initial bundle.
 const VisualDesignerPanel = lazy(() =>
@@ -180,6 +181,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [shareLinksMap,setShareLinksMap]=useState({});
   const [showCsvImport,setShowCsvImport]=useState(false);
   const [analyseRun,setAnalyseRun]=useState(null);
+  const [latestResults,setLatestResults]=useState(null);
+  const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
 
   const handleAnalyseRun=useCallback((row)=>{setAnalyseRun(row);setTab("execute");},[]);
   const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname.replace(/\/+$/, "") : "";
@@ -364,6 +367,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     downloadTextFile(csv, `des-studio-run-history-${slugifyModelName(model.name)}.csv`, "text/csv;charset=utf-8");
   };
 
+  const hasResultsPayload = row => {
+    const json = row?.results_json;
+    return !!(json && typeof json === "object" && (json.summary || json.timeSeries || json.waitDist));
+  };
+
+  const loadResultsRun = runId => {
+    const row = historyRows.find(r => r.id === runId);
+    if (!hasResultsPayload(row)) return;
+    setSelectedResultsRunId(row.id);
+    setLatestResults(row.results_json);
+  };
+
   const TabErrors = ({ tabId }) => {
     const errs  = validation.errors.filter(e => e.tab === tabId);
     const warns = validation.warnings.filter(w => w.tab === tabId);
@@ -400,24 +415,35 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     // ── RUN ──
     {id:"_runlabel",label:"─── Run ───",disabled:true},
     {id:"execute",label:"▶ Execute"},
+    {id:"results",label:"Results"},
     {id:"history",label:"History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
 
   useEffect(()=>{
-    if(tab!=="history")return;
+    if(tab!=="history"&&tab!=="results")return;
     setHistoryLoading(true);setHistoryError("");
     Promise.all([
       fetchRunHistory(modelId),
       listShareLinks(modelId).catch(()=>[]),
     ]).then(([rows, links])=>{
-      setHistoryRows(rows);
+      const nextRows = rows || [];
+      setHistoryRows(nextRows);
       const map = {};
       (links||[]).forEach(link => { if (link.isActive && link.runId) map[link.runId] = link; });
       setShareLinksMap(map);
+      if(tab==="results"){
+        const selected = nextRows.find(row => row.id === selectedResultsRunId && hasResultsPayload(row));
+        const fallback = nextRows.find(hasResultsPayload);
+        const row = selected || fallback;
+        if(row && !latestResults){
+          setSelectedResultsRunId(row.id);
+          setLatestResults(row.results_json);
+        }
+      }
     }).catch(e=>setHistoryError(e.message))
     .finally(()=>setHistoryLoading(false));
-  },[tab,modelId]);
+  },[tab,modelId,selectedResultsRunId,latestResults]);
 
   if(!model)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',
@@ -585,8 +611,49 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             title="Execute panel crashed"
             message="The simulation controls could not render."
           >
-            <ExecutePanel model={model} modelId={modelId} userId={overrides.userId} onRunSaved={handleRunSaved} autoRun={overrides.autoRun} analyseRun={analyseRun} onClearAnalyse={()=>setAnalyseRun(null)}/>
+            <ExecutePanel model={model} modelId={modelId} userId={overrides.userId} onRunSaved={handleRunSaved} onResultsReady={setLatestResults} autoRun={overrides.autoRun} analyseRun={analyseRun} onClearAnalyse={()=>setAnalyseRun(null)}/>
           </ErrorBoundary>
+        )}
+        {tab==="results"&&(
+          <div style={{maxWidth:1200,display:"flex",flexDirection:"column",gap:14}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:4}}>RESULTS WORKSPACE</div>
+                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Run analysis and chart diagnostics</div>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <Btn small variant="ghost" onClick={()=>setTab("execute")}>Open Execute</Btn>
+                <Btn small variant="ghost" onClick={()=>setTab("history")}>Open History</Btn>
+              </div>
+            </div>
+            {historyLoading&&<div style={{color:C.muted,fontFamily:FONT,fontSize:12}}>Loading saved runs...</div>}
+            {historyError&&<div role="alert" style={{color:C.red,fontFamily:FONT,fontSize:12}}>{historyError}</div>}
+            {historyRows.some(hasResultsPayload)&&(
+              <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <label htmlFor="results-run-selector" style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>SAVED RUN</label>
+                <select
+                  id="results-run-selector"
+                  aria-label="Saved run"
+                  value={selectedResultsRunId}
+                  onChange={e=>loadResultsRun(e.target.value)}
+                  style={{minWidth:260,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"6px 8px",outline:"none"}}
+                >
+                  {historyRows.filter(hasResultsPayload).map(row=>{
+                    const dt=new Date(row.ran_at);
+                    const label=row.run_label||dt.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+                    return <option key={row.id} value={row.id}>{label}</option>;
+                  })}
+                </select>
+              </div>
+            )}
+            {latestResults ? (
+              <ResultsWorkspace results={latestResults} model={model}/>
+            ) : (
+              <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
+                Results from the latest run will appear here. Run the model from Execute, or select a saved run when history is available.
+              </div>
+            )}
+          </div>
         )}
         {tab==="history"&&(
           <div style={{maxWidth:1200}}>
@@ -630,7 +697,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                             ) : <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>—</span>}
                           </td>
                           <td style={{padding:"6px 12px"}}>
-                            <Btn small variant="ghost" onClick={()=>handleAnalyseRun(row)}>Analyse</Btn>
+                            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                              {hasResultsPayload(row)&&<Btn small variant="ghost" onClick={()=>{setSelectedResultsRunId(row.id);setLatestResults(row.results_json);setTab("results");}}>View Results</Btn>}
+                              <Btn small variant="ghost" onClick={()=>handleAnalyseRun(row)}>Analyse</Btn>
+                            </div>
                           </td>
                         </tr>
                       );

@@ -150,6 +150,18 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         total:   entities.filter(e => e.type === t).length,
       };
     });
+    const byQueue = {};
+    (runtimeModel.queues || []).forEach(q => {
+      const qName = q.name;
+      if (!qName) return;
+      const seenEntities = entities.filter(e => e.role !== "server" && (e.queue === qName || e.lastQueue === qName));
+      const waitingEntities = entities.filter(e => e.role !== "server" && e.queue === qName && e.status === "waiting");
+      byQueue[qName] = {
+        waiting: waitingEntities.length,
+        total: seenEntities.length,
+        reneged: seenEntities.filter(e => e.status === "reneged").length,
+      };
+    });
     // nextArrivals: maps each b-event id to its next scheduled time in the FEL.
     // Used by the Execute canvas to show countdowns on Source nodes.
     // FEL is already sorted; first occurrence of each id is the earliest.
@@ -171,6 +183,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         Object.entries(state).filter(([k]) => !k.startsWith("__"))
       ),
       byType,
+      byQueue,
       nextArrivals,
       eventCounts: { ..._eventCounts },
     };
@@ -338,7 +351,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
     // Collect time-series snapshot after Phase C stabilises (F10.4a)
     const stepSnap = snap(clock);
-    if (_timeSeries !== null) _timeSeries.push({ t: stepSnap.clock, byType: stepSnap.byType });
+    if (_timeSeries !== null) _timeSeries.push({ t: stepSnap.clock, byType: stepSnap.byType, byQueue: stepSnap.byQueue });
     return { done: false, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated };
   }
 

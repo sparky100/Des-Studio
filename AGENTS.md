@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-11 | Reflects: Sprint 21 — SaaS Admin Platform complete. Current: Sprint 22 — TBD*
+*Last updated: 2026-05-11 | Reflects: Sprint 22 — Results Workspace complete. Current: Sprint 23 — TBD*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
@@ -1317,14 +1317,29 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 19 | ✅ Complete | 2026-05-10 | Model Import/Export & Community Gallery |
 | Sprint 20 | ✅ Complete | 2026-05-10 | CSV Import Bridge |
 | Sprint 21 | ✅ Complete | 2026-05-11 | SaaS Admin Platform (config, admin panel, multi-provider LLM) |
+| Sprint 22 | ✅ Complete | 2026-05-11 | Results Workspace & chart data trust |
 
 ---
 
-## 21. Current Sprint — Sprint 21 (TBD)
+## 21. Current Sprint — Sprint 23 (TBD)
 
 **Goal:** To be determined.
 
 ### Recently Completed
+
+**Sprint 22 — Results Workspace & Chart Data Trust** (2026-05-11):
+- Added queue-specific `byQueue` counts to engine snapshots and collected time-series entries so queue-depth charts no longer rely on aggregate customer-type counts for new runs
+- Added `src/ui/results/resultsViewModel.js` to normalise engine-shaped result data into chart-ready queue depth, server utilisation, wait distribution, and chart-section metadata
+- Added `src/ui/results/ResultsWorkspace.jsx` as a reusable results analysis workspace with analysis-question framing and explicit `Data:` provenance labels
+- Moved chart rendering out of `BottomPanel.jsx`; the Execute bottom panel now hosts `ResultsWorkspace` instead of owning chart data interpretation
+- Added a top-level `Results` tab in `ModelDetail.jsx` with latest-run handoff from Execute, saved-run history loading, and a saved-run selector
+- History rows with usable `results_json` now include `View Results`, while the existing `Analyse` flow remains available for AI-assisted analysis
+- Verification: `npm test -- model-results-tab run-history results-workspace bottom-panel execute-panel` passed (44 tests); `npm run build` passed
+
+**Sprint 21 — SaaS Admin Platform** (2026-05-11):
+- `platform_config` and admin workflows for LLM provider/model settings, user roles, limits, and operational configuration
+- Multi-provider edge function routing for Anthropic, OpenAI, and OpenCode Go
+- Admin panel access guarded by role/profile state
 
 **Sprint 20 — CSV Import Bridge** (2026-05-10):
 - `src/engine/distribution-fitting.js` — parse CSV, infer column types (number/string/boolean), fit distributions (exponential, uniform, normal, lognormal, triangular, fixed, empirical), generate entity type with attrDefs

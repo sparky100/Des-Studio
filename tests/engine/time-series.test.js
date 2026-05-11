@@ -61,6 +61,16 @@ describe("collectTimeSeries = true", () => {
     }
   });
 
+  test("each entry includes byQueue counts for queue-specific charts", () => {
+    const result = buildEngine(makeModel(), 42, 0, 5, null, 5000, 500, true).runAll();
+    for (const entry of result.timeSeries) {
+      expect(entry.byQueue).toBeDefined();
+      expect(entry.byQueue["Waiting Queue"]).toBeDefined();
+      expect(typeof entry.byQueue["Waiting Queue"].waiting).toBe("number");
+      expect(typeof entry.byQueue["Waiting Queue"].total).toBe("number");
+    }
+  });
+
   test("t values are strictly increasing", () => {
     const result = buildEngine(makeModel(), 42, 0, 10, null, 5000, 500, true).runAll();
     const times = result.timeSeries.map(e => e.t);

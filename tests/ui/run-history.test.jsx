@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFetchRunHistory = vi.hoisted(() => vi.fn());
 const mockSaveSimulationRun = vi.hoisted(() => vi.fn());
+const mockListShareLinks = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/db/models.js', () => ({
   fetchRunHistory: mockFetchRunHistory,
   saveSimulationRun: mockSaveSimulationRun,
+  listShareLinks: mockListShareLinks,
 }));
 
 import {
@@ -64,6 +66,8 @@ describe('run history', () => {
     vi.restoreAllMocks();
     mockFetchRunHistory.mockReset();
     mockFetchRunHistory.mockResolvedValue([historyRow]);
+    mockListShareLinks.mockReset();
+    mockListShareLinks.mockResolvedValue([]);
     URL.createObjectURL = vi.fn(() => 'blob:run-history');
     URL.revokeObjectURL = vi.fn();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
