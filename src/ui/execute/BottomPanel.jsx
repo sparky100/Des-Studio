@@ -501,7 +501,7 @@ function ChartsTab({ results, model }) {
         </div>
       )}
 
-      {/* Wait time distribution — histogram + percentile table (F10.6) */}
+      {/* Wait time distribution — histogram + percentile stats (F10.6) */}
       {wd && Object.keys(wd).length > 0 && (
         <div>
           <div style={{ fontSize: 10, color: C.amber, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
@@ -512,21 +512,6 @@ function ChartsTab({ results, model }) {
               <div key={q}>
                 <div style={{ fontSize: 11, color: C.cEvent, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>{q}</div>
                 <WaitHistogram dist={d} color={C.amber} />
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 4, marginTop: 6 }}>
-                  {[
-                    { label: "n",    value: d.n,    color: C.muted  },
-                    { label: "mean", value: d.mean, color: C.accent },
-                    { label: "p50",  value: d.p50,  color: C.green  },
-                    { label: "p90",  value: d.p90,  color: C.amber  },
-                    { label: "p95",  value: d.p95,  color: C.amber  },
-                    { label: "p99",  value: d.p99,  color: C.red    },
-                  ].map(s => (
-                    <div key={s.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 6px", textAlign: "center" }}>
-                      <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, marginBottom: 2 }}>{s.label.toUpperCase()}</div>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: s.color, fontFamily: FONT }}>{typeof s.value === "number" ? Math.round(s.value) : s.value}</div>
-                    </div>
-                  ))}
-                </div>
               </div>
             ))}
           </div>
