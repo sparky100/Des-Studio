@@ -246,29 +246,59 @@ function EntitiesTab({ snap }) {
   if (!snap) {
     return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>No snapshot yet.</div>;
   }
+  const entities = (snap.entities || [])
+    .filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged");
   return (
-    <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 11 }}>
-      <thead>
-        <tr style={{ color: C.muted, borderBottom: `2px solid ${C.border}` }}>
-          <th style={{ padding: "4px 8px", textAlign: "left" }}>Entity</th>
-          <th style={{ padding: "4px 8px", textAlign: "left" }}>Type</th>
-          <th style={{ padding: "4px 8px", textAlign: "left" }}>Status</th>
-          <th style={{ padding: "4px 8px", textAlign: "left" }}>Queue</th>
-        </tr>
-      </thead>
-      <tbody>
-        {snap.entities.map(e => (
-          <tr key={e.id} style={{ borderBottom: `1px solid ${C.bg}` }}>
-            <td style={{ padding: "4px 8px", color: C.kpiArr }}>#{e.id}</td>
-            <td style={{ padding: "4px 8px", fontFamily: FONT }}>{e.type}</td>
-            <td style={{ padding: "4px 8px" }}>
-              <Tag label={e.status} color={e.status === "waiting" ? C.amber : C.green} />
-            </td>
-            <td style={{ padding: "4px 8px", color: C.muted, fontFamily: FONT }}>{e.queue || "—"}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+        {entities.length} active {entities.length === 1 ? "entity" : "entities"}
+      </div>
+      {entities.length === 0 ? (
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+          No active customer entities.
+        </div>
+      ) : (
+        <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 11 }}>
+          <thead>
+            <tr style={{ color: C.muted, borderBottom: `2px solid ${C.border}` }}>
+              <th style={{ padding: "4px 8px", textAlign: "left" }}>ID</th>
+              <th style={{ padding: "4px 8px", textAlign: "left" }}>Type</th>
+              <th style={{ padding: "4px 8px", textAlign: "left" }}>Attrs</th>
+              <th style={{ padding: "4px 8px", textAlign: "left" }}>Status</th>
+              <th style={{ padding: "4px 8px", textAlign: "left" }}>Location</th>
+              <th style={{ padding: "4px 8px", textAlign: "right" }}>Journey</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entities.map(e => {
+              const journey = snap.clock != null ? snap.clock - (e.arrivalTime || 0) : null;
+              const attrStr = e.attrs
+                ? Object.entries(e.attrs).filter(([k]) => k !== "priority").map(([k, v]) => `${k}=${v}`).join(" ")
+                : "";
+              const location = e.status === "waiting"
+                ? (e.queue || "queue")
+                : e.status === "serving"
+                  ? (e.queue ? `serving in ${e.queue}` : "in service")
+                  : e.queue || "—";
+              return (
+                <tr key={e.id} style={{ borderBottom: `1px solid ${C.bg}` }}>
+                  <td style={{ padding: "4px 8px", color: C.kpiArr, fontFamily: FONT, fontWeight: 700 }}>#{e.id}</td>
+                  <td style={{ padding: "4px 8px", fontFamily: FONT }}>{e.type}</td>
+                  <td style={{ padding: "4px 8px", fontSize: 10, color: C.label, fontFamily: FONT, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attrStr || "—"}</td>
+                  <td style={{ padding: "4px 8px" }}>
+                    <Tag label={e.status} color={e.status === "waiting" ? C.amber : e.status === "serving" ? C.accent : C.green} />
+                  </td>
+                  <td style={{ padding: "4px 8px", color: C.cEvent, fontFamily: FONT }}>{location}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", color: C.amber, fontFamily: FONT, fontWeight: 700 }}>
+                    {journey != null ? `${journey.toFixed(1)}t` : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
   );
 }
 
