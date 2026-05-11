@@ -7,18 +7,18 @@
      "temperature": 0.3,
      "permission": { "edit": "allow", "bash": "allow" }
    },
-    "plan": {
-      "description": "Architecture and planning agent — read-only",
-      "mode": "primary",
-      "model": "opencode-go/deepseek-v4-pro",
-      "temperature": 0.1,
-      "permission": { "edit": "deny", "bash": "deny" }
-    },
-    "explore": {
-      "description": "Fast codebase search and analysis — read-only",
-      "mode": "subagent",
-      "model": "opencode-go/deepseek-v4-flash",
-      "temperature": 0.1,
+   "plan": {
+     "description": "Architecture and planning agent — read-only",
+     "mode": "primary",
+     "model": "opencode-go/deepseek-v4-pro",
+     "temperature": 0.1,
+     "permission": { "edit": "deny", "bash": "deny" }
+   },
+   "explore": {
+     "description": "Fast codebase search and analysis — read-only",
+     "mode": "subagent",
+     "model": "opencode-go/deepseek-v4-flash",
+     "temperature": 0.1,
      "prompt": "You are a fast codebase explorer. Search for files, grep for patterns, and answer structural questions. Do NOT make any edits.",
      "permission": { "edit": "deny", "bash": { "*": "ask", "grep *": "allow", "rg *": "allow", "Select-String *": "allow" } }
    },
@@ -42,6 +42,13 @@
      "temperature": 0.4,
      "prompt": "{file:./prompts/ui-polish.txt}",
      "permission": { "edit": { "src/ui/**": "allow", "src/ui/shared/tokens.js": "allow" }, "bash": { "*": "ask", "npm run build": "allow" } }
+   },
+   "ui-analyst": {
+     "description": "UI/UX analysis — read-only, reports issues without editing",
+     "mode": "subagent",
+     "temperature": 0.1,
+     "prompt": "{file:./prompts/ui-analyst.txt}",
+     "permission": { "edit": "deny", "bash": "deny" }
    },
    "db-migrate": {
      "description": "Supabase schema and DB wrapper changes",
