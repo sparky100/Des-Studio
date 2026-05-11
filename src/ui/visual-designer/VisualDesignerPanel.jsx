@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
+import { validateVisualGraph, addVisualNode, deleteVisualNode, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout } from "./graph-operations.js";
+import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
+import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 
 function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
   return (
