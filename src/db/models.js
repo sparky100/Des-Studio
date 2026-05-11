@@ -537,7 +537,7 @@ export async function listShareLinks(modelId) {
 
   const { data, error } = await supabase
     .from("share_links")
-    .select("id, token, config, created_at, revoked_at")
+    .select("id, token, config, created_at, revoked_at, run_id")
     .in("run_id", runIds)
     .order("created_at", { ascending: false });
   if (error) throw error;
@@ -548,6 +548,7 @@ export async function listShareLinks(modelId) {
     createdAt: link.created_at,
     revokedAt: link.revoked_at,
     isActive: !link.revoked_at,
+    runId: link.run_id,
   }));
 }
 

@@ -13,7 +13,7 @@ import { CsvImportModal } from "./CsvImportModal.jsx";
 const VisualDesignerPanel = lazy(() =>
   import("./visual-designer/VisualDesignerPanel.jsx").then(m => ({ default: m.VisualDesignerPanel }))
 );
-import { fetchRunHistory } from "../db/models.js";
+import { fetchRunHistory, listShareLinks } from "../db/models.js";
 import { validateModel } from "../engine/validation.js";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph"];
@@ -176,10 +176,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [historyRows,setHistoryRows]=useState([]);
   const [historyLoading,setHistoryLoading]=useState(false);
   const [historyError,setHistoryError]=useState("");
+  const [shareLinksMap,setShareLinksMap]=useState({});
   const [showCsvImport,setShowCsvImport]=useState(false);
   const [analyseRun,setAnalyseRun]=useState(null);
 
   const handleAnalyseRun=useCallback((row)=>{setAnalyseRun(row);setTab("execute");},[]);
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname.replace(/\/+$/, "") : "";
   const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
   const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
 
@@ -405,10 +407,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   useEffect(()=>{
     if(tab!=="history")return;
     setHistoryLoading(true);setHistoryError("");
-    fetchRunHistory(modelId)
-      .then(rows=>setHistoryRows(rows))
-      .catch(e=>setHistoryError(e.message))
-      .finally(()=>setHistoryLoading(false));
+    Promise.all([
+      fetchRunHistory(modelId),
+      listShareLinks(modelId).catch(()=>[]),
+    ]).then(([rows, links])=>{
+      setHistoryRows(rows);
+      const map = {};
+      (links||[]).forEach(link => { if (link.isActive && link.runId) map[link.runId] = link; });
+      setShareLinksMap(map);
+    }).catch(e=>setHistoryError(e.message))
+    .finally(()=>setHistoryLoading(false));
   },[tab,modelId]);
 
   if(!model)return(
@@ -580,7 +588,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
               <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FONT,fontSize:11}}>
                   <thead>
-                    <tr>                    {["Date / Time","Label","Served","Reneged","Avg Wait","Summary",""].map(h=>(
+                    <tr>                    {["Date / Time","Label","Served","Reneged","Avg Wait","Summary","Reshare",""].map(h=>(
                       <th key={h} style={{textAlign:"left",padding:"6px 12px",color:C.muted,borderBottom:`1px solid ${C.border}`,fontSize:10,letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
                     ))}</tr>
                   </thead>
@@ -599,6 +607,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                           <td style={{padding:"6px 12px",color:row.total_reneged>0?C.reneged:C.muted}}>{row.total_reneged||0}</td>
                           <td style={{padding:"6px 12px",color:C.amber}}>{row.avg_wait_time!=null?row.avg_wait_time.toFixed(2):"—"}t</td>
                           <td style={{padding:"6px 12px",fontSize:10,color:insight?C.purple:C.muted,fontFamily:FONT,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={insight||""}>{insight||"—"}</td>
+                          <td style={{padding:"6px 12px"}}>
+                            {shareLinksMap[row.id] ? (
+                              <Btn small variant="ghost" onClick={() => {
+                                navigator.clipboard.writeText(`${baseUrl}/#share/${shareLinksMap[row.id].token}`);
+                              }}>📋 Reshare</Btn>
+                            ) : <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>—</span>}
+                          </td>
                           <td style={{padding:"6px 12px"}}>
                             <Btn small variant="ghost" onClick={()=>handleAnalyseRun(row)}>Analyse</Btn>
                           </td>
