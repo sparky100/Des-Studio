@@ -1612,8 +1612,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 results={results}
                 selectedNodeLabel={selectedNodeLabel}
                 onClearFilter={() => setSelectedNodeLabel(null)}
-                replicationResults={replicationResults}
-                warmupDetection={warmupDetection}
               />
             </>
           );

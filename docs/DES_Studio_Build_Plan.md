@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.57 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.58 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -70,10 +70,8 @@ flowchart LR
   S22 --> S23["Sprint 23<br/>UI Interface Polish<br/>& Workflow Shell"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
-  classDef active fill:#3d3214,stroke:#f0883e,color:#fff8e8;
   classDef future fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
-  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S14,S15,S16,S17,S18,S19,S20,S21,S22 done;
-  class S23 active;
+  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S14,S15,S16,S17,S18,S19,S20,S21,S22,S23 done;
 ```
 
 ### Roadmap Snapshot
@@ -99,7 +97,7 @@ flowchart LR
 | CSV import bridge | ✅ Complete | Sprint 20: parse CSV, infer column types, fit distributions, generate entity type with attrDefs, CsvImportModal in Entity Types tab. |
 | SaaS admin platform | ✅ Complete | Sprint 21: platform_config table, admin panel (LLM config, users, limits), multi-provider edge function (Anthropic/OpenAI/OpenCode Go), user role management. |
 | Results workspace | ✅ Complete | Sprint 22: queue-specific time-series data, tested results view model, reusable ResultsWorkspace, top-level Results tab with saved-run selector and chart provenance labels. |
-| UI interface polish | 🔄 In progress | Sprint 23: workflow-mode navigation, persistent Model Health, Validate workspace, shared authoring shell planning, Results/History polish, tablet refinements, and mobile read/run/results view. |
+| UI interface polish | ✅ Complete | Sprint 23: workflow-mode navigation, persistent Model Health, Validate workspace, shared authoring shell, Results/History polish, chart upgrades, tablet refinements, mobile read/run/results view, and UI warning cleanup. |
 
 ### Key Issues and Watchpoints
 
@@ -115,7 +113,7 @@ flowchart LR
 | Visual Designer canvas decision | ✅ Resolved | ADR-010: `@xyflow/react`; optional layout-only `model_json.graph`. |
 | Conditional routing gap | ⚠️ Tracked | RELEASE has fixed nextQueueId. Attribute-based routing achievable via C-Event pattern but not guided. Probabilistic routing absent. Both addressed in Sprint 10. |
 | Multi-server resource pooling | ⚠️ Tracked | Resources are single-server only; manual C-Event duplication workaround. Addressed in Sprint 10. |
-| UI workflow shell | 🔄 In progress | Sprint 23 groups ModelDetail into workflow modes. Shared authoring shells, tablet refinements, mobile read/run/results, and richer charts remain active tasks until completed or carried forward. |
+| UI workflow shell | ✅ Complete | Sprint 23 grouped ModelDetail into workflow modes, added shared authoring shells, tablet/mobile refinements, richer charts, and Results-owned statistical analysis. |
 
 ---
 
@@ -159,6 +157,7 @@ flowchart LR
 | 1.53 | 2026-05-10 | Sprint 19 — Model Import/Export & Community Gallery complete. graph-preserving import/export, validation-gated import, Community Gallery tab, `tags` DB column, ER Triage template fix, integer formatting (0 d.p.). 21 new tests. |
 | 1.56 | 2026-05-11 | Sprint 22 — Results Workspace & Chart Data Trust complete. Added queue-specific time-series data, results view model, reusable ResultsWorkspace, top-level Results tab, saved-run selector, and chart provenance labels. 44 focused tests passed; production build passed. |
 | 1.57 | 2026-05-11 | Sprint 23 — UI Interface Polish & Workflow Shell defined. Labelled remaining UI roadmap as clear features/refinements with statuses, guardrails, and exit gates before further implementation. |
+| 1.58 | 2026-05-11 | Sprint 23 complete. Added workflow modes, shared authoring shell, Validate workspace, Results-owned statistical analysis, upgraded charts, tablet/mobile layouts, and UI warning cleanup. 60 focused tests passed; production build passed. |
 
 ---
 
@@ -197,7 +196,7 @@ flowchart LR
 | Sprint 20 | ✅ Complete | 2026-05-10 | CSV Import Bridge. | 30 focused | N/A | Success | CSV parsing, inferred entity types, distribution fitting, CsvImportModal in Entity Types. |
 | Sprint 21 | ✅ Complete | 2026-05-11 | SaaS Admin Platform. | Focused | N/A | Success | platform_config, admin panel, role management, multi-provider LLM routing. |
 | Sprint 22 | ✅ Complete | 2026-05-11 | Results Workspace & Chart Data Trust. | 44 focused | N/A | Success | queue-specific chart data, results view model, reusable ResultsWorkspace, top-level Results tab with saved-run selector and provenance labels. |
-| Sprint 23 | 🔄 In progress | — | UI Interface Polish & Workflow Shell. | Focused | N/A | In progress | Workflow-mode navigation, persistent Model Health, Validate workspace, shared authoring shell, Results/History polish, richer charts, tablet refinements, mobile read/run/results view, and UI warning cleanup. |
+| Sprint 23 | ✅ Complete | 2026-05-11 | UI Interface Polish & Workflow Shell. | 60 focused | N/A | Success | Workflow-mode navigation, persistent Model Health, Validate workspace, shared authoring shell, Results-owned statistical analysis, upgraded charts, tablet/mobile layouts, and UI warning cleanup. |
 
 ---
 
@@ -205,7 +204,7 @@ flowchart LR
 
 **Goal:** Make DES Studio easier to navigate for simulation modellers by grouping ModelDetail into workflow modes, keeping validation/health visible, separating build/run/results concerns, and preparing tablet/mobile-specific layouts.
 
-**Status:** 🔄 In progress | **Started:** 2026-05-11
+**Status:** ✅ Complete | **Started:** 2026-05-11 | **Completed:** 2026-05-11
 
 **Scope guardrails:**
 - Extend the existing working UI. Do not rewrite `ModelDetail`, editors, Execute, or Results from scratch.
@@ -218,18 +217,18 @@ flowchart LR
 |---|---|---|---|
 | F23.1 | Results workspace and chart data trust follow-through | ✅ Complete | Sprint 22 Results/Charts work remains the baseline: top-level Results tab, saved-run selector, queue-specific chart data, chart provenance labels, and reusable ResultsWorkspace. |
 | F23.2 | Persistent Model Health and validation routing | ✅ Complete | Health state remains visible while moving through the model workflow; issue actions route modellers to the right authoring area. |
-| F23.3 | ModelDetail workflow modes | ✅ Complete in working tree | Add clear modes: Visual Design, Entity Model, Event Logic, Validate, Execute, Results, and owner/admin access. Current working-tree work covers mode rail, grouped selector, and Validate workspace. |
-| F23.4 | Shared 2/3-panel authoring shell | ✅ Complete in working tree | Reusable shell for Visual Design, Entity Model, and Event Logic with left mode sections, central editor/canvas workspace, and right workflow context/health panel. |
-| F23.5 | Analysis migration from Execute to Results | 🔄 In progress | Keep Execute focused on run setup/live execution; move interpretation, chart reading, run-history summary, and saved-run analysis into Results. |
-| F23.6 | Chart visual upgrade | ⬜ Not started | Replace/extend mini-chart presentation with clearer axes, labels, legends, readable comparison states, and tablet-safe sizing. |
-| F23.7 | Tablet layout refinements | ⬜ Not started | Verify and tune ModelDetail modes, authoring shells, Model Health, Execute, Results, and history tables at tablet widths. |
-| F23.8 | Mobile read/run/results view | ⬜ Not started | Provide a mobile-specific experience for model summary, validation, run controls, run history, and results review. |
-| F23.9 | UI warning cleanup | ⬜ Not started | Remove remaining table whitespace warnings and ExecutePanel async `act(...)` warnings from the UI test suite. |
-| F23.10 | Sprint documentation and regression coverage | 🔄 In progress | Keep `AGENTS.md` and this build plan current; run focused UI tests and production build before staging/committing. |
+| F23.3 | ModelDetail workflow modes | ✅ Complete | Clear modes: Visual Design, Entity Model, Event Logic, Validate, Execute, Results, and owner/admin access. |
+| F23.4 | Shared 2/3-panel authoring shell | ✅ Complete | Reusable shell for Visual Design, Entity Model, and Event Logic with left mode sections, central editor/canvas workspace, and right workflow context/health panel. |
+| F23.5 | Analysis migration from Execute to Results | ✅ Complete | Statistical analysis, batch-means confidence intervals, warm-up context, and distribution diagnostics now live in ResultsWorkspace; Execute stays focused on run control/live feedback. |
+| F23.6 | Chart visual upgrade | ✅ Complete | Result charts now include clearer axes, accessible chart roles, peak/latest markers, endpoint legends, provenance, and data previews. |
+| F23.7 | Tablet layout refinements | ✅ Complete | Authoring shells, chart grids, Model Health, Results, and run-history summary use flexible wrapping layouts for tablet widths. |
+| F23.8 | Mobile read/run/results view | ✅ Complete | Phone-width ModelDetail switches to Summary, Validate, Run, Results, and History instead of the full authoring workflow. |
+| F23.9 | UI warning cleanup | ✅ Complete | ExecutePanel async warnings are controlled in tests; focused table/Execute/Results tests run clean. |
+| F23.10 | Sprint documentation and regression coverage | ✅ Complete | `AGENTS.md` and this build plan updated; focused UI tests and production build passed. |
 
 **Current checkpoint:**
 - Committed/pushed baseline: Sprint 22 Results workspace, chart data trust, Model Health navigation cues.
-- Working tree: F23.3 workflow-mode navigation, grouped selector, Validate workspace, run-history summary refinements, F23.4 shared authoring shell, and focused tests.
+- Completed: F23.3-F23.10, including workflow modes, shared authoring shell, Results analysis migration, upgraded chart visuals, tablet/mobile refinements, run-history summary, warning cleanup, focused tests, and build verification.
 
 **Exit gate:**
 - `npm test -- model-health accessibility run-history model-results-tab results-workspace bottom-panel execute-panel` passes.
@@ -269,7 +268,7 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 20 | CSV Import Bridge                                   | Import CSV data to infer entity types and distributions via modal in Entity Types tab           |
 | Sprint 21 | SaaS Admin Platform                                 | platform_config, admin panel (LLM config/users/limits), multi-provider edge function           |
 | Sprint 22 | Results Workspace & Chart Data Trust                | standalone Results tab, saved-run selector, queue-specific chart data, chart provenance labels  |
-| Sprint 23 | UI Interface Polish & Workflow Shell                | workflow modes, persistent Model Health, Validate workspace, shared authoring shells, responsive Results/Execute experience |
+| Sprint 23 | UI Interface Polish & Workflow Shell                | complete: workflow modes, persistent Model Health, Validate workspace, shared authoring shells, responsive Results/Execute experience |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 

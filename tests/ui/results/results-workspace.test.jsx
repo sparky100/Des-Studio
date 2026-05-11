@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import {
   ResultsWorkspace,
@@ -30,6 +30,19 @@ const results = {
   waitDist: {
     "Queue A": { n: 3, mean: 4, p50: 4, p90: 8, p95: 8, p99: 8, values: [1, 4, 8] },
   },
+};
+
+const makeReplicationResult = (avgWait, avgSvc = 5, served = 100) => ({
+  result: {
+    summary: { avgWait, avgSvc, avgSojourn: avgWait + avgSvc, served, reneged: 0 },
+  },
+});
+
+const warmupDetection = {
+  truncationPoint: 35,
+  explanation: "Welch's method detected a warm-up truncation at t=35.00.",
+  series: Array.from({ length: 5 }, (_, i) => ({ t: i * 5, value: 10 - i })),
+  confidence: "high",
 };
 
 describe("ResultsWorkspace", () => {
@@ -70,6 +83,14 @@ describe("ResultsWorkspace", () => {
     });
   });
 
+  test("renders upgraded accessible chart visuals with endpoint legends", () => {
+    render(<ResultsWorkspace results={results} model={model} />);
+
+    expect(screen.getByRole("img", { name: /Queue A depth trend chart/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Queue A chart legend/i)).toHaveTextContent(/latest t=5/i);
+    expect(screen.getByLabelText(/Queue A chart legend/i)).toHaveTextContent(/peak t=5/i);
+  });
+
   test("offers expandable previews of chart data and wait samples", () => {
     render(<ResultsWorkspace results={results} model={model} />);
 
@@ -93,5 +114,63 @@ describe("ResultsWorkspace", () => {
     render(<ResultsWorkspace results={{}} model={model} />);
 
     expect(screen.getByText(/Detailed output/i)).toBeInTheDocument();
+  });
+
+  test("hosts statistical analysis with warm-up and batch-means controls", () => {
+    render(
+      <ResultsWorkspace
+        results={results}
+        model={model}
+        warmupDetection={warmupDetection}
+        replicationResults={[makeReplicationResult(8), makeReplicationResult(10), makeReplicationResult(12)]}
+      />
+    );
+
+    expect(screen.getByText(/How reliable are these outputs/i)).toBeInTheDocument();
+    expect(screen.getByText(/WARM-UP DETECTION/i)).toBeInTheDocument();
+    expect(screen.getByText(/Welch's method/i)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /batch-means metric/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /compute/i })).not.toBeDisabled();
+  });
+
+  test("computes batch-means and shows distribution diagnostics in Results", () => {
+    render(
+      <ResultsWorkspace
+        results={results}
+        model={model}
+        replicationResults={[
+          makeReplicationResult(8, 5, 100),
+          makeReplicationResult(10, 6, 110),
+          makeReplicationResult(12, 7, 120),
+          makeReplicationResult(9, 5, 105),
+          makeReplicationResult(11, 6, 115),
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /compute/i }));
+
+    expect(screen.getByText(/DISTRIBUTION DIAGNOSTICS \(Avg Wait\)/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/skewness/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/kurtosis/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/CI LOW/i)).toBeInTheDocument();
+    expect(screen.getByText(/CI HIGH/i)).toBeInTheDocument();
+  });
+
+  test("uses saved-run replications for analysis", () => {
+    render(
+      <ResultsWorkspace
+        results={{
+          replications: [
+            { summary: { avgWait: 8, avgSvc: 5, avgSojourn: 13, served: 100 } },
+            { summary: { avgWait: 10, avgSvc: 6, avgSojourn: 16, served: 110 } },
+          ],
+        }}
+        model={model}
+      />
+    );
+
+    expect(screen.getByText(/How reliable are these outputs/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /compute/i })).not.toBeDisabled();
   });
 });

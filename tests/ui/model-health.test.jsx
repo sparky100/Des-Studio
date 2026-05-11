@@ -42,6 +42,8 @@ function renderDetail(modelData) {
 
 describe("ModelDetail Model Health panel", () => {
   beforeEach(() => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1024 });
+    window.dispatchEvent(new Event("resize"));
     mockFetchRunHistory.mockReset();
     mockListShareLinks.mockReset();
     mockFetchRunHistory.mockResolvedValue([]);
@@ -154,5 +156,22 @@ describe("ModelDetail Model Health panel", () => {
     fireEvent.click(screen.getByRole("button", { name: /run model/i }));
 
     expect(screen.getByRole("tab", { name: /execute/i })).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("uses a mobile read/run/results workflow at phone width", () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 600 });
+    window.dispatchEvent(new Event("resize"));
+
+    renderDetail({
+      ...baseModel,
+      entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
+    });
+
+    expect(screen.getByLabelText(/mobile model workflow/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^run$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /entity model/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /entity types/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /execute/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /results/i })).toBeInTheDocument();
   });
 });

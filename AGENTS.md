@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-11 | Reflects: Sprint 22 — Results Workspace complete. Current: Sprint 23 — UI Interface Polish & Workflow Shell*
+*Last updated: 2026-05-11 | Reflects: Sprint 23 — UI Interface Polish & Workflow Shell complete. Current: Sprint 24 — TBD*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
@@ -1318,14 +1318,31 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 20 | ✅ Complete | 2026-05-10 | CSV Import Bridge |
 | Sprint 21 | ✅ Complete | 2026-05-11 | SaaS Admin Platform (config, admin panel, multi-provider LLM) |
 | Sprint 22 | ✅ Complete | 2026-05-11 | Results Workspace & chart data trust |
+| Sprint 23 | ✅ Complete | 2026-05-11 | UI Interface Polish & Workflow Shell |
 
 ---
 
-## 21. Current Sprint — Sprint 23: UI Interface Polish & Workflow Shell
+## 21. Current Sprint — Sprint 24 (TBD)
+
+**Goal:** To be determined.
+
+### Recently Completed
+
+**Sprint 23 — UI Interface Polish & Workflow Shell** (2026-05-11):
+- Added ModelDetail workflow modes: Visual Design, Entity Model, Event Logic, Validate, Execute, Results, and Access
+- Added a shared authoring shell for Visual Design, Entity Model, and Event Logic with left mode sections, central workspace, and right workflow context
+- Added persistent Model Health routing, a dedicated Validate workspace, and run-history summary cards
+- Moved statistical analysis out of Execute bottom panel and into ResultsWorkspace
+- Upgraded result charts with axes, accessible chart roles, peak/latest markers, endpoint legends, provenance, and raw data previews
+- Added tablet-friendly wrapping layouts and a phone-width Summary/Validate/Run/Results/History workflow
+- Cleaned focused UI test warnings around ExecutePanel async updates
+- Verification: `npm test -- model-health accessibility run-history model-results-tab results-workspace bottom-panel execute-panel` passed (60 tests); `npm run build` passed
+
+### Sprint 23 Closure Details
 
 **Goal:** Rework the model-detail experience into clearer modeller workflow modes while preserving the existing working editors, Execute panel, Results workspace, and canonical `model_json` contract.
 
-**Status:** 🔄 In progress | **Started:** 2026-05-11
+**Status:** ✅ Complete | **Started:** 2026-05-11 | **Completed:** 2026-05-11
 
 **Implementation guardrails:**
 - Build on the existing `ModelDetail`, editor, Execute, Results, and Model Health components; do not rewrite working panels from scratch.
@@ -1337,22 +1354,20 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 |---|---|---|
 | F23.1 Results workspace and chart data trust follow-through | ✅ Complete | Results/Charts slice is complete from Sprint 22: top-level Results tab, saved-run selector, queue-specific chart data, chart provenance labels, and reusable `ResultsWorkspace`. |
 | F23.2 Persistent Model Health and validation routing | ✅ Complete | Keep Model Health visible across workflow modes, show blockers/warnings, route issue actions to the relevant editor/workspace, and keep run actions guarded by validation. |
-| F23.3 ModelDetail workflow modes | ✅ Complete in working tree | Replace the flat editor-tab feel with clear modes: Visual Design, Entity Model, Event Logic, Validate, Execute, Results, and owner/admin access. Current working-tree changes add the mode rail, grouped selector, and Validate workspace. |
-| F23.4 Shared 2/3-panel authoring shell | ✅ Complete in working tree | Shared shell added for Visual Design, Entity Model, and Event Logic with left mode sections, central editor/canvas workspace, and right workflow context/health panel. |
-| F23.5 Analysis migration from Execute to Results | 🔄 In progress | Continue moving interpretation, chart reading, run-history summaries, and analysis context out of Execute and into Results while keeping Execute focused on run control and live feedback. |
-| F23.6 Chart visual upgrade | ⬜ Not started | Improve charts beyond mini SVGs with clearer axes, labels, legends, empty states, comparison affordances, and readable tablet sizing. |
-| F23.7 Tablet layout refinements | ⬜ Not started | Verify and tune the mode rail, editor shells, Results, Execute, and Model Health layouts at tablet widths. |
-| F23.8 Mobile read/run/results view | ⬜ Not started | Add a mobile-specific view for model summary, validation, run controls, results, and history; full visual/form authoring can remain desktop/tablet only. |
-| F23.9 UI warning cleanup | ⬜ Not started | Clean remaining UI test warnings around table whitespace and async `act(...)` behaviour in ExecutePanel tests. |
-| F23.10 Sprint documentation and regression coverage | 🔄 In progress | Keep this sprint documented in `AGENTS.md` and `docs/DES_Studio_Build_Plan.md`; maintain focused UI tests and production build checks before staging/committing. |
+| F23.3 ModelDetail workflow modes | ✅ Complete | Replace the flat editor-tab feel with clear modes: Visual Design, Entity Model, Event Logic, Validate, Execute, Results, and owner/admin access. |
+| F23.4 Shared 2/3-panel authoring shell | ✅ Complete | Shared shell added for Visual Design, Entity Model, and Event Logic with left mode sections, central editor/canvas workspace, and right workflow context/health panel. |
+| F23.5 Analysis migration from Execute to Results | ✅ Complete | Statistical analysis, batch-means confidence intervals, warm-up context, and distribution diagnostics now live in `ResultsWorkspace`; Execute bottom panel is focused on live run surfaces. |
+| F23.6 Chart visual upgrade | ✅ Complete | Result charts now include clearer axes, accessible chart roles, peak/latest markers, endpoint legends, provenance, and data previews. |
+| F23.7 Tablet layout refinements | ✅ Complete | Workflow shell, chart grids, history summary, and Model Health use wrapping/flexible layouts for tablet widths. |
+| F23.8 Mobile read/run/results view | ✅ Complete | Phone-width ModelDetail switches to Summary, Validate, Run, Results, and History instead of the full authoring workflow. |
+| F23.9 UI warning cleanup | ✅ Complete | ExecutePanel async test warnings are addressed by controlling async history/settings mocks; table whitespace warnings remain clean in focused tests. |
+| F23.10 Sprint documentation and regression coverage | ✅ Complete | `AGENTS.md` and `docs/DES_Studio_Build_Plan.md` updated; focused UI tests and production build passed. |
 
 **Sprint 23 exit gate:**
 - Focused tests for Model Health, navigation, Results, run history, Execute, and accessibility pass.
 - `npm run build` passes.
 - Desktop and tablet browser smoke checks confirm navigation, validation routing, Execute, and Results remain usable.
-- Outstanding mobile/full-chart items are either completed or explicitly carried forward with a new sprint label.
-
-### Recently Completed
+- Mobile/full-chart items completed within Sprint 23.
 
 **Sprint 22 — Results Workspace & Chart Data Trust** (2026-05-11):
 - Added queue-specific `byQueue` counts to engine snapshots and collected time-series entries so queue-depth charts no longer rely on aggregate customer-type counts for new runs

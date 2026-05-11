@@ -197,6 +197,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [analyseRun,setAnalyseRun]=useState(null);
   const [latestResults,setLatestResults]=useState(null);
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
+  const [viewportWidth,setViewportWidth]=useState(() => typeof window === "undefined" ? 1024 : window.innerWidth);
+  useEffect(()=>{
+    if(typeof window === "undefined") return;
+    const onResize=()=>setViewportWidth(window.innerWidth);
+    window.addEventListener("resize",onResize);
+    return ()=>window.removeEventListener("resize",onResize);
+  },[]);
 
   const handleAnalyseRun=useCallback((row)=>{setAnalyseRun(row);setTab("execute");},[]);
   const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname.replace(/\/+$/, "") : "";
@@ -573,8 +580,20 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
     ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
   ];
+  const isMobileLayout = viewportWidth < 720;
+  const MOBILE_TABS = ["overview","validate","execute","results","history"];
+  const DISPLAY_MODES = isMobileLayout
+    ? [
+        {id:"mobile-summary",label:"Summary",primaryTab:"overview",tabs:["overview"]},
+        {id:"validate",label:"Validate",primaryTab:"validate",tabs:["validate"]},
+        {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
+        {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
+      ]
+    : NAV_MODES;
+  const visibleTabs = isMobileLayout ? selectableTabs.filter(t => MOBILE_TABS.includes(t.id)) : TABS;
+  const visibleSelectableTabs = visibleTabs.filter(t => !t.disabled);
   const tabById = Object.fromEntries(selectableTabs.map(t => [t.id, t]));
-  const activeMode = NAV_MODES.find(mode => mode.tabs.includes(tab)) || NAV_MODES[0];
+  const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
   const tabIssueCounts = useMemo(() => {
     const counts = {};
     for (const issue of validation.errors || []) {
@@ -597,7 +616,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     if (counts.warnings) parts.push(`${counts.warnings} warning${counts.warnings === 1 ? "" : "s"}`);
     return parts.join(", ");
   };
-  const authoringShellMode = ["visual-design", "entity-model", "event-logic"].includes(activeMode.id)
+  const authoringShellMode = !isMobileLayout && ["visual-design", "entity-model", "event-logic"].includes(activeMode.id)
     ? activeMode
     : null;
   const AuthoringWorkflowShell = ({mode, children}) => {
@@ -734,6 +753,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   );
 
   useEffect(()=>{
+    if(isMobileLayout && !MOBILE_TABS.includes(tab)) setTab("overview");
+  },[isMobileLayout, tab]);
+
+  useEffect(()=>{
     if(tab!=="history"&&tab!=="results")return;
     setHistoryLoading(true);setHistoryError("");
     Promise.all([
@@ -787,8 +810,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         )}
         {canEdit&&dirty&&<Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save"}</Btn>}
       </div>
-      <div aria-label="Model workflow modes" style={{display:"flex",alignItems:"stretch",gap:8,padding:"8px 20px",borderBottom:`1px solid ${C.border}`,background:C.bg,overflowX:"auto",flexShrink:0}}>
-        {NAV_MODES.map(mode=>{
+      <div aria-label={isMobileLayout ? "Mobile model workflow" : "Model workflow modes"} style={{display:"flex",alignItems:"stretch",gap:8,padding:"8px 20px",borderBottom:`1px solid ${C.border}`,background:C.bg,overflowX:"auto",flexShrink:0}}>
+        {DISPLAY_MODES.map(mode=>{
           const selected = activeMode.id === mode.id;
           const modeCounts = mode.tabs.reduce((acc, tabId) => {
             const counts = tabIssueCounts[tabId] || {};
@@ -842,7 +865,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             onChange={e=>setTab(e.target.value)}
             style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 7px",maxWidth:180,outline:"none"}}
           >
-            {NAV_MODES.map(mode=>(
+            {DISPLAY_MODES.map(mode=>(
               <optgroup key={mode.id} label={mode.label}>
                 {mode.tabs.filter(tabId => tabById[tabId]).map(tabId=>{
                   const t = tabById[tabId];
@@ -855,7 +878,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           </select>
         </div>
         <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:8,flex:1,minWidth:0,overflowX:"auto"}}>
-          {TABS.map(t=>t.disabled?(
+          {visibleTabs.map(t=>t.disabled?(
             <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>
           ):(
             <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} aria-label={`${t.label}${tabIssueLabel(t.id) ? `, ${tabIssueLabel(t.id)}` : ""}`} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",

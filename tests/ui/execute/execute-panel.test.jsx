@@ -4,7 +4,8 @@ import { ExecutePanel } from '../../../src/ui/execute/index.jsx';
 
 const mockRunReplications = vi.hoisted(() => vi.fn());
 const mockSaveSimulationRun = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const mockFetchRunHistory = vi.hoisted(() => vi.fn().mockResolvedValue([]));
+const mockFetchRunHistory = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
+const mockFetchUserSettings = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
 const mockStreamNarrative = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../src/engine/replication-runner.js', () => ({
@@ -14,7 +15,7 @@ vi.mock('../../../src/engine/replication-runner.js', () => ({
 vi.mock('../../../src/db/models.js', () => ({
   fetchRunHistory: mockFetchRunHistory,
   saveSimulationRun: mockSaveSimulationRun,
-  fetchUserSettings: vi.fn().mockResolvedValue({ schemaVersion: 1, settings: {} }),
+  fetchUserSettings: mockFetchUserSettings,
   saveUserSettings:  vi.fn().mockResolvedValue({ schemaVersion: 1, settings: {} }),
 }));
 
@@ -46,9 +47,11 @@ describe('ExecutePanel', () => {
     mockRunReplications.mockReset();
     mockSaveSimulationRun.mockReset();
     mockFetchRunHistory.mockReset();
+    mockFetchUserSettings.mockReset();
     mockStreamNarrative.mockReset();
     mockSaveSimulationRun.mockResolvedValue(undefined);
-    mockFetchRunHistory.mockResolvedValue([]);
+    mockFetchRunHistory.mockImplementation(() => new Promise(() => {}));
+    mockFetchUserSettings.mockImplementation(() => new Promise(() => {}));
   });
 
   it('renders the execute controls without crashing', () => {
