@@ -5,6 +5,7 @@ import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { validateVisualGraph, addVisualNode, deleteVisualNode, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
+import { validateModel } from "../../engine/validation.js";
 
 function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
   return (
