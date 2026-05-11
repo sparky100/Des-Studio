@@ -369,6 +369,62 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
               {item.label}
             </button>
           ))}
+          {/* Entity Types section */}
+          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+              <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>ENTITY TYPES</span>
+              {canEdit && <Btn small variant="ghost" onClick={() => {
+                const next = [...(model.entityTypes || []), { id: "et" + Date.now(), name: "", role: "customer", count: "1", attrDefs: [] }];
+                applyModel({ ...model, entityTypes: next });
+              }}>+ Add</Btn>}
+            </div>
+            {(model.entityTypes || []).length === 0 && (
+              <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, fontStyle: "italic" }}>
+                No entity types defined.
+              </div>
+            )}
+            {(model.entityTypes || []).map((et, i) => (
+              <div key={et.id || i} style={{
+                display: "flex", alignItems: "center", gap: 4, padding: "3px 4px",
+                background: C.bg, borderRadius: 4, marginBottom: 3,
+                border: `1px solid ${et.role === "server" ? C.server + "44" : C.cEvent + "33"}`,
+                borderLeft: `2px solid ${et.role === "server" ? C.server : C.cEvent}`,
+              }}>
+                <input value={et.name} onChange={e => {
+                  const next = [...(model.entityTypes || [])];
+                  next[i] = { ...next[i], name: e.target.value };
+                  applyModel({ ...model, entityTypes: next });
+                }} placeholder="Name" maxLength={20}
+                  style={{ width: 60, background: "transparent", border: "none", color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
+                />
+                <select value={et.role || "customer"} onChange={e => {
+                  const next = [...(model.entityTypes || [])];
+                  next[i] = { ...next[i], role: e.target.value, count: e.target.value === "server" ? (next[i].count || "1") : "" };
+                  applyModel({ ...model, entityTypes: next });
+                }}
+                  style={{ width: 56, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: et.role === "server" ? C.server : C.cEvent, fontFamily: FONT, fontSize: 9, padding: "1px 3px", outline: "none" }}>
+                  <option value="customer">Entity</option>
+                  <option value="server">Server</option>
+                </select>
+                {et.role === "server" && (
+                  <input type="number" min="1" value={et.count || "1"} onChange={e => {
+                    const next = [...(model.entityTypes || [])];
+                    next[i] = { ...next[i], count: e.target.value };
+                    applyModel({ ...model, entityTypes: next });
+                  }}
+                    style={{ width: 30, background: "transparent", border: "none", color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px", outline: "none", textAlign: "center" }}
+                  />
+                )}
+                {canEdit && (
+                  <button type="button" onClick={() => {
+                    const next = (model.entityTypes || []).filter((_, idx) => idx !== i);
+                    applyModel({ ...model, entityTypes: next });
+                  }}
+                    style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 11, padding: "0 2px", lineHeight: 1 }}>✕</button>
+                )}
+              </div>
+            ))}
+          </div>
           <ValidationChecklist
             visualIssues={visualIssues}
             modelErrors={modelValidation.errors}
