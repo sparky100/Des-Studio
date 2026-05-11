@@ -383,20 +383,19 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const TABS=[
     // ── DESIGN ──
     {id:"overview",label:"Overview"},
+    {id:"goals",label:"Goals"},
     {id:"visual",label:"Visual Designer"},
+    {id:"ai",label:"AI Designer"},
+    {id:"_model",label:"─── Model ───",disabled:true},
     {id:"entities",label:"Entity Types"},
     {id:"queues",label:"Queues"},
     {id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},
-    {id:"goals",label:"Goals"},
+    {id:"state",label:"State Vars"},
     // ── RUN ──
     {id:"_runlabel",label:"─── Run ───",disabled:true},
     {id:"execute",label:"▶ Execute"},
     {id:"history",label:"History"},
-    // ── ANALYZE ──
-    {id:"_analyzlabel",label:"─── Analyze ───",disabled:true},
-    {id:"ai",label:"Use AI"},
-    {id:"state",label:"State Vars"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
 
@@ -523,7 +522,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 </div>
                 <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
                   <Btn variant="primary" onClick={()=>setTab("visual")}>🎨 Visual Designer</Btn>
-                  <Btn variant="ghost" onClick={()=>setTab("ai")}>🤖 Use AI to generate</Btn>
+                  <Btn variant="ghost" onClick={()=>setTab("ai")}>🤖 AI Designer</Btn>
                   <Btn variant="ghost" onClick={()=>setTab("entities")}>📝 Start with forms</Btn>
                 </div>
               </div>
