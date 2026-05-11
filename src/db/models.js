@@ -50,6 +50,7 @@ export function norm(r) {
     bEvents:        r.b_events         || [],
     cEvents:        r.c_events         || [],
     queues:         r.queues           || [],
+    goals:          r.goals            || [],
     owner_id:       r.owner_id,
     owner:          r.owner_id,
     createdAt:      r.created_at,
@@ -69,6 +70,7 @@ function toRow(model, userId) {
     b_events:        model.bEvents        || [],
     c_events:        model.cEvents        || [],
     queues:          model.queues         || [],
+    goals:           model.goals          || [],
     owner_id:        userId,
   };
 }
@@ -82,17 +84,17 @@ export async function fetchModels(userId) {
     const [visible, sharedViewer, sharedEditor] = await Promise.all([
       supabase
         .from("des_models")
-        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
+        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at")
         .or(`owner_id.eq.${userId},visibility.eq.public`)
         .order("updated_at", sort),
       supabase
         .from("des_models")
-        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
+        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at")
         .contains("access", { [userId]: "viewer" })
         .order("updated_at", sort),
       supabase
         .from("des_models")
-        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
+        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at")
         .contains("access", { [userId]: "editor" })
         .order("updated_at", sort),
     ]);
@@ -114,7 +116,7 @@ export async function fetchModels(userId) {
   } else {
     const { data: publicData, error } = await supabase
       .from("des_models")
-      .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
+      .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at")
       .eq("visibility", "public")
       .order("updated_at", { ascending: false });
     if (error) throw error;
@@ -328,7 +330,7 @@ export async function forkModel(sourceModelId, newUserId, newName = "") {
   // 1. Fetch the original model — must be owned by or accessible to the user
   const { data: sourceModel, error: fetchError } = await supabase
     .from("des_models")
-    .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,owner_id,created_at,updated_at")
+    .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at")
     .or(`owner_id.eq.${newUserId},visibility.eq.public`)
     .eq("id", sourceModelId)
     .single();

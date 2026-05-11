@@ -5,6 +5,7 @@ import { C, FONT } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
+import { GoalsEditor } from "./editors/GoalsEditor.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
 import { CsvImportModal } from "./CsvImportModal.jsx";
 
@@ -383,6 +384,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     {id:"overview",label:"Overview"},{id:"entities",label:"Entity Types"},
     {id:"state",label:"State Vars"},{id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},{id:"queues",label:"Queues"},
+    {id:"goals",label:"Goals"},
     {id:"ai",label:"Use AI"},
     {id:"visual",label:"Visual Designer"},
     {id:"execute",label:"▶ Execute"},
@@ -528,6 +530,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         {tab==="bevents"&&<div style={{maxWidth:1100}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
         {tab==="cevents"&&<div style={{maxWidth:1100}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
         {tab==="queues"&&<div style={{maxWidth:900}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?v=>setField("queues",v):()=>{}}/></div>}
+        {tab==="goals"&&<div style={{maxWidth:800}}><GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/></div>}
         {tab==="execute"&&(
           <ErrorBoundary
             title="Execute panel crashed"

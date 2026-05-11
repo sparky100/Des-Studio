@@ -97,6 +97,17 @@ function buildKpis(model = {}, results = {}) {
   };
 }
 
+function goalsToPrompt(model = {}) {
+  const goals = model.goals || [];
+  if (!goals.length) return null;
+  return goals.filter(g => g.metric && g.target).map(g => ({
+    metric: g.metric,
+    target: parseFloat(g.target),
+    operator: g.operator || "<",
+    label: g.label || `${g.metric} ${g.operator} ${g.target}`,
+  }));
+}
+
 function makeMessages(system, payload, instruction) {
   return [
     { role: "system", content: system },
@@ -118,6 +129,7 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
+      goals: goalsToPrompt(model),
     },
     experiment: extractExperiment(experimentConfig),
     kpis: buildKpis(model, results),
@@ -126,12 +138,16 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     aggregateStats: results.aggregateStats || {},
   };
 
+  const goalsInstr = model.goals?.length
+    ? " Performance goals were set for this model. Assess each goal against the results and note whether it was met or missed."
+    : "";
+
   return {
     kind: "narrative",
     messages: makeMessages(
       system,
       payload,
-      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish between typical and extreme waits."
+      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish between typical and extreme waits." + goalsInstr
     ),
     max_tokens: 450,
   };
@@ -183,6 +199,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
+      goals: goalsToPrompt(model),
       entityTypes,
       queues,
       flowSummary: queues
@@ -196,12 +213,15 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     perQueue: results.perQueue || {},
   };
 
+  const suggestionGoals = model.goals?.length
+    ? " Performance goals were defined for this model — your recommendations should prioritise changes that help meet those goals."
+    : "";
   return {
     kind: "suggestion",
     messages: makeMessages(
       system,
       payload,
-      "Based on the KPI data, identify the primary bottleneck and recommend a specific model change. Consider per-queue wait percentiles (p50, p90, p95), per-resource utilisation, and blocking/balking counters. State the expected impact (e.g. 'mean wait would drop from 8.2 to ~4.5'). If multiple changes are needed, prioritise the single most impactful one."
+      "Based on the KPI data, identify the primary bottleneck and recommend a specific model change. Consider per-queue wait percentiles (p50, p90, p95), per-resource utilisation, and blocking/balking counters. State the expected impact (e.g. 'mean wait would drop from 8.2 to ~4.5'). If multiple changes are needed, prioritise the single most impactful one." + suggestionGoals
     ),
     max_tokens: 450,
   };
