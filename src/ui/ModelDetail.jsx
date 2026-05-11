@@ -446,7 +446,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           flexWrap: "wrap",
         }}
       >
-        <div style={{display:"flex",alignItems:"flex-start",gap:10,minWidth:240,flex:"1 1 280px"}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:10,minWidth:0,flex:"1 1 280px",flexWrap:"wrap"}}>
           <div style={{
             background: statusBg,
             border: `1px solid ${statusBorder}66`,
@@ -460,7 +460,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           }}>
             {statusTitle}
           </div>
-          <div>
+          <div style={{minWidth:0,flex:"1 1 220px"}}>
             <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.4,fontWeight:700,marginBottom:4}}>MODEL HEALTH</div>
             <div style={{fontSize:12,color:C.text,fontFamily:FONT,lineHeight:1.5}}>
               {hasBlockers
@@ -472,7 +472,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           </div>
         </div>
         {issues.length > 0 && (
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end",flex:"1 1 360px"}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end",flex:"1 1 320px",minWidth:0}}>
             {issues.map((issue, index) => {
               const targetTab = issue.tab || "overview";
               const tabLabel = MODEL_HEALTH_TAB_LABELS[targetTab] || "Overview";
@@ -493,7 +493,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                     fontSize: 11,
                     fontWeight: 700,
                     padding: "7px 9px",
-                    maxWidth: 420,
+                    maxWidth: "100%",
+                    flex: "1 1 240px",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -527,6 +528,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     {id:"history",label:"History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
+  const selectableTabs = TABS.filter(t => !t.disabled);
 
   useEffect(()=>{
     if(tab!=="history"&&tab!=="results")return;
@@ -561,10 +563,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   );
   const runCountValue = model.statsLoading || model.statsError ? "—" : model.stats?.runs ?? 0;
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100vh",background:C.bg}}>
+    <div style={{display:"flex",flexDirection:"column",height:"100dvh",minHeight:"100vh",background:C.bg}}>
       <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 20px",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,flexWrap:"wrap"}}>
         <Btn small variant="ghost" onClick={handleBack}>← Back</Btn>
-        <div style={{flex:1,fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT}}>{model.name}</div>
+        <div style={{flex:"1 1 220px",minWidth:0,fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{model.name}</div>
         <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
         <Tag label={`v${pkg.version}`} color={C.purple}/>
         {canEdit&&<Btn small variant="ghost" onClick={undo} disabled={!past.length} title="Undo (Ctrl+Z)">↩ Undo</Btn>}
@@ -582,16 +584,30 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         )}
         {canEdit&&dirty&&<Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save"}</Btn>}
       </div>
-      <div role="tablist" aria-label="Model sections" style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.surface,paddingLeft:20,flexShrink:0,overflowX:"auto"}}>
-        {TABS.map(t=>t.disabled?(
-          <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>
-        ):(
-          <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
-            borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",
-            color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400}}>{t.label}</button>
-        ))}
+      <div style={{display:"flex",alignItems:"stretch",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px 6px 20px",borderRight:`1px solid ${C.border}`,flexShrink:0}}>
+          <label htmlFor="model-section-jump" style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.1,fontWeight:700,whiteSpace:"nowrap"}}>SECTION</label>
+          <select
+            id="model-section-jump"
+            aria-label="Jump to model section"
+            value={tab}
+            onChange={e=>setTab(e.target.value)}
+            style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 7px",maxWidth:180,outline:"none"}}
+          >
+            {selectableTabs.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </div>
+        <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:8,flex:1,minWidth:0,overflowX:"auto"}}>
+          {TABS.map(t=>t.disabled?(
+            <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>
+          ):(
+            <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
+              borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",
+              color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400}}>{t.label}</button>
+          ))}
+        </div>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:20}}>
+      <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
         {canEdit&&dirty&&(
           <div role="status" style={{
             background:C.amber+"18",
@@ -644,7 +660,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4}/>
             <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:14}}>
               <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,marginBottom:12}}>MODEL STRUCTURE</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
+              <div aria-label="Model structure metrics" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",gap:10}}>
                 {[
                   {label:"Entity Types",value:(model.entityTypes||[]).length,color:C.server},
                   {label:"State Vars",  value:(model.stateVariables||[]).length,color:C.purple},

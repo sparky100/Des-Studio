@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mockFetchRunHistory = vi.hoisted(() => vi.fn());
 const mockListShareLinks = vi.hoisted(() => vi.fn());
@@ -41,6 +41,13 @@ function renderDetail(modelData) {
 }
 
 describe("ModelDetail Model Health panel", () => {
+  beforeEach(() => {
+    mockFetchRunHistory.mockReset();
+    mockListShareLinks.mockReset();
+    mockFetchRunHistory.mockResolvedValue([]);
+    mockListShareLinks.mockResolvedValue([]);
+  });
+
   test("shows blocking validation status on every model tab", () => {
     renderDetail({
       ...baseModel,
@@ -61,5 +68,29 @@ describe("ModelDetail Model Health panel", () => {
 
     expect(screen.getByRole("tab", { name: /entity types/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("alert")).toHaveTextContent(/Entity class at position 1 has an empty name/i);
+  });
+
+  test("uses responsive overview metric columns", () => {
+    renderDetail({
+      ...baseModel,
+      entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
+    });
+
+    expect(screen.getByLabelText(/model structure metrics/i)).toHaveStyle({
+      gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+    });
+  });
+
+  test("jumps between model sections from the compact selector", () => {
+    renderDetail({
+      ...baseModel,
+      entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: /jump to model section/i }), {
+      target: { value: "queues" },
+    });
+
+    expect(screen.getByRole("tab", { name: /queues/i })).toHaveAttribute("aria-selected", "true");
   });
 });

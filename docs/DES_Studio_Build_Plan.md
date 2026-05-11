@@ -21,13 +21,13 @@ Claude Code must read the relevant existing files before touching anything.
 
 ### Sprint Status Key
 
-| Symbol | Meaning |
-|---|---|
-| ⬜ | Not started |
-| 🔄 | In progress |
-| ✅ | Complete |
-| ⏭ | Deferred |
-| ❌ | Cancelled |
+| Symbol | Meaning     |
+| ------ | ----------- |
+| ⬜      | Not started |
+| 🔄     | In progress |
+| ✅      | Complete    |
+| ⏭      | Deferred    |
+| ❌      | Cancelled   |
 
 ---
 
