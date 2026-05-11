@@ -278,8 +278,8 @@ function EntitiesTab({ snap }) {
               const location = e.status === "waiting"
                 ? (e.queue || "queue")
                 : e.status === "serving"
-                  ? (e.ceventName || "serving")
-                  : e.queue || "—";
+                  ? (e.ceventName || e.lastQueue || "serving")
+                  : e.queue || e.lastQueue || "—";
               return (
                 <tr key={e.id} style={{ borderBottom: `1px solid ${C.bg}` }}>
                   <td style={{ padding: "4px 8px", color: C.kpiArr, fontFamily: FONT, fontWeight: 700 }}>#{e.id}</td>
