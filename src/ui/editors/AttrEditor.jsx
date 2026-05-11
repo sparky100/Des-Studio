@@ -1,9 +1,15 @@
 import { C, FONT } from "../shared/tokens.js";
 import { Btn, DistPicker } from "../shared/components.jsx";
 
+const VALUE_TYPES = [
+  { value: "number",  label: "Number" },
+  { value: "string",  label: "String" },
+  { value: "boolean", label: "Boolean" },
+];
+
 const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
   const add = () => onChange([...attrs, {
-    id:'a'+Date.now(), name:'', dist:'Fixed', distParams:{value:'1'}
+    id:'a'+Date.now(), name:'', valueType:'number', dist:'Fixed', distParams:{value:'1'}
   }]);
   const upd = (i, patch) => {
     const n=[...attrs]; n[i]={...n[i],...patch}; onChange(n);
@@ -13,6 +19,12 @@ const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
   const inpStyle = (color) => ({
     background:'transparent', border:`1px solid ${color||C.border}`,
     borderRadius:4, color:C.text, fontFamily:FONT, fontSize:11,
+    padding:'4px 7px', outline:'none',
+  });
+
+  const selStyle = (color) => ({
+    background:C.bg, border:`1px solid ${color||C.border}`,
+    borderRadius:4, color:color||C.text, fontFamily:FONT, fontSize:11,
     padding:'4px 7px', outline:'none',
   });
 
@@ -32,26 +44,47 @@ const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
         </span>
       )}
       {attrs.map((a,i)=>{
+        const vt = a.valueType || 'number';
         return (
           <div key={a.id} style={{background:C.surface,borderRadius:6,padding:'8px 10px',
             border:`1px solid ${role==='server'?C.server+'33':C.cEvent+'33'}`,
             display:'flex',flexDirection:'column',gap:6}}>
-            {/* Row 1: name + distribution picker */}
+            {/* Row 1: name + value type + input */}
             <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
               <input value={a.name} onChange={e=>upd(i,{name:e.target.value})}
-                placeholder="attrName" style={{...inpStyle(C.amber),width:110}}/>
-              <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>~</span>
-              <div style={{flex:1}}>
-                <DistPicker value={{dist:a.dist,distParams:a.distParams,sourceFile:a.sourceFile,column:a.column,_csvStats:a._csvStats}}
-                  onChange={v=>upd(i,v)} compact allowPiecewise={false}/>
-              </div>
+                placeholder="attrName" style={{...inpStyle(C.amber),width:100}}/>
+              <select value={vt} onChange={e=>upd(i,{valueType:e.target.value})}
+                style={{...selStyle(C.purple),width:80}}>
+                {VALUE_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              {vt === 'number' ? (
+                <>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>~</span>
+                  <div style={{flex:1}}>
+                    <DistPicker value={{dist:a.dist,distParams:a.distParams,sourceFile:a.sourceFile,column:a.column,_csvStats:a._csvStats}}
+                      onChange={v=>upd(i,v)} compact allowPiecewise={false}/>
+                  </div>
+                </>
+              ) : vt === 'string' ? (
+                <input value={a.defaultValue||''} onChange={e=>upd(i,{defaultValue:e.target.value})}
+                  placeholder="e.g. Gold" style={{...inpStyle(C.green),flex:1,minWidth:100}}/>
+              ) : (
+                <select value={a.defaultValue==='true'?'true':'false'} onChange={e=>upd(i,{defaultValue:e.target.value})}
+                  style={{...selStyle(C.amber),width:80}}>
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              )}
               <Btn small variant="danger" ariaLabel={`Remove attribute ${a.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
             </div>
             {/* Preview */}
             {a.name&&(
               <div style={{fontSize:10,color:C.muted,fontFamily:FONT}}>
-                → <span style={{color:C.accent}}>{a.name}</span> sampled from{' '}
-                <span style={{color:C.amber}}>{a.dist||'Fixed'}({Object.values(a.distParams||{}).join(', ')})</span>
+                → <span style={{color:C.accent}}>{a.name}</span>
+                {vt === 'number'
+                  ? <> sampled from <span style={{color:C.amber}}>{a.dist||'Fixed'}({Object.values(a.distParams||{}).join(', ')})</span></>
+                  : <> = <span style={{color:C.green}}>{String(a.defaultValue??'')}</span></>
+                }
                 {' '}on each {role==='customer'?'arrival':'server creation'}
               </div>
             )}
