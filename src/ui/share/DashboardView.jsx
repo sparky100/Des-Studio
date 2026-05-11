@@ -89,56 +89,120 @@ function KpiCard({ label, value, color, sub }) {
   );
 }
 
+const NODE_COLORS = { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red };
+const NODE_LABELS = { source: "Source", queue: "Queue", activity: "Activity", sink: "Sink" };
+const NODE_W = 130, NODE_H = 36;
+
 function ModelTopology({ model }) {
+  const graph = model.graph || {};
+  const storedNodes = graph.nodes || [];
+  const storedEdges = graph.edges || [];
   const types = model.entityTypes || [];
   const queues = model.queues || [];
+
+  // If we have stored graph layout, use it
+  if (storedNodes.length > 0) {
+    const xs = storedNodes.map(n => n.position?.x ?? 0);
+    const ys = storedNodes.map(n => n.position?.y ?? 0);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const pad = 50;
+    const totalW = maxX - minX + NODE_W + pad * 2;
+    const totalH = maxY - minY + NODE_H + pad * 2;
+
+    return (
+      <svg width={totalW} height={totalH} style={{ display: "block", width: "100%", maxWidth: "100%" }}
+        viewBox={`0 0 ${totalW} ${totalH}`} aria-label="Model topology">
+        <style>{`.tn{font-family:monospace;font-size:9px;font-weight:700;}.tl{font-family:monospace;font-size:8px;fill:${C.muted};}.te{stroke:${C.border};stroke-width:1.5;fill:none;marker-end:url(#arrow);}`}</style>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 Z" fill={C.border} />
+          </marker>
+        </defs>
+        {storedEdges.map(edge => {
+          const from = storedNodes.find(n => n.id === edge.from);
+          const to = storedNodes.find(n => n.id === edge.to);
+          if (!from || !to) return null;
+          const x1 = (from.position?.x ?? 0) - minX + pad + NODE_W / 2;
+          const y1 = (from.position?.y ?? 0) - minY + pad + NODE_H / 2;
+          const x2 = (to.position?.x ?? 0) - minX + pad + NODE_W / 2;
+          const y2 = (to.position?.y ?? 0) - minY + pad + NODE_H / 2;
+          return <line key={edge.id} x1={x1} y1={y1} x2={x2} y2={y2} className="te" />;
+        })}
+        {storedNodes.map(node => {
+          const x = (node.position?.x ?? 0) - minX + pad;
+          const y = (node.position?.y ?? 0) - minY + pad;
+          const col = NODE_COLORS[node.type] || C.muted;
+          return (
+            <g key={node.id}>
+              <rect x={x} y={y} width={NODE_W} height={NODE_H} rx={6}
+                fill={col + "22"} stroke={col} strokeWidth={1.5} />
+              <text x={x + NODE_W / 2} y={y + NODE_H / 2 + 3} textAnchor="middle" className="tn" fill={col}>{node.label || node.type}</text>
+            </g>
+          );
+        })}
+      </svg>
+    );
+  }
+
+  // Fallback: derive a simple layout from model data
   const customers = types.filter(t => t.role !== "server");
   const servers = types.filter(t => t.role === "server");
   const gapX = 160, gapY = 40;
   const w = 120, h = 36;
-  const cX = 50, cY = 50 + customers.length * gapY;
+  const cX = 50, cY = 50;
   const qX = cX + gapX, qY = 50;
-  const sX = qX + gapX, sY = cY;
+  const sX = qX + gapX, sY = cY + Math.max(customers.length, 1) * gapY;
   const totalW = sX + w + 40;
-  const totalH = Math.max(qY + queues.length * gapY + h, cY + h + gapY) + 40;
+  const totalH = Math.max(qY + Math.max(queues.length, 1) * gapY + h, sY + Math.max(servers.length, 1) * gapY + h) + 40;
 
   return (
     <svg width={totalW} height={totalH} style={{ display: "block", width: "100%", maxWidth: 600 }}
       viewBox={`0 0 ${totalW} ${totalH}`} aria-label="Model topology">
-      <style>{`.topo-node{font-family:monospace;font-size:9px;font-weight:700;}.topo-line{stroke:${C.border};stroke-width:1;fill:none;}.topo-label{font-family:monospace;font-size:8px;fill:${C.muted};}`}</style>
-      {customers.map((t, i) => (
-        <g key={t.id || t.name}>
-          <rect x={cX} y={50 + i * gapY} width={w} height={h} rx={6} fill={C.green + "22"} stroke={C.green} strokeWidth={1.5} />
-          <text x={cX + w / 2} y={50 + i * gapY + h / 2 + 3} textAnchor="middle" className="topo-node" fill={C.green}>{t.name}</text>
-        </g>
-      ))}
-      {customers.length > 0 && <text x={cX + w / 2} y={42} textAnchor="middle" className="topo-label">Entity Types</text>}
-
-      {queues.map((q, i) => {
-        const match = customers.find(c => c.name === q.customerType);
-        const srcIdx = match ? customers.indexOf(match) : 0;
-        return (
-          <g key={q.id || q.name}>
-            <line x1={cX + w} y1={50 + srcIdx * gapY + h / 2} x2={qX} y2={qY + i * gapY + h / 2} className="topo-line" />
-            <rect x={qX} y={qY + i * gapY} width={w} height={h} rx={6} fill={C.cEvent + "22"} stroke={C.cEvent} strokeWidth={1.5} />
-            <text x={qX + w / 2} y={qY + i * gapY + h / 2 + 3} textAnchor="middle" className="topo-node" fill={C.cEvent}>{q.name}</text>
-          </g>
-        );
-      })}
-      {queues.length > 0 && <text x={qX + w / 2} y={42} textAnchor="middle" className="topo-label">Queues</text>}
-
-      {servers.map((s, i) => {
-        const fromQ = i < queues.length ? queues[i] : null;
-        const fromY = fromQ ? qY + queues.indexOf(fromQ) * gapY + h / 2 : (sY - gapY + i * gapY + h / 2);
-        return (
-          <g key={s.id || s.name}>
-            <line x1={qX + w} y1={fromY} x2={sX} y2={sY + i * gapY + h / 2} className="topo-line" />
-            <rect x={sX} y={sY + i * gapY} width={w} height={h} rx={6} fill={C.server + "22"} stroke={C.server} strokeWidth={1.5} />
-            <text x={sX + w / 2} y={sY + i * gapY + h / 2 + 3} textAnchor="middle" className="topo-node" fill={C.server}>{s.name} ({s.count || 1})</text>
-          </g>
-        );
-      })}
-      {servers.length > 0 && <text x={sX + w / 2} y={42} textAnchor="middle" className="topo-label">Servers</text>}
+      <style>{`.tn{font-family:monospace;font-size:9px;font-weight:700;}.tl{font-family:monospace;font-size:8px;fill:${C.muted};}.te{stroke:${C.border};stroke-width:1;fill:none;}`}</style>
+      {customers.length > 0 && (
+        <>
+          <text x={cX + w / 2} y={42} textAnchor="middle" className="tl">Entity Types</text>
+          {customers.map((t, i) => (
+            <g key={t.id || t.name}>
+              <rect x={cX} y={cY + i * gapY} width={w} height={h} rx={6} fill={C.green + "22"} stroke={C.green} strokeWidth={1.5} />
+              <text x={cX + w / 2} y={cY + i * gapY + h / 2 + 3} textAnchor="middle" className="tn" fill={C.green}>{t.name}</text>
+            </g>
+          ))}
+        </>
+      )}
+      {queues.length > 0 && (
+        <>
+          <text x={qX + w / 2} y={42} textAnchor="middle" className="tl">Queues</text>
+          {queues.map((q, i) => {
+            const match = customers.find(c => c.name === q.customerType);
+            const srcIdx = match ? customers.indexOf(match) : 0;
+            return (
+              <g key={q.id || q.name}>
+                <line x1={cX + w} y1={cY + srcIdx * gapY + h / 2} x2={qX} y2={qY + i * gapY + h / 2} className="te" />
+                <rect x={qX} y={qY + i * gapY} width={w} height={h} rx={6} fill={C.cEvent + "22"} stroke={C.cEvent} strokeWidth={1.5} />
+                <text x={qX + w / 2} y={qY + i * gapY + h / 2 + 3} textAnchor="middle" className="tn" fill={C.cEvent}>{q.name}</text>
+              </g>
+            );
+          })}
+        </>
+      )}
+      {servers.length > 0 && (
+        <>
+          <text x={sX + w / 2} y={42} textAnchor="middle" className="tl">Servers</text>
+          {servers.map((s, i) => {
+            const fromQ = i < queues.length ? queues[i] : null;
+            const fromY = fromQ ? qY + queues.indexOf(fromQ) * gapY + h / 2 : (sY - gapY);
+            return (
+              <g key={s.id || s.name}>
+                <line x1={qX + w} y1={fromY} x2={sX} y2={sY + i * gapY + h / 2} className="te" />
+                <rect x={sX} y={sY + i * gapY} width={w} height={h} rx={6} fill={C.server + "22"} stroke={C.server} strokeWidth={1.5} />
+                <text x={sX + w / 2} y={sY + i * gapY + h / 2 + 3} textAnchor="middle" className="tn" fill={C.server}>{s.name} ({s.count || 1})</text>
+              </g>
+            );
+          })}
+        </>
+      )}
     </svg>
   );
 }

@@ -403,7 +403,7 @@ export async function getShareLink(token) {
 
   const { data: model, error: modelError } = await supabase
     .from("des_models")
-    .select("name, entity_types, queues")
+    .select("name, entity_types, queues, graph")
     .eq("id", run.model_id)
     .single();
   if (modelError) throw modelError;
