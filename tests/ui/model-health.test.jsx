@@ -105,6 +105,46 @@ describe("ModelDetail Model Health panel", () => {
     expect(screen.getByRole("tab", { name: /queues/i })).toHaveAttribute("aria-selected", "true");
   });
 
+  test("navigates by high-level model workflow modes", () => {
+    renderDetail({
+      ...baseModel,
+      entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /event logic/i }));
+    expect(screen.getByRole("tab", { name: /b-events/i })).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: /^validate/i }));
+    expect(screen.getByRole("button", { name: /^validate/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/VALIDATION WORKSPACE/i)).toBeInTheDocument();
+  });
+
+  test("uses a shared authoring shell for workflow modes", () => {
+    renderDetail({
+      ...baseModel,
+      entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /entity model/i }));
+
+    expect(screen.getByRole("region", { name: /entity model authoring shell/i })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: /entity model sections/i })).toHaveTextContent(/Entity Types/i);
+    expect(screen.getByRole("complementary", { name: /entity model context panel/i })).toHaveTextContent(/Workflow Context/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /event logic/i }));
+    expect(screen.getByRole("region", { name: /event logic authoring shell/i })).toBeInTheDocument();
+  });
+
+  test("groups section selector options by workflow mode", () => {
+    renderDetail({
+      ...baseModel,
+      entityTypes: [{ id: "bad-customer", name: "", role: "customer", attrDefs: [] }],
+    });
+
+    expect(screen.getByRole("group", { name: /entity model/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Validate \(1\/2\)/i })).toBeInTheDocument();
+  });
+
   test("offers next-step run actions when the model has no blockers", () => {
     renderDetail({
       ...baseModel,

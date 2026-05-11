@@ -79,7 +79,13 @@ describe('run history', () => {
     fireEvent.click(screen.getByRole('tab', { name: /history/i }));
 
     await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith('m1'));
-    expect(await screen.findByText('Two servers')).toBeInTheDocument();
+    expect((await screen.findAllByText('Two servers')).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('LATEST RUN');
+    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('SERVED');
+    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('81');
+    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('RENEGE RATE');
+    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('0.0%');
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Export History' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Export History CSV' })).toBeEnabled();
   });
@@ -101,7 +107,7 @@ describe('run history', () => {
     renderDetail();
 
     fireEvent.click(screen.getByRole('tab', { name: /history/i }));
-    await screen.findByText('Two servers');
+    await screen.findAllByText('Two servers');
     fireEvent.click(screen.getByRole('button', { name: 'Export History' }));
 
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));

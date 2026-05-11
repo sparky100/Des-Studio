@@ -392,6 +392,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     setSelectedResultsRunId(row.id);
     setLatestResults(row.results_json);
   };
+  const formatRunDate = value => {
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return "Unknown";
+    return `${dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})} ${dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`;
+  };
+  const formatPercent = value => Number.isFinite(value) ? `${value.toFixed(1)}%` : "—";
+  const formatTime = value => value != null && Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}t` : "—";
 
   const TabErrors = ({ tabId }) => {
     const errs  = validation.errors.filter(e => e.tab === tabId);
@@ -548,6 +555,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     {id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},
     {id:"state",label:"State Vars"},
+    {id:"validate",label:"Validate"},
     // ── RUN ──
     {id:"_runlabel",label:"─── Run ───",disabled:true},
     {id:"execute",label:"▶ Execute"},
@@ -556,15 +564,28 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
   const selectableTabs = TABS.filter(t => !t.disabled);
+  const NAV_MODES=[
+    {id:"visual-design",label:"Visual Design",primaryTab:"visual",tabs:["overview","visual","ai"]},
+    {id:"entity-model",label:"Entity Model",primaryTab:"entities",tabs:["entities","queues","state"]},
+    {id:"event-logic",label:"Event Logic",primaryTab:"bevents",tabs:["bevents","cevents"]},
+    {id:"validate",label:"Validate",primaryTab:"validate",tabs:["validate"]},
+    {id:"execute",label:"Execute",primaryTab:"execute",tabs:["execute"]},
+    {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
+    ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
+  ];
+  const tabById = Object.fromEntries(selectableTabs.map(t => [t.id, t]));
+  const activeMode = NAV_MODES.find(mode => mode.tabs.includes(tab)) || NAV_MODES[0];
   const tabIssueCounts = useMemo(() => {
     const counts = {};
     for (const issue of validation.errors || []) {
       const tabId = issue.tab || "overview";
       counts[tabId] = { errors: (counts[tabId]?.errors || 0) + 1, warnings: counts[tabId]?.warnings || 0 };
+      counts.validate = { errors: (counts.validate?.errors || 0) + 1, warnings: counts.validate?.warnings || 0 };
     }
     for (const issue of validation.warnings || []) {
       const tabId = issue.tab || "overview";
       counts[tabId] = { errors: counts[tabId]?.errors || 0, warnings: (counts[tabId]?.warnings || 0) + 1 };
+      counts.validate = { errors: counts.validate?.errors || 0, warnings: (counts.validate?.warnings || 0) + 1 };
     }
     return counts;
   }, [validation]);
@@ -576,6 +597,141 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     if (counts.warnings) parts.push(`${counts.warnings} warning${counts.warnings === 1 ? "" : "s"}`);
     return parts.join(", ");
   };
+  const authoringShellMode = ["visual-design", "entity-model", "event-logic"].includes(activeMode.id)
+    ? activeMode
+    : null;
+  const AuthoringWorkflowShell = ({mode, children}) => {
+    const modeTabs = mode.tabs.filter(tabId => tabById[tabId]);
+    const modeCounts = modeTabs.reduce((acc, tabId) => {
+      const counts = tabIssueCounts[tabId] || {};
+      return {
+        errors: acc.errors + (counts.errors || 0),
+        warnings: acc.warnings + (counts.warnings || 0),
+      };
+    }, {errors: 0, warnings: 0});
+    const activeLabel = tabById[tab]?.label || mode.label;
+    const nextAction = modeCounts.errors > 0
+      ? "Resolve blockers before executing."
+      : mode.id === "visual-design"
+        ? "Shape the process map, then validate the generated model structure."
+        : mode.id === "entity-model"
+          ? "Define entities, queues, and state before adding event logic."
+          : "Connect B-Events and C-Events, then validate the run path.";
+
+    return (
+      <section
+        aria-label={`${mode.label} authoring shell`}
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 14,
+          flexWrap: "wrap",
+        }}
+      >
+        <aside
+          aria-label={`${mode.label} sections`}
+          style={{
+            background: C.panel,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            padding: 10,
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            flex: "0 1 210px",
+            minWidth: 180,
+          }}
+        >
+          <div style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.3,fontWeight:700}}>MODE SECTIONS</div>
+          {modeTabs.map(tabId => {
+            const section = tabById[tabId];
+            const selected = tab === tabId;
+            const counts = tabIssueCounts[tabId] || {};
+            return (
+              <button
+                key={tabId}
+                type="button"
+                aria-current={selected ? "page" : undefined}
+                onClick={()=>setTab(tabId)}
+                style={{
+                  background: selected ? C.accent + "18" : C.surface,
+                  border: `1px solid ${selected ? C.accent : C.border}`,
+                  borderRadius: 6,
+                  color: selected ? C.accent : C.text,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  fontFamily: FONT,
+                  fontSize: 11,
+                  fontWeight: selected ? 700 : 600,
+                  padding: "8px 9px",
+                  textAlign: "left",
+                  width: "100%",
+                }}
+              >
+                <span>{section.label}</span>
+                {(counts.errors || counts.warnings) ? (
+                  <span style={{color: counts.errors ? C.red : C.amber, fontSize: 10, fontWeight: 700}}>
+                    {counts.errors || counts.warnings}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </aside>
+        <main
+          aria-label={`${mode.label} workspace`}
+          style={{
+            flex: "1 1 520px",
+            minWidth: 0,
+          }}
+        >
+          {children}
+        </main>
+        <aside
+          aria-label={`${mode.label} context panel`}
+          style={{
+            background: C.panel,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            padding: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            flex: "0 1 280px",
+            minWidth: 220,
+          }}
+        >
+          <div>
+            <div style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.3,fontWeight:700,marginBottom:5}}>WORKFLOW CONTEXT</div>
+            <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>{activeLabel}</div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:8}}>
+            {[
+              {label:"Blockers",value:modeCounts.errors,color:modeCounts.errors?C.red:C.green},
+              {label:"Warnings",value:modeCounts.warnings,color:modeCounts.warnings?C.amber:C.green},
+            ].map(item=>(
+              <div key={item.label} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:"8px 9px"}}>
+                <div style={{fontSize:8,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700,marginBottom:3}}>{item.label.toUpperCase()}</div>
+                <div style={{fontSize:16,color:item.color,fontFamily:FONT,fontWeight:700}}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
+            {nextAction}
+          </div>
+          <Btn small variant={modeCounts.errors ? "ghost" : "primary"} onClick={()=>setTab("validate")}>
+            Open Validate
+          </Btn>
+        </aside>
+      </section>
+    );
+  };
+  const renderAuthoringShell = content => (
+    authoringShellMode ? <AuthoringWorkflowShell mode={authoringShellMode}>{content}</AuthoringWorkflowShell> : content
+  );
 
   useEffect(()=>{
     if(tab!=="history"&&tab!=="results")return;
@@ -631,6 +787,51 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         )}
         {canEdit&&dirty&&<Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save"}</Btn>}
       </div>
+      <div aria-label="Model workflow modes" style={{display:"flex",alignItems:"stretch",gap:8,padding:"8px 20px",borderBottom:`1px solid ${C.border}`,background:C.bg,overflowX:"auto",flexShrink:0}}>
+        {NAV_MODES.map(mode=>{
+          const selected = activeMode.id === mode.id;
+          const modeCounts = mode.tabs.reduce((acc, tabId) => {
+            const counts = tabIssueCounts[tabId] || {};
+            return { errors: acc.errors + (counts.errors || 0), warnings: acc.warnings + (counts.warnings || 0) };
+          }, { errors: 0, warnings: 0 });
+          return (
+            <button
+              key={mode.id}
+              type="button"
+              aria-pressed={selected}
+              onClick={()=>setTab(mode.primaryTab)}
+              style={{
+                background:selected?C.panel:C.surface,
+                border:`1px solid ${selected?C.accent:C.border}`,
+                borderRadius:6,
+                color:selected?C.accent:C.text,
+                cursor:"pointer",
+                display:"inline-flex",
+                alignItems:"center",
+                gap:6,
+                flexShrink:0,
+                fontFamily:FONT,
+                fontSize:11,
+                fontWeight:700,
+                padding:"7px 10px",
+                whiteSpace:"nowrap",
+              }}
+            >
+              <span>{mode.label}</span>
+              {modeCounts.errors > 0 && (
+                <span aria-hidden="true" style={{background:C.errorBg,border:`1px solid ${C.danger}66`,borderRadius:10,color:C.error,fontSize:9,padding:"1px 5px"}}>
+                  {modeCounts.errors}
+                </span>
+              )}
+              {!modeCounts.errors && modeCounts.warnings > 0 && (
+                <span aria-hidden="true" style={{background:C.warmup,border:`1px solid ${C.amber}66`,borderRadius:10,color:C.warnBg,fontSize:9,padding:"1px 5px"}}>
+                  {modeCounts.warnings}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
       <div style={{display:"flex",alignItems:"stretch",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px 6px 20px",borderRight:`1px solid ${C.border}`,flexShrink:0}}>
           <label htmlFor="model-section-jump" style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.1,fontWeight:700,whiteSpace:"nowrap"}}>SECTION</label>
@@ -641,11 +842,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             onChange={e=>setTab(e.target.value)}
             style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 7px",maxWidth:180,outline:"none"}}
           >
-            {selectableTabs.map(t=>{
-              const counts = tabIssueCounts[t.id];
-              const suffix = counts ? ` (${counts.errors || 0}/${counts.warnings || 0})` : "";
-              return <option key={t.id} value={t.id}>{t.label}{suffix}</option>;
-            })}
+            {NAV_MODES.map(mode=>(
+              <optgroup key={mode.id} label={mode.label}>
+                {mode.tabs.filter(tabId => tabById[tabId]).map(tabId=>{
+                  const t = tabById[tabId];
+                  const counts = tabIssueCounts[t.id];
+                  const suffix = counts ? ` (${counts.errors || 0}/${counts.warnings || 0})` : "";
+                  return <option key={t.id} value={t.id}>{t.label}{suffix}</option>;
+                })}
+              </optgroup>
+            ))}
           </select>
         </div>
         <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:8,flex:1,minWidth:0,overflowX:"auto"}}>
@@ -698,27 +904,31 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           message="This tab could not render. Try opening the tab again."
         >
         {tab==="ai"&&(
-          <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel} onSaveModel={saveGeneratedModel}/>
+          renderAuthoringShell(
+            <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel} onSaveModel={saveGeneratedModel}/>
+          )
         )}
         {tab==="visual"&&(
-          <Suspense fallback={
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 48,
-              color: C.muted,
-              fontFamily: FONT,
-              fontSize: 12,
-            }}>
-              Loading Visual Designer…
-            </div>
-          }>
-            <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel}/>
-          </Suspense>
+          renderAuthoringShell(
+            <Suspense fallback={
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 48,
+                color: C.muted,
+                fontFamily: FONT,
+                fontSize: 12,
+              }}>
+                Loading Visual Designer…
+              </div>
+            }>
+              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel}/>
+            </Suspense>
+          )
         )}
         {tab==="overview"&&(
-          <div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
+          renderAuthoringShell(<div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
             <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null}/>
             <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4}/>
             <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:14}}>
@@ -755,10 +965,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 </div>
               </div>
             )}
-          </div>
+          </div>)
         )}
         {tab==="entities"&&(
-          <div style={{maxWidth:1100,display:"flex",flexDirection:"column",gap:14}}>
+          renderAuthoringShell(<div style={{maxWidth:1100,display:"flex",flexDirection:"column",gap:14}}>
             <TabErrors tabId="entities"/>
             {canEdit&&(
               <div style={{display:"flex",justifyContent:"flex-end"}}>
@@ -775,12 +985,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 }}
               />
             )}
-          </div>
+          </div>)
         )}
-        {tab==="state"&&<div style={{maxWidth:900}}><TabErrors tabId="state"/><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>}
-        {tab==="bevents"&&<div style={{maxWidth:1100}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>}
-        {tab==="cevents"&&<div style={{maxWidth:1100}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>}
-        {tab==="queues"&&<div style={{maxWidth:900}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
+        {tab==="state"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="state"/><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>)}
+        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>)}
+        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
+        {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
   // Propagate queue renames through the entire model
   const oldQueues = model.queues || [];
   let updated = { ...model, queues: newQueues };
@@ -792,7 +1002,54 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     }
   }
   setWholeModel(updated);
-}:()=>{}}/></div>}
+}:()=>{}}/></div>)}
+
+        {tab==="validate"&&(
+          <div style={{maxWidth:1000,display:"flex",flexDirection:"column",gap:14}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:4}}>VALIDATION WORKSPACE</div>
+                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Model readiness and issue routing</div>
+              </div>
+              <Btn small variant="ghost" onClick={()=>setTab("execute")} disabled={validation.errors.length>0}>Run Model</Btn>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:10}}>
+              {[
+                {label:"Blockers",value:validation.errors.length,color:validation.errors.length?C.red:C.green},
+                {label:"Warnings",value:validation.warnings.length,color:validation.warnings.length?C.amber:C.green},
+                {label:"Sections",value:Object.keys(tabIssueCounts).filter(id=>id!=="validate").length,color:C.accent},
+              ].map(item=>(
+                <div key={item.label} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:"10px 12px"}}>
+                  <div style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.1,fontWeight:700,marginBottom:4}}>{item.label.toUpperCase()}</div>
+                  <div style={{fontSize:18,color:item.color,fontFamily:FONT,fontWeight:700}}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+            {[...(validation.errors||[]),...(validation.warnings||[])].length ? (
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {[...(validation.errors||[]),...(validation.warnings||[])].map((issue,index)=>{
+                  const isError = validation.errors.includes(issue);
+                  const targetTab = issue.tab || "overview";
+                  const tabLabel = MODEL_HEALTH_TAB_LABELS[targetTab] || "Overview";
+                  return (
+                    <button
+                      key={`${issue.code}-${index}`}
+                      type="button"
+                      onClick={()=>setTab(targetTab)}
+                      style={{background:isError?C.errorBg:C.warmup,border:`1px solid ${isError?C.danger:C.amber}66`,borderRadius:6,color:isError?C.error:C.warnBg,cursor:"pointer",fontFamily:FONT,fontSize:11,padding:"9px 11px",textAlign:"left"}}
+                    >
+                      [{issue.code}] {tabLabel}: {issue.message}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{background:C.panel,border:`1px solid ${C.green}55`,borderRadius:8,padding:16,color:C.green,fontFamily:FONT,fontSize:12}}>
+                No blocking validation issues found.
+              </div>
+            )}
+          </div>
+        )}
 
         {tab==="execute"&&(
           <ErrorBoundary
@@ -855,10 +1112,33 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
               <Empty icon="📊" msg="No runs yet. Run the simulation from the Execute tab."/>
             )}
             {!historyLoading&&historyRows.length>0&&(
-              <div style={{overflowX:"auto"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                {(() => {
+                  const latest = historyRows[0];
+                  const arrived = Number(latest.total_arrived || 0);
+                  const reneged = Number(latest.total_reneged || 0);
+                  const renegeRate = arrived > 0 ? (reneged / arrived) * 100 : null;
+                  const cells = [
+                    { label: "Latest run", value: latest.run_label || formatRunDate(latest.ran_at), color: C.accent },
+                    { label: "Served", value: latest.total_served || 0, color: C.served },
+                    { label: "Renege rate", value: formatPercent(renegeRate), color: reneged > 0 ? C.reneged : C.muted },
+                    { label: "Avg wait", value: formatTime(latest.avg_wait_time), color: C.amber },
+                  ];
+                  return (
+                    <div aria-label="Run history summary" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:10}}>
+                      {cells.map(cell=>(
+                        <div key={cell.label} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:"10px 12px"}}>
+                          <div style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.1,fontWeight:700,marginBottom:4}}>{cell.label.toUpperCase()}</div>
+                          <div style={{fontSize:14,color:cell.color,fontFamily:FONT,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={String(cell.value)}>{cell.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+                <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FONT,fontSize:11}}>
                   <thead>
-                    <tr>                    {["Date / Time","Label","Served","Reneged","Avg Wait","Summary","Reshare",""].map(h=>(
+                    <tr>{["Date / Time","Label","Served","Reneged","Avg Wait","Summary","Reshare","Actions"].map(h=>(
                       <th key={h} style={{textAlign:"left",padding:"6px 12px",color:C.muted,borderBottom:`1px solid ${C.border}`,fontSize:10,letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
                     ))}</tr>
                   </thead>
@@ -895,6 +1175,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
           </div>
