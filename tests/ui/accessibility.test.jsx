@@ -65,11 +65,11 @@ describe('accessibility pass', () => {
       />
     );
 
-    expect(screen.getByRole('tab', { name: 'Use AI' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: 'AI Designer' })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
     const tabs = screen.getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs.indexOf('Use AI')).toBeGreaterThan(tabs.indexOf('Overview'));
-    expect(tabs.indexOf('Visual Designer')).toBeGreaterThan(tabs.indexOf('Use AI'));
+    expect(tabs.indexOf('AI Designer')).toBeGreaterThan(tabs.indexOf('Overview'));
+    expect(tabs.indexOf('Visual Designer')).toBeGreaterThan(tabs.indexOf('Overview'));
 
     await user.click(screen.getByRole('tab', { name: /execute/i }));
     expect(screen.getByRole('tab', { name: /execute/i })).toHaveAttribute('aria-selected', 'true');

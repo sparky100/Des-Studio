@@ -94,7 +94,7 @@ function StageKpisTable({ snap, model }) {
   const serverTypes = (model.entityTypes || []).filter(et => et.role === "server");
 
   const th = (label, right = false) => (
-    <th style={{ padding: "4px 8px", textAlign: right ? "right" : "left", fontWeight: 600,
+    <th key={label} style={{ padding: "4px 8px", textAlign: right ? "right" : "left", fontWeight: 600,
       color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 0.8 }}>
       {label}
     </th>
@@ -117,8 +117,14 @@ function StageKpisTable({ snap, model }) {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                {th("Queue")} {th("Depth", true)} {th("Mean wait", true)}
-                {th("Max wait", true)} {th("Arrivals", true)} {th("Reneged", true)}
+                {[
+                  th("Queue"),
+                  th("Depth", true),
+                  th("Mean wait", true),
+                  th("Max wait", true),
+                  th("Arrivals", true),
+                  th("Reneged", true),
+                ]}
               </tr>
             </thead>
             <tbody>
@@ -154,8 +160,14 @@ function StageKpisTable({ snap, model }) {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                {th("Server type")} {th("Capacity", true)} {th("Busy", true)}
-                {th("Utilisation", true)} {th("Mean svc", true)} {th("Completions", true)}
+                {[
+                  th("Server type"),
+                  th("Capacity", true),
+                  th("Busy", true),
+                  th("Utilisation", true),
+                  th("Mean svc", true),
+                  th("Completions", true),
+                ]}
               </tr>
             </thead>
             <tbody>

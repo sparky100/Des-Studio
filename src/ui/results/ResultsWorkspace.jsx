@@ -9,6 +9,62 @@ const CHART_W = 400;
 const CHART_H = 120;
 const CHART_COLORS = [C.accent, C.bEvent, C.purple, C.green, C.red, C.server];
 
+function formatNumber(value, digits = 2) {
+  if (!Number.isFinite(Number(value))) return "0";
+  const rounded = Number(value).toFixed(digits);
+  return rounded.replace(/\.?0+$/, "");
+}
+
+function MetricStrip({ items }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))", gap: 6 }}>
+      {items.map(item => (
+        <div key={item.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "6px 8px" }}>
+          <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700, marginBottom: 2 }}>
+            {item.label.toUpperCase()}
+          </div>
+          <div style={{ fontSize: 11, color: item.color || C.text, fontFamily: FONT, fontWeight: 700 }}>
+            {item.value}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SeriesDataSummary({ series, valueLabel }) {
+  const points = Array.isArray(series?.points) ? series.points : [];
+  if (!points.length) return null;
+  const first = points[0];
+  const last = points[points.length - 1];
+  const peak = Math.max(...points.map(p => Number(p.value) || 0));
+  return (
+    <MetricStrip
+      items={[
+        { label: "points", value: points.length },
+        { label: "first", value: `t=${formatNumber(first.t)} -> ${formatNumber(first.value)}` },
+        { label: "last", value: `t=${formatNumber(last.t)} -> ${formatNumber(last.value)}` },
+        { label: `peak ${valueLabel}`, value: formatNumber(peak), color: C.accent },
+      ]}
+    />
+  );
+}
+
+function WaitDataSummary({ dist }) {
+  const vals = Array.isArray(dist?.values) ? dist.values : [];
+  if (!vals.length) return null;
+  return (
+    <MetricStrip
+      items={[
+        { label: "samples", value: dist.n },
+        { label: "min wait", value: formatNumber(vals[0]) },
+        { label: "max wait", value: formatNumber(vals[vals.length - 1]) },
+        { label: "mean wait", value: formatNumber(dist.mean), color: C.accent },
+      ]}
+    />
+  );
+}
+
 function WaitHistogram({ dist, color }) {
   if (!dist || dist.n < 2) return null;
   const vals = dist.values;
@@ -199,6 +255,7 @@ export function ResultsWorkspace({ results, model }) {
                 <div style={{ fontSize: 9, color: series.source === "type-fallback" ? C.amber : C.muted, fontFamily: FONT }}>
                   Data: {series.sourceLabel}
                 </div>
+                <SeriesDataSummary series={series} valueLabel="depth" />
               </div>
             ))}
           </div>
@@ -219,6 +276,7 @@ export function ResultsWorkspace({ results, model }) {
                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>
                   Data: {series.sourceLabel}
                 </div>
+                <SeriesDataSummary series={series} valueLabel="utilisation" />
               </div>
             ))}
           </div>
@@ -234,6 +292,9 @@ export function ResultsWorkspace({ results, model }) {
                 <WaitHistogram dist={dist} color={C.amber} />
                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginTop: 5 }}>
                   Data: {dist.sourceLabel}
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <WaitDataSummary dist={dist} />
                 </div>
               </div>
             ))}

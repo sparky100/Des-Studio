@@ -45,6 +45,16 @@ describe("ResultsWorkspace", () => {
     expect(screen.getByText(/Data: 3 completed waits from engine waitDist/i)).toBeInTheDocument();
   });
 
+  test("shows compact data checks under charts", () => {
+    render(<ResultsWorkspace results={results} model={model} />);
+
+    expect(screen.getAllByText("POINTS").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("t=0 -> 1")).toBeInTheDocument();
+    expect(screen.getByText("t=5 -> 3")).toBeInTheDocument();
+    expect(screen.getByText("PEAK DEPTH")).toBeInTheDocument();
+    expect(screen.getByText("MAX WAIT")).toBeInTheDocument();
+  });
+
   test("shows detailed-output guidance when chart inputs are absent", () => {
     render(<ResultsWorkspace results={{}} model={model} />);
 

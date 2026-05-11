@@ -155,6 +155,20 @@ function buildRunHistoryCsv(rows = []) {
   return table.map(row => row.map(csvEscape).join(",")).join("\n");
 }
 
+const MODEL_HEALTH_TAB_LABELS = {
+  overview: "Overview",
+  visual: "Visual Designer",
+  ai: "AI Designer",
+  entities: "Entity Types",
+  queues: "Queues",
+  bevents: "B-Events",
+  cevents: "C-Events",
+  state: "State Vars",
+  execute: "Execute",
+  results: "Results",
+  history: "History",
+};
+
 const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})=>{
   const [model,setModel]=useState(()=>{
     if(!modelData) return null;
@@ -401,6 +415,100 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     );
   };
 
+  const ModelHealthPanel = () => {
+    const blockers = validation.errors || [];
+    const warnings = validation.warnings || [];
+    const issues = [...blockers, ...warnings].slice(0, 5);
+    const hasBlockers = blockers.length > 0;
+    const hasWarnings = warnings.length > 0;
+    const statusColor = hasBlockers ? C.red : hasWarnings ? C.amber : C.green;
+    const statusBg = hasBlockers ? C.errorBg : hasWarnings ? C.warmup : C.green + "14";
+    const statusBorder = hasBlockers ? C.danger : hasWarnings ? C.amber : C.green;
+    const statusTitle = hasBlockers
+      ? `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}`
+      : hasWarnings
+        ? `Ready with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
+        : "Ready to run";
+
+    return (
+      <section
+        aria-label="Model health"
+        style={{
+          background: C.panel,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+          padding: 12,
+          marginBottom: 14,
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{display:"flex",alignItems:"flex-start",gap:10,minWidth:240,flex:"1 1 280px"}}>
+          <div style={{
+            background: statusBg,
+            border: `1px solid ${statusBorder}66`,
+            borderRadius: 6,
+            padding: "6px 9px",
+            color: statusColor,
+            fontFamily: FONT,
+            fontSize: 11,
+            fontWeight: 700,
+            whiteSpace: "nowrap",
+          }}>
+            {statusTitle}
+          </div>
+          <div>
+            <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.4,fontWeight:700,marginBottom:4}}>MODEL HEALTH</div>
+            <div style={{fontSize:12,color:C.text,fontFamily:FONT,lineHeight:1.5}}>
+              {hasBlockers
+                ? "Fix blocking validation issues before running this model."
+                : hasWarnings
+                  ? "The model can run, but review the warnings before trusting outputs."
+                  : "No blocking validation issues found."}
+            </div>
+          </div>
+        </div>
+        {issues.length > 0 && (
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end",flex:"1 1 360px"}}>
+            {issues.map((issue, index) => {
+              const targetTab = issue.tab || "overview";
+              const tabLabel = MODEL_HEALTH_TAB_LABELS[targetTab] || "Overview";
+              const isError = blockers.includes(issue);
+              return (
+                <button
+                  key={`${issue.code}-${index}-${targetTab}`}
+                  type="button"
+                  onClick={() => setTab(targetTab)}
+                  title={issue.message}
+                  style={{
+                    background: isError ? C.errorBg : C.warmup,
+                    border: `1px solid ${isError ? C.danger : C.amber}66`,
+                    borderRadius: 6,
+                    color: isError ? C.error : C.warnBg,
+                    cursor: "pointer",
+                    fontFamily: FONT,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: "7px 9px",
+                    maxWidth: 420,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  [{issue.code}] {tabLabel}: {issue.message}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   const TABS=[
     // ── DESIGN ──
     {id:"overview",label:"Overview"},
@@ -504,6 +612,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save Changes"}</Btn>
           </div>
         )}
+        <ModelHealthPanel/>
         <ErrorBoundary
           key={tab}
           title="Model panel crashed"
