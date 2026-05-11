@@ -7,18 +7,18 @@
      "temperature": 0.3,
      "permission": { "edit": "allow", "bash": "allow" }
    },
-   "plan": {
-     "description": "Architecture and planning agent — read-only",
-     "mode": "primary",
-     "model": "anthropic/claude-haiku-4-20250514",
-     "temperature": 0.1,
-     "permission": { "edit": "deny", "bash": "deny" }
-   },
-   "explore": {
-     "description": "Fast codebase search and analysis — read-only",
-     "mode": "subagent",
-     "model": "anthropic/claude-haiku-4-20250514",
-     "temperature": 0.1,
+    "plan": {
+      "description": "Architecture and planning agent — read-only",
+      "mode": "primary",
+      "model": "opencode-go/deepseek-v4-pro",
+      "temperature": 0.1,
+      "permission": { "edit": "deny", "bash": "deny" }
+    },
+    "explore": {
+      "description": "Fast codebase search and analysis — read-only",
+      "mode": "subagent",
+      "model": "opencode-go/deepseek-v4-flash",
+      "temperature": 0.1,
      "prompt": "You are a fast codebase explorer. Search for files, grep for patterns, and answer structural questions. Do NOT make any edits.",
      "permission": { "edit": "deny", "bash": { "*": "ask", "grep *": "allow", "rg *": "allow", "Select-String *": "allow" } }
    },
