@@ -381,14 +381,22 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   };
 
   const TABS=[
-    {id:"overview",label:"Overview"},{id:"entities",label:"Entity Types"},
-    {id:"state",label:"State Vars"},{id:"bevents",label:"B-Events"},
-    {id:"cevents",label:"C-Events"},{id:"queues",label:"Queues"},
-    {id:"goals",label:"Goals"},
-    {id:"ai",label:"Use AI"},
+    // ── DESIGN ──
+    {id:"overview",label:"Overview"},
     {id:"visual",label:"Visual Designer"},
+    {id:"entities",label:"Entity Types"},
+    {id:"queues",label:"Queues"},
+    {id:"bevents",label:"B-Events"},
+    {id:"cevents",label:"C-Events"},
+    {id:"goals",label:"Goals"},
+    // ── RUN ──
+    {id:"_runlabel",label:"─── Run ───",disabled:true},
     {id:"execute",label:"▶ Execute"},
     {id:"history",label:"History"},
+    // ── ANALYZE ──
+    {id:"_analyzlabel",label:"─── Analyze ───",disabled:true},
+    {id:"ai",label:"Use AI"},
+    {id:"state",label:"State Vars"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
 
@@ -431,7 +439,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         {canEdit&&dirty&&<Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save"}</Btn>}
       </div>
       <div role="tablist" aria-label="Model sections" style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.surface,paddingLeft:20,flexShrink:0,overflowX:"auto"}}>
-        {TABS.map(t=>(
+        {TABS.map(t=>t.disabled?(
+          <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>
+        ):(
           <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
             borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",
             color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400}}>{t.label}</button>
@@ -504,6 +514,20 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 ))}
               </div>
             </div>
+            {/* Startup prompt for empty models */}
+            {canEdit&&!(model.entityTypes||[]).length&&!runCountValue&&(
+              <div style={{background:C.surface,border:`1px solid ${C.accent}44`,borderRadius:8,padding:18,display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.accent,fontFamily:FONT}}>Get started building your model</div>
+                <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
+                  Choose how you'd like to define your simulation model:
+                </div>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+                  <Btn variant="primary" onClick={()=>setTab("visual")}>🎨 Visual Designer</Btn>
+                  <Btn variant="ghost" onClick={()=>setTab("ai")}>🤖 Use AI to generate</Btn>
+                  <Btn variant="ghost" onClick={()=>setTab("entities")}>📝 Start with forms</Btn>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {tab==="entities"&&(
