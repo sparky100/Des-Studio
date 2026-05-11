@@ -429,6 +429,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
       : hasWarnings
         ? `Ready with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
         : "Ready to run";
+    const completedRuns = Number.isFinite(model.stats?.runs) ? model.stats.runs : 0;
+    const actionHint = hasBlockers
+      ? "Resolve the listed issues first."
+      : latestResults
+        ? "Review the latest run or run another scenario."
+        : completedRuns > 0
+          ? "Pick a saved run or start a fresh execution."
+          : "Run this model to generate results.";
 
     return (
       <section
@@ -506,6 +514,25 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             })}
           </div>
         )}
+        <div style={{
+          borderTop: `1px solid ${C.border}`,
+          paddingTop: 10,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          flex: "1 1 100%",
+          flexWrap: "wrap",
+        }}>
+          <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>
+            {actionHint}
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {!hasBlockers && <Btn small variant="primary" onClick={()=>setTab("execute")}>Run Model</Btn>}
+            {!hasBlockers && latestResults && <Btn small variant="ghost" onClick={()=>setTab("results")}>View Results</Btn>}
+            {!hasBlockers && completedRuns > 0 && <Btn small variant="ghost" onClick={()=>setTab("history")}>Run History</Btn>}
+          </div>
+        </div>
       </section>
     );
   };
@@ -529,6 +556,26 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
   const selectableTabs = TABS.filter(t => !t.disabled);
+  const tabIssueCounts = useMemo(() => {
+    const counts = {};
+    for (const issue of validation.errors || []) {
+      const tabId = issue.tab || "overview";
+      counts[tabId] = { errors: (counts[tabId]?.errors || 0) + 1, warnings: counts[tabId]?.warnings || 0 };
+    }
+    for (const issue of validation.warnings || []) {
+      const tabId = issue.tab || "overview";
+      counts[tabId] = { errors: counts[tabId]?.errors || 0, warnings: (counts[tabId]?.warnings || 0) + 1 };
+    }
+    return counts;
+  }, [validation]);
+  const tabIssueLabel = tabId => {
+    const counts = tabIssueCounts[tabId];
+    if (!counts) return "";
+    const parts = [];
+    if (counts.errors) parts.push(`${counts.errors} error${counts.errors === 1 ? "" : "s"}`);
+    if (counts.warnings) parts.push(`${counts.warnings} warning${counts.warnings === 1 ? "" : "s"}`);
+    return parts.join(", ");
+  };
 
   useEffect(()=>{
     if(tab!=="history"&&tab!=="results")return;
@@ -594,16 +641,32 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             onChange={e=>setTab(e.target.value)}
             style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 7px",maxWidth:180,outline:"none"}}
           >
-            {selectableTabs.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}
+            {selectableTabs.map(t=>{
+              const counts = tabIssueCounts[t.id];
+              const suffix = counts ? ` (${counts.errors || 0}/${counts.warnings || 0})` : "";
+              return <option key={t.id} value={t.id}>{t.label}{suffix}</option>;
+            })}
           </select>
         </div>
         <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:8,flex:1,minWidth:0,overflowX:"auto"}}>
           {TABS.map(t=>t.disabled?(
             <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>
           ):(
-            <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
+            <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} aria-label={`${t.label}${tabIssueLabel(t.id) ? `, ${tabIssueLabel(t.id)}` : ""}`} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
               borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",
-              color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400}}>{t.label}</button>
+              color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400,display:"inline-flex",alignItems:"center",gap:6}}>
+              <span>{t.label}</span>
+              {tabIssueCounts[t.id]?.errors > 0 && (
+                <span aria-hidden="true" style={{background:C.errorBg,border:`1px solid ${C.danger}66`,borderRadius:10,color:C.error,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
+                  {tabIssueCounts[t.id].errors}
+                </span>
+              )}
+              {!tabIssueCounts[t.id]?.errors && tabIssueCounts[t.id]?.warnings > 0 && (
+                <span aria-hidden="true" style={{background:C.warmup,border:`1px solid ${C.amber}66`,borderRadius:10,color:C.warnBg,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
+                  {tabIssueCounts[t.id].warnings}
+                </span>
+              )}
+            </button>
           ))}
         </div>
       </div>

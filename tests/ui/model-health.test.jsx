@@ -56,6 +56,7 @@ describe("ModelDetail Model Health panel", () => {
 
     expect(screen.getByRole("region", { name: /model health/i })).toHaveTextContent(/blocker/i);
     expect(screen.getByRole("button", { name: /\[V1\] Entity Types/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /run model/i })).not.toBeInTheDocument();
   });
 
   test("opens the editor tab attached to a health issue", () => {
@@ -68,6 +69,16 @@ describe("ModelDetail Model Health panel", () => {
 
     expect(screen.getByRole("tab", { name: /entity types/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("alert")).toHaveTextContent(/Entity class at position 1 has an empty name/i);
+  });
+
+  test("marks tabs and section selector options with validation counts", () => {
+    renderDetail({
+      ...baseModel,
+      entityTypes: [{ id: "bad-customer", name: "", role: "customer", attrDefs: [] }],
+    });
+
+    expect(screen.getByRole("tab", { name: /entity types, 1 error/i })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Entity Types \(1\/0\)/i })).toBeInTheDocument();
   });
 
   test("uses responsive overview metric columns", () => {
@@ -92,5 +103,16 @@ describe("ModelDetail Model Health panel", () => {
     });
 
     expect(screen.getByRole("tab", { name: /queues/i })).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("offers next-step run actions when the model has no blockers", () => {
+    renderDetail({
+      ...baseModel,
+      entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /run model/i }));
+
+    expect(screen.getByRole("tab", { name: /execute/i })).toHaveAttribute("aria-selected", "true");
   });
 });
