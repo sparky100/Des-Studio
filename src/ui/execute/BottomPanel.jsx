@@ -123,13 +123,11 @@ function StageKpisTable({ snap, model }) {
             <tbody>
               {queues.map(q => {
                 const inQueue  = entities.filter(e => e.role !== "server" && (e.queue === q.name || e.lastQueue === q.name));
-                const waiting  = inQueue.filter(e => e.status === "waiting");
-                const waits    = inQueue
-                  .filter(e => e.serviceStart != null)
-                  .map(e => e.serviceStart - e.arrivalTime)
-                  .filter(Number.isFinite);
-                const meanWait = waits.length ? waits.reduce((a, b) => a + b, 0) / waits.length : null;
-                const maxWait  = waits.length ? Math.max(...waits) : null;
+                const waiting  = entities.filter(e => e.role !== "server" && e.queue === q.name && e.status === "waiting");
+                const now = snap.clock || 0;
+                const currentWaits = waiting.map(e => now - (e.arrivalTime || 0)).filter(Number.isFinite);
+                const meanWait = currentWaits.length ? currentWaits.reduce((a, b) => a + b, 0) / currentWaits.length : null;
+                const maxWait  = currentWaits.length ? Math.max(...currentWaits) : null;
                 return (
                   <tr key={q.name} style={{ borderBottom: `1px solid ${C.border}` }}>
                     {td(q.name, C.cEvent)}
