@@ -52,6 +52,19 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from('des_models').order).toHaveBeenCalledWith('updated_at', { ascending: false });
     });
 
+    it('uses wildcard selection so startup stays compatible with older des_models schemas', async () => {
+      supabase.from('des_models').select().or.mockReturnThis();
+      supabase.from('des_models').select().contains.mockReturnThis();
+      supabase.from('des_models').order
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: [], error: null });
+
+      await fetchModels('compat-user');
+
+      expect(supabase.from('des_models').select).toHaveBeenCalledWith('*');
+    });
+
     it('deduplicates and sorts rows from visible and shared model queries', async () => {
       const newer = {
         id: 'm-new',
@@ -93,6 +106,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from).toHaveBeenCalledWith('des_models');
       expect(supabase.from('des_models').eq).toHaveBeenCalledWith('visibility', 'public');
       expect(supabase.from('des_models').order).toHaveBeenCalledWith('updated_at', { ascending: false });
+      expect(supabase.from('des_models').select).toHaveBeenCalledWith('*');
     });
   });
 
@@ -512,6 +526,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       // Verify fetch call
       expect(supabase.from).toHaveBeenCalledWith('des_models');
       expect(supabase.from('des_models').select).toHaveBeenCalled();
+      expect(supabase.from('des_models').select).toHaveBeenCalledWith('*');
       expect(supabase.from('des_models').or).toHaveBeenCalledWith(expect.stringContaining(newUserId));
       expect(supabase.from('des_models').eq).toHaveBeenCalledWith('id', sourceModelId);
       expect(supabase.from('des_models').single).toHaveBeenCalled();
@@ -654,6 +669,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(result.run.avgWaitTime).toBe(8.2);
       expect(result.model.name).toBe('Test Model');
       expect(result.model.entityTypes).toHaveLength(1);
+      expect(supabase.from('des_models').select).toHaveBeenCalledWith('*');
     });
 
     it('getShareLink throws when share link is revoked', async () => {

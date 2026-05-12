@@ -36,6 +36,8 @@ export function normalizeUserSettings(row = {}) {
   };
 }
 
+const MODEL_ROW_SELECT = "*";
+
 // ── Row normalisation ─────────────────────────────────────────────────────────
 export function norm(r) {
   const modelJson = r.model_json || {};
@@ -102,17 +104,17 @@ export async function fetchModels(userId) {
     const [visible, sharedViewer, sharedEditor] = await Promise.all([
       supabase
         .from("des_models")
-        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at")
+        .select(MODEL_ROW_SELECT)
         .or(`owner_id.eq.${userId},visibility.eq.public`)
         .order("updated_at", sort),
       supabase
         .from("des_models")
-        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at")
+        .select(MODEL_ROW_SELECT)
         .contains("access", { [userId]: "viewer" })
         .order("updated_at", sort),
       supabase
         .from("des_models")
-        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at")
+        .select(MODEL_ROW_SELECT)
         .contains("access", { [userId]: "editor" })
         .order("updated_at", sort),
     ]);
@@ -134,7 +136,7 @@ export async function fetchModels(userId) {
   } else {
     const { data: publicData, error } = await supabase
       .from("des_models")
-      .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at")
+      .select(MODEL_ROW_SELECT)
       .eq("visibility", "public")
       .order("updated_at", { ascending: false });
     if (error) throw error;
@@ -365,7 +367,7 @@ export async function forkModel(sourceModelId, newUserId, newName = "") {
   // 1. Fetch the original model — must be owned by or accessible to the user
   const { data: sourceModel, error: fetchError } = await supabase
     .from("des_models")
-    .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at")
+    .select(MODEL_ROW_SELECT)
     .or(`owner_id.eq.${newUserId},visibility.eq.public`)
     .eq("id", sourceModelId)
     .single();
@@ -438,7 +440,7 @@ export async function getShareLink(token) {
 
   const { data: model, error: modelError } = await supabase
     .from("des_models")
-    .select("name, entity_types, queues, model_json")
+    .select(MODEL_ROW_SELECT)
     .eq("id", run.model_id)
     .single();
   if (modelError) throw modelError;
