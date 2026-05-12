@@ -84,6 +84,60 @@ describe("validateModel", () => {
     ]));
   });
 
+  it("blocks execution when both source and sink are missing", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "noop", name: "No-op", effect: "x = 1", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V8", tab: "bevents" }),
+    ]));
+    expect(result.warnings.filter(w => w.code === "V8")).toEqual([]);
+  });
+
+  it("warns when a source exists but no sink exists", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors.filter(e => e.code === "V8")).toEqual([]);
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V8", message: expect.stringContaining("may never leave the system") }),
+    ]));
+  });
+
+  it("warns when a sink exists but no source exists", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "complete", name: "Complete", effect: "COMPLETE()", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors.filter(e => e.code === "V8")).toEqual([]);
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V8", message: expect.stringContaining("no entity arrivals") }),
+    ]));
+  });
+
   // ── V25: RENEGE argument validation ──────────────────────────────────────
 
   it("warns when RENEGE() argument is a type name instead of 'ctx'", () => {

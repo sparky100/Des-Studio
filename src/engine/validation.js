@@ -282,7 +282,16 @@ export function validateModel(model) {
 
   // ── V8: Model must have at least one arrival source and at least one sink ──
   const hasArrive = bEvents.some(b => /ARRIVE\s*\(/i.test(effectText(b.effect)));
-  if (!hasArrive) {
+  const hasSinkMacro = bEvents.some(b => {
+    const text = effectText(b.effect);
+    return /COMPLETE\s*\(/i.test(text) || /RENEGE\s*\(/i.test(text);
+  });
+
+  if (!hasArrive && !hasSinkMacro) {
+    err('V8',
+      'Model has no arrival source and no sink: add an ARRIVE(Type) effect and a COMPLETE() or RENEGE() effect before running.',
+      'bevents');
+  } else if (!hasArrive) {
     warn('V8',
       'No B-Event with an ARRIVE(Type) effect was found — the simulation will have no entity arrivals.',
       'bevents');
@@ -290,11 +299,7 @@ export function validateModel(model) {
 
   // A "sink" is effectively an entity reaching a terminal status (done or reneged)
   // This check is a heuristic based on event effects that lead to termination.
-  const hasSinkMacro = bEvents.some(b => {
-    const text = effectText(b.effect);
-    return /COMPLETE\s*\(/i.test(text) || /RENEGE\s*\(/i.test(text);
-  });
-  if (!hasSinkMacro) {
+  if (hasArrive && !hasSinkMacro) {
     warn('V8',
       'No B-Event with a COMPLETE() or RENEGE() effect was found — entities may never leave the system.',
       'bevents');

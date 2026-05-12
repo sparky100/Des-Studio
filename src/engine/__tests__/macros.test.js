@@ -12,7 +12,7 @@ function makeCtx(entities, state, model, clock = 0, felRef = null) {
     model,
     clock,
     felRef,
-    helpers: makeHelpers(entities),
+    helpers: makeHelpers(entities, model),
     nextId: () => ++seq,
     _lastCustId: null,
     _lastSrvId: null,
@@ -409,6 +409,45 @@ describe('RENEGE_OLDEST(Customer)', () => {
     applyEffect('RENEGE_OLDEST(Customer)', ctx);
     expect(waiting.status).toBe('reneged');
     expect(serving.status).toBe('serving');
+  });
+
+  test('uses queue-name arbitration when the argument matches a queue', () => {
+    const inTreatment = { id: 1, type: 'Patient', role: 'customer', status: 'waiting', queue: 'Treatment', arrivalTime: 5, attrs: { priority: 4 }, stages: [] };
+    const inOther = { id: 2, type: 'Patient', role: 'customer', status: 'waiting', queue: 'Other', arrivalTime: 1, attrs: { priority: 1 }, stages: [] };
+    const entities = [inOther, inTreatment];
+    const state = { __reneged: 0 };
+    const model = {
+      entityTypes: [{ name: 'Patient', role: 'customer', attrDefs: [{ name: 'priority' }] }],
+      queues: [{ name: 'Treatment', discipline: 'PRIORITY' }],
+      bEvents: [],
+      cEvents: [],
+    };
+    const ctx = makeCtx(entities, state, model, 10);
+    applyEffect('RENEGE_OLDEST(Treatment)', ctx);
+    expect(inTreatment.status).toBe('reneged');
+    expect(inOther.status).toBe('waiting');
+  });
+});
+
+describe('BATCH(QueueName, batchSize)', () => {
+  test('uses centralized priority arbitration for queue selection', () => {
+    const lowPrio = { id: 1, type: 'Patient', role: 'customer', status: 'waiting', queue: 'Treatment', arrivalTime: 1, attrs: { priority: 5 }, stages: [] };
+    const highPrio = { id: 2, type: 'Patient', role: 'customer', status: 'waiting', queue: 'Treatment', arrivalTime: 3, attrs: { priority: 1 }, stages: [] };
+    const midPrio = { id: 3, type: 'Patient', role: 'customer', status: 'waiting', queue: 'Treatment', arrivalTime: 2, attrs: { priority: 2 }, stages: [] };
+    const entities = [lowPrio, highPrio, midPrio];
+    const model = {
+      entityTypes: [{ name: 'Patient', role: 'customer', attrDefs: [{ name: 'priority' }] }],
+      queues: [{ name: 'Treatment', discipline: 'PRIORITY' }],
+      bEvents: [],
+      cEvents: [],
+    };
+    const ctx = makeCtx(entities, {}, model, 10);
+
+    applyEffect('BATCH(Treatment, 2)', ctx);
+
+    const parent = entities.find(entity => entity.role === 'batch');
+    expect(parent).toBeDefined();
+    expect(parent.batch.children.map(child => child.id)).toEqual([2, 3]);
   });
 });
 

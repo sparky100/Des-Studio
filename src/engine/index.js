@@ -87,6 +87,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   let _terminationConditionMet = false;
   let _phaseCTruncated = false;
   let _excludedCount = 0;
+  let _statsResetTime = 0;
   const warnings = [];
 
   // ── Per-queue metrics (F11.4): blockingCount, balkCount per queue name ───────
@@ -120,7 +121,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // Assign IDs to pre-created servers
   for (const e of entities) e.id = nextId();
 
-  const helpers = () => makeHelpers(entities);
+  const helpers = () => makeHelpers(entities, runtimeModel);
   const createServerEntity = (serverTypeName, arrivalTime = clock) => {
     const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
     const entityType = (runtimeModel.entityTypes || []).find(et => et.role === "server" && match(et.name, serverTypeName));
@@ -138,7 +139,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   // ── Snapshot ──────────────────────────────────────────────────────────────
   function snap(clock) {
-    const h = makeHelpers(entities);
+    const h = makeHelpers(entities, runtimeModel);
     const types = [...new Set(entities.map(e => e.type))];
     const byType = {};
     types.forEach(t => {
@@ -219,7 +220,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     model: runtimeModel,
     clock,
     felRef,
-    helpers: makeHelpers(entities),
+    helpers: makeHelpers(entities, runtimeModel),
     nextId,
     rng,
     warnings,
@@ -279,6 +280,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     for (const ev of due) {
       if (ev.type === 'WARMUP' && !_warmupComplete) {
         _warmupComplete = true;
+        _statsResetTime = clock;
         const msg = `Warm-up complete at t=${clock.toFixed(3)}. Statistics reset.`;
         cycleLog.push({ phase: "WARMUP", time: clock, message: msg });
         log.push({ phase: "WARMUP", time: clock, message: msg });
@@ -392,16 +394,25 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const served       = customers.filter(e => e.status === "done");
     const reneged      = customers.filter(e => e.status === "reneged");
 
-    const avgWait = served.length
-      ? served.reduce((s, e) => s + ((e.serviceStart ?? e.arrivalTime) - e.arrivalTime), 0) / served.length
+    const waitSamples = served.map(entityWaitAfterWarmup);
+    const avgWait = waitSamples.length
+      ? waitSamples.reduce((s, value) => s + value, 0) / waitSamples.length
       : null;
-    const withService = served.filter(e => e.completionTime != null && e.serviceStart != null);
-    const avgSvc = withService.length
-      ? withService.reduce((s, e) => s + (e.completionTime - e.serviceStart), 0) / withService.length
+    const serviceSamples = served
+      .map(entityServiceAfterWarmup)
+      .filter(value => value != null);
+    const avgSvc = serviceSamples.length
+      ? serviceSamples.reduce((s, value) => s + value, 0) / serviceSamples.length
       : null;
-    const withSojourn  = customers.filter(e => e.sojournTime != null);
-    const avgSojourn   = withSojourn.length ? withSojourn.reduce((s, e) => s + e.sojournTime, 0) / withSojourn.length : null;
-    const maxSojourn   = withSojourn.length ? Math.max(...withSojourn.map(e => e.sojournTime)) : null;
+    const sojournSamples = customers
+      .map(entitySojournAfterWarmup)
+      .filter(value => value != null);
+    const avgSojourn = sojournSamples.length
+      ? sojournSamples.reduce((s, value) => s + value, 0) / sojournSamples.length
+      : null;
+    const maxSojourn = sojournSamples.length
+      ? Math.max(...sojournSamples)
+      : null;
 
     return {
       finalTime: clock,
@@ -417,6 +428,32 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     };
   }
 
+  function truncateInterval(start, end) {
+    if (start == null || end == null) return 0;
+    return Math.max(0, end - Math.max(start, _statsResetTime));
+  }
+
+  function entityWaitAfterWarmup(entity) {
+    if (!entity?.stages?.length) {
+      if (entity?.serviceStart == null) return 0;
+      return truncateInterval(entity.arrivalTime, entity.serviceStart);
+    }
+    return entity.stages.reduce((sum, stage) => sum + truncateInterval(stage.waitStartedAt, stage.serviceStartedAt), 0);
+  }
+
+  function entityServiceAfterWarmup(entity) {
+    if (!entity?.stages?.length) {
+      if (entity?.serviceStart == null || entity?.completionTime == null) return null;
+      return truncateInterval(entity.serviceStart, entity.completionTime);
+    }
+    return entity.stages.reduce((sum, stage) => sum + truncateInterval(stage.serviceStartedAt, stage.serviceEndedAt), 0);
+  }
+
+  function entitySojournAfterWarmup(entity) {
+    if (entity?.completionTime == null) return null;
+    return truncateInterval(entity.arrivalTime, entity.completionTime);
+  }
+
   // ── waitDist: per-queue wait-time distribution (F10.4b) ───────────────────
   // Wait time = serviceStart − arrivalTime, recorded for every served customer.
   // Always computed (cheap O(n)) regardless of collectTimeSeries flag.
@@ -428,7 +465,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       for (const stage of e.stages) {
         const qName = stage.queueName || e.lastQueue || e.queue;
         if (!qName) continue;
-        const wait = stage.stageWait ?? 0;
+        const wait = truncateInterval(stage.waitStartedAt, stage.serviceStartedAt);
         if (!byQueue[qName]) byQueue[qName] = [];
         byQueue[qName].push(wait);
       }
@@ -458,16 +495,25 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const reneged      = customers.filter(e => e.status === "reneged");
     const servers      = entities.filter(e => e.role === "server");
 
-    const avgWait = served.length
-      ? served.reduce((s, e) => s + ((e.serviceStart ?? e.arrivalTime) - e.arrivalTime), 0) / served.length
+    const waitSamples = served.map(entityWaitAfterWarmup);
+    const avgWait = waitSamples.length
+      ? waitSamples.reduce((s, value) => s + value, 0) / waitSamples.length
       : null;
-    const withService = served.filter(e => e.completionTime != null && e.serviceStart != null);
-    const avgSvc = withService.length
-      ? withService.reduce((s, e) => s + (e.completionTime - e.serviceStart), 0) / withService.length
+    const serviceSamples = served
+      .map(entityServiceAfterWarmup)
+      .filter(value => value != null);
+    const avgSvc = serviceSamples.length
+      ? serviceSamples.reduce((s, value) => s + value, 0) / serviceSamples.length
       : null;
-    const withSojourn  = customers.filter(e => e.sojournTime != null);
-    const avgSojourn   = withSojourn.length ? withSojourn.reduce((s, e) => s + e.sojournTime, 0) / withSojourn.length : null;
-    const maxSojourn   = withSojourn.length ? Math.max(...withSojourn.map(e => e.sojournTime)) : null;
+    const sojournSamples = customers
+      .map(entitySojournAfterWarmup)
+      .filter(value => value != null);
+    const avgSojourn = sojournSamples.length
+      ? sojournSamples.reduce((s, value) => s + value, 0) / sojournSamples.length
+      : null;
+    const maxSojourn = sojournSamples.length
+      ? Math.max(...sojournSamples)
+      : null;
 
     const perResource = {};
     for (const srv of servers) {

@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.59 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.61 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -69,11 +69,12 @@ flowchart LR
   S21 --> S22["Sprint 22<br/>Results Workspace"]
   S22 --> S23["Sprint 23<br/>UI Interface Polish<br/>& Workflow Shell"]
   S23 --> S24["Sprint 24<br/>Simulation Correctness<br/>& SimPy-Informed Remediation"]
+  S24 --> S25["Sprint 25<br/>Simulation Contract<br/>Consolidation"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef future fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
   class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S14,S15,S16,S17,S18,S19,S20,S21,S22,S23 done;
-  class S24 future;
+  class S24,S25 future;
 ```
 
 ### Roadmap Snapshot
@@ -100,7 +101,8 @@ flowchart LR
 | SaaS admin platform | ✅ Complete | Sprint 21: platform_config table, admin panel (LLM config, users, limits), multi-provider edge function (Anthropic/OpenAI/OpenCode Go), user role management. |
 | Results workspace | ✅ Complete | Sprint 22: queue-specific time-series data, tested results view model, reusable ResultsWorkspace, top-level Results tab with saved-run selector and chart provenance labels. |
 | UI interface polish | ✅ Complete | Sprint 23: workflow-mode navigation, persistent Model Health, Validate workspace, shared authoring shell, Results/History polish, chart upgrades, tablet refinements, mobile read/run/results view, and UI warning cleanup. |
-| Simulation correctness remediation | 🔄 Planned | Sprint 24: urgent engine correctness fixes plus SimPy-informed JavaScript abstractions for cancellation, resource arbitration, queue selection, lifecycle transitions, and regression coverage. |
+| Simulation correctness remediation | ✅ Complete | Sprint 24 closed the urgent engine correctness defects, propagated Phase C warnings, hardened lifecycle/event context behavior, aligned persistence, and added regression coverage. |
+| Simulation contract consolidation | 🔄 In progress | Sprint 25 now has an explicit V8 policy, warm-up truncation semantics for in-flight entities, and one queue/entity arbitration path; final closeout/reporting remains. |
 
 ### Key Issues and Watchpoints
 
@@ -117,7 +119,7 @@ flowchart LR
 | Conditional routing gap | ⚠️ Tracked | RELEASE has fixed nextQueueId. Attribute-based routing achievable via C-Event pattern but not guided. Probabilistic routing absent. Both addressed in Sprint 10. |
 | Multi-server resource pooling | ⚠️ Tracked | Resources are single-server only; manual C-Event duplication workaround. Addressed in Sprint 10. |
 | UI workflow shell | ✅ Complete | Sprint 23 grouped ModelDetail into workflow modes, added shared authoring shells, tablet/mobile refinements, richer charts, and Results-owned statistical analysis. |
-| SimPy architecture review | 🔄 Planned | Sprint 24 adopts the review recommendation: partial migration only. Use SimPy idioms as design guidance; do not migrate the browser engine to Python/SimPy. |
+| SimPy architecture review | ✅ Applied as guidance | Sprint 24 adopted the review recommendation: partial migration only. Use SimPy idioms as design guidance; do not migrate the browser engine to Python/SimPy. Sprint 25 continues this approach for validation/warm-up/arbitration contracts. |
 
 ---
 
@@ -163,6 +165,7 @@ flowchart LR
 | 1.57 | 2026-05-11 | Sprint 23 — UI Interface Polish & Workflow Shell defined. Labelled remaining UI roadmap as clear features/refinements with statuses, guardrails, and exit gates before further implementation. |
 | 1.58 | 2026-05-11 | Sprint 23 complete. Added workflow modes, shared authoring shell, Validate workspace, Results-owned statistical analysis, upgraded charts, tablet/mobile layouts, and UI warning cleanup. 60 focused tests passed; production build passed. |
 | 1.59 | 2026-05-12 | Sprint 24 defined as Simulation Correctness & SimPy-Informed Remediation. Added urgent engine correctness tracks and SimPy-informed guidance without adopting Python/SimPy as the primary runtime. |
+| 1.60 | 2026-05-12 | Sprint 24 marked complete. Added Sprint 25 as Simulation Contract Consolidation, focused on V8 validation policy, warm-up semantics, and centralized queue/entity arbitration. |
 
 ---
 
@@ -202,48 +205,50 @@ flowchart LR
 | Sprint 21 | ✅ Complete | 2026-05-11 | SaaS Admin Platform. | Focused | N/A | Success | platform_config, admin panel, role management, multi-provider LLM routing. |
 | Sprint 22 | ✅ Complete | 2026-05-11 | Results Workspace & Chart Data Trust. | 44 focused | N/A | Success | queue-specific chart data, results view model, reusable ResultsWorkspace, top-level Results tab with saved-run selector and provenance labels. |
 | Sprint 23 | ✅ Complete | 2026-05-11 | UI Interface Polish & Workflow Shell. | 60 focused | N/A | Success | Workflow-mode navigation, persistent Model Health, Validate workspace, shared authoring shell, Results-owned statistical analysis, upgraded charts, tablet/mobile layouts, and UI warning cleanup. |
-| Sprint 24 | 🔄 Planned | — | Simulation Correctness & SimPy-Informed Remediation. | Planned | N/A | Planned | Fix Phase C warning propagation, lifecycle/context integrity, initial FEL scheduling, persistence contract, shift capacity, and add SimPy-informed JS cancellation/resource abstractions. |
+| Sprint 24 | ✅ Complete | 2026-05-12 | Simulation Correctness & SimPy-Informed Remediation. | Focused + full-suite verification | N/A | Success | Fixed Phase C warning propagation, lifecycle/context integrity, initial FEL scheduling, persistence contract, shift capacity reconciliation, and added SimPy-informed JS regression coverage. |
+| Sprint 25 | ✅ Complete | 2026-05-12 | Simulation Contract Consolidation. | 235 focused tests | N/A | Success | Finalized the V8 policy, warm-up truncation semantics, centralized queue/entity arbitration, contract regression coverage, and SimPy-informed documentation follow-through. |
 
 ---
 
-## Sprint 24 — Simulation Correctness & SimPy-Informed Remediation
+## Sprint 25 — Simulation Contract Consolidation
 
-**Goal:** Remediate urgent simulation correctness findings while applying the SimPy review recommendation: partial migration only. DES Studio should keep its browser-first JavaScript Three-Phase engine, but use SimPy idioms to guide safer cancellation, resource arbitration, queue selection, and lifecycle transitions.
+**Goal:** Consolidate the simulation contract after Sprint 24 by making validation policy explicit, defining warm-up semantics for in-flight entities, and centralizing queue/entity arbitration behind one engine selection service.
 
-**Status:** 🔄 Planned | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-12 | **Completed:** 2026-05-12
 
-**Source reviews:**
+**Source documents:**
 - `docs/reviews/simulation-architecture-review.md`
 - `docs/reviews/simpy-architecture-review.md`
-- Detailed sprint plan: `docs/reviews/sprint-24-simulation-remediation-plan.md`
+- `docs/reviews/sprint-24-completion-report.md`
+- Detailed sprint plan: `docs/reviews/sprint-25-simulation-contract-consolidation-plan.md`
 
 **Scope guardrails:**
-- Build on the existing `buildEngine()`, Phase A/B/C loop, macro registry, replication runner, Execute panel, and DB wrappers.
+- Build on the existing `buildEngine()`, Phase A/B/C loop, macro registry, queue helpers, Execute panel, and DB wrappers.
 - Do not rewrite the engine or migrate the browser runtime to Python/SimPy in this sprint.
 - Preserve Pidd's Three-Phase restart rule.
-- Use SimPy concepts such as `AnyOf(request, timeout)`, `Resource`, `PriorityResource`, `Store`, and process-local lifecycle as design references for JavaScript fixes.
+- Use SimPy concepts such as `Resource`, `PriorityResource`, `Store`, process-local waiting, and explicit timeout/request races as design references for JavaScript fixes.
 - Add focused regression tests before or alongside each fix.
 - No new dependencies unless explicitly reviewed first.
 
 | ID | Priority | Feature / remediation | Status | Deliverable |
 |---|---:|---|---|---|
-| F24.1 | P0 | Phase C truncation metadata | ⬜ | `runAll()` returns durable truncation metadata; replication compaction preserves it; Execute shows a default-cap warning; saved `results_json` carries the flag/warning. |
-| F24.2 | P0 | SimPy-style reneging/cancellation context | ⬜ | Reneging timers bind to the intended entity, following an `AnyOf(request, timeout)`-style model rather than global newest waiting selection. |
-| F24.3 | P0 | Lifecycle invariants and service metrics | ⬜ | `COMPLETE()` skips stale/waiting entities; `serviceStart = 0` is valid; `avgSvc` divides by contributing service completions. |
-| F24.4 | P1 | Initial FEL scheduling cap | ⬜ | B-events after t=900 are not silently dropped; invalid scheduled times are validated or warned. |
-| F24.5 | P1 | Canonical model persistence | ⬜ | `graph` and `experimentDefaults` round trip through remote persistence; DB wrappers and import/export agree on canonical keys. |
-| F24.6 | P1 | Shift-capacity reconciliation | ⬜ | Excess busy servers retained during a downshift are retired after completion/release until actual capacity matches target. |
-| F24.7 | P2 | SimPy-style queue/resource selection service | ⬜ | Queue-name/entity-type selection shares one helper for FIFO/LIFO/PRIORITY across `ASSIGN`, `BATCH`, and `RENEGE_OLDEST`. |
-| F24.8 | P2 | V8 validation contract | ⬜ | Missing source/sink policy is consistent across docs, validation, and Execute UI. |
-| F24.9 | P2 | Warm-up context semantics | ⬜ | Active/queued/context-carrying entities at warm-up have documented and tested behavior. |
-| F24.10 | P3 | SimPy validation/export backlog decision | ⬜ | Decide whether a later optional SimPy exporter/cross-check harness should be added for benchmark models. |
+| F25.1 | P0 | V8 validation contract | ✅ | Source/sink policy is explicit and consistent across docs, validation, and Execute UI. |
+| F25.2 | P0 | Warm-up semantics for in-flight entities | ✅ | Waiting, serving, scheduled-completion, and post-warm-up counting behavior is documented and tested. |
+| F25.3 | P1 | Queue/entity arbitration service | ✅ | FIFO/LIFO/PRIORITY arbitration is routed through one helper/service for `ASSIGN`, `BATCH`, and `RENEGE_OLDEST`. |
+| F25.4 | P1 | Contract-level regression coverage | ✅ | Tests prove the V8 policy, warm-up semantics, and arbitration equivalence. |
+| F25.5 | P2 | SimPy-style documentation follow-through | ✅ | Docs explain the JavaScript equivalents of SimPy-style validation, waiting, and arbitration patterns. |
+
+**Resolved SimPy-informed mappings:**
+- Validation remains a DES Studio authoring concern rather than a SimPy runtime primitive; the V8 rule is now explicit in engine validation and Execute UX.
+- Warm-up handling remains a JavaScript engine concern; instead of process suspension semantics, the engine truncates metric intervals at the warm-up boundary while preserving live entity/event context.
+- Queue/resource arbitration remains custom to support Three-Phase semantics, but now follows one shared helper-led path analogous to a lightweight `Resource` / `PriorityResource` service.
 
 **Exit gate:**
-- F24.1-F24.6 complete with regression tests.
-- F24.7-F24.9 complete or explicitly split with written defer notes.
-- Focused tests pass: `npm test -- three-phase replication-runner distributions entities validation termination time-varying execute-panel db`.
-- `npm run build` passes.
-- Architecture review docs are updated with resolved/deferred status notes.
+- F25.1-F25.4 complete with regression tests.
+- Warm-up behavior is documented, not implied.
+- Arbitration logic has one authoritative selection path.
+- Focused tests pass for validation, warm-up, queue disciplines, batching, and Execute validation.
+- Architecture review docs are updated with final contract decisions.
 
 ---
 
@@ -316,7 +321,8 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 21 | SaaS Admin Platform                                 | platform_config, admin panel (LLM config/users/limits), multi-provider edge function           |
 | Sprint 22 | Results Workspace & Chart Data Trust                | standalone Results tab, saved-run selector, queue-specific chart data, chart provenance labels  |
 | Sprint 23 | UI Interface Polish & Workflow Shell                | complete: workflow modes, persistent Model Health, Validate workspace, shared authoring shells, responsive Results/Execute experience |
-| Sprint 24 | Simulation Correctness & SimPy-Informed Remediation | planned: urgent engine correctness fixes, SimPy-style JS cancellation/resource abstractions, persistence contract, regression coverage |
+| Sprint 24 | Simulation Correctness & SimPy-Informed Remediation | complete: urgent engine correctness fixes, SimPy-style JS lifecycle/resource guidance, persistence contract alignment, regression coverage |
+| Sprint 25 | Simulation Contract Consolidation | planned: V8 validation policy, warm-up semantics, centralized queue/entity arbitration |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 

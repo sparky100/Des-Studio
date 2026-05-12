@@ -41,6 +41,35 @@ let _seq = 0;
 export const resetSeq = () => { _seq = 0; };
 export const nextId   = () => ++_seq;
 
+function norm(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+export function queueDisciplineComparator(discipline = "FIFO") {
+  switch ((discipline || "FIFO").toUpperCase()) {
+    case "LIFO":
+      return (a, b) => (b.arrivalTime || 0) - (a.arrivalTime || 0);
+    case "PRIORITY":
+      return (a, b) => {
+        const pa = Number(a.attrs?.priority ?? Infinity);
+        const pb = Number(b.attrs?.priority ?? Infinity);
+        if (pa !== pb) return pa - pb;
+        return (a.arrivalTime || 0) - (b.arrivalTime || 0);
+      };
+    default:
+      return (a, b) => (a.arrivalTime || 0) - (b.arrivalTime || 0);
+  }
+}
+
+export function sortWaitingEntities(waiting, discipline = "FIFO") {
+  return [...waiting].sort(queueDisciplineComparator(discipline));
+}
+
+export function findQueueConfig(model, token) {
+  const key = norm(token);
+  return (model?.queues || []).find(queue => norm(queue.name) === key || norm(queue.customerType) === key) || null;
+}
+
 /**
  * Create a new customer entity.
  */
@@ -85,31 +114,38 @@ export function createServerEntities(entityTypes, sampleAttrsFn) {
  * Status filter helpers — all case-insensitive on type name.
  */
 export function makeHelpers(entities, model = null) {
-  const match = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  const match = (a, b) => norm(a) === norm(b);
+
+  function filterWaiting(predicate, discipline = "FIFO", filterFn = null) {
+    let waiting = entities.filter(entity => entity.status === "waiting" && predicate(entity));
+    if (filterFn) waiting = waiting.filter(filterFn);
+    return sortWaitingEntities(waiting, discipline);
+  }
 
   return {
     entities,
     model,
-    waitingOf: (type, discipline = 'FIFO', filterFn = null) => {
-      // O(n log n) due to sort — revisit if entity pools exceed 10k
-      let waiting = entities.filter(e => match(e.type, type) && e.status === 'waiting');
-      if (filterFn) {
-        waiting = waiting.filter(filterFn);
-      }
-      switch ((discipline || 'FIFO').toUpperCase()) {
-        case 'LIFO':
-          return waiting.sort((a, b) => (b.arrivalTime || 0) - (a.arrivalTime || 0));
-        case 'PRIORITY':
-          return waiting.sort((a, b) => {
-            const pa = Number(a.attrs?.priority ?? Infinity);
-            const pb = Number(b.attrs?.priority ?? Infinity);
-            if (pa !== pb) return pa - pb;
-            return (a.arrivalTime || 0) - (b.arrivalTime || 0); // FIFO tiebreaker
-          });
-        default: // FIFO
-          return waiting.sort((a, b) => (a.arrivalTime || 0) - (b.arrivalTime || 0));
-      }
-    },
+    findQueueConfig: (token) => findQueueConfig(model, token),
+
+    waitingOf: (type, discipline = "FIFO", filterFn = null) =>
+      filterWaiting(entity => match(entity.type, type), discipline, filterFn),
+
+    waitingInQueue: (queueName, discipline = "FIFO", filterFn = null, includeBatches = true) =>
+      filterWaiting(entity => {
+        if (!entity.queue || !match(entity.queue, queueName)) return false;
+        if (!includeBatches && entity.role === "batch") return false;
+        return true;
+      }, discipline, filterFn),
+
+    selectWaitingOf: (type, discipline = "FIFO", filterFn = null) =>
+      filterWaiting(entity => match(entity.type, type), discipline, filterFn)[0],
+
+    selectWaitingInQueue: (queueName, discipline = "FIFO", filterFn = null, includeBatches = true) =>
+      filterWaiting(entity => {
+        if (!entity.queue || !match(entity.queue, queueName)) return false;
+        if (!includeBatches && entity.role === "batch") return false;
+        return true;
+      }, discipline, filterFn)[0],
 
     idleOf: (type) =>
       entities.filter(e => match(e.type, type) && e.status === "idle"),

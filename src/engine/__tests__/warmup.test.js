@@ -55,4 +55,76 @@ describe("Warm-up period", () => {
     expect(warmupLog, "Log should contain a WARMUP event").toBeDefined();
     expect(warmupLog.time, "WARMUP event time should match warmup period").toBe(15);
   });
+
+  it("truncates waiting time at the warm-up boundary for entities already in queue", () => {
+    const model = {
+      entityTypes: [
+        { id: "e1", name: "Customer", role: "customer" },
+        { id: "e2", name: "Server", role: "server", count: 1 },
+      ],
+      stateVariables: [
+        { id: "sv1", name: "gate", initialValue: "0", resetOnWarmup: false },
+      ],
+      bEvents: [
+        { id: "b1", name: "Arrival", scheduledTime: "5", effect: ["ARRIVE(Customer)"] },
+        { id: "b2", name: "OpenGate", scheduledTime: "15", effect: ["gate = 1"] },
+        { id: "b3", name: "ServiceComplete", scheduledTime: "999", effect: ["COMPLETE()"] },
+      ],
+      cEvents: [
+        {
+          id: "c1",
+          name: "StartService",
+          condition: "queue(Customer).length > 0 AND idle(Server).count > 0 AND gate == 1",
+          effect: ["ASSIGN(Customer, Server)"],
+          priority: 1,
+          cSchedules: [
+            { eventId: "b3", dist: "Fixed", distParams: { value: 5 }, useEntityCtx: true },
+          ],
+        },
+      ],
+    };
+
+    const result = buildEngine(model, 123, 10).runAll();
+
+    expect(result.summary.served).toBe(1);
+    expect(result.summary.avgWait).toBe(5);
+    expect(result.summary.avgSvc).toBe(5);
+    expect(result.summary.avgSojourn).toBe(10);
+    expect(result.summary.maxSojourn).toBe(10);
+    expect(result.waitDist.CustomerQueue.values).toEqual([5]);
+  });
+
+  it("preserves scheduled completions created before warm-up and truncates in-flight service", () => {
+    const model = {
+      entityTypes: [
+        { id: "e1", name: "Customer", role: "customer" },
+        { id: "e2", name: "Server", role: "server", count: 1 },
+      ],
+      bEvents: [
+        { id: "b1", name: "Arrival", scheduledTime: "5", effect: ["ARRIVE(Customer)"] },
+        { id: "b2", name: "ServiceComplete", scheduledTime: "999", effect: ["COMPLETE()"] },
+      ],
+      cEvents: [
+        {
+          id: "c1",
+          name: "StartService",
+          condition: "queue(Customer).length > 0 AND idle(Server).count > 0",
+          effect: ["ASSIGN(Customer, Server)"],
+          priority: 1,
+          cSchedules: [
+            { eventId: "b2", dist: "Fixed", distParams: { value: 10 }, useEntityCtx: true },
+          ],
+        },
+      ],
+    };
+
+    const result = buildEngine(model, 123, 10).runAll();
+
+    expect(result.summary.served).toBe(1);
+    expect(result.summary.avgWait).toBe(0);
+    expect(result.summary.avgSvc).toBe(5);
+    expect(result.summary.avgSojourn).toBe(5);
+    expect(result.summary.maxSojourn).toBe(5);
+    expect(result.waitDist.CustomerQueue.values).toEqual([0]);
+  });
 });

@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-12 | Reflects: Sprint 23 — UI Interface Polish & Workflow Shell complete. Current: Sprint 24 — Simulation Correctness & SimPy-Informed Remediation*
+*Last updated: 2026-05-12 | Reflects: Sprint 24 — Simulation Correctness & SimPy-Informed Remediation complete. Current: Sprint 25 — Simulation Contract Consolidation*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
@@ -1319,48 +1319,50 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 21 | ✅ Complete | 2026-05-11 | SaaS Admin Platform (config, admin panel, multi-provider LLM) |
 | Sprint 22 | ✅ Complete | 2026-05-11 | Results Workspace & chart data trust |
 | Sprint 23 | ✅ Complete | 2026-05-11 | UI Interface Polish & Workflow Shell |
-| Sprint 24 | 🔄 Planned | — | Simulation Correctness & SimPy-Informed Remediation |
+| Sprint 24 | ✅ Complete | 2026-05-12 | Simulation Correctness & SimPy-Informed Remediation |
+| Sprint 25 | ✅ Complete | 2026-05-12 | Simulation Contract Consolidation |
 
 ---
 
-## 21. Current Sprint — Sprint 24 (Simulation Correctness & SimPy-Informed Remediation)
+## 21. Current Sprint — Sprint 25 (Simulation Contract Consolidation)
 
-**Goal:** Remediate urgent simulation correctness findings while applying the SimPy review recommendation: partial migration only. DES Studio keeps its browser-first JavaScript Three-Phase engine, but uses SimPy idioms to guide safer cancellation, resource arbitration, queue selection, and lifecycle transitions.
+**Goal:** Consolidate the simulation contract after Sprint 24 by making validation policy explicit, defining warm-up semantics for in-flight entities, and centralizing queue/entity arbitration behind one engine selection service.
 
 **Source reviews:**
 - `docs/reviews/simulation-architecture-review.md`
 - `docs/reviews/simpy-architecture-review.md`
-- `docs/reviews/sprint-24-simulation-remediation-plan.md`
+- `docs/reviews/sprint-24-completion-report.md`
+- `docs/reviews/sprint-25-simulation-contract-consolidation-plan.md`
 
-**Status:** 🔄 Planned | **Started:** — | **Completed:** —
+**Status:** ✅ Complete | **Started:** 2026-05-12 | **Completed:** 2026-05-12
 
 **Implementation guardrails:**
-- Build on the existing `buildEngine()`, Phase A/B/C loop, macro registry, replication runner, Execute panel, and DB wrappers; do not rewrite working systems.
-- Do not migrate the browser runtime to Python/SimPy in Sprint 24.
-- Preserve Pidd's Three-Phase restart rule.
-- Use SimPy concepts such as `AnyOf(request, timeout)`, `Resource`, `PriorityResource`, `Store`, and process-local lifecycle as design references for JavaScript fixes.
+- Build on the existing `buildEngine()`, Phase A/B/C loop, macro registry, queue helpers, Execute panel, and DB wrappers; do not rewrite working systems.
+- Do not migrate the browser runtime to Python/SimPy in Sprint 25.
+- Preserve Pidd's Three-Phase restart rule and the existing behavior fixed in Sprint 24 unless the contract is being explicitly clarified.
+- Use SimPy concepts such as `Resource`, `PriorityResource`, `Store`, process-local waiting, and explicit timeout/request races as design references for JavaScript fixes.
 - Add focused regression tests before or alongside each fix.
 - No new dependencies unless explicitly reviewed first.
 
 | Feature / remediation | Status | Task clarity |
 |---|---|---|
-| F24.1 Phase C truncation metadata | ⬜ Planned | Propagate truncation from `step()` to `runAll()`, replication payloads, saved results, and Execute warnings. |
-| F24.2 SimPy-style reneging/cancellation context | ⬜ Planned | Bind reneging timers to the intended entity using an `AnyOf(request, timeout)`-style model rather than global newest waiting selection. |
-| F24.3 Lifecycle invariants and service metrics | ⬜ Planned | Prevent `COMPLETE()` from serving stale/waiting entities; handle `serviceStart = 0`; correct `avgSvc` denominator. |
-| F24.4 Initial FEL scheduling cap | ⬜ Planned | Stop silently dropping B-events scheduled after t=900; validate malformed scheduled times. |
-| F24.5 Canonical model persistence | ⬜ Planned | Ensure `graph` and `experimentDefaults` round trip through remote persistence and DB wrappers. |
-| F24.6 Shift-capacity reconciliation | ⬜ Planned | Retire excess busy servers after downshift completion/release until target capacity is met. |
-| F24.7 SimPy-style queue/resource selection service | ⬜ Planned | Centralize FIFO/LIFO/PRIORITY selection for `ASSIGN`, `BATCH`, and `RENEGE_OLDEST`. |
-| F24.8 V8 validation contract | ⬜ Planned | Align missing source/sink policy across docs, validation, and Execute UI. |
-| F24.9 Warm-up context semantics | ⬜ Planned | Define and test active/queued/context-carrying entity behavior at warm-up. |
-| F24.10 SimPy validation/export backlog decision | ⬜ Planned | Decide whether a later optional SimPy exporter/cross-check harness should be added for benchmark models. |
+| F25.1 V8 validation contract | ✅ Complete | Missing both source and sink is blocking; exactly one missing side is a warning, and Execute mirrors that contract. |
+| F25.2 Warm-up semantics for in-flight entities | ✅ Complete | Active entities survive warm-up; scheduled completions still fire; wait/service/sojourn metrics are truncated at the warm-up boundary. |
+| F25.3 Queue/entity arbitration service | ✅ Complete | FIFO/LIFO/PRIORITY arbitration now flows through shared entity helpers for `ASSIGN`, `BATCH`, and `RENEGE_OLDEST`. |
+| F25.4 Contract-level regression coverage | ✅ Complete | Focused tests cover the V8 policy, warm-up truncation, in-flight completion handling, and centralized arbitration behavior. |
+| F25.5 SimPy-style documentation follow-through | ✅ Complete | Repo docs now describe the JavaScript equivalents of SimPy-style validation, waiting, and arbitration patterns. |
 
-**Sprint 24 exit gate:**
-- F24.1-F24.6 complete with regression tests.
-- F24.7-F24.9 complete or explicitly split with written defer notes.
-- Focused tests pass: `npm test -- three-phase replication-runner distributions entities validation termination time-varying execute-panel db`.
-- `npm run build` passes.
-- Architecture review docs are updated with resolved/deferred status notes.
+**Sprint 25 contract notes:**
+- `Validation`: instead of a SimPy API, DES Studio enforces structural run preconditions in `src/engine/validation.js`; V8 is now an explicit product contract rather than an implied warning.
+- `Waiting / timeout races`: instead of `request | timeout`, the JavaScript engine preserves context-bound scheduled completions and reneging timers while truncating post-warm-up metrics at a clear reset boundary.
+- `Resource / store arbitration`: instead of `Resource` or `PriorityResource`, DES Studio now uses one helper-led arbitration path in `src/engine/entities.js` for queue- and type-based selection.
+
+**Sprint 25 exit gate:**
+- F25.1-F25.4 complete with regression tests.
+- Warm-up behavior is documented, not implied.
+- Arbitration logic has one authoritative selection path.
+- Focused tests pass for validation, warm-up, queue disciplines, batching, and Execute validation.
+- Architecture and sprint docs are updated with final contract decisions.
 
 ### Recently Completed
 

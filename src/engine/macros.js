@@ -108,6 +108,22 @@ function retireIdleExcessServers(ctx, serverTypeName) {
   return retired;
 }
 
+function buildStageRecord(cust, srv, clock) {
+  const waitStartedAt = cust.lastStageStart ?? cust.arrivalTime;
+  const serviceStartedAt = cust.serviceStart ?? clock;
+  return {
+    serverType: srv?.type || "unknown",
+    queueName: cust.lastQueue || cust.queue || null,
+    waitStartedAt,
+    serviceStartedAt,
+    serviceEndedAt: clock,
+    stageWait: +(cust.serviceStart != null
+      ? (cust.serviceStart - waitStartedAt)
+      : 0).toFixed(4),
+    stageService: +(clock - serviceStartedAt).toFixed(4),
+  };
+}
+
 export const MACROS = [
 
   // ── ARRIVE(Type[, QueueName]) ──────────────────────────────────────────────
@@ -228,13 +244,7 @@ export const MACROS = [
       const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
 
       // Look up queue discipline for this entity type or queue name
-      const queues = ctx.model?.queues || [];
-      const matchedQ = queues.find(q => {
-        const n = q.name?.trim().toLowerCase();
-        const t = q.customerType?.trim().toLowerCase();
-        const c = cType.trim().toLowerCase();
-        return n === c || t === c;
-      });
+      const matchedQ = helpers.findQueueConfig?.(cType);
       const discipline = matchedQ?.discipline || 'FIFO';
 
       // Build entity filter function from predicate JSON if present
@@ -242,32 +252,14 @@ export const MACROS = [
         ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
 
-      // Queue-name match: filter entities by queue field + status.
-      // This prevents cross-queue theft (e.g. ASSIGN(Patient, Nurse) must not
-      // pick up a patient waiting in the Treatment queue).
-      let cust = (entities.filter(e =>
-        e.queue &&
-        e.queue.trim().toLowerCase() === cType.trim().toLowerCase() &&
-        e.status === "waiting"
-      ));
-      if (filterFn) cust = cust.filter(filterFn);
-      cust = cust.sort((a, b) => {
-        if (discipline.toUpperCase() === 'LIFO')
-          return (b.arrivalTime || 0) - (a.arrivalTime || 0);
-        if (discipline.toUpperCase() === 'PRIORITY') {
-          const pa = Number(a.attrs?.priority ?? Infinity);
-          const pb = Number(b.attrs?.priority ?? Infinity);
-          if (pa !== pb) return pa - pb;
-        }
-        return (a.arrivalTime || 0) - (b.arrivalTime || 0);
-      });
-      cust = cust[0];
+      // Queue-name match prevents cross-queue theft.
+      let cust = helpers.selectWaitingInQueue?.(cType, discipline, filterFn);
 
       // No match by queue name. If cType is NOT a known queue name, fall back
       // to entity-type match for backward compat (e.g. ARRIVE(Customer) creates
       // queue "CustomerQueue", and ASSIGN(Customer, Server) should still work).
       if (!cust && !matchedQ) {
-        cust = helpers.waitingOf(cType, discipline, filterFn)[0];
+        cust = helpers.selectWaitingOf?.(cType, discipline, filterFn);
       }
 
       const srv = helpers.idleOf(sType)[0];
@@ -315,14 +307,7 @@ export const MACROS = [
 
       if (cust.status === "serving" || cust.role === "batch") {
         if (!cust.stages) cust.stages = [];
-        cust.stages.push({
-          serverType:   srv?.type || "unknown",
-          queueName:    cust.lastQueue || cust.queue || null,
-          stageWait:    +(cust.serviceStart != null
-            ? (cust.serviceStart - (cust.lastStageStart ?? cust.arrivalTime))
-            : 0).toFixed(4),
-          stageService: +(clock - (cust.serviceStart ?? clock)).toFixed(4),
-        });
+        cust.stages.push(buildStageRecord(cust, srv, clock));
         cust.status        = "done";
         cust.completionTime = clock;
         cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
@@ -360,14 +345,7 @@ export const MACROS = [
 
       if (srv && cust) {
         if (!cust.stages) cust.stages = [];
-        cust.stages.push({
-          serverType:   srv.type,
-          queueName:    cust.lastQueue || cust.queue || null,
-          stageWait:    +(cust.serviceStart != null
-            ? (cust.serviceStart - (cust.lastStageStart ?? cust.arrivalTime))
-            : 0).toFixed(4),
-          stageService: +(clock - (cust.serviceStart ?? clock)).toFixed(4),
-        });
+        cust.stages.push(buildStageRecord(cust, srv, clock));
         cust.lastStageStart = clock;
         cust.status         = "waiting";
         if (targetQueue) cust.queue = targetQueue;
@@ -425,26 +403,10 @@ export const MACROS = [
       }
       const discipline = qDef.discipline || 'FIFO';
 
-      let candidates = entities.filter(
-        e => e.status === "waiting" && e.role !== "batch" &&
-          e.queue?.trim().toLowerCase() === queueName.trim().toLowerCase()
-      );
+      const candidates = helpers.waitingInQueue?.(queueName, discipline, null, false) || [];
       if (candidates.length < batchSize) {
         msgs.push(`BATCH(${queueName},${batchSize}): only ${candidates.length} waiting — insufficient`);
         return;
-      }
-      switch ((discipline || 'FIFO').toUpperCase()) {
-        case 'LIFO': candidates.sort((a, b) => (b.arrivalTime || 0) - (a.arrivalTime || 0)); break;
-        case 'PRIORITY':
-          candidates.sort((a, b) => {
-            const pa = Number(a.attrs?.priority ?? Infinity);
-            const pb = Number(b.attrs?.priority ?? Infinity);
-            if (pa !== pb) return pa - pb;
-            return (a.arrivalTime || 0) - (b.arrivalTime || 0);
-          });
-          break;
-        default:
-          candidates.sort((a, b) => (a.arrivalTime || 0) - (b.arrivalTime || 0));
       }
 
       const batched = candidates.slice(0, batchSize);
@@ -526,15 +488,11 @@ export const MACROS = [
     apply(match, ctx) {
       const { helpers, state, clock, msgs } = ctx;
       const cType = match[1].trim();
-      const queues = ctx.model?.queues || [];
-      const matchedQ = queues.find(q => {
-        const n = q.name?.trim().toLowerCase();
-        const t = q.customerType?.trim().toLowerCase();
-        const c = cType.toLowerCase();
-        return n === c || t === c;
-      });
+      const matchedQ = helpers.findQueueConfig?.(cType);
       const discipline = matchedQ?.discipline || 'FIFO';
-      const ent = helpers.waitingOf(cType, discipline)[0];
+      const ent = matchedQ
+        ? helpers.selectWaitingInQueue?.(cType, discipline)
+        : helpers.selectWaitingOf?.(cType, discipline);
       if (ent) {
         ent.status     = "reneged";
         ent.renegeTime = clock;
