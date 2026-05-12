@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { createSampleMm1Model } from '../../src/App.jsx';
@@ -47,8 +47,8 @@ describe('first-run onboarding', () => {
     await renderApp();
 
     expect(screen.getByText('Start your first model')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /create blank model/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /create sample m\/m\/1 model/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create a model/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /use a template/i })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /import model/i }).length).toBeGreaterThan(0);
   });
 
@@ -57,20 +57,19 @@ describe('first-run onboarding', () => {
 
     await renderApp();
 
+    expect(await screen.findByRole('button', { name: /open model existing/i })).toBeInTheDocument();
     expect(screen.queryByText('Start your first model')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /open model existing/i })).toBeInTheDocument();
   });
 
-  it('creates the sample M/M/1 model for the current user', async () => {
+  it('opens the templates catalog from the first-run panel', async () => {
     const user = userEvent.setup();
     await renderApp();
 
-    await user.click(screen.getByRole('button', { name: /create sample m\/m\/1 model/i }));
+    await user.click(screen.getByRole('button', { name: /use a template/i }));
 
-    await waitFor(() => expect(mockSaveModel).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Sample M/M/1 Queue', visibility: 'private' }),
-      'user-1'
-    ));
+    expect(await screen.findByRole('button', { name: /try m\/m\/1 queue/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /try call center/i })).toBeInTheDocument();
+    expect(mockSaveModel).not.toHaveBeenCalled();
   });
 
   it('provides a valid runnable sample M/M/1 model', () => {

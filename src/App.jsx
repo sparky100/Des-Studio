@@ -114,16 +114,16 @@ function extractImportedModelPayload(payload) {
 
 export { createSampleMm1Model, extractImportedModelPayload };
 
-const FirstRunPanel=({onCreateBlank,onCreateSample,onImport})=>(
+const FirstRunPanel=({onCreateBlank,onBrowseTemplates,onImport})=>(
   <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
     <div>
       <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:4}}>Start your first model</div>
-      <div style={{fontSize:12,color:C.muted}}>Create a blank model, load the M/M/1 sample, or import an existing DES Studio model file.</div>
+      <div style={{fontSize:12,color:C.muted}}>Create a model from scratch, start from one of the built-in templates, or import an existing DES Studio model file.</div>
     </div>
     <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
       <Btn variant="ghost" onClick={onImport}>Import Model</Btn>
-      <Btn variant="ghost" onClick={onCreateSample}>Create sample M/M/1 model</Btn>
-      <Btn variant="primary" onClick={onCreateBlank}>Create blank model</Btn>
+      <Btn variant="ghost" onClick={onBrowseTemplates}>Use a Template</Btn>
+      <Btn variant="primary" onClick={onCreateBlank}>Create a Model</Btn>
     </div>
   </div>
 );
@@ -304,20 +304,6 @@ export default function App(){
     };
     reader.readAsText(file);
   }, [uid, loadData]);
-
-  const createSampleModel = useCallback(async () => {
-    if(!uid)return;
-    setLoading(true);setError('');
-    try{
-      const saved=await saveModel(createSampleMm1Model(),uid);
-      await loadData();
-      setOpenId(saved.id);
-    }catch(e){
-      setError(e.message);
-    }finally{
-      setLoading(false);
-    }
-  },[uid,loadData]);
 
   const handleStartTemplate = useCallback(async (template) => {
     if(!uid)return;
@@ -600,7 +586,7 @@ export default function App(){
           {tab==='my'&&(myModels.length===0
             ?<FirstRunPanel
               onCreateBlank={()=>setShowNew(true)}
-              onCreateSample={createSampleModel}
+              onBrowseTemplates={()=>setTab('templates')}
               onImport={()=>importFileRef.current?.click()}
             />
             :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:14}}>
