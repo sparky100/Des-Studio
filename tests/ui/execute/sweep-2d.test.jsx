@@ -79,7 +79,8 @@ const validModel = {
 };
 
 function openSweepSection() {
-  const header = screen.getByText('PARAMETRIC SWEEP');
+  fireEvent.click(screen.getByRole('button', { name: /^experiments$/i }));
+  const header = screen.getByText('EXPERIMENTS');
   fireEvent.click(header.closest('div') || header);
 }
 
@@ -236,7 +237,7 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     // Both cell and sidebar now contain 5
     expect(screen.getAllByText('5').length).toBeGreaterThanOrEqual(1);
     // Avg service = 2.1 rounded to 2
-    expect(screen.getByText('Avg service')).toBeInTheDocument();
+    expect(screen.getAllByText('Avg service').length).toBeGreaterThanOrEqual(1);
   });
 
   it('2D sweep run button is disabled until both parameters are selected', () => {

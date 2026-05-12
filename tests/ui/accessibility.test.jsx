@@ -69,10 +69,10 @@ describe('accessibility pass', () => {
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
     const tabs = screen.getAllByRole('tab').map(tab => tab.textContent);
     expect(tabs.indexOf('AI Designer')).toBeGreaterThan(tabs.indexOf('Overview'));
-    expect(tabs.indexOf('Visual Designer')).toBeGreaterThan(tabs.indexOf('Overview'));
+    expect(tabs.indexOf('Design')).toBeGreaterThan(tabs.indexOf('Overview'));
 
-    await user.click(screen.getByRole('tab', { name: /execute/i }));
-    expect(screen.getByRole('tab', { name: /execute/i })).toHaveAttribute('aria-selected', 'true');
+    await user.click(screen.getByRole('button', { name: /^execute$/i }));
+    expect(screen.getByRole('button', { name: /^execute$/i })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('keeps Execute Run All discoverable and disabled with validation errors', () => {
@@ -94,7 +94,7 @@ describe('accessibility pass', () => {
       />
     );
 
-    await screen.findByLabelText('Visual Designer');
+    await screen.findByRole('button', { name: /^design$/i });
     expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
   });
@@ -114,6 +114,8 @@ describe('accessibility pass', () => {
       />
     );
 
+    await screen.findByRole('button', { name: /^execute$/i });
+    await userEvent.setup().click(screen.getByRole('button', { name: /^setup$/i }));
     await screen.findByRole('button', { name: /edit setup/i });
     expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();

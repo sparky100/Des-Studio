@@ -7,6 +7,14 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // Mock Supabase client — never hit real DB in tests
 const mockQuery = {
   select: vi.fn().mockReturnThis(),

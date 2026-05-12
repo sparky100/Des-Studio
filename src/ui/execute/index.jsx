@@ -56,6 +56,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [terminationCondition, setTerminationCondition] = useState(() => experimentDefaults.terminationCondition || null);
   const [replications, setReplications] = useState(() => intDefault(experimentDefaults.replications, 1));
   const [runLabel, setRunLabel] = useState("");
+  const [executeSection, setExecuteSection] = useState("run");
   const [showRunSetup, setShowRunSetup] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
@@ -150,6 +151,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
 
   const initEngine = useCallback(() => {
     if (hasErrors) return;
+    setExecuteSection("run");
     runSeedRef.current = seed;
     engineRef.current = buildEngine(
       model,
@@ -183,6 +185,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
 
   const doStep = useCallback(() => {
     if (!engineRef.current) return;
+    setExecuteSection("run");
     const r = engineRef.current.step();
     setCurrentSnap(r.snap);
     setLog(prev => [...prev, ...(r.cycleLog || [])]);
@@ -264,6 +267,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       setSaveStatus({ state: 'error', message: '✗ No model to run' });
       return;
     }
+    setExecuteSection("run");
 
     const runSeed = seed;
     const maxTimeForRun = terminationMode === 'time' ? maxSimTime : null;
@@ -757,7 +761,27 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   return (
     <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1, minWidth: 0 }}>
-      {/* Experiment Controls Section */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {[
+          { id: "run", label: "Run" },
+          { id: "setup", label: "Setup" },
+          { id: "experiments", label: "Experiments" },
+        ].map(section => (
+          <Btn
+            key={section.id}
+            small
+            variant={executeSection === section.id ? "primary" : "ghost"}
+            onClick={() => {
+              if (section.id === "experiments" && !sweepOpen) setSweepParams(enumerateSweepableParams(model));
+              setExecuteSection(section.id);
+            }}
+          >
+            {section.label}
+          </Btn>
+        ))}
+      </div>
+
+      {executeSection === "setup" && (
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div
           style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}
@@ -936,8 +960,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           </div>
         )}
       </div>
+      )}
 
-      {/* Parametric Sweep Section */}
+      {executeSection === "experiments" && (
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div
           onClick={() => {
@@ -946,9 +971,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           }}
           style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, userSelect: "none" }}>
           <span style={{ fontSize: 14, color: sweepOpen ? C.accent : C.muted }}>{sweepOpen ? "▼" : "▶"}</span>
-          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETRIC SWEEP</span>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>EXPERIMENTS</span>
           {sweepStatus === "running" && (
-            <span style={{ fontSize: 10, color: C.amber, fontFamily: FONT }}>Running sweep...</span>
+            <span style={{ fontSize: 10, color: C.amber, fontFamily: FONT }}>Running experiment...</span>
           )}
           {sweepStatus === "complete" && (
             <span style={{ fontSize: 10, color: C.green, fontFamily: FONT }}>Complete ({sweepResults?.length} points)</span>
@@ -1453,6 +1478,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           </div>
         )}
       </div>
+      )}
 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive}>⟳ Reset</Btn>
@@ -1490,6 +1516,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         </div>
       </div>
 
+      {executeSection === "run" && (
+        <>
       {validation.errors.length > 0 && (
         <div role="alert" style={{ background: C.errorBg, border: `1px solid ${C.danger}`, borderRadius: 6,
           padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1765,6 +1793,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
             warmupDetection={warmupDetection}
           />
         </div>
+      )}
+        </>
       )}
       </div>
 

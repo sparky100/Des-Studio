@@ -114,14 +114,13 @@ function extractImportedModelPayload(payload) {
 
 export { createSampleMm1Model, extractImportedModelPayload };
 
-const FirstRunPanel=({onCreateBlank,onBrowseTemplates,onImport})=>(
+const FirstRunPanel=({onCreateBlank,onBrowseTemplates})=>(
   <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
     <div>
       <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:4}}>Start your first model</div>
-      <div style={{fontSize:12,color:C.muted}}>Create a model from scratch, start from one of the built-in templates, or import an existing DES Studio model file.</div>
+      <div style={{fontSize:12,color:C.muted}}>Create a model from scratch or start from one of the built-in templates.</div>
     </div>
     <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-      <Btn variant="ghost" onClick={onImport}>Import Model</Btn>
       <Btn variant="ghost" onClick={onBrowseTemplates}>Use a Template</Btn>
       <Btn variant="primary" onClick={onCreateBlank}>Create a Model</Btn>
     </div>
@@ -405,6 +404,13 @@ export default function App(){
               onSetVisibility: (id, vis) => setVisibility(id, vis, uid),
               onSetAccess: (id, acc) => setAccess(id, acc, uid),
               onFork: session ? confirmFork : undefined,
+              onExitToTemplates: () => {
+                setOpenId(null);
+                setLocalModel(null);
+                setIsTemplate(false);
+                setShowStarterGuideForId(null);
+                setTab('templates');
+              },
             }}
           />
         </ErrorBoundary>
@@ -590,7 +596,6 @@ export default function App(){
             ?<FirstRunPanel
               onCreateBlank={()=>setShowNew(true)}
               onBrowseTemplates={()=>setTab('templates')}
-              onImport={()=>importFileRef.current?.click()}
             />
             :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(340px,1fr))',gap:14}}>
               {myModels.map(m=><ModelCard key={m.id} model={m} onOpen={()=>handleOpenModel(m)} onDelete={handleDeleteModel} currentUserId={uid} profiles={profiles}/>)}
@@ -608,7 +613,7 @@ export default function App(){
         </ErrorBoundary>
       </div>
       {showNew&&(
-        <NewModelModal onClose={()=>setShowNew(false)} onCreate={async(name,desc)=>{
+        <NewModelModal onClose={()=>setShowNew(false)} onUseTemplate={()=>setTab('templates')} onCreate={async(name,desc)=>{
           const m=await saveModel({name,description:desc,entityTypes:[],stateVariables:[],bEvents:[],cEvents:[],queues:[]},uid)
           await loadData()
           setShowStarterGuideForId(m.id)

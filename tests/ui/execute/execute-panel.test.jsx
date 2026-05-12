@@ -44,6 +44,7 @@ const validModel = {
 
 describe('ExecutePanel', () => {
   const openSetup = () => {
+    fireEvent.click(screen.getByRole('button', { name: /^setup$/i }));
     fireEvent.click(screen.getByRole('button', { name: /edit setup/i }));
   };
 
@@ -61,8 +62,9 @@ describe('ExecutePanel', () => {
   it('renders the execute controls without crashing', () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    expect(screen.getByText('RUN SETUP')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /edit setup/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^run$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^setup$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^experiments$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /run all/i })).toBeInTheDocument();
     expect(screen.getByText('Run or step the simulation to see the visual view.')).toBeInTheDocument();
   });

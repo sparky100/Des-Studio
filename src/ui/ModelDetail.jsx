@@ -162,13 +162,13 @@ function buildRunHistoryCsv(rows = []) {
 
 const MODEL_HEALTH_TAB_LABELS = {
   overview: "Overview",
-  visual: "Visual Designer",
+  visual: "Design",
   ai: "AI Designer",
   entities: "Entity Types",
   queues: "Queues",
   bevents: "B-Events",
   cevents: "C-Events",
-  state: "State Vars",
+  state: "Model Data",
   execute: "Execute",
   results: "Results",
   history: "History",
@@ -604,48 +604,53 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   };
 
   const TABS=[
-    // ── DESIGN ──
     {id:"overview",label:"Overview"},
-    {id:"visual",label:"Visual Designer"},
+    {id:"visual",label:"Design"},
     {id:"ai",label:"AI Designer"},
-    {id:"_model",label:"─── Model ───",disabled:true},
     {id:"entities",label:"Entity Types"},
     {id:"queues",label:"Queues"},
     {id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},
-    {id:"state",label:"State Vars"},
+    {id:"state",label:"Model Data"},
     {id:"validate",label:"Validate"},
-    // ── RUN ──
-    {id:"_runlabel",label:"─── Run ───",disabled:true},
-    {id:"execute",label:"▶ Execute"},
+    {id:"execute",label:"Execute"},
     {id:"results",label:"Results"},
     {id:"history",label:"History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
   const selectableTabs = TABS.filter(t => !t.disabled);
   const NAV_MODES=[
-    {id:"visual-design",label:"Visual Design",primaryTab:"visual",tabs:["overview","visual","ai"]},
-    {id:"entity-model",label:"Entity Model",primaryTab:"entities",tabs:["entities","queues","state"]},
-    {id:"event-logic",label:"Event Logic",primaryTab:"bevents",tabs:["bevents","cevents"]},
-    {id:"validate",label:"Validate",primaryTab:"validate",tabs:["validate"]},
+    {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
+    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","entities","queues","bevents","cevents","state","validate"]},
+    {id:"ai",label:"AI Designer",primaryTab:"ai",tabs:["ai"]},
     {id:"execute",label:"Execute",primaryTab:"execute",tabs:["execute"]},
     {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
     ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
   ];
   const isMobileLayout = viewportWidth < 720;
-  const MOBILE_TABS = ["overview","validate","execute","results","history"];
+  const MOBILE_TABS = ["overview","visual","ai","execute","results","history"];
   const DISPLAY_MODES = isMobileLayout
     ? [
-        {id:"mobile-summary",label:"Summary",primaryTab:"overview",tabs:["overview"]},
-        {id:"validate",label:"Validate",primaryTab:"validate",tabs:["validate"]},
+        {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
+        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","entities","queues","bevents","cevents","state","validate"]},
+        {id:"ai",label:"AI Designer",primaryTab:"ai",tabs:["ai"]},
         {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
         {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
       ]
     : NAV_MODES;
-  const visibleTabs = isMobileLayout ? selectableTabs.filter(t => MOBILE_TABS.includes(t.id)) : TABS;
+  const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
+  const contextualTabs = useMemo(() => {
+    if (activeMode?.id === "overview") return ["overview", "visual", "ai"];
+    if (activeMode?.id === "design") return ["visual", "entities", "queues", "bevents", "cevents", "state", "validate"];
+    if (activeMode?.id === "ai") return ["ai"];
+    if (activeMode?.id === "execute") return ["execute"];
+    if (activeMode?.id === "results") return ["results", "history"];
+    if (activeMode?.id === "access") return ["access"];
+    return ["overview"];
+  }, [activeMode?.id]);
+  const visibleTabs = isMobileLayout ? selectableTabs.filter(t => MOBILE_TABS.includes(t.id)) : selectableTabs.filter(t => contextualTabs.includes(t.id));
   const visibleSelectableTabs = visibleTabs.filter(t => !t.disabled);
   const tabById = Object.fromEntries(selectableTabs.map(t => [t.id, t]));
-  const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
   const tabIssueCounts = useMemo(() => {
     const counts = {};
     for (const issue of validation.errors || []) {
@@ -668,7 +673,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     if (counts.warnings) parts.push(`${counts.warnings} warning${counts.warnings === 1 ? "" : "s"}`);
     return parts.join(", ");
   };
-  const authoringShellMode = !isMobileLayout && ["visual-design", "entity-model", "event-logic"].includes(activeMode.id)
+  const authoringShellMode = !isMobileLayout && ["design"].includes(activeMode.id)
     ? activeMode
     : null;
   const AuthoringWorkflowShell = ({mode, children}) => {
@@ -681,11 +686,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
       ? "Choose a starting path, then validate the generated model structure once the flow is defined."
       : contextCounts.errors > 0
       ? "Resolve blockers before executing."
-      : mode.id === "visual-design"
+      : mode.id === "design"
         ? "Shape the process map, then validate the generated model structure."
-        : mode.id === "entity-model"
-          ? "Define entities, queues, and state before adding event logic."
-          : "Connect B-Events and C-Events, then validate the run path.";
+        : "Define entities, queues, and state before running the model.";
 
     return (
       <section
@@ -852,29 +855,31 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           );
         })}
       </div>
-      <div style={{display:"flex",alignItems:"stretch",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,minWidth:0}}>
-        <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:12,flex:1,minWidth:0,overflowX:"auto"}}>
-          {visibleTabs.map(t=>t.disabled?(
-            <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>
-          ):(
-            <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} aria-label={`${t.label}${tabIssueLabel(t.id) ? `, ${tabIssueLabel(t.id)}` : ""}`} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
-              borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",
-              color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400,display:"inline-flex",alignItems:"center",gap:6}}>
-              <span>{t.label}</span>
-              {tabIssueCounts[t.id]?.errors > 0 && (
-                <span aria-hidden="true" style={{background:C.errorBg,border:`1px solid ${C.danger}66`,borderRadius:10,color:C.error,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
-                  {tabIssueCounts[t.id].errors}
-                </span>
-              )}
-              {!tabIssueCounts[t.id]?.errors && tabIssueCounts[t.id]?.warnings > 0 && (
-                <span aria-hidden="true" style={{background:C.warmup,border:`1px solid ${C.amber}66`,borderRadius:10,color:C.warnBg,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
-                  {tabIssueCounts[t.id].warnings}
-                </span>
-              )}
-            </button>
-          ))}
+      {visibleSelectableTabs.length > 1 && (
+        <div style={{display:"flex",alignItems:"stretch",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,minWidth:0}}>
+          <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:12,flex:1,minWidth:0,overflowX:"auto"}}>
+            {visibleTabs.map(t=>t.disabled?(
+              <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>
+            ):(
+              <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} aria-label={`${t.label}${tabIssueLabel(t.id) ? `, ${tabIssueLabel(t.id)}` : ""}`} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
+                borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",
+                color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400,display:"inline-flex",alignItems:"center",gap:6}}>
+                <span>{t.label}</span>
+                {tabIssueCounts[t.id]?.errors > 0 && (
+                  <span aria-hidden="true" style={{background:C.errorBg,border:`1px solid ${C.danger}66`,borderRadius:10,color:C.error,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
+                    {tabIssueCounts[t.id].errors}
+                  </span>
+                )}
+                {!tabIssueCounts[t.id]?.errors && tabIssueCounts[t.id]?.warnings > 0 && (
+                  <span aria-hidden="true" style={{background:C.warmup,border:`1px solid ${C.amber}66`,borderRadius:10,color:C.warnBg,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
+                    {tabIssueCounts[t.id].warnings}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
         {canEdit&&dirty&&(
           <div role="status" style={{
@@ -896,7 +901,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save Changes"}</Btn>
           </div>
         )}
-        <ModelHealthPanel/>
+        {tab!=="execute" && <ModelHealthPanel/>}
         <ErrorBoundary
           key={tab}
           title="Model panel crashed"
@@ -1193,9 +1198,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(170px, 1fr))",gap:12}}>
               {[
                 {
-                  title:"Visual Designer",
+                  title:"Design",
                   body:"Sketch the process map first, then refine the generated structure.",
-                  action:"Open Visual Designer",
+                  action:"Open Design",
                   onClick:()=>{setTab("visual");setShowStarterGuide(false);},
                   primary:true,
                 },
@@ -1206,10 +1211,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                   onClick:()=>{setTab("ai");setShowStarterGuide(false);},
                 },
                 {
-                  title:"Start with forms",
-                  body:"Define entities, queues, and events directly in the structured editors.",
-                  action:"Open Forms",
-                  onClick:()=>{setTab("entities");setShowStarterGuide(false);},
+                  title:"Use a Template",
+                  body:"Start from a proven template and copy it into your own model workspace.",
+                  action:"Browse Templates",
+                  onClick:()=>{setShowStarterGuide(false);overrides.onExitToTemplates?.();},
                 },
               ].map(option=>(
                 <div key={option.title} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:14,display:"flex",flexDirection:"column",gap:10}}>
@@ -1273,7 +1278,7 @@ const ModelCard=({model,onOpen,onDelete,profiles=[],currentUserId})=>{
   );
 };
 
-const NewModelModal=({onClose,onCreate})=>{
+const NewModelModal=({onClose,onCreate,onUseTemplate})=>{
   const [name,setName]=useState(""); const [desc,setDesc]=useState("");
   const [saving,setSaving]=useState(false);
   const create=async()=>{if(!name.trim())return;setSaving(true);try{await onCreate(name.trim(),desc.trim());}finally{setSaving(false);}onClose();};
@@ -1283,8 +1288,9 @@ const NewModelModal=({onClose,onCreate})=>{
         <div id="new-model-title" style={{fontSize:15,fontWeight:700,color:C.text}}>New DES Model</div>
         <Field label="Name" value={name} onChange={setName} placeholder="e.g. Queue with Reneging" autoFocus/>
         <Field label="Description" value={desc} onChange={setDesc} multiline rows={3}/>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
           <Btn variant="ghost" onClick={onClose} full>Cancel</Btn>
+          <Btn variant="ghost" onClick={()=>{onClose();onUseTemplate?.();}} full>Use a Template</Btn>
           <Btn variant="primary" onClick={create} disabled={!name.trim()||saving} full>{saving?"Saving...":"Create"}</Btn>
         </div>
       </div>

@@ -79,6 +79,7 @@ describe("ModelDetail Model Health panel", () => {
       entityTypes: [{ id: "bad-customer", name: "", role: "customer", attrDefs: [] }],
     });
 
+    fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
     expect(screen.getByRole("tab", { name: /entity types, 1 error/i })).toBeInTheDocument();
   });
 
@@ -88,11 +89,12 @@ describe("ModelDetail Model Health panel", () => {
       entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /event logic/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /b-events/i }));
     expect(screen.getByRole("tab", { name: /b-events/i })).toHaveAttribute("aria-selected", "true");
 
-    fireEvent.click(screen.getByRole("button", { name: /^validate/i }));
-    expect(screen.getByRole("button", { name: /^validate/i })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("tab", { name: /^validate/i }));
+    expect(screen.getByRole("button", { name: /^design$/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText(/VALIDATION WORKSPACE/i)).toBeInTheDocument();
   });
 
@@ -102,13 +104,13 @@ describe("ModelDetail Model Health panel", () => {
       entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /entity model/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
 
-    expect(screen.getByRole("region", { name: /entity model authoring shell/i })).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: /entity model context panel/i })).toHaveTextContent(/Workflow Context/i);
+    expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: /design context panel/i })).toHaveTextContent(/Workflow Context/i);
 
-    fireEvent.click(screen.getByRole("button", { name: /event logic/i }));
-    expect(screen.getByRole("region", { name: /event logic authoring shell/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /b-events/i }));
+    expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
   });
 
   test("offers next-step run actions when the model has no blockers", () => {
@@ -124,7 +126,8 @@ describe("ModelDetail Model Health panel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /open execute/i }));
 
-    expect(screen.getByRole("tab", { name: /execute/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: /^execute$/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^run$/i })).toBeInTheDocument();
   });
 
   test("uses a mobile read/run/results workflow at phone width", () => {
@@ -137,6 +140,9 @@ describe("ModelDetail Model Health panel", () => {
     });
 
     expect(screen.getByLabelText(/mobile model workflow/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^overview$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^design$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ai designer/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^run$/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /entity model/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /entity types/i })).not.toBeInTheDocument();
