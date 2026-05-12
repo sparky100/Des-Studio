@@ -38,6 +38,7 @@ export function normalizeUserSettings(row = {}) {
 
 // ── Row normalisation ─────────────────────────────────────────────────────────
 export function norm(r) {
+  const modelJson = r.model_json || {};
   return {
     id:             r.id,
     name:           r.name,
@@ -50,11 +51,27 @@ export function norm(r) {
     bEvents:        r.b_events         || [],
     cEvents:        r.c_events         || [],
     queues:         r.queues           || [],
+    graph:          modelJson.graph ?? r.graph ?? null,
+    experimentDefaults: modelJson.experimentDefaults ?? r.experiment_defaults ?? {},
     goals:          r.goals            || [],
     owner_id:       r.owner_id,
     owner:          r.owner_id,
     createdAt:      r.created_at,
     updatedAt:      r.updated_at,
+  };
+}
+
+function modelJsonFromModel(model = {}) {
+  return {
+    schemaVersion:        model.schemaVersion ?? 1,
+    entityTypes:          model.entityTypes || [],
+    stateVariables:       model.stateVariables || [],
+    bEvents:              model.bEvents || [],
+    cEvents:              model.cEvents || [],
+    queues:               model.queues || [],
+    graph:                model.graph || null,
+    experimentDefaults:   model.experimentDefaults || {},
+    goals:                model.goals || [],
   };
 }
 
@@ -71,6 +88,7 @@ function toRow(model, userId) {
     c_events:        model.cEvents        || [],
     queues:          model.queues         || [],
     goals:           model.goals          || [],
+    model_json:      modelJsonFromModel(model),
     owner_id:        userId,
   };
 }
@@ -84,17 +102,17 @@ export async function fetchModels(userId) {
     const [visible, sharedViewer, sharedEditor] = await Promise.all([
       supabase
         .from("des_models")
-        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at")
+        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at")
         .or(`owner_id.eq.${userId},visibility.eq.public`)
         .order("updated_at", sort),
       supabase
         .from("des_models")
-        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at")
+        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at")
         .contains("access", { [userId]: "viewer" })
         .order("updated_at", sort),
       supabase
         .from("des_models")
-        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at")
+        .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at")
         .contains("access", { [userId]: "editor" })
         .order("updated_at", sort),
     ]);
@@ -116,7 +134,7 @@ export async function fetchModels(userId) {
   } else {
     const { data: publicData, error } = await supabase
       .from("des_models")
-      .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at")
+      .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at")
       .eq("visibility", "public")
       .order("updated_at", { ascending: false });
     if (error) throw error;
@@ -254,6 +272,13 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
   if (!resultsJson.summary) {
     resultsJson.summary = s;
   }
+  if (result.phaseCTruncated || s.phaseCTruncated) {
+    resultsJson.phaseCTruncated = true;
+    resultsJson.summary = { ...resultsJson.summary, phaseCTruncated: true };
+  }
+  if (Array.isArray(result.warnings) && result.warnings.length) {
+    resultsJson.warnings = result.warnings;
+  }
   if (config.batchId) {
     resultsJson.batch_id = config.batchId;
   }
@@ -340,7 +365,7 @@ export async function forkModel(sourceModelId, newUserId, newName = "") {
   // 1. Fetch the original model — must be owned by or accessible to the user
   const { data: sourceModel, error: fetchError } = await supabase
     .from("des_models")
-    .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at")
+    .select("id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at")
     .or(`owner_id.eq.${newUserId},visibility.eq.public`)
     .eq("id", sourceModelId)
     .single();

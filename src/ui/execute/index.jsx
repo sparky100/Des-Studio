@@ -185,10 +185,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         snap: r.snap,
         summary: {
           ...summary,
+          phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
           total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
           served: r.snap?.served || 0,
           reneged: r.snap?.reneged || 0,
         },
+        phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
         timeSeries:    engineRef.current.getTimeSeries?.(),
         waitDist:      engineRef.current.getWaitDist?.(),
         entitySummary: engineRef.current.getEntitySummary?.(),
@@ -297,7 +299,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
               message: `Replication ${payload.replicationIndex + 1}/${replications} complete  (seed: ${payload.seed})`,
             },
           ]);
-          if (payload.result?.summary?.phaseCTruncated) setPhaseCTruncated(true);
+          if (payload.result?.phaseCTruncated || payload.result?.summary?.phaseCTruncated) setPhaseCTruncated(true);
         },
         onComplete: async payloads => {
           saveInProgressRef.current = true;
@@ -383,7 +385,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     onResultsReady?.(result);
     setLog(result.log);
     setMode("done");
-    if (result.summary?.phaseCTruncated) setPhaseCTruncated(true);
+    if (result.phaseCTruncated || result.summary?.phaseCTruncated) setPhaseCTruncated(true);
 
     saveInProgressRef.current = true;
     setSaveStatus({ state: 'saving', message: 'Saving results...' });
@@ -1476,10 +1478,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         </div>
       )}
 
-      {phaseCTruncated && model.maxCPasses && (
+      {phaseCTruncated && (
         <div style={{ background: C.amber + '18', border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, fontFamily: FONT }}>
-            Phase C scan hit the {model.maxCPasses}-pass cap — model may have an unstable or conflicting C-event condition
+            Phase C scan hit the {model.maxCPasses || 500}-pass cap — model may have an unstable or conflicting C-event condition
           </div>
           <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, marginTop: 4, opacity: 0.8 }}>
             Check your C-event conditions for cycles or conditions that never become false.

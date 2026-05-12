@@ -55,6 +55,8 @@ export function compactReplicationPayload(payload) {
       finalTime: result.finalTime,
       snap: result.snap,
       summary: result.summary,
+      phaseCTruncated: result.phaseCTruncated || result.summary?.phaseCTruncated || false,
+      warnings: result.warnings || result.summary?.warnings || [],
       entitySummary: result.entitySummary,
       log: [],
       timeSeries: result.timeSeries,

@@ -228,4 +228,20 @@ describe("validateModel", () => {
     const result = validateModel(model);
     expect(result.warnings.filter(w => w.code === "V16")).toEqual([]);
   });
+
+  it("blocks non-numeric B-event scheduled times", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "bad", name: "Bad Time", scheduledTime: "soon", effect: "ARRIVE(Customer)", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    expect(validateModel(model).errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V26", tab: "bevents" }),
+    ]));
+  });
 });

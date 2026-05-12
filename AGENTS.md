@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-11 | Reflects: Sprint 23 — UI Interface Polish & Workflow Shell complete. Current: Sprint 24 — TBD*
+*Last updated: 2026-05-12 | Reflects: Sprint 23 — UI Interface Polish & Workflow Shell complete. Current: Sprint 24 — Simulation Correctness & SimPy-Informed Remediation*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
@@ -1319,12 +1319,48 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 21 | ✅ Complete | 2026-05-11 | SaaS Admin Platform (config, admin panel, multi-provider LLM) |
 | Sprint 22 | ✅ Complete | 2026-05-11 | Results Workspace & chart data trust |
 | Sprint 23 | ✅ Complete | 2026-05-11 | UI Interface Polish & Workflow Shell |
+| Sprint 24 | 🔄 Planned | — | Simulation Correctness & SimPy-Informed Remediation |
 
 ---
 
-## 21. Current Sprint — Sprint 24 (TBD)
+## 21. Current Sprint — Sprint 24 (Simulation Correctness & SimPy-Informed Remediation)
 
-**Goal:** To be determined.
+**Goal:** Remediate urgent simulation correctness findings while applying the SimPy review recommendation: partial migration only. DES Studio keeps its browser-first JavaScript Three-Phase engine, but uses SimPy idioms to guide safer cancellation, resource arbitration, queue selection, and lifecycle transitions.
+
+**Source reviews:**
+- `docs/reviews/simulation-architecture-review.md`
+- `docs/reviews/simpy-architecture-review.md`
+- `docs/reviews/sprint-24-simulation-remediation-plan.md`
+
+**Status:** 🔄 Planned | **Started:** — | **Completed:** —
+
+**Implementation guardrails:**
+- Build on the existing `buildEngine()`, Phase A/B/C loop, macro registry, replication runner, Execute panel, and DB wrappers; do not rewrite working systems.
+- Do not migrate the browser runtime to Python/SimPy in Sprint 24.
+- Preserve Pidd's Three-Phase restart rule.
+- Use SimPy concepts such as `AnyOf(request, timeout)`, `Resource`, `PriorityResource`, `Store`, and process-local lifecycle as design references for JavaScript fixes.
+- Add focused regression tests before or alongside each fix.
+- No new dependencies unless explicitly reviewed first.
+
+| Feature / remediation | Status | Task clarity |
+|---|---|---|
+| F24.1 Phase C truncation metadata | ⬜ Planned | Propagate truncation from `step()` to `runAll()`, replication payloads, saved results, and Execute warnings. |
+| F24.2 SimPy-style reneging/cancellation context | ⬜ Planned | Bind reneging timers to the intended entity using an `AnyOf(request, timeout)`-style model rather than global newest waiting selection. |
+| F24.3 Lifecycle invariants and service metrics | ⬜ Planned | Prevent `COMPLETE()` from serving stale/waiting entities; handle `serviceStart = 0`; correct `avgSvc` denominator. |
+| F24.4 Initial FEL scheduling cap | ⬜ Planned | Stop silently dropping B-events scheduled after t=900; validate malformed scheduled times. |
+| F24.5 Canonical model persistence | ⬜ Planned | Ensure `graph` and `experimentDefaults` round trip through remote persistence and DB wrappers. |
+| F24.6 Shift-capacity reconciliation | ⬜ Planned | Retire excess busy servers after downshift completion/release until target capacity is met. |
+| F24.7 SimPy-style queue/resource selection service | ⬜ Planned | Centralize FIFO/LIFO/PRIORITY selection for `ASSIGN`, `BATCH`, and `RENEGE_OLDEST`. |
+| F24.8 V8 validation contract | ⬜ Planned | Align missing source/sink policy across docs, validation, and Execute UI. |
+| F24.9 Warm-up context semantics | ⬜ Planned | Define and test active/queued/context-carrying entity behavior at warm-up. |
+| F24.10 SimPy validation/export backlog decision | ⬜ Planned | Decide whether a later optional SimPy exporter/cross-check harness should be added for benchmark models. |
+
+**Sprint 24 exit gate:**
+- F24.1-F24.6 complete with regression tests.
+- F24.7-F24.9 complete or explicitly split with written defer notes.
+- Focused tests pass: `npm test -- three-phase replication-runner distributions entities validation termination time-varying execute-panel db`.
+- `npm run build` passes.
+- Architecture review docs are updated with resolved/deferred status notes.
 
 ### Recently Completed
 

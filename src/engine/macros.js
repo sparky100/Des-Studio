@@ -80,6 +80,34 @@ function safeEvalScalar(v) {
   return s; // raw string fallback — matches previous behaviour for unresolved identifiers
 }
 
+function normName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function retireIdleExcessServers(ctx, serverTypeName) {
+  const key = normName(serverTypeName);
+  const desired = ctx.state?.__desiredServerCapacity?.[key];
+  if (!Number.isInteger(desired)) return 0;
+
+  const servers = ctx.entities.filter(e => e.role === "server" && normName(e.type) === key);
+  let excess = servers.length - desired;
+  let retired = 0;
+  for (let i = ctx.entities.length - 1; i >= 0 && excess > 0; i--) {
+    const entity = ctx.entities[i];
+    if (
+      entity.role === "server" &&
+      normName(entity.type) === key &&
+      entity.status === "idle" &&
+      entity.currentCustId == null
+    ) {
+      ctx.entities.splice(i, 1);
+      excess--;
+      retired++;
+    }
+  }
+  return retired;
+}
+
 export const MACROS = [
 
   // ── ARRIVE(Type[, QueueName]) ──────────────────────────────────────────────
@@ -276,7 +304,16 @@ export const MACROS = [
       const cust   = entities.find(e => e.id === custId);
       const srv    = entities.find(e => e.id === srvId);
 
-      if (cust && (cust.status === "serving" || cust.status === "waiting")) {
+      if (!cust) {
+        msgs.push(`COMPLETE skipped — context customer #${custId ?? "?"} not found`);
+        return;
+      }
+      if (cust.status !== "serving" && !(cust.role === "batch" && cust.status === "waiting")) {
+        msgs.push(`COMPLETE skipped — #${cust.id} is ${cust.status}, not serving`);
+        return;
+      }
+
+      if (cust.status === "serving" || cust.role === "batch") {
         if (!cust.stages) cust.stages = [];
         cust.stages.push({
           serverType:   srv?.type || "unknown",
@@ -284,7 +321,7 @@ export const MACROS = [
           stageWait:    +(cust.serviceStart != null
             ? (cust.serviceStart - (cust.lastStageStart ?? cust.arrivalTime))
             : 0).toFixed(4),
-          stageService: +(clock - (cust.serviceStart || clock)).toFixed(4),
+          stageService: +(clock - (cust.serviceStart ?? clock)).toFixed(4),
         });
         cust.status        = "done";
         cust.completionTime = clock;
@@ -296,6 +333,10 @@ export const MACROS = [
         srv.status = "idle";
         delete srv.currentCustId;
         msgs.push(`Server #${srv.id} → idle`);
+        const retired = retireIdleExcessServers(ctx, srv.type);
+        if (retired > 0) {
+          msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
+        }
       }
     },
   },
@@ -325,7 +366,7 @@ export const MACROS = [
           stageWait:    +(cust.serviceStart != null
             ? (cust.serviceStart - (cust.lastStageStart ?? cust.arrivalTime))
             : 0).toFixed(4),
-          stageService: +(clock - (cust.serviceStart || clock)).toFixed(4),
+          stageService: +(clock - (cust.serviceStart ?? clock)).toFixed(4),
         });
         cust.lastStageStart = clock;
         cust.status         = "waiting";
@@ -334,7 +375,11 @@ export const MACROS = [
         delete cust.serverId;
         srv.status = "idle";
         delete srv.currentCustId;
+        const retired = retireIdleExcessServers(ctx, srv.type);
         msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done, srv #${srv.id} idle]`);
+        if (retired > 0) {
+          msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
+        }
       } else {
         msgs.push(`RELEASE(${srvType}): no busy server+customer pair found`);
       }

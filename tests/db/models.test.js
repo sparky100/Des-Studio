@@ -134,6 +134,29 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
 
       expect(result.tags).toEqual([]);
     });
+
+    it('hydrates canonical model_json graph and experiment defaults', () => {
+      const result = norm({
+        id: 'm3',
+        name: 'Canonical',
+        visibility: 'private',
+        owner_id: 'u3',
+        entity_types: [],
+        state_variables: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: {
+          graph: { nodes: [{ id: 'n1' }], edges: [] },
+          experimentDefaults: { maxSimTime: 250, warmupPeriod: 10 },
+        },
+        created_at: '2026-05-01T00:00:00Z',
+        updated_at: '2026-05-02T00:00:00Z',
+      });
+
+      expect(result.graph).toEqual({ nodes: [{ id: 'n1' }], edges: [] });
+      expect(result.experimentDefaults).toEqual({ maxSimTime: 250, warmupPeriod: 10 });
+    });
   });
 
   describe('Profiles and user settings', () => {
@@ -239,6 +262,35 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from('des_models').select).toHaveBeenCalled();
       expect(supabase.from('des_models').single).toHaveBeenCalled();
     });
+
+    it('persists canonical model_json with graph and experiment defaults', async () => {
+      const model = {
+        id: 'm1',
+        name: 'Canonical Save',
+        entityTypes: [{ id: 'cust', name: 'Customer' }],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+        graph: { nodes: [{ id: 'source' }], edges: [] },
+        experimentDefaults: { maxSimTime: 500, warmupPeriod: 25 },
+      };
+      supabase.from('des_models').update.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({ data: { ...model, owner_id: 'u1' }, error: null });
+
+      await saveModel(model, 'u1');
+
+      expect(supabase.from('des_models').update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model_json: expect.objectContaining({
+            graph: { nodes: [{ id: 'source' }], edges: [] },
+            experimentDefaults: { maxSimTime: 500, warmupPeriod: 25 },
+          }),
+        })
+      );
+    });
   });
 
   describe('deleteModel', () => {
@@ -267,20 +319,19 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
 
   describe('Simulation Runs', () => {
     it('enforces run_by matching current user', async () => {
-      // Mock the insert operation without .single()
-      supabase.from('simulation_runs').insert.mockResolvedValueOnce({ data: { id: 'run-id-1', model_id: 'm1', run_by: 'u1' }, error: null });
+      supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-1', model_id: 'm1', run_by: 'u1' }, error: null });
 
       await saveSimulationRun('m1', 'u1', { summary: {} });
       expect(supabase.from).toHaveBeenCalledWith('simulation_runs');
       expect(supabase.from('simulation_runs').insert).toHaveBeenCalledWith(
         expect.objectContaining({ run_by: 'u1' })
       );
-      // .single() is not called for saveSimulationRun
-      expect(supabase.from('simulation_runs').single).not.toHaveBeenCalled();
+      expect(supabase.from('simulation_runs').select).toHaveBeenCalledWith('id');
+      expect(supabase.from('simulation_runs').single).toHaveBeenCalled();
     });
 
     it('persists replication batch metadata in results_json', async () => {
-      supabase.from('simulation_runs').insert.mockResolvedValueOnce({ data: { id: 'run-id-2' }, error: null });
+      supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-2' }, error: null });
       const suppliedResultsJson = { existing: true };
 
       await saveSimulationRun(
@@ -321,7 +372,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
     });
 
     it('stores a null avg_service_time when avgSvc is missing', async () => {
-      supabase.from('simulation_runs').insert.mockResolvedValueOnce({ data: { id: 'run-id-3' }, error: null });
+      supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-3' }, error: null });
 
       await saveSimulationRun('m1', 'u1', {
         summary: { total: 1, served: 1, reneged: 0, avgWait: 4, avgSojourn: 9 },
@@ -333,6 +384,27 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
           avg_service_time: null,
           results_json: expect.objectContaining({
             summary: expect.objectContaining({ avgSojourn: 9 }),
+          }),
+        })
+      );
+    });
+
+    it('persists Phase C truncation metadata in results_json', async () => {
+      supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-4' }, error: null });
+
+      await saveSimulationRun('m1', 'u1', {
+        summary: { total: 1, served: 0, reneged: 0, phaseCTruncated: true },
+        phaseCTruncated: true,
+        warnings: ['Phase C truncated after 3 passes at t=0.000'],
+        snap: { clock: 0 },
+      });
+
+      expect(supabase.from('simulation_runs').insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          results_json: expect.objectContaining({
+            phaseCTruncated: true,
+            summary: expect.objectContaining({ phaseCTruncated: true }),
+            warnings: ['Phase C truncated after 3 passes at t=0.000'],
           }),
         })
       );

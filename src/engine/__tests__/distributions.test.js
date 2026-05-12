@@ -126,7 +126,7 @@ describe('sampleAttrs', () => {
     const result = sampleAttrs([
       { name: 'serviceTime', dist: 'Fixed', distParams: { value: '5' } },
       { name: 'priority',    dist: 'Fixed', distParams: { value: '2' } },
-    ]);
+    ], mulberry32(99));
     expect(result.serviceTime).toBe(5);
     expect(result.priority).toBe(2);
   });

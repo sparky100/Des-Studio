@@ -20,6 +20,8 @@ function applyShiftChange(ev, ctx) {
   }
 
   const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+  ctx.state.__desiredServerCapacity = ctx.state.__desiredServerCapacity || {};
+  ctx.state.__desiredServerCapacity[String(serverTypeName).trim().toLowerCase()] = target;
   const servers = ctx.entities.filter(e => e.role === "server" && match(e.type, serverTypeName));
   const current = servers.length;
 
@@ -237,11 +239,13 @@ export function fireBEvent(ev, ctx) {
     const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng, null, { clock }));
     let renegeTarget;
     if (sched.isRenege) {
-      // Tag the newest waiting customer
-      const newest = entities
-        .filter(e => e.status === "waiting")
-        .sort((a, b) => (b.arrivalTime || 0) - (a.arrivalTime || 0))[0];
-      renegeTarget = newest?.id;
+      renegeTarget = effectCtx._lastCustId;
+      if (renegeTarget == null) {
+        const warning = `Renege schedule skipped for "${tmpl.name}": no context customer available`;
+        msgs.push(warning);
+        ctx.warnings?.push(warning);
+        continue;
+      }
     }
     felEntries.push({
       ...tmpl,

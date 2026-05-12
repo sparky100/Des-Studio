@@ -15,8 +15,6 @@ import { fireBEvent, fireCEvent }              from "./phases.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
-const INITIAL_FEL_MAX_SCHEDULED_TIME = 900; // Arbitrary limit for initial B-Events
-
 function getValidShiftSchedule(entityType) {
   if (!Array.isArray(entityType.shiftSchedule) || entityType.shiftSchedule.length === 0) return [];
   return entityType.shiftSchedule
@@ -87,6 +85,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const rng = mulberry32(seed);
   let _warmupComplete = false;
   let _terminationConditionMet = false;
+  let _phaseCTruncated = false;
   let _excludedCount = 0;
   const warnings = [];
 
@@ -195,8 +194,13 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const _timeSeries = collectTimeSeries ? [] : null; // null = disabled, zero overhead
 
   let fel = (runtimeModel.bEvents || [])
-    .filter(ev => parseFloat(ev.scheduledTime) < INITIAL_FEL_MAX_SCHEDULED_TIME)
-    .map(ev => ({ ...ev, scheduledTime: parseFloat(ev.scheduledTime) || 0 }));
+    .map(ev => {
+      const scheduledTime = parseFloat(ev.scheduledTime);
+      return {
+        ...ev,
+        scheduledTime: Number.isFinite(scheduledTime) ? scheduledTime : 0,
+      };
+    });
 
   fel.push(...makeRateChangeEvents(runtimeModel), ...makeShiftChangeEvents(runtimeModel));
 
@@ -206,7 +210,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
 
-  log.push({ phase: "INIT", time: 0, message: "Engine initialised", snap: snap(0) });
+  log.push({ phase: "INIT", time: 0, message: "Engine initialised" });
 
   // ── Shared execution context ──────────────────────────────────────────────
   const makeCtx = (felRef = null) => ({
@@ -225,14 +229,17 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   });
 
   // ── step(): one Phase A → B → C cycle ────────────────────────────────────
-  function step() {
+  function step(options = {}) {
+    const captureSnap = options.captureSnap !== false;
+    const stepSnapshot = () => (captureSnap ? snap(clock) : null);
+
     if (_terminationConditionMet) {
-      return { done: true, cycleLog: [], snap: snap(clock) };
+      return { done: true, cycleLog: [], snap: stepSnapshot() };
     }
 
     if (fel.length === 0) {
-      log.push({ phase: "END", time: clock, message: "FEL empty — simulation complete", snap: snap(clock) });
-      return { done: true, cycleLog: [{ phase: "END", time: clock, message: "FEL empty" }], snap: snap(clock) };
+      log.push({ phase: "END", time: clock, message: "FEL empty — simulation complete" });
+      return { done: true, cycleLog: [{ phase: "END", time: clock, message: "FEL empty" }], snap: stepSnapshot() };
     }
 
     const cycleLog = [];
@@ -245,8 +252,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       clock = maxSimTime;
       _terminationConditionMet = true;
       const msg = `Run limit reached (t=${maxSimTime.toFixed(3)}) — simulation complete`;
-      log.push({ phase: "END", time: clock, message: msg, snap: snap(clock) });
-      return { done: true, cycleLog: [{ phase: "END", time: clock, message: msg }], snap: snap(clock) };
+      log.push({ phase: "END", time: clock, message: msg });
+      return { done: true, cycleLog: [{ phase: "END", time: clock, message: msg }], snap: stepSnapshot() };
     }
 
     clock = nextTime;
@@ -257,13 +264,13 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       if (evalCondition(terminationCondition, h, state, clock)) {
         _terminationConditionMet = true;
         const msg = "Termination condition met — simulation complete";
-        log.push({ phase: "END", time: clock, message: msg, snap: snap(clock) });
-        return { done: true, cycleLog: [{ phase: "END", time: clock, message: msg }], snap: snap(clock) };
+        log.push({ phase: "END", time: clock, message: msg });
+        return { done: true, cycleLog: [{ phase: "END", time: clock, message: msg }], snap: stepSnapshot() };
       }
     }
 
     cycleLog.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}` });
-    log.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}`, snap: snap(clock) });
+    log.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}` });
 
     // Phase B — fire all due events
     const due = fel.filter(ev => Math.abs(ev.scheduledTime - clock) < 1e-9);
@@ -274,7 +281,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         _warmupComplete = true;
         const msg = `Warm-up complete at t=${clock.toFixed(3)}. Statistics reset.`;
         cycleLog.push({ phase: "WARMUP", time: clock, message: msg });
-        log.push({ phase: "WARMUP", time: clock, message: msg, snap: snap(clock) });
+        log.push({ phase: "WARMUP", time: clock, message: msg });
         state.__served = 0;
         state.__reneged = 0;
         for (const sv of runtimeModel.stateVariables || []) {
@@ -299,7 +306,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
       const msg = [`B: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
       cycleLog.push({ phase: "B", time: clock, message: msg, skipped });
-      log.push({ phase: "B", time: clock, message: msg, snap: snap(clock), skipped });
+      log.push({ phase: "B", time: clock, message: msg, skipped });
     }
 
     // Phase C — evaluate conditionals until stable
@@ -321,12 +328,12 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         cFired = true;
         const msg = [`C: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
         cycleLog.push({ phase: "C", time: clock, message: msg });
-        log.push({ phase: "C", time: clock, message: msg, snap: snap(clock) });
+        log.push({ phase: "C", time: clock, message: msg });
         break; // restart from Priority 1 — Three-Phase restart rule
       }
       if (!cFired) {
         cycleLog.push({ phase: "C", time: clock, message: "No C-events can fire → Phase A" });
-        log.push({ phase: "C", time: clock, message: "No C-events can fire → Phase A", snap: snap(clock) });
+        log.push({ phase: "C", time: clock, message: "No C-events can fire → Phase A" });
       }
     }
 
@@ -334,8 +341,10 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const phaseCTruncated = cFired;
     if (phaseCTruncated) {
       const truncMsg = `Phase C truncated after ${maxCPasses} passes at t=${clock.toFixed(3)} — model may have an unstable condition`;
+      _phaseCTruncated = true;
+      warnings.push(truncMsg);
       cycleLog.push({ phase: "C", time: clock, message: truncMsg });
-      log.push({ phase: "C", time: clock, message: truncMsg, snap: snap(clock) });
+      log.push({ phase: "C", time: clock, message: truncMsg });
     }
 
     // Condition-based termination check (post-step)
@@ -344,41 +353,39 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       if (evalCondition(terminationCondition, h, state, clock)) {
         _terminationConditionMet = true;
         const msg = "Termination condition met — simulation complete";
-        log.push({ phase: "END", time: clock, message: msg, snap: snap(clock) });
-        return { done: true, cycleLog: [...cycleLog, { phase: "END", time: clock, message: msg }], snap: snap(clock), felSize: fel.length, phaseCTruncated };
+        log.push({ phase: "END", time: clock, message: msg });
+        return { done: true, cycleLog: [...cycleLog, { phase: "END", time: clock, message: msg }], snap: stepSnapshot(), felSize: fel.length, phaseCTruncated };
       }
     }
 
     // Collect time-series snapshot after Phase C stabilises (F10.4a)
-    const stepSnap = snap(clock);
-    if (_timeSeries !== null) _timeSeries.push({ t: stepSnap.clock, byType: stepSnap.byType, byQueue: stepSnap.byQueue });
+    const stepSnap = (_timeSeries !== null || captureSnap) ? snap(clock) : null;
+    if (_timeSeries !== null && stepSnap) _timeSeries.push({ t: stepSnap.clock, byType: stepSnap.byType, byQueue: stepSnap.byQueue });
     return { done: false, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated };
   }
 
   // ── runAll(): run to completion ───────────────────────────────────────────
   function runAll() {
     let c = 0;
-    let anyPhaseCTruncated = false;
 
     // Initial termination check
     if (terminationCondition) {
       const h = makeHelpers(entities, runtimeModel);
       if (evalCondition(terminationCondition, h, state, clock)) {
         _terminationConditionMet = true;
-        log.push({ phase: "END", time: clock, message: "Termination condition met at start", snap: snap(clock) });
+        log.push({ phase: "END", time: clock, message: "Termination condition met at start" });
       }
     }
 
     while (fel.length > 0 && c < maxCycles && !_terminationConditionMet) {
       c++;
-      const r = step();
-      if (r.phaseCTruncated) anyPhaseCTruncated = true;
+      const r = step({ captureSnap: false });
       if (r.done) break;
     }
     if (!_terminationConditionMet && c >= maxCycles) {
-      log.push({ phase: "END", time: clock, message: `Cycle limit reached (${maxCycles}) — simulation halted`, snap: snap(clock) });
+      log.push({ phase: "END", time: clock, message: `Cycle limit reached (${maxCycles}) — simulation halted` });
     } else if (fel.length === 0 && !_terminationConditionMet) {
-      log.push({ phase: "END", time: clock, message: "FEL empty — simulation complete", snap: snap(clock) });
+      log.push({ phase: "END", time: clock, message: "FEL empty — simulation complete" });
     }
 
     const customers    = entities.filter(e => e.role !== "server");
@@ -386,11 +393,11 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const reneged      = customers.filter(e => e.status === "reneged");
 
     const avgWait = served.length
-      ? served.reduce((s, e) => s + ((e.serviceStart || 0) - e.arrivalTime), 0) / served.length
+      ? served.reduce((s, e) => s + ((e.serviceStart ?? e.arrivalTime) - e.arrivalTime), 0) / served.length
       : null;
-    const avgSvc = served.filter(e => e.completionTime != null && e.serviceStart != null).length
-      ? served.filter(e => e.completionTime != null && e.serviceStart != null)
-          .reduce((s, e) => s + (e.completionTime - e.serviceStart), 0) / served.length
+    const withService = served.filter(e => e.completionTime != null && e.serviceStart != null);
+    const avgSvc = withService.length
+      ? withService.reduce((s, e) => s + (e.completionTime - e.serviceStart), 0) / withService.length
       : null;
     const withSojourn  = customers.filter(e => e.sojournTime != null);
     const avgSojourn   = withSojourn.length ? withSojourn.reduce((s, e) => s + e.sojournTime, 0) / withSojourn.length : null;
@@ -401,6 +408,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       log,
       snap:           snap(clock),
       summary:        getSummary(),
+      phaseCTruncated: _phaseCTruncated,
+      warnings:       warnings.slice(),
       entitySummary:  entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
       timeSeries:     _timeSeries ?? undefined,
       waitDist:       computeWaitDist(entities),
@@ -450,11 +459,11 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     const servers      = entities.filter(e => e.role === "server");
 
     const avgWait = served.length
-      ? served.reduce((s, e) => s + ((e.serviceStart || 0) - e.arrivalTime), 0) / served.length
+      ? served.reduce((s, e) => s + ((e.serviceStart ?? e.arrivalTime) - e.arrivalTime), 0) / served.length
       : null;
-    const avgSvc = served.filter(e => e.completionTime != null && e.serviceStart != null).length
-      ? served.filter(e => e.completionTime != null && e.serviceStart != null)
-          .reduce((s, e) => s + (e.completionTime - e.serviceStart), 0) / served.length
+    const withService = served.filter(e => e.completionTime != null && e.serviceStart != null);
+    const avgSvc = withService.length
+      ? withService.reduce((s, e) => s + (e.completionTime - e.serviceStart), 0) / withService.length
       : null;
     const withSojourn  = customers.filter(e => e.sojournTime != null);
     const avgSojourn   = withSojourn.length ? withSojourn.reduce((s, e) => s + e.sojournTime, 0) / withSojourn.length : null;
@@ -483,6 +492,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       perResource:       Object.keys(perResource).length ? perResource : undefined,
       warmupPeriod,
       excludedCount:     _excludedCount,
+      phaseCTruncated:   _phaseCTruncated,
+      maxCPasses,
       warnings,
     };
   }

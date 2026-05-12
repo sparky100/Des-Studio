@@ -198,6 +198,14 @@ export function validateModel(model) {
   }
 
   bEvents.forEach(b => {
+    const scheduledTime = b.scheduledTime === undefined || b.scheduledTime === null || b.scheduledTime === ""
+      ? 0
+      : parseFloat(b.scheduledTime);
+    if (!Number.isFinite(scheduledTime)) {
+      err('V26',
+        `B-Event '${b.name || b.id}' scheduledTime '${b.scheduledTime}' is not numeric.`,
+        'bevents');
+    }
     (b.schedules || []).forEach((s, j) => {
       checkDist(s.dist, s.distParams,
         `B-Event '${b.name || b.id}' schedule ${j + 1}`, 'bevents');
