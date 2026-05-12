@@ -179,4 +179,37 @@ describe("validateModel", () => {
     const result = validateModel(model);
     expect(result.warnings.filter(w => w.code === "V25")).toEqual([]);
   });
+
+  it("uses the default 500 run duration when maxSimTime is not stored on the model", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.warnings.filter(w => w.code === "V16")).toEqual([]);
+  });
+
+  it("still warns when run duration is explicitly cleared to zero and no stop condition exists", () => {
+    const model = {
+      maxSimTime: 0,
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V16" }),
+    ]));
+  });
 });
