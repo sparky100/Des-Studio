@@ -19,7 +19,7 @@ import { TEMPLATES }                        from "./engine/templates.js";
 import DashboardView                        from "./ui/share/DashboardView.jsx";
 import { AdminPanel }                       from "./ui/AdminPanel.jsx";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph"];
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
 
 function createSampleMm1Model() {
   return {
@@ -100,10 +100,10 @@ function extractImportedModelPayload(payload) {
   };
 
   for (const key of MODEL_JSON_KEYS) {
-    if (key === 'graph') {
+    if (key === 'graph' || key === 'experimentDefaults') {
       model[key] = source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])
         ? source[key]
-        : null;
+        : key === 'graph' ? null : {};
     } else {
       model[key] = Array.isArray(source[key]) ? source[key] : [];
     }

@@ -26,6 +26,7 @@ const emptyModelJson = {
   cEvents: [],
   queues: [],
   graph: null,
+  experimentDefaults: {},
 };
 
 function jsonFile(name, payload) {
@@ -177,5 +178,23 @@ describe('model JSON import', () => {
       },
     });
     expect(imported.graph).toBeNull();
+    expect(imported.experimentDefaults).toEqual({});
+  });
+
+  it('preserves experiment defaults when present in imported model_json', () => {
+    const imported = extractImportedModelPayload({
+      name: 'Defaults model',
+      model_json: {
+        ...emptyModelJson,
+        experimentDefaults: { maxSimTime: 900, warmupPeriod: 30, replications: 5, terminationMode: 'time' },
+      },
+    });
+
+    expect(imported.experimentDefaults).toEqual({
+      maxSimTime: 900,
+      warmupPeriod: 30,
+      replications: 5,
+      terminationMode: 'time',
+    });
   });
 });

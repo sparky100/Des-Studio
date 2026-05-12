@@ -212,7 +212,7 @@ export function validateModel(model) {
     });
   });
 
-  const maxSimTimeRaw = model.maxSimTime;
+  const maxSimTimeRaw = model.maxSimTime ?? model.experimentDefaults?.maxSimTime;
   const maxSimTime = maxSimTimeRaw === undefined || maxSimTimeRaw === null || maxSimTimeRaw === ""
     ? DEFAULT_MAX_SIM_TIME
     : parseFloat(maxSimTimeRaw);
@@ -498,7 +498,9 @@ export function validateModel(model) {
   });
 
   // ── V16: Termination check (Sprint 3.2) ─────────────────────────────────────
-  const hasTermination = (Number.isFinite(maxSimTime) && maxSimTime > 0) || model.terminationCondition;
+  const hasTermination = (Number.isFinite(maxSimTime) && maxSimTime > 0) ||
+    model.terminationCondition ||
+    model.experimentDefaults?.terminationCondition;
   if (!hasTermination && hasArrive) {
     warn('V16',
       'No simulation time limit or termination condition set. Model may run until cycle limit (5000) if arrivals continue indefinitely.',

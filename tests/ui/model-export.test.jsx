@@ -84,6 +84,17 @@ describe('model JSON export', () => {
     }));
   });
 
+  it('includes experiment defaults in export payload when configured', () => {
+    const payload = buildModelExportPayload({
+      ...baseModel,
+      experimentDefaults: { maxSimTime: 750, warmupPeriod: 50, replications: 3, terminationMode: 'time' },
+    });
+
+    expect(payload.model_json).toEqual(expect.objectContaining({
+      experimentDefaults: { maxSimTime: 750, warmupPeriod: 50, replications: 3, terminationMode: 'time' },
+    }));
+  });
+
   it('omits graph from export payload when model has no graph', () => {
     const payload = buildModelExportPayload(baseModel);
 

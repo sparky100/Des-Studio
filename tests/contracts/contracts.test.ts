@@ -10,6 +10,7 @@ describe("typed contracts", () => {
       "bEvents",
       "cEvents",
       "queues",
+      "experimentDefaults",
     ]);
   });
 

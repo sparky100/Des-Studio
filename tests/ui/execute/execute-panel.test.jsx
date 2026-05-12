@@ -66,6 +66,34 @@ describe('ExecutePanel', () => {
     expect(screen.getByText('Run or step the simulation to see the visual view.')).toBeInTheDocument();
   });
 
+  it('loads and persists model experiment defaults from Execute controls', () => {
+    const onExperimentDefaultsChange = vi.fn();
+    render(
+      <ExecutePanel
+        model={{
+          ...validModel,
+          experimentDefaults: { maxSimTime: 750, warmupPeriod: 25, replications: 4, terminationMode: 'time' },
+        }}
+        modelId="model-1"
+        userId="user-1"
+        onExperimentDefaultsChange={onExperimentDefaultsChange}
+      />
+    );
+
+    expect(screen.getByLabelText(/warm-up period/i)).toHaveValue(25);
+    expect(screen.getByLabelText(/replication count/i)).toHaveValue(4);
+    expect(screen.getByLabelText(/run duration/i)).toHaveValue(750);
+
+    fireEvent.change(screen.getByLabelText(/run duration/i), { target: { value: '900' } });
+
+    expect(onExperimentDefaultsChange).toHaveBeenCalledWith(expect.objectContaining({
+      maxSimTime: 900,
+      warmupPeriod: 25,
+      replications: 4,
+      terminationMode: 'time',
+    }));
+  });
+
   it('toggles the AI assistant panel with actions disabled before results exist', () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 

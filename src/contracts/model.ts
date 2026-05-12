@@ -4,6 +4,7 @@ export const MODEL_JSON_KEYS = [
   "bEvents",
   "cEvents",
   "queues",
+  "experimentDefaults",
 ] as const;
 
 export type ModelJsonKey = (typeof MODEL_JSON_KEYS)[number];
@@ -99,7 +100,16 @@ export interface DesModelJson {
   bEvents: BEventDefinition[];
   cEvents: CEventDefinition[];
   queues: QueueDefinition[];
+  experimentDefaults?: ExperimentDefaults;
   graph?: ModelGraphMetadata;
+}
+
+export interface ExperimentDefaults {
+  warmupPeriod?: number;
+  maxSimTime?: number | null;
+  replications?: number;
+  terminationMode?: "time" | "condition";
+  terminationCondition?: unknown;
 }
 
 export interface ModelGraphMetadata {

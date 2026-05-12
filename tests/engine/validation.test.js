@@ -212,4 +212,20 @@ describe("validateModel", () => {
       expect.objectContaining({ code: "V16" }),
     ]));
   });
+
+  it("uses saved experiment defaults as the model run duration", () => {
+    const model = {
+      experimentDefaults: { maxSimTime: 250 },
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.warnings.filter(w => w.code === "V16")).toEqual([]);
+  });
 });

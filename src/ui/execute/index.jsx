@@ -23,7 +23,17 @@ import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResu
 import { SweepChart, WarmupChart, Sweep2DGrid } from "./SweepViews.jsx";
 import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 
-const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, autoRun = false, analyseRun = null, onClearAnalyse }) => {
+const numberDefault = (value, fallback) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+};
+const intDefault = (value, fallback) => {
+  const n = parseInt(value, 10);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+};
+
+const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, autoRun = false, analyseRun = null, onClearAnalyse, onExperimentDefaultsChange = null }) => {
+  const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
   const [log, setLog] = useState([]);
@@ -38,12 +48,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [replicationResults, setReplicationResults] = useState([]);
   const [aggregateStats, setAggregateStats] = useState({});
   const [seed, setSeed] = useState(() => Math.floor(mulberry32(Date.now())() * 1e9));
-  const [warmupPeriod, setWarmupPeriod] = useState(0);
+  const [warmupPeriod, setWarmupPeriod] = useState(() => numberDefault(experimentDefaults.warmupPeriod, 0));
   const [warmupDetection, setWarmupDetection] = useState(null);
-  const [maxSimTime, setMaxSimTime] = useState(500);
-  const [terminationMode, setTerminationMode] = useState("time");
-  const [terminationCondition, setTerminationCondition] = useState(null);
-  const [replications, setReplications] = useState(1);
+  const [maxSimTime, setMaxSimTime] = useState(() => numberDefault(experimentDefaults.maxSimTime, 500));
+  const [terminationMode, setTerminationMode] = useState(() => experimentDefaults.terminationMode === "condition" ? "condition" : "time");
+  const [terminationCondition, setTerminationCondition] = useState(() => experimentDefaults.terminationCondition || null);
+  const [replications, setReplications] = useState(() => intDefault(experimentDefaults.replications, 1));
   const [runLabel, setRunLabel] = useState("");
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
@@ -96,6 +106,18 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     () => Math.max(40, Math.round(400 / speedMultiplier)),
     [speedMultiplier]
   );
+  const persistExperimentDefaults = useCallback((patch) => {
+    if (!onExperimentDefaultsChange) return;
+    onExperimentDefaultsChange({
+      ...(model.experimentDefaults || {}),
+      warmupPeriod,
+      maxSimTime,
+      replications,
+      terminationMode,
+      terminationCondition,
+      ...patch,
+    });
+  }, [model.experimentDefaults, warmupPeriod, maxSimTime, replications, terminationMode, terminationCondition, onExperimentDefaultsChange]);
 
   const validation = useMemo(() => {
     const v = validateModel({
@@ -731,7 +753,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 aria-label="Warm-up period"
                 type="number"
                 value={warmupPeriod}
-                onChange={e => { setWarmupPeriod(parseFloat(e.target.value) || 0); setWarmupDetection(null); }}
+                onChange={e => {
+                  const value = parseFloat(e.target.value) || 0;
+                  setWarmupPeriod(value);
+                  setWarmupDetection(null);
+                  persistExperimentDefaults({ warmupPeriod: value });
+                }}
                 style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`,
                   borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
                   padding: "6px 8px", outline: "none" }}
@@ -747,7 +774,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   <Btn small variant="primary" onClick={() => {
-                    setWarmupPeriod(Math.round(warmupDetection.truncationPoint));
+                    const value = Math.round(warmupDetection.truncationPoint);
+                    setWarmupPeriod(value);
+                    persistExperimentDefaults({ warmupPeriod: value });
                     setWarmupDetection(null);
                   }}>
                     Apply t={Math.round(warmupDetection.truncationPoint)}
@@ -772,7 +801,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
               aria-label="Replication count"
               type="number"
               value={replications}
-              onChange={e => setReplications(parseInt(e.target.value) || 0)}
+              onChange={e => {
+                const value = parseInt(e.target.value, 10) || 0;
+                setReplications(value);
+                persistExperimentDefaults({ replications: value });
+              }}
               style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`,
                 borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
                 padding: "6px 8px", outline: "none" }}
@@ -812,11 +845,17 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
             <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>TERMINATION MODE</span>
             <div style={{ display: "flex", gap: 12, alignItems: "center", height: 32 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
-                <input type="radio" name="terminationMode" checked={terminationMode === "time"} onChange={() => setTerminationMode("time")} />
+                <input type="radio" name="terminationMode" checked={terminationMode === "time"} onChange={() => {
+                  setTerminationMode("time");
+                  persistExperimentDefaults({ terminationMode: "time", maxSimTime, terminationCondition: null });
+                }} />
                 Time-based
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
-                <input type="radio" name="terminationMode" checked={terminationMode === "condition"} onChange={() => setTerminationMode("condition")} />
+                <input type="radio" name="terminationMode" checked={terminationMode === "condition"} onChange={() => {
+                  setTerminationMode("condition");
+                  persistExperimentDefaults({ terminationMode: "condition", terminationCondition });
+                }} />
                 Condition-based
               </label>
             </div>
@@ -829,7 +868,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 aria-label="Run duration"
                 type="number"
                 value={maxSimTime}
-                onChange={e => setMaxSimTime(parseFloat(e.target.value) || 0)}
+                onChange={e => {
+                  const value = parseFloat(e.target.value) || 0;
+                  setMaxSimTime(value);
+                  persistExperimentDefaults({ maxSimTime: value, terminationMode: "time" });
+                }}
                 style={{ width: 100, background: "transparent", border: `1px solid ${C.border}`,
                   borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
                   padding: "6px 8px", outline: "none" }}
@@ -846,7 +889,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
               entityTypes={model.entityTypes}
               stateVariables={model.stateVariables}
               queues={model.queues}
-              onChange={setTerminationCondition}
+              onChange={condition => {
+                setTerminationCondition(condition);
+                persistExperimentDefaults({ terminationCondition: condition, terminationMode: "condition" });
+              }}
             />
           </div>
         )}

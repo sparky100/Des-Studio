@@ -18,7 +18,7 @@ import { fetchRunHistory, listShareLinks } from "../db/models.js";
 import { validateModel }                    from "../engine/validation.js";
 import { renameQueue }                      from "../engine/queue-refs.js";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph"];
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
 
 function slugifyModelName(name = "") {
   return (name || "untitled")
@@ -33,6 +33,11 @@ function modelJsonFromModel(model = {}) {
     if (key === "graph") {
       return model.graph && typeof model.graph === "object" && !Array.isArray(model.graph)
         ? { ...json, graph: model.graph }
+        : json;
+    }
+    if (key === "experimentDefaults") {
+      return model.experimentDefaults && typeof model.experimentDefaults === "object" && !Array.isArray(model.experimentDefaults)
+        ? { ...json, experimentDefaults: model.experimentDefaults }
         : json;
     }
     return {
@@ -180,6 +185,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
       cEvents:       modelData.cEvents        || [],
       queues:        modelData.queues         || [],
       graph:         modelData.graph          || null,
+      experimentDefaults: modelData.experimentDefaults || {},
       access:        modelData.access         || {},
     };
   });
@@ -251,6 +257,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     cEvents: Array.isArray(nextModel.cEvents) ? nextModel.cEvents : (current.cEvents || []),
     queues: Array.isArray(nextModel.queues) ? nextModel.queues : (current.queues || []),
     graph: nextModel.graph && typeof nextModel.graph === "object" && !Array.isArray(nextModel.graph) ? nextModel.graph : (current.graph || null),
+    experimentDefaults: nextModel.experimentDefaults && typeof nextModel.experimentDefaults === "object" && !Array.isArray(nextModel.experimentDefaults)
+      ? nextModel.experimentDefaults
+      : (current.experimentDefaults || {}),
   });
   const applyGeneratedModel=(nextModel)=>{
     const merged=mergeGeneratedModel(model,nextModel);
@@ -1079,7 +1088,17 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             title="Execute panel crashed"
             message="The simulation controls could not render."
           >
-            <ExecutePanel model={model} modelId={modelId} userId={overrides.userId} onRunSaved={handleRunSaved} onResultsReady={setLatestResults} autoRun={overrides.autoRun} analyseRun={analyseRun} onClearAnalyse={()=>setAnalyseRun(null)}/>
+            <ExecutePanel
+              model={model}
+              modelId={modelId}
+              userId={overrides.userId}
+              onRunSaved={handleRunSaved}
+              onResultsReady={setLatestResults}
+              autoRun={overrides.autoRun}
+              analyseRun={analyseRun}
+              onClearAnalyse={()=>setAnalyseRun(null)}
+              onExperimentDefaultsChange={canEdit ? defaults => setField("experimentDefaults", defaults) : null}
+            />
           </ErrorBoundary>
         )}
         {tab==="results"&&(
