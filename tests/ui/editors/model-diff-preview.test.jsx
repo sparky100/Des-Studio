@@ -32,7 +32,7 @@ describe("ModelDiffPreview", () => {
       queues: [{ id: "q2", name: "New Queue", discipline: "FIFO" }],
     };
 
-    render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={onApply} onDiscard={vi.fn()} />);
+    render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={onApply} onDiscard={vi.fn()} allowDraftApply />);
 
     fireEvent.click(screen.getByRole("button", { name: /^apply selected$/i }));
     fireEvent.click(screen.getByLabelText(/apply entity classes/i));
@@ -72,8 +72,12 @@ describe("ModelDiffPreview", () => {
     render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={vi.fn()} onDiscard={vi.fn()} />);
 
     expect(screen.getByText("Old Queue")).toBeInTheDocument();
-    expect(screen.getByText((_, element) => element.textContent === "discipline: FIFO to LIFO")).toBeInTheDocument();
-    expect(screen.getByText((_, element) => element.textContent === "capacity: blank to 12")).toBeInTheDocument();
+    expect(screen.getByText("discipline")).toBeInTheDocument();
+    expect(screen.getByText("FIFO")).toBeInTheDocument();
+    expect(screen.getByText("LIFO")).toBeInTheDocument();
+    expect(screen.getByText("capacity")).toBeInTheDocument();
+    expect(screen.getByText("blank")).toBeInTheDocument();
+    expect(screen.getByText("12")).toBeInTheDocument();
     expect(screen.queryByText(/"discipline"/i)).not.toBeInTheDocument();
   });
 

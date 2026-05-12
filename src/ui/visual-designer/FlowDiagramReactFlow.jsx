@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -235,6 +235,7 @@ export function FlowDiagramReactFlow({
 }) {
   const [dragOver, setDragOver] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const suppressViewportSyncRef = useRef(true);
 
   // Attach hasError flag to each node so DesNode can show the error badge.
   // This is derived state — never stored in model_json.
@@ -305,7 +306,13 @@ export function FlowDiagramReactFlow({
         onNodeClick={(_, node) => onNodeSelect?.(node.id)}
         onPaneClick={() => onNodeSelect?.(null)}
         onNodeDragStop={(_, node) => onNodeMove?.(node.id, node.position)}
-        onMoveEnd={(_, viewport) => onViewportChange?.(viewport)}
+        onMoveEnd={(_, viewport) => {
+          if (suppressViewportSyncRef.current) {
+            suppressViewportSyncRef.current = false;
+            return;
+          }
+          onViewportChange?.(viewport);
+        }}
         onConnect={connection => onConnectNodes?.(connection.source, connection.target)}
         onConnectStart={() => setConnecting(true)}
         onConnectEnd={() => setConnecting(false)}

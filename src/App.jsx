@@ -142,6 +142,7 @@ export default function App(){
   const [error,setError]=useState('')
   const [showForkConfirm,setShowForkConfirm]=useState(false)
   const [modelToFork,setModelToFork]=useState(null)
+  const [showStarterGuideForId,setShowStarterGuideForId]=useState(null)
   const [importStatus,setImportStatus]=useState(null)
   const [runStatsError,setRunStatsError]=useState('')
   const [actionError,setActionError]=useState('')
@@ -232,6 +233,7 @@ export default function App(){
   const signOut=()=>supabase.auth.signOut()
 
   const handleOpenModel = useCallback((model) => {
+    setShowStarterGuideForId(null);
     if (model.owner_id !== uid && model.visibility === 'public') {
       setModelToFork(model);
       setShowForkConfirm(true);
@@ -383,15 +385,16 @@ export default function App(){
         <ErrorBoundary
           title="Model view crashed"
           message="This model could not render. Return to the library and reopen it."
-          onReset={()=>{setOpenId(null);setLocalModel(null)}}
+          onReset={()=>{setOpenId(null);setLocalModel(null);setShowStarterGuideForId(null)}}
         >
           <ModelDetail modelId={openId}
             modelData={model}
             initialTab={isTemplate?"execute":undefined}
-            onBack={()=>{setOpenId(null);setLocalModel(null);setIsTemplate(false)}}
+            onBack={()=>{setOpenId(null);setLocalModel(null);setIsTemplate(false);setShowStarterGuideForId(null)}}
             onRefresh={loadData}
             overrides={{
               autoRun: isTemplate,
+              showStarterGuide: showStarterGuideForId === openId,
               isOwner: true, canEdit: true, profiles, userId: isLocal ? null : uid, isAdmin,
               onSave: isLocal
                 ? async (m) => saveLocalModel(m)
@@ -606,8 +609,9 @@ export default function App(){
       </div>
       {showNew&&(
         <NewModelModal onClose={()=>setShowNew(false)} onCreate={async(name,desc)=>{
-          const m=await saveModel({name,description:desc,entityTypes:[],stateVariables:[],bEvents:[],cEvents:[]},uid)
+          const m=await saveModel({name,description:desc,entityTypes:[],stateVariables:[],bEvents:[],cEvents:[],queues:[]},uid)
           await loadData()
+          setShowStarterGuideForId(m.id)
           setOpenId(m.id)
         }}/>
       )}

@@ -174,6 +174,29 @@ const MODEL_HEALTH_TAB_LABELS = {
   history: "History",
 };
 
+function isStarterBlankModel(model = {}) {
+  return !(model.entityTypes || []).length &&
+    !(model.stateVariables || []).length &&
+    !(model.bEvents || []).length &&
+    !(model.cEvents || []).length &&
+    !(model.queues || []).length &&
+    !(model.goals || []).length;
+}
+
+function valuesEqual(a, b) {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== typeof b) return false;
+  if (a == null || b == null) return false;
+  if (typeof a === "object") {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})=>{
   const [model,setModel]=useState(()=>{
     if(!modelData) return null;
@@ -203,6 +226,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [analyseRun,setAnalyseRun]=useState(null);
   const [latestResults,setLatestResults]=useState(null);
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
+  const [showStarterGuide,setShowStarterGuide]=useState(() => !!overrides.showStarterGuide);
   const [viewportWidth,setViewportWidth]=useState(() => typeof window === "undefined" ? 1024 : window.innerWidth);
   useEffect(()=>{
     if(typeof window === "undefined") return;
@@ -233,7 +257,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     }
   }, [modelData?.stats, modelData?.statsLoading, modelData?.statsError]);
 
+  useEffect(() => {
+    setShowStarterGuide(!!overrides.showStarterGuide && canEdit);
+  }, [overrides.showStarterGuide, canEdit]);
+
   const setField=(f,v)=>{
+    if (valuesEqual(model?.[f], v)) return;
     setPast(p=>[...p.slice(-19),model]); // push snapshot before change, cap at 20
     setFuture([]);                        // new edit clears redo stack
     setModel(m=>({...m,[f]:v}));
@@ -353,6 +382,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   },[dirty]);
 
   const validation = useMemo(() => model ? validateModel(model) : { errors: [], warnings: [] }, [model]);
+  const isStarterBlank = useMemo(() => isStarterBlankModel(model), [model]);
+  const healthValidation = useMemo(() => (
+    isStarterBlank ? { errors: [], warnings: [] } : validation
+  ), [isStarterBlank, validation]);
 
   const handleRunSaved=()=>{
     // Increment runs optimistically — do NOT call onRefresh here.
@@ -439,22 +472,30 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   };
 
   const ModelHealthPanel = () => {
-    const blockers = validation.errors || [];
-    const warnings = validation.warnings || [];
+    const blockers = healthValidation.errors || [];
+    const warnings = healthValidation.warnings || [];
     const issues = [...blockers, ...warnings].slice(0, 5);
     const hasBlockers = blockers.length > 0;
     const hasWarnings = warnings.length > 0;
-    const statusColor = hasBlockers ? C.red : hasWarnings ? C.amber : C.green;
-    const statusBg = hasBlockers ? C.errorBg : hasWarnings ? C.warmup : C.green + "14";
-    const statusBorder = hasBlockers ? C.danger : hasWarnings ? C.amber : C.green;
-    const statusTitle = hasBlockers
+    const isGettingStarted = isStarterBlank;
+    const isExecuteTab = tab === "execute";
+    const statusColor = isGettingStarted ? C.accent : hasBlockers ? C.red : hasWarnings ? C.amber : C.green;
+    const statusBg = isGettingStarted ? C.accent + "14" : hasBlockers ? C.errorBg : hasWarnings ? C.warmup : C.green + "14";
+    const statusBorder = isGettingStarted ? C.accent : hasBlockers ? C.danger : hasWarnings ? C.amber : C.green;
+    const statusTitle = isGettingStarted
+      ? "Getting started"
+      : hasBlockers
       ? `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}`
       : hasWarnings
         ? `Ready with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
         : "Ready to run";
     const completedRuns = Number.isFinite(model.stats?.runs) ? model.stats.runs : 0;
-    const actionHint = hasBlockers
+    const actionHint = isGettingStarted
+      ? "Choose a build path below to start defining your model."
+      : hasBlockers
       ? "Resolve the listed issues first."
+      : isExecuteTab
+        ? "Use the controls below to run this scenario or review recent runs."
       : latestResults
         ? "Review the latest run or run another scenario."
         : completedRuns > 0
@@ -496,6 +537,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             <div style={{fontSize:12,color:C.text,fontFamily:FONT,lineHeight:1.5}}>
               {hasBlockers
                 ? "Fix blocking validation issues before running this model."
+                : isGettingStarted
+                  ? "Start with a template, the visual designer, AI designer, or forms to build the first runnable version."
                 : hasWarnings
                   ? "The model can run, but review the warnings before trusting outputs."
                   : "No blocking validation issues found."}
@@ -551,9 +594,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             {actionHint}
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {!hasBlockers && <Btn small variant="primary" onClick={()=>setTab("execute")}>Run Model</Btn>}
-            {!hasBlockers && latestResults && <Btn small variant="ghost" onClick={()=>setTab("results")}>View Results</Btn>}
-            {!hasBlockers && completedRuns > 0 && <Btn small variant="ghost" onClick={()=>setTab("history")}>Run History</Btn>}
+            {!isGettingStarted && !hasBlockers && !isExecuteTab && <Btn small variant="primary" onClick={()=>setTab("execute")}>Open Execute</Btn>}
+            {!isGettingStarted && !hasBlockers && latestResults && <Btn small variant="ghost" onClick={()=>setTab("results")}>View Results</Btn>}
+            {!isGettingStarted && !hasBlockers && completedRuns > 0 && <Btn small variant="ghost" onClick={()=>setTab("history")}>Run History</Btn>}
           </div>
         </div>
       </section>
@@ -629,16 +672,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     ? activeMode
     : null;
   const AuthoringWorkflowShell = ({mode, children}) => {
-    const modeTabs = mode.tabs.filter(tabId => tabById[tabId]);
-    const modeCounts = modeTabs.reduce((acc, tabId) => {
-      const counts = tabIssueCounts[tabId] || {};
-      return {
-        errors: acc.errors + (counts.errors || 0),
-        warnings: acc.warnings + (counts.warnings || 0),
-      };
-    }, {errors: 0, warnings: 0});
+    const contextCounts = {
+      errors: healthValidation.errors.length,
+      warnings: healthValidation.warnings.length,
+    };
     const activeLabel = tabById[tab]?.label || mode.label;
-    const nextAction = modeCounts.errors > 0
+    const nextAction = isStarterBlank
+      ? "Choose a starting path, then validate the generated model structure once the flow is defined."
+      : contextCounts.errors > 0
       ? "Resolve blockers before executing."
       : mode.id === "visual-design"
         ? "Shape the process map, then validate the generated model structure."
@@ -656,63 +697,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           flexWrap: "wrap",
         }}
       >
-        <aside
-          aria-label={`${mode.label} sections`}
-          style={{
-            background: C.panel,
-            border: `1px solid ${C.border}`,
-            borderRadius: 8,
-            padding: 10,
-            display: "flex",
-            flexDirection: "column",
-            gap: 8,
-            flex: "0 1 210px",
-            minWidth: 180,
-          }}
-        >
-          <div style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.3,fontWeight:700}}>MODE SECTIONS</div>
-          {modeTabs.map(tabId => {
-            const section = tabById[tabId];
-            const selected = tab === tabId;
-            const counts = tabIssueCounts[tabId] || {};
-            return (
-              <button
-                key={tabId}
-                type="button"
-                aria-current={selected ? "page" : undefined}
-                onClick={()=>setTab(tabId)}
-                style={{
-                  background: selected ? C.accent + "18" : C.surface,
-                  border: `1px solid ${selected ? C.accent : C.border}`,
-                  borderRadius: 6,
-                  color: selected ? C.accent : C.text,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: 8,
-                  fontFamily: FONT,
-                  fontSize: 11,
-                  fontWeight: selected ? 700 : 600,
-                  padding: "8px 9px",
-                  textAlign: "left",
-                  width: "100%",
-                }}
-              >
-                <span>{section.label}</span>
-                {(counts.errors || counts.warnings) ? (
-                  <span style={{color: counts.errors ? C.red : C.amber, fontSize: 10, fontWeight: 700}}>
-                    {counts.errors || counts.warnings}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </aside>
         <main
           aria-label={`${mode.label} workspace`}
           style={{
-            flex: "1 1 520px",
+            flex: "1 1 620px",
             minWidth: 0,
           }}
         >
@@ -738,8 +726,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:8}}>
             {[
-              {label:"Blockers",value:modeCounts.errors,color:modeCounts.errors?C.red:C.green},
-              {label:"Warnings",value:modeCounts.warnings,color:modeCounts.warnings?C.amber:C.green},
+              {label:"Blockers",value:contextCounts.errors,color:contextCounts.errors?C.red:C.green},
+              {label:"Warnings",value:contextCounts.warnings,color:contextCounts.warnings?C.amber:C.green},
             ].map(item=>(
               <div key={item.label} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:"8px 9px"}}>
                 <div style={{fontSize:8,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700,marginBottom:3}}>{item.label.toUpperCase()}</div>
@@ -750,7 +738,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
             {nextAction}
           </div>
-          <Btn small variant={modeCounts.errors ? "ghost" : "primary"} onClick={()=>setTab("validate")}>
+          <Btn small variant={contextCounts.errors ? "ghost" : "primary"} onClick={()=>setTab("validate")}>
             Open Validate
           </Btn>
         </aside>
@@ -865,28 +853,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         })}
       </div>
       <div style={{display:"flex",alignItems:"stretch",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,minWidth:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px 6px 20px",borderRight:`1px solid ${C.border}`,flexShrink:0}}>
-          <label htmlFor="model-section-jump" style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.1,fontWeight:700,whiteSpace:"nowrap"}}>SECTION</label>
-          <select
-            id="model-section-jump"
-            aria-label="Jump to model section"
-            value={tab}
-            onChange={e=>setTab(e.target.value)}
-            style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 7px",maxWidth:180,outline:"none"}}
-          >
-            {DISPLAY_MODES.map(mode=>(
-              <optgroup key={mode.id} label={mode.label}>
-                {mode.tabs.filter(tabId => tabById[tabId]).map(tabId=>{
-                  const t = tabById[tabId];
-                  const counts = tabIssueCounts[t.id];
-                  const suffix = counts ? ` (${counts.errors || 0}/${counts.warnings || 0})` : "";
-                  return <option key={t.id} value={t.id}>{t.label}{suffix}</option>;
-                })}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-        <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:8,flex:1,minWidth:0,overflowX:"auto"}}>
+        <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:12,flex:1,minWidth:0,overflowX:"auto"}}>
           {visibleTabs.map(t=>t.disabled?(
             <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>
           ):(
@@ -963,40 +930,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           renderAuthoringShell(<div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
             <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null}/>
             <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4}/>
-            <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:14}}>
-              <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,marginBottom:12}}>MODEL STRUCTURE</div>
-              <div aria-label="Model structure metrics" style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(120px, 1fr))",gap:10}}>
-                {[
-                  {label:"Entity Types",value:(model.entityTypes||[]).length,color:C.server},
-                  {label:"State Vars",  value:(model.stateVariables||[]).length,color:C.purple},
-                  {label:"B-Events",    value:(model.bEvents||[]).length,color:C.bEvent},
-                  {label:"C-Events",    value:(model.cEvents||[]).length,color:C.cEvent},
-                  {label:"Runs",        value:runCountValue,color:C.green},
-                ].map(s=>(
-                  <div key={s.label} style={{background:C.bg,borderRadius:6,border:`1px solid ${s.color}33`,padding:"12px 14px"}}>
-                    <div style={{fontSize:22,fontWeight:700,color:s.color,fontFamily:FONT}}>{s.value}</div>
-                    <div style={{fontSize:11,color:C.muted,fontFamily:FONT}}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
               <GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
             </div>
-            {/* Startup prompt for empty models */}
-            {canEdit&&!(model.entityTypes||[]).length&&!runCountValue&&(
-              <div style={{background:C.surface,border:`1px solid ${C.accent}44`,borderRadius:8,padding:18,display:"flex",flexDirection:"column",gap:12}}>
-                <div style={{fontSize:13,fontWeight:700,color:C.accent,fontFamily:FONT}}>Get started building your model</div>
-                <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
-                  Choose how you'd like to define your simulation model:
-                </div>
-                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-                  <Btn variant="primary" onClick={()=>setTab("visual")}>🎨 Visual Designer</Btn>
-                  <Btn variant="ghost" onClick={()=>setTab("ai")}>🤖 AI Designer</Btn>
-                  <Btn variant="ghost" onClick={()=>setTab("entities")}>📝 Start with forms</Btn>
-                </div>
-              </div>
-            )}
           </div>)
         )}
         {tab==="entities"&&(
@@ -1242,6 +1178,50 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         )}
         </ErrorBoundary>
       </div>
+      {showStarterGuide && isStarterBlank && canEdit && (
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"#000000aa",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20}}>
+          <div role="dialog" aria-modal="true" aria-labelledby="starter-guide-title" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,width:"min(640px, 100%)",padding:22,display:"flex",flexDirection:"column",gap:18,boxShadow:"0 18px 48px rgba(0,0,0,0.35)"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+              <div>
+                <div id="starter-guide-title" style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:FONT,marginBottom:6}}>Get started building your model</div>
+                <div style={{fontSize:12,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
+                  Pick the path that feels most natural. You can switch between them at any point as the model takes shape.
+                </div>
+              </div>
+              <Btn small variant="ghost" onClick={()=>setShowStarterGuide(false)}>Close</Btn>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(170px, 1fr))",gap:12}}>
+              {[
+                {
+                  title:"Visual Designer",
+                  body:"Sketch the process map first, then refine the generated structure.",
+                  action:"Open Visual Designer",
+                  onClick:()=>{setTab("visual");setShowStarterGuide(false);},
+                  primary:true,
+                },
+                {
+                  title:"AI Designer",
+                  body:"Describe the system in plain language and let the assistant draft the model.",
+                  action:"Open AI Designer",
+                  onClick:()=>{setTab("ai");setShowStarterGuide(false);},
+                },
+                {
+                  title:"Start with forms",
+                  body:"Define entities, queues, and events directly in the structured editors.",
+                  action:"Open Forms",
+                  onClick:()=>{setTab("entities");setShowStarterGuide(false);},
+                },
+              ].map(option=>(
+                <div key={option.title} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:14,display:"flex",flexDirection:"column",gap:10}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text,fontFamily:FONT}}>{option.title}</div>
+                  <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.6,flex:1}}>{option.body}</div>
+                  <Btn variant={option.primary ? "primary" : "ghost"} onClick={option.onClick}>{option.action}</Btn>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

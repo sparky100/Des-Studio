@@ -43,6 +43,10 @@ const validModel = {
 };
 
 describe('ExecutePanel', () => {
+  const openSetup = () => {
+    fireEvent.click(screen.getByRole('button', { name: /edit setup/i }));
+  };
+
   beforeEach(() => {
     mockRunReplications.mockReset();
     mockSaveSimulationRun.mockReset();
@@ -57,11 +61,8 @@ describe('ExecutePanel', () => {
   it('renders the execute controls without crashing', () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    expect(screen.getByText('WARM-UP PERIOD')).toBeInTheDocument();
-    expect(screen.getByText('REPLICATIONS')).toBeInTheDocument();
-    expect(screen.getByLabelText(/run label/i)).toBeInTheDocument();
-    expect(screen.getByText('Time-based')).toBeInTheDocument();
-    expect(screen.getByText('Condition-based')).toBeInTheDocument();
+    expect(screen.getByText('RUN SETUP')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /edit setup/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /run all/i })).toBeInTheDocument();
     expect(screen.getByText('Run or step the simulation to see the visual view.')).toBeInTheDocument();
   });
@@ -80,6 +81,7 @@ describe('ExecutePanel', () => {
       />
     );
 
+    openSetup();
     expect(screen.getByLabelText(/warm-up period/i)).toHaveValue(25);
     expect(screen.getByLabelText(/replication count/i)).toHaveValue(4);
     expect(screen.getByLabelText(/run duration/i)).toHaveValue(750);
@@ -113,6 +115,7 @@ describe('ExecutePanel', () => {
     const onRunSaved = vi.fn();
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
 
+    openSetup();
     fireEvent.change(screen.getByLabelText(/run label/i), { target: { value: 'Baseline' } });
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
 
@@ -124,11 +127,22 @@ describe('ExecutePanel', () => {
     expect(onRunSaved).toHaveBeenCalledOnce();
   });
 
+  it('enables the Results view after a run completes', async () => {
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+    expect(screen.getByRole('button', { name: /^results$/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+
+    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: /^results$/i })).not.toBeDisabled();
+  });
+
   it('saves all 10 sequential single-replication runs — each click triggers one Supabase insert', async () => {
     // Each iteration runs a real engine.runAll(); allow 30 s for the full loop under load.
     const onRunSaved = vi.fn();
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
 
+    openSetup();
     for (let i = 0; i < 10; i++) {
       fireEvent.click(screen.getByRole('button', { name: /run all/i }));
       // Wait for this run's save to complete before clicking again
@@ -167,6 +181,7 @@ describe('ExecutePanel', () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
 
+    openSetup();
     const spinButtons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinButtons[1], { target: { value: String(N) } });
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
@@ -191,6 +206,7 @@ describe('ExecutePanel', () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
+    openSetup();
     const spinButtons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinButtons[1], { target: { value: '3' } });
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
@@ -224,6 +240,7 @@ describe('ExecutePanel', () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
+    openSetup();
     const spinButtons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinButtons[1], { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
@@ -279,6 +296,7 @@ describe('ExecutePanel', () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
+    openSetup();
     const spinButtons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinButtons[1], { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
@@ -310,6 +328,7 @@ describe('ExecutePanel', () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
+    openSetup();
     const spinButtons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinButtons[1], { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));

@@ -81,4 +81,41 @@ describe('accessibility pass', () => {
     expect(screen.getByRole('button', { name: /run all/i })).toBeDisabled();
     expect(screen.getByRole('alert')).toHaveTextContent(/blocking error/i);
   });
+
+  it('does not mark the model dirty just for opening the Visual Designer', async () => {
+    render(
+      <ModelDetail
+        modelId="model-1"
+        modelData={validModel}
+        initialTab="visual"
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        overrides={{ isOwner: true, canEdit: true, userId: 'user-1' }}
+      />
+    );
+
+    await screen.findByLabelText('Visual Designer');
+    expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
+  });
+
+  it('does not mark the model dirty when Execute writes the same experiment defaults back', async () => {
+    render(
+      <ModelDetail
+        modelId="model-1"
+        modelData={{
+          ...validModel,
+          experimentDefaults: { warmupPeriod: 0, maxSimTime: 500, replications: 1, terminationMode: 'time' },
+        }}
+        initialTab="execute"
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        overrides={{ isOwner: true, canEdit: true, userId: 'user-1' }}
+      />
+    );
+
+    await screen.findByRole('button', { name: /edit setup/i });
+    expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
+  });
 });

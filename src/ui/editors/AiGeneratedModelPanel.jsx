@@ -306,6 +306,7 @@ function conditionToLegacyString(condition) {
 function Bubble({ role, content }) {
   const isUser = role === "user";
   const isSystem = role === "system";
+  const label = isSystem ? "Model note" : isUser ? "You" : "AI";
   return (
     <div style={{
       alignSelf: isSystem ? "center" : isUser ? "flex-end" : "flex-start",
@@ -313,13 +314,16 @@ function Bubble({ role, content }) {
       background: isSystem ? C.surface : isUser ? C.accent + "22" : C.bg,
       border: `1px solid ${isUser ? C.accent : C.border}`,
       borderRadius: 8,
-      padding: "9px 11px",
+      padding: "10px 12px",
       color: C.text,
       fontFamily: FONT,
-      fontSize: 12,
-      lineHeight: 1.5,
+      fontSize: 11,
+      lineHeight: 1.7,
       whiteSpace: "pre-wrap",
     }}>
+      <div style={{ color: isUser ? C.accent : C.muted, fontSize: 10, fontWeight: 700, marginBottom: 6 }}>
+        {label}
+      </div>
       {content}
     </div>
   );
@@ -457,7 +461,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     if (response.flowDescription && response.intent !== "clarify") {
       newTurns.unshift({
         role: "system",
-        content: `Flow understanding:\n${response.flowDescription}`,
+        content: `What I understood:\n${response.flowDescription}`,
       });
     }
 
@@ -493,13 +497,13 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       <section aria-label="Use AI conversation" style={{ display: "flex", flexDirection: "column", minHeight: 520, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: 14, borderBottom: `1px solid ${C.border}` }}>
           <SH label="Use AI" />
-          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, marginTop: 4 }}>
-            Natural-language authoring over the same validated model JSON.
+          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
+            Describe the system you want to build, or explain what you want changed.
           </div>
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, padding: 14, overflowY: "auto" }}>
           {!history.length && (
-            <Empty icon="AI" msg="Describe the system you want to model, or ask for a refinement to the current model." />
+            <Empty icon="AI" msg="Start with a plain-language description, or ask for a change to the current model." />
           )}
           {history.map((turn, index) => <Bubble key={index} role={turn.role} content={turn.content} />)}
           {notice && <Bubble role="system" content={notice} />}
@@ -512,7 +516,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
             onChange={setDraft}
             multiline
             rows={3}
-            placeholder="e.g. A post office with 2 clerks, FIFO queue, exponential arrivals at rate 0.5"
+            placeholder="e.g. Add another doctor to triage, or build a post office with 2 clerks and a single queue"
           />
           <button
             type="button"
@@ -526,7 +530,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
               borderRadius: 5,
               color: listening ? C.red : C.muted,
               fontFamily: FONT,
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: 600,
               padding: "7px 11px",
               cursor: canEdit && !loading ? "pointer" : "default",

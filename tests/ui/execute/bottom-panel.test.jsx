@@ -37,7 +37,7 @@ describe("BottomPanel — F9C.8", () => {
     expect(screen.getByRole("tab", { name: /step log/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /entities/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /stage kpis/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /charts/i })).not.toBeDisabled();
+    expect(screen.queryByRole("tab", { name: /charts/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /analysis/i })).not.toBeInTheDocument();
   });
 
@@ -55,6 +55,28 @@ describe("BottomPanel — F9C.8", () => {
     fireEvent.click(screen.getByRole("button", { name: /collapse panel/i }));
     fireEvent.click(screen.getByRole("button", { name: /expand panel/i }));
     expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
+  });
+
+  test("keeps a stable body height so tab content scrolls inside the panel", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} />);
+    const body = screen.getByLabelText(/bottom panel content/i);
+    expect(body).toHaveStyle({ height: "320px", minHeight: "320px", overflowY: "auto" });
+
+    fireEvent.click(screen.getByRole("tab", { name: /entities/i }));
+    expect(screen.getByLabelText(/bottom panel content/i)).toHaveStyle({ height: "320px" });
+  });
+
+  test("offers maximize and resize affordances for the live inspector", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} />);
+    expect(screen.getByRole("button", { name: /maximize panel/i })).toBeInTheDocument();
+    expect(screen.getByRole("separator", { name: /resize bottom panel/i })).toBeInTheDocument();
+  });
+
+  test("shows an Open Results action when run results are available", () => {
+    const onOpenResults = vi.fn();
+    render(<BottomPanel log={log} snap={snap} model={model} hasResults onOpenResults={onOpenResults} />);
+    fireEvent.click(screen.getByRole("button", { name: /open results/i }));
+    expect(onOpenResults).toHaveBeenCalledOnce();
   });
 });
 
@@ -98,43 +120,5 @@ describe("BottomPanel — F9C.11 node-filtered log", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
     expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
     expect(screen.getByText(/ASSIGN Customer/)).toBeInTheDocument();
-  });
-});
-
-describe("BottomPanel — Results charts", () => {
-  const chartResults = {
-    timeSeries: [
-      {
-        t: 0,
-        byQueue: { "Queue A": { waiting: 1 } },
-        byType: { Customer: { waiting: 1 }, Clerk: { busy: 0 } },
-      },
-      {
-        t: 5,
-        byQueue: { "Queue A": { waiting: 3 } },
-        byType: { Customer: { waiting: 3 }, Clerk: { busy: 1 } },
-      },
-    ],
-    waitDist: {
-      "Queue A": { n: 3, mean: 4, p50: 4, p90: 8, p95: 8, p99: 8, values: [1, 4, 8] },
-    },
-  };
-
-  test("Charts tab frames charts as modelling questions", () => {
-    render(<BottomPanel log={log} snap={snap} model={model} results={chartResults} />);
-    fireEvent.click(screen.getByRole("tab", { name: /charts/i }));
-
-    expect(screen.getByText(/Where are queues forming/i)).toBeInTheDocument();
-    expect(screen.getByText(/Are resources under- or over-utilised/i)).toBeInTheDocument();
-    expect(screen.getByText(/How variable is customer waiting time/i)).toBeInTheDocument();
-  });
-
-  test("Charts tab shows data provenance labels", () => {
-    render(<BottomPanel log={log} snap={snap} model={model} results={chartResults} />);
-    fireEvent.click(screen.getByRole("tab", { name: /charts/i }));
-
-    expect(screen.getByText(/Data: Queue-specific runtime counts/i)).toBeInTheDocument();
-    expect(screen.getByText(/Data: Busy Clerk resources divided by capacity 1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Data: 3 completed waits from engine waitDist/i)).toBeInTheDocument();
   });
 });

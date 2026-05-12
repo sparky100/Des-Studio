@@ -1,10 +1,9 @@
 // ui/execute/BottomPanel.jsx — collapsible tabbed detail area below the Execute canvas
-// Tabs: Step Log | Entities | Stage KPIs | Charts
+// Tabs: Step Log | Entities | Stage KPIs
 // F9C.8 + F9C.9 + F9C.11 node-filtered log
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, PhaseTag } from "../shared/components.jsx";
-import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
 
 const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
@@ -12,8 +11,63 @@ const TABS = [
   { id: "log",       label: "Step Log" },
   { id: "entities",  label: "Entities" },
   { id: "stagekpis", label: "Stage KPIs" },
-  { id: "charts",    label: "Charts" },
 ];
+
+const BOTTOM_PANEL_BODY_HEIGHT = 320;
+const STAGE_KPI_BODY_MIN_HEIGHT = 220;
+const PANEL_MIN_HEIGHT = 220;
+const PANEL_MAX_HEIGHT = 640;
+const PANEL_MAXIMIZED_HEIGHT = "65vh";
+
+function EventCountGroup({ title, color, events, counts }) {
+  if (events.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: 10, color, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+        {title}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+        {events.map((event) => {
+          const count = counts[event.id] || 0;
+          return (
+            <div
+              key={event.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 10,
+                background: C.bg,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                padding: "8px 10px",
+              }}
+            >
+              <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={{ color, fontFamily: FONT, fontSize: 11, fontWeight: 700, lineHeight: 1.3 }}>
+                  {event.name || event.id}
+                </span>
+                <span style={{ color: C.muted, fontFamily: FONT, fontSize: 9 }}>
+                  {count === 1 ? "1 firing" : `${count} firings`}
+                </span>
+              </div>
+              <div style={{
+                minWidth: 34,
+                textAlign: "center",
+                color: count ? C.text : C.muted,
+                fontFamily: FONT,
+                fontSize: 15,
+                fontWeight: 700,
+              }}>
+                {count}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 // ── Stage KPIs ────────────────────────────────────────────────────────────────
 
@@ -23,57 +77,20 @@ function EventCountsTable({ snap, model }) {
   const cEvents = model.cEvents || [];
   if (bEvents.length === 0 && cEvents.length === 0) return null;
 
-  const thStyle = { padding: "4px 8px", textAlign: "left", fontWeight: 600, color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 0.8 };
-  const tdStyle = (color) => ({ padding: "4px 8px", fontFamily: FONT, fontSize: 11, color: color || C.text });
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {bEvents.length > 0 && (
-        <div>
-          <div style={{ fontSize: 10, color: C.bEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
-            B-EVENTS (BOUND) — TIMES FIRED
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>
-              <th style={thStyle}>Event</th>
-              <th style={{ ...thStyle, textAlign: "right" }}>Count</th>
-            </tr></thead>
-            <tbody>
-              {bEvents.map(b => (
-                <tr key={b.id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={tdStyle(C.bEvent)}>{b.name || b.id}</td>
-                  <td style={{ ...tdStyle(counts[b.id] ? C.text : C.muted), textAlign: "right", fontWeight: counts[b.id] ? 700 : 400 }}>
-                    {counts[b.id] || 0}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {cEvents.length > 0 && (
-        <div>
-          <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
-            C-EVENTS (CONDITIONAL) — TIMES FIRED
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr style={{ borderBottom: `1px solid ${C.border}` }}>
-              <th style={thStyle}>Event</th>
-              <th style={{ ...thStyle, textAlign: "right" }}>Count</th>
-            </tr></thead>
-            <tbody>
-              {cEvents.map(c => (
-                <tr key={c.id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={tdStyle(C.cEvent)}>{c.name || c.id}</td>
-                  <td style={{ ...tdStyle(counts[c.id] ? C.text : C.muted), textAlign: "right", fontWeight: counts[c.id] ? 700 : 400 }}>
-                    {counts[c.id] || 0}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <EventCountGroup
+        title="B-EVENTS (BOUND) — TIMES FIRED"
+        color={C.bEvent}
+        events={bEvents}
+        counts={counts}
+      />
+      <EventCountGroup
+        title="C-EVENTS (CONDITIONAL) — TIMES FIRED"
+        color={C.cEvent}
+        events={cEvents}
+        counts={counts}
+      />
     </div>
   );
 }
@@ -104,11 +121,21 @@ function StageKpisTable({ snap, model }) {
     </td>
   );
 
+  const panelStyle = {
+    background: C.bg,
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
+    padding: 10,
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  };
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
       {/* Queue rows */}
       {queues.length > 0 && (
-        <div>
+        <div style={panelStyle}>
           <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
             QUEUES
           </div>
@@ -151,7 +178,7 @@ function StageKpisTable({ snap, model }) {
 
       {/* Server rows */}
       {serverTypes.length > 0 && (
-        <div>
+        <div style={panelStyle}>
           <div style={{ fontSize: 10, color: C.purple, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
             SERVERS
           </div>
@@ -313,9 +340,35 @@ function EntitiesTab({ snap }) {
 
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
-export function BottomPanel({ log, snap, model, results, selectedNodeLabel, onClearFilter }) {
+export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter }) {
   const [activeTab,  setActiveTab]  = useState("log");
   const [collapsed,  setCollapsed]  = useState(false);
+  const [bodyHeight, setBodyHeight] = useState(BOTTOM_PANEL_BODY_HEIGHT);
+  const [maximized,  setMaximized]  = useState(false);
+  const dragStateRef = useRef(null);
+
+  useEffect(() => {
+    const handlePointerMove = (event) => {
+      if (!dragStateRef.current) return;
+      const nextHeight = dragStateRef.current.startHeight + (dragStateRef.current.startY - event.clientY);
+      setBodyHeight(Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, nextHeight)));
+    };
+    const handlePointerUp = () => {
+      dragStateRef.current = null;
+    };
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", handlePointerUp);
+    return () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerUp);
+    };
+  }, []);
+
+  const startResize = (event) => {
+    event.preventDefault();
+    setMaximized(false);
+    dragStateRef.current = { startY: event.clientY, startHeight: bodyHeight };
+  };
 
   const tabBtnStyle = (id) => ({
     background: activeTab === id ? C.border : "transparent",
@@ -338,6 +391,29 @@ export function BottomPanel({ log, snap, model, results, selectedNodeLabel, onCl
     fontSize: 11,
     padding: "3px 8px",
   };
+
+  const toolBtnStyle = {
+    background: "none",
+    border: `1px solid ${C.border}`,
+    borderRadius: 4,
+    color: C.muted,
+    cursor: "pointer",
+    fontFamily: FONT,
+    fontSize: 10,
+    padding: "3px 8px",
+  };
+
+  const resolvedBodyHeight = maximized
+    ? PANEL_MAXIMIZED_HEIGHT
+    : activeTab === "stagekpis"
+      ? "auto"
+      : `${bodyHeight}px`;
+
+  const resolvedMinHeight = maximized
+    ? PANEL_MAXIMIZED_HEIGHT
+    : activeTab === "stagekpis"
+      ? `${STAGE_KPI_BODY_MIN_HEIGHT}px`
+      : `${bodyHeight}px`;
 
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8 }}>
@@ -366,6 +442,23 @@ export function BottomPanel({ log, snap, model, results, selectedNodeLabel, onCl
           ))}
         </div>
         <div style={{ flex: 1 }} />
+        {hasResults && (
+          <button
+            type="button"
+            onClick={onOpenResults}
+            style={toolBtnStyle}
+          >
+            Open Results
+          </button>
+        )}
+        <button
+          type="button"
+          aria-label={maximized ? "Restore panel size" : "Maximize panel"}
+          onClick={() => setMaximized(value => !value)}
+          style={toolBtnStyle}
+        >
+          {maximized ? "Restore" : "Maximize"}
+        </button>
         <button
           aria-label={collapsed ? "Expand panel" : "Collapse panel"}
           onClick={() => setCollapsed(c => !c)}
@@ -377,7 +470,17 @@ export function BottomPanel({ log, snap, model, results, selectedNodeLabel, onCl
 
       {/* Body */}
       {!collapsed && (
-        <div style={{ padding: 14, maxHeight: 300, overflowY: "auto" }}>
+        <div
+          aria-label="Bottom panel content"
+          style={{
+            padding: 14,
+            height: resolvedBodyHeight,
+            minHeight: resolvedMinHeight,
+            maxHeight: maximized ? PANEL_MAXIMIZED_HEIGHT : `${PANEL_MAX_HEIGHT}px`,
+            overflowY: "auto",
+            overflowX: "hidden",
+          }}
+        >
           {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} />}
           {activeTab === "stagekpis" && (
@@ -386,7 +489,24 @@ export function BottomPanel({ log, snap, model, results, selectedNodeLabel, onCl
               <StageKpisTable snap={snap} model={model} />
             </div>
           )}
-          {activeTab === "charts"    && <ResultsWorkspace results={results} model={model} />}
+        </div>
+      )}
+      {!collapsed && activeTab !== "stagekpis" && !maximized && (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize bottom panel"
+          onMouseDown={startResize}
+          style={{
+            height: 10,
+            cursor: "ns-resize",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderTop: `1px solid ${C.border}`,
+          }}
+        >
+          <div style={{ width: 44, height: 3, borderRadius: 999, background: C.border }} />
         </div>
       )}
     </div>

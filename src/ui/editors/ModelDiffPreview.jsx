@@ -62,7 +62,7 @@ function ChangeList({ title, items, color, renderItem }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <Tag label={`${title}: ${items.length}`} color={color} />
       {items.map((item, index) => (
-        <div key={index} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 8, color: C.text, fontFamily: FONT, fontSize: 11 }}>
+        <div key={index} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, color: C.text, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 }}>
           {renderItem(item)}
         </div>
       ))}
@@ -109,8 +109,11 @@ function renderModifiedSummary(item) {
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
       <div style={{ color: C.text, fontWeight: 700 }}>{title}</div>
       {fields.slice(0, 5).map(field => (
-        <div key={field} style={{ color: C.muted }}>
-          <span style={{ color: C.amber }}>{field}</span>: {friendlyValue(before[field])} to {friendlyValue(after[field])}
+        <div key={field} style={{ color: C.muted, display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ color: C.amber, fontWeight: 700 }}>{field}</span>
+          <span>{friendlyValue(before[field])}</span>
+          <span style={{ color: C.accent }}>-></span>
+          <span style={{ color: C.text }}>{friendlyValue(after[field])}</span>
         </div>
       ))}
       {fields.length > 5 && <div style={{ color: C.muted }}>{fields.length - 5} more field changes</div>}
@@ -125,6 +128,25 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const diff = useMemo(() => buildModelDiff(currentModel, proposedModel), [currentModel, proposedModel]);
+  const orderedDiff = useMemo(() => {
+    return [...diff].sort((a, b) => {
+      const aChanged = a.diff.added.length + a.diff.modified.length + a.diff.removed.length;
+      const bChanged = b.diff.added.length + b.diff.modified.length + b.diff.removed.length;
+      if (!!aChanged === !!bChanged) return 0;
+      return aChanged ? -1 : 1;
+    });
+  }, [diff]);
+  const summary = useMemo(() => {
+    return diff.reduce((acc, section) => {
+      acc.added += section.diff.added.length;
+      acc.removed += section.diff.removed.length;
+      acc.modified += section.diff.modified.length;
+      if (section.diff.added.length || section.diff.removed.length || section.diff.modified.length) {
+        acc.changedSections += 1;
+      }
+      return acc;
+    }, { added: 0, removed: 0, modified: 0, changedSections: 0 });
+  }, [diff]);
 
   const applyModel = async (mode, save = false) => {
     if (saving) return;
@@ -152,8 +174,31 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
   return (
     <div aria-label="Model proposal preview" style={{ display: "flex", flexDirection: "column", gap: 12, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
-        <SH label="Model Proposal" />
+        <div>
+          <SH label="Proposed Changes" />
+          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
+            Review what will change before applying it to the model.
+          </div>
+        </div>
         <Btn small variant="ghost" onClick={onDiscard}>Discard</Btn>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
+        {[
+          { label: "Sections changed", value: summary.changedSections, color: summary.changedSections ? C.accent : C.muted },
+          { label: "Modified", value: summary.modified, color: summary.modified ? C.amber : C.muted },
+          { label: "Added", value: summary.added, color: summary.added ? C.green : C.muted },
+          { label: "Removed", value: summary.removed, color: summary.removed ? C.red : C.muted },
+        ].map(item => (
+          <div key={item.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "9px 10px" }}>
+            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, fontWeight: 700, marginBottom: 4 }}>
+              {item.label}
+            </div>
+            <div style={{ color: item.color, fontFamily: FONT, fontSize: 18, fontWeight: 700 }}>
+              {item.value}
+            </div>
+          </div>
+        ))}
       </div>
 
       {validation?.errors?.length > 0 && (
@@ -173,7 +218,7 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
         </div>
       )}
 
-      {diff.map(section => {
+      {orderedDiff.map(section => {
         const { added, modified, removed, unchanged } = section.diff;
         const hasChanges = added.length || modified.length || removed.length;
         return (
@@ -189,11 +234,20 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
               )}
               <div style={{ color: C.text, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>{section.label}</div>
               <Tag label={hasChanges ? "Changed" : "Unchanged"} color={hasChanges ? C.accent : C.muted} />
+              {hasChanges && (
+                <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
+                  {[added.length ? `${added.length} added` : "", modified.length ? `${modified.length} modified` : "", removed.length ? `${removed.length} removed` : ""].filter(Boolean).join("  ·  ")}
+                </div>
+              )}
             </div>
             <ChangeList title="Added" items={added} color={C.green} renderItem={renderItemSummary} />
             <ChangeList title="Removed" items={removed} color={C.red} renderItem={renderItemSummary} />
             <ChangeList title="Modified" items={modified} color={C.amber} renderItem={renderModifiedSummary} />
-            {!hasChanges && <Empty icon="=" msg={`${unchanged.length} unchanged`} />}
+            {!hasChanges && (
+              <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", color: C.muted, fontFamily: FONT, fontSize: 10 }}>
+                {unchanged.length} item{unchanged.length === 1 ? "" : "s"} unchanged
+              </div>
+            )}
           </section>
         );
       })}

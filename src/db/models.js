@@ -39,6 +39,16 @@ export function normalizeUserSettings(row = {}) {
 const DES_MODELS_SELECT_CURRENT = "id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at";
 const DES_MODELS_SELECT_LEGACY = "id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at";
 const DES_MODELS_SELECT_MINIMAL = "id,name,description,visibility,entity_types,state_variables,b_events,c_events,owner_id,created_at,updated_at";
+const DES_MODELS_SELECTS = [
+  DES_MODELS_SELECT_CURRENT,
+  DES_MODELS_SELECT_LEGACY,
+  DES_MODELS_SELECT_MINIMAL,
+];
+let desModelsSelectModeIndex = 0;
+
+export function __resetDesModelsSchemaModeForTests() {
+  desModelsSelectModeIndex = 0;
+}
 
 function errorText(error) {
   return [error?.message, error?.details, error?.hint].filter(Boolean).join(" ").toLowerCase();
@@ -54,17 +64,18 @@ function isSchemaCompatibilityError(error) {
 
 async function runDesModelsSelect(buildQuery) {
   let lastError = null;
-  for (const selectClause of [
-    DES_MODELS_SELECT_CURRENT,
-    DES_MODELS_SELECT_LEGACY,
-    DES_MODELS_SELECT_MINIMAL,
-  ]) {
+  for (let i = desModelsSelectModeIndex; i < DES_MODELS_SELECTS.length; i++) {
+    const selectClause = DES_MODELS_SELECTS[i];
     const result = await buildQuery(selectClause);
-    if (!result?.error) return result;
+    if (!result?.error) {
+      desModelsSelectModeIndex = i;
+      return result;
+    }
     lastError = result.error;
     if (!isSchemaCompatibilityError(result.error)) {
       throw result.error;
     }
+    desModelsSelectModeIndex = Math.min(i + 1, DES_MODELS_SELECTS.length - 1);
   }
   throw lastError;
 }
@@ -257,8 +268,14 @@ export async function saveModel(model, userId) {
       .single();
   };
 
-  let result = await persist(row);
+  const initialRow = desModelsSelectModeIndex === 0 ? row : (() => {
+    const { model_json, ...legacyRow } = row;
+    return legacyRow;
+  })();
+
+  let result = await persist(initialRow);
   if (result.error && isSchemaCompatibilityError(result.error) && errorText(result.error).includes("model_json")) {
+    desModelsSelectModeIndex = Math.min(1, DES_MODELS_SELECTS.length - 1);
     const { model_json, ...legacyRow } = row;
     result = await persist(legacyRow);
   }

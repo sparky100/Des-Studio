@@ -52,7 +52,7 @@ describe("AI generated model apply/save flow", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: /use ai/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /ai designer/i }));
     fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Create a GP practice" } });
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await screen.findByLabelText(/model proposal preview/i);

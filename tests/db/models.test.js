@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
+  __resetDesModelsSchemaModeForTests,
   norm,
   fetchModels,
   fetchProfiles,
@@ -29,6 +30,7 @@ import { supabase } from '../../src/db/supabase.js';
 describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    __resetDesModelsSchemaModeForTests();
   });
 
   describe('fetchModels', () => {
@@ -67,6 +69,32 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
 
       expect(supabase.from('des_models').select).toHaveBeenCalledWith(expect.stringContaining('model_json'));
       expect(supabase.from('des_models').select).toHaveBeenCalledWith(expect.not.stringContaining('model_json'));
+    });
+
+    it('remembers the legacy schema mode after the first compatibility failure', async () => {
+      supabase.from('des_models').select().or.mockReturnThis();
+      supabase.from('des_models').select().contains.mockReturnThis();
+      supabase.from('des_models').order
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
+        .mockResolvedValueOnce({ data: [], error: null });
+
+      await fetchModels('compat-user');
+
+      vi.clearAllMocks();
+      supabase.from('des_models').select().or.mockReturnThis();
+      supabase.from('des_models').select().contains.mockReturnThis();
+      supabase.from('des_models').order
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: [], error: null });
+
+      await fetchModels('compat-user');
+
+      expect(supabase.from('des_models').select).not.toHaveBeenCalledWith(expect.stringContaining('model_json'));
     });
 
     it('deduplicates and sorts rows from visible and shared model queries', async () => {
@@ -335,6 +363,34 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       );
       expect(supabase.from('des_models').update).toHaveBeenNthCalledWith(
         2,
+        expect.not.objectContaining({ model_json: expect.anything() })
+      );
+    });
+
+    it('skips model_json on later saves once legacy schema mode is known', async () => {
+      supabase.from('des_models').select().or.mockReturnThis();
+      supabase.from('des_models').select().contains.mockReturnThis();
+      supabase.from('des_models').order
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
+        .mockResolvedValueOnce({ data: [], error: null });
+      await fetchModels('compat-user');
+
+      vi.clearAllMocks();
+      supabase.from('des_models').update.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'm1', name: 'Legacy known', owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel({ id: 'm1', name: 'Legacy known', entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [] }, 'u1');
+
+      expect(supabase.from('des_models').update).toHaveBeenCalledWith(
         expect.not.objectContaining({ model_json: expect.anything() })
       );
     });

@@ -12,6 +12,7 @@ import { compareScenarios, detectWarmupWelch, summarizeReplicationResults } from
 import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights } from "../../db/models.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
+import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
 import { CustomerToken, VisualView } from "./VisualView.jsx";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
@@ -55,6 +56,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [terminationCondition, setTerminationCondition] = useState(() => experimentDefaults.terminationCondition || null);
   const [replications, setReplications] = useState(() => intDefault(experimentDefaults.replications, 1));
   const [runLabel, setRunLabel] = useState("");
+  const [showRunSetup, setShowRunSetup] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
   const [runHistoryStatus, setRunHistoryStatus] = useState("idle");
@@ -106,6 +108,15 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     () => Math.max(40, Math.round(400 / speedMultiplier)),
     [speedMultiplier]
   );
+  const runSetupSummary = useMemo(() => {
+    const modeLabel = terminationMode === "condition" ? "Condition stop" : `Duration ${maxSimTime}`;
+    return [
+      `Warm-up ${warmupPeriod}`,
+      `${replications} repl${replications === 1 ? "" : "s"}`,
+      `Seed ${seed}`,
+      modeLabel,
+    ];
+  }, [warmupPeriod, replications, seed, terminationMode, maxSimTime]);
   const persistExperimentDefaults = useCallback((patch) => {
     if (!onExperimentDefaultsChange) return;
     onExperimentDefaultsChange({
@@ -526,6 +537,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const batchActive = batchStatus === "running" || batchStatus === "cancelling";
   const partialBatchStatus = batchStatus === "cancelled" || batchStatus === "error";
   const canExportResults = Boolean(results || (partialBatchStatus && replicationResults.length));
+  const canOpenResultsView = Boolean(results || replicationResults.length > 0);
   const exportConfig = useMemo(() => ({
     modelId,
     seed: runSeedRef.current,
@@ -746,7 +758,30 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1, minWidth: 0 }}>
       {/* Experiment Controls Section */}
-      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+        <div
+          style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}
+        >
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: "1 1 420px", minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN SETUP</span>
+              {runLabel.trim() && <Tag label={runLabel.trim()} color={C.accent} />}
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {runSetupSummary.map(item => (
+                <div key={item} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 999, padding: "5px 10px", color: C.muted, fontFamily: FONT, fontSize: 11 }}>
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+          <Btn small variant="ghost" onClick={() => setShowRunSetup(open => !open)}>
+            {showRunSetup ? "Hide setup" : "Edit setup"}
+          </Btn>
+        </div>
+
+        {showRunSetup && (
+          <div style={{ borderTop: `1px solid ${C.border}`, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WARM-UP PERIOD</span>
@@ -896,6 +931,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 persistExperimentDefaults({ terminationCondition: condition, terminationMode: "condition" });
               }}
             />
+          </div>
+        )}
           </div>
         )}
       </div>
@@ -1422,6 +1459,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
+        <Btn variant={view === "visual" ? "primary" : "ghost"} onClick={() => setView("visual")}>Live View</Btn>
+        <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Results</Btn>
         <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results</Btn>
         <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
         <Btn variant="ghost" onClick={() => { setShowShareModal(true); loadShareLinks(); }} disabled={!canShare}>Share</Btn>
@@ -1657,7 +1696,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 log={log}
                 snap={currentSnap}
                 model={model}
-                results={results}
+                hasResults={canOpenResultsView}
+                onOpenResults={() => setView("results")}
                 selectedNodeLabel={selectedNodeLabel}
                 onClearFilter={() => setSelectedNodeLabel(null)}
               />
@@ -1713,6 +1753,17 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {view === "results" && (
+        <div style={{ background: C.logBg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
+          <ResultsWorkspace
+            results={results}
+            model={model}
+            replicationResults={replicationResults}
+            warmupDetection={warmupDetection}
+          />
         </div>
       )}
       </div>
