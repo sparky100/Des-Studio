@@ -52,17 +52,21 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from('des_models').order).toHaveBeenCalledWith('updated_at', { ascending: false });
     });
 
-    it('uses wildcard selection so startup stays compatible with older des_models schemas', async () => {
+    it('retries model fetches with a legacy select when model_json is unavailable', async () => {
       supabase.from('des_models').select().or.mockReturnThis();
       supabase.from('des_models').select().contains.mockReturnThis();
       supabase.from('des_models').order
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
         .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
         .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
         .mockResolvedValueOnce({ data: [], error: null });
 
       await fetchModels('compat-user');
 
-      expect(supabase.from('des_models').select).toHaveBeenCalledWith('*');
+      expect(supabase.from('des_models').select).toHaveBeenCalledWith(expect.stringContaining('model_json'));
+      expect(supabase.from('des_models').select).toHaveBeenCalledWith(expect.not.stringContaining('model_json'));
     });
 
     it('deduplicates and sorts rows from visible and shared model queries', async () => {
@@ -106,7 +110,6 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from).toHaveBeenCalledWith('des_models');
       expect(supabase.from('des_models').eq).toHaveBeenCalledWith('visibility', 'public');
       expect(supabase.from('des_models').order).toHaveBeenCalledWith('updated_at', { ascending: false });
-      expect(supabase.from('des_models').select).toHaveBeenCalledWith('*');
     });
   });
 
@@ -303,6 +306,36 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
             experimentDefaults: { maxSimTime: 500, warmupPeriod: 25 },
           }),
         })
+      );
+    });
+
+    it('retries saves without model_json on legacy schemas', async () => {
+      const model = {
+        id: 'm1',
+        name: 'Legacy Save',
+        entityTypes: [],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+        graph: { nodes: [{ id: 'n1' }], edges: [] },
+      };
+      supabase.from('des_models').update.mockReturnThis();
+      supabase.from('des_models').eq.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
+        .mockResolvedValueOnce({ data: { ...model, owner_id: 'u1' }, error: null });
+
+      await saveModel(model, 'u1');
+
+      expect(supabase.from('des_models').update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ model_json: expect.any(Object) })
+      );
+      expect(supabase.from('des_models').update).toHaveBeenNthCalledWith(
+        2,
+        expect.not.objectContaining({ model_json: expect.anything() })
       );
     });
   });
@@ -526,7 +559,6 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       // Verify fetch call
       expect(supabase.from).toHaveBeenCalledWith('des_models');
       expect(supabase.from('des_models').select).toHaveBeenCalled();
-      expect(supabase.from('des_models').select).toHaveBeenCalledWith('*');
       expect(supabase.from('des_models').or).toHaveBeenCalledWith(expect.stringContaining(newUserId));
       expect(supabase.from('des_models').eq).toHaveBeenCalledWith('id', sourceModelId);
       expect(supabase.from('des_models').single).toHaveBeenCalled();
@@ -669,7 +701,6 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(result.run.avgWaitTime).toBe(8.2);
       expect(result.model.name).toBe('Test Model');
       expect(result.model.entityTypes).toHaveLength(1);
-      expect(supabase.from('des_models').select).toHaveBeenCalledWith('*');
     });
 
     it('getShareLink throws when share link is revoked', async () => {

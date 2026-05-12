@@ -36,7 +36,38 @@ export function normalizeUserSettings(row = {}) {
   };
 }
 
-const MODEL_ROW_SELECT = "*";
+const DES_MODELS_SELECT_CURRENT = "id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at";
+const DES_MODELS_SELECT_LEGACY = "id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at";
+const DES_MODELS_SELECT_MINIMAL = "id,name,description,visibility,entity_types,state_variables,b_events,c_events,owner_id,created_at,updated_at";
+
+function errorText(error) {
+  return [error?.message, error?.details, error?.hint].filter(Boolean).join(" ").toLowerCase();
+}
+
+function isSchemaCompatibilityError(error) {
+  if (!error) return false;
+  if (error.code === "42703" || error.code === "PGRST204") return true;
+  if (error.status === 400) return true;
+  const text = errorText(error);
+  return text.includes("column") || text.includes("select") || text.includes("schema");
+}
+
+async function runDesModelsSelect(buildQuery) {
+  let lastError = null;
+  for (const selectClause of [
+    DES_MODELS_SELECT_CURRENT,
+    DES_MODELS_SELECT_LEGACY,
+    DES_MODELS_SELECT_MINIMAL,
+  ]) {
+    const result = await buildQuery(selectClause);
+    if (!result?.error) return result;
+    lastError = result.error;
+    if (!isSchemaCompatibilityError(result.error)) {
+      throw result.error;
+    }
+  }
+  throw lastError;
+}
 
 // ── Row normalisation ─────────────────────────────────────────────────────────
 export function norm(r) {
@@ -102,25 +133,28 @@ export async function fetchModels(userId) {
   if (userId) {
     const sort = { ascending: false };
     const [visible, sharedViewer, sharedEditor] = await Promise.all([
-      supabase
-        .from("des_models")
-        .select(MODEL_ROW_SELECT)
-        .or(`owner_id.eq.${userId},visibility.eq.public`)
-        .order("updated_at", sort),
-      supabase
-        .from("des_models")
-        .select(MODEL_ROW_SELECT)
-        .contains("access", { [userId]: "viewer" })
-        .order("updated_at", sort),
-      supabase
-        .from("des_models")
-        .select(MODEL_ROW_SELECT)
-        .contains("access", { [userId]: "editor" })
-        .order("updated_at", sort),
+      runDesModelsSelect((selectClause) =>
+        supabase
+          .from("des_models")
+          .select(selectClause)
+          .or(`owner_id.eq.${userId},visibility.eq.public`)
+          .order("updated_at", sort)
+      ),
+      runDesModelsSelect((selectClause) =>
+        supabase
+          .from("des_models")
+          .select(selectClause)
+          .contains("access", { [userId]: "viewer" })
+          .order("updated_at", sort)
+      ),
+      runDesModelsSelect((selectClause) =>
+        supabase
+          .from("des_models")
+          .select(selectClause)
+          .contains("access", { [userId]: "editor" })
+          .order("updated_at", sort)
+      ),
     ]);
-
-    const error = visible.error || sharedViewer.error || sharedEditor.error;
-    if (error) throw error;
 
     const byId = new Map();
     for (const row of [
@@ -134,12 +168,13 @@ export async function fetchModels(userId) {
       String(b.updated_at || "").localeCompare(String(a.updated_at || ""))
     );
   } else {
-    const { data: publicData, error } = await supabase
-      .from("des_models")
-      .select(MODEL_ROW_SELECT)
-      .eq("visibility", "public")
-      .order("updated_at", { ascending: false });
-    if (error) throw error;
+    const { data: publicData } = await runDesModelsSelect((selectClause) =>
+      supabase
+        .from("des_models")
+        .select(selectClause)
+        .eq("visibility", "public")
+        .order("updated_at", { ascending: false })
+    );
     data = publicData || [];
   }
 
@@ -206,24 +241,29 @@ export async function saveUserSettings(userId, settings = {}, schemaVersion = 1)
 
 export async function saveModel(model, userId) {
   const row = toRow(model, userId);
-  if (model.id) {
-    const { data, error } = await supabase
+  const persist = async (payload) => {
+    if (model.id) {
+      return supabase
+        .from("des_models")
+        .update(payload)
+        .eq("id", model.id)
+        .select()
+        .single();
+    }
+    return supabase
       .from("des_models")
-      .update(row)
-      .eq("id", model.id)
+      .insert(payload)
       .select()
       .single();
-    if (error) throw error;
-    return norm(data);
-  } else {
-    const { data, error } = await supabase
-      .from("des_models")
-      .insert(row)
-      .select()
-      .single();
-    if (error) throw error;
-    return norm(data);
+  };
+
+  let result = await persist(row);
+  if (result.error && isSchemaCompatibilityError(result.error) && errorText(result.error).includes("model_json")) {
+    const { model_json, ...legacyRow } = row;
+    result = await persist(legacyRow);
   }
+  if (result.error) throw result.error;
+  return norm(result.data);
 }
 
 export async function deleteModel(id, userId) {
@@ -365,12 +405,14 @@ export async function fetchRunStatsForModels(modelIds = [], userId) {
 
 export async function forkModel(sourceModelId, newUserId, newName = "") {
   // 1. Fetch the original model — must be owned by or accessible to the user
-  const { data: sourceModel, error: fetchError } = await supabase
-    .from("des_models")
-    .select(MODEL_ROW_SELECT)
-    .or(`owner_id.eq.${newUserId},visibility.eq.public`)
-    .eq("id", sourceModelId)
-    .single();
+  const { data: sourceModel, error: fetchError } = await runDesModelsSelect((selectClause) =>
+    supabase
+      .from("des_models")
+      .select(selectClause)
+      .or(`owner_id.eq.${newUserId},visibility.eq.public`)
+      .eq("id", sourceModelId)
+      .single()
+  );
   if (fetchError) throw fetchError;
   if (!sourceModel) throw new Error("Source model not found.");
 
@@ -438,11 +480,13 @@ export async function getShareLink(token) {
   if (runError) throw runError;
   if (!run) throw new Error("Run not found.");
 
-  const { data: model, error: modelError } = await supabase
-    .from("des_models")
-    .select(MODEL_ROW_SELECT)
-    .eq("id", run.model_id)
-    .single();
+  const { data: model, error: modelError } = await runDesModelsSelect((selectClause) =>
+    supabase
+      .from("des_models")
+      .select(selectClause)
+      .eq("id", run.model_id)
+      .single()
+  );
   if (modelError) throw modelError;
 
   const modelGraph = model.model_json?.graph || null;
