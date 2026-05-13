@@ -64,7 +64,7 @@ describe('ExecutePanel', () => {
 
     expect(screen.getByRole('button', { name: /^run$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^setup$/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^experiments$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^studies$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /run all/i })).toBeInTheDocument();
     expect(screen.getByText('Run or step the simulation to see the visual view.')).toBeInTheDocument();
   });

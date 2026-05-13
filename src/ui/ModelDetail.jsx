@@ -607,7 +607,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const TABS=[
     {id:"overview",label:"Overview"},
     {id:"visual",label:"Design"},
-    {id:"ai",label:"AI Designer"},
+    {id:"ai",label:"AI"},
     {id:"entities",label:"Entity Types"},
     {id:"queues",label:"Queues"},
     {id:"bevents",label:"B-Events"},
@@ -674,59 +674,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     ? activeMode
     : null;
   const AuthoringWorkflowShell = ({mode, children}) => {
-    const activeLabel = tabById[tab]?.label || mode.label;
-    const nextAction = isStarterBlank
-      ? "Choose a starting path, then shape the first runnable version of the model."
-      : healthValidation.errors.length > 0
-      ? "Resolve blockers in Model Health before executing."
-      : mode.id === "design"
-        ? "Use Design to shape the process, then check Model Health when you are ready to run."
-        : "Define entities, queues, and state before running the model.";
-
     return (
       <section
         aria-label={`${mode.label} authoring shell`}
         style={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: 14,
-          flexWrap: "wrap",
+          display: "block",
         }}
       >
-        <main
-          aria-label={`${mode.label} workspace`}
-          style={{
-            flex: "1 1 620px",
-            minWidth: 0,
-          }}
-        >
+        <main aria-label={`${mode.label} workspace`} style={{minWidth:0}}>
           {children}
         </main>
-        <aside
-          aria-label={`${mode.label} context panel`}
-          style={{
-            background: C.panel,
-            border: `1px solid ${C.border}`,
-            borderRadius: 8,
-            padding: 12,
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-            flex: "0 1 280px",
-            minWidth: 220,
-          }}
-        >
-          <div>
-            <div style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.3,fontWeight:700,marginBottom:5}}>WORKSPACE GUIDE</div>
-            <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>{activeLabel}</div>
-          </div>
-          <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
-            {nextAction}
-          </div>
-          <Btn small variant={healthValidation.errors.length ? "ghost" : "primary"} onClick={()=>setTab("validate")}>
-            Open Model Health
-          </Btn>
-        </aside>
       </section>
     );
   };
@@ -842,7 +799,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             {visibleTabs.map(t=>t.disabled?(
               <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>
             ):(
-              <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} aria-label={`${t.label}${tabIssueLabel(t.id) ? `, ${tabIssueLabel(t.id)}` : ""}`} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
+              (() => {
+                const accessibleLabel = t.id === "ai" ? "AI Designer" : t.label;
+                return (
+              <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} aria-label={`${accessibleLabel}${tabIssueLabel(t.id) ? `, ${tabIssueLabel(t.id)}` : ""}`} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
                 borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",
                 color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400,display:"inline-flex",alignItems:"center",gap:6}}>
                 <span>{t.label}</span>
@@ -857,6 +817,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                   </span>
                 )}
               </button>
+                );
+              })()
             ))}
           </div>
         </div>
@@ -882,7 +844,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save Changes"}</Btn>
           </div>
         )}
-        {tab!=="execute" && <ModelHealthPanel/>}
+        {(tab==="overview" || tab==="execute") && <ModelHealthPanel/>}
         <ErrorBoundary
           key={tab}
           title="Model panel crashed"

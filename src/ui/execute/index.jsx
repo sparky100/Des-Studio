@@ -765,7 +765,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         {[
           { id: "run", label: "Run" },
           { id: "setup", label: "Setup" },
-          { id: "experiments", label: "Experiments" },
+          { id: "experiments", label: "Studies" },
         ].map(section => (
           <Btn
             key={section.id}
@@ -784,11 +784,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       {executeSection === "setup" && (
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div
-          style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}
+          style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}
         >
           <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: "1 1 420px", minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN SETUP</span>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SCENARIO SETUP</span>
               {runLabel.trim() && <Tag label={runLabel.trim()} color={C.accent} />}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -805,8 +805,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         </div>
 
         {showRunSetup && (
-          <div style={{ borderTop: `1px solid ${C.border}`, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ borderTop: `1px solid ${C.border}`, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WARM-UP PERIOD</span>
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -971,7 +971,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           }}
           style={{ padding: "12px 16px", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, userSelect: "none" }}>
           <span style={{ fontSize: 14, color: sweepOpen ? C.accent : C.muted }}>{sweepOpen ? "▼" : "▶"}</span>
-          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>EXPERIMENTS</span>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>STUDIES</span>
           {sweepStatus === "running" && (
             <span style={{ fontSize: 10, color: C.amber, fontFamily: FONT }}>Running experiment...</span>
           )}

@@ -306,7 +306,7 @@ function conditionToLegacyString(condition) {
 function Bubble({ role, content }) {
   const isUser = role === "user";
   const isSystem = role === "system";
-  const label = isSystem ? "Model note" : isUser ? "You" : "AI";
+  const label = isSystem ? "Model note" : isUser ? "You" : "Assistant";
   return (
     <div style={{
       alignSelf: isSystem ? "center" : isUser ? "flex-end" : "flex-start",
@@ -430,7 +430,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
         const errorSummary = validation.errors.map(e => `[${e.code}] ${e.message}`).join("\n");
         setHistory(prev => [...prev, {
           role: "system",
-          content: `Validation found ${validation.errors.length} issue(s). Asking AI to fix...`,
+          content: `The draft hit ${validation.errors.length} model issue(s). Asking the assistant to correct them...`,
         }]);
 
         const retryMessages = [...messages, {
@@ -448,7 +448,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       setProposal(proposal);
       const finalValidation = validateModel(proposal);
       if (finalValidation.errors?.length) {
-        setNotice(`Proposal has ${finalValidation.errors.length} validation issue(s) that could not be auto-fixed. Fix them in the tabs before running.`);
+        setNotice(`This draft still has ${finalValidation.errors.length} model issue(s). Tidy those up in the editors before running.`);
       }
     }
 
@@ -461,7 +461,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     if (response.flowDescription && response.intent !== "clarify") {
       newTurns.unshift({
         role: "system",
-        content: `What I understood:\n${response.flowDescription}`,
+        content: `Working draft:\n${response.flowDescription}`,
       });
     }
 
@@ -475,28 +475,28 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     onApplyModel?.(nextModel);
     setProposal(null);
     const errorText = validation.errors?.length
-      ? `Proposal applied as an editable draft with ${validation.errors.length} validation issue(s). Fix them in the tabs before running.`
+      ? `Draft applied with ${validation.errors.length} model issue(s). Fix them in the editors before running.`
       : "";
     const warningText = validation.warnings?.length ? validation.warnings.map(w => `[${w.code}] ${w.message}`).join("\n") : "";
-    setNotice(errorText || warningText || "Proposal applied. Save the model when ready.");
-    setHistory(prev => [...prev, { role: "system", content: errorText || "Proposal applied to the editable model." }]);
+    setNotice(errorText || warningText || "Draft applied. Save when you're happy with it.");
+    setHistory(prev => [...prev, { role: "system", content: errorText || "Draft applied to the editable model." }]);
   };
   const saveProposal = async (nextModel, validation = { errors: [], warnings: [] }) => {
     await onSaveModel?.(nextModel);
     setProposal(null);
     const errorText = validation.errors?.length
-      ? `Proposal saved as an editable draft with ${validation.errors.length} validation issue(s). Fix them in the tabs before running.`
+      ? `Draft saved with ${validation.errors.length} model issue(s). Fix them in the editors before running.`
       : "";
     const warningText = validation.warnings?.length ? validation.warnings.map(w => `[${w.code}] ${w.message}`).join("\n") : "";
-    setNotice(errorText || warningText || "Proposal applied and saved.");
-    setHistory(prev => [...prev, { role: "system", content: errorText || "Proposal applied and saved." }]);
+    setNotice(errorText || warningText || "Draft applied and saved.");
+    setHistory(prev => [...prev, { role: "system", content: errorText || "Draft applied and saved." }]);
   };
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: proposal ? "minmax(320px, 1fr) minmax(360px, 0.95fr)" : "minmax(320px, 760px)", gap: 16, alignItems: "stretch" }}>
       <section aria-label="Use AI conversation" style={{ display: "flex", flexDirection: "column", minHeight: 520, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: 14, borderBottom: `1px solid ${C.border}` }}>
-          <SH label="Use AI" />
+          <SH label="Design with AI" />
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
             Describe the system you want to build, or explain what you want changed.
           </div>

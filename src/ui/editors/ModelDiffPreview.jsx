@@ -8,7 +8,7 @@ const SECTION_META = [
   { key: "bEvents", label: "B-Events" },
   { key: "cEvents", label: "C-Events" },
   { key: "queues", label: "Queues" },
-  { key: "stateVariables", label: "State Variables" },
+  { key: "stateVariables", label: "Model Data" },
 ];
 
 function itemKey(item = {}) {
@@ -112,7 +112,7 @@ function renderModifiedSummary(item) {
         <div key={field} style={{ color: C.muted, display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
           <span style={{ color: C.amber, fontWeight: 700 }}>{field}</span>
           <span>{friendlyValue(before[field])}</span>
-          <span style={{ color: C.accent }}>-></span>
+          <span style={{ color: C.accent }}>to</span>
           <span style={{ color: C.text }}>{friendlyValue(after[field])}</span>
         </div>
       ))}
@@ -175,7 +175,7 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
     <div aria-label="Model proposal preview" style={{ display: "flex", flexDirection: "column", gap: 12, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
         <div>
-          <SH label="Proposed Changes" />
+          <SH label="Model Proposal" />
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
             Review what will change before applying it to the model.
           </div>
@@ -191,7 +191,7 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
           { label: "Removed", value: summary.removed, color: summary.removed ? C.red : C.muted },
         ].map(item => (
           <div key={item.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "9px 10px" }}>
-            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, fontWeight: 700, marginBottom: 4 }}>
+            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, fontWeight: 700, marginBottom: 4, letterSpacing: 1 }}>
               {item.label}
             </div>
             <div style={{ color: item.color, fontFamily: FONT, fontSize: 18, fontWeight: 700 }}>
@@ -233,7 +233,7 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
                 />
               )}
               <div style={{ color: C.text, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>{section.label}</div>
-              <Tag label={hasChanges ? "Changed" : "Unchanged"} color={hasChanges ? C.accent : C.muted} />
+              {hasChanges && <Tag label="Changed" color={C.accent} />}
               {hasChanges && (
                 <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
                   {[added.length ? `${added.length} added` : "", modified.length ? `${modified.length} modified` : "", removed.length ? `${removed.length} removed` : ""].filter(Boolean).join("  ·  ")}
