@@ -1,0 +1,126 @@
+{
+  "name": "Sprint 26 Priority Handoff Demo",
+  "description": "Two-stage service flow showing RELEASE to a downstream PRIORITY queue after an upstream FIFO stage.",
+  "visibility": "private",
+  "access": {},
+  "entityTypes": [
+    {
+      "id": "et-patient",
+      "name": "Patient",
+      "role": "customer",
+      "count": 0,
+      "attrDefs": [
+        {
+          "name": "priority",
+          "valueType": "number",
+          "defaultValue": "3",
+          "mutable": true
+        }
+      ]
+    },
+    {
+      "id": "et-nurse",
+      "name": "Nurse",
+      "role": "server",
+      "count": "1",
+      "attrDefs": []
+    },
+    {
+      "id": "et-doctor",
+      "name": "Doctor",
+      "role": "server",
+      "count": "1",
+      "attrDefs": []
+    }
+  ],
+  "stateVariables": [],
+  "bEvents": [
+    {
+      "id": "b-arrival",
+      "name": "Arrival",
+      "scheduledTime": "0",
+      "effect": "ARRIVE(Patient, Intake Queue)",
+      "schedules": [
+        {
+          "eventId": "b-arrival",
+          "dist": "Fixed",
+          "distParams": {
+            "value": "1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "b-triage-done",
+      "name": "Triage Done",
+      "scheduledTime": "9999",
+      "effect": "RELEASE(Nurse, Treatment Queue)",
+      "schedules": []
+    },
+    {
+      "id": "b-treatment-done",
+      "name": "Treatment Done",
+      "scheduledTime": "9999",
+      "effect": "COMPLETE()",
+      "schedules": []
+    }
+  ],
+  "cEvents": [
+    {
+      "id": "c-start-triage",
+      "name": "Start Triage",
+      "priority": 1,
+      "condition": "queue(Intake Queue).length > 0 AND idle(Nurse).count > 0",
+      "effect": "ASSIGN(Intake Queue, Nurse)",
+      "cSchedules": [
+        {
+          "eventId": "b-triage-done",
+          "dist": "Fixed",
+          "distParams": {
+            "value": "2"
+          },
+          "useEntityCtx": true
+        }
+      ]
+    },
+    {
+      "id": "c-start-treatment",
+      "name": "Start Treatment",
+      "priority": 2,
+      "condition": "queue(Treatment Queue).length > 0 AND idle(Doctor).count > 0",
+      "effect": "ASSIGN(Treatment Queue, Doctor)",
+      "cSchedules": [
+        {
+          "eventId": "b-treatment-done",
+          "dist": "Fixed",
+          "distParams": {
+            "value": "3"
+          },
+          "useEntityCtx": true
+        }
+      ]
+    }
+  ],
+  "queues": [
+    {
+      "id": "q-intake",
+      "name": "Intake Queue",
+      "customerType": "Patient",
+      "capacity": "",
+      "discipline": "FIFO"
+    },
+    {
+      "id": "q-treatment",
+      "name": "Treatment Queue",
+      "customerType": "Patient",
+      "capacity": "",
+      "discipline": "PRIORITY"
+    }
+  ],
+  "graph": null,
+  "experimentDefaults": {
+    "maxSimTime": 30,
+    "warmupPeriod": 0,
+    "replications": 1
+  }
+}

@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach } from 'vitest';
-import { createServerEntities, makeHelpers, resetSeq } from '../entities.js';
+import { createServerEntities, makeHelpers, resetSeq, claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState, sortResourceEntities } from '../entities.js';
 
 beforeEach(() => {
   resetSeq();
@@ -112,5 +112,124 @@ describe('makeHelpers', () => {
   test('findById returns undefined for missing id', () => {
     const h = makeHelpers(entities);
     expect(h.findById(999)).toBeUndefined();
+  });
+
+  test('idleOf returns idle resources in deterministic creation order', () => {
+    entities.push(
+      { id: 7, type: 'Server', role: 'server', status: 'idle', arrivalTime: 5 },
+      { id: 8, type: 'Server', role: 'server', status: 'idle', arrivalTime: 0 },
+    );
+    const h = makeHelpers(entities);
+    const result = h.idleOf('Server');
+    expect(result.map(e => e.id)).toEqual([5, 8, 7]);
+  });
+
+  test('selectIdleOf returns the deterministically first idle server', () => {
+    entities.push(
+      { id: 7, type: 'Server', role: 'server', status: 'idle', arrivalTime: 5 },
+      { id: 8, type: 'Server', role: 'server', status: 'idle', arrivalTime: 0 },
+    );
+    const h = makeHelpers(entities);
+    expect(h.selectIdleOf('Server').id).toBe(5);
+  });
+});
+
+describe('resource claim helpers', () => {
+  test('claimServerForEntity records mirrored claim metadata on customer and server', () => {
+    const customer = { id: 1, type: 'Customer', role: 'customer', status: 'waiting', queue: 'Main Queue', arrivalTime: 2 };
+    const server = { id: 2, type: 'Server', role: 'server', status: 'idle', arrivalTime: 0 };
+
+    const claimed = claimServerForEntity(customer, server, 5);
+
+    expect(claimed).toBe(true);
+    expect(customer.status).toBe('serving');
+    expect(customer.serviceStart).toBe(5);
+    expect(customer.serverId).toBe(2);
+    expect(customer.queue).toBeUndefined();
+    expect(customer.resourceClaim).toEqual({
+      customerId: 1,
+      customerType: 'Customer',
+      serverId: 2,
+      serverType: 'Server',
+      queueName: 'Main Queue',
+      claimedAt: 5,
+    });
+    expect(server.status).toBe('busy');
+    expect(server.currentCustId).toBe(1);
+    expect(server.resourceClaim).toEqual(customer.resourceClaim);
+  });
+
+  test('claimServerForEntity rejects non-waiting customers and non-idle servers', () => {
+    const doneCustomer = { id: 1, type: 'Customer', role: 'customer', status: 'done', queue: 'Main Queue', arrivalTime: 2 };
+    const busyServer = { id: 2, type: 'Server', role: 'server', status: 'busy', arrivalTime: 0 };
+
+    expect(claimServerForEntity(doneCustomer, busyServer, 5)).toBe(false);
+    expect(doneCustomer.resourceClaim).toBeUndefined();
+    expect(busyServer.resourceClaim).toBeUndefined();
+  });
+
+  test('releaseServerClaim clears mirrored ownership metadata', () => {
+    const claim = {
+      customerId: 1,
+      customerType: 'Customer',
+      serverId: 2,
+      serverType: 'Server',
+      queueName: 'Main Queue',
+      claimedAt: 5,
+    };
+    const customer = { id: 1, type: 'Customer', role: 'customer', status: 'serving', serverId: 2, resourceClaim: claim };
+    const server = { id: 2, type: 'Server', role: 'server', status: 'busy', currentCustId: 1, resourceClaim: claim };
+
+    const released = releaseServerClaim(customer, server);
+
+    expect(released).toBe(true);
+    expect(customer.serverId).toBeUndefined();
+    expect(customer.resourceClaim).toBeUndefined();
+    expect(server.status).toBe('idle');
+    expect(server.currentCustId).toBeUndefined();
+    expect(server.resourceClaim).toBeUndefined();
+  });
+
+  test('markEntityWaiting records explicit waiting ownership metadata', () => {
+    const customer = { id: 1, type: 'Customer', role: 'customer', arrivalTime: 2, lastQueue: 'Main Queue' };
+
+    const marked = markEntityWaiting(customer, 7, 'Triage');
+
+    expect(marked).toBe(true);
+    expect(customer.status).toBe('waiting');
+    expect(customer.queue).toBe('Triage');
+    expect(customer.waitingSince).toBe(7);
+    expect(customer.waitingFor).toEqual({
+      kind: 'queue',
+      queueName: 'Triage',
+      enteredAt: 7,
+    });
+  });
+
+  test('clearWaitingState removes explicit waiting ownership metadata', () => {
+    const customer = {
+      id: 1,
+      type: 'Customer',
+      role: 'customer',
+      status: 'waiting',
+      queue: 'Triage',
+      waitingSince: 7,
+      waitingFor: { kind: 'queue', queueName: 'Triage', enteredAt: 7 },
+    };
+
+    const cleared = clearWaitingState(customer);
+
+    expect(cleared).toBe(true);
+    expect(customer.waitingSince).toBeUndefined();
+    expect(customer.waitingFor).toBeUndefined();
+  });
+
+  test('sortResourceEntities orders by creation/arrival order with id tiebreaker', () => {
+    const resources = [
+      { id: 9, type: 'Server', status: 'idle', arrivalTime: 10 },
+      { id: 3, type: 'Server', status: 'idle', arrivalTime: 0 },
+      { id: 4, type: 'Server', status: 'idle', arrivalTime: 0 },
+    ];
+    expect(sortResourceEntities(resources).map(e => e.id)).toEqual([3, 4, 9]);
   });
 });

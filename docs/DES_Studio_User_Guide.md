@@ -234,6 +234,22 @@ Probabilistic routing using weighted random branch selection (with seeded RNG) i
 
 Resources (servers) can have a capacity greater than 1. A resource with capacity N can serve up to N entities concurrently. The engine tracks idle and busy counts per resource type. The Predicate Builder exposes `idleCount` and `busyCount` for all resources.
 
+### Waiting and resource ownership
+
+Recent engine work makes waiting and service ownership more explicit.
+
+- A queued entity is not just "somehow waiting". It is explicitly recorded as waiting for a named queue.
+- When a server claims an entity, the relationship is mirrored on both sides: the entity knows which server is serving it, and the server knows which entity it is serving.
+- When the entity is released, completes, reneges, or exits the system, that ownership is cleared.
+
+In practice, this means:
+
+- queue routing, release, recirculation, and batching flows behave more consistently
+- stale timers are less likely to mutate entities that already moved on
+- debugging run behaviour is easier because queue/service ownership is more deliberate
+
+DES Studio still does **not** support first-class preemption or interruption. A busy resource does not yet pause one entity to serve another higher-priority one mid-service.
+
 ## 7. Distributions
 
 Distributions control random durations and samples, such as inter-arrival time, service time, patience time, or time-varying rate bands.
@@ -446,6 +462,8 @@ Blocking errors prevent execution. Examples include:
 - Resource capacity less than 1 or non-integer.
 
 Warnings do not always prevent execution, but they indicate something worth checking. For example, a normal distribution with a mean too close to its standard deviation may create many negative samples that need clamping.
+
+Validation currently focuses on model structure and supported patterns. Some waiting/resource behaviours are enforced by engine lifecycle rules rather than separate validation errors. As Sprint 26 closes out, the user-facing guidance and sample models will be the main reference for those behaviours.
 
 ## 15. Dynamic Modelling Features
 

@@ -114,6 +114,35 @@ describe('Loop guard (loopConfig)', () => {
     // Entities should be routed to Exit Queue when loopCount reaches 1
     const exitQueueEntities = result.entitySummary.filter(e => e.queue === "Exit Queue" && e.role === "customer");
     expect(exitQueueEntities.length).toBeGreaterThan(0);
+    exitQueueEntities.forEach(entity => {
+      expect(entity.status).toBe("waiting");
+      expect(entity.waitingFor).toEqual({
+        kind: "queue",
+        queueName: "Exit Queue",
+        enteredAt: entity.lastStageStart,
+      });
+    });
+  });
+
+  test('loopConfig exit-to-system clears waiting ownership metadata', () => {
+    const model = {
+      ...loopModel,
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: "ARRIVE(Customer, Entry Queue)", scheduledTime: "0", schedules: [] },
+        { id: "process", name: "Process Entity", effect: "RELEASE(Worker, Entry Queue)", scheduledTime: "9999", schedules: [],
+          loopConfig: { maxLoopCount: 1 },
+        },
+      ],
+    };
+
+    const engine = buildEngine(model, 42, 0, 10);
+    const result = engine.runAll();
+    const doneCustomer = result.entitySummary.find(e => e.role === "customer");
+
+    expect(doneCustomer.status).toBe("done");
+    expect(doneCustomer.queue).toBeUndefined();
+    expect(doneCustomer.waitingFor).toBeUndefined();
+    expect(doneCustomer.waitingSince).toBeUndefined();
   });
 });
 

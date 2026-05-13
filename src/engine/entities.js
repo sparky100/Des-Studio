@@ -65,6 +65,87 @@ export function sortWaitingEntities(waiting, discipline = "FIFO") {
   return [...waiting].sort(queueDisciplineComparator(discipline));
 }
 
+export function sortResourceEntities(resources) {
+  return [...resources].sort((a, b) => {
+    const timeDelta = (a.arrivalTime || 0) - (b.arrivalTime || 0);
+    if (timeDelta !== 0) return timeDelta;
+    return (a.id || 0) - (b.id || 0);
+  });
+}
+
+function claimSnapshot(customer, server, clock, queueName) {
+  return {
+    customerId: customer.id,
+    customerType: customer.type,
+    serverId: server.id,
+    serverType: server.type,
+    queueName: queueName ?? customer.queue ?? customer.lastQueue ?? null,
+    claimedAt: clock,
+  };
+}
+
+function waitingSnapshot(entity, clock, queueName) {
+  return {
+    kind: "queue",
+    queueName: queueName ?? entity.queue ?? entity.lastQueue ?? null,
+    enteredAt: clock,
+  };
+}
+
+export function markEntityWaiting(entity, clock, queueName = entity.queue ?? entity.lastQueue ?? null) {
+  if (!entity) return false;
+  entity.status = "waiting";
+  entity.queue = queueName;
+  entity.waitingSince = clock;
+  entity.waitingFor = waitingSnapshot(entity, clock, queueName);
+  return true;
+}
+
+export function clearWaitingState(entity) {
+  if (!entity) return false;
+  delete entity.waitingFor;
+  delete entity.waitingSince;
+  return true;
+}
+
+export function claimServerForEntity(customer, server, clock) {
+  if (!customer || !server) return false;
+  if (customer.status !== "waiting" || server.status !== "idle") return false;
+
+  const queueName = customer.queue ?? customer.lastQueue ?? null;
+  const claim = claimSnapshot(customer, server, clock, queueName);
+
+  clearWaitingState(customer);
+  customer.status = "serving";
+  customer.serviceStart = clock;
+  customer.serverId = server.id;
+  customer.lastQueue = queueName;
+  customer.resourceClaim = claim;
+  delete customer.queue;
+
+  server.status = "busy";
+  server.currentCustId = customer.id;
+  server.resourceClaim = claim;
+
+  return true;
+}
+
+export function releaseServerClaim(customer, server) {
+  if (!customer && !server) return false;
+
+  if (customer) {
+    delete customer.serverId;
+    delete customer.resourceClaim;
+  }
+  if (server) {
+    delete server.currentCustId;
+    delete server.resourceClaim;
+    if (server.status === "busy") server.status = "idle";
+  }
+
+  return true;
+}
+
 export function findQueueConfig(model, token) {
   const key = norm(token);
   return (model?.queues || []).find(queue => norm(queue.name) === key || norm(queue.customerType) === key) || null;
@@ -148,10 +229,13 @@ export function makeHelpers(entities, model = null) {
       }, discipline, filterFn)[0],
 
     idleOf: (type) =>
-      entities.filter(e => match(e.type, type) && e.status === "idle"),
+      sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "idle")),
 
     busyOf: (type) =>
-      entities.filter(e => match(e.type, type) && (e.status === "busy" || e.status === "serving")),
+      sortResourceEntities(entities.filter(e => match(e.type, type) && (e.status === "busy" || e.status === "serving"))),
+
+    selectIdleOf: (type) =>
+      sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "idle"))[0],
 
     findById: (id) =>
       entities.find(e => e.id === id),

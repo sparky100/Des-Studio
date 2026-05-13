@@ -45,6 +45,18 @@ describe('ARRIVE(Customer)', () => {
     expect(entities[0].arrivalTime).toBe(7);
   });
 
+  test('records explicit waiting ownership metadata on arrival', () => {
+    const entities = [];
+    const ctx = makeCtx(entities, {}, baseModel, 7);
+    applyEffect('ARRIVE(Customer)', ctx);
+    expect(entities[0].waitingSince).toBe(7);
+    expect(entities[0].waitingFor).toEqual({
+      kind: 'queue',
+      queueName: 'CustomerQueue',
+      enteredAt: 7,
+    });
+  });
+
   test('new entity appears in entities array', () => {
     const entities = [];
     const ctx = makeCtx(entities, {}, baseModel, 0);
@@ -151,6 +163,30 @@ describe('ASSIGN(Customer, Server)', () => {
     expect(server.currentCustId).toBe(customer.id);
   });
 
+  test('records mirrored resourceClaim metadata on customer and server', () => {
+    const ctx = makeCtx(entities, {}, baseModel, 5);
+    applyEffect('ASSIGN(Customer, Server)', ctx);
+    expect(customer.resourceClaim).toEqual({
+      customerId: customer.id,
+      customerType: 'Customer',
+      serverId: server.id,
+      serverType: 'Server',
+      queueName: null,
+      claimedAt: 5,
+    });
+    expect(server.resourceClaim).toEqual(customer.resourceClaim);
+  });
+
+  test('clears explicit waiting ownership metadata on assign', () => {
+    customer.queue = 'CustomerQueue';
+    customer.waitingSince = 0;
+    customer.waitingFor = { kind: 'queue', queueName: 'CustomerQueue', enteredAt: 0 };
+    const ctx = makeCtx(entities, {}, baseModel, 5);
+    applyEffect('ASSIGN(Customer, Server)', ctx);
+    expect(customer.waitingSince).toBeUndefined();
+    expect(customer.waitingFor).toBeUndefined();
+  });
+
   test('ctx._lastCustId and _lastSrvId set after applyEffect', () => {
     const ctx = makeCtx(entities, {}, baseModel, 5);
     applyEffect('ASSIGN(Customer, Server)', ctx);
@@ -225,6 +261,17 @@ describe('ASSIGN(Customer, Server)', () => {
     expect(highPrio.status).toBe('serving');
     expect(lowPrio.status).toBe('waiting');
   });
+
+  test('selects the deterministically first idle server when multiple are idle', () => {
+    const serverA = { id: 3, type: 'Server', role: 'server', status: 'idle', arrivalTime: 0, stages: [] };
+    const serverB = { id: 4, type: 'Server', role: 'server', status: 'idle', arrivalTime: 5, stages: [] };
+    entities = [customer, serverB, serverA];
+    const ctx = makeCtx(entities, {}, baseModel, 5);
+    applyEffect('ASSIGN(Customer, Server)', ctx);
+    expect(serverA.status).toBe('busy');
+    expect(serverA.currentCustId).toBe(customer.id);
+    expect(serverB.status).toBe('idle');
+  });
 });
 
 // ── COMPLETE ─────────────────────────────────────────────────────────────────
@@ -268,6 +315,14 @@ describe('COMPLETE()', () => {
     expect(server.status).toBe('idle');
   });
 
+  test('clears mirrored claim metadata on complete', () => {
+    runComplete();
+    expect(customer.serverId).toBeUndefined();
+    expect(customer.resourceClaim).toBeUndefined();
+    expect(server.currentCustId).toBeUndefined();
+    expect(server.resourceClaim).toBeUndefined();
+  });
+
   test('increments state.__served', () => {
     runComplete();
     expect(state.__served).toBe(1);
@@ -291,6 +346,25 @@ describe('COMPLETE()', () => {
     applyEffect('COMPLETE()', ctx);
     expect(customer.status).toBe('done');
     expect(otherCustomer.status).toBe('serving');
+  });
+
+  test('skips complete when customer/server claim metadata contradict each other', () => {
+    customer.serverId = 999;
+    const ctx = makeCtx(entities, state, baseModel, 3,
+      { _contextCustId: customer.id, _contextSrvId: server.id });
+    applyEffect('COMPLETE()', ctx);
+    expect(customer.status).toBe('serving');
+    expect(server.status).toBe('busy');
+    expect(state.__served).toBe(0);
+  });
+
+  test('skips complete when serving customer has no matching busy server', () => {
+    entities = [customer];
+    const ctx = makeCtx(entities, state, baseModel, 3,
+      { _contextCustId: customer.id, _contextSrvId: server.id });
+    applyEffect('COMPLETE()', ctx);
+    expect(customer.status).toBe('serving');
+    expect(state.__served).toBe(0);
   });
 });
 
@@ -319,9 +393,27 @@ describe('RELEASE(ServerType)', () => {
     expect(server.status).toBe('idle');
   });
 
+  test('clears mirrored claim metadata on release', () => {
+    runRelease();
+    expect(customer.serverId).toBeUndefined();
+    expect(customer.resourceClaim).toBeUndefined();
+    expect(server.currentCustId).toBeUndefined();
+    expect(server.resourceClaim).toBeUndefined();
+  });
+
   test('sets customer status back to "waiting"', () => {
     runRelease();
     expect(customer.status).toBe('waiting');
+  });
+
+  test('re-establishes explicit waiting ownership metadata on release', () => {
+    runRelease();
+    expect(customer.waitingSince).toBe(10);
+    expect(customer.waitingFor).toEqual({
+      kind: 'queue',
+      queueName: null,
+      enteredAt: 10,
+    });
   });
 
   test('preserves customer.arrivalTime (does not change it)', () => {
@@ -343,6 +435,13 @@ describe('RELEASE(ServerType)', () => {
   test('deletes customer.serviceStart', () => {
     runRelease();
     expect(customer.serviceStart).toBeUndefined();
+  });
+
+  test('skips release when customer/server claim metadata contradict each other', () => {
+    customer.serverId = 999;
+    runRelease();
+    expect(customer.status).toBe('serving');
+    expect(server.status).toBe('busy');
   });
 });
 
@@ -375,6 +474,17 @@ describe('RENEGE(ctx)', () => {
       { _contextCustId: customer.id });
     applyEffect('RENEGE(ctx)', ctx);
     expect(state.__reneged).toBe(1);
+  });
+
+  test('clears explicit waiting ownership metadata on renege', () => {
+    customer.queue = 'CustomerQueue';
+    customer.waitingSince = 0;
+    customer.waitingFor = { kind: 'queue', queueName: 'CustomerQueue', enteredAt: 0 };
+    const ctx = makeCtx(entities, state, baseModel, 5,
+      { _contextCustId: customer.id });
+    applyEffect('RENEGE(ctx)', ctx);
+    expect(customer.waitingSince).toBeUndefined();
+    expect(customer.waitingFor).toBeUndefined();
   });
 
   test('skips (no change) if customer status is not "waiting"', () => {

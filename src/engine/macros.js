@@ -11,6 +11,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
+import { claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState } from "./entities.js";
 
 // ── Safe scalar expression evaluator (replaces new Function in applyScalar) ──
 
@@ -124,6 +125,26 @@ function buildStageRecord(cust, srv, clock) {
   };
 }
 
+function claimMatchesPair(customer, server) {
+  if (!customer || !server) return false;
+
+  const customerServerId = customer.serverId ?? customer.resourceClaim?.serverId ?? null;
+  const serverCustomerId = server.currentCustId ?? server.resourceClaim?.customerId ?? null;
+
+  if (customerServerId != null && customerServerId !== server.id) return false;
+  if (serverCustomerId != null && serverCustomerId !== customer.id) return false;
+
+  if (customer.resourceClaim?.customerId != null && customer.resourceClaim.customerId !== customer.id) return false;
+  if (server.resourceClaim?.serverId != null && server.resourceClaim.serverId !== server.id) return false;
+
+  if (customer.resourceClaim && server.resourceClaim) {
+    if (customer.resourceClaim.customerId !== server.resourceClaim.customerId) return false;
+    if (customer.resourceClaim.serverId !== server.resourceClaim.serverId) return false;
+  }
+
+  return true;
+}
+
 export const MACROS = [
 
   // ── ARRIVE(Type[, QueueName]) ──────────────────────────────────────────────
@@ -161,9 +182,11 @@ export const MACROS = [
             const dest = qDef?.overflowDestination ?? null;
             if (dest) {
               const id = ctx.nextId();
-              entities.push({ id, type: typeName, role: et?.role || "customer", status: "waiting",
+              const rerouted = { id, type: typeName, role: et?.role || "customer",
                 queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
-                arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 });
+                arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
+              markEntityWaiting(rerouted, clock, dest);
+              entities.push(rerouted);
               setLastCustId(id);
               msgs.push(`#${id} (${typeName}) balked → rerouted to "${dest}"`);
             } else {
@@ -178,9 +201,11 @@ export const MACROS = [
           const dest = qDef?.overflowDestination ?? null;
           if (dest) {
             const id = ctx.nextId();
-            entities.push({ id, type: typeName, role: et?.role || "customer", status: "waiting",
+            const rerouted = { id, type: typeName, role: et?.role || "customer",
               queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
-              arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 });
+              arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
+            markEntityWaiting(rerouted, clock, dest);
+            entities.push(rerouted);
             setLastCustId(id);
             msgs.push(`#${id} (${typeName}) balked (p) → rerouted to "${dest}"`);
           } else {
@@ -202,9 +227,11 @@ export const MACROS = [
           const dest = qDef?.overflowDestination ?? null;
           if (dest) {
             const id = ctx.nextId();
-            entities.push({ id, type: typeName, role: et?.role || "customer", status: "waiting",
+            const rerouted = { id, type: typeName, role: et?.role || "customer",
               queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
-              arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 });
+              arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
+            markEntityWaiting(rerouted, clock, dest);
+            entities.push(rerouted);
             setLastCustId(id);
             msgs.push(`#${id} (${typeName}) blocked (capacity ${cap}) → overflow to "${dest}"`);
           } else {
@@ -220,7 +247,6 @@ export const MACROS = [
         id,
         type:           typeName,
         role:           et?.role || "customer",
-        status:         "waiting",
         queue:          queueName,
         attrs:          sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
         arrivalTime:    clock,
@@ -228,6 +254,7 @@ export const MACROS = [
         lastStageStart: null,
         loopCount:      0,
       };
+      markEntityWaiting(ent, clock, queueName);
       entities.push(ent);
       setLastCustId(id);
       msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${queueName}, depth: ${helpers.waitingOf(typeName).length}]`);
@@ -262,17 +289,16 @@ export const MACROS = [
         cust = helpers.selectWaitingOf?.(cType, discipline, filterFn);
       }
 
-      const srv = helpers.idleOf(sType)[0];
+      const srv = helpers.selectIdleOf?.(sType) || helpers.idleOf(sType)[0];
 
       if (cust && srv) {
-        cust.status        = "serving";
-        cust.serviceStart  = clock;
-        cust.serverId      = srv.id;
-        cust.lastQueue     = cust.queue;
+        const queuedAt = cust.queue;
+        if (!claimServerForEntity(cust, srv, clock)) {
+          msgs.push(`ASSIGN(${cType},${sType}): claim failed`);
+          return;
+        }
+        cust.lastQueue     = queuedAt ?? cust.lastQueue;
         cust.ceventName    = ctx.ceventName;
-        delete cust.queue;
-        srv.status        = "busy";
-        srv.currentCustId = cust.id;
         setLastCustId(cust.id);
         setLastSrvId(srv.id);
         msgs.push(
@@ -304,10 +330,21 @@ export const MACROS = [
         msgs.push(`COMPLETE skipped — #${cust.id} is ${cust.status}, not serving`);
         return;
       }
+      if (cust.status === "serving") {
+        if (!srv) {
+          msgs.push(`COMPLETE skipped — #${cust.id} has no matching busy server`);
+          return;
+        }
+        if (!claimMatchesPair(cust, srv)) {
+          msgs.push(`COMPLETE skipped — stale or contradictory claim for customer #${cust.id} and server #${srv.id}`);
+          return;
+        }
+      }
 
       if (cust.status === "serving" || cust.role === "batch") {
         if (!cust.stages) cust.stages = [];
         cust.stages.push(buildStageRecord(cust, srv, clock));
+        clearWaitingState(cust);
         cust.status        = "done";
         cust.completionTime = clock;
         cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
@@ -315,8 +352,7 @@ export const MACROS = [
         msgs.push(`#${cust.id} done [sojourn ${cust.sojournTime.toFixed(2)} t, ${cust.stages.length} stage(s)]`);
       }
       if (srv) {
-        srv.status = "idle";
-        delete srv.currentCustId;
+        releaseServerClaim(cust, srv);
         msgs.push(`Server #${srv.id} → idle`);
         const retired = retireIdleExcessServers(ctx, srv.type);
         if (retired > 0) {
@@ -344,15 +380,16 @@ export const MACROS = [
         : entities.find(e => e.id === custId);
 
       if (srv && cust) {
+        if (!claimMatchesPair(cust, srv)) {
+          msgs.push(`RELEASE(${srvType}) skipped — stale or contradictory claim for customer #${cust.id} and server #${srv.id}`);
+          return;
+        }
         if (!cust.stages) cust.stages = [];
         cust.stages.push(buildStageRecord(cust, srv, clock));
         cust.lastStageStart = clock;
-        cust.status         = "waiting";
-        if (targetQueue) cust.queue = targetQueue;
+        markEntityWaiting(cust, clock, targetQueue || cust.lastQueue || cust.queue);
         delete cust.serviceStart;
-        delete cust.serverId;
-        srv.status = "idle";
-        delete srv.currentCustId;
+        releaseServerClaim(cust, srv);
         const retired = retireIdleExcessServers(ctx, srv.type);
         msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done, srv #${srv.id} idle]`);
         if (retired > 0) {
@@ -375,6 +412,7 @@ export const MACROS = [
         : parseInt(match[1]);
       const ent = entities.find(e => e.id === id);
       if (ent && ent.status === "waiting") {
+        clearWaitingState(ent);
         ent.status     = "reneged";
         ent.renegeTime = clock;
         state.__reneged = (state.__reneged || 0) + 1;
@@ -424,7 +462,6 @@ export const MACROS = [
         id: parentId,
         type: firstChild.type,
         role: "batch",
-        status: "waiting",
         queue: queueName,
         attrs: { ...(firstChild.attrs || {}) },
         arrivalTime: clock,
@@ -439,6 +476,7 @@ export const MACROS = [
           })),
         },
       };
+      markEntityWaiting(parent, clock, queueName);
       entities.push(parent);
       setLastCustId(parentId);
       msgs.push(`BATCH: #${ids.join(', #')} → batch #${parentId} in "${queueName}"`);
@@ -467,14 +505,14 @@ export const MACROS = [
         const restored = {
           ...child,
           attrs: { ...(child.attrs || {}) },
-          status: "waiting",
-          queue: targetQueue,
           lastStageStart: clock,
         };
+        markEntityWaiting(restored, clock, targetQueue);
         entities.push(restored);
         childIds.push(child.id);
       }
 
+      clearWaitingState(parent);
       parent.status = "done";
       parent.completionTime = clock;
       msgs.push(`UNBATCH: batch #${parentId} → restored #${childIds.join(', #')} to "${targetQueue}"`);
@@ -494,6 +532,7 @@ export const MACROS = [
         ? helpers.selectWaitingInQueue?.(cType, discipline)
         : helpers.selectWaitingOf?.(cType, discipline);
       if (ent) {
+        clearWaitingState(ent);
         ent.status     = "reneged";
         ent.renegeTime = clock;
         state.__reneged = (state.__reneged || 0) + 1;

@@ -111,6 +111,11 @@ describe("RELEASE — engine integration", () => {
     const patient = result.entitySummary.find(e => e.role === "customer");
     expect(patient?.queue).toBe("ICU Queue");
     expect(patient?.status).toBe("waiting");
+    expect(patient?.waitingFor).toEqual({
+      kind: "queue",
+      queueName: "ICU Queue",
+      enteredAt: 1,
+    });
   });
 
   test("probability 1.0 routes single patient to Ward Queue", () => {

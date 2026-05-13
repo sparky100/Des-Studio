@@ -1,0 +1,84 @@
+{
+  "name": "Sprint 26 Recirculation Exit Demo",
+  "description": "Single-stage rework loop showing RELEASE back to the same queue with a hard maxLoopCount exit.",
+  "visibility": "private",
+  "access": {},
+  "entityTypes": [
+    {
+      "id": "et-job",
+      "name": "Job",
+      "role": "customer",
+      "count": 0,
+      "attrDefs": []
+    },
+    {
+      "id": "et-worker",
+      "name": "Worker",
+      "role": "server",
+      "count": "1",
+      "attrDefs": []
+    }
+  ],
+  "stateVariables": [],
+  "bEvents": [
+    {
+      "id": "b-arrival",
+      "name": "Arrival",
+      "scheduledTime": "0",
+      "effect": "ARRIVE(Job, Rework Queue)",
+      "schedules": []
+    },
+    {
+      "id": "b-process-done",
+      "name": "Process Done",
+      "scheduledTime": "9999",
+      "effect": "RELEASE(Worker, Rework Queue)",
+      "schedules": [],
+      "loopConfig": {
+        "maxLoopCount": 2,
+        "exitQueueName": "Finished Queue"
+      }
+    }
+  ],
+  "cEvents": [
+    {
+      "id": "c-start-work",
+      "name": "Start Work",
+      "priority": 1,
+      "condition": "queue(Rework Queue).length > 0 AND idle(Worker).count > 0",
+      "effect": "ASSIGN(Rework Queue, Worker)",
+      "cSchedules": [
+        {
+          "eventId": "b-process-done",
+          "dist": "Fixed",
+          "distParams": {
+            "value": "1"
+          },
+          "useEntityCtx": true
+        }
+      ]
+    }
+  ],
+  "queues": [
+    {
+      "id": "q-rework",
+      "name": "Rework Queue",
+      "customerType": "Job",
+      "capacity": "",
+      "discipline": "FIFO"
+    },
+    {
+      "id": "q-finished",
+      "name": "Finished Queue",
+      "customerType": "Job",
+      "capacity": "",
+      "discipline": "FIFO"
+    }
+  ],
+  "graph": null,
+  "experimentDefaults": {
+    "maxSimTime": 20,
+    "warmupPeriod": 0,
+    "replications": 1
+  }
+}

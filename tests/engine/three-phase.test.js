@@ -177,3 +177,60 @@ describe('Phase C — C-scan restart rule', () => {
     expect(cFires).toHaveLength(1);
   });
 });
+
+describe('Phase C — resource wake-up ordering', () => {
+  test('after a completion frees a server, the highest-priority eligible C-event claims it first', () => {
+    const model = {
+      entityTypes: [
+        { id: 'et_job', name: 'Job', role: 'customer', count: 0, attrDefs: [] },
+        { id: 'et_server', name: 'Server', role: 'server', count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [
+        { id: 'q_a', name: 'QueueA', discipline: 'FIFO' },
+        { id: 'q_b', name: 'QueueB', discipline: 'FIFO' },
+      ],
+      bEvents: [
+        { id: 'b_a1', name: 'Arrive A1', scheduledTime: '0', effect: 'ARRIVE(Job, QueueA)', schedules: [] },
+        { id: 'b_a2', name: 'Arrive A2', scheduledTime: '0', effect: 'ARRIVE(Job, QueueA)', schedules: [] },
+        { id: 'b_b1', name: 'Arrive B1', scheduledTime: '0', effect: 'ARRIVE(Job, QueueB)', schedules: [] },
+        { id: 'b_done', name: 'Done', scheduledTime: '999', effect: 'COMPLETE()', schedules: [] },
+      ],
+      cEvents: [
+        {
+          id: 'c_a',
+          name: 'Serve Queue A',
+          priority: 1,
+          condition: 'queue(QueueA).length > 0 AND idle(Server).count > 0',
+          effect: 'ASSIGN(QueueA, Server)',
+          cSchedules: [{ eventId: 'b_done', dist: 'Fixed', distParams: { value: 1 }, useEntityCtx: true }],
+        },
+        {
+          id: 'c_b',
+          name: 'Serve Queue B',
+          priority: 2,
+          condition: 'queue(QueueB).length > 0 AND idle(Server).count > 0',
+          effect: 'ASSIGN(QueueB, Server)',
+          cSchedules: [{ eventId: 'b_done', dist: 'Fixed', distParams: { value: 1 }, useEntityCtx: true }],
+        },
+      ],
+    };
+
+    const result = buildEngine(model, 123).runAll();
+    const queueAWaiting = result.entitySummary.filter(e => e.status === 'waiting' && e.queue === 'QueueA');
+    const queueBDone = result.entitySummary.filter(e => e.status === 'done' && e.lastQueue === 'QueueB');
+
+    expect(queueAWaiting).toHaveLength(0);
+    expect(queueBDone).toHaveLength(1);
+
+    const cLog = result.log
+      .filter(e => e.phase === 'C')
+      .map(e => e.message.match(/^C: "([^"]+)"/)?.[1])
+      .filter(Boolean);
+
+    const secondServeA = cLog.findIndex((name, idx) => name === 'Serve Queue A' && idx > 0);
+    const firstServeB = cLog.indexOf('Serve Queue B');
+    expect(secondServeA).toBeGreaterThanOrEqual(0);
+    expect(firstServeB).toBeGreaterThan(secondServeA);
+  });
+});

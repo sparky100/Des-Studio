@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.61 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.64 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -102,7 +102,9 @@ flowchart LR
 | Results workspace | ✅ Complete | Sprint 22: queue-specific time-series data, tested results view model, reusable ResultsWorkspace, top-level Results tab with saved-run selector and chart provenance labels. |
 | UI interface polish | ✅ Complete | Sprint 23: workflow-mode navigation, persistent Model Health, Validate workspace, shared authoring shell, Results/History polish, chart upgrades, tablet refinements, mobile read/run/results view, and UI warning cleanup. |
 | Simulation correctness remediation | ✅ Complete | Sprint 24 closed the urgent engine correctness defects, propagated Phase C warnings, hardened lifecycle/event context behavior, aligned persistence, and added regression coverage. |
-| Simulation contract consolidation | 🔄 In progress | Sprint 25 now has an explicit V8 policy, warm-up truncation semantics for in-flight entities, and one queue/entity arbitration path; final closeout/reporting remains. |
+| Simulation contract consolidation | ✅ Complete | Sprint 25 finalized the V8 policy, warm-up truncation semantics for in-flight entities, one queue/entity arbitration path, and contract-level regression coverage. |
+| Resource semantics and waiting behaviour | ✅ Complete | Sprint 26 hardened waiting ownership, mirrored resource claims, deterministic idle-server arbitration, lifecycle cleanup across routing/recirculation, and the associated ADR/test/doc set. |
+| Next roadmap shape | 🔄 In progress | Sprint 27+ roadmap remains captured in `docs/reviews/sprint-26-30-roadmap-and-scenario-coverage.md`. |
 
 ### Key Issues and Watchpoints
 
@@ -166,6 +168,9 @@ flowchart LR
 | 1.58 | 2026-05-11 | Sprint 23 complete. Added workflow modes, shared authoring shell, Validate workspace, Results-owned statistical analysis, upgraded charts, tablet/mobile layouts, and UI warning cleanup. 60 focused tests passed; production build passed. |
 | 1.59 | 2026-05-12 | Sprint 24 defined as Simulation Correctness & SimPy-Informed Remediation. Added urgent engine correctness tracks and SimPy-informed guidance without adopting Python/SimPy as the primary runtime. |
 | 1.60 | 2026-05-12 | Sprint 24 marked complete. Added Sprint 25 as Simulation Contract Consolidation, focused on V8 validation policy, warm-up semantics, and centralized queue/entity arbitration. |
+| 1.62 | 2026-05-12 | Added post-Sprint-25 roadmap shaping for Sprints 26-30 and modelling scenario coverage analysis. See `docs/reviews/open-source-tool-gap-analysis.md` and `docs/reviews/sprint-26-30-roadmap-and-scenario-coverage.md`. |
+| 1.63 | 2026-05-12 | Added a structured Sprint 26 plan and closure report template. Updated AGENTS.md / CLAUDE.md references and made Sprint 26 the active tracked sprint. |
+| 1.64 | 2026-05-13 | Sprint 26 completed. Added explicit waiting/resource ownership contracts, ADR-013/014, capability guidance, sample models, and focused regression coverage for contention, routing, and lifecycle cleanup. |
 
 ---
 
@@ -322,7 +327,8 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 22 | Results Workspace & Chart Data Trust                | standalone Results tab, saved-run selector, queue-specific chart data, chart provenance labels  |
 | Sprint 23 | UI Interface Polish & Workflow Shell                | complete: workflow modes, persistent Model Health, Validate workspace, shared authoring shells, responsive Results/Execute experience |
 | Sprint 24 | Simulation Correctness & SimPy-Informed Remediation | complete: urgent engine correctness fixes, SimPy-style JS lifecycle/resource guidance, persistence contract alignment, regression coverage |
-| Sprint 25 | Simulation Contract Consolidation | planned: V8 validation policy, warm-up semantics, centralized queue/entity arbitration |
+| Sprint 25 | Simulation Contract Consolidation | complete: V8 validation policy, warm-up semantics, centralized queue/entity arbitration, contract regression coverage |
+| Sprint 26 | Resource Semantics & Waiting Behaviour | complete: explicit waiting ownership, mirrored resource claims, deterministic contention helpers, lifecycle cleanup across routing/recirculation, ADRs, sample models, and focused regression coverage |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
