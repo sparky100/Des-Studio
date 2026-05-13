@@ -83,19 +83,21 @@ describe("ModelDetail Model Health panel", () => {
     expect(screen.getByRole("tab", { name: /entity types, 1 error/i })).toBeInTheDocument();
   });
 
-  test("navigates by high-level model workflow modes", () => {
+  test("only shows the Model Health tab when there are issues to review", () => {
     renderDetail({
       ...baseModel,
       entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
+      queues: [{ id: "q1", name: "Customer Queue", discipline: "FIFO" }],
+      bEvents: [
+        { id: "b-arrive", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [] },
+        { id: "b-complete", name: "Depart", effect: "COMPLETE()", schedules: [] },
+      ],
     });
 
     fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
     fireEvent.click(screen.getByRole("tab", { name: /b-events/i }));
     expect(screen.getByRole("tab", { name: /b-events/i })).toHaveAttribute("aria-selected", "true");
-
-    fireEvent.click(screen.getByRole("tab", { name: /model health/i }));
-    expect(screen.getByRole("button", { name: /^design$/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getAllByText(/MODEL HEALTH/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("tab", { name: /model health/i })).not.toBeInTheDocument();
   });
 
   test("uses a shared authoring shell for workflow modes", () => {
@@ -107,7 +109,7 @@ describe("ModelDetail Model Health panel", () => {
     fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
 
     expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: /design context panel/i })).toHaveTextContent(/Workspace Guide/i);
+    expect(screen.queryByRole("complementary", { name: /design context panel/i })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /b-events/i }));
     expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
@@ -153,8 +155,8 @@ describe("ModelDetail Model Health panel", () => {
     fireEvent.click(within(mobileWorkflow).getByRole("button", { name: /^run$/i }));
     expect(within(mobileWorkflow).getByRole("button", { name: /^run$/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /^setup$/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /analysis/i }));
-    expect(screen.getByRole("button", { name: /analysis/i })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(mobileWorkflow).getByRole("button", { name: /analysis/i }));
+    expect(within(mobileWorkflow).getByRole("button", { name: /analysis/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText(/ANALYSIS WORKSPACE/i)).toBeInTheDocument();
   });
 

@@ -148,6 +148,21 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     return v;
   }, [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
   const hasErrors = validation.errors.length > 0;
+  const hasWarnings = validation.warnings.length > 0;
+  const readinessTagColor = hasErrors ? C.red : hasWarnings ? C.amber : C.green;
+  const readinessTagBg = hasErrors ? C.errorBg : hasWarnings ? C.warmup : `${C.green}18`;
+  const readinessBorder = hasErrors ? C.danger : hasWarnings ? C.amber : `${C.green}66`;
+  const readinessTitle = hasErrors
+    ? "Needs attention"
+    : hasWarnings
+      ? "Ready with notes"
+      : "Ready to run";
+  const readinessSummary = hasErrors
+    ? `${validation.errors.length} blocker${validation.errors.length === 1 ? "" : "s"} to resolve before running.`
+    : hasWarnings
+      ? `${validation.warnings.length} warning${validation.warnings.length === 1 ? "" : "s"} worth reviewing before you trust the outputs.`
+      : "No blocking issues found for this scenario.";
+  const readinessIssues = hasErrors ? validation.errors : validation.warnings;
 
   const initEngine = useCallback(() => {
     if (hasErrors) return;
@@ -1518,40 +1533,79 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
 
       {executeSection === "run" && (
         <>
-      {validation.errors.length > 0 && (
-        <div role="alert" style={{ background: C.errorBg, border: `1px solid ${C.danger}`, borderRadius: 6,
-          padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.error, fontFamily: FONT, marginBottom: 4 }}>
-            Model has {validation.errors.length} blocking error{validation.errors.length > 1 ? 's' : ''} — fix before running:
-          </div>
-          {validation.errors.map((e, i) => (
-            <div key={i} style={{ fontSize: 12, color: C.error, fontFamily: FONT }}>
-              [{e.code}] {e.message}
+      <div
+        role={hasErrors ? "alert" : "status"}
+        style={{
+          background: C.panel,
+          border: `1px solid ${readinessBorder}`,
+          borderRadius: 8,
+          padding: 12,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <span
+              style={{
+                background: readinessTagBg,
+                border: `1px solid ${readinessBorder}`,
+                borderRadius: 999,
+                color: readinessTagColor,
+                fontFamily: FONT,
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "5px 10px",
+              }}
+            >
+              {readinessTitle}
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>
+                RUN READINESS
+              </div>
+              <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
+                {readinessSummary}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {validation.errors.length === 0 && validation.warnings.length > 0 && (
-        <div style={{ background: C.warmup, border: `1px solid ${C.amber}`, borderRadius: 6, padding: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: C.warnBg, fontFamily: FONT, marginBottom: 4 }}>
-            {validation.warnings.length} warning{validation.warnings.length > 1 ? 's' : ''} — run will proceed:
           </div>
-          {validation.warnings.map((w, i) => (
-            <div key={i} style={{ fontSize: 12, color: C.warnBg, fontFamily: FONT }}>
-              [{w.code}] {w.message}
-            </div>
-          ))}
+          {runLabel.trim() && <Tag label={runLabel.trim()} color={C.accent} />}
         </div>
-      )}
+        {readinessIssues.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {readinessIssues.slice(0, 4).map((issue, index) => (
+              <div
+                key={`${issue.code}-${index}`}
+                style={{
+                  background: hasErrors ? C.errorBg : C.warmup,
+                  border: `1px solid ${hasErrors ? C.danger : C.amber}55`,
+                  borderRadius: 6,
+                  color: hasErrors ? C.error : C.warnBg,
+                  fontFamily: FONT,
+                  fontSize: 11,
+                  padding: "8px 10px",
+                }}
+              >
+                [{issue.code}] {issue.message}
+              </div>
+            ))}
+            {readinessIssues.length > 4 && (
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+                {readinessIssues.length - 4} more item{readinessIssues.length - 4 === 1 ? "" : "s"} in Model Health.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {phaseCTruncated && (
         <div style={{ background: C.amber + '18', border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, fontFamily: FONT }}>
-            Phase C scan hit the {model.maxCPasses || 500}-pass cap — model may have an unstable or conflicting C-event condition
+            This run hit the {model.maxCPasses || 500}-pass limit for conditional-event scans.
           </div>
           <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, marginTop: 4, opacity: 0.8 }}>
-            Check your C-event conditions for cycles or conditions that never become false.
+            Some conditional-event logic may be cycling or staying true longer than intended.
           </div>
         </div>
       )}
@@ -1564,13 +1618,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           fontSize: 12, fontFamily: FONT,
         }}>
           {saveStatus.message}
-        </div>
-      )}
-
-      {runLabel.trim() && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN LABEL</span>
-          <Tag label={runLabel.trim()} color={C.accent} />
         </div>
       )}
 

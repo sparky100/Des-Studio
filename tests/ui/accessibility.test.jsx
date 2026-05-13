@@ -80,7 +80,8 @@ describe('accessibility pass', () => {
     render(<ExecutePanel model={{ ...validModel, entityTypes: [{ id: 'bad', name: '', role: 'customer' }] }} modelId="model-1" userId="user-1" />);
 
     expect(screen.getByRole('button', { name: /run all/i })).toBeDisabled();
-    expect(screen.getByRole('alert')).toHaveTextContent(/blocking error/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/needs attention/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/1 blocker to resolve before running/i);
   });
 
   it('does not mark the model dirty just for opening the Visual Designer', async () => {

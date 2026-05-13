@@ -645,7 +645,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     if (activeMode?.id === "access") return ["access"];
     return ["overview"];
   }, [activeMode?.id]);
-  const visibleTabs = selectableTabs.filter(t => contextualTabs.includes(t.id));
+  const hasModelIssues = validation.errors.length > 0 || validation.warnings.length > 0;
+  const visibleTabs = selectableTabs.filter(t => {
+    if (!contextualTabs.includes(t.id)) return false;
+    if (t.id === "validate" && !hasModelIssues && tab !== "validate") return false;
+    return true;
+  });
   const visibleSelectableTabs = visibleTabs.filter(t => !t.disabled);
   const tabById = Object.fromEntries(selectableTabs.map(t => [t.id, t]));
   const tabIssueCounts = useMemo(() => {
@@ -844,7 +849,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save Changes"}</Btn>
           </div>
         )}
-        {(tab==="overview" || tab==="execute") && <ModelHealthPanel/>}
+        {tab==="overview" && <ModelHealthPanel/>}
         <ErrorBoundary
           key={tab}
           title="Model panel crashed"
