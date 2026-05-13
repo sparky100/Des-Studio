@@ -144,7 +144,7 @@ describe('Phase C — C-scan restart rule', () => {
   test('firing order recorded in log: P2 then P1 (not P2 then P3)', () => {
     const result = buildEngine(restartModel).runAll();
     const cLog = result.log
-      .filter(e => e.phase === 'C')
+      .filter(e => e.phase === 'C' && e.cEval?.conditionTrue)
       .map(e => e.message.match(/^C: "([^"]+)"/)?.[1]);
 
     // P2 must appear before P1, and P3 must never appear
@@ -155,6 +155,18 @@ describe('Phase C — C-scan restart rule', () => {
     expect(p2Idx).toBeGreaterThanOrEqual(0); // P2 fired
     expect(p1Idx).toBeGreaterThan(p2Idx);    // P1 fired after P2 (on restart)
     expect(p3Idx).toBe(-1);                  // P3 never fired
+  });
+
+  test('restart-skip trace is recorded for lower-priority events not reached after a fire', () => {
+    const result = buildEngine(restartModel).runAll();
+    const restartSkip = result.log.find(e =>
+      e.phase === 'C' &&
+      e.cEval?.eventName === 'P3-LowPriority' &&
+      e.cEval?.skippedBecause === 'restart'
+    );
+
+    expect(restartSkip).toBeDefined();
+    expect(restartSkip.seq).toBeTypeOf('number');
   });
 
   test('Phase C scan is stable once no condition is true', () => {
@@ -173,7 +185,7 @@ describe('Phase C — C-scan restart rule', () => {
     const result = buildEngine(model).runAll();
     expect(result.snap.scalars.done).toBe(1);
     // Verify the C-event fired exactly once
-    const cFires = result.log.filter(e => e.phase === 'C' && e.message.includes('OnceOnly'));
+    const cFires = result.log.filter(e => e.phase === 'C' && e.cEval?.conditionTrue && e.message.includes('OnceOnly'));
     expect(cFires).toHaveLength(1);
   });
 });
@@ -224,7 +236,7 @@ describe('Phase C — resource wake-up ordering', () => {
     expect(queueBDone).toHaveLength(1);
 
     const cLog = result.log
-      .filter(e => e.phase === 'C')
+      .filter(e => e.phase === 'C' && e.cEval?.conditionTrue)
       .map(e => e.message.match(/^C: "([^"]+)"/)?.[1])
       .filter(Boolean);
 

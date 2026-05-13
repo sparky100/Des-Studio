@@ -99,9 +99,9 @@ describe('initial state (M/M/1)', () => {
     expect(engine.getSnap().reneged).toBe(0);
   });
 
-  test('getFelSize = 1 (only Customer Arrives at t=0 in initial FEL)', () => {
+  test('getFelSize includes the arrival event plus the dormant completion template event', () => {
     const engine = buildEngine(mm1Model);
-    expect(engine.getFelSize()).toBe(1);
+    expect(engine.getFelSize()).toBe(2);
   });
 });
 
@@ -137,6 +137,19 @@ describe('step()', () => {
     const engine = buildEngine(mm1Model);
     const result = engine.step();
     expect(result.cycleLog.some(e => e.phase === 'A')).toBe(true);
+  });
+
+  test('phase A trace records the clock transition from previous time to next time', () => {
+    const engine = buildEngine(mm1Model);
+    const first = engine.step();
+    const phaseA = first.cycleLog.find(e => e.phase === 'A');
+    expect(phaseA.clock.from).toBe(0);
+    expect(phaseA.clock.to).toBe(0);
+
+    const second = engine.step();
+    const secondPhaseA = second.cycleLog.find(e => e.phase === 'A');
+    expect(secondPhaseA.clock.from).toBe(0);
+    expect(secondPhaseA.clock.to).toBeGreaterThan(0);
   });
 
   test('step returns snap with byType map', () => {
@@ -201,6 +214,14 @@ describe('runAll() M/M/1 model', () => {
     expect(phases.has('C')).toBe(true);
   });
 
+  test('structured log entries carry monotonically increasing seq numbers', () => {
+    const seqs = result.log.map(e => e.seq).filter(v => v != null);
+    expect(seqs.length).toBe(result.log.length);
+    for (let i = 1; i < seqs.length; i++) {
+      expect(seqs[i]).toBeGreaterThan(seqs[i - 1]);
+    }
+  });
+
   test('state variable totalArrived is tracked in snap.scalars', () => {
     expect(result.snap.scalars.totalArrived).toBeGreaterThan(0);
     expect(result.snap.scalars.totalArrived).toBe(result.summary.total);
@@ -242,9 +263,7 @@ describe('two-stage model (TriageNurse + Doctor)', () => {
     expect(types.has('TriageNurse')).toBe(true);
     expect(types.has('Doctor')).toBe(true);
   });
-});
-
-
+ 
   test('two runs with the same seed produce identical summary.served', () => {
     const r1 = buildEngine(mm1Model, 42, 0, 50).runAll();
     const r2 = buildEngine(mm1Model, 42, 0, 50).runAll();

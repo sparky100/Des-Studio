@@ -15,6 +15,18 @@ const log = [
   { phase: "C", time: 2, message: "ASSIGN Customer #1 to Clerk" },
 ];
 
+const detailedLog = [
+  {
+    seq: 1,
+    phase: "C",
+    time: 2,
+    message: 'C: "Start Service"  ·  #2 (Customer) → serving by #1 (Clerk)',
+    cEval: { eventName: "Start Service", conditionTrue: true, pass: 1, priority: 1 },
+    event: { fired: true, entityIds: [2], newEvents: [{ name: "Service Complete", at: 5 }] },
+    arbitration: { type: "server", serverType: "Clerk", discipline: "FIFO", winner: { entityId: 2, serverId: 1 }, losers: [] },
+  },
+];
+
 const snap = {
   clock: 5, served: 1, reneged: 0,
   entities: [
@@ -120,5 +132,28 @@ describe("BottomPanel — F9C.11 node-filtered log", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
     expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
     expect(screen.getByText(/ASSIGN Customer/)).toBeInTheDocument();
+  });
+
+  test("expanded debug detail renders structured trace and supports entity selection", () => {
+    const onEntitySelect = vi.fn();
+    render(<BottomPanel log={detailedLog} snap={snap} model={model} onEntitySelect={onEntitySelect} />);
+
+    fireEvent.click(screen.getByTitle(/toggle debug detail/i));
+    expect(screen.getByText(/C-Eval/i)).toBeInTheDocument();
+    expect(screen.getByText(/winner: #2 → server #1/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("#2"));
+    expect(onEntitySelect).toHaveBeenCalledWith(2);
+  });
+});
+
+describe("BottomPanel — inspector", () => {
+  test("inspector tab shows the selected entity details", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} selectedEntityId={2} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: /inspector/i }));
+    expect(screen.getByText("#2")).toBeInTheDocument();
+    expect(screen.getByText("Customer")).toBeInTheDocument();
+    expect(screen.getByText("Queue A")).toBeInTheDocument();
   });
 });

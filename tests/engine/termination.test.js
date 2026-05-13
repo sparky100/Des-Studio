@@ -36,6 +36,7 @@ describe('Engine Termination (Sprint 3.2)', () => {
     expect(result.snap.scalars.counter).toBe(5);
     expect(result.finalTime).toBe(4); 
     expect(result.log.some(e => e.phase === 'END' && e.message.includes('Termination condition met'))).toBe(true);
+    expect(result.log.filter(e => e.phase === 'END').every(e => typeof e.seq === 'number')).toBe(true);
   });
 
   test('terminates at maxCycles if no other condition met', () => {
@@ -50,6 +51,7 @@ describe('Engine Termination (Sprint 3.2)', () => {
     const result = engine.runAll();
     
     expect(result.log.some(e => e.phase === 'END' && e.message.includes('Cycle limit reached'))).toBe(true);
+    expect(result.log.filter(e => e.phase === 'END').every(e => typeof e.seq === 'number')).toBe(true);
   });
 
   test('warmupPeriod and maxSimTime work together', () => {

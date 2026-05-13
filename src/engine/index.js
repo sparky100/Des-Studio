@@ -103,6 +103,23 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     if (id) _eventCounts[id] = (_eventCounts[id] || 0) + 1;
   };
 
+  // ── Structured trace ─────────────────────────────────────────────────────
+  // Monotonically increasing sequence index for ordering trace entries.
+  // Trace is observational only — never mutates state, entities, or fel.
+  let _traceSeq = 0;
+  const nextSeq = () => ++_traceSeq;
+
+  // Core structured trace emitter. Returns a trace entry with all required
+  // phase/A fields populated. Callers add phase-specific payload fields.
+  const _trace = (phase, extra = {}) => ({
+    phase,
+    time: clock,
+    seq: nextSeq(),
+    ...extra,
+  });
+
+  const makeTraceEntry = (phase, extra = {}) => _trace(phase, extra);
+
   // ── Initialise scalar state ───────────────────────────────────────────────
   const state = { __served: 0, __reneged: 0 };
   for (const sv of runtimeModel.stateVariables || []) {
@@ -211,9 +228,12 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
 
-  log.push({ phase: "INIT", time: 0, message: "Engine initialised" });
+  log.push(_trace("INIT", { message: "Engine initialised" }));
 
-  // ── Shared execution context ──────────────────────────────────────────────
+// ── Shared execution context ──────────────────────────────────────────────
+  // _arbitration: set by ASSIGN macro to record queue/server selection reasoning
+  // for structured trace emission. Shape defined in F27.4 contract.
+  const _arbitration = {};
   const makeCtx = (felRef = null) => ({
     entities,
     state,
@@ -227,6 +247,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     createServerEntity,
     incQueueMetric,
     incEventCount,
+    _arbitration,
   });
 
   // ── step(): one Phase A → B → C cycle ────────────────────────────────────
@@ -238,23 +259,27 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       return { done: true, cycleLog: [], snap: stepSnapshot() };
     }
 
-    if (fel.length === 0) {
-      log.push({ phase: "END", time: clock, message: "FEL empty — simulation complete" });
-      return { done: true, cycleLog: [{ phase: "END", time: clock, message: "FEL empty" }], snap: stepSnapshot() };
+if (fel.length === 0) {
+      log.push(_trace("END", { message: "FEL empty — simulation complete" }));
+      return { done: true, cycleLog: [_trace("END", { message: "FEL empty" })], snap: stepSnapshot() };
     }
 
-    const cycleLog = [];
+const cycleLog = [];
 
     // Phase A — advance clock
+    const previousClock = clock;
     const nextTime = fel[0].scheduledTime;
+
+    // Compute due events before clock advance — needed for Phase A trace entry
+    const due = fel.filter(ev => Math.abs(ev.scheduledTime - nextTime) < 1e-9);
 
     // Time-based termination check (before advancing clock)
     if (maxSimTime !== null && nextTime > maxSimTime) {
       clock = maxSimTime;
       _terminationConditionMet = true;
       const msg = `Run limit reached (t=${maxSimTime.toFixed(3)}) — simulation complete`;
-      log.push({ phase: "END", time: clock, message: msg });
-      return { done: true, cycleLog: [{ phase: "END", time: clock, message: msg }], snap: stepSnapshot() };
+      log.push(_trace("END", { message: msg }));
+      return { done: true, cycleLog: [_trace("END", { message: msg })], snap: stepSnapshot() };
     }
 
     clock = nextTime;
@@ -265,17 +290,19 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       if (evalCondition(terminationCondition, h, state, clock)) {
         _terminationConditionMet = true;
         const msg = "Termination condition met — simulation complete";
-        log.push({ phase: "END", time: clock, message: msg });
-        return { done: true, cycleLog: [{ phase: "END", time: clock, message: msg }], snap: stepSnapshot() };
+        const endEntry = makeTraceEntry("END", { message: msg });
+        log.push(endEntry);
+        return { done: true, cycleLog: [endEntry], snap: stepSnapshot() };
       }
     }
 
-    cycleLog.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}` });
-    log.push({ phase: "A", time: clock, message: `Clock → t=${clock.toFixed(3)}` });
+    const phaseAClock = { from: previousClock, to: clock, dueEvents: due.map(e => ({ id: e.id || e.name, name: e.name || e.id || "?", type: e.type || "B" })) };
+    const phaseAEntry = makeTraceEntry("A", { message: `Clock → t=${clock.toFixed(3)}`, clock: phaseAClock });
+    cycleLog.push(phaseAEntry);
+    log.push(phaseAEntry);
 
     // Phase B — fire all due events
-    const due = fel.filter(ev => Math.abs(ev.scheduledTime - clock) < 1e-9);
-    fel       = fel.filter(ev => Math.abs(ev.scheduledTime - clock) >= 1e-9);
+    fel = fel.filter(ev => Math.abs(ev.scheduledTime - clock) >= 1e-9);
 
     for (const ev of due) {
       if (ev.type === 'WARMUP' && !_warmupComplete) {
@@ -283,7 +310,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         _statsResetTime = clock;
         const msg = `Warm-up complete at t=${clock.toFixed(3)}. Statistics reset.`;
         cycleLog.push({ phase: "WARMUP", time: clock, message: msg });
-        log.push({ phase: "WARMUP", time: clock, message: msg });
+        log.push(_trace("WARMUP", { message: msg }));
         state.__served = 0;
         state.__reneged = 0;
         for (const sv of runtimeModel.stateVariables || []) {
@@ -307,11 +334,21 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
 
       const msg = [`B: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
-      cycleLog.push({ phase: "B", time: clock, message: msg, skipped });
-      log.push({ phase: "B", time: clock, message: msg, skipped });
+      const entityIds = [
+        ...(ctx._lastCustId != null ? [ctx._lastCustId] : []),
+        ...(ctx._lastSrvId  != null ? [ctx._lastSrvId]  : []),
+      ];
+      const newEvents = felEntries.map(fe => ({
+        id:     fe.id || fe.name || "?",
+        name:   fe.name || fe.id || "?",
+        at:     fe.scheduledTime,
+        reason: fe._isRenege ? "renege" : "schedule",
+      }));
+      cycleLog.push({ phase: "B", time: clock, message: msg, skipped, event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents } });
+      log.push(_trace("B", { event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents }, message: msg, skipped }));
     }
 
-    // Phase C — evaluate conditionals until stable
+// Phase C — evaluate conditionals until stable
     // Sort by ev.priority ascending (lower integer = higher priority, missing = last).
     const sortedCEvents = (runtimeModel.cEvents || []).slice()
       .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999));
@@ -319,9 +356,28 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     let cFired = true, cPass = 0;
     while (cFired && cPass < maxCPasses) {
       cFired = false; cPass++;
-      for (const ev of sortedCEvents) {
+      for (let idx = 0; idx < sortedCEvents.length; idx++) {
+        const ev = sortedCEvents[idx];
         const h = makeHelpers(entities, runtimeModel);
-        if (!evalCondition(ev.condition, h, state, clock)) continue;
+        const condTrue = evalCondition(ev.condition, h, state, clock);
+        if (!condTrue) {
+          const falseEntry = makeTraceEntry("C", {
+            message: `C: "${ev.name || ev.id}" — condition false`,
+            cEval: {
+              eventId: ev.id || ev.name || "?",
+              eventName: ev.name || ev.id || "?",
+              priority: ev.priority ?? 9999,
+              pass: cPass,
+              conditionTrue: false,
+              failureReason: "condition false",
+            },
+          });
+          cycleLog.push(falseEntry);
+          log.push(falseEntry);
+          continue;
+        }
+        // Clear arbitration from any prior C-event pass, then build fresh ctx
+        for (const k in _arbitration) delete _arbitration[k];
         const ctx = makeCtx(null);
         ctx.clock = clock;
         const { msgs, felEntries } = fireCEvent(ev, ctx);
@@ -329,13 +385,46 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
         if (felEntries.length) fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
         cFired = true;
         const msg = [`C: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
-        cycleLog.push({ phase: "C", time: clock, message: msg });
-        log.push({ phase: "C", time: clock, message: msg });
+        const entityIds = [
+          ...(ctx._lastCustId != null ? [ctx._lastCustId] : []),
+          ...(ctx._lastSrvId  != null ? [ctx._lastSrvId]  : []),
+        ];
+        const newEvents = felEntries.map(fe => ({
+          id:     fe.id || fe.name || "?",
+          name:   fe.name || fe.id || "?",
+          at:     fe.scheduledTime,
+          reason: fe._isRenege ? "renege" : "schedule",
+        }));
+        const firedEntry = makeTraceEntry("C", {
+          cEval: { eventId: ev.id || ev.name || "?", eventName: ev.name || ev.id || "?", priority: ev.priority ?? 9999, pass: cPass, conditionTrue: true },
+          event: { type: "C", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: true, result: msgs, entityIds, newEvents },
+          message: msg,
+          arbitration: Object.keys(ctx._arbitration).length ? { ...ctx._arbitration } : undefined,
+        });
+        cycleLog.push(firedEntry);
+        log.push(firedEntry);
+        for (let skippedIndex = idx + 1; skippedIndex < sortedCEvents.length; skippedIndex++) {
+          const skippedEvent = sortedCEvents[skippedIndex];
+          const skippedEntry = makeTraceEntry("C", {
+            cEval: {
+              eventId: skippedEvent.id || skippedEvent.name || "?",
+              eventName: skippedEvent.name || skippedEvent.id || "?",
+              priority: skippedEvent.priority ?? 9999,
+              pass: cPass,
+              conditionTrue: false,
+              skippedBecause: "restart",
+            },
+            message: `C: "${skippedEvent.name || skippedEvent.id}" skipped (restart)`,
+          });
+          cycleLog.push(skippedEntry);
+          log.push(skippedEntry);
+        }
         break; // restart from Priority 1 — Three-Phase restart rule
       }
       if (!cFired) {
-        cycleLog.push({ phase: "C", time: clock, message: "No C-events can fire → Phase A" });
-        log.push({ phase: "C", time: clock, message: "No C-events can fire → Phase A" });
+        const stableEntry = makeTraceEntry("C", { message: "No C-events can fire → Phase A" });
+        cycleLog.push(stableEntry);
+        log.push(stableEntry);
       }
     }
 
@@ -346,7 +435,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       _phaseCTruncated = true;
       warnings.push(truncMsg);
       cycleLog.push({ phase: "C", time: clock, message: truncMsg });
-      log.push({ phase: "C", time: clock, message: truncMsg });
+      log.push(_trace("WARNING", { warning: { code: "PHASE_C_TRUNCATED", message: truncMsg, detail: `reached ${maxCPasses} passes` }, message: truncMsg }));
     }
 
     // Condition-based termination check (post-step)
@@ -355,8 +444,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       if (evalCondition(terminationCondition, h, state, clock)) {
         _terminationConditionMet = true;
         const msg = "Termination condition met — simulation complete";
-        log.push({ phase: "END", time: clock, message: msg });
-        return { done: true, cycleLog: [...cycleLog, { phase: "END", time: clock, message: msg }], snap: stepSnapshot(), felSize: fel.length, phaseCTruncated };
+        const endEntry = makeTraceEntry("END", { message: msg });
+        log.push(endEntry);
+        return { done: true, cycleLog: [...cycleLog, endEntry], snap: stepSnapshot(), felSize: fel.length, phaseCTruncated };
       }
     }
 
@@ -375,7 +465,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       const h = makeHelpers(entities, runtimeModel);
       if (evalCondition(terminationCondition, h, state, clock)) {
         _terminationConditionMet = true;
-        log.push({ phase: "END", time: clock, message: "Termination condition met at start" });
+        log.push(makeTraceEntry("END", { message: "Termination condition met at start" }));
       }
     }
 
@@ -385,9 +475,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       if (r.done) break;
     }
     if (!_terminationConditionMet && c >= maxCycles) {
-      log.push({ phase: "END", time: clock, message: `Cycle limit reached (${maxCycles}) — simulation halted` });
+      log.push(makeTraceEntry("END", { message: `Cycle limit reached (${maxCycles}) — simulation halted` }));
     } else if (fel.length === 0 && !_terminationConditionMet) {
-      log.push({ phase: "END", time: clock, message: "FEL empty — simulation complete" });
+      log.push(makeTraceEntry("END", { message: "FEL empty — simulation complete" }));
     }
 
     const customers    = entities.filter(e => e.role !== "server");

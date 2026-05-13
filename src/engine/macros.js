@@ -261,35 +261,48 @@ export const MACROS = [
     },
   },
 
-  // ── ASSIGN(CustomerType|QueueName, ServerType) ────────────────────────────
+// ── ASSIGN(CustomerType|QueueName, ServerType) ────────────────────────────
   {
     name:    "ASSIGN",
     pattern: /^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)\)$/i,
     apply(match, ctx) {
       const cType = match[1].trim();
       const sType = match[2].trim();
-      const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
+      const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs, _arbitration } = ctx;
+      const arbitrationTarget = _arbitration && typeof _arbitration === "object" ? _arbitration : null;
 
-      // Look up queue discipline for this entity type or queue name
       const matchedQ = helpers.findQueueConfig?.(cType);
       const discipline = matchedQ?.discipline || 'FIFO';
 
-      // Build entity filter function from predicate JSON if present
       const filterFn = ctx.entityFilter
         ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
 
-      // Queue-name match prevents cross-queue theft.
-      let cust = helpers.selectWaitingInQueue?.(cType, discipline, filterFn);
+      const allWaiting = helpers.waitingOf(cType, "FIFO", null);
+      const queueCandidates = helpers.waitingInQueue?.(cType, discipline, filterFn) || [];
+      const typeCandidates = !matchedQ ? (helpers.waitingOf?.(cType, discipline, filterFn) || []) : [];
+      const allIdleServers = helpers.idleOf(sType) || [];
 
-      // No match by queue name. If cType is NOT a known queue name, fall back
-      // to entity-type match for backward compat (e.g. ARRIVE(Customer) creates
-      // queue "CustomerQueue", and ASSIGN(Customer, Server) should still work).
+      const arbitration = {
+        type: "server",
+        serverType: sType,
+        discipline,
+        queueName: matchedQ ? cType : null,
+        candidates: (queueCandidates.length ? queueCandidates : typeCandidates).map(e => ({
+          entityId: e.id,
+          type: e.type,
+          key: "arrivalTime",
+          value: e.arrivalTime || 0,
+        })),
+        idleServers: allIdleServers.map(s => ({ serverId: s.id, type: s.type })),
+      };
+
+      let cust = queueCandidates[0];
       if (!cust && !matchedQ) {
-        cust = helpers.selectWaitingOf?.(cType, discipline, filterFn);
+        cust = typeCandidates[0];
       }
 
-      const srv = helpers.selectIdleOf?.(sType) || helpers.idleOf(sType)[0];
+      const srv = allIdleServers[0] || null;
 
       if (cust && srv) {
         const queuedAt = cust.queue;
@@ -301,12 +314,21 @@ export const MACROS = [
         cust.ceventName    = ctx.ceventName;
         setLastCustId(cust.id);
         setLastSrvId(srv.id);
+        arbitration.winner = { entityId: cust.id, serverId: srv.id };
+        arbitration.losers = (queueCandidates.length ? queueCandidates : typeCandidates)
+          .filter(e => e.id !== cust.id)
+          .map(e => ({ entityId: e.id, reason: "lower priority or later arrival" }));
+        if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
         msgs.push(
           `#${cust.id} (${cType}) → serving by #${srv.id} (${sType}) ` +
           `[waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
         );
       } else {
-        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${helpers.waitingOf(cType).length} idle=${helpers.idleOf(sType).length}`);
+        arbitration.noMatch = true;
+        arbitration.candidateCount = (queueCandidates.length ? queueCandidates : typeCandidates).length;
+        arbitration.idleServerCount = allIdleServers.length;
+        if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
+        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${(queueCandidates.length ? queueCandidates : typeCandidates).length} idle=${allIdleServers.length}`);
       }
     },
   },
