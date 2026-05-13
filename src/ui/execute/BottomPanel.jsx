@@ -10,7 +10,6 @@ const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 const TABS = [
   { id: "log",       label: "Step Log" },
   { id: "entities",  label: "Entities" },
-  { id: "inspector", label: "Inspector" },
   { id: "stagekpis", label: "Live Metrics" },
 ];
 
@@ -555,7 +554,7 @@ function EntityInspector({ entity, snap, onClose }) {
   );
 }
 
-// ── Entities tab ──────────────────────────────────────────────────────────────
+// ── Entities tab (split view) ───────────────────────────────────────────────
 
 function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
   if (!snap) {
@@ -563,60 +562,75 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
   }
   const entities = (snap.entities || [])
     .filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged");
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
-        {entities.length} active {entities.length === 1 ? "entity" : "entities"}
-      </div>
-      {entities.length === 0 ? (
-        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
-          No active customer entities.
+    <div style={{ display: "flex", gap: 16, height: "100%" }}>
+      {/* Left: Entity List */}
+      <div style={{ flex: "0 0 45%", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+          {entities.length} active {entities.length === 1 ? "entity" : "entities"}
         </div>
-      ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 11 }}>
-          <thead>
-            <tr style={{ color: C.muted, borderBottom: `2px solid ${C.border}` }}>
-              <th style={{ padding: "4px 8px", textAlign: "left" }}>ID</th>
-              <th style={{ padding: "4px 8px", textAlign: "left" }}>Type</th>
-              <th style={{ padding: "4px 8px", textAlign: "left" }}>Status</th>
-              <th style={{ padding: "4px 8px", textAlign: "left" }}>Location</th>
-              <th style={{ padding: "4px 8px", textAlign: "right" }}>Age</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entities.map(e => {
-              const journey = snap.clock != null ? snap.clock - (e.arrivalTime || 0) : null;
-              const location = e.status === "waiting"
-                ? (e.queue || "queue")
-                : e.status === "serving"
-                  ? (e.ceventName || e.lastQueue || "serving")
-                  : e.queue || e.lastQueue || "—";
-              const isSelected = selectedEntityId === e.id;
-              return (
-                <tr
-                  key={e.id}
-                  onClick={() => onEntitySelect?.(isSelected ? null : e.id)}
-                  style={{
-                    borderBottom: `1px solid ${C.bg}`,
-                    cursor: "pointer",
-                    background: isSelected ? `${C.accent}18` : "transparent",
-                  }}
-                >
-                  <td style={{ padding: "4px 8px", color: C.kpiArr, fontFamily: FONT, fontWeight: 700 }}>#{e.id}</td>
-                  <td style={{ padding: "4px 8px", fontFamily: FONT }}>{e.type}</td>
-                  <td style={{ padding: "4px 8px" }}>
-                    <Tag label={e.status} color={e.status === "waiting" ? C.amber : e.status === "serving" ? C.accent : C.green} />
-                  </td>
-                  <td style={{ padding: "4px 8px", color: C.cEvent, fontFamily: FONT }}>{location}</td>
-                  <td style={{ padding: "4px 8px", textAlign: "right", color: C.amber, fontFamily: FONT, fontWeight: 700 }}>
-                    {journey != null ? `${journey.toFixed(1)}t` : "—"}
-                  </td>
+        {entities.length === 0 ? (
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+            No active customer entities.
+          </div>
+        ) : (
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 11 }}>
+              <thead>
+                <tr style={{ color: C.muted, borderBottom: `2px solid ${C.border}` }}>
+                  <th style={{ padding: "4px 8px", textAlign: "left" }}>ID</th>
+                  <th style={{ padding: "4px 8px", textAlign: "left" }}>Type</th>
+                  <th style={{ padding: "4px 8px", textAlign: "left" }}>Status</th>
+                  <th style={{ padding: "4px 8px", textAlign: "left" }}>Location</th>
+                  <th style={{ padding: "4px 8px", textAlign: "right" }}>Age</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
+              </thead>
+              <tbody>
+                {entities.map(e => {
+                  const journey = snap.clock != null ? snap.clock - (e.arrivalTime || 0) : null;
+                  const location = e.status === "waiting"
+                    ? (e.queue || "queue")
+                    : e.status === "serving"
+                      ? (e.ceventName || e.lastQueue || "serving")
+                      : e.queue || e.lastQueue || "—";
+                  const isSelected = selectedEntityId === e.id;
+                  return (
+                    <tr
+                      key={e.id}
+                      onClick={() => onEntitySelect?.(isSelected ? null : e.id)}
+                      style={{
+                        borderBottom: `1px solid ${C.bg}`,
+                        cursor: "pointer",
+                        background: isSelected ? `${C.accent}18` : "transparent",
+                      }}
+                    >
+                      <td style={{ padding: "4px 8px", color: C.kpiArr, fontFamily: FONT, fontWeight: 700 }}>#{e.id}</td>
+                      <td style={{ padding: "4px 8px", fontFamily: FONT }}>{e.type}</td>
+                      <td style={{ padding: "4px 8px" }}>
+                        <Tag label={e.status} color={e.status === "waiting" ? C.amber : e.status === "serving" ? C.accent : C.green} />
+                      </td>
+                      <td style={{ padding: "4px 8px", color: C.cEvent, fontFamily: FONT }}>{location}</td>
+                      <td style={{ padding: "4px 8px", textAlign: "right", color: C.amber, fontFamily: FONT, fontWeight: 700 }}>
+                        {journey != null ? `${journey.toFixed(1)}t` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Right: Inspector */}
+      <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+        <EntityInspector
+          entity={selectedEntityId != null ? entities.find(e => e.id === selectedEntityId) : null}
+          snap={snap}
+          onClose={onEntitySelect ? () => onEntitySelect(null) : undefined}
+        />
+      </div>
     </div>
   );
 }
@@ -762,13 +776,6 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
         >
           {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
-          {activeTab === "inspector" && (
-            <EntityInspector
-              entity={selectedEntityId != null ? (snap?.entities || []).find(e => e.id === selectedEntityId) : null}
-              snap={snap}
-              onClose={onEntitySelect ? () => onEntitySelect(null) : undefined}
-            />
-          )}
           {activeTab === "stagekpis" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <EventCountsTable snap={snap} model={model} />

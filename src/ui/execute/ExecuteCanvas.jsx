@@ -399,6 +399,30 @@ export function ExecuteCanvas({
   onNodeSelect,
 }) {
   const baseGraph = useMemo(() => deriveGraphFromModel(model), [model]);
+  const [canvasHeight, setCanvasHeight] = useState(480);
+  const dragStateRef = useRef(null);
+
+  useEffect(() => {
+    const handlePointerMove = (event) => {
+      if (!dragStateRef.current) return;
+      const nextHeight = dragStateRef.current.startHeight + (event.clientY - dragStateRef.current.startY);
+      setCanvasHeight(Math.max(250, Math.min(900, nextHeight)));
+    };
+    const handlePointerUp = () => {
+      dragStateRef.current = null;
+    };
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", handlePointerUp);
+    return () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerUp);
+    };
+  }, []);
+
+  const startResize = (event) => {
+    event.preventDefault();
+    dragStateRef.current = { startY: event.clientY, startHeight: canvasHeight };
+  };
 
   // Build c-event id → { serverType, capacity } for activity node enrichment.
   // capacity comes from model.entityTypes[role=server].count (defaults to 1).
@@ -607,7 +631,7 @@ export function ExecuteCanvas({
       <div
         aria-label="Execute canvas"
         style={{
-          height: "clamp(400px, calc(100vh - 500px), 680px)",
+          height: canvasHeight,
           width: "100%",
           background: C.bg,
           border: `1px solid ${C.border}`,
@@ -651,6 +675,22 @@ export function ExecuteCanvas({
             </Panel>
           )}
         </ReactFlow>
+      </div>
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize canvas"
+        onMouseDown={startResize}
+        style={{
+          height: 10,
+          cursor: "ns-resize",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginTop: 4,
+        }}
+      >
+        <div style={{ width: 44, height: 3, borderRadius: 999, background: C.border }} />
       </div>
     </div>
   );
