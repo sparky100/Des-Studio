@@ -1,11 +1,17 @@
 import { C, FONT, normTypeName } from "../shared/tokens.js";
-import { Tag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { Tag, Btn, CommitInput, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { AttrEditor } from "./AttrEditor.jsx";
 
 const EntityTypeEditor=({types,onChange})=>{
   const add=()=>onChange([...types,{id:"et"+Date.now(),name:"",role:"customer",count:"",attrs:"",description:""}]);
   const upd=(i,f,v)=>{const n=[...types];n[i]={...n[i],[f]:v};onChange(n);};
-  const blurName=(i,v)=>{const n=[...types];n[i]={...n[i],name:normTypeName(v)};onChange(n);};
+  const commitName=(i,v)=>{
+    const nextName = normTypeName(v);
+    if ((types[i]?.name || "") === nextName) return;
+    const n=[...types];
+    n[i]={...n[i],name:nextName};
+    onChange(n);
+  };
   const rem=(i)=>onChange(types.filter((_,idx)=>idx!==i));
   const setShiftEnabled=(i,enabled)=>{
     const n=[...types];
@@ -49,7 +55,7 @@ const EntityTypeEditor=({types,onChange})=>{
           borderLeft:`3px solid ${et.role==="server"?C.server:C.cEvent}`,borderRadius:6,padding:12,display:"flex",flexDirection:"column",gap:8}}>
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <Tag label={et.role||"customer"} color={et.role==="server"?C.server:C.cEvent}/>
-            <input value={et.name} onChange={e=>upd(i,"name",e.target.value)} onBlur={e=>blurName(i,e.target.value)} placeholder="TypeName"
+            <CommitInput value={et.name} onCommit={value=>commitName(i,value)} placeholder="TypeName"
               style={{width:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Role:</span>
             <select value={et.role||"customer"} onChange={e=>upd(i,"role",e.target.value)}

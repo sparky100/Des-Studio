@@ -16,7 +16,7 @@ const VisualDesignerPanel = lazy(() =>
 );
 import { fetchRunHistory, listShareLinks } from "../db/models.js";
 import { validateModel }                    from "../engine/validation.js";
-import { renameQueue }                      from "../engine/queue-refs.js";
+import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
 
@@ -170,8 +170,9 @@ const MODEL_HEALTH_TAB_LABELS = {
   cevents: "C-Events",
   state: "Model Data",
   execute: "Execute",
-  results: "Results",
+  results: "Analysis",
   history: "History",
+  validate: "Model Health",
 };
 
 function isStarterBlankModel(model = {}) {
@@ -595,7 +596,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
             {!isGettingStarted && !hasBlockers && !isExecuteTab && <Btn small variant="primary" onClick={()=>setTab("execute")}>Open Execute</Btn>}
-            {!isGettingStarted && !hasBlockers && latestResults && <Btn small variant="ghost" onClick={()=>setTab("results")}>View Results</Btn>}
+            {!isGettingStarted && !hasBlockers && latestResults && <Btn small variant="ghost" onClick={()=>setTab("results")}>Open Analysis</Btn>}
             {!isGettingStarted && !hasBlockers && completedRuns > 0 && <Btn small variant="ghost" onClick={()=>setTab("history")}>Run History</Btn>}
           </div>
         </div>
@@ -612,43 +613,39 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     {id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},
     {id:"state",label:"Model Data"},
-    {id:"validate",label:"Validate"},
+    {id:"validate",label:"Model Health"},
     {id:"execute",label:"Execute"},
-    {id:"results",label:"Results"},
+    {id:"results",label:"Analysis"},
     {id:"history",label:"History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
   const selectableTabs = TABS.filter(t => !t.disabled);
   const NAV_MODES=[
     {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
-    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","entities","queues","bevents","cevents","state","validate"]},
-    {id:"ai",label:"AI Designer",primaryTab:"ai",tabs:["ai"]},
+    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
     {id:"execute",label:"Execute",primaryTab:"execute",tabs:["execute"]},
-    {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
+    {id:"results",label:"Analysis",primaryTab:"results",tabs:["results","history"]},
     ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
   ];
   const isMobileLayout = viewportWidth < 720;
-  const MOBILE_TABS = ["overview","visual","ai","execute","results","history"];
   const DISPLAY_MODES = isMobileLayout
-    ? [
+      ? [
         {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
-        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","entities","queues","bevents","cevents","state","validate"]},
-        {id:"ai",label:"AI Designer",primaryTab:"ai",tabs:["ai"]},
+        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
         {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
-        {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
+        {id:"results",label:"Analysis",primaryTab:"results",tabs:["results","history"]},
       ]
     : NAV_MODES;
   const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
   const contextualTabs = useMemo(() => {
-    if (activeMode?.id === "overview") return ["overview", "visual", "ai"];
-    if (activeMode?.id === "design") return ["visual", "entities", "queues", "bevents", "cevents", "state", "validate"];
-    if (activeMode?.id === "ai") return ["ai"];
+    if (activeMode?.id === "overview") return ["overview"];
+    if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "state", "validate"];
     if (activeMode?.id === "execute") return ["execute"];
     if (activeMode?.id === "results") return ["results", "history"];
     if (activeMode?.id === "access") return ["access"];
     return ["overview"];
   }, [activeMode?.id]);
-  const visibleTabs = isMobileLayout ? selectableTabs.filter(t => MOBILE_TABS.includes(t.id)) : selectableTabs.filter(t => contextualTabs.includes(t.id));
+  const visibleTabs = selectableTabs.filter(t => contextualTabs.includes(t.id));
   const visibleSelectableTabs = visibleTabs.filter(t => !t.disabled);
   const tabById = Object.fromEntries(selectableTabs.map(t => [t.id, t]));
   const tabIssueCounts = useMemo(() => {
@@ -677,17 +674,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     ? activeMode
     : null;
   const AuthoringWorkflowShell = ({mode, children}) => {
-    const contextCounts = {
-      errors: healthValidation.errors.length,
-      warnings: healthValidation.warnings.length,
-    };
     const activeLabel = tabById[tab]?.label || mode.label;
     const nextAction = isStarterBlank
-      ? "Choose a starting path, then validate the generated model structure once the flow is defined."
-      : contextCounts.errors > 0
-      ? "Resolve blockers before executing."
+      ? "Choose a starting path, then shape the first runnable version of the model."
+      : healthValidation.errors.length > 0
+      ? "Resolve blockers in Model Health before executing."
       : mode.id === "design"
-        ? "Shape the process map, then validate the generated model structure."
+        ? "Use Design to shape the process, then check Model Health when you are ready to run."
         : "Define entities, queues, and state before running the model.";
 
     return (
@@ -724,25 +717,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           }}
         >
           <div>
-            <div style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.3,fontWeight:700,marginBottom:5}}>WORKFLOW CONTEXT</div>
+            <div style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.3,fontWeight:700,marginBottom:5}}>WORKSPACE GUIDE</div>
             <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>{activeLabel}</div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:8}}>
-            {[
-              {label:"Blockers",value:contextCounts.errors,color:contextCounts.errors?C.red:C.green},
-              {label:"Warnings",value:contextCounts.warnings,color:contextCounts.warnings?C.amber:C.green},
-            ].map(item=>(
-              <div key={item.label} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:"8px 9px"}}>
-                <div style={{fontSize:8,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700,marginBottom:3}}>{item.label.toUpperCase()}</div>
-                <div style={{fontSize:16,color:item.color,fontFamily:FONT,fontWeight:700}}>{item.value}</div>
-              </div>
-            ))}
           </div>
           <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
             {nextAction}
           </div>
-          <Btn small variant={contextCounts.errors ? "ghost" : "primary"} onClick={()=>setTab("validate")}>
-            Open Validate
+          <Btn small variant={healthValidation.errors.length ? "ghost" : "primary"} onClick={()=>setTab("validate")}>
+            Open Model Health
           </Btn>
         </aside>
       </section>
@@ -753,7 +735,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   );
 
   useEffect(()=>{
-    if(isMobileLayout && !MOBILE_TABS.includes(tab)) setTab("overview");
+    if(isMobileLayout && !DISPLAY_MODES.some(mode => mode.tabs.includes(tab))) setTab("overview");
   },[isMobileLayout, tab]);
 
   useEffect(()=>{
@@ -795,9 +777,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         <div style={{flex:"1 1 220px",minWidth:0,fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{model.name}</div>
         <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
         <Tag label={`v${pkg.version}`} color={C.purple}/>
-        {canEdit&&<Btn small variant="ghost" onClick={undo} disabled={!past.length} title="Undo (Ctrl+Z)">↩ Undo</Btn>}
-        {canEdit&&<Btn small variant="ghost" onClick={redo} disabled={!future.length} title="Redo (Ctrl+Shift+Z)">↪ Redo</Btn>}
-        <Btn small variant="ghost" onClick={exportJson}>Export Model</Btn>
+        {canEdit&&<Btn small variant="ghost" onClick={undo} disabled={!past.length} title="Undo the last model edit (Ctrl+Z)" ariaLabel="Undo last model edit">↩ Undo</Btn>}
+        {canEdit&&<Btn small variant="ghost" onClick={redo} disabled={!future.length} title="Redo the last undone model edit (Ctrl+Shift+Z)" ariaLabel="Redo last model edit">↪ Redo</Btn>}
         {saveStatus&&(
           <div role={saveStatus.state==="error"?"alert":"status"} style={{
             color: saveStatus.state==="error"?C.red:saveStatus.state==="success"?C.green:C.muted,
@@ -933,8 +914,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         )}
         {tab==="overview"&&(
           renderAuthoringShell(<div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
-            <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null}/>
-            <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4}/>
+            <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
+            <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
               <GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
             </div>
@@ -948,7 +929,19 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 <Btn small variant="ghost" onClick={()=>setShowCsvImport(true)}>Import from CSV</Btn>
               </div>
             )}
-            <EntityTypeEditor types={model.entityTypes||[]} onChange={canEdit?v=>setField("entityTypes",v):()=>{}}/>
+            <EntityTypeEditor types={model.entityTypes||[]} onChange={canEdit?newTypes=>{
+              const oldTypes = model.entityTypes || [];
+              let updated = { ...model, entityTypes: newTypes };
+              for (let i = 0; i < newTypes.length; i++) {
+                const oldName = oldTypes[i]?.name?.trim();
+                const newName = newTypes[i]?.name?.trim();
+                const role = oldTypes[i]?.role || newTypes[i]?.role || "customer";
+                if (oldName && newName && oldName !== newName) {
+                  updated = renameEntityType(updated, oldName, newName, role);
+                }
+              }
+              setWholeModel(updated);
+            }:()=>{}}/>
             {showCsvImport&&(
               <CsvImportModal
                 onClose={()=>setShowCsvImport(false)}
@@ -964,27 +957,25 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>)}
         {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
         {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
-  // Propagate queue renames through the entire model
-  const oldQueues = model.queues || [];
-  let updated = { ...model, queues: newQueues };
-  for (let i = 0; i < newQueues.length; i++) {
-    const oldName = oldQueues[i]?.name?.trim();
-    const newName = newQueues[i]?.name?.trim();
-    if (oldName && newName && oldName !== newName) {
-      updated = renameQueue(updated, oldName, newName);
-    }
-  }
-  setWholeModel(updated);
-}:()=>{}}/></div>)}
+          const oldQueues = model.queues || [];
+          let updated = { ...model, queues: newQueues };
+          for (let i = 0; i < newQueues.length; i++) {
+            const oldName = oldQueues[i]?.name?.trim();
+            const newName = newQueues[i]?.name?.trim();
+            if (oldName && newName && oldName !== newName) {
+              updated = renameQueue(updated, oldName, newName);
+            }
+          }
+          setWholeModel(updated);
+        }:()=>{}}/></div>)}
 
         {tab==="validate"&&(
           <div style={{maxWidth:1000,display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
               <div>
-                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:4}}>VALIDATION WORKSPACE</div>
-                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Model readiness and issue routing</div>
+                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:4}}>MODEL HEALTH</div>
+                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Readiness, blockers, and warnings</div>
               </div>
-              <Btn small variant="ghost" onClick={()=>setTab("execute")} disabled={validation.errors.length>0}>Run Model</Btn>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:10}}>
               {[
@@ -1046,8 +1037,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           <div style={{maxWidth:1200,display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
               <div>
-                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:4}}>RESULTS WORKSPACE</div>
-                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Run analysis and chart diagnostics</div>
+                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:4}}>ANALYSIS WORKSPACE</div>
+                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Run charts and diagnostics</div>
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <Btn small variant="ghost" onClick={()=>setTab("execute")}>Open Execute</Btn>
@@ -1078,7 +1069,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
               <ResultsWorkspace results={latestResults} model={model}/>
             ) : (
               <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
-                Results from the latest run will appear here. Run the model from Execute, or select a saved run when history is available.
+                Analysis from the latest run will appear here. Run the model from Execute, or select a saved run when history is available.
               </div>
             )}
           </div>
@@ -1164,11 +1155,29 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           </div>
         )}
         {tab==="access"&&isOwner&&(
-          <div style={{maxWidth:480,display:"flex",flexDirection:"column",gap:14}}>
-            <div style={{display:"flex",gap:8}}>
-              <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"private").then(onRefresh);}} small>🔒 Private</Btn>
-              <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"public").then(onRefresh);}} small>🌐 Public</Btn>
-            </div>
+          <div style={{maxWidth:560,display:"flex",flexDirection:"column",gap:18}}>
+            <section aria-label="Sharing settings" style={{display:"flex",flexDirection:"column",gap:10}}>
+              <SH label="Sharing"/>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"private").then(onRefresh);}} small>🔒 Private</Btn>
+                <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"public").then(onRefresh);}} small>🌐 Public</Btn>
+              </div>
+            </section>
+            <section aria-label="Export model" style={{display:"flex",flexDirection:"column",gap:10}}>
+              <SH label="Export"/>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12}}>
+                <div>
+                  <div style={{fontSize:12,color:C.text,fontFamily:FONT,fontWeight:700,marginBottom:4}}>Model JSON</div>
+                  <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>Download a portable copy of this model definition.</div>
+                </div>
+                <Btn small variant="ghost" onClick={exportJson}>Export Model</Btn>
+              </div>
+            </section>
+            <section aria-label="Collaborator access" style={{display:"flex",flexDirection:"column",gap:4}}>
+              <SH label="Collaborators"/>
+              {(overrides.profiles||[]).filter(u=>u.id!==model.owner_id).length===0&&(
+                <div style={{fontSize:11,color:C.muted,fontFamily:FONT}}>No collaborators available.</div>
+              )}
             {(overrides.profiles||[]).filter(u=>u.id!==model.owner_id).map(u=>(
               <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
                 <Avatar u={u} size={26}/>
@@ -1179,6 +1188,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 </select>
               </div>
             ))}
+            </section>
           </div>
         )}
         </ErrorBoundary>

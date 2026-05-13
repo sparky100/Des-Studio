@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { C, FONT, normTypeName } from "../shared/tokens.js";
-import { Tag, Btn, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
+import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { ConditionBuilder, buildConditionStr } from "./ConditionBuilder.jsx";
 import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 import { DropField, assignOptions, displayEventName } from "./helpers.jsx";
@@ -17,6 +17,12 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
     cSchedules:[],description:"",priority:events.length+1});
   const add=()=>onChange([...events,blank()]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
+  const commitName=(i,v)=>{
+    if((events[i]?.name||"")===v) return;
+    const n=[...events];
+    n[i]={...n[i],name:v};
+    onChange(n);
+  };
   const rem=(i)=>{
     const remaining=events.filter((_,idx)=>idx!==i);
     onChange(remaining.map((ev,idx)=>({...ev,priority:idx+1})));
@@ -98,7 +104,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
               }}>P{ev.priority||i+1}</span>
             </div>
             <Tag label="C-event" color={C.cEvent}/>
-            <input value={ev.name} onChange={e=>upd(i,"name",e.target.value)}
+            <CommitInput value={ev.name} onCommit={value=>commitName(i,value)}
               placeholder="Event name"
               style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,
               borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,

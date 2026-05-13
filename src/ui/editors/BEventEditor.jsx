@@ -1,10 +1,16 @@
 import { C, FONT } from "../shared/tokens.js";
-import { Tag, Btn, Field, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
+import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField } from "./helpers.jsx";
 
 const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[]})=>{
   const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:[],schedules:[],description:""}]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
+  const commitName=(i,v)=>{
+    if((events[i]?.name||"")===v) return;
+    const n=[...events];
+    n[i]={...n[i],name:v};
+    onChange(n);
+  };
   const rem=(i)=>{
     const ev=events[i];
     const refs=cEvents.filter(c=>(c.cSchedules||[]).some(s=>s.eventId===ev.id));
@@ -63,7 +69,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
             borderLeft:`3px solid ${isTmpl?C.muted:C.bEvent}`,borderRadius:6,padding:12,display:"flex",flexDirection:"column",gap:10}}>
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
               <Tag label={isTmpl?"scheduled follow-on":"B-event"} color={isTmpl?C.muted:C.bEvent}/>
-              <input value={ev.name} onChange={e=>upd(i,"name",e.target.value)} placeholder="Event name"
+              <CommitInput value={ev.name} onCommit={value=>commitName(i,value)} placeholder="Event name"
                 style={{flex:1,minWidth:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
               <div style={{display:"flex",alignItems:"center",gap:5}}>
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Behavior:</span>

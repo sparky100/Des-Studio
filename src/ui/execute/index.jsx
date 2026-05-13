@@ -1486,7 +1486,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
         <Btn variant={view === "visual" ? "primary" : "ghost"} onClick={() => setView("visual")}>Live View</Btn>
-        <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Results</Btn>
+        <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Analysis</Btn>
         <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results</Btn>
         <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
         <Btn variant="ghost" onClick={() => { setShowShareModal(true); loadShareLinks(); }} disabled={!canShare}>Share</Btn>

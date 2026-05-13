@@ -50,6 +50,7 @@ describe('model JSON export', () => {
   it('renders the Export Model button for a loaded model', () => {
     renderDetail();
 
+    fireEvent.click(screen.getByRole('button', { name: /access/i }));
     expect(screen.getByRole('button', { name: /export model/i })).toBeInTheDocument();
   });
 
@@ -113,6 +114,7 @@ describe('model JSON export', () => {
       entityTypes: [{ id: 'et1', name: '', role: 'customer', attrDefs: [] }],
     });
 
+    fireEvent.click(screen.getByRole('button', { name: /access/i }));
     fireEvent.click(screen.getByRole('button', { name: /export model/i }));
 
     expect(confirmSpy).toHaveBeenCalledWith('This model has validation errors. Export anyway?');
@@ -120,8 +122,10 @@ describe('model JSON export', () => {
   });
 
   it('downloads and revokes the export object URL', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderDetail();
 
+    fireEvent.click(screen.getByRole('button', { name: /access/i }));
     fireEvent.click(screen.getByRole('button', { name: /export model/i }));
 
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));

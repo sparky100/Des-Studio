@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mockFetchRunHistory = vi.hoisted(() => vi.fn());
@@ -93,9 +93,9 @@ describe("ModelDetail Model Health panel", () => {
     fireEvent.click(screen.getByRole("tab", { name: /b-events/i }));
     expect(screen.getByRole("tab", { name: /b-events/i })).toHaveAttribute("aria-selected", "true");
 
-    fireEvent.click(screen.getByRole("tab", { name: /^validate/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /model health/i }));
     expect(screen.getByRole("button", { name: /^design$/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText(/VALIDATION WORKSPACE/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/MODEL HEALTH/i).length).toBeGreaterThan(0);
   });
 
   test("uses a shared authoring shell for workflow modes", () => {
@@ -107,7 +107,7 @@ describe("ModelDetail Model Health panel", () => {
     fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
 
     expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
-    expect(screen.getByRole("complementary", { name: /design context panel/i })).toHaveTextContent(/Workflow Context/i);
+    expect(screen.getByRole("complementary", { name: /design context panel/i })).toHaveTextContent(/Workspace Guide/i);
 
     fireEvent.click(screen.getByRole("tab", { name: /b-events/i }));
     expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
@@ -142,12 +142,20 @@ describe("ModelDetail Model Health panel", () => {
     expect(screen.getByLabelText(/mobile model workflow/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^overview$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^design$/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /ai designer/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^run$/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /entity model/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /entity types/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /execute/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /results/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
+    expect(screen.getByRole("tab", { name: /ai designer/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /entity types/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /execute/i })).not.toBeInTheDocument();
+    const mobileWorkflow = screen.getByLabelText(/mobile model workflow/i);
+    fireEvent.click(within(mobileWorkflow).getByRole("button", { name: /^run$/i }));
+    expect(within(mobileWorkflow).getByRole("button", { name: /^run$/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^setup$/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /analysis/i }));
+    expect(screen.getByRole("button", { name: /analysis/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/ANALYSIS WORKSPACE/i)).toBeInTheDocument();
   });
 
   test("treats a fresh blank model as getting started instead of blocked", () => {

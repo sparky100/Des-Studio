@@ -7,13 +7,14 @@ const StateVarEditor=({vars,onChange})=>{
   const rem=(i)=>onChange(vars.filter((_,idx)=>idx!==i));
   return (
     <div style={{display:"flex",flexDirection:"column",gap:8}}>
-      <SH label="Scalar State Variables" color={C.purple}><Btn small variant="ghost" onClick={add}>+ Add Variable</Btn></SH>
+      <SH label="Model Data" color={C.purple}><Btn small variant="ghost" onClick={add}>+ Add Data Item</Btn></SH>
       <InfoBox color={C.purple}>
-        <strong style={{color:C.purple}}>Built-in:</strong>{" "}
+        Use model data for counters, gates, and values that change during a run.{" "}
+        <strong style={{color:C.purple}}>Available live measures:</strong>{" "}
         <code>queue(Type).length</code> · <code>idle(Type).count</code> · <code>busy(Type).count</code> ·{" "}
         <code>attr(Type,attrName)</code> · <code>served</code> · <code>reneged</code> · <code>clock</code>
       </InfoBox>
-      {vars.length===0&&<Empty icon="📊" msg="No custom scalar variables needed for most models."/>}
+      {vars.length===0&&<Empty icon="Data" msg="No custom model data needed for most models."/>}
       {vars.map((sv,i)=>(
         <div key={sv.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:10,display:"flex",flexDirection:'column',gap:8}}>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>

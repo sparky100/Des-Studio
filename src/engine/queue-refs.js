@@ -1,120 +1,142 @@
-// engine/queue-refs.js — Queue reference propagation
-// When a queue is renamed, all references throughout the model must be updated.
-// References exist in: B-event effects, C-event effects, routing configs, overflow destinations.
+// engine/queue-refs.js — model reference propagation for queue and entity-type renames
+
+function norm(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function esc(value = "") {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function replaceQueueToken(text = "", oldName, newName) {
+  if (!oldName || !newName) return text;
+  return String(text || "").replace(
+    new RegExp(`queue\\(${esc(oldName)}\\)`, "gi"),
+    `queue(${newName})`
+  );
+}
+
+function replaceServerTokens(text = "", oldName, newName) {
+  if (!oldName || !newName) return text;
+  return String(text || "")
+    .replace(new RegExp(`idle\\(${esc(oldName)}\\)\\.count`, "gi"), `idle(${newName}).count`)
+    .replace(new RegExp(`busy\\(${esc(oldName)}\\)\\.count`, "gi"), `busy(${newName}).count`)
+    .replace(new RegExp(`attr\\(${esc(oldName)}\\s*,`, "gi"), `attr(${newName},`);
+}
+
+function replaceMacroArg(effect, macroName, argIndex, oldName, newName) {
+  if (typeof effect !== "string" || !oldName || !newName) return effect;
+  const match = effect.match(/^([A-Z_]+)\((.*)\)$/i);
+  if (!match || match[1].toUpperCase() !== macroName.toUpperCase()) return effect;
+  const args = match[2].split(",").map(part => part.trim());
+  if (argIndex >= args.length) return effect;
+  if (norm(args[argIndex]) !== norm(oldName)) return effect;
+  args[argIndex] = newName;
+  return `${match[1]}(${args.join(", ")})`;
+}
+
+function mapEffects(rawEffect, mapper) {
+  const effects = Array.isArray(rawEffect) ? rawEffect : (rawEffect ? [rawEffect] : []);
+  const next = effects.map(mapper);
+  if (Array.isArray(rawEffect)) return next;
+  if (rawEffect == null) return rawEffect;
+  return next[0] || "";
+}
 
 export function renameQueue(model, oldName, newName) {
   if (!oldName || !newName || oldName === newName) return model;
 
-  const qn = (s) => s.trim().toLowerCase();
-  const oldLower = qn(oldName);
-  const newLower = qn(newName);
+  return {
+    ...model,
+    bEvents: (model.bEvents || []).map(event => ({
+      ...event,
+      effect: mapEffects(event.effect, effect => {
+        let next = replaceMacroArg(effect, "ARRIVE", 1, oldName, newName);
+        next = replaceMacroArg(next, "RELEASE", 1, oldName, newName);
+        next = replaceMacroArg(next, "UNBATCH", 0, oldName, newName);
+        return next;
+      }),
+      routing: (event.routing || []).map(route => ({
+        ...route,
+        queueName: norm(route.queueName) === norm(oldName) ? newName : route.queueName,
+      })),
+      probabilisticRouting: (event.probabilisticRouting || []).map(route => ({
+        ...route,
+        queueName: norm(route.queueName) === norm(oldName) ? newName : route.queueName,
+      })),
+      defaultQueueName: norm(event.defaultQueueName) === norm(oldName) ? newName : event.defaultQueueName,
+    })),
+    cEvents: (model.cEvents || []).map(event => ({
+      ...event,
+      condition: replaceQueueToken(event.condition, oldName, newName),
+      effect: (() => {
+        let next = replaceQueueToken(event.effect, oldName, newName);
+        next = replaceMacroArg(next, "ASSIGN", 0, oldName, newName);
+        next = replaceMacroArg(next, "BATCH", 0, oldName, newName);
+        return next;
+      })(),
+    })),
+    queues: (model.queues || []).map(queue => ({
+      ...queue,
+      overflowDestination: norm(queue.overflowDestination) === norm(oldName) ? newName : queue.overflowDestination,
+    })),
+  };
+}
 
-  // Helper: replace queue name in a macro string
-  const replaceInMacro = (eff, patterns) => {
-    if (typeof eff !== "string") return eff;
-    let result = eff;
-    for (const [pattern, queueIdx] of patterns) {
-      const regex = new RegExp(`(${pattern}\\s*\\([^,)]*(?:,\\s*)?)([^,)]+)(\\s*[^)]*\\))`, "i");
-      const match = result.match(regex);
-      if (match && qn(match[queueIdx]) === oldLower) {
-        const parts = result.match(regex);
-        if (parts) {
-          const before = parts[1];
-          const after = parts.slice(3).join("");
-          // Replace the right parameter with the new name
-          result = result.replace(regex, (m, p1, p2, p3) => {
-            const segments = m.split(",");
-            if (segments.length === 2 && queueIdx === 1) {
-              // ARRIVE(Type, Queue) — replace 2nd param
-              return `${segments[0]}, ${newName})`;
-            } else if (segments.length === 2 && queueIdx === 2) {
-              // Single param like UNBATCH(Queue)
-              return `${pattern}(${newName})`;
-            }
-            return m;
-          });
+export function renameEntityType(model, oldName, newName, role = "customer") {
+  if (!oldName || !newName || oldName === newName) return model;
+
+  const hasQueueNamedOld = (model.queues || []).some(queue => norm(queue.name) === norm(oldName));
+  const shouldTreatAsTypeQueueToken = !hasQueueNamedOld;
+
+  const updateCustomerCondition = condition => (
+    shouldTreatAsTypeQueueToken
+      ? replaceQueueToken(condition, oldName, newName)
+      : condition
+  );
+
+  const updateCustomerAssign = effect => (
+    shouldTreatAsTypeQueueToken
+      ? replaceMacroArg(effect, "ASSIGN", 0, oldName, newName)
+      : effect
+  );
+
+  return {
+    ...model,
+    queues: (model.queues || []).map(queue => ({
+      ...queue,
+      customerType: role === "customer" && norm(queue.customerType) === norm(oldName) ? newName : queue.customerType,
+    })),
+    bEvents: (model.bEvents || []).map(event => ({
+      ...event,
+      effect: mapEffects(event.effect, effect => {
+        let next = effect;
+        if (role === "customer") {
+          next = replaceMacroArg(next, "ARRIVE", 0, oldName, newName);
+          next = replaceMacroArg(next, "RENEGE_OLDEST", 0, oldName, newName);
         }
+        if (role === "server") {
+          next = replaceMacroArg(next, "RELEASE", 0, oldName, newName);
+        }
+        return next;
+      }),
+    })),
+    cEvents: (model.cEvents || []).map(event => {
+      let nextCondition = event.condition || "";
+      let nextEffect = event.effect || "";
+      if (role === "customer") {
+        nextCondition = updateCustomerCondition(nextCondition);
+        nextEffect = updateCustomerAssign(nextEffect);
       }
-    }
-    return result;
-  };
-
-  const macroPatterns = {
-    arrive: [/^ARRIVE/i, 2],     // ARRIVE(Type, QueueName) — queue is 2nd param
-    release: [/^RELEASE/i, 2],   // RELEASE(Server, QueueName) — queue is 2nd param
-    unbatch: [/^UNBATCH/i, 1],   // UNBATCH(QueueName) — queue is 1st param
-    assign: [/^ASSIGN/i, 1],     // ASSIGN(QueueName, Server) — queue is 1st param (when it's a queue name)
-    batch: [/^BATCH/i, 1],       // BATCH(QueueName, N) — queue is 1st param
-  };
-
-  const updated = { ...model };
-
-  // 1. Update B-event effects (ARRIVE, RELEASE, UNBATCH)
-  updated.bEvents = (model.bEvents || []).map(ev => {
-    const effects = Array.isArray(ev.effect) ? ev.effect : (ev.effect ? [ev.effect] : []);
-    const newEffects = effects.map(eff => {
-      if (typeof eff !== "string") return eff;
-      // ARRIVE(Type, OldQueue) → ARRIVE(Type, NewQueue)
-      let r = eff.replace(
-        /^(ARRIVE\s*\()([^,]+)\s*,\s*([^)]+)(\))/i,
-        (m, p1, p2, p3, p4) => qn(p3.trim()) === oldLower ? `${p1}${p2}, ${newName}${p4}` : m
-      );
-      // RELEASE(Server, OldQueue) → RELEASE(Server, NewQueue)
-      r = r.replace(
-        /^(RELEASE\s*\()([^,]+)\s*,\s*([^)]+)(\))/i,
-        (m, p1, p2, p3, p4) => qn(p3.trim()) === oldLower ? `${p1}${p2}, ${newName}${p4}` : m
-      );
-      // UNBATCH(OldQueue) → UNBATCH(NewQueue)
-      r = r.replace(
-        /^(UNBATCH\s*\()([^)]+)(\))/i,
-        (m, p1, p2, p3) => qn(p2.trim()) === oldLower ? `${p1}${newName}${p3}` : m
-      );
-      return r;
-    });
-    // 2. Update routing configs
-    const routing = (ev.routing || []).map(r => ({
-      ...r,
-      queueName: qn(r.queueName) === oldLower ? newName : r.queueName,
-    }));
-    const probRouting = (ev.probabilisticRouting || []).map(r => ({
-      ...r,
-      queueName: qn(r.queueName) === oldLower ? newName : r.queueName,
-    }));
-    return {
-      ...ev,
-      effect: newEffects.length === 1 ? newEffects[0] : newEffects,
-      routing: routing.length ? routing : ev.routing,
-      probabilisticRouting: probRouting.length ? probRouting : ev.probabilisticRouting,
-      defaultQueueName: qn(ev.defaultQueueName) === oldLower ? newName : ev.defaultQueueName,
-    };
-  });
-
-  // 3. Update C-event effects (ASSIGN, BATCH)
-  updated.cEvents = (model.cEvents || []).map(ev => {
-    const eff = ev.effect || "";
-    let newEff = eff;
-    // ASSIGN(OldQueue, Server) → ASSIGN(NewQueue, Server)
-    newEff = newEff.replace(
-      /^(ASSIGN\s*\()([^,]+)\s*,\s*([^)]+)(\))/i,
-      (m, p1, p2, p3, p4) => {
-        // Only replace if first param looks like a queue name (not an entity type)
-        // We can't know for sure, so check if it matches a queue name directly
-        return qn(p2.trim()) === oldLower ? `${p1}${newName}, ${p3}${p4}` : m;
+      if (role === "server") {
+        nextCondition = replaceServerTokens(nextCondition, oldName, newName);
+        nextEffect = replaceMacroArg(nextEffect, "ASSIGN", 1, oldName, newName);
       }
-    );
-    // BATCH(OldQueue, N) → BATCH(NewQueue, N)
-    newEff = newEff.replace(
-      /^(BATCH\s*\()([^,]+)\s*,\s*([^)]+)(\))/i,
-      (m, p1, p2, p3, p4) => qn(p2.trim()) === oldLower ? `${p1}${newName}, ${p3}${p4}` : m
-    );
-    return { ...ev, effect: newEff };
-  });
-
-  // 4. Update queue overflow destinations
-  updated.queues = (model.queues || []).map(q => ({
-    ...q,
-    overflowDestination: qn(q.overflowDestination) === oldLower ? newName : q.overflowDestination,
-  }));
-
-  return updated;
+      return {
+        ...event,
+        condition: nextCondition,
+        effect: nextEffect,
+      };
+    }),
+  };
 }

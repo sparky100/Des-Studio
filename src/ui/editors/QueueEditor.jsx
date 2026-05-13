@@ -1,5 +1,5 @@
 import { C, FONT } from "../shared/tokens.js";
-import { Tag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { Tag, Btn, CommitInput, SH, InfoBox, Empty } from "../shared/components.jsx";
 
 const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
   const customerTypes = (entityTypes||[])
@@ -16,6 +16,12 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
   }]);
 
   const upd = (i, f, v) => { const n=[...queues]; n[i]={...n[i],[f]:v}; onChange(n); };
+  const commitName = (i, value) => {
+    if ((queues[i]?.name || "") === value) return;
+    const n=[...queues];
+    n[i]={...n[i],name:value};
+    onChange(n);
+  };
   const rem = (i) => onChange(queues.filter((_,idx)=>idx!==i));
 
   const inpStyle = (color) => ({
@@ -41,7 +47,7 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
           {/* Row 1: Queue Name — full width */}
           <div style={{display:'flex',flexDirection:'column',gap:4}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>QUEUE NAME</span>
-            <input value={q.name||''} onChange={e=>upd(i,'name',e.target.value)}
+            <CommitInput value={q.name||''} onCommit={value=>commitName(i,value)}
               placeholder="e.g. Triage Queue"
               style={{...inpStyle(C.cEvent+'88'),color:C.text}}/>
           </div>

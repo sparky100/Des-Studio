@@ -32,7 +32,7 @@ const model = {
 };
 
 describe("BottomPanel — F9C.8", () => {
-  test("renders live execution tabs and leaves statistical analysis to Results", () => {
+  test("renders live execution tabs and leaves statistical analysis to Analysis", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
     expect(screen.getByRole("tab", { name: /step log/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /entities/i })).toBeInTheDocument();
@@ -72,10 +72,10 @@ describe("BottomPanel — F9C.8", () => {
     expect(screen.getByRole("separator", { name: /resize bottom panel/i })).toBeInTheDocument();
   });
 
-  test("shows an Open Results action when run results are available", () => {
+  test("shows an Open Analysis action when run results are available", () => {
     const onOpenResults = vi.fn();
     render(<BottomPanel log={log} snap={snap} model={model} hasResults onOpenResults={onOpenResults} />);
-    fireEvent.click(screen.getByRole("button", { name: /open results/i }));
+    fireEvent.click(screen.getByRole("button", { name: /open analysis/i }));
     expect(onOpenResults).toHaveBeenCalledOnce();
   });
 });

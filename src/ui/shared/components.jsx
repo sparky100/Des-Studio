@@ -1,5 +1,5 @@
 // ui/shared/components.jsx — Reusable micro-components
-import React, { Component, useId, useState, useRef } from "react";
+import React, { Component, useEffect, useId, useState, useRef } from "react";
 import { C, FONT } from "./tokens.js";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
 
@@ -79,16 +79,64 @@ const Btn=({children,onClick,variant="ghost",small,disabled,full,style={},ariaLa
     amber:{bg:C.amber+"18",fg:C.amber,br:C.amber+"44"}}[variant]||{bg:"#ffffff08",fg:C.text,br:C.border};
   return <button type={type} onClick={onClick} disabled={disabled} aria-label={ariaLabel} title={title} style={{background:v.bg,color:v.fg,border:`1px solid ${v.br}`,borderRadius:5,padding:small?"4px 10px":"7px 14px",fontSize:small?11:12,fontWeight:600,fontFamily:FONT,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.45:1,display:"inline-flex",alignItems:"center",gap:6,width:full?"100%":undefined,justifyContent:full?"center":undefined,transition:"opacity .15s",flexShrink:0,...style}}>{children}</button>;
 };
-const Field=({label,value,onChange,multiline,rows=2,placeholder="",autoFocus=false})=>{
+const Field=({label,value,onChange,multiline,rows=2,placeholder="",autoFocus=false,inputStyle={}})=>{
   const generatedId=useId();
   const id=`field-${generatedId}`;
   return (
     <div style={{display:"flex",flexDirection:"column",gap:5}}>
       {label&&<label htmlFor={id} style={{fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.muted,textTransform:"uppercase",fontFamily:FONT}}>{label}</label>}
       {multiline
-        ?<textarea id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} autoFocus={autoFocus} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",resize:"vertical",outline:"none",lineHeight:1.6}}/>
-        :<input id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",outline:"none",width:"100%",boxSizing:"border-box"}}/>}
+        ?<textarea id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} autoFocus={autoFocus} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",resize:"vertical",outline:"none",lineHeight:1.6,...inputStyle}}/>
+        :<input id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",outline:"none",width:"100%",boxSizing:"border-box",...inputStyle}}/>}
     </div>
+  );
+};
+const CommitInput=({
+  value,
+  onCommit,
+  transform,
+  placeholder="",
+  autoFocus=false,
+  ariaLabel,
+  disabled=false,
+  maxLength,
+  style={},
+})=>{
+  const [draft,setDraft]=useState(value||"");
+  useEffect(()=>{setDraft(value||"");},[value]);
+  const commit=()=>{
+    const nextRaw=draft ?? "";
+    const next=transform ? transform(nextRaw) : nextRaw;
+    if((value||"") !== next){
+      onCommit?.(next);
+    }else if(nextRaw !== next){
+      setDraft(next);
+    }
+  };
+  return (
+    <input
+      value={draft}
+      onChange={e=>setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e=>{
+        if(e.key==="Enter"){
+          e.preventDefault();
+          commit();
+          e.currentTarget.blur();
+        }
+        if(e.key==="Escape"){
+          e.preventDefault();
+          setDraft(value||"");
+          e.currentTarget.blur();
+        }
+      }}
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      autoFocus={autoFocus}
+      disabled={disabled}
+      maxLength={maxLength}
+      style={style}
+    />
   );
 };
 const SH=({label,color=C.muted,children})=>(
@@ -277,5 +325,5 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true})=>{
   );
 };
 
-export { ErrorBoundary, Tag, PhaseTag, Avatar, Btn, Field, SH, InfoBox, Empty, DistPicker };
+export { ErrorBoundary, Tag, PhaseTag, Avatar, Btn, Field, CommitInput, SH, InfoBox, Empty, DistPicker };
 

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
-import { Tag, Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { validateVisualGraph, addVisualNode, deleteVisualNode, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
+import { renameEntityType } from "../../engine/queue-refs.js";
 
 function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
   return (
@@ -395,11 +396,21 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
                 border: `1px solid ${et.role === "server" ? C.server + "44" : C.cEvent + "33"}`,
                 borderLeft: `2px solid ${et.role === "server" ? C.server : C.cEvent}`,
               }}>
-                <input value={et.name} onChange={e => {
-                  const next = [...(model.entityTypes || [])];
-                  next[i] = { ...next[i], name: e.target.value };
-                  applyModel({ ...model, entityTypes: next });
-                }} placeholder="Name" maxLength={20}
+                <CommitInput
+                  value={et.name}
+                  onCommit={value => {
+                    const oldName = et.name || "";
+                    const next = [...(model.entityTypes || [])];
+                    next[i] = { ...next[i], name: value };
+                    const renamed = value && oldName && value !== oldName
+                      ? renameEntityType({ ...model, entityTypes: next }, oldName, value, et.role || "customer")
+                      : { ...model, entityTypes: next };
+                    applyModel(renamed);
+                  }}
+                  placeholder="Name"
+                  maxLength={20}
+                  disabled={!canEdit}
+                  ariaLabel={`Entity type ${i + 1} name`}
                   style={{ width: 60, background: "transparent", border: "none", color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
                 />
                 <select value={et.role || "customer"} onChange={e => {
@@ -430,13 +441,15 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
               </div>
             ))}
           </div>
-          <ValidationChecklist
-            visualIssues={visualIssues}
-            modelErrors={modelValidation.errors}
-            modelWarnings={modelValidation.warnings}
-            graph={graph}
-            onFocusNode={focusNode}
-          />
+          {(visualIssues.length > 0 || modelValidation.errors.length > 0 || modelValidation.warnings.length > 0) && (
+            <ValidationChecklist
+              visualIssues={visualIssues}
+              modelErrors={modelValidation.errors}
+              modelWarnings={modelValidation.warnings}
+              graph={graph}
+              onFocusNode={focusNode}
+            />
+          )}
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, lineHeight: 1.5 }}>
             Click to add quickly, or drag onto the canvas to choose the starting position.
           </div>

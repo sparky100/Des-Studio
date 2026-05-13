@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { BEventEditor } from '../../../src/ui/editors/index.jsx';
 
@@ -54,5 +54,27 @@ describe('BEventEditor — queue-aware effect options', () => {
     );
 
     expect(screen.getByRole('option', { name: 'Add Customer to Waiting Queue' })).toBeInTheDocument();
+  });
+
+  it('commits B-event name edits on blur instead of on every keypress', () => {
+    const handleChange = vi.fn();
+    render(
+      <BEventEditor
+        events={[{ id: 'b1', name: 'Arrival', scheduledTime: '0', effect: [''], schedules: [], description: '' }]}
+        onChange={handleChange}
+        entityTypes={[{ id: 'customer', name: 'Customer', role: 'customer', attrDefs: [] }]}
+        queues={[]}
+        cEvents={[]}
+      />
+    );
+
+    const input = screen.getByDisplayValue('Arrival');
+    fireEvent.change(input, { target: { value: 'Patient Arrival' } });
+    expect(handleChange).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+    expect(handleChange).toHaveBeenCalledWith([
+      expect.objectContaining({ name: 'Patient Arrival' }),
+    ]);
   });
 });

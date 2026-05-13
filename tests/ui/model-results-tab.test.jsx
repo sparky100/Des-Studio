@@ -29,7 +29,7 @@ const baseModel = {
   owner_id: "user-1",
 };
 
-describe("ModelDetail Results tab", () => {
+describe("ModelDetail Analysis tab", () => {
   beforeEach(() => {
     mockFetchRunHistory.mockReset();
     mockListShareLinks.mockReset();
@@ -37,7 +37,7 @@ describe("ModelDetail Results tab", () => {
     mockListShareLinks.mockResolvedValue([]);
   });
 
-  test("shows a top-level Results workspace tab with run guidance", () => {
+  test("shows a top-level Analysis workspace tab with run guidance", () => {
     render(
       <ModelDetail
         modelId="m1"
@@ -48,15 +48,15 @@ describe("ModelDetail Results tab", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: /results/i }));
+    fireEvent.click(screen.getByRole("button", { name: /analysis/i }));
 
-    expect(screen.getByText(/RESULTS WORKSPACE/i)).toBeInTheDocument();
+    expect(screen.getByText(/ANALYSIS WORKSPACE/i)).toBeInTheDocument();
     expect(screen.getByText(/latest run will appear here/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /open execute/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /open history/i })).toBeInTheDocument();
   });
 
-  test("loads a saved run directly in Results", async () => {
+  test("loads a saved run directly in Analysis", async () => {
     mockFetchRunHistory.mockResolvedValue([
       {
         id: "run-1",
@@ -100,7 +100,7 @@ describe("ModelDetail Results tab", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: /results/i }));
+    fireEvent.click(screen.getByRole("button", { name: /analysis/i }));
 
     await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith("m1"));
     expect(await screen.findByRole("combobox", { name: /saved run/i })).toHaveValue("run-1");

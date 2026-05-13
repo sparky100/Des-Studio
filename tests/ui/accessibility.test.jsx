@@ -65,11 +65,12 @@ describe('accessibility pass', () => {
       />
     );
 
+    expect(screen.getByRole('button', { name: 'Overview' })).toHaveAttribute('aria-pressed', 'true');
+    const tabs = screen.queryAllByRole('tab').map(tab => tab.textContent);
+    expect(tabs).not.toContain('AI Designer');
+
+    await user.click(screen.getByRole('button', { name: /^design$/i }));
     expect(screen.getByRole('tab', { name: 'AI Designer' })).toHaveAttribute('aria-selected', 'false');
-    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
-    const tabs = screen.getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs.indexOf('AI Designer')).toBeGreaterThan(tabs.indexOf('Overview'));
-    expect(tabs.indexOf('Design')).toBeGreaterThan(tabs.indexOf('Overview'));
 
     await user.click(screen.getByRole('button', { name: /^execute$/i }));
     expect(screen.getByRole('button', { name: /^execute$/i })).toHaveAttribute('aria-pressed', 'true');

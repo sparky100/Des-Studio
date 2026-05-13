@@ -56,4 +56,23 @@ describe('EntityTypeEditor — shift schedules (F7.6)', () => {
     expect(handleChange).toHaveBeenCalledOnce();
     expect(handleChange.mock.calls[0][0][0].shiftSchedule).toHaveLength(2);
   });
+
+  it('commits entity type name edits on blur instead of on every keypress', () => {
+    const handleChange = vi.fn();
+    render(
+      <EntityTypeEditor
+        types={[{ id: 'cust', name: 'Patient', role: 'customer', attrDefs: [] }]}
+        onChange={handleChange}
+      />
+    );
+
+    const input = screen.getByDisplayValue('Patient');
+    fireEvent.change(input, { target: { value: 'Emergency Patient' } });
+    expect(handleChange).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+    expect(handleChange).toHaveBeenCalledWith([
+      expect.objectContaining({ name: 'Emergency Patient' }),
+    ]);
+  });
 });

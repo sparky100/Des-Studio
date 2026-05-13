@@ -129,14 +129,14 @@ describe('ExecutePanel', () => {
     expect(onRunSaved).toHaveBeenCalledOnce();
   });
 
-  it('enables the Results view after a run completes', async () => {
+  it('enables the Analysis view after a run completes', async () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    expect(screen.getByRole('button', { name: /^results$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^analysis$/i })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('button', { name: /^results$/i })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /^analysis$/i })).not.toBeDisabled();
   });
 
   it('saves all 10 sequential single-replication runs — each click triggers one Supabase insert', async () => {
