@@ -1054,7 +1054,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                     <option key={p.path} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
                   ))}
                 </optgroup>
-                <optgroup label="State Variables">
+                <optgroup label="Model Data">
                   {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
                     <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
                   ))}
@@ -1103,7 +1103,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                       <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
                     ))}
                   </optgroup>
-                  <optgroup label="State Variables">
+                  <optgroup label="Model Data">
                     {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
                       <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
                     ))}

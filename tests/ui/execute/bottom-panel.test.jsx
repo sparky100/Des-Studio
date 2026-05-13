@@ -1,4 +1,4 @@
-// F9C.8 + F9C.9 — BottomPanel: tabs, collapse, Stage KPIs
+// F9C.8 + F9C.9 — BottomPanel: tabs, collapse, live metrics
 import { render, screen, fireEvent } from "@testing-library/react";
 import { vi, describe, test, expect } from "vitest";
 import { BottomPanel } from "../../../src/ui/execute/BottomPanel.jsx";
@@ -36,7 +36,7 @@ describe("BottomPanel — F9C.8", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
     expect(screen.getByRole("tab", { name: /step log/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /entities/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /stage kpis/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /live metrics/i })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /charts/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /analysis/i })).not.toBeInTheDocument();
   });
@@ -45,15 +45,15 @@ describe("BottomPanel — F9C.8", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
     // Log content visible initially
     expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /collapse panel/i }));
+    fireEvent.click(screen.getByRole("button", { name: /collapse details panel/i }));
     // Log content hidden after collapse
     expect(screen.queryByText(/ARRIVE Customer/)).not.toBeInTheDocument();
   });
 
   test("expand toggle restores panel body", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
-    fireEvent.click(screen.getByRole("button", { name: /collapse panel/i }));
-    fireEvent.click(screen.getByRole("button", { name: /expand panel/i }));
+    fireEvent.click(screen.getByRole("button", { name: /collapse details panel/i }));
+    fireEvent.click(screen.getByRole("button", { name: /expand details panel/i }));
     expect(screen.getByText(/ARRIVE Customer/)).toBeInTheDocument();
   });
 
@@ -68,7 +68,7 @@ describe("BottomPanel — F9C.8", () => {
 
   test("offers maximize and resize affordances for the live inspector", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
-    expect(screen.getByRole("button", { name: /maximize panel/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /expand panel/i })).toBeInTheDocument();
     expect(screen.getByRole("separator", { name: /resize bottom panel/i })).toBeInTheDocument();
   });
 
@@ -80,18 +80,18 @@ describe("BottomPanel — F9C.8", () => {
   });
 });
 
-describe("BottomPanel — F9C.9 Stage KPIs", () => {
-  test("Stage KPIs tab shows queue row and server row", () => {
+describe("BottomPanel — F9C.9 live metrics", () => {
+  test("Live Metrics tab shows queue row and server row", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
-    fireEvent.click(screen.getByRole("tab", { name: /stage kpis/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
     expect(screen.getByText("Queue A")).toBeInTheDocument();
     expect(screen.getByText("Clerk")).toBeInTheDocument();
   });
 
   test("shows placeholder when snap is null", () => {
     render(<BottomPanel log={[]} snap={null} model={model} />);
-    fireEvent.click(screen.getByRole("tab", { name: /stage kpis/i }));
-    expect(screen.getByText(/run the simulation/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /live metrics/i }));
+    expect(screen.getByText(/run the simulation to see live metrics/i)).toBeInTheDocument();
   });
 });
 

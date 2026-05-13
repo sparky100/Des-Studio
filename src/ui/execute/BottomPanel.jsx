@@ -10,7 +10,7 @@ const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 const TABS = [
   { id: "log",       label: "Step Log" },
   { id: "entities",  label: "Entities" },
-  { id: "stagekpis", label: "Stage KPIs" },
+  { id: "stagekpis", label: "Live Metrics" },
 ];
 
 const BOTTOM_PANEL_BODY_HEIGHT = 320;
@@ -99,7 +99,7 @@ function StageKpisTable({ snap, model }) {
   if (!snap) {
     return (
       <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
-        Run the simulation to see stage KPIs.
+        Run the simulation to see live metrics.
       </div>
     );
   }
@@ -107,19 +107,6 @@ function StageKpisTable({ snap, model }) {
   const entities    = snap.entities || [];
   const queues      = model.queues || [];
   const serverTypes = (model.entityTypes || []).filter(et => et.role === "server");
-
-  const th = (label, right = false) => (
-    <th key={label} style={{ padding: "4px 8px", textAlign: right ? "right" : "left", fontWeight: 600,
-      color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 0.8 }}>
-      {label}
-    </th>
-  );
-  const td = (val, color, right = false) => (
-    <td style={{ padding: "4px 8px", textAlign: right ? "right" : "left",
-      color: color || C.text, fontFamily: FONT, fontSize: 11 }}>
-      {val}
-    </td>
-  );
 
   const panelStyle = {
     background: C.bg,
@@ -131,6 +118,23 @@ function StageKpisTable({ snap, model }) {
     gap: 8,
   };
 
+  const metricGridStyle = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+    gap: 8,
+  };
+
+  const metricCard = (label, value, color = C.text) => (
+    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", minWidth: 0 }}>
+      <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>
+        {label.toUpperCase()}
+      </div>
+      <div style={{ fontSize: 14, color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>
+        {value}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 12 }}>
       {/* Queue rows */}
@@ -139,40 +143,30 @@ function StageKpisTable({ snap, model }) {
           <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
             QUEUES
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                {[
-                  th("Queue"),
-                  th("Depth", true),
-                  th("Mean wait", true),
-                  th("Max wait", true),
-                  th("Arrivals", true),
-                  th("Reneged", true),
-                ]}
-              </tr>
-            </thead>
-            <tbody>
-              {queues.map(q => {
-                const inQueue  = entities.filter(e => e.role !== "server" && (e.queue === q.name || e.lastQueue === q.name));
-                const waiting  = entities.filter(e => e.role !== "server" && e.queue === q.name && e.status === "waiting");
-                const now = snap.clock || 0;
-                const currentWaits = waiting.map(e => now - (e.arrivalTime || 0)).filter(Number.isFinite);
-                const meanWait = currentWaits.length ? currentWaits.reduce((a, b) => a + b, 0) / currentWaits.length : null;
-                const maxWait  = currentWaits.length ? Math.max(...currentWaits) : null;
-                return (
-                  <tr key={q.name} style={{ borderBottom: `1px solid ${C.border}` }}>
-                    {td(q.name, C.cEvent)}
-                    {td(waiting.length, waiting.length > 0 ? C.amber : C.text, true)}
-                    {td(fmt(meanWait, 1), null, true)}
-                    {td(fmt(maxWait, 1),  null, true)}
-                    {td(inQueue.length, null, true)}
-                    {td(snap.reneged || 0, C.reneged, true)}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {queues.map(q => {
+              const inQueue  = entities.filter(e => e.role !== "server" && (e.queue === q.name || e.lastQueue === q.name));
+              const waiting  = entities.filter(e => e.role !== "server" && e.queue === q.name && e.status === "waiting");
+              const now = snap.clock || 0;
+              const currentWaits = waiting.map(e => now - (e.arrivalTime || 0)).filter(Number.isFinite);
+              const meanWait = currentWaits.length ? currentWaits.reduce((a, b) => a + b, 0) / currentWaits.length : null;
+              const maxWait  = currentWaits.length ? Math.max(...currentWaits) : null;
+              return (
+                <div key={q.name} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ color: C.cEvent, fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>
+                    {q.name}
+                  </div>
+                  <div style={metricGridStyle}>
+                    {metricCard("Waiting", waiting.length, waiting.length > 0 ? C.amber : C.text)}
+                    {metricCard("Mean wait", fmt(meanWait, 1))}
+                    {metricCard("Max wait", fmt(maxWait, 1))}
+                    {metricCard("Arrivals", inQueue.length)}
+                    {metricCard("Reneged", snap.reneged || 0, C.reneged)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -182,43 +176,33 @@ function StageKpisTable({ snap, model }) {
           <div style={{ fontSize: 10, color: C.purple, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
             SERVERS
           </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                {[
-                  th("Server type"),
-                  th("Capacity", true),
-                  th("Busy", true),
-                  th("Utilisation", true),
-                  th("Mean svc", true),
-                  th("Completions", true),
-                ]}
-              </tr>
-            </thead>
-            <tbody>
-              {serverTypes.map(et => {
-                const capacity = parseInt(et.count || "1", 10) || 1;
-                const servers  = entities.filter(e => e.role === "server" && e.type === et.name);
-                const busy     = servers.filter(e => e.status === "busy").length;
-                const util     = ((busy / capacity) * 100).toFixed(0);
-                const done     = entities.filter(e => e.role !== "server" &&
-                  e.completionTime != null && e.serviceStart != null);
-                const svcTimes = done.map(e => e.completionTime - e.serviceStart).filter(Number.isFinite);
-                const meanSvc  = svcTimes.length
-                  ? svcTimes.reduce((a, b) => a + b, 0) / svcTimes.length : null;
-                return (
-                  <tr key={et.name} style={{ borderBottom: `1px solid ${C.border}` }}>
-                    {td(et.name, C.purple)}
-                    {td(capacity, null, true)}
-                    {td(busy, busy > 0 ? C.amber : C.text, true)}
-                    {td(`${util}%`, null, true)}
-                    {td(fmt(meanSvc, 1), null, true)}
-                    {td(snap.served || 0, C.served, true)}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {serverTypes.map(et => {
+              const capacity = parseInt(et.count || "1", 10) || 1;
+              const servers  = entities.filter(e => e.role === "server" && e.type === et.name);
+              const busy     = servers.filter(e => e.status === "busy").length;
+              const util     = ((busy / capacity) * 100).toFixed(0);
+              const done     = entities.filter(e => e.role !== "server" &&
+                e.completionTime != null && e.serviceStart != null);
+              const svcTimes = done.map(e => e.completionTime - e.serviceStart).filter(Number.isFinite);
+              const meanSvc  = svcTimes.length
+                ? svcTimes.reduce((a, b) => a + b, 0) / svcTimes.length : null;
+              return (
+                <div key={et.name} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ color: C.purple, fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>
+                    {et.name}
+                  </div>
+                  <div style={metricGridStyle}>
+                    {metricCard("Capacity", capacity)}
+                    {metricCard("Busy", busy, busy > 0 ? C.amber : C.text)}
+                    {metricCard("Use", `${util}%`)}
+                    {metricCard("Mean svc", fmt(meanSvc, 1))}
+                    {metricCard("Completions", snap.served || 0, C.served)}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -405,15 +389,11 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
 
   const resolvedBodyHeight = maximized
     ? PANEL_MAXIMIZED_HEIGHT
-    : activeTab === "stagekpis"
-      ? "auto"
-      : `${bodyHeight}px`;
+    : `${Math.max(bodyHeight, activeTab === "stagekpis" ? STAGE_KPI_BODY_MIN_HEIGHT : bodyHeight)}px`;
 
   const resolvedMinHeight = maximized
     ? PANEL_MAXIMIZED_HEIGHT
-    : activeTab === "stagekpis"
-      ? `${STAGE_KPI_BODY_MIN_HEIGHT}px`
-      : `${bodyHeight}px`;
+    : `${Math.max(bodyHeight, activeTab === "stagekpis" ? STAGE_KPI_BODY_MIN_HEIGHT : bodyHeight)}px`;
 
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8 }}>
@@ -453,14 +433,14 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
         )}
         <button
           type="button"
-          aria-label={maximized ? "Restore panel size" : "Maximize panel"}
+          aria-label={maximized ? "Restore panel size" : "Expand panel"}
           onClick={() => setMaximized(value => !value)}
           style={toolBtnStyle}
         >
-          {maximized ? "Restore" : "Maximize"}
+          {maximized ? "Restore" : "Expand"}
         </button>
         <button
-          aria-label={collapsed ? "Expand panel" : "Collapse panel"}
+          aria-label={collapsed ? "Expand details panel" : "Collapse details panel"}
           onClick={() => setCollapsed(c => !c)}
           style={chevronStyle}
         >
@@ -491,7 +471,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
           )}
         </div>
       )}
-      {!collapsed && activeTab !== "stagekpis" && !maximized && (
+      {!collapsed && !maximized && (
         <div
           role="separator"
           aria-orientation="horizontal"
