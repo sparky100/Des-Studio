@@ -10,7 +10,7 @@
 
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
 import { makeHelpers, createServerEntities }   from "./entities.js";
-import { evalCondition }                        from "./conditions.js";
+import { evalCondition, snapshotConditionVariables, findFailingOperand } from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
@@ -79,7 +79,7 @@ function makeRateChangeEvents(model) {
   return events;
 }
 
-export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500, collectTimeSeries = false) {
+export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500, collectTimeSeries = false, debugMode = false) {
   const runtimeModel = modelWithShiftInitialCapacity(model);
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
   const rng = mulberry32(seed);
@@ -119,6 +119,12 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   });
 
   const makeTraceEntry = (phase, extra = {}) => _trace(phase, extra);
+
+  // ── Condition evaluation debug log (F27R.1) ───────────────────────────────
+  // Populated only when debugMode=true. Zero overhead when false.
+  const COND_EVAL_LOG_CAP = 10_000;
+  const _conditionEvalLog = [];
+  let _conditionEvalLogTruncated = false;
 
   // ── Initialise scalar state ───────────────────────────────────────────────
   const state = { __served: 0, __reneged: 0 };
@@ -360,6 +366,23 @@ const cycleLog = [];
         const ev = sortedCEvents[idx];
         const h = makeHelpers(entities, runtimeModel);
         const condTrue = evalCondition(ev.condition, h, state, clock);
+
+        if (debugMode) {
+          if (_conditionEvalLog.length < COND_EVAL_LOG_CAP) {
+            _conditionEvalLog.push({
+              t:               clock,
+              cEventName:      ev.name || ev.id || "?",
+              cEventPriority:  ev.priority ?? 9999,
+              conditionExpr:   ev.condition,
+              variableSnapshot: snapshotConditionVariables(ev.condition, h, state, clock),
+              outcome:         condTrue,
+              failingOperand:  condTrue ? null : findFailingOperand(ev.condition, h, state, clock),
+            });
+          } else {
+            _conditionEvalLogTruncated = true;
+          }
+        }
+
         if (!condTrue) {
           const falseEntry = makeTraceEntry("C", {
             message: `C: "${ev.name || ev.id}" — condition false`,
@@ -507,14 +530,16 @@ const cycleLog = [];
     return {
       finalTime: clock,
       log,
-      snap:           snap(clock),
-      summary:        getSummary(),
-      phaseCTruncated: _phaseCTruncated,
-      warnings:       warnings.slice(),
-      entitySummary:  entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
-      timeSeries:     _timeSeries ?? undefined,
-      waitDist:       computeWaitDist(entities),
-      perQueue:       Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
+      snap:                     snap(clock),
+      summary:                  getSummary(),
+      phaseCTruncated:          _phaseCTruncated,
+      warnings:                 warnings.slice(),
+      entitySummary:            entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
+      timeSeries:               _timeSeries ?? undefined,
+      waitDist:                 computeWaitDist(entities),
+      perQueue:                 Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
+      conditionEvalLog:         _conditionEvalLog,
+      conditionEvalLogTruncated: _conditionEvalLogTruncated,
     };
   }
 

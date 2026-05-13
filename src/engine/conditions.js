@@ -207,6 +207,161 @@ export function evalCondition(condition, helpers, state, clock) {
   }
 }
 
+// ── Condition evaluation debug helpers (F27R.1) ───────────────────────────────
+//
+// These three functions are used by the engine's debugMode to build a
+// ConditionEvalRecord for every C-event evaluation. They must mirror the token
+// resolution logic of evalCondition exactly so that variableSnapshot values
+// match what the evaluator actually saw.
+
+// Substitutes condition string tokens to their resolved values and returns the
+// substituted string. Used to produce the "actual: …" fragment in failingOperand.
+// Does NOT substitute AND/OR so that findFailingOperand can still split on them.
+function substituteConditionTokens(conditionStr, helpers, state, clock) {
+  if (!conditionStr) return String(conditionStr);
+  try {
+    let expr = conditionStr;
+    expr = expr.replace(/queue\(([^)]+)\)\.length/g, (_, rawName) => {
+      const name = rawName.trim();
+      const inQueue = helpers.entities
+        ? helpers.entities.filter(e =>
+            e.queue?.toLowerCase() === name.toLowerCase() && e.status === 'waiting'
+          ).length
+        : 0;
+      const hasQueue = helpers.model?.queues?.some(
+        q => (q.name || '').toLowerCase() === name.toLowerCase()
+      );
+      if (inQueue > 0 || hasQueue) return String(inQueue);
+      return String(helpers.waitingOf(name, 'FIFO').length);
+    });
+    expr = expr.replace(/idle\(([^)]+)\)\.count/g,
+      (_, t) => String(helpers.idleOf(t.trim()).length));
+    expr = expr.replace(/busy\(([^)]+)\)\.count/g,
+      (_, t) => String(helpers.busyOf(t.trim()).length));
+    expr = expr.replace(/attr\(([^,]+)\s*,\s*([^)]+)\)/g, (_, t, a) => {
+      const e = helpers.idleOf(t.trim())[0];
+      const v = e?.attrs?.[a.trim()];
+      return v === undefined ? '0' : typeof v === 'string' ? `"${v}"` : String(v);
+    });
+    expr = expr.replace(/\bserved\b/g,    String(state.__served    || 0));
+    expr = expr.replace(/\breneged\b/g,   String(state.__reneged   || 0));
+    expr = expr.replace(/\bloopCount\b/g, String(state.__loopCount ?? 0));
+    expr = expr.replace(/\bclock\b/g,     String(clock));
+    Object.keys(state)
+      .filter(k => !k.startsWith('__'))
+      .forEach(k => {
+        expr = expr.replace(
+          new RegExp(`\\b${k}\\b`, 'g'),
+          typeof state[k] === 'string' ? `"${state[k]}"` : String(state[k])
+        );
+      });
+    return expr;
+  } catch {
+    return conditionStr;
+  }
+}
+
+/**
+ * Snapshot the resolved value of every token referenced in a condition string.
+ * Returns { [token]: resolvedValue } using the same resolution logic as evalCondition.
+ *
+ * @param {string}  conditionStr
+ * @param {object}  helpers   — from makeHelpers()
+ * @param {object}  state     — scalar state { __served, __reneged, ...vars }
+ * @param {number}  clock
+ * @returns {{ [token: string]: number|string|boolean|null }}
+ */
+export function snapshotConditionVariables(conditionStr, helpers, state, clock) {
+  const snapshot = {};
+  if (!conditionStr) return snapshot;
+  try {
+    for (const m of conditionStr.matchAll(/queue\(([^)]+)\)\.length/g)) {
+      const name = m[1].trim();
+      const key  = `queue(${name}).length`;
+      const inQueue = helpers.entities
+        ? helpers.entities.filter(e =>
+            e.queue?.toLowerCase() === name.toLowerCase() && e.status === 'waiting'
+          ).length
+        : 0;
+      const hasQueue = helpers.model?.queues?.some(
+        q => (q.name || '').toLowerCase() === name.toLowerCase()
+      );
+      snapshot[key] = (inQueue > 0 || hasQueue) ? inQueue : helpers.waitingOf(name, 'FIFO').length;
+    }
+    for (const m of conditionStr.matchAll(/idle\(([^)]+)\)\.count/g)) {
+      const t = m[1].trim();
+      snapshot[`idle(${t}).count`] = helpers.idleOf(t).length;
+    }
+    for (const m of conditionStr.matchAll(/busy\(([^)]+)\)\.count/g)) {
+      const t = m[1].trim();
+      snapshot[`busy(${t}).count`] = helpers.busyOf(t).length;
+    }
+    for (const m of conditionStr.matchAll(/attr\(([^,]+)\s*,\s*([^)]+)\)/g)) {
+      const t = m[1].trim(), a = m[2].trim();
+      const e = helpers.idleOf(t)[0];
+      snapshot[`attr(${t},${a})`] = e?.attrs?.[a] ?? null;
+    }
+    if (/\bserved\b/.test(conditionStr))    snapshot['served']    = state.__served    || 0;
+    if (/\breneged\b/.test(conditionStr))   snapshot['reneged']   = state.__reneged   || 0;
+    if (/\bloopCount\b/.test(conditionStr)) snapshot['loopCount'] = state.__loopCount ?? 0;
+    if (/\bclock\b/.test(conditionStr))     snapshot['clock']     = clock;
+    for (const k of Object.keys(state)) {
+      if (k.startsWith('__')) continue;
+      if (new RegExp(`\\b${k}\\b`).test(conditionStr)) snapshot[k] = state[k];
+    }
+  } catch { /* return partial snapshot on error */ }
+  return snapshot;
+}
+
+/**
+ * Identify which sub-expression caused a false condition evaluation.
+ * Returns null when the condition was true.
+ *
+ * Rules:
+ *   AND compound → first false clause, formatted as "expr (actual: substituted)"
+ *   OR  compound → all clauses (all must be false for OR to be false)
+ *   Simple       → the expression itself formatted as above
+ *
+ * @param {string}  conditionStr
+ * @param {object}  helpers
+ * @param {object}  state
+ * @param {number}  clock
+ * @returns {string|null}
+ */
+export function findFailingOperand(conditionStr, helpers, state, clock) {
+  if (!conditionStr) return null;
+  try {
+    const format = (clause) => {
+      const subst = substituteConditionTokens(clause, helpers, state, clock);
+      return clause === subst ? clause : `${clause} (actual: ${subst})`;
+    };
+
+    const andParts = conditionStr.split(/\bAND\b/gi);
+    if (andParts.length > 1) {
+      for (const part of andParts) {
+        const clause = part.trim();
+        if (clause && !evalCondition(clause, helpers, state, clock)) {
+          return format(clause);
+        }
+      }
+      return format(conditionStr.trim());
+    }
+
+    const orParts = conditionStr.split(/\bOR\b/gi);
+    if (orParts.length > 1) {
+      return orParts
+        .map(p => p.trim())
+        .filter(Boolean)
+        .map(format)
+        .join('; ');
+    }
+
+    return format(conditionStr.trim());
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Build the list of valid condition tokens for the ConditionBuilder UI.
  * Derived from the model's entity types and state variables.
