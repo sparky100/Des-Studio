@@ -194,6 +194,34 @@ export function addVisualNode(model, type, position = null) {
   return updateGraphLayout(next, derived, newest ? { nodes: [{ id: newest.id, x: position.x, y: position.y }] } : {});
 }
 
+export function createStarterFlowModel(model) {
+  let next = ensureEntityTypes(model);
+  next = addVisualNode(next, VISUAL_NODE_TYPES.QUEUE);
+  next = addVisualNode(next, VISUAL_NODE_TYPES.SOURCE);
+  next = addVisualNode(next, VISUAL_NODE_TYPES.ACTIVITY);
+  next = addVisualNode(next, VISUAL_NODE_TYPES.SINK);
+
+  let graph = deriveGraphFromModel(next);
+  const sourceId = graph.nodes.find(node => node.type === VISUAL_NODE_TYPES.SOURCE)?.id;
+  const queueId = graph.nodes.find(node => node.type === VISUAL_NODE_TYPES.QUEUE)?.id;
+  const activityId = graph.nodes.find(node => node.type === VISUAL_NODE_TYPES.ACTIVITY)?.id;
+  const sinkId = graph.nodes.find(node => node.type === VISUAL_NODE_TYPES.SINK)?.id;
+
+  if (sourceId && queueId) {
+    next = connectVisualNodes(next, graph, sourceId, queueId).model;
+    graph = deriveGraphFromModel(next);
+  }
+  if (queueId && activityId) {
+    next = connectVisualNodes(next, graph, queueId, activityId).model;
+    graph = deriveGraphFromModel(next);
+  }
+  if (activityId && sinkId) {
+    next = connectVisualNodes(next, graph, activityId, sinkId).model;
+  }
+
+  return next;
+}
+
 export function validateVisualGraph(graph = {}) {
   const nodes = graph.nodes || [];
   const edges = graph.edges || [];

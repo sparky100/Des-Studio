@@ -168,6 +168,33 @@ describe('Visual Designer shell', () => {
     expect(screen.getByText('Unsaved changes in this model.')).toBeInTheDocument();
   });
 
+  it('auto-links a newly added queue from the currently selected source when the connection is valid', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+
+    render(
+      <ModelDetail
+        modelId="model-visual"
+        modelData={twoStageModel}
+        onBack={vi.fn()}
+        onRefresh={vi.fn()}
+        overrides={{ isOwner: true, canEdit: true, userId: 'user-1', onSave }}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /^design$/i }));
+    await screen.findByLabelText('Visual Designer');
+    await user.click(screen.getByRole('button', { name: /mock select source/i }));
+    await user.click(screen.getByRole('button', { name: /add queue/i }));
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
+      bEvents: expect.arrayContaining([
+        expect.objectContaining({ id: 'arrive', effect: 'ARRIVE(Patient, Queue 3)' }),
+      ]),
+    }));
+  });
+
   it('persists layout changes through the normal save path', async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { deriveGraphFromModel } from "../../../src/ui/visual-designer/graph.js";
 import {
   addVisualNode,
+  createStarterFlowModel,
   connectVisualNodes,
   deleteVisualEdge,
   updateGraphLayout,
@@ -59,6 +60,19 @@ describe("visual designer graph operations", () => {
     expect(withSink.bEvents.some(event => String(event.effect).startsWith("ARRIVE("))).toBe(true);
     expect(withSink.cEvents.some(event => String(event.effect).startsWith("ASSIGN("))).toBe(true);
     expect(withSink.bEvents.some(event => event.effect === "COMPLETE()")).toBe(true);
+  });
+
+  it("creates a linked starter flow for a blank model", () => {
+    const starter = createStarterFlowModel({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] });
+    const starterGraph = deriveGraphFromModel(starter);
+    const edgePairs = starterGraph.edges.map(edge => `${edge.from}->${edge.to}`);
+
+    expect(starter.queues).toHaveLength(1);
+    expect(starter.bEvents.some(event => String(event.effect).startsWith("ARRIVE("))).toBe(true);
+    expect(starter.cEvents.some(event => String(event.effect).startsWith("ASSIGN("))).toBe(true);
+    expect(starter.bEvents.some(event => event.effect === "COMPLETE()")).toBe(true);
+    expect(edgePairs.some(edge => edge.startsWith("source:") && edge.includes("->queue:queue-1"))).toBe(true);
+    expect(edgePairs).toContain("queue:queue-1->activity:activity-1");
   });
 
   it("can place a newly added visual node at a requested canvas position", () => {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
-import { validateVisualGraph, addVisualNode, deleteVisualNode, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, createStarterFlowModel, deleteVisualNode, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
@@ -222,10 +222,18 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
     ...acc,
     [node.type]: (acc[node.type] || 0) + 1,
   }), {});
+  const isStarterBlank = !(model?.queues || []).length &&
+    !(model?.bEvents || []).length &&
+    !(model?.cEvents || []).length;
   const applyModel = nextModel => {
     setMessage(null);
     onModelChange?.(nextModel);
   };
+
+  useEffect(() => {
+    if (!canEdit || !isStarterBlank) return;
+    applyModel(createStarterFlowModel(model || {}));
+  }, [canEdit, isStarterBlank]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function doDelete(targetNode) {
     const nextModel = deleteVisualNode(model, targetNode);
@@ -271,10 +279,26 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
   }, []);
   const addNode = (type, position = null) => {
     if (!canEdit) return;
-    const next = addVisualNode(model, type, position);
-    applyModel(next);
-    const nextGraph = deriveGraphFromModel(next);
+    let next = addVisualNode(model, type, position);
+    let nextGraph = deriveGraphFromModel(next);
     const newest = [...nextGraph.nodes].reverse().find(node => node.type === type);
+    const selectedNode = selectedNodeId ? graph.nodes.find(node => node.id === selectedNodeId) : null;
+    if (selectedNode && newest && selectedNode.id !== newest.id) {
+      const validation = validateVisualConnection(nextGraph, selectedNode.id, newest.id);
+      if (validation.ok) {
+        next = connectVisualNodes(next, nextGraph, selectedNode.id, newest.id).model;
+        nextGraph = deriveGraphFromModel(next);
+        const linkedNewest = nextGraph.nodes.find(node => node.id === newest.id);
+        applyModel(next);
+        setSelectedNodeId(linkedNewest?.id || newest.id);
+        setMessage({
+          state: "success",
+          text: `${selectedNode.label} linked to ${linkedNewest?.label || newest.label}.`,
+        });
+        return;
+      }
+    }
+    applyModel(next);
     setSelectedNodeId(newest?.id || null);
   };
   const moveNode = (nodeId, position) => {
@@ -336,7 +360,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
 
       <div style={{
         display: "grid",
-        gridTemplateColumns: "160px minmax(0, 1fr) 280px",
+        gridTemplateColumns: "minmax(140px, 160px) minmax(0, 1fr) minmax(240px, 280px)",
         gap: 12,
         alignItems: "stretch",
       }}>

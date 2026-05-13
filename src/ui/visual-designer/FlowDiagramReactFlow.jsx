@@ -29,8 +29,8 @@ function DesNode({ data, selected }) {
   return (
     <div style={{
       position: "relative",
-      width: 160,
-      minHeight: 78,
+      width: 142,
+      minHeight: 68,
       background: C.surface,
       border: `1.5px solid ${hasError && !selected ? C.red : selected ? color : `${color}44`}`,
       borderLeft: `4px solid ${hasError && !selected ? C.red : color}`,
@@ -43,10 +43,10 @@ function DesNode({ data, selected }) {
       color: C.text,
       display: "flex",
       flexDirection: "column",
-      gap: 6,
-      padding: 10,
+      gap: 5,
+      padding: 8,
       fontFamily: FONT,
-      fontSize: 11,
+      fontSize: 10,
     }}>
       {hasError && (
         <div
@@ -78,16 +78,16 @@ function DesNode({ data, selected }) {
       )}
       <div style={{
         color,
-        fontSize: 9,
+        fontSize: 8,
         fontWeight: 700,
-        letterSpacing: 1.2,
+        letterSpacing: 1,
         textTransform: "uppercase",
       }}>
         {data.type}
       </div>
-      <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35 }}>{data.label}</div>
+      <div style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.3 }}>{data.label}</div>
       {!!data.sublabel && (
-        <div style={{ color: C.muted, fontSize: 10, lineHeight: 1.4 }}>{data.sublabel}</div>
+        <div style={{ color: C.muted, fontSize: 9, lineHeight: 1.35 }}>{data.sublabel}</div>
       )}
       {hasSource && (
         <Handle
@@ -273,8 +273,8 @@ export function FlowDiagramReactFlow({
         });
       }}
       style={{
-        height: "clamp(420px, calc(100vh - 360px), 720px)",
-        minHeight: 420,
+        height: "clamp(380px, calc(100vh - 360px), 680px)",
+        minHeight: 380,
         width: "100%",
         background: dragOver ? `${C.accent}06` : C.bg,
         border: `1px solid ${C.border}`,
