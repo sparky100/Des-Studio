@@ -93,6 +93,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
+  const [selectedEntityId, setSelectedEntityId] = useState(null);
   const [shareLinks, setShareLinks] = useState([]);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shareConfig, setShareConfig] = useState(() => ({
@@ -1775,6 +1776,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 onOpenResults={() => setView("results")}
                 selectedNodeLabel={selectedNodeLabel}
                 onClearFilter={() => setSelectedNodeLabel(null)}
+                selectedEntityId={selectedEntityId}
+                onEntitySelect={setSelectedEntityId}
+                onNodeSelect={setSelectedNodeLabel}
               />
             </>
           );

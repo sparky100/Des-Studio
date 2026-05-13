@@ -10,6 +10,7 @@ const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 const TABS = [
   { id: "log",       label: "Step Log" },
   { id: "entities",  label: "Entities" },
+  { id: "inspector", label: "Inspector" },
   { id: "stagekpis", label: "Live Metrics" },
 ];
 
@@ -211,13 +212,56 @@ function StageKpisTable({ snap, model }) {
 
 // ── Log tab ───────────────────────────────────────────────────────────────────
 
-function LogTab({ log, selectedNodeLabel, onClearFilter }) {
+function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeSelect, model }) {
+  const [expandedSeq, setExpandedSeq] = useState(null);
   const filtered = useMemo(
     () => selectedNodeLabel
       ? log.filter(e => e.message?.includes(selectedNodeLabel))
       : log,
     [log, selectedNodeLabel]
   );
+
+  const nodeNames = useMemo(() => {
+    const names = new Set();
+    (model.queues || []).forEach(q => names.add(q.name));
+    (model.entityTypes || []).filter(et => et.role === "server").forEach(et => names.add(et.name));
+    (model.bEvents || []).forEach(b => names.add(b.name));
+    (model.cEvents || []).forEach(c => names.add(c.name));
+    return [...names].sort((a, b) => b.length - a.length);
+  }, [model]);
+
+  function renderLogMessageWithNodeLinks(message) {
+    if (!message || !onNodeSelect) return message;
+    const parts = [];
+    let remaining = message;
+    let keyIdx = 0;
+
+    for (const nodeName of nodeNames) {
+      if (!remaining.includes(nodeName)) continue;
+      const newParts = [];
+      const segments = remaining.split(nodeName);
+      segments.forEach((seg, i) => {
+        if (i > 0) {
+          newParts.push(
+            <span
+              key={`node-${keyIdx++}`}
+              onClick={(e) => { e.stopPropagation(); onNodeSelect(nodeName); }}
+              style={{ color: C.accent, cursor: "pointer", textDecoration: "underline", fontWeight: 700 }}
+              title={`Filter log for: ${nodeName}`}
+            >
+              {nodeName}
+            </span>
+          );
+        }
+        if (seg) newParts.push(<span key={`text-${keyIdx++}`}>{seg}</span>);
+      });
+      remaining = null;
+      parts.push(...newParts);
+      break;
+    }
+
+    return parts.length > 0 ? parts : message;
+  }
 
   return (
     <div>
@@ -239,30 +283,281 @@ function LogTab({ log, selectedNodeLabel, onClearFilter }) {
         ? <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>
             {selectedNodeLabel ? "No events match this node." : "Log empty. Run simulation to see events."}
           </div>
-        : [...filtered].reverse().map((r, i) => (
-          <div key={i}>
-            {r.phase === "WARMUP" && (
-              <div style={{ padding: "8px 0", borderBottom: `1px solid ${C.border}`,
-                textAlign: "center", color: C.amber, fontSize: 11, fontWeight: 700,
-                letterSpacing: 1.5, background: `${C.warmup}22` }}>
-                ──── WARM-UP ENDED AT T={r.time?.toFixed(0)} ────
+        : [...filtered].reverse().map((r, i) => {
+          const hasDetail = r.cEval || r.event || r.arbitration;
+          return (
+            <div key={i}>
+              {r.phase === "WARMUP" && (
+                <div style={{ padding: "8px 0", borderBottom: `1px solid ${C.border}`,
+                  textAlign: "center", color: C.amber, fontSize: 11, fontWeight: 700,
+                  letterSpacing: 1.5, background: `${C.warmup}22` }}>
+                  ──── WARM-UP ENDED AT T={r.time?.toFixed(0)} ────
+                </div>
+              )}
+              <div style={{ fontSize: 11, fontFamily: "monospace", color: C.kpiSvc,
+                borderBottom: `1px solid ${C.bg}`, padding: "3px 0" }}>
+                <span style={{ color: C.muted }}>[t={r.time?.toFixed(0)}]</span>{" "}
+                <PhaseTag phase={r.phase} /> {renderLogMessageWithNodeLinks(r.message)}
+                {hasDetail && (
+                  <button
+                    onClick={() => setExpandedSeq(prev => prev === r.seq ? null : r.seq)}
+                    style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 9, padding: "0 4px", marginLeft: 4 }}
+                    title="Toggle debug detail"
+                  >
+                    {expandedSeq === r.seq ? "▲" : "▶"}
+                  </button>
+                )}
               </div>
-            )}
-            <div style={{ fontSize: 11, fontFamily: "monospace", color: C.kpiSvc,
-              borderBottom: `1px solid ${C.bg}`, padding: "3px 0" }}>
-              <span style={{ color: C.muted }}>[t={r.time?.toFixed(0)}]</span>{" "}
-              <PhaseTag phase={r.phase} /> {r.message}
+              {expandedSeq === r.seq && hasDetail && (
+                <div style={{ background: C.bg, borderBottom: `1px solid ${C.border}`, padding: "6px 12px", fontSize: 10, fontFamily: FONT, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {r.cEval && (
+                    <div>
+                      <span style={{ color: C.muted }}>C-Eval  </span>
+                      <span style={{ color: C.cEvent }}>"{r.cEval.eventName}"</span>
+                      <span style={{ color: r.cEval.conditionTrue ? C.green : C.red, marginLeft: 8 }}>
+                        {r.cEval.conditionTrue ? "FIRED" : "false"}
+                      </span>
+                      {r.cEval.failureReason && (
+                        <span style={{ color: C.muted, marginLeft: 8 }}>({r.cEval.failureReason})</span>
+                      )}
+                      {r.cEval.skippedBecause && (
+                        <span style={{ color: C.purple, marginLeft: 8 }}>skipped: {r.cEval.skippedBecause}</span>
+                      )}
+                      {!r.cEval.conditionTrue && (
+                        <span style={{ color: C.muted, marginLeft: 8 }}>pass {r.cEval.pass} · priority {r.cEval.priority}</span>
+                      )}
+                      {r.cEval.conditionTrue && (
+                        <span style={{ color: C.muted, marginLeft: 8 }}>pass {r.cEval.pass} · priority {r.cEval.priority}</span>
+                      )}
+                    </div>
+                  )}
+                  {r.event && (
+                    <div>
+                      <span style={{ color: C.muted }}>Event  </span>
+                      <span style={{ color: C.text }}>
+                        {r.event.fired ? `fired` : `skipped`}
+                        {r.event.entityIds?.length > 0 && (
+                          <span style={{ marginLeft: 6 }}>
+                            → entities
+                            {r.event.entityIds.map(id => (
+                              <span
+                                key={id}
+                                onClick={() => onEntitySelect?.(id)}
+                                style={{ color: C.kpiArr, cursor: "pointer", marginLeft: 4, textDecoration: "underline" }}
+                              >
+                                #{id}
+                              </span>
+                            ))}
+                          </span>
+                        )}
+                        {r.event.newEvents?.length > 0 && (
+                          <span style={{ color: C.muted, marginLeft: 8 }}>
+                            scheduled: {r.event.newEvents.map(ne => `${ne.name}@${ne.at?.toFixed(1)}t`).join(", ")}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {r.arbitration && (
+                    <div>
+                      <span style={{ color: C.muted }}>Arb  </span>
+                      <span style={{ color: C.label }}>
+                        {r.arbitration.type}
+                        {r.arbitration.serverType && ` (${r.arbitration.serverType})`}
+                        {r.arbitration.queueName && ` queue=${r.arbitration.queueName}`}
+                        {r.arbitration.discipline && ` [${r.arbitration.discipline}]`}
+                      </span>
+                      {r.arbitration.noMatch ? (
+                        <span style={{ color: C.amber, marginLeft: 8 }}>
+                          no match — {r.arbitration.candidateCount ?? 0} waiting, {r.arbitration.idleServerCount ?? 0} idle servers
+                        </span>
+                      ) : (
+                        <>
+                          <span style={{ color: C.green, marginLeft: 8 }}>
+                            winner: #{r.arbitration.winner?.entityId} → server #{r.arbitration.winner?.serverId}
+                          </span>
+                          {r.arbitration.losers?.length > 0 && (
+                            <span style={{ color: C.muted, marginLeft: 8 }}>
+                              skipped: {r.arbitration.losers.map(l => `#${l.entityId}`).join(", ")}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        ))
+          );
+        })
       }
+    </div>
+  );
+}
+
+// ── Entity Inspector ─────────────────────────────────────────────────────────
+
+function EntityInspector({ entity, snap, onClose }) {
+  if (!entity) return null;
+  const clock = snap?.clock ?? 0;
+  const waitingAge = entity.waitingSince != null ? clock - entity.waitingSince : null;
+  const stages = entity.stages || [];
+
+  const rowStyle = {
+    display: "flex",
+    gap: 12,
+    alignItems: "flex-start",
+    borderBottom: `1px solid ${C.bg}`,
+    padding: "5px 0",
+    fontSize: 11,
+    fontFamily: FONT,
+  };
+  const labelStyle = {
+    color: C.muted,
+    minWidth: 100,
+    fontSize: 10,
+    paddingTop: 2,
+  };
+  const valueStyle = {
+    color: C.text,
+    flex: 1,
+  };
+
+  return (
+    <div style={{
+      background: C.bg,
+      border: `1px solid ${C.accent}44`,
+      borderRadius: 8,
+      padding: 14,
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <span style={{ color: C.kpiArr, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>
+            #{entity.id}
+          </span>
+          <span style={{ color: C.text, fontFamily: FONT, fontSize: 12 }}>{entity.type}</span>
+          <Tag label={entity.status} color={entity.status === "waiting" ? C.amber : entity.status === "serving" ? C.accent : entity.status === "batch" ? C.purple : C.green} />
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 10, padding: "2px 8px" }}
+          >
+            Close
+          </button>
+        )}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
+        <div style={rowStyle}>
+          <span style={labelStyle}>Arrival</span>
+          <span style={valueStyle}>{entity.arrivalTime != null ? `t=${entity.arrivalTime.toFixed(3)}` : "—"}</span>
+        </div>
+        <div style={rowStyle}>
+          <span style={labelStyle}>Clock</span>
+          <span style={valueStyle}>{clock.toFixed(3)}</span>
+        </div>
+        {entity.serverId != null && (
+          <div style={rowStyle}>
+            <span style={labelStyle}>Server</span>
+            <span style={valueStyle}>#{entity.serverId}</span>
+          </div>
+        )}
+        {entity.queue != null && (
+          <div style={rowStyle}>
+            <span style={labelStyle}>Queue</span>
+            <span style={{ ...valueStyle, color: C.cEvent }}>{entity.queue}</span>
+          </div>
+        )}
+        {waitingAge != null && (
+          <div style={rowStyle}>
+            <span style={labelStyle}>Waiting</span>
+            <span style={{ ...valueStyle, color: C.amber }}>{waitingAge.toFixed(1)}t</span>
+          </div>
+        )}
+        {entity.waitingFor?.queueName && (
+          <div style={rowStyle}>
+            <span style={labelStyle}>Waiting for</span>
+            <span style={{ ...valueStyle, color: C.amber }}>{entity.waitingFor.queueName}</span>
+          </div>
+        )}
+        {entity.loopCount > 0 && (
+          <div style={rowStyle}>
+            <span style={labelStyle}>Loops</span>
+            <span style={{ ...valueStyle, color: C.purple }}>{entity.loopCount}x</span>
+          </div>
+        )}
+        {entity.completionTime != null && (
+          <div style={rowStyle}>
+            <span style={labelStyle}>Completed</span>
+            <span style={{ ...valueStyle, color: C.green }}>t={entity.completionTime.toFixed(3)}</span>
+          </div>
+        )}
+        {entity.renegeTime != null && (
+          <div style={rowStyle}>
+            <span style={labelStyle}>Reneged</span>
+            <span style={{ ...valueStyle, color: C.red }}>t={entity.renegeTime.toFixed(3)}</span>
+          </div>
+        )}
+        {entity.sojournTime != null && (
+          <div style={rowStyle}>
+            <span style={labelStyle}>Sojourn</span>
+            <span style={{ ...valueStyle, color: C.kpiSvc }}>{entity.sojournTime.toFixed(3)}t</span>
+          </div>
+        )}
+      </div>
+
+      {entity.attrs && Object.keys(entity.attrs).length > 0 && (
+        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+          <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, marginBottom: 4, textTransform: "uppercase" }}>Attributes</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {Object.entries(entity.attrs).map(([k, v]) => (
+              <div key={k} style={{ display: "flex", gap: 8, fontSize: 11, fontFamily: FONT }}>
+                <span style={{ color: C.muted, minWidth: 80 }}>{k}</span>
+                <span style={{ color: C.text }}>{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {stages.length > 0 && (
+        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+          <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, marginBottom: 6, textTransform: "uppercase" }}>
+            Service Stages ({stages.length})
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {stages.map((s, i) => (
+              <div key={i} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ color: C.cEvent, fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                    Stage {i + 1}: {s.queueName || "—"}
+                  </span>
+                  <span style={{ color: C.muted, fontFamily: FONT, fontSize: 9 }}>
+                    {s.serverType}
+                  </span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 12px" }}>
+                  <div style={{ fontSize: 10, color: C.muted }}>Waited</div>
+                  <div style={{ fontSize: 10, color: C.amber, fontWeight: 700 }}>{s.stageWait != null ? `${Number(s.stageWait).toFixed(3)}t` : "—"}</div>
+                  <div style={{ fontSize: 10, color: C.muted }}>Service</div>
+                  <div style={{ fontSize: 10, color: C.accent, fontWeight: 700 }}>{s.stageService != null ? `${Number(s.stageService).toFixed(3)}t` : "—"}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Entities tab ──────────────────────────────────────────────────────────────
 
-function EntitiesTab({ snap }) {
+function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
   if (!snap) {
     return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>No snapshot yet.</div>;
   }
@@ -283,28 +578,32 @@ function EntitiesTab({ snap }) {
             <tr style={{ color: C.muted, borderBottom: `2px solid ${C.border}` }}>
               <th style={{ padding: "4px 8px", textAlign: "left" }}>ID</th>
               <th style={{ padding: "4px 8px", textAlign: "left" }}>Type</th>
-              <th style={{ padding: "4px 8px", textAlign: "left" }}>Attrs</th>
               <th style={{ padding: "4px 8px", textAlign: "left" }}>Status</th>
               <th style={{ padding: "4px 8px", textAlign: "left" }}>Location</th>
-              <th style={{ padding: "4px 8px", textAlign: "right" }}>Journey</th>
+              <th style={{ padding: "4px 8px", textAlign: "right" }}>Age</th>
             </tr>
           </thead>
           <tbody>
             {entities.map(e => {
               const journey = snap.clock != null ? snap.clock - (e.arrivalTime || 0) : null;
-              const attrStr = e.attrs
-                ? Object.entries(e.attrs).filter(([k]) => k !== "priority").map(([k, v]) => `${k}=${v}`).join(" ")
-                : "";
               const location = e.status === "waiting"
                 ? (e.queue || "queue")
                 : e.status === "serving"
                   ? (e.ceventName || e.lastQueue || "serving")
                   : e.queue || e.lastQueue || "—";
+              const isSelected = selectedEntityId === e.id;
               return (
-                <tr key={e.id} style={{ borderBottom: `1px solid ${C.bg}` }}>
+                <tr
+                  key={e.id}
+                  onClick={() => onEntitySelect?.(isSelected ? null : e.id)}
+                  style={{
+                    borderBottom: `1px solid ${C.bg}`,
+                    cursor: "pointer",
+                    background: isSelected ? `${C.accent}18` : "transparent",
+                  }}
+                >
                   <td style={{ padding: "4px 8px", color: C.kpiArr, fontFamily: FONT, fontWeight: 700 }}>#{e.id}</td>
                   <td style={{ padding: "4px 8px", fontFamily: FONT }}>{e.type}</td>
-                  <td style={{ padding: "4px 8px", fontSize: 10, color: C.label, fontFamily: FONT, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{attrStr || "—"}</td>
                   <td style={{ padding: "4px 8px" }}>
                     <Tag label={e.status} color={e.status === "waiting" ? C.amber : e.status === "serving" ? C.accent : C.green} />
                   </td>
@@ -324,7 +623,7 @@ function EntitiesTab({ snap }) {
 
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
-export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter }) {
+export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect }) {
   const [activeTab,  setActiveTab]  = useState("log");
   const [collapsed,  setCollapsed]  = useState(false);
   const [bodyHeight, setBodyHeight] = useState(BOTTOM_PANEL_BODY_HEIGHT);
@@ -461,8 +760,15 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
             overflowX: "hidden",
           }}
         >
-          {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} />}
-          {activeTab === "entities"  && <EntitiesTab snap={snap} />}
+          {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
+          {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
+          {activeTab === "inspector" && (
+            <EntityInspector
+              entity={selectedEntityId != null ? (snap?.entities || []).find(e => e.id === selectedEntityId) : null}
+              snap={snap}
+              onClose={onEntitySelect ? () => onEntitySelect(null) : undefined}
+            />
+          )}
           {activeTab === "stagekpis" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <EventCountsTable snap={snap} model={model} />
