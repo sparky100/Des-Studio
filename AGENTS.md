@@ -1,12 +1,13 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-13 | Reflects: Sprint 26 — Resource Semantics & Waiting Behaviour complete. Current: Sprint 27 planning pending*
+*Last updated: 2026-05-13 | Reflects: Sprint 26 — Resource Semantics & Waiting Behaviour complete. Current: Sprint 27 — Simulation Debugging & Explainability*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Sprint plan: `docs/reviews/sprint-26-resource-semantics-and-waiting-behaviour-plan.md`
-- Sprint closure report: `docs/reviews/sprint-26-closure-report.md`
+- Sprint plan: `docs/reviews/sprint-27-simulation-debugging-and-explainability-plan.md`
+- Sprint closure report: `docs/reviews/sprint-27-closure-report.md`
+- Sprint capability guide: `docs/reviews/sprint-27-capability-guide.md`
 - Post-Sprint-25 roadmap and scenario coverage: `docs/reviews/sprint-26-30-roadmap-and-scenario-coverage.md`
 
 ---
