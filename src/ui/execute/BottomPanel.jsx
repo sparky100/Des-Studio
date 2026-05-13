@@ -399,13 +399,104 @@ function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeS
   );
 }
 
+// ── Wait-period condition trace helpers (F27R.2) ─────────────────────────────
+
+function filterCondEvals(conditionEvalLog, waitStart, waitEnd, queueName) {
+  if (!conditionEvalLog?.length) return [];
+  return conditionEvalLog.filter(r =>
+    r.t >= (waitStart ?? 0) &&
+    r.t <= (waitEnd ?? Infinity) &&
+    (!queueName || String(r.conditionExpr ?? "").includes(queueName))
+  );
+}
+
+const WAIT_PAGE_SIZE = 50;
+
+function WaitPeriodDetail({ records, truncated }) {
+  const [page, setPage] = useState(0);
+  const visible = records.slice(0, (page + 1) * WAIT_PAGE_SIZE);
+  const hasMore = visible.length < records.length;
+
+  return (
+    <div style={{ marginTop: 4, borderTop: `1px solid ${C.border}`, paddingTop: 6 }}>
+      {truncated && (
+        <div style={{ fontSize: 9, color: C.amber, fontFamily: FONT, marginBottom: 4,
+          padding: "2px 6px", background: `${C.amber}18`, borderRadius: 3 }}>
+          Trace truncated at 10,000 records — earliest evaluations may be missing.
+        </div>
+      )}
+      {records.length === 0 ? (
+        <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic", padding: "4px 0" }}>
+          No evaluation records found for this wait period.
+        </div>
+      ) : (
+        <>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 9, fontFamily: FONT }}>
+            <thead>
+              <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                <th style={{ padding: "2px 4px", textAlign: "left", fontWeight: 600 }}>Time</th>
+                <th style={{ padding: "2px 4px", textAlign: "left", fontWeight: 600 }}>C-Event</th>
+                <th style={{ padding: "2px 4px", textAlign: "left", fontWeight: 600 }}>Result</th>
+                <th style={{ padding: "2px 4px", textAlign: "left", fontWeight: 600 }}>Snapshot</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visible.map((rec, idx) => (
+                <tr key={idx} style={{ borderBottom: `1px solid ${C.bg}`, verticalAlign: "top" }}>
+                  <td style={{ padding: "2px 4px", color: C.muted, whiteSpace: "nowrap" }}>
+                    {rec.t?.toFixed(2)}
+                  </td>
+                  <td style={{ padding: "2px 4px", color: C.cEvent, whiteSpace: "nowrap" }}>
+                    {rec.cEventName}
+                  </td>
+                  <td style={{ padding: "2px 4px", whiteSpace: "nowrap" }}>
+                    <span style={{ color: rec.outcome ? C.green : C.red, fontWeight: 700 }}>
+                      {rec.outcome ? "✓" : "✗"}
+                    </span>
+                  </td>
+                  <td style={{ padding: "2px 4px" }}>
+                    {rec.failingOperand && (
+                      <div style={{ color: C.amber, fontWeight: 600, marginBottom: 1 }}>
+                        {rec.failingOperand}
+                      </div>
+                    )}
+                    {Object.keys(rec.variableSnapshot || {}).length > 0 && (
+                      <div style={{ color: C.muted }}>
+                        {Object.entries(rec.variableSnapshot).map(([k, v]) => (
+                          <span key={k} style={{ marginRight: 6 }}>{k}={String(v)}</span>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {hasMore && (
+            <button
+              onClick={() => setPage(p => p + 1)}
+              style={{ marginTop: 4, fontSize: 9, background: "none", border: `1px solid ${C.border}`,
+                borderRadius: 3, color: C.muted, cursor: "pointer", fontFamily: FONT, padding: "2px 8px" }}
+            >
+              Show next {Math.min(WAIT_PAGE_SIZE, records.length - visible.length)} →
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Entity Inspector ─────────────────────────────────────────────────────────
 
-function EntityInspector({ entity, snap, onClose }) {
+function EntityInspector({ entity, snap, onClose, conditionEvalLog = [], conditionEvalLogTruncated = false, debugTrace = false }) {
   if (!entity) return null;
   const clock = snap?.clock ?? 0;
   const waitingAge = entity.waitingSince != null ? clock - entity.waitingSince : null;
   const stages = entity.stages || [];
+  const [expandedWait, setExpandedWait] = useState(null);
+  const hasEvalLog = conditionEvalLog.length > 0;
+  const toggleWait = (key) => setExpandedWait(prev => prev === key ? null : key);
 
   const rowStyle = {
     display: "flex",
@@ -508,6 +599,35 @@ function EntityInspector({ entity, snap, onClose }) {
         )}
       </div>
 
+      {entity.status === "waiting" && (
+        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, textTransform: "uppercase" }}>
+              Wait Trace
+            </span>
+            {(debugTrace || hasEvalLog)
+              ? <button
+                  onClick={() => toggleWait("current")}
+                  title="Show C-event evaluations during this wait"
+                  style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 10, padding: 0 }}
+                >
+                  {expandedWait === "current" ? "▼" : "▶"}
+                </button>
+              : <span
+                  title="Enable condition trace before running to see evaluation detail."
+                  style={{ color: C.muted, fontSize: 9, cursor: "help" }}
+                >ⓘ</span>
+            }
+          </div>
+          {expandedWait === "current" && (
+            <WaitPeriodDetail
+              records={filterCondEvals(conditionEvalLog, entity.waitingSince, clock, entity.queue)}
+              truncated={conditionEvalLogTruncated}
+            />
+          )}
+        </div>
+      )}
+
       {entity.attrs && Object.keys(entity.attrs).length > 0 && (
         <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, marginBottom: 4, textTransform: "uppercase" }}>Attributes</div>
@@ -528,24 +648,48 @@ function EntityInspector({ entity, snap, onClose }) {
             Service Stages ({stages.length})
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {stages.map((s, i) => (
-              <div key={i} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ color: C.cEvent, fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
-                    Stage {i + 1}: {s.queueName || "—"}
-                  </span>
-                  <span style={{ color: C.muted, fontFamily: FONT, fontSize: 9 }}>
-                    {s.serverType}
-                  </span>
+            {stages.map((s, i) => {
+              const stageKey = `stage-${i}`;
+              return (
+                <div key={i} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ color: C.cEvent, fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                      Stage {i + 1}: {s.queueName || "—"}
+                    </span>
+                    <span style={{ color: C.muted, fontFamily: FONT, fontSize: 9 }}>
+                      {s.serverType}
+                    </span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 12px" }}>
+                    <div style={{ fontSize: 10, color: C.muted }}>Waited</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: C.amber, fontWeight: 700 }}>
+                      {s.stageWait != null ? `${Number(s.stageWait).toFixed(1)}t` : "—"}
+                      {(debugTrace || hasEvalLog)
+                        ? <button
+                            onClick={() => toggleWait(stageKey)}
+                            title="Show C-event evaluations during this wait"
+                            style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontSize: 9, padding: 0, fontWeight: "normal" }}
+                          >
+                            {expandedWait === stageKey ? "▼" : "▶"}
+                          </button>
+                        : <span
+                            title="Enable condition trace before running to see evaluation detail."
+                            style={{ color: C.muted, fontSize: 9, cursor: "help", fontWeight: "normal" }}
+                          >ⓘ</span>
+                      }
+                    </div>
+                    <div style={{ fontSize: 10, color: C.muted }}>Service</div>
+                    <div style={{ fontSize: 10, color: C.accent, fontWeight: 700 }}>{s.stageService != null ? `${Number(s.stageService).toFixed(1)}t` : "—"}</div>
+                  </div>
+                  {expandedWait === stageKey && (
+                    <WaitPeriodDetail
+                      records={filterCondEvals(conditionEvalLog, s.waitStartedAt, s.serviceStartedAt, s.queueName)}
+                      truncated={conditionEvalLogTruncated}
+                    />
+                  )}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 12px" }}>
-                  <div style={{ fontSize: 10, color: C.muted }}>Waited</div>
-                  <div style={{ fontSize: 10, color: C.amber, fontWeight: 700 }}>{s.stageWait != null ? `${Number(s.stageWait).toFixed(1)}t` : "—"}</div>
-                  <div style={{ fontSize: 10, color: C.muted }}>Service</div>
-                  <div style={{ fontSize: 10, color: C.accent, fontWeight: 700 }}>{s.stageService != null ? `${Number(s.stageService).toFixed(1)}t` : "—"}</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -555,7 +699,7 @@ function EntityInspector({ entity, snap, onClose }) {
 
 // ── Entities tab (split view) ───────────────────────────────────────────────
 
-function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
+function EntitiesTab({ snap, selectedEntityId, onEntitySelect, conditionEvalLog = [], conditionEvalLogTruncated = false, debugTrace = false }) {
   if (!snap) {
     return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>No snapshot yet.</div>;
   }
@@ -628,6 +772,9 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
           entity={selectedEntityId != null ? entities.find(e => e.id === selectedEntityId) : null}
           snap={snap}
           onClose={onEntitySelect ? () => onEntitySelect(null) : undefined}
+          conditionEvalLog={conditionEvalLog}
+          conditionEvalLogTruncated={conditionEvalLogTruncated}
+          debugTrace={debugTrace}
         />
       </div>
     </div>
@@ -636,7 +783,7 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
 
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
-export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect }) {
+export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, conditionEvalLog = [], conditionEvalLogTruncated = false, debugTrace = false }) {
   const [activeTab,  setActiveTab]  = useState("log");
   const [collapsed,  setCollapsed]  = useState(false);
   const [bodyHeight, setBodyHeight] = useState(BOTTOM_PANEL_BODY_HEIGHT);
@@ -774,7 +921,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
           }}
         >
           {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
-          {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
+          {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} conditionEvalLog={conditionEvalLog} conditionEvalLogTruncated={conditionEvalLogTruncated} debugTrace={debugTrace} />}
           {activeTab === "stagekpis" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <EventCountsTable snap={snap} model={model} />

@@ -90,6 +90,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const saveInProgressRef = useRef(false);
   const [animationEnabled, setAnimationEnabled] = useState(true);
   const [collectTimeSeries, setCollectTimeSeries] = useState(true);
+  const [debugTrace, setDebugTrace] = useState(false);
+  const [conditionEvalLog, setConditionEvalLog] = useState([]);
+  const [conditionEvalLogTruncated, setConditionEvalLogTruncated] = useState(false);
+  const savedReplicationsRef = useRef(null);
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
@@ -189,6 +193,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setBatchProgress(null);
     setReplicationResults([]);
     setAggregateStats({});
+    setConditionEvalLog([]);
+    setConditionEvalLogTruncated(false);
   }, [model, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries]);
 
   const stopAuto = useCallback(() => {
@@ -407,7 +413,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       maxTimeForRun,
       stopConditionForRun,
       5000, 500,
-      collectTimeSeries
+      collectTimeSeries,
+      debugTrace
     );
     const result = engine.runAll();
 
@@ -417,6 +424,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setLog(result.log);
     setMode("done");
     if (result.phaseCTruncated || result.summary?.phaseCTruncated) setPhaseCTruncated(true);
+    setConditionEvalLog(result.conditionEvalLog || []);
+    setConditionEvalLogTruncated(result.conditionEvalLogTruncated || false);
 
     saveInProgressRef.current = true;
     setSaveStatus({ state: 'saving', message: 'Saving results...' });
@@ -436,7 +445,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     } finally {
       saveInProgressRef.current = false;
     }
-  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, stopAuto, onRunSaved, onResultsReady]);
+  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, debugTrace, stopAuto, onRunSaved, onResultsReady]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -506,6 +515,19 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setAnimationEnabled(next);
     saveExecuteSetting({ animateTokens: next });
   }, [animationEnabled, saveExecuteSetting]);
+
+  const handleDebugTrace = useCallback((enabled) => {
+    setDebugTrace(enabled);
+    if (enabled) {
+      savedReplicationsRef.current = replications;
+      setReplications(1);
+    } else {
+      if (savedReplicationsRef.current != null) {
+        setReplications(savedReplicationsRef.current);
+        savedReplicationsRef.current = null;
+      }
+    }
+  }, [replications]);
 
   const handleKpiSlotChange = useCallback((slotIndex, newKey) => {
     setKpiSlots(prev => {
@@ -1515,6 +1537,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           <input type="checkbox" checked={collectTimeSeries} onChange={e => setCollectTimeSeries(e.target.checked)} style={{ accentColor: C.accent }}/>
           Collect time-series
         </label>
+        <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 11, color: debugTrace ? C.amber : C.label, fontFamily: FONT }}
+          title="Records every C-event evaluation so you can trace why each entity waited. Forces replications = 1.">
+          <input type="checkbox" checked={debugTrace} onChange={e => handleDebugTrace(e.target.checked)} style={{ accentColor: C.amber }}/>
+          Condition trace
+        </label>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         <div style={{ flex: 1, minWidth: 12 }} />
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1779,6 +1806,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 selectedEntityId={selectedEntityId}
                 onEntitySelect={setSelectedEntityId}
                 onNodeSelect={setSelectedNodeLabel}
+                conditionEvalLog={conditionEvalLog}
+                conditionEvalLogTruncated={conditionEvalLogTruncated}
+                debugTrace={debugTrace}
               />
             </>
           );
