@@ -13,6 +13,20 @@ import { evalCondition, evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
 import { clearWaitingState, markEntityWaiting } from "./entities.js";
 
+function hasConditionDefinition(condition) {
+  if (!condition) return false;
+  if (typeof condition === "string") return condition.trim() !== "";
+  if (Array.isArray(condition)) return condition.some(hasConditionDefinition);
+  if (typeof condition !== "object") return false;
+  if (Array.isArray(condition.clauses)) return condition.clauses.some(hasConditionDefinition);
+  return String(condition.variable || condition.token || condition.left || "").trim() !== "";
+}
+
+function isMeaningfulRoutingBranch(branch) {
+  if (!branch || typeof branch !== "object") return false;
+  return hasConditionDefinition(branch.condition);
+}
+
 function applyShiftChange(ev, ctx) {
   const serverTypeName = ev.serverTypeName || ev.payload?.serverTypeName;
   const target = parseInt(ev.newCapacity ?? ev.payload?.newCapacity, 10);
@@ -172,7 +186,8 @@ export function fireBEvent(ev, ctx) {
     }
   };
 
-  const hasConditionalRouting = Array.isArray(ev.routing) && ev.routing.length > 0;
+  const routingBranches = Array.isArray(ev.routing) ? ev.routing.filter(isMeaningfulRoutingBranch) : [];
+  const hasConditionalRouting = routingBranches.length > 0;
 
   // ── Conditional routing (F10.1) ──────────────────────────────────────────
   if (hasConditionalRouting) {
@@ -180,7 +195,7 @@ export function fireBEvent(ev, ctx) {
     const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
     if (cust && cust.status === "waiting") {
       let routed;
-      for (const branch of ev.routing) {
+      for (const branch of routingBranches) {
         if (branch.condition && evaluatePredicate(branch.condition, { currentEntity: cust })) {
           routed = branch.queueName;
           break;

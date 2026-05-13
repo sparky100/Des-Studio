@@ -44,7 +44,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const hasRelease=effects.some(eff=>typeof eff==='string'&&/^RELEASE\s*\(/i.test(eff));
         const hasArriveEffect=effects.some(eff=>typeof eff==='string'&&/^ARRIVE\s*\(/i.test(eff));
         const updBalk=(f,v)=>{const n=[...events];n[i]={...n[i],[f]:v===''||v===null?undefined:v};onChange(n);};
-        const hasRouting=Array.isArray(ev.routing) && ev.routing.length>0;
+        const hasRouting=Array.isArray(ev.routing) && ev.routing.some(row=>String(row?.condition?.variable||row?.condition?.token||row?.condition?.left||"").trim()!=="");
         const hasProb=Array.isArray(ev.probabilisticRouting) && ev.probabilisticRouting.length>0;
         const routingMode=hasRouting?"conditional":hasProb?"probabilistic":"none";
         const routingEntityAttrs=entityTypes.filter(et=>et.role!=="server").flatMap(et=>(et.attrDefs||et.attrs||[]).map(a=>`Entity.${a.name||a}`)).filter(Boolean);

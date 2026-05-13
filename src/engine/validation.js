@@ -34,6 +34,18 @@ export function validateModel(model) {
     }
     return String(effect || '');
   };
+  const hasConditionDefinition = condition => {
+    if (!condition) return false;
+    if (typeof condition === 'string') return condition.trim() !== '';
+    if (Array.isArray(condition)) return condition.some(hasConditionDefinition);
+    if (typeof condition !== 'object') return false;
+    if (Array.isArray(condition.clauses)) return condition.clauses.some(hasConditionDefinition);
+    return String(condition.variable || condition.token || condition.left || '').trim() !== '';
+  };
+  const isMeaningfulRoutingBranch = branch => {
+    if (!branch || typeof branch !== 'object') return false;
+    return hasConditionDefinition(branch.condition);
+  };
 
   // ── V1: Entity class unique non-empty name ──────────────────────────────────
   const seen1 = new Set();
@@ -350,7 +362,8 @@ export function validateModel(model) {
 
   // ── V17: Routing table validation (F10.1) ─────────────────────────────────
   bEvents.forEach(b => {
-    const hasConditionalRouting = Array.isArray(b.routing) && b.routing.length > 0;
+    const routingBranches = Array.isArray(b.routing) ? b.routing.filter(isMeaningfulRoutingBranch) : [];
+    const hasConditionalRouting = routingBranches.length > 0;
     if (!hasConditionalRouting) return;
     const bLabel = `B-Event '${b.name || b.id}'`;
 
@@ -364,7 +377,7 @@ export function validateModel(model) {
     }
 
     // Each routing entry must reference a valid queue, or null/"" meaning "exit system"
-    b.routing.forEach((branch, idx) => {
+    routingBranches.forEach((branch, idx) => {
       const qName = branch.queueName == null ? null : String(branch.queueName).trim();
       if (qName === null || qName === '') return; // null = exit system — valid
       if (!queueNamesLower.has(qName.toLowerCase())) {
@@ -405,7 +418,7 @@ export function validateModel(model) {
     const bLabel = `B-Event '${b.name || b.id}'`;
 
     // Mutually exclusive with routing and literal RELEASE queue arg
-    const hasConditionalRouting = Array.isArray(b.routing) && b.routing.length > 0;
+    const hasConditionalRouting = Array.isArray(b.routing) && b.routing.some(isMeaningfulRoutingBranch);
     if (hasConditionalRouting) {
       err('V18', `${bLabel} has both routing and probabilisticRouting — they are mutually exclusive.`, 'bevents');
     }

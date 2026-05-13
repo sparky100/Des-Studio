@@ -297,4 +297,33 @@ describe("Imported empty routing placeholders", () => {
     expect(patient.status).toBe("waiting");
     expect(patient.queue).toBe("Waiting for treatment");
   });
+
+  test("blank routing placeholder rows are ignored at runtime", () => {
+    const model = {
+      entityTypes: [
+        { id: "et-patient", name: "Patients", role: "customer", attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [{ id: "q-wait", name: "Waiting for triage", discipline: "FIFO", customerType: "Patients" }],
+      bEvents: [
+        {
+          id: "b-arrive",
+          name: "Arrival",
+          scheduledTime: "0",
+          effect: ["ARRIVE(Patients, Waiting for triage)"],
+          routing: [{ condition: { variable: "", operator: "==", value: "" }, queueName: "" }],
+          schedules: [],
+        },
+      ],
+      cEvents: [],
+    };
+
+    const result = buildEngine(model, 42, 0, 20).runAll();
+    const patient = result.entitySummary.find(e => e.role === "customer");
+
+    expect(patient).toBeDefined();
+    expect(patient.status).toBe("waiting");
+    expect(patient.queue).toBe("Waiting for triage");
+    expect(result.summary.served).toBe(0);
+  });
 });

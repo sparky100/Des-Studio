@@ -354,4 +354,25 @@ describe("validateModel", () => {
     const result = validateModel(model);
     expect(result.errors.filter(error => error.code === "V17" || error.code === "V18")).toEqual([]);
   });
+
+  it("ignores blank conditional routing placeholder rows", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Patient", role: "customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Waiting", discipline: "FIFO", customerType: "Patient" }],
+      bEvents: [
+        {
+          id: "arrival",
+          name: "Arrival",
+          effect: ["ARRIVE(Patient, Waiting)"],
+          routing: [{ condition: { variable: "", operator: "==", value: "" }, queueName: "" }],
+          schedules: [],
+        },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors.filter(error => error.code === "V17" || error.code === "V18")).toEqual([]);
+  });
 });
