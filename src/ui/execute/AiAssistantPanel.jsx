@@ -193,7 +193,7 @@ export const AiAssistantPanel = ({
     }
     if (status === "loading") return "Waiting for analysis...";
     if (response) return response;
-    return "Run the model to generate insights.";
+    return "Run the model to start asking questions.";
   };
 
   return (
@@ -213,7 +213,7 @@ export const AiAssistantPanel = ({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>AI Assistant</div>
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Results analysis + natural language queries</div>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>
         </div>
         <Btn small variant="ghost" onClick={onClose} ariaLabel="Close AI assistant">x</Btn>
       </div>
@@ -223,7 +223,7 @@ export const AiAssistantPanel = ({
           Explain results
         </Btn>
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE RUNS</label>
+          <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE WITH</label>
           <select
             id="compare-run"
             value={selectedRunId}
@@ -244,7 +244,7 @@ export const AiAssistantPanel = ({
           </Btn>
         </div>
         <Btn variant="amber" onClick={explainSensitivity} disabled={!sensitivityReady || isStreaming} style={panelButtonStyle}>
-          Sensitivity
+          Explore sensitivity
         </Btn>
         <Btn variant="primary" onClick={suggestChanges} disabled={!results || isStreaming} style={panelButtonStyle}>
           Suggest model changes

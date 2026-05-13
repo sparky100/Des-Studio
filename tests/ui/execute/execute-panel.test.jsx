@@ -104,10 +104,10 @@ describe('ExecutePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
 
     expect(screen.getByRole('complementary', { name: /ai assistant/i })).toBeInTheDocument();
-    expect(screen.getByText('Run the model to generate insights.')).toBeInTheDocument();
+    expect(screen.getByText('Run the model to start asking questions.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /explain results/i })).toBeDisabled();
     expect(screen.getByRole('button', { name: /^compare$/i })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /sensitivity/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /explore sensitivity/i })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: /close ai assistant/i }));
     expect(screen.queryByRole('complementary', { name: /ai assistant/i })).not.toBeInTheDocument();

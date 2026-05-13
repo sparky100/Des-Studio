@@ -38,7 +38,7 @@ describe("ModelDiffPreview", () => {
     fireEvent.click(screen.getByLabelText(/apply entity classes/i));
     fireEvent.click(screen.getByLabelText(/apply b-events/i));
     fireEvent.click(screen.getByLabelText(/apply c-events/i));
-    fireEvent.click(screen.getByLabelText(/apply state variables/i));
+    fireEvent.click(screen.getByLabelText(/apply model data/i));
     fireEvent.click(screen.getByRole("button", { name: /^apply selected$/i }));
 
     expect(onApply).toHaveBeenCalledOnce();

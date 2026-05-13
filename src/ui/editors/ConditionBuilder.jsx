@@ -205,7 +205,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
 
   if(tokens.length===0) return (
     <div style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:'italic',padding:'6px 0'}}>
-      Define entity types and state variables first — they appear here as condition tokens.
+      Define entity types and model data first — they appear here as condition options.
     </div>
   );
 
