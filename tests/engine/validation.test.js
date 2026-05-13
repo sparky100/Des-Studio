@@ -298,4 +298,34 @@ describe("validateModel", () => {
       expect.objectContaining({ code: "V26", tab: "bevents" }),
     ]));
   });
+
+  it("ignores empty routing arrays left behind by stored models", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Patient", role: "customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Waiting", discipline: "FIFO", customerType: "Patient" }],
+      bEvents: [
+        {
+          id: "arrival",
+          name: "Arrival",
+          effect: ["ARRIVE(Patient, Waiting)"],
+          routing: [],
+          probabilisticRouting: [],
+          schedules: [],
+        },
+        {
+          id: "depart",
+          name: "Depart",
+          effect: "COMPLETE()",
+          routing: [],
+          probabilisticRouting: [],
+          schedules: [],
+        },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors.filter(error => error.code === "V17" || error.code === "V18")).toEqual([]);
+  });
 });

@@ -350,7 +350,8 @@ export function validateModel(model) {
 
   // ── V17: Routing table validation (F10.1) ─────────────────────────────────
   bEvents.forEach(b => {
-    if (!Array.isArray(b.routing)) return;
+    const hasConditionalRouting = Array.isArray(b.routing) && (b.routing.length > 0 || (b.defaultQueueName != null && String(b.defaultQueueName).trim() !== ''));
+    if (!hasConditionalRouting) return;
     const bLabel = `B-Event '${b.name || b.id}'`;
 
     // queueName (in effect string) and routing are mutually exclusive
@@ -399,11 +400,13 @@ export function validateModel(model) {
 
   // ── V18: Probabilistic routing validation (F10.2) ─────────────────────────
   bEvents.forEach(b => {
-    if (!Array.isArray(b.probabilisticRouting)) return;
+    const hasProbabilisticRouting = Array.isArray(b.probabilisticRouting) && b.probabilisticRouting.length > 0;
+    if (!hasProbabilisticRouting) return;
     const bLabel = `B-Event '${b.name || b.id}'`;
 
     // Mutually exclusive with routing and literal RELEASE queue arg
-    if (Array.isArray(b.routing)) {
+    const hasConditionalRouting = Array.isArray(b.routing) && (b.routing.length > 0 || (b.defaultQueueName != null && String(b.defaultQueueName).trim() !== ''));
+    if (hasConditionalRouting) {
       err('V18', `${bLabel} has both routing and probabilisticRouting — they are mutually exclusive.`, 'bevents');
     }
     const effectStr = effectText(b.effect);
