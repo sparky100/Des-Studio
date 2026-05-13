@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -154,13 +154,6 @@ const panelBtnStyle = {
 
 function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef }) {
   const { fitView } = useReactFlow();
-
-  // Auto-fit all nodes on mount so they fill the canvas width.
-  // Short delay lets ReactFlow measure node dimensions first.
-  useEffect(() => {
-    const t = setTimeout(() => fitView({ padding: 0.15, duration: 300 }), 80);
-    return () => clearTimeout(t);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Expose fitView for a specific node so the validation checklist can navigate to it.
   // Assigned synchronously during render so it is always current.
