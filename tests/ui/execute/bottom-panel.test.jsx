@@ -148,12 +148,15 @@ describe("BottomPanel — F9C.11 node-filtered log", () => {
 });
 
 describe("BottomPanel — inspector", () => {
-  test("inspector tab shows the selected entity details", () => {
+  test("entities tab shows the selected entity details in split view", () => {
     render(<BottomPanel log={log} snap={snap} model={model} selectedEntityId={2} />);
 
-    fireEvent.click(screen.getByRole("tab", { name: /inspector/i }));
-    expect(screen.getByText("#2")).toBeInTheDocument();
-    expect(screen.getByText("Customer")).toBeInTheDocument();
-    expect(screen.getByText("Queue A")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /entities/i }));
+    const entityIds = screen.getAllByText("#2");
+    expect(entityIds.length).toBeGreaterThanOrEqual(1);
+    const customerTypes = screen.getAllByText("Customer");
+    expect(customerTypes.length).toBeGreaterThanOrEqual(1);
+    const queueLabels = screen.getAllByText("Queue A");
+    expect(queueLabels.length).toBeGreaterThanOrEqual(1);
   });
 });

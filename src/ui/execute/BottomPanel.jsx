@@ -7,6 +7,11 @@ import { Tag, PhaseTag } from "../shared/components.jsx";
 
 const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
+function formatStatus(status) {
+  if (status === "serving") return "In Service";
+  return status;
+}
+
 const TABS = [
   { id: "log",       label: "Step Log" },
   { id: "entities",  label: "Entities" },
@@ -424,40 +429,34 @@ function EntityInspector({ entity, snap, onClose }) {
 
   return (
     <div style={{
-      background: C.bg,
-      border: `1px solid ${C.accent}44`,
-      borderRadius: 8,
-      padding: 14,
       display: "flex",
       flexDirection: "column",
-      gap: 10,
+      gap: 8,
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ color: C.kpiArr, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>
-            #{entity.id}
-          </span>
-          <span style={{ color: C.text, fontFamily: FONT, fontSize: 12 }}>{entity.type}</span>
-          <Tag label={entity.status} color={entity.status === "waiting" ? C.amber : entity.status === "serving" ? C.accent : entity.status === "batch" ? C.purple : C.green} />
-        </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+        <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>ENTITY TRACKING</span>
         {onClose && (
           <button
             onClick={onClose}
             style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 10, padding: "2px 8px" }}
           >
-            Close
+            Clear
           </button>
         )}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
+        <span style={{ color: C.kpiArr, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>
+          #{entity.id}
+        </span>
+        <span style={{ color: C.text, fontFamily: FONT, fontSize: 12 }}>{entity.type}</span>
+        <Tag label={formatStatus(entity.status)} color={entity.status === "waiting" ? C.amber : entity.status === "serving" ? C.accent : entity.status === "batch" ? C.purple : C.green} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
         <div style={rowStyle}>
           <span style={labelStyle}>Arrival</span>
-          <span style={valueStyle}>{entity.arrivalTime != null ? `t=${entity.arrivalTime.toFixed(3)}` : "—"}</span>
-        </div>
-        <div style={rowStyle}>
-          <span style={labelStyle}>Clock</span>
-          <span style={valueStyle}>{clock.toFixed(3)}</span>
+          <span style={valueStyle}>{entity.arrivalTime != null ? `t=${entity.arrivalTime.toFixed(1)}` : "—"}</span>
         </div>
         {entity.serverId != null && (
           <div style={rowStyle}>
@@ -492,19 +491,19 @@ function EntityInspector({ entity, snap, onClose }) {
         {entity.completionTime != null && (
           <div style={rowStyle}>
             <span style={labelStyle}>Completed</span>
-            <span style={{ ...valueStyle, color: C.green }}>t={entity.completionTime.toFixed(3)}</span>
+            <span style={{ ...valueStyle, color: C.green }}>t={entity.completionTime.toFixed(1)}</span>
           </div>
         )}
         {entity.renegeTime != null && (
           <div style={rowStyle}>
             <span style={labelStyle}>Reneged</span>
-            <span style={{ ...valueStyle, color: C.red }}>t={entity.renegeTime.toFixed(3)}</span>
+            <span style={{ ...valueStyle, color: C.red }}>t={entity.renegeTime.toFixed(1)}</span>
           </div>
         )}
         {entity.sojournTime != null && (
           <div style={rowStyle}>
             <span style={labelStyle}>Sojourn</span>
-            <span style={{ ...valueStyle, color: C.kpiSvc }}>{entity.sojournTime.toFixed(3)}t</span>
+            <span style={{ ...valueStyle, color: C.kpiSvc }}>{entity.sojournTime.toFixed(1)}t</span>
           </div>
         )}
       </div>
@@ -541,9 +540,9 @@ function EntityInspector({ entity, snap, onClose }) {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2px 12px" }}>
                   <div style={{ fontSize: 10, color: C.muted }}>Waited</div>
-                  <div style={{ fontSize: 10, color: C.amber, fontWeight: 700 }}>{s.stageWait != null ? `${Number(s.stageWait).toFixed(3)}t` : "—"}</div>
+                  <div style={{ fontSize: 10, color: C.amber, fontWeight: 700 }}>{s.stageWait != null ? `${Number(s.stageWait).toFixed(1)}t` : "—"}</div>
                   <div style={{ fontSize: 10, color: C.muted }}>Service</div>
-                  <div style={{ fontSize: 10, color: C.accent, fontWeight: 700 }}>{s.stageService != null ? `${Number(s.stageService).toFixed(3)}t` : "—"}</div>
+                  <div style={{ fontSize: 10, color: C.accent, fontWeight: 700 }}>{s.stageService != null ? `${Number(s.stageService).toFixed(1)}t` : "—"}</div>
                 </div>
               </div>
             ))}
@@ -589,11 +588,11 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
               <tbody>
                 {entities.map(e => {
                   const journey = snap.clock != null ? snap.clock - (e.arrivalTime || 0) : null;
-                  const location = e.status === "waiting"
-                    ? (e.queue || "queue")
-                    : e.status === "serving"
-                      ? (e.ceventName || e.lastQueue || "serving")
-                      : e.queue || e.lastQueue || "—";
+              const location = e.status === "waiting"
+                ? (e.queue || "—")
+                : e.status === "serving"
+                  ? (e.ceventName || e.lastQueue || "—")
+                  : (e.queue || e.lastQueue || "—");
                   const isSelected = selectedEntityId === e.id;
                   return (
                     <tr
@@ -608,7 +607,7 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
                       <td style={{ padding: "4px 8px", color: C.kpiArr, fontFamily: FONT, fontWeight: 700 }}>#{e.id}</td>
                       <td style={{ padding: "4px 8px", fontFamily: FONT }}>{e.type}</td>
                       <td style={{ padding: "4px 8px" }}>
-                        <Tag label={e.status} color={e.status === "waiting" ? C.amber : e.status === "serving" ? C.accent : C.green} />
+                        <Tag label={formatStatus(e.status)} color={e.status === "waiting" ? C.amber : e.status === "serving" ? C.accent : C.green} />
                       </td>
                       <td style={{ padding: "4px 8px", color: C.cEvent, fontFamily: FONT }}>{location}</td>
                       <td style={{ padding: "4px 8px", textAlign: "right", color: C.amber, fontFamily: FONT, fontWeight: 700 }}>

@@ -84,7 +84,7 @@ describe('BottomPanel — EntitiesTab', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
     expect(screen.getByText(/2 active entities/i)).toBeInTheDocument();
     expect(screen.getByText('waiting')).toBeInTheDocument();
-    expect(screen.getAllByText('serving').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('In Service').length).toBeGreaterThanOrEqual(1);
   });
 
   test('clicking entity row calls onEntitySelect with entity ID', () => {
@@ -107,48 +107,50 @@ describe('BottomPanel — EntitiesTab', () => {
 });
 
 describe('BottomPanel — EntityInspector', () => {
-  test('inspector tab shows entity details when entity is selected', () => {
+  test('inspector pane shows entity details when entity is selected', () => {
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} selectedEntityId={1} />);
-    const inspectorTab = screen.getByRole('tab', { name: /Inspector/i });
-    fireEvent.click(inspectorTab);
-    expect(screen.getByText('#1')).toBeInTheDocument();
-    expect(screen.getByText('Customer')).toBeInTheDocument();
-    expect(screen.getByText('waiting')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    const entityIds = screen.getAllByText('#1');
+    expect(entityIds.length).toBeGreaterThanOrEqual(1);
+    const customerTypes = screen.getAllByText('Customer');
+    expect(customerTypes.length).toBeGreaterThanOrEqual(1);
+    const waitingLabels = screen.getAllByText('waiting');
+    expect(waitingLabels.length).toBeGreaterThanOrEqual(1);
   });
 
   test('inspector shows waiting age', () => {
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} selectedEntityId={1} />);
-    const inspectorTab = screen.getByRole('tab', { name: /Inspector/i });
-    fireEvent.click(inspectorTab);
-    expect(screen.getByText(/Waiting/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    const waitingLabels = screen.getAllByText(/Waiting/i);
+    expect(waitingLabels.length).toBeGreaterThanOrEqual(1);
   });
 
   test('inspector close button calls onEntitySelect with null', () => {
     const onEntitySelect = vi.fn();
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} selectedEntityId={1} onEntitySelect={onEntitySelect} />);
-    const inspectorTab = screen.getByRole('tab', { name: /Inspector/i });
-    fireEvent.click(inspectorTab);
-    const closeBtn = screen.getByText('Close');
+    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    const closeBtn = screen.getByText('Clear');
     fireEvent.click(closeBtn);
     expect(onEntitySelect).toHaveBeenCalledWith(null);
   });
 
-  test('inspector shows serving entity with server ID', () => {
+  test('inspector shows in-service entity with server ID', () => {
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} selectedEntityId={2} />);
-    const inspectorTab = screen.getByRole('tab', { name: /Inspector/i });
-    fireEvent.click(inspectorTab);
-    expect(screen.getByText('#2')).toBeInTheDocument();
-    expect(screen.getByText('serving')).toBeInTheDocument();
-    expect(screen.getByText(/#10/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    const entityIds = screen.getAllByText('#2');
+    expect(entityIds.length).toBeGreaterThanOrEqual(1);
+    const inServiceLabels = screen.getAllByText('In Service');
+    expect(inServiceLabels.length).toBeGreaterThanOrEqual(1);
+    const serverIds = screen.getAllByText('#10');
+    expect(serverIds.length).toBeGreaterThanOrEqual(1);
   });
 });
 
 describe('BottomPanel — tab navigation', () => {
-  test('all four tabs are present: Step Log, Entities, Inspector, Live Metrics', () => {
+  test('all three tabs are present: Step Log, Entities, Live Metrics', () => {
     render(<BottomPanel log={mockLog} snap={mockSnap} model={mockModel} />);
     expect(screen.getByRole('tab', { name: /Step Log/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Entities/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /Inspector/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Live Metrics/i })).toBeInTheDocument();
   });
 });
