@@ -86,6 +86,7 @@ export function applyEffect(effect, ctx) {
     nextId: ctx.nextId,
     rng:    ctx.rng,
     entityFilter: ctx.entityFilter ?? null,
+    ceventName: ctx.ceventName ?? null,
     incQueueMetric: ctx.incQueueMetric ?? null,
     _arbitration: ctx._arbitration ?? null,
     getLastCustId: () => lastCustId,

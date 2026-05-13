@@ -588,11 +588,11 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
               <tbody>
                 {entities.map(e => {
                   const journey = snap.clock != null ? snap.clock - (e.arrivalTime || 0) : null;
-              const location = e.status === "waiting"
-                ? (e.queue || "—")
-                : e.status === "serving"
-                  ? (e.ceventName || e.lastQueue || "—")
-                  : (e.queue || e.lastQueue || "—");
+                  const location = e.status === "waiting"
+                    ? (e.queue || "—")
+                    : e.status === "serving"
+                      ? (e.ceventName || e.lastQueue || "—")
+                      : (e.queue || e.lastQueue || "—");
                   const isSelected = selectedEntityId === e.id;
                   return (
                     <tr
