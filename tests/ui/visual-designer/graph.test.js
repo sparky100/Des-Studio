@@ -152,7 +152,7 @@ describe("deriveGraphFromModel", () => {
     const xValues = graph.nodes.map(node => node.x);
 
     expect(Math.min(...xValues)).toBe(40);
-    expect(Math.max(...xValues)).toBeLessThanOrEqual(610);
+    expect(Math.max(...xValues)).toBeLessThanOrEqual(640);
     expect(graph.viewport).toEqual({ x: 0, y: 0, zoom: 1 });
   });
 

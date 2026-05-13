@@ -66,13 +66,16 @@ describe("visual designer graph operations", () => {
     const starter = createStarterFlowModel({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] });
     const starterGraph = deriveGraphFromModel(starter);
     const edgePairs = starterGraph.edges.map(edge => `${edge.from}->${edge.to}`);
+    const sinkNodes = starterGraph.nodes.filter(node => node.type === "sink");
 
     expect(starter.queues).toHaveLength(1);
     expect(starter.bEvents.some(event => String(event.effect).startsWith("ARRIVE("))).toBe(true);
     expect(starter.cEvents.some(event => String(event.effect).startsWith("ASSIGN("))).toBe(true);
     expect(starter.bEvents.some(event => event.effect === "COMPLETE()")).toBe(true);
+    expect(sinkNodes).toHaveLength(1);
     expect(edgePairs.some(edge => edge.startsWith("source:") && edge.includes("->queue:queue-1"))).toBe(true);
     expect(edgePairs).toContain("queue:queue-1->activity:activity-1");
+    expect(edgePairs.some(edge => edge.startsWith("activity:activity-1->sink:"))).toBe(true);
   });
 
   it("can place a newly added visual node at a requested canvas position", () => {

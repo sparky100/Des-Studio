@@ -199,7 +199,6 @@ export function createStarterFlowModel(model) {
   next = addVisualNode(next, VISUAL_NODE_TYPES.QUEUE);
   next = addVisualNode(next, VISUAL_NODE_TYPES.SOURCE);
   next = addVisualNode(next, VISUAL_NODE_TYPES.ACTIVITY);
-  next = addVisualNode(next, VISUAL_NODE_TYPES.SINK);
 
   let graph = deriveGraphFromModel(next);
   const sourceId = graph.nodes.find(node => node.type === VISUAL_NODE_TYPES.SOURCE)?.id;
@@ -219,7 +218,11 @@ export function createStarterFlowModel(model) {
     next = connectVisualNodes(next, graph, activityId, sinkId).model;
   }
 
-  return next;
+  const relayoutSeed = {
+    ...next,
+    graph: next.graph ? { ...next.graph, nodes: [] } : undefined,
+  };
+  return updateGraphLayout(relayoutSeed, deriveGraphFromModel(relayoutSeed));
 }
 
 export function validateVisualGraph(graph = {}) {

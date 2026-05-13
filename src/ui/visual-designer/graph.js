@@ -3,7 +3,7 @@
 // Graph topology is derived from the canonical DES model. Persisted
 // model.graph data is used only for layout metadata such as node positions.
 
-const NODE_SPACING_X = 170;
+const NODE_SPACING_X = 200;
 const NODE_SPACING_Y = 112;
 const ORIGIN_X = 40;
 const ORIGIN_Y = 96;
