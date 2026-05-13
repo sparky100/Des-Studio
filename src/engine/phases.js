@@ -11,6 +11,7 @@
 import { MACROS, applyScalar }              from "./macros.js";
 import { evalCondition, evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
+import { clearWaitingState, markEntityWaiting } from "./entities.js";
 
 function applyShiftChange(ev, ctx) {
   const serverTypeName = ev.serverTypeName || ev.payload?.serverTypeName;
@@ -156,19 +157,25 @@ export function fireBEvent(ev, ctx) {
   // null / "" means "exit system" — complete the customer immediately.
   const applyRoute = (cust, queueName, note) => {
     if (!queueName) {
+      const previousQueue = cust.queue ?? cust.lastQueue ?? null;
+      clearWaitingState(cust);
       cust.status        = "done";
       cust.completionTime = clock;
       cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
+      cust.lastQueue = previousQueue;
+      delete cust.queue;
       ctx.state.__served  = (ctx.state.__served || 0) + 1;
       msgs.push(`Routing: #${cust.id} → exit system (${note})`);
     } else {
-      cust.queue = queueName;
+      markEntityWaiting(cust, clock, queueName);
       msgs.push(`Routing: #${cust.id} → "${queueName}" (${note})`);
     }
   };
 
+  const hasConditionalRouting = Array.isArray(ev.routing) && ev.routing.length > 0;
+
   // ── Conditional routing (F10.1) ──────────────────────────────────────────
-  if (Array.isArray(ev.routing) || ev.defaultQueueName !== undefined) {
+  if (hasConditionalRouting) {
     const custId = effectCtx._lastCustId;
     const cust   = custId ? ctx.entities.find(e => e.id === custId) : null;
     if (cust && cust.status === "waiting") {
@@ -216,13 +223,16 @@ export function fireBEvent(ev, ctx) {
       if (Number.isFinite(maxCount) && cust.loopCount >= maxCount) {
         const exitQ = ev.loopConfig.exitQueueName;
         if (exitQ) {
-          cust.queue = exitQ;
-          cust.status = "waiting";
+          markEntityWaiting(cust, clock, exitQ);
           msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → "${exitQ}"`);
         } else {
+          const previousQueue = cust.queue ?? cust.lastQueue ?? null;
+          clearWaitingState(cust);
           cust.status = "done";
           cust.completionTime = clock;
           cust.sojournTime = +(clock - cust.arrivalTime).toFixed(4);
+          cust.lastQueue = previousQueue;
+          delete cust.queue;
           ctx.state.__served = (ctx.state.__served || 0) + 1;
           msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → exit system`);
         }

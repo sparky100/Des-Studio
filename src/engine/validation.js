@@ -350,7 +350,7 @@ export function validateModel(model) {
 
   // ── V17: Routing table validation (F10.1) ─────────────────────────────────
   bEvents.forEach(b => {
-    const hasConditionalRouting = Array.isArray(b.routing) && (b.routing.length > 0 || (b.defaultQueueName != null && String(b.defaultQueueName).trim() !== ''));
+    const hasConditionalRouting = Array.isArray(b.routing) && b.routing.length > 0;
     if (!hasConditionalRouting) return;
     const bLabel = `B-Event '${b.name || b.id}'`;
 
@@ -375,7 +375,7 @@ export function validateModel(model) {
     });
 
     // defaultQueueName must exist
-    if (b.defaultQueueName !== undefined && b.defaultQueueName !== null) {
+    if (hasConditionalRouting && b.defaultQueueName !== undefined && b.defaultQueueName !== null) {
       const defQ = String(b.defaultQueueName || '').trim();
       if (!queueNamesLower.has(defQ.toLowerCase())) {
         err('V17',
@@ -405,7 +405,7 @@ export function validateModel(model) {
     const bLabel = `B-Event '${b.name || b.id}'`;
 
     // Mutually exclusive with routing and literal RELEASE queue arg
-    const hasConditionalRouting = Array.isArray(b.routing) && (b.routing.length > 0 || (b.defaultQueueName != null && String(b.defaultQueueName).trim() !== ''));
+    const hasConditionalRouting = Array.isArray(b.routing) && b.routing.length > 0;
     if (hasConditionalRouting) {
       err('V18', `${bLabel} has both routing and probabilisticRouting — they are mutually exclusive.`, 'bevents');
     }

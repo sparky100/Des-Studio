@@ -328,4 +328,30 @@ describe("validateModel", () => {
     const result = validateModel(model);
     expect(result.errors.filter(error => error.code === "V17" || error.code === "V18")).toEqual([]);
   });
+
+  it("ignores stale defaultQueueName when no conditional routing rows exist", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Patient", role: "customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [
+        { id: "q1", name: "Waiting", discipline: "FIFO", customerType: "Patient" },
+        { id: "q2", name: "Treatment", discipline: "FIFO", customerType: "Patient" },
+      ],
+      bEvents: [
+        {
+          id: "depart",
+          name: "Depart",
+          effect: "RELEASE(Nurse, Treatment)",
+          routing: [],
+          defaultQueueName: "Waiting",
+          probabilisticRouting: [],
+          schedules: [],
+        },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors.filter(error => error.code === "V17" || error.code === "V18")).toEqual([]);
+  });
 });

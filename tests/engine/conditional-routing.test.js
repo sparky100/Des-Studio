@@ -100,6 +100,11 @@ describe("RELEASE — routing table evaluation", () => {
     const patient = result.entitySummary.find(e => e.role === "customer");
     expect(patient.queue).toBe("ICU Queue");
     expect(patient.status).toBe("waiting");
+    expect(patient.waitingFor).toEqual({
+      kind: "queue",
+      queueName: "ICU Queue",
+      enteredAt: 2,
+    });
   });
 
   test("routes patient to Ward Queue when Entity.outcome == ward", () => {
@@ -109,6 +114,7 @@ describe("RELEASE — routing table evaluation", () => {
     const patient = result.entitySummary.find(e => e.role === "customer");
     expect(patient.queue).toBe("Ward Queue");
     expect(patient.status).toBe("waiting");
+    expect(patient.waitingSince).toBe(2);
   });
 
   test("first matching condition wins — does not evaluate subsequent conditions", () => {
@@ -167,15 +173,35 @@ describe("RELEASE — routing table evaluation", () => {
     const engine = buildEngine(model, 6, 0, 20);
     expect(() => engine.runAll()).not.toThrow();
   });
+
+  test("routing to exit system clears waiting ownership metadata", () => {
+    const routing = [
+      {
+        condition: { variable: "Entity.outcome", operator: "==", value: "exit" },
+        queueName: null,
+      },
+    ];
+    const model = baseModel("exit", routing, null);
+    const engine = buildEngine(model, 9, 0, 20);
+    const result = engine.runAll();
+    const patient = result.entitySummary.find(e => e.role === "customer");
+    expect(patient.status).toBe("done");
+    expect(patient.queue).toBeUndefined();
+    expect(patient.waitingFor).toBeUndefined();
+    expect(patient.waitingSince).toBeUndefined();
+  });
 });
 
 describe("RELEASE routing — edge cases", () => {
-  test("routing works when routing array is empty (treated as no match → default)", () => {
+  test("routing stays inactive when stored models contain an empty routing array only", () => {
     const model = baseModel("ward", [], "Ward Queue");
+    model.bEvents[1].effect = "RELEASE(Nurse)";
     const engine = buildEngine(model, 7, 0, 20);
     const result = engine.runAll();
     const patient = result.entitySummary.find(e => e.role === "customer");
-    expect(patient.queue).toBe("Ward Queue");
+    expect(patient).toBeDefined();
+    expect(patient.queue).not.toBe("Ward Queue");
+    expect(patient.lastQueue).not.toBe("Ward Queue");
   });
 
   test("routing is case-sensitive for string values by default", () => {
@@ -191,5 +217,84 @@ describe("RELEASE routing — edge cases", () => {
     const result = engine.runAll();
     const patient = result.entitySummary.find(e => e.role === "customer");
     expect(patient.queue).toBe("Ward Queue"); // falls back to default
+  });
+});
+
+describe("Imported empty routing placeholders", () => {
+  test("ARRIVE does not exit the entity when stored models contain empty routing arrays", () => {
+    const model = {
+      entityTypes: [
+        { id: "et-patient", name: "Patients", role: "customer", attrDefs: [] },
+        { id: "et-nurse", name: "Nurses", role: "server", count: "1", attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [{ id: "q-wait", name: "Waiting for triage", discipline: "FIFO", customerType: "Patients" }],
+      bEvents: [
+        {
+          id: "b-arrive",
+          name: "Arrival",
+          scheduledTime: "0",
+          effect: ["ARRIVE(Patients, Waiting for triage)"],
+          routing: [],
+          probabilisticRouting: [],
+          schedules: [],
+        },
+      ],
+      cEvents: [],
+    };
+
+    const engine = buildEngine(model, 42, 0, 20);
+    const result = engine.runAll();
+    const patient = result.entitySummary.find(e => e.role === "customer");
+
+    expect(patient).toBeDefined();
+    expect(patient.status).toBe("waiting");
+    expect(patient.queue).toBe("Waiting for triage");
+    expect(result.summary.served).toBe(0);
+  });
+
+  test("RELEASE honours its target queue when a stale defaultQueueName is stored without routing rows", () => {
+    const model = {
+      entityTypes: [
+        { id: "et-patient", name: "Patients", role: "customer", attrDefs: [] },
+        { id: "et-nurse", name: "Nurses", role: "server", count: "1", attrDefs: [] },
+        { id: "et-doctor", name: "Doctors", role: "server", count: "1", attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [
+        { id: "q-triage", name: "Waiting for triage", discipline: "FIFO", customerType: "Patients" },
+        { id: "q-treatment", name: "Waiting for treatment", discipline: "FIFO", customerType: "Patients" },
+      ],
+      bEvents: [
+        { id: "b-arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Patients, Waiting for triage)", schedules: [] },
+        {
+          id: "b-triage-done",
+          name: "Triage Done",
+          scheduledTime: "9999",
+          effect: "RELEASE(Nurses, Waiting for treatment)",
+          routing: [],
+          defaultQueueName: "Waiting for triage",
+          probabilisticRouting: [],
+          schedules: [],
+        },
+      ],
+      cEvents: [
+        {
+          id: "c-triage",
+          name: "Triage",
+          priority: 1,
+          condition: "queue(Waiting for triage).length > 0 AND idle(Nurses).count > 0",
+          effect: "ASSIGN(Waiting for triage, Nurses)",
+          cSchedules: [{ eventId: "b-triage-done", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }],
+        },
+      ],
+    };
+
+    const result = buildEngine(model, 42, 0, 20).runAll();
+    const patient = result.entitySummary.find(e => e.role === "customer");
+
+    expect(patient).toBeDefined();
+    expect(patient.status).toBe("waiting");
+    expect(patient.queue).toBe("Waiting for treatment");
   });
 });
