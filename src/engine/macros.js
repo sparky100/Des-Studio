@@ -381,6 +381,19 @@ export const MACROS = [
           msgs.push(`Server capacity reconciliation: retired ${retired} idle ${srv.type} server(s)`);
         }
       }
+      // Release any auxiliary servers that were co-seized with this customer (COSEIZE pattern).
+      // They have currentCustId pointing to the now-done customer but were not tracked in
+      // the primary server context, so COMPLETE would otherwise leave them permanently busy.
+      const auxiliaryBusy = entities.filter(e =>
+        e.role === "server" &&
+        e.currentCustId === cust.id &&
+        e.id !== srv?.id &&
+        (e.status === "busy" || e.status === "serving")
+      );
+      for (const auxSrv of auxiliaryBusy) {
+        releaseServerClaim(null, auxSrv);
+        msgs.push(`Server #${auxSrv.id} (${auxSrv.type}) → idle (COSEIZE release)`);
+      }
     },
   },
 
@@ -707,9 +720,10 @@ export const MACROS = [
 
       let repairedCount = 0;
       for (const srv of failedServers) {
+        const failedAt = srv._failedAt;
         srv.status = "idle";
         srv._failedAt = undefined;
-        srv._downtime = +(clock - (srv._failedAt || clock)).toFixed(4);
+        srv._downtime = failedAt != null ? +(clock - failedAt).toFixed(4) : 0;
         repairedCount++;
       }
 
@@ -762,6 +776,7 @@ export const MACROS = [
           _splitFrom: cust.id,
           _splitIndex: i,
         };
+        markEntityWaiting(child, clock, targetQueue);
         entities.push(child);
         childIds.push(childId);
       }
