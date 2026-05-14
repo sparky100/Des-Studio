@@ -139,6 +139,55 @@ export function WarmupChart({ series, truncationPoint, width = 320, height = 100
   );
 }
 
+export function CumulativeMeanChart({ points, warmupPeriod, width = 320, height = 100 }) {
+  if (!points || points.length < 2) return null;
+  const W = width, H = height, PAD = { top: 8, right: 8, bottom: 18, left: 36 };
+  const plotW = W - PAD.left - PAD.right;
+  const plotH = H - PAD.top - PAD.bottom;
+
+  const means = points.map(p => p.mean);
+  const indices = points.map(p => p.index);
+  const yMin = Math.min(...means);
+  const yMax = Math.max(...means);
+  const yRange = yMax - yMin || 1;
+  const yPad = yRange * 0.1;
+  const xMin = indices[0];
+  const xMax = indices[indices.length - 1];
+
+  const xScale = (i) => PAD.left + (i - xMin) / (xMax - xMin || 1) * plotW;
+  const yScale = (v) => PAD.top + plotH - (v - (yMin - yPad)) / (yRange + 2 * yPad) * plotH;
+
+  const linePath = points.map((p, i) =>
+    `${i === 0 ? "M" : "L"}${xScale(p.index).toFixed(1)},${yScale(p.mean).toFixed(1)}`
+  ).join(" ");
+
+  const yTicks = Array.from({ length: 3 }, (_, i) =>
+    (yMin - yPad) + (i / 2) * (yRange + 2 * yPad)
+  );
+
+  return (
+    <div style={{ background: C.bg, borderRadius: 4, border: `1px solid ${C.border}`, padding: 6, overflow: "hidden" }}>
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+        {yTicks.map((tick, i) => (
+          <g key={i}>
+            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} />
+            <text x={PAD.left - 4} y={yScale(tick) + 2} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace">
+              {tick.toFixed(2)}
+            </text>
+          </g>
+        ))}
+        <path d={linePath} fill="none" stroke={C.green} strokeWidth={1.5} />
+        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={8} fontFamily="monospace">
+          Observations
+        </text>
+        <text x={PAD.left - 2} y={PAD.top + 4} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace" transform={`rotate(-90, ${PAD.left - 14}, ${H / 2})`}>
+          Cum. mean
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellClick }) {
   if (!results?.length) return null;
 

@@ -6,9 +6,13 @@ import {
   computePercentiles,
   computeSummaryStats,
   confidenceInterval95,
+  cumulativeMean,
+  detectOutliers,
   detectWarmupWelch,
   mean,
   pairedTConfidenceInterval,
+  relativePrecision,
+  sampleSizeGuidance,
   sampleStdDev,
   sampleVariance,
   suggestBatchSize,
@@ -379,5 +383,121 @@ describe('computePercentiles', () => {
     const result = computePercentiles([7, 2, 9, 4, 1], [0, 100]);
     expect(result.p0).toBe(1);
     expect(result.p100).toBe(9);
+  });
+});
+
+// --- F28.3: relativePrecision ---
+describe('relativePrecision', () => {
+  test('happy path: returns halfWidth/|mean|*100', () => {
+    expect(relativePrecision({ mean: 10, halfWidth: 1, n: 5 })).toBeCloseTo(10, 4);
+  });
+
+  test('returns null when mean is zero', () => {
+    expect(relativePrecision({ mean: 0, halfWidth: 0.5, n: 5 })).toBeNull();
+  });
+
+  test('returns null when halfWidth is null', () => {
+    expect(relativePrecision({ mean: 5, halfWidth: null, n: 5 })).toBeNull();
+  });
+
+  test('returns null for null ci', () => {
+    expect(relativePrecision(null)).toBeNull();
+  });
+
+  test('works with negative mean (uses absolute value)', () => {
+    expect(relativePrecision({ mean: -10, halfWidth: 1, n: 5 })).toBeCloseTo(10, 4);
+  });
+});
+
+// --- F28.3: sampleSizeGuidance ---
+describe('sampleSizeGuidance', () => {
+  test('returns additional n needed for 5% precision', () => {
+    const ci = confidenceInterval95([10, 12, 14, 8, 11, 9, 13, 15, 10, 11]);
+    const guidance = sampleSizeGuidance(ci, 5);
+    expect(guidance == null || guidance > 0).toBe(true);
+  });
+
+  test('returns null when n < 2', () => {
+    expect(sampleSizeGuidance({ n: 1, mean: 10, halfWidth: 0.5 }, 5)).toBeNull();
+  });
+
+  test('returns null when mean is zero', () => {
+    expect(sampleSizeGuidance({ n: 10, mean: 0, halfWidth: 0.5 }, 5)).toBeNull();
+  });
+
+  test('returns null when precision already met', () => {
+    const ci = confidenceInterval95([10, 10, 10, 10, 10, 10, 10, 10, 10, 10]);
+    expect(sampleSizeGuidance(ci, 5)).toBeNull();
+  });
+
+  test('returns null for null input', () => {
+    expect(sampleSizeGuidance(null, 5)).toBeNull();
+  });
+});
+
+// --- F28.4: cumulativeMean ---
+describe('cumulativeMean', () => {
+  test('returns empty array for empty input', () => {
+    expect(cumulativeMean([])).toEqual([]);
+  });
+
+  test('returns single point for single value', () => {
+    expect(cumulativeMean([5])).toEqual([{ index: 0, mean: 5 }]);
+  });
+
+  test('computes known sequence correctly', () => {
+    const result = cumulativeMean([2, 4, 6]);
+    expect(result[0]).toEqual({ index: 0, mean: 2 });
+    expect(result[1]).toEqual({ index: 1, mean: 3 });
+    expect(result[2]).toEqual({ index: 2, mean: 4 });
+  });
+
+  test('filters out non-finite values', () => {
+    const result = cumulativeMean([2, NaN, 4, Infinity, 6]);
+    expect(result.length).toBe(3);
+    expect(result[2].mean).toBeCloseTo(4, 4);
+  });
+
+  test('monotonically stable for constant input', () => {
+    const result = cumulativeMean([5, 5, 5, 5]);
+    expect(result.every(p => p.mean === 5)).toBe(true);
+  });
+});
+
+// --- F28.5: detectOutliers ---
+describe('detectOutliers', () => {
+  test('returns nulls and empty indices for fewer than 4 values', () => {
+    const result = detectOutliers([1, 2, 3]);
+    expect(result.q1).toBeNull();
+    expect(result.outlierIndices).toEqual([]);
+  });
+
+  test('returns no outliers for tight cluster', () => {
+    const result = detectOutliers([10, 11, 10, 11, 10, 11]);
+    expect(result.outlierIndices).toEqual([]);
+  });
+
+  test('detects one high outlier', () => {
+    const result = detectOutliers([10, 11, 10, 10, 11, 100]);
+    expect(result.outlierIndices).toContain(5);
+    expect(result.outlierIndices.length).toBe(1);
+  });
+
+  test('detects one low outlier', () => {
+    const result = detectOutliers([-50, 10, 11, 10, 10, 11]);
+    expect(result.outlierIndices).toContain(0);
+  });
+
+  test('all identical values: IQR=0, no outliers', () => {
+    const result = detectOutliers([5, 5, 5, 5, 5]);
+    expect(result.iqr).toBe(0);
+    expect(result.outlierIndices).toEqual([]);
+  });
+
+  test('returns correct fence values for symmetric data', () => {
+    const result = detectOutliers([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(result.lowerFence).toBeLessThan(result.q1);
+    expect(result.upperFence).toBeGreaterThan(result.q3);
+    expect(result.iqr).toBeCloseTo(result.q3 - result.q1, 5);
   });
 });

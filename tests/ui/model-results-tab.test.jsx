@@ -102,7 +102,7 @@ describe("ModelDetail Analysis tab", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /analysis/i }));
 
-    await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith("m1"));
+    await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith("m1", expect.objectContaining({ archived: false })));
     expect(await screen.findByRole("combobox", { name: /saved run/i })).toHaveValue("run-1");
     expect(screen.getByText(/Morning baseline/i)).toBeInTheDocument();
     expect(screen.getByText(/Where are queues forming/i)).toBeInTheDocument();

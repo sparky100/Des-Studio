@@ -672,3 +672,69 @@ export function batchMeansCI(values = [], batchSize = null) {
     lag1Rho,
   };
 }
+
+// --- F28.3: CI precision helpers ---
+
+export function relativePrecision(ci) {
+  if (!ci || ci.halfWidth == null || ci.mean == null) return null;
+  if (!Number.isFinite(ci.halfWidth) || !Number.isFinite(ci.mean)) return null;
+  if (ci.mean === 0) return null;
+  return (ci.halfWidth / Math.abs(ci.mean)) * 100;
+}
+
+export function sampleSizeGuidance(ci, targetPrecision = 5) {
+  if (!ci || ci.n == null || ci.mean == null || ci.halfWidth == null) return null;
+  if (!Number.isFinite(ci.mean) || ci.mean === 0) return null;
+  if (!Number.isFinite(ci.halfWidth) || ci.halfWidth <= 0) return null;
+  if (ci.n < 2) return null;
+  const relPrec = relativePrecision(ci);
+  if (relPrec != null && relPrec <= targetPrecision) return null;
+  // Estimate sample std dev from half-width and t critical
+  const df = ci.n - 1;
+  const t = tCritical95(df);
+  const stdDev = (ci.halfWidth * Math.sqrt(ci.n)) / t;
+  const targetAbsolute = Math.abs(ci.mean) * (targetPrecision / 100);
+  const nRequired = Math.ceil((t * stdDev / targetAbsolute) ** 2);
+  return Math.max(nRequired - ci.n, 1);
+}
+
+// --- F28.4: Transient analysis helpers ---
+
+export function cumulativeMean(values = []) {
+  const finite = [];
+  for (const v of values) {
+    if (Number.isFinite(v)) finite.push(v);
+  }
+  if (finite.length === 0) return [];
+  const result = [];
+  let sum = 0;
+  for (let i = 0; i < finite.length; i++) {
+    sum += finite[i];
+    result.push({ index: i, mean: sum / (i + 1) });
+  }
+  return result;
+}
+
+// --- F28.5: Replication diagnostics ---
+
+export function detectOutliers(values = []) {
+  const empty = { q1: null, q3: null, iqr: null, lowerFence: null, upperFence: null, outlierIndices: [] };
+  if (!Array.isArray(values) || values.length < 4) return empty;
+  const finite = values.filter(Number.isFinite);
+  if (finite.length < 4) return empty;
+  const pcts = computePercentiles(finite, [25, 75]);
+  const q1 = pcts.p25;
+  const q3 = pcts.p75;
+  if (q1 == null || q3 == null) return empty;
+  const iqr = q3 - q1;
+  const lowerFence = q1 - 1.5 * iqr;
+  const upperFence = q3 + 1.5 * iqr;
+  const outlierIndices = [];
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (Number.isFinite(v) && (v < lowerFence || v > upperFence)) {
+      outlierIndices.push(i);
+    }
+  }
+  return { q1, q3, iqr, lowerFence, upperFence, outlierIndices };
+}
