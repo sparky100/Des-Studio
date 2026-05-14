@@ -1,13 +1,12 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-13 | Reflects: Sprint 26 — Resource Semantics & Waiting Behaviour complete. Current: Sprint 27 — Simulation Debugging & Explainability*
+*Last updated: 2026-05-14 | Reflects: Sprint 31 — Expressiveness & Observability complete. Current: Sprint 32 — Resource Reliability*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Sprint plan: `docs/reviews/sprint-27-simulation-debugging-and-explainability-plan.md`
-- Sprint closure report: `docs/reviews/sprint-27-closure-report.md`
-- Sprint capability guide: `docs/reviews/sprint-27-capability-guide.md`
+- Sprint plan: `docs/reviews/sprint-31-plan.md`
+- Sprint closure report: `docs/reviews/sprint-31-closure-report.md`
 - Post-Sprint-25 roadmap and scenario coverage: `docs/reviews/sprint-26-30-roadmap-and-scenario-coverage.md`
 
 ---
@@ -1348,6 +1347,7 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 28 | ✅ Complete | 2026-05-14 | Experiments and Statistical Workbench |
 | Sprint 29 | ✅ Complete | 2026-05-14 | Test Infrastructure, Benchmarks, and Reproducibility |
 | Sprint 30 | ✅ Complete | 2026-05-14 | Reusable Modelling Library and Scenario Packs |
+| Sprint 31 | ✅ Complete | 2026-05-14 | Expressiveness & Observability: clock token in UI, WIP time-average metric, live queue-depth time-plot |
 
 ---
 

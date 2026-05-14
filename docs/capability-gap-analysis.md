@@ -21,8 +21,8 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | Mutable entity attributes | ✅ | ✅ | ✅ | ✅ mutable flag | — |
 | Attribute-based routing predicates | ✅ | ✅ | ✅ | ⚠️ entityFilter on ASSIGN only | Gap |
 | Multi-stage sequential routing | ✅ | ✅ | ✅ | ✅ RELEASE macro | — |
-| Probabilistic routing / branching | ✅ | ✅ | ✅ | ⚠️ balkProbability only | Gap |
-| Conditional routing (Select Output) | ✅ | ✅ | ✅ | ⚠️ overflow destination only | Gap |
+| Probabilistic routing / branching | ✅ | ✅ | ✅ | ✅ conditional + probabilistic routing tables | — |
+| Conditional routing (Select Output) | ✅ | ✅ | ✅ | ✅ condition-based routing branches | — |
 | Entity cloning / splitting | ⚠️ manual | ✅ Split block | ✅ EntitySplit | ❌ | Gap |
 | Entity joining / combining | ⚠️ manual | ✅ Combine block | ✅ Combine | ❌ | Gap |
 | Process recirculation / loops | ✅ | ✅ | ✅ | ✅ loopCount tracked | — |
@@ -135,7 +135,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | General-purpose scripting language | ✅ Python | ✅ Java | ❌ | ❌ | Gap |
 | Custom logic in process steps | ✅ yield | ✅ code blocks | ❌ | ❌ | **High Gap** |
 | Custom condition expressions | ✅ Python | ✅ Java | ✅ input lang | ⚠️ token-based DSL | Gap |
-| Clock value in conditions | ✅ env.now | ✅ | ✅ | ❌ | Gap |
+| Clock value in conditions | ✅ env.now | ✅ | ✅ | ⚠️ engine supports `clock` token; not exposed in UI Condition Builder | Gap |
 | Custom distributions | ✅ any fn | ✅ | ✅ | ⚠️ Empirical / CSV only | Gap |
 | Distribution fitting from data | ❌ | ❌ | ❌ | ✅ fitDistribution() | — |
 | Macro / block extensibility | ❌ | ⚠️ | ❌ | ✅ MACROS registry | — |
@@ -157,9 +157,9 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 |---|---|---|---|---|---|
 | G01 | **Resource preemption** | B | **High** | High-priority entity interrupts a lower-priority entity currently in service. Requires preemption claim stack in server entity, interrupted entity re-queues with remaining service time. | Sprint 31 |
 | G02 | **General-purpose scripting / custom process logic** | F | **High** | Users cannot write conditional loops, multi-step sequences, or arbitrary logic within a single entity's lifetime. The three-phase declarative model is architecturally intentional but limits certain use cases. Partial mitigation: structured C-event priority chain. | Sprint 33 |
-| G03 | **Probabilistic / conditional routing** | A | **High** | Beyond overflow routing, no explicit Select-Output or Branch block. Workaround: separate queues + C-event conditions, but it's tedious. Suggest `ROUTE(EntityType, {prob: Q1, prob: Q2})` macro or routing-table UI. | Sprint 31 |
+| G03 | ~~**Probabilistic / conditional routing**~~ | A | ~~High~~ | ~~Beyond overflow routing, no explicit Select-Output or Branch block.~~ **RESOLVED: Both conditional routing (predicate-based branches) and probabilistic routing (probability-weighted selection) are implemented in `fireBEvent()` (`src/engine/phases.js:191-231`). Visual designer derives edges from both routing types. V17/V18 validation rules cover both.** | ~~Sprint 31~~ Resolved |
 | G04 | **Resource breakdowns / failures** | B | **High** | No MTBF/MTTR modelling. Servers can only be idle or busy. Add `FAIL(ServerType)` and `REPAIR(ServerType)` macros + failed state; schedule via B-events. | Sprint 32 |
-| G05 | **Clock value in conditions** | F | **Med** | `time() > 100` or `clock >= shiftEnd` cannot be expressed in condition tokens. Required for time-triggered logic without a dedicated B-event. Add `time()` as a reserved condition token. | Sprint 31 |
+| G05 | **Clock value in conditions** | F | Low | Engine supports `clock` token at runtime (`evalCondition` line 189) but it is **not exposed in the UI Condition Builder** token list (`buildConditionTokens()`). One-line fix: add `clock` to returned tokens. | Sprint 31 |
 | G06 | **Entity splitting / cloning** | A | **Med** | No equivalent of AnyLogic Split or JaamSim EntitySplit. Needed for parallel service paths (e.g. sample sent to two labs). Suggest `SPLIT(EntityType, N, TargetQueue)` macro. | Sprint 32 |
 | G07 | **Multiple resource types per task (co-seize)** | B | **Med** | A task requiring both a Nurse AND a Room simultaneously cannot be expressed. Requires a compound ASSIGN or SeizeSet concept. | Sprint 32 |
 | G08 | **Custom / SPT queue comparator** | C | **Med** | Only FIFO/LIFO/PRIORITY available. Shortest Processing Time (SPT), Earliest Due Date (EDD), or user-defined sort keys are unsupported. Extend discipline enum + attribute-based sort key field. | Sprint 33 |
@@ -185,7 +185,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 ## Section 3: Capability Summary
 
 ### A — Core Entity Model
-DES Studio implements the essential entity lifecycle: typed entities with sampled attributes, multi-stage routing via RELEASE, recirculation tracking, and balking/reneging. It covers the patterns needed for the vast majority of service and manufacturing models. The two most impactful gaps are **probabilistic/conditional routing** (currently only overflow routing exists — a proper Branch/Select-Output macro would unlock a large class of models) and **entity splitting/cloning** (parallel sub-process paths). Entity conveyors and spatial movement are out of scope for the tool's browser-based positioning.
+DES Studio implements the essential entity lifecycle: typed entities with sampled attributes, multi-stage routing via RELEASE, recirculation tracking, balking/reneging, and both **conditional routing** (predicate-based branches) and **probabilistic routing** (probability-weighted selection). It covers the patterns needed for the vast majority of service and manufacturing models. The two most impactful gaps are **entity splitting/cloning** (parallel sub-process paths) and **entity matching/synchronisation** (coordinating two different entity types from separate queues). Entity conveyors and spatial movement are out of scope for the tool's browser-based positioning.
 
 ### B — Resource & Server Model
 Server pools, multi-capacity types, shift schedules, dynamic capacity adjustment, and utilisation tracking are all solid. The critical missing capability is **preemption**: the ability for a higher-priority entity to interrupt an in-service lower-priority entity and reclaim the server. This is fundamental to a wide class of healthcare, emergency response, and manufacturing-interruption models. **Resource failures/breakdowns** (MTBF/MTTR cycles) represent the second most impactful gap — essential for reliability and maintenance modelling. Multi-resource co-seize (requiring both a nurse and a room simultaneously) is a medium-priority gap.
@@ -200,39 +200,36 @@ DES Studio's statistical output is arguably its strongest differentiator: 95% CI
 The visual authoring surface is comprehensive for a browser-based tool: canvas DAG editor, real-time token animation, per-node live counts, structured trace/event log, entity inspector, KPI cards, sweep charts, and a model gallery with sharing and forking. The notable absence vs AnyLogic/JaamSim is a **live time-plot panel** (queue depth and utilisation over simulation time) — this would be the highest-impact UI addition. 2D spatial layouts and 3D environments are out of scope for the tool's positioning.
 
 ### F — Scripting & Extensibility
-DES Studio makes a deliberate safety-first choice: all logic is expressed through a declarative macro and condition token system with no `new Function()` or `eval()`. This prevents code injection and makes the tool accessible to non-programmers, but it means **sequential process logic** (loops, conditionals, multi-step waiting within a single entity's lifetime) is not expressible — a fundamental architectural constraint that SimPy Python and AnyLogic Java code blocks resolve trivially. The most actionable near-term fix is adding **`time()` as a condition token** (clock-aware guards) and **custom condition expressions** beyond the current fixed-token DSL. The macro registry and distribution registry are already open to extension without touching engine internals.
+DES Studio makes a deliberate safety-first choice: all logic is expressed through a declarative macro and condition token system with no `new Function()` or `eval()`. This prevents code injection and makes the tool accessible to non-programmers, but it means **sequential process logic** (loops, conditionals, multi-step waiting within a single entity's lifetime) is not expressible — a fundamental architectural constraint that SimPy Python and AnyLogic Java code blocks resolve trivially. The `clock` token is supported at runtime but **not yet exposed in the UI Condition Builder** — a quick fix planned for Sprint 31. The macro registry and distribution registry are already open to extension without touching engine internals.
 
 ---
 
 ## Section 4: Recommended Next Sprints
 
-### Sprint 31 — Core Expressiveness (High-Impact, Low-Risk)
+### Sprint 31 — Expressiveness & Observability (Low-Risk, Additive)
 
-**Goal:** Close the highest-frequency gaps that limit real model expressiveness with targeted, safe additions.
+**Goal:** Close quick-win gaps that improve model expressiveness and add live observability during execution. All changes are additive — no existing engine contracts modified.
 
 | Feature | Gap # | Approach |
-|---|---|---|
-| Probabilistic / conditional routing macro | G03 | Add `ROUTE(Type, {Queue1: p1, Queue2: p2})` macro to MACROS registry; C-event effect; routing table UI in C-event editor |
-| Clock value in conditions | G05 | Add `time()` as a reserved token in evalCondition; maps to current `clock` value |
-| WIP time-average metric | G11 | Track cumulative `∫ WIP dt` in engine step loop; expose in summary as `avgWIP` |
-| Live queue-depth time-plot | G15 | New chart panel in Execute bottom bar using existing `_timeSeries[]` data; line chart per queue/server type |
+|---------|-------|----------|
+| Clock token in Condition Builder UI | G05 | Add `clock` to `buildConditionTokens()` output. Engine already supports it at runtime. |
+| WIP time-average metric | G11 | Track cumulative `∫ WIP dt` in engine step loop; expose in summary as `avgWIP`. |
+| Live queue-depth time-plot | G15 | New chart panel in Execute bottom bar using existing `_timeSeries[]` data; line chart per queue. |
 
-**Exit gate:** All 4 features tested; no regressions; 2 new templates demonstrating routing.
+**Exit gate:** All 3 features tested; no regressions; `npm test -- --run` passes; `npm run build` passes.
 
 ---
 
 ### Sprint 32 — Resource Reliability (High-Impact, Moderate Complexity)
 
-**Goal:** Add resource failure/repair cycles and multi-resource co-seize — the two biggest resource modelling gaps.
+**Goal:** Add resource failure/repair cycles and preemption — the two biggest resource modelling gaps.
 
 | Feature | Gap # | Approach |
-|---|---|---|
+|---------|-------|----------|
 | Resource preemption | G01 | New server state `preempted`; `PREEMPT(ServerType)` macro; interrupted entity re-queues with remaining service in `_remainingService`; schedule resume B-event |
 | Resource breakdowns / failures | G04 | Add `failed` server state; `FAIL(ServerType)` and `REPAIR(ServerType)` macros; MTBF/MTTR scheduled as recurring B-events on server entity types; failed server excluded from `idle(Type).count` |
 | Entity splitting / cloning | G06 | `SPLIT(Type, N, TargetQueue)` macro; creates N child entities in target queue, marks parent as split |
 | Multi-resource co-seize | G07 | `ASSIGN(Queue, [Server1, Server2])` compound form; condition: `idle(Server1).count > 0 AND idle(Server2).count > 0` |
-
-**Exit gate:** Hospital emergency template demonstrating preemption; manufacturing template demonstrating breakdown/repair; all 1000+ tests passing.
 
 ---
 
@@ -256,20 +253,20 @@ DES Studio makes a deliberate safety-first choice: all logic is expressed throug
 ## Appendix: Coverage Summary
 
 | Category | Features Assessed | DES Studio ✅ | DES Studio ⚠️ | DES Studio ❌ | Coverage % |
-|---|---|---|---|---|---|
-| A — Core entity model | 14 | 8 | 3 | 3 | 64% |
+|----------|-------------------|---------------|---------------|---------------|------------|
+| A — Core entity model | 14 | 10 | 1 | 3 | 75% |
 | B — Resource & server model | 14 | 8 | 2 | 4 | 64% |
-| C — Queueing & scheduling | 19 | 12 | 1 | 6 | 68% |
+| C — Queueing & scheduling | 19 | 14 | 1 | 4 | 76% |
 | D — Statistical output | 24 | 19 | 2 | 3 | 83% |
 | E — Visual authoring | 21 | 15 | 2 | 4 | 74% |
-| F — Scripting & extensibility | 16 | 8 | 3 | 5 | 56% |
-| **Total** | **108** | **70** | **13** | **25** | **76%** |
+| F — Scripting & extensibility | 16 | 8 | 4 | 4 | 63% |
+| **Total** | **108** | **74** | **12** | **22** | **74%** |
 
 *Coverage % = (✅ + 0.5×⚠️) / Total*
 
 **Top 5 highest-priority gaps:**
 1. G01 — Resource preemption (B, High)
 2. G02 — General-purpose scripting / custom process logic (F, High)
-3. G03 — Probabilistic / conditional routing (A, High)
-4. G04 — Resource breakdowns / failures (B, High)
-5. G05 — Clock value in conditions (F, Med — quick win)
+3. G04 — Resource breakdowns / failures (B, High)
+4. G06 — Entity splitting / cloning (A, Med)
+5. G07 — Multiple resource types per task (co-seize) (B, Med)

@@ -44,12 +44,12 @@ const model = {
 };
 
 describe("BottomPanel — F9C.8", () => {
-  test("renders live execution tabs and leaves statistical analysis to Analysis", () => {
+  test("renders live execution tabs including Charts tab", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
     expect(screen.getByRole("tab", { name: /step log/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /entities/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /charts/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /live metrics/i })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /charts/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /analysis/i })).not.toBeInTheDocument();
   });
 
@@ -158,5 +158,33 @@ describe("BottomPanel — inspector", () => {
     expect(customerTypes.length).toBeGreaterThanOrEqual(1);
     const queueLabels = screen.getAllByText("Queue A");
     expect(queueLabels.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("BottomPanel — G15 Charts tab", () => {
+  const timeSeriesData = [
+    { t: 0, byQueue: { "Queue A": { waiting: 0 } } },
+    { t: 1, byQueue: { "Queue A": { waiting: 2 } } },
+    { t: 2, byQueue: { "Queue A": { waiting: 1 } } },
+    { t: 3, byQueue: { "Queue A": { waiting: 3 } } },
+  ];
+
+  test("Charts tab shows queue-depth time-plot when time-series data is available", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} timeSeries={timeSeriesData} />);
+    fireEvent.click(screen.getByRole("tab", { name: /charts/i }));
+    expect(screen.getByText(/Queue A/)).toBeInTheDocument();
+    expect(screen.getByText(/Simulation time/)).toBeInTheDocument();
+  });
+
+  test("Charts tab shows empty state when no time-series data", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} timeSeries={null} />);
+    fireEvent.click(screen.getByRole("tab", { name: /charts/i }));
+    expect(screen.getByText(/no time-series data/i)).toBeInTheDocument();
+  });
+
+  test("Charts tab shows empty state when time-series has fewer than 2 points", () => {
+    render(<BottomPanel log={log} snap={snap} model={model} timeSeries={[{ t: 0, byQueue: {} }]} />);
+    fireEvent.click(screen.getByRole("tab", { name: /charts/i }));
+    expect(screen.getByText(/no time-series data/i)).toBeInTheDocument();
   });
 });

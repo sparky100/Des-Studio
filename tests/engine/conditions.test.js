@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
-import { evalCondition, evaluatePredicate } from '../../src/engine/conditions.js';
+import { evalCondition, evaluatePredicate, buildConditionTokens } from '../../src/engine/conditions.js';
 
 // Tests for the safe JSON predicate evaluator (Addition 1 §4).
 // These tests FAIL on the unmodified codebase (evaluatePredicate does not exist).
@@ -323,5 +323,22 @@ describe('evalCondition — legacy condition string evaluator', () => {
       {},
       0
     )).toBe(true);
+  });
+});
+
+describe('buildConditionTokens — token list for Condition Builder UI', () => {
+  test('includes clock token for simulation time conditions', () => {
+    const tokens = buildConditionTokens([], []);
+    const clockToken = tokens.find(t => t.value === 'clock');
+    expect(clockToken).toBeDefined();
+    expect(clockToken.valueType).toBe('number');
+    expect(clockToken.label).toContain('simulation time');
+  });
+
+  test('clock token appears before served/reneged tokens', () => {
+    const tokens = buildConditionTokens([], []);
+    const clockIdx = tokens.findIndex(t => t.value === 'clock');
+    const servedIdx = tokens.findIndex(t => t.value === 'served');
+    expect(clockIdx).toBeLessThan(servedIdx);
   });
 });

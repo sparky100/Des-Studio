@@ -1,9 +1,10 @@
 // ui/execute/BottomPanel.jsx — collapsible tabbed detail area below the Execute canvas
-// Tabs: Step Log | Entities | Stage KPIs
+// Tabs: Step Log | Entities | Charts | Live Metrics
 // F9C.8 + F9C.9 + F9C.11 node-filtered log
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, PhaseTag } from "../shared/components.jsx";
+import { QueueDepthTimePlot } from "./SweepViews.jsx";
 
 const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
@@ -15,6 +16,7 @@ function formatStatus(status) {
 const TABS = [
   { id: "log",       label: "Step Log" },
   { id: "entities",  label: "Entities" },
+  { id: "charts",    label: "Charts" },
   { id: "stagekpis", label: "Live Metrics" },
 ];
 
@@ -636,7 +638,7 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
 
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
-export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect }) {
+export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries }) {
   const [activeTab,  setActiveTab]  = useState("log");
   const [collapsed,  setCollapsed]  = useState(false);
   const [bodyHeight, setBodyHeight] = useState(BOTTOM_PANEL_BODY_HEIGHT);
@@ -775,6 +777,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
         >
           {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
+          {activeTab === "charts"    && <QueueDepthTimePlot timeSeries={timeSeries} queues={model.queues} />}
           {activeTab === "stagekpis" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <EventCountsTable snap={snap} model={model} />

@@ -2234,6 +2234,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 selectedEntityId={selectedEntityId}
                 onEntitySelect={setSelectedEntityId}
                 onNodeSelect={setSelectedNodeLabel}
+                timeSeries={results?.timeSeries}
               />
             </>
           );

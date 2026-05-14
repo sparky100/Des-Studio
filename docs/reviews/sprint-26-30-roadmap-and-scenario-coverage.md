@@ -1,6 +1,6 @@
-# DES Studio — Sprint 26-30 Roadmap and Modelling Scenario Coverage
+# DES Studio — Sprint 26-31 Roadmap and Modelling Scenario Coverage
 
-Last updated: 2026-05-12
+Last updated: 2026-05-14
 
 ## Purpose
 
@@ -15,15 +15,17 @@ This is a planning document, not an implementation record.
 
 ## Executive Summary
 
-After Sprint 25, DES Studio has a much stronger correctness baseline and a cleaner modelling workflow. The next challenge is not more shell polish. It is to deepen the engine and analysis layer enough that the product can compete with established open-source simulation tools on modelling headroom and trust.
+After Sprint 31, DES Studio has a strong correctness baseline, comprehensive debugging/explainability support, and live observability features. The next challenge is to deepen resource reliability modelling (preemption, breakdowns) and expand entity composition capabilities (splitting, co-seize, matching).
 
 The recommended next sequence is:
 
-1. **Sprint 26 — Resource Semantics and Waiting Behaviour**
-2. **Sprint 27 — Simulation Debugging and Explainability**
-3. **Sprint 28 — Experiments and Statistical Workbench**
-4. **Sprint 29 — Reference Models, Benchmarks, and Performance Envelope**
-5. **Sprint 30 — Reusable Modelling Library and Scenario Packs**
+1. **Sprint 26 — Resource Semantics and Waiting Behaviour** ✅ Complete
+2. **Sprint 27 — Simulation Debugging and Explainability** ✅ Complete
+3. **Sprint 28 — Experiments and Statistical Workbench** ✅ Complete
+4. **Sprint 29 — Reference Models, Benchmarks, and Performance Envelope** ✅ Complete
+5. **Sprint 30 — Reusable Modelling Library and Scenario Packs** ✅ Complete
+6. **Sprint 31 — Expressiveness & Observability** ✅ Complete
+7. **Sprint 32 — Resource Reliability** (next)
 
 This sequence is intentional:
 
@@ -32,6 +34,7 @@ This sequence is intentional:
 - analytics before broader scenario claims
 - benchmarks before large-scale positioning
 - reusable model assets after the engine is better able to support them
+- quick-win expressiveness gaps before complex resource semantics
 
 ---
 

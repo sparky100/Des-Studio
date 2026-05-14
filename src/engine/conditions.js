@@ -238,6 +238,7 @@ export function buildConditionTokens(entityTypes = [], stateVariables = []) {
     }
   }
 
+  tokens.push({ label: "clock  — current simulation time", value: "clock", valueType: "number" });
   tokens.push({ label: "served  — cumulative served",    value: "served",    valueType: "number" });
   tokens.push({ label: "reneged — cumulative reneged",   value: "reneged",   valueType: "number" });
   tokens.push({ label: "loopCount  — current entity loop recirculations", value: "loopCount", valueType: "number" });

@@ -211,6 +211,10 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const log = [];
   const _timeSeries = collectTimeSeries ? [] : null; // null = disabled, zero overhead
 
+  // G11 — WIP time-average tracking (Little's Law: avgWIP = ∫ WIP dt / T)
+  let _wipIntegral = 0;
+  let _lastWipSnapTime = 0;
+
   let fel = (runtimeModel.bEvents || [])
     .map(ev => {
       const scheduledTime = parseFloat(ev.scheduledTime);
@@ -308,6 +312,8 @@ const cycleLog = [];
       if (ev.type === 'WARMUP' && !_warmupComplete) {
         _warmupComplete = true;
         _statsResetTime = clock;
+        _wipIntegral = 0;
+        _lastWipSnapTime = clock;
         const msg = `Warm-up complete at t=${clock.toFixed(3)}. Statistics reset.`;
         cycleLog.push({ phase: "WARMUP", time: clock, message: msg });
         log.push(_trace("WARMUP", { message: msg }));
@@ -453,6 +459,15 @@ const cycleLog = [];
     // Collect time-series snapshot after Phase C stabilises (F10.4a)
     const stepSnap = (_timeSeries !== null || captureSnap) ? snap(clock) : null;
     if (_timeSeries !== null && stepSnap) _timeSeries.push({ t: stepSnap.clock, byType: stepSnap.byType, byQueue: stepSnap.byQueue });
+
+    // G11 — WIP time-average: integrate WIP count over time
+    const dt = clock - _lastWipSnapTime;
+    if (dt > 0) {
+      const wipCount = entities.filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged").length;
+      _wipIntegral += wipCount * dt;
+      _lastWipSnapTime = clock;
+    }
+
     return { done: false, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated };
   }
 
@@ -625,6 +640,7 @@ const cycleLog = [];
       avgSvc:            avgSvc    != null ? +avgSvc.toFixed(4)    : null,
       avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
       maxSojourn:        maxSojourn!= null ? +maxSojourn.toFixed(4): null,
+      avgWIP:            clock > 0 ? +(_wipIntegral / clock).toFixed(4) : 0,
       perResource:       Object.keys(perResource).length ? perResource : undefined,
       warmupPeriod,
       excludedCount:     _excludedCount,
