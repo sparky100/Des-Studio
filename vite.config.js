@@ -10,5 +10,15 @@ export default defineConfig({
     ],
     globals: true,
     setupFiles: ['tests/setup.js'],
+    // Run heavy benchmark tests in their own single fork so they don't
+    // starve the parallel UI test workers of CPU time.
+    poolMatchGlobs: [
+      ['tests/benchmarks/**', 'forks'],
+    ],
+    poolOptions: {
+      forks: {
+        singleFork: true,
+      },
+    },
   },
 })
