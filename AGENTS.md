@@ -1346,19 +1346,34 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 26 | ✅ Complete | 2026-05-12 | Resource Semantics and Waiting Behaviour |
 | Sprint 27 | ✅ Complete | 2026-05-13 | Simulation Debugging and Explainability |
 | Sprint 28 | ✅ Complete | 2026-05-14 | Experiments and Statistical Workbench |
-| Sprint 29 | 🔄 In Progress | 2026-05-14 | Test Infrastructure, Benchmarks, and Reproducibility |
+| Sprint 29 | ✅ Complete | 2026-05-14 | Test Infrastructure, Benchmarks, and Reproducibility |
+| Sprint 30 | ✅ Complete | 2026-05-14 | Reusable Modelling Library and Scenario Packs |
 
 ---
 
-## 21. Current Sprint — Sprint 29 (Test Infrastructure, Benchmarks, and Reproducibility)
+## 21. Current Sprint — Sprint 30 (Reusable Modelling Library and Scenario Packs)
 
-**Goal:** Harden the test infrastructure by fixing pre-existing test drift (18 failures), adding M/M/c analytical validation, documenting the reproducibility contract, establishing a performance envelope, and wiring benchmarks into CI.
+**Goal:** Expand the built-in template library from 10 to 14 templates across 6 domains, fix all broken templates (ARRIVE and ASSIGN macro bugs), add `domain`/`templateMeta` fields, upgrade the template gallery UI with domain filtering and search, add an in-app Patterns Guide panel, and document 6 reusable modelling patterns.
 
 **Source reviews:**
-- `docs/reviews/sprint-29-pre-sprint-assessment.md`
-- `docs/reviews/sprint-28-experiments-and-statistical-workbench-plan.md`
+- `docs/reviews/sprint-30-pre-sprint-assessment.md`
 
-**Status:** 🔄 In Progress | **Started:** 2026-05-14
+**Status:** ✅ Complete | **Completed:** 2026-05-14
+
+**Delivered:**
+- F30.0 — Fixed ARRIVE queue-name mismatch in 9 templates; fixed ASSIGN entity-type-vs-queue-name mismatch in 6 templates
+- F30.1 — `domain` and `templateMeta` fields added to all 14 templates
+- F30.2 — Healthcare pack: Ward Bed Admission added; Outpatient Clinic ARRIVE fixed
+- F30.3 — Service Systems pack: Bank Branch + Retail Checkout added; Call Center / Fast Food / Airport ASSIGN fixed
+- F30.4 — Manufacturing/Logistics pack: Port Berth Operations added; Factory / Construction / Warehouse ASSIGN confirmed correct
+- F30.5 — Template gallery redesign: domain filter strip, full-text search, richer cards
+- F30.6 — In-app Patterns Guide panel (6 patterns, accessible from gallery toolbar)
+- F30.7 — `docs/patterns/` with 6 Markdown pattern reference files
+
+**Exit gate met:**
+- 1000/1000 Vitest tests passing
+- All 14 templates: `served > 0` headless validation
+- Build clean (`npx vite build` no errors)
 
 **Implementation guardrails:**
 - Fix only assertion drift — no engine rewrites unless a test reveals a genuine engine bug.
@@ -1389,6 +1404,25 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 - Sprint history updated to Sprint 29.
 
 ### Recently Completed
+
+**Sprint 30 — Reusable Modelling Library and Scenario Packs** (2026-05-14):
+- Templates expanded from 10 to 14 across 6 domains (Academic, Healthcare, Service Systems, Manufacturing, Logistics, Technology)
+- Root-cause fixes for two classes of engine bug affecting 9+ templates: ARRIVE one-arg queue-name mismatch and ASSIGN entity-type-vs-queue-name mismatch
+- 4 new templates: Ward Bed Admission, Bank Branch, Retail Checkout, Port Berth Operations
+- All templates carry `domain` and `templateMeta` (scenarioType, keyMacros, paramGuide, limitations) fields
+- Template gallery redesigned: domain filter strip, full-text search, richer cards with domain badge and macro chips
+- In-app Patterns Guide panel covering 6 modelling patterns
+- `docs/patterns/` directory with 6 canonical Markdown pattern references
+- 1000/1000 tests passing (83 template-specific tests added/updated)
+
+**Sprint 29 — Test Infrastructure, Benchmarks, and Reproducibility** (2026-05-14):
+- Fixed 18 pre-existing test failures (Vitest pool timeout; stale golden values)
+- M/M/c Erlang-C analytical validation: 20-rep CI gate confirms simulated Wq within 5% of 1.7778
+- Reproducibility contract (6 invariants): same seed → identical FEL sequence, deterministic distributions, no shared mutable state across replications
+- Performance envelope documented (`docs/performance-envelope.md`): 3 load profiles, steps/sec baselines
+- Golden tests (`tests/benchmarks/golden.test.js`): M/M/1 and M/M/c pinned to numerical windows
+- CI pipeline (`.github/workflows/ci.yml`): test + benchmark + build jobs
+- Vitest `poolMatchGlobs` fix: benchmarks run in isolated single fork to prevent timeout cascade
 
 **Sprint 28 — Experiments and Statistical Workbench** (2026-05-14):
 - Saved experiment configurations (named snapshots of run parameters, storable and restorable from Execute panel)
