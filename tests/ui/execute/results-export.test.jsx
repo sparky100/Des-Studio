@@ -14,6 +14,11 @@ vi.mock('../../../src/db/models.js', () => ({
   saveSimulationRun: mockSaveSimulationRun,
   fetchUserSettings: vi.fn().mockResolvedValue({ schemaVersion: 1, settings: {} }),
   saveUserSettings:  vi.fn().mockResolvedValue({ schemaVersion: 1, settings: {} }),
+  fetchExperiments: vi.fn().mockResolvedValue([]),
+  saveExperiment: vi.fn().mockResolvedValue({}),
+  updateExperiment: vi.fn().mockResolvedValue({}),
+  cloneExperiment: vi.fn().mockResolvedValue({}),
+  deleteExperiment: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 const validModel = {

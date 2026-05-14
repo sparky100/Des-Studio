@@ -678,3 +678,84 @@ export async function updateUserRole(userId, role) {
   return { ok: true };
 }
 
+// --- F28.1: Saved Experiment Definitions ---
+
+function normalizeExperiment(row = {}) {
+  return {
+    id: row.id,
+    modelId: row.model_id,
+    userId: row.user_id,
+    name: row.name,
+    description: row.description ?? null,
+    config: row.config ?? {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function fetchExperiments(modelId) {
+  const { data, error } = await supabase
+    .from("experiments")
+    .select("*")
+    .eq("model_id", modelId)
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(normalizeExperiment);
+}
+
+export async function saveExperiment({ modelId, userId, name, description, config }) {
+  const { data, error } = await supabase
+    .from("experiments")
+    .insert({ model_id: modelId, user_id: userId, name, description: description || null, config })
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeExperiment(data);
+}
+
+export async function updateExperiment(id, { name, description, config }) {
+  const patch = {};
+  if (name !== undefined) patch.name = name;
+  if (description !== undefined) patch.description = description || null;
+  if (config !== undefined) patch.config = config;
+  const { data, error } = await supabase
+    .from("experiments")
+    .update(patch)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeExperiment(data);
+}
+
+export async function cloneExperiment(id, userId) {
+  const { data: src, error: fetchErr } = await supabase
+    .from("experiments")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (fetchErr) throw fetchErr;
+  const { data, error } = await supabase
+    .from("experiments")
+    .insert({
+      model_id: src.model_id,
+      user_id: userId,
+      name: `${src.name} (copy)`,
+      description: src.description,
+      config: src.config,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeExperiment(data);
+}
+
+export async function deleteExperiment(id) {
+  const { error } = await supabase
+    .from("experiments")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+  return { ok: true };
+}
+

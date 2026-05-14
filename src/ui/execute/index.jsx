@@ -9,7 +9,7 @@ import { buildEngine } from "../../engine/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights } from "../../db/models.js";
+import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment } from "../../db/models.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
@@ -82,6 +82,17 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [comparisonIdxA, setComparisonIdxA] = useState(0);
   const [comparisonIdxB, setComparisonIdxB] = useState(null);
   const [comparisonResult, setComparisonResult] = useState(null);
+  // F28.1: Saved experiment definitions
+  const [experiments, setExperiments] = useState([]);
+  const [experimentsStatus, setExperimentsStatus] = useState("idle");
+  const [experimentsError, setExperimentsError] = useState("");
+  const [expFormOpen, setExpFormOpen] = useState(false);
+  const [expEditId, setExpEditId] = useState(null);
+  const [expFormName, setExpFormName] = useState("");
+  const [expFormDesc, setExpFormDesc] = useState("");
+  const [expFormOverrides, setExpFormOverrides] = useState([]);
+  const [expFormSaving, setExpFormSaving] = useState(false);
+
   const sweepRunnerRef = useRef(null);
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
@@ -539,6 +550,27 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     };
   }, [aiPanelOpen, modelId]);
 
+  // F28.1: load experiments when tab is opened
+  useEffect(() => {
+    if (executeSection !== "saved-experiments" || !modelId || !userId) return;
+    let cancelled = false;
+    setExperimentsStatus("loading");
+    setExperimentsError("");
+    fetchExperiments(modelId)
+      .then(rows => {
+        if (cancelled) return;
+        setExperiments(rows || []);
+        setExperimentsStatus("loaded");
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setExperiments([]);
+        setExperimentsError(err?.message || "Could not load experiments");
+        setExperimentsStatus("error");
+      });
+    return () => { cancelled = true; };
+  }, [executeSection, modelId, userId]);
+
   // Handle Analyse button from History tab — load saved run into AI panel
   useEffect(() => {
     if (!analyseRun || !modelId) return;
@@ -781,6 +813,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         {[
           { id: "run", label: "Run" },
           { id: "setup", label: "Setup" },
+          { id: "saved-experiments", label: "Experiments" },
           { id: "experiments", label: "Studies" },
         ].map(section => (
           <Btn
@@ -975,6 +1008,216 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         )}
           </div>
         )}
+      </div>
+      )}
+
+      {executeSection === "saved-experiments" && (
+      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+        {/* Header row */}
+        <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SAVED EXPERIMENTS</span>
+          {userId && (
+            <Btn small variant="primary" onClick={() => {
+              setExpEditId(null);
+              setExpFormName("");
+              setExpFormDesc("");
+              setExpFormOverrides([]);
+              setExpFormOpen(true);
+            }}>
+              New Experiment
+            </Btn>
+          )}
+        </div>
+
+        {/* New / Edit form */}
+        {expFormOpen && (
+          <div style={{ padding: 16, borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 12 }}>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+              {expEditId ? "EDIT EXPERIMENT" : "NEW EXPERIMENT"}
+            </span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Name *</span>
+              <input
+                aria-label="Experiment name"
+                type="text"
+                value={expFormName}
+                onChange={e => setExpFormName(e.target.value)}
+                placeholder="e.g. High-load scenario"
+                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }}
+              />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Description</span>
+              <input
+                aria-label="Experiment description"
+                type="text"
+                value={expFormDesc}
+                onChange={e => setExpFormDesc(e.target.value)}
+                placeholder="Optional notes"
+                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }}
+              />
+            </div>
+            {/* Capture current execute settings */}
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+              Captures current settings: {replications} repl · seed {seed} · warm-up {warmupPeriod} · {terminationMode === "time" ? `duration ${maxSimTime}` : "condition stop"}
+            </div>
+            {/* Parameter overrides */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER OVERRIDES</span>
+                <Btn small variant="ghost" onClick={() => {
+                  if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
+                  setExpFormOverrides(prev => [...prev, { path: "", value: "" }]);
+                }}>
+                  + Add
+                </Btn>
+              </div>
+              {expFormOverrides.map((ov, idx) => (
+                <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <select
+                    aria-label={`Override parameter ${idx + 1}`}
+                    value={ov.path}
+                    onChange={e => {
+                      const path = e.target.value;
+                      setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, path } : o));
+                    }}
+                    style={{ flex: 2, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+                  >
+                    <option value="">Select parameter...</option>
+                    {sweepParams.map(p => (
+                      <option key={p.path} value={p.path}>{p.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    aria-label={`Override value ${idx + 1}`}
+                    type="number"
+                    value={ov.value}
+                    onChange={e => setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, value: e.target.value } : o))}
+                    placeholder="value"
+                    style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "5px 6px", outline: "none" }}
+                  />
+                  <Btn small variant="ghost" onClick={() => setExpFormOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn small variant="primary" disabled={!expFormName.trim() || expFormSaving} onClick={async () => {
+                const config = {
+                  replications,
+                  seed,
+                  warmupPeriod,
+                  maxSimTime,
+                  terminationMode,
+                  terminationCondition: terminationMode === "condition" ? terminationCondition : null,
+                  overrides: expFormOverrides.filter(o => o.path && o.value !== "").map(o => ({ path: o.path, value: Number(o.value) })),
+                };
+                setExpFormSaving(true);
+                try {
+                  if (expEditId) {
+                    const updated = await updateExperiment(expEditId, { name: expFormName.trim(), description: expFormDesc.trim() || null, config });
+                    setExperiments(prev => prev.map(e => e.id === expEditId ? updated : e));
+                  } else {
+                    const created = await saveExperiment({ modelId, userId, name: expFormName.trim(), description: expFormDesc.trim() || null, config });
+                    setExperiments(prev => [created, ...prev]);
+                  }
+                  setExpFormOpen(false);
+                  setExpEditId(null);
+                } catch (err) {
+                  setExperimentsError(err?.message || "Save failed");
+                } finally {
+                  setExpFormSaving(false);
+                }
+              }}>
+                {expFormSaving ? "Saving…" : "Save"}
+              </Btn>
+              <Btn small variant="ghost" onClick={() => { setExpFormOpen(false); setExpEditId(null); }}>Cancel</Btn>
+            </div>
+          </div>
+        )}
+
+        {/* Experiment list */}
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+          {experimentsStatus === "loading" && (
+            <span style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>Loading…</span>
+          )}
+          {experimentsStatus === "error" && (
+            <span style={{ fontSize: 12, color: C.red, fontFamily: FONT }}>{experimentsError}</span>
+          )}
+          {experimentsStatus === "loaded" && experiments.length === 0 && !expFormOpen && (
+            <span style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>No saved experiments yet. Click "New Experiment" to create one.</span>
+          )}
+          {experiments.map(exp => (
+            <div key={exp.id} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                  <span style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 600 }}>{exp.name}</span>
+                  {exp.description && <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>{exp.description}</span>}
+                  <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                    {exp.config.replications} repl · seed {exp.config.seed} · warm-up {exp.config.warmupPeriod} · {exp.config.terminationMode === "time" ? `duration ${exp.config.maxSimTime}` : "condition stop"}
+                    {exp.config.overrides?.length > 0 && ` · ${exp.config.overrides.length} override${exp.config.overrides.length > 1 ? "s" : ""}`}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                  <Btn small variant="primary" onClick={() => {
+                    const cfg = exp.config;
+                    setReplications(cfg.replications ?? 1);
+                    setSeed(cfg.seed ?? seed);
+                    setWarmupPeriod(cfg.warmupPeriod ?? 0);
+                    setMaxSimTime(cfg.maxSimTime ?? 500);
+                    setTerminationMode(cfg.terminationMode ?? "time");
+                    setTerminationCondition(cfg.terminationCondition ?? null);
+                    setExecuteSection("run");
+                  }}>
+                    Load
+                  </Btn>
+                  <Btn small variant="ghost" onClick={() => {
+                    const cfg = exp.config;
+                    setReplications(cfg.replications ?? 1);
+                    setSeed(cfg.seed ?? seed);
+                    setWarmupPeriod(cfg.warmupPeriod ?? 0);
+                    setMaxSimTime(cfg.maxSimTime ?? 500);
+                    setTerminationMode(cfg.terminationMode ?? "time");
+                    setTerminationCondition(cfg.terminationCondition ?? null);
+                    setRunLabel(exp.name);
+                    setExecuteSection("run");
+                  }}>
+                    Run
+                  </Btn>
+                  <Btn small variant="ghost" onClick={() => {
+                    setExpEditId(exp.id);
+                    setExpFormName(exp.name);
+                    setExpFormDesc(exp.description || "");
+                    setExpFormOverrides((exp.config.overrides || []).map(o => ({ path: o.path, value: String(o.value) })));
+                    setExpFormOpen(true);
+                  }}>
+                    Edit
+                  </Btn>
+                  <Btn small variant="ghost" onClick={async () => {
+                    try {
+                      const cloned = await cloneExperiment(exp.id, userId);
+                      setExperiments(prev => [cloned, ...prev]);
+                    } catch (err) {
+                      setExperimentsError(err?.message || "Clone failed");
+                    }
+                  }}>
+                    Clone
+                  </Btn>
+                  <Btn small variant="ghost" onClick={async () => {
+                    if (!confirm(`Delete "${exp.name}"?`)) return;
+                    try {
+                      await deleteExperiment(exp.id);
+                      setExperiments(prev => prev.filter(e => e.id !== exp.id));
+                    } catch (err) {
+                      setExperimentsError(err?.message || "Delete failed");
+                    }
+                  }}>
+                    Delete
+                  </Btn>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
       )}
 
