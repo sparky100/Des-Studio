@@ -707,9 +707,10 @@ export const MACROS = [
 
       let repairedCount = 0;
       for (const srv of failedServers) {
+        const failedAt = srv._failedAt || clock;
         srv.status = "idle";
         srv._failedAt = undefined;
-        srv._downtime = +(clock - (srv._failedAt || clock)).toFixed(4);
+        srv._downtime = +(clock - failedAt).toFixed(4);
         repairedCount++;
       }
 
@@ -861,8 +862,8 @@ export const MACROS = [
       const candidatesA = helpers.waitingInQueue?.(queueA, disciplineA) || [];
       const candidatesB = helpers.waitingInQueue?.(queueB, disciplineB) || [];
 
-      const entityA = candidatesA[0];
-      const entityB = candidatesB[0];
+      const entityA = candidatesA.find(e => normName(e.type) === normName(typeA));
+      const entityB = candidatesB.find(e => normName(e.type) === normName(typeB));
 
       if (!entityA || !entityB) {
         msgs.push(`MATCH(${typeA},${queueA},${typeB},${queueB},${targetQueue}): no match — A=${candidatesA.length} B=${candidatesB.length}`);

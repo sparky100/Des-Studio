@@ -31,9 +31,11 @@ function Dot({ busy, failed }) {
 
 // Dot grid for capacity ≤ MAX_DOTS
 function DotGrid({ capacity, busyCount, failedCount }) {
+  const effectiveFailed = Math.min(failedCount, capacity);
+  const effectiveBusy = Math.max(0, Math.min(busyCount, capacity - effectiveFailed));
   const dots = Array.from({ length: capacity }, (_, i) => {
-    if (i < failedCount) return { busy: false, failed: true };
-    if (i < failedCount + busyCount) return { busy: true, failed: false };
+    if (i < effectiveFailed) return { busy: false, failed: true };
+    if (i < effectiveFailed + effectiveBusy) return { busy: true, failed: false };
     return { busy: false, failed: false };
   });
   return (
