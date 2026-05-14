@@ -225,8 +225,13 @@ function extractServerType(effect) {
     const args = Array.isArray(effect.args) ? effect.args.join(",") : "";
     text = `${macro}(${args})`;
   }
-  const match = text.match(/ASSIGN\s*\(\s*[^,)]+,\s*([^),]+)\)/i);
-  return match ? match[1].trim() : null;
+  // ASSIGN(Queue, ServerType) — extract second argument
+  const assignMatch = text.match(/ASSIGN\s*\(\s*[^,)]+,\s*([^),]+)\)/i);
+  if (assignMatch) return assignMatch[1].trim();
+  // COSEIZE(Queue, ServerType1, ServerType2[, ...]) — extract first server type
+  const coseizeMatch = text.match(/COSEIZE\s*\(\s*[^,)]+,\s*([^),]+)\)/i);
+  if (coseizeMatch) return coseizeMatch[1].trim();
+  return null;
 }
 
 function LiveBadge({ value, label, color }) {
