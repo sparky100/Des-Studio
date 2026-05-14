@@ -229,7 +229,7 @@ function extractServerType(effect) {
   const assignMatch = text.match(/ASSIGN\s*\(\s*[^,)]+,\s*([^),]+)\)/i);
   if (assignMatch) return assignMatch[1].trim();
   // COSEIZE(Queue, ServerType1, ServerType2[, ...]) — extract first server type
-  const coseizeMatch = text.match(/COSEIZE\s*\(\s*[^,)]+,\s*([^),]+)\)/i);
+  const coseizeMatch = text.match(/COSEIZE\s*\(\s*[^,]+,\s*([^,]+)/i);
   if (coseizeMatch) return coseizeMatch[1].trim();
   return null;
 }
@@ -522,7 +522,7 @@ export function ExecuteCanvas({
           const serverType = meta?.serverType;
           const capacity   = meta?.capacity ?? 1;
           const relevant   = serverType
-            ? servers.filter(e => e.type === serverType)
+            ? servers.filter(e => e.type.trim().toLowerCase() === serverType.trim().toLowerCase())
             : servers;
           const busyCount = relevant.filter(e => e.status === "busy").length;
           const idleCount = relevant.filter(e => e.status === "idle").length;
