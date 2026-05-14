@@ -285,15 +285,9 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
         </div>
       );
       })}
-      {/* Add clause + preview */}
+      {/* Add clause */}
       <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
         <Btn small variant="ghost" onClick={addRow}>+ Add Clause</Btn>
-        {rows.length>0&&(
-          <div style={{fontSize:11,color:C.muted,fontFamily:FONT,
-            background:C.surface,borderRadius:4,padding:'4px 10px',flex:1}}>
-            <span style={{color:C.cEvent}}>{buildConditionStr(rows)||'—'}</span>
-          </div>
-        )}
       </div>
     </div>
   );

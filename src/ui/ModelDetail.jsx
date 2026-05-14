@@ -371,6 +371,25 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     }
   };
 
+  const discard=()=>{
+    if (!modelData) return;
+    setModel({
+      ...modelData,
+      entityTypes:   modelData.entityTypes   || [],
+      stateVariables:modelData.stateVariables || [],
+      bEvents:       modelData.bEvents        || [],
+      cEvents:       modelData.cEvents        || [],
+      queues:        modelData.queues         || [],
+      graph:         modelData.graph          || null,
+      experimentDefaults: modelData.experimentDefaults || {},
+      access:        modelData.access         || {},
+    });
+    setDirty(false);
+    setSaveStatus(null);
+    setPast([]);
+    setFuture([]);
+  };
+
   const handleBack=()=>{
     if(dirty&&!window.confirm('You have unsaved changes. Leave without saving?'))return;
     onBack();
@@ -755,7 +774,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             {saveStatus.message}
           </div>
         )}
-        {canEdit&&dirty&&<Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save"}</Btn>}
+        {canEdit&&dirty&&(
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save"}</Btn>
+            <Btn small variant="ghost" onClick={discard} disabled={saving}>Discard</Btn>
+          </div>
+        )}
       </div>
       <div aria-label={isMobileLayout ? "Mobile model workflow" : "Model workflow modes"} style={{display:"flex",alignItems:"stretch",gap:8,padding:"8px 20px",borderBottom:`1px solid ${C.border}`,background:C.bg,overflowX:"auto",flexShrink:0}}>
         {DISPLAY_MODES.map(mode=>{
@@ -850,7 +874,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             fontSize:12,
           }}>
             <span>Unsaved changes in this model.</span>
-            <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save Changes"}</Btn>
+            <div style={{display:"flex",gap:6}}>
+              <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save Changes"}</Btn>
+              <Btn small variant="ghost" onClick={discard} disabled={saving}>Discard Changes</Btn>
+            </div>
           </div>
         )}
         {tab==="overview" && <ModelHealthPanel/>}
