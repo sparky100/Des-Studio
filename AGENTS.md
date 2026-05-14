@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-14 | Reflects: Sprint 32 — Resource Reliability complete. Current: Sprint 33 — Advanced Scheduling & Analytics*
+*Last updated: 2026-05-14 | Reflects: Sprint 33 — Advanced Scheduling & Analytics complete.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
@@ -1350,6 +1350,7 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 30 | ✅ Complete | 2026-05-14 | Reusable Modelling Library and Scenario Packs |
 | Sprint 31 | ✅ Complete | 2026-05-14 | Expressiveness & Observability: clock token in UI, WIP time-average metric, live queue-depth time-plot |
 | Sprint 32 | ✅ Complete | 2026-05-14 | Resource Reliability: preemption, breakdowns/failures with MTBF/MTTR |
+| Sprint 33 | ✅ Complete | 2026-05-14 | Advanced Scheduling & Analytics: SPLIT, COSEIZE, MATCH, dynamic BATCH, SPT/EDD/PRIORITY queues, histograms, ANOVA |
 
 ---
 

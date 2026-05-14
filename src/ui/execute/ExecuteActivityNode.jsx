@@ -10,18 +10,19 @@ import { C, FONT } from "../shared/tokens.js";
 
 const ACTIVITY_COLOR = C.purple;    // "#8b5cf6" — matches authoring-mode Activity node
 const BUSY_DOT_COLOR = C.cEvent;    // "#06b6d4" teal — matches spec  ■ (busy, teal)
+const FAILED_DOT_COLOR = C.red;     // "#f85149" red — failed servers
 const MAX_DOTS       = 12;
 const FLASH_MS       = 400;
 
-// One square dot: ■ busy (teal fill) or □ idle (muted outline)
-function Dot({ busy }) {
+// One square dot: ■ busy (teal), ■ failed (red), or □ idle (muted outline)
+function Dot({ busy, failed }) {
   return (
     <div style={{
       width: 10,
       height: 10,
       borderRadius: 2,
-      background:  busy ? BUSY_DOT_COLOR          : "transparent",
-      border:      `1.5px solid ${busy ? BUSY_DOT_COLOR : `${C.muted}66`}`,
+      background:  failed ? FAILED_DOT_COLOR : busy ? BUSY_DOT_COLOR : "transparent",
+      border:      `1.5px solid ${failed ? FAILED_DOT_COLOR : busy ? BUSY_DOT_COLOR : `${C.muted}66`}`,
       flexShrink: 0,
       transition: "background 0.12s, border-color 0.12s",
     }} />
@@ -29,25 +30,41 @@ function Dot({ busy }) {
 }
 
 // Dot grid for capacity ≤ MAX_DOTS
-function DotGrid({ capacity, busyCount }) {
-  const dots = Array.from({ length: capacity }, (_, i) => i < busyCount);
+function DotGrid({ capacity, busyCount, failedCount }) {
+  const dots = Array.from({ length: capacity }, (_, i) => {
+    if (i < failedCount) return { busy: false, failed: true };
+    if (i < failedCount + busyCount) return { busy: true, failed: false };
+    return { busy: false, failed: false };
+  });
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-      {dots.map((busy, i) => <Dot key={i} busy={busy} />)}
+      {dots.map((state, i) => <Dot key={i} busy={state.busy} failed={state.failed} />)}
     </div>
   );
 }
 
 // Text fallback when capacity exceeds dot limit
-function PoolText({ busyCount, capacity }) {
+function PoolText({ busyCount, failedCount, capacity }) {
   return (
-    <div style={{
-      fontFamily: FONT,
-      fontSize: 12,
-      fontWeight: 700,
-      color: busyCount > 0 ? C.amber : C.muted,
-    }}>
-      {busyCount}/{capacity} busy
+    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+      <span style={{
+        fontFamily: FONT,
+        fontSize: 12,
+        fontWeight: 700,
+        color: busyCount > 0 ? C.amber : C.muted,
+      }}>
+        {busyCount}/{capacity} busy
+      </span>
+      {failedCount > 0 && (
+        <span style={{
+          fontFamily: FONT,
+          fontSize: 11,
+          fontWeight: 600,
+          color: FAILED_DOT_COLOR,
+        }}>
+          {failedCount} failed
+        </span>
+      )}
     </div>
   );
 }
@@ -75,9 +92,11 @@ export function ExecuteActivityNode({ data }) {
 
   const capacity    = live?.capacity    ?? 1;
   const busyCount   = live?.busyCount   ?? 0;
+  const failedCount = live?.failedCount ?? 0;
   const utilisation = live?.utilisation ?? 0;
   const serverName  = live?.serverTypeName ?? null;
   const useText     = capacity > MAX_DOTS;
+  const hasFailures = failedCount > 0;
 
   return (
     <div style={{
@@ -145,18 +164,34 @@ export function ExecuteActivityNode({ data }) {
         <>
           {/* Dot grid or text pool */}
           {useText
-            ? <PoolText busyCount={busyCount} capacity={capacity} />
-            : <DotGrid  capacity={capacity}   busyCount={busyCount} />
+            ? <PoolText busyCount={busyCount} failedCount={failedCount} capacity={capacity} />
+            : <DotGrid  capacity={capacity}   busyCount={busyCount} failedCount={failedCount} />
           }
 
-          {/* Utilisation % */}
+          {/* Utilisation % and failure indicator */}
           <div style={{
-            fontSize: 9,
-            color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted,
-            fontFamily: FONT,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
             marginTop: 1,
           }}>
-            {utilisation.toFixed(0)}% utilisation
+            <span style={{
+              fontSize: 9,
+              color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted,
+              fontFamily: FONT,
+            }}>
+              {utilisation.toFixed(0)}% utilisation
+            </span>
+            {hasFailures && (
+              <span style={{
+                fontSize: 9,
+                color: FAILED_DOT_COLOR,
+                fontFamily: FONT,
+                fontWeight: 600,
+              }}>
+                ⚠ {failedCount} failed
+              </span>
+            )}
           </div>
         </>
       ) : (

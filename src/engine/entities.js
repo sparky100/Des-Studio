@@ -47,7 +47,41 @@ function norm(value) {
 }
 
 export function queueDisciplineComparator(discipline = "FIFO") {
-  switch ((discipline || "FIFO").toUpperCase()) {
+  const d = (discipline || "FIFO").toUpperCase();
+
+  // PRIORITY(attrName) — sort by specified attribute, FIFO tiebreaker
+  const priorityMatch = d.match(/^PRIORITY\((\w+)\)$/);
+  if (priorityMatch) {
+    const attrName = priorityMatch[1];
+    return (a, b) => {
+      const pa = Number(a.attrs?.[attrName] ?? Infinity);
+      const pb = Number(b.attrs?.[attrName] ?? Infinity);
+      if (pa !== pb) return pa - pb;
+      return (a.arrivalTime || 0) - (b.arrivalTime || 0);
+    };
+  }
+
+  // SPT — Shortest Processing Time (uses attrs.serviceTime or attrs.processingTime)
+  if (d === "SPT") {
+    return (a, b) => {
+      const sa = Number(a.attrs?.serviceTime ?? a.attrs?.processingTime ?? Infinity);
+      const sb = Number(b.attrs?.serviceTime ?? b.attrs?.processingTime ?? Infinity);
+      if (sa !== sb) return sa - sb;
+      return (a.arrivalTime || 0) - (b.arrivalTime || 0);
+    };
+  }
+
+  // EDD — Earliest Due Date (uses attrs.dueDate)
+  if (d === "EDD") {
+    return (a, b) => {
+      const da = Number(a.attrs?.dueDate ?? Infinity);
+      const db = Number(b.attrs?.dueDate ?? Infinity);
+      if (da !== db) return da - db;
+      return (a.arrivalTime || 0) - (b.arrivalTime || 0);
+    };
+  }
+
+  switch (d) {
     case "LIFO":
       return (a, b) => (b.arrivalTime || 0) - (a.arrivalTime || 0);
     case "PRIORITY":

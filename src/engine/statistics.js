@@ -738,3 +738,493 @@ export function detectOutliers(values = []) {
   }
   return { q1, q3, iqr, lowerFence, upperFence, outlierIndices };
 }
+
+// ---------------------------------------------------------------------------
+// G12: Histogram collector
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a histogram from a set of values using equal-width bins.
+ *
+ * @param {number[]} values — observations
+ * @param {Object} options
+ * @param {number} [options.numBins=10] — number of bins
+ * @param {number} [options.min] — lower bound (auto-detected if omitted)
+ * @param {number} [options.max] — upper bound (auto-detected if omitted)
+ * @returns {Object} { bins: [{ low, high, count, density }], numBins, min, max, total }
+ */
+export function buildHistogram(values = [], options = {}) {
+  const { numBins = 10, min: userMin, max: userMax } = options;
+  const finite = finiteValues(values);
+  const n = finite.length;
+  if (n === 0) {
+    return { bins: [], numBins: 0, min: null, max: null, total: 0 };
+  }
+
+  const lo = userMin != null ? userMin : Math.min(...finite);
+  const hi = userMax != null ? userMax : Math.max(...finite);
+
+  if (lo === hi) {
+    // All values identical — single bin
+    return {
+      bins: [{ low: lo, high: hi, count: n, density: 1.0 }],
+      numBins: 1,
+      min: lo,
+      max: hi,
+      total: n,
+    };
+  }
+
+  const binWidth = (hi - lo) / numBins;
+  const bins = [];
+  for (let i = 0; i < numBins; i++) {
+    bins.push({
+      low: +(lo + i * binWidth).toFixed(6),
+      high: +(lo + (i + 1) * binWidth).toFixed(6),
+      count: 0,
+      density: 0,
+    });
+  }
+
+  for (const v of finite) {
+    let idx = Math.floor((v - lo) / binWidth);
+    if (idx >= numBins) idx = numBins - 1; // handle max value edge case
+    if (idx < 0) idx = 0;
+    bins[idx].count++;
+  }
+
+  // Compute density (count / (total * binWidth)) so area sums to 1
+  for (const bin of bins) {
+    bin.density = n > 0 && binWidth > 0 ? +(bin.count / (n * binWidth)).toFixed(6) : 0;
+  }
+
+  return { bins, numBins, min: lo, max: hi, total: n };
+}
+
+/**
+ * Build a histogram with automatic bin selection using the Freedman-Diaconis rule.
+ *
+ * Bin width = 2 * IQR(x) / n^(1/3)
+ * This adapts to the data spread and is robust to outliers.
+ *
+ * @param {number[]} values — observations
+ * @param {Object} options
+ * @param {number} [options.min] — lower bound (auto-detected if omitted)
+ * @param {number} [options.max] — upper bound (auto-detected if omitted)
+ * @param {number} [options.maxBins=50] — cap on number of bins
+ * @returns {Object} { bins, numBins, min, max, total, method: 'freedman-diaconis' }
+ */
+export function buildHistogramFD(values = [], options = {}) {
+  const { min: userMin, max: userMax, maxBins = 50 } = options;
+  const finite = finiteValues(values);
+  const n = finite.length;
+  if (n === 0) {
+    return { bins: [], numBins: 0, min: null, max: null, total: 0, method: 'freedman-diaconis' };
+  }
+
+  const pcts = computePercentiles(finite, [25, 75]);
+  const iqr = (pcts.p75 ?? 0) - (pcts.p25 ?? 0);
+  const binWidth = iqr > 0 ? 2 * iqr / Math.cbrt(n) : (Math.max(...finite) - Math.min(...finite)) / 10;
+
+  const lo = userMin != null ? userMin : Math.min(...finite);
+  const hi = userMax != null ? userMax : Math.max(...finite);
+  const numBins = Math.min(maxBins, Math.max(2, Math.ceil((hi - lo) / binWidth)));
+
+  const result = buildHistogram(finite, { numBins, min: lo, max: hi });
+  return { ...result, method: 'freedman-diaconis' };
+}
+
+// ---------------------------------------------------------------------------
+// G13: One-way ANOVA (Analysis of Variance)
+// ---------------------------------------------------------------------------
+
+/**
+ * Perform one-way ANOVA to test whether the means of k groups differ significantly.
+ *
+ * Null hypothesis: all group means are equal.
+ * Alternative: at least one group mean differs.
+ *
+ * Uses the F-statistic: F = MS_between / MS_within
+ *
+ * @param {number[][]} groups — array of k arrays, each containing observations for one group
+ * @param {Object} options
+ * @param {string[]} [options.labels] — display labels for each group
+ * @returns {Object} {
+ *   k: number of groups,
+ *   n: total observations,
+ *   grandMean: overall mean,
+ *   ssBetween: sum of squares between groups,
+ *   ssWithin: sum of squares within groups,
+ *   ssTotal: total sum of squares,
+ *   dfBetween: degrees of freedom between,
+ *   dfWithin: degrees of freedom within,
+ *   msBetween: mean square between,
+ *   msWithin: mean square within,
+ *   fStatistic: F value,
+ *   pValue: approximate p-value (using F-distribution approximation),
+ *   significant: whether p < 0.05,
+ *   groupStats: [{ label, n, mean, stdDev }],
+ *   explanation: human-readable summary
+ * }
+ */
+export function oneWayANOVA(groups = [], options = {}) {
+  const { labels = null } = options;
+  const k = groups.length;
+  if (k < 2) {
+    return {
+      k, n: 0, grandMean: null,
+      ssBetween: 0, ssWithin: 0, ssTotal: 0,
+      dfBetween: 0, dfWithin: 0, msBetween: 0, msWithin: 0,
+      fStatistic: null, pValue: null, significant: false,
+      groupStats: [],
+      explanation: 'At least 2 groups are required for ANOVA.',
+    };
+  }
+
+  const finiteGroups = groups.map(g => finiteValues(g));
+  const groupSizes = finiteGroups.map(g => g.length);
+  const n = groupSizes.reduce((s, size) => s + size, 0);
+
+  if (n < k + 1) {
+    return {
+      k, n, grandMean: null,
+      ssBetween: 0, ssWithin: 0, ssTotal: 0,
+      dfBetween: 0, dfWithin: 0, msBetween: 0, msWithin: 0,
+      fStatistic: null, pValue: null, significant: false,
+      groupStats: [],
+      explanation: 'Insufficient data: need at least k+1 total observations.',
+    };
+  }
+
+  // Group means
+  const groupMeans = finiteGroups.map(g => g.reduce((s, v) => s + v, 0) / g.length);
+  const grandMean = finiteGroups.flat().reduce((s, v) => s + v, 0) / n;
+
+  // Sum of squares between groups
+  let ssBetween = 0;
+  for (let i = 0; i < k; i++) {
+    ssBetween += groupSizes[i] * (groupMeans[i] - grandMean) ** 2;
+  }
+
+  // Sum of squares within groups
+  let ssWithin = 0;
+  for (let i = 0; i < k; i++) {
+    for (const v of finiteGroups[i]) {
+      ssWithin += (v - groupMeans[i]) ** 2;
+    }
+  }
+
+  const ssTotal = ssBetween + ssWithin;
+  const dfBetween = k - 1;
+  const dfWithin = n - k;
+  const msBetween = dfBetween > 0 ? ssBetween / dfBetween : 0;
+  const msWithin = dfWithin > 0 ? ssWithin / dfWithin : 0;
+
+  const fStatistic = msWithin > 0 ? msBetween / msWithin : null;
+
+  // Approximate p-value using the F-distribution
+  // For large df, F approaches chi-squared / df; use a simple approximation
+  const pValue = fStatistic != null ? approximateFPValue(fStatistic, dfBetween, dfWithin) : null;
+  const significant = pValue != null && pValue < 0.05;
+
+  // Group statistics
+  const groupStats = finiteGroups.map((g, i) => ({
+    label: labels?.[i] ?? `Group ${i + 1}`,
+    n: g.length,
+    mean: groupMeans[i],
+    stdDev: sampleStdDev(g),
+  }));
+
+  // Explanation
+  let explanation;
+  if (significant) {
+    explanation = `ANOVA indicates a statistically significant difference between group means (F(${dfBetween}, ${dfWithin}) = ${fStatistic.toFixed(3)}, p = ${pValue.toFixed(4)}). At least one group mean differs from the others.`;
+  } else if (fStatistic != null) {
+    explanation = `ANOVA does not detect a significant difference between group means (F(${dfBetween}, ${dfWithin}) = ${fStatistic.toFixed(3)}, p = ${pValue.toFixed(4)}). The observed differences could be due to random variation.`;
+  } else {
+    explanation = 'ANOVA could not be computed (insufficient variance within groups).';
+  }
+
+  return {
+    k, n, grandMean,
+    ssBetween, ssWithin, ssTotal,
+    dfBetween, dfWithin, msBetween, msWithin,
+    fStatistic, pValue, significant,
+    groupStats,
+    explanation,
+  };
+}
+
+/**
+ * Approximate the p-value for an F-statistic with given degrees of freedom.
+ * Uses the regularized incomplete beta function approximation.
+ *
+ * For practical purposes, uses a lookup-based approximation for common df ranges.
+ *
+ * @param {number} f — F-statistic value
+ * @param {number} df1 — numerator degrees of freedom
+ * @param {number} df2 — denominator degrees of freedom
+ * @returns {number} approximate p-value (0 to 1)
+ */
+function approximateFPValue(f, df1, df2) {
+  if (f == null || f <= 0) return 1.0;
+  if (!Number.isFinite(f)) return 0.0;
+
+  // Use the approximation: p ≈ 1 - I_x(df1/2, df2/2)
+  // where x = (df1 * f) / (df1 * f + df2)
+  // and I_x is the regularized incomplete beta function.
+  //
+  // For simplicity, use a series expansion for small df1 and asymptotic for large df.
+
+  const x = (df1 * f) / (df1 * f + df2);
+
+  // Regularized incomplete beta function approximation
+  // Using continued fraction expansion (Lentz's method)
+  return 1.0 - incompleteBeta(x, df1 / 2, df2 / 2);
+}
+
+/**
+ * Approximate the regularized incomplete beta function I_x(a, b).
+ * Uses the continued fraction expansion (Lentz's method).
+ *
+ * @param {number} x — value in [0, 1]
+ * @param {number} a — first shape parameter
+ * @param {number} b — second shape parameter
+ * @returns {number} I_x(a, b) approximation
+ */
+function incompleteBeta(x, a, b) {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+
+  // Use the symmetry relation when x > (a+1)/(a+b+2)
+  if (x > (a + 1) / (a + b + 2)) {
+    return 1.0 - incompleteBeta(1 - x, b, a);
+  }
+
+  // Compute the front factor: x^a * (1-x)^b / (a * B(a,b))
+  const lnFront = a * Math.log(x) + b * Math.log(1 - x) - logBeta(a, b) - Math.log(a);
+  const front = Math.exp(lnFront);
+
+  // Continued fraction expansion (Lentz's method)
+  const maxIter = 200;
+  const eps = 1e-10;
+  let f = 1.0;
+  let c = 1.0;
+  let d = 1.0 - (a + b) * x / (a + 1);
+  if (Math.abs(d) < 1e-30) d = 1e-30;
+  d = 1.0 / d;
+  f = d;
+
+  for (let m = 1; m <= maxIter; m++) {
+    // Even step
+    let num = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
+    d = 1.0 + num * d;
+    if (Math.abs(d) < 1e-30) d = 1e-30;
+    d = 1.0 / d;
+    c = 1.0 + num / c;
+    if (Math.abs(c) < 1e-30) c = 1e-30;
+    f *= d * c;
+
+    // Odd step
+    num = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
+    d = 1.0 + num * d;
+    if (Math.abs(d) < 1e-30) d = 1e-30;
+    d = 1.0 / d;
+    c = 1.0 + num / c;
+    if (Math.abs(c) < 1e-30) c = 1e-30;
+    const delta = d * c;
+    f *= delta;
+
+    if (Math.abs(delta - 1.0) < eps) break;
+  }
+
+  return front * f;
+}
+
+/**
+ * Compute the log of the beta function B(a, b) using the log-gamma function.
+ * B(a, b) = Gamma(a) * Gamma(b) / Gamma(a + b)
+ *
+ * @param {number} a
+ * @param {number} b
+ * @returns {number} log(B(a, b))
+ */
+function logBeta(a, b) {
+  return logGamma(a) + logGamma(b) - logGamma(a + b);
+}
+
+/**
+ * Approximate the log-gamma function using Lanczos approximation.
+ *
+ * @param {number} z — argument (must be > 0)
+ * @returns {number} log(Gamma(z))
+ */
+function logGamma(z) {
+  if (z <= 0) return NaN;
+
+  // Lanczos coefficients (g=7, n=9)
+  const g = 7;
+  const coef = [
+    0.99999999999980993,
+    676.5203681218851,
+    -1259.1392167224028,
+    771.32342877765313,
+    -176.61502916214059,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.9843695780195716e-6,
+    1.5056327351493116e-7,
+  ];
+
+  if (z < 0.5) {
+    // Reflection formula: Gamma(z) = pi / (sin(pi*z) * Gamma(1-z))
+    return Math.log(Math.PI / Math.sin(Math.PI * z)) - logGamma(1 - z);
+  }
+
+  z -= 1;
+  let x = coef[0];
+  for (let i = 1; i < g + 2; i++) {
+    x += coef[i] / (z + i);
+  }
+  const t = z + g + 0.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+}
+
+/**
+ * Perform Tukey's HSD (Honestly Significant Difference) post-hoc test
+ * after a significant ANOVA to identify which specific group pairs differ.
+ *
+ * @param {number[][]} groups — array of k arrays of observations
+ * @param {Object} options
+ * @param {string[]} [options.labels] — display labels for each group
+ * @param {number} [options.alpha=0.05] — significance level
+ * @returns {Object} {
+ *   comparisons: [{ groupA, groupB, meanDiff, criticalValue, significant, pValue }],
+ *   anySignificant: boolean,
+ *   explanation: string
+ * }
+ */
+export function tukeyHSD(groups = [], options = {}) {
+  const { labels = null, alpha = 0.05 } = options;
+  const k = groups.length;
+  if (k < 2) {
+    return { comparisons: [], anySignificant: false, explanation: 'At least 2 groups required.' };
+  }
+
+  const finiteGroups = groups.map(g => finiteValues(g));
+  const groupSizes = finiteGroups.map(g => g.length);
+  const n = groupSizes.reduce((s, size) => s + size, 0);
+  const groupMeans = finiteGroups.map(g => g.reduce((s, v) => s + v, 0) / g.length);
+
+  // Mean square within (from ANOVA)
+  let ssWithin = 0;
+  for (let i = 0; i < k; i++) {
+    for (const v of finiteGroups[i]) {
+      ssWithin += (v - groupMeans[i]) ** 2;
+    }
+  }
+  const dfWithin = n - k;
+  const msWithin = dfWithin > 0 ? ssWithin / dfWithin : 0;
+
+  if (msWithin === 0) {
+    return { comparisons: [], anySignificant: false, explanation: 'No within-group variance — all values identical within groups.' };
+  }
+
+  // Studentized range critical value approximation
+  // q(alpha, k, df) — use approximation for common values
+  const qCritical = studentizedRangeCritical(alpha, k, dfWithin);
+
+  const comparisons = [];
+  for (let i = 0; i < k; i++) {
+    for (let j = i + 1; j < k; j++) {
+      const meanDiff = Math.abs(groupMeans[i] - groupMeans[j]);
+      const se = Math.sqrt(msWithin * (1 / groupSizes[i] + 1 / groupSizes[j]) / 2);
+      const criticalValue = qCritical * se;
+      const significant = meanDiff > criticalValue;
+
+      comparisons.push({
+        groupA: labels?.[i] ?? `Group ${i + 1}`,
+        groupB: labels?.[j] ?? `Group ${j + 1}`,
+        meanA: groupMeans[i],
+        meanB: groupMeans[j],
+        meanDiff,
+        se,
+        criticalValue,
+        significant,
+      });
+    }
+  }
+
+  const anySignificant = comparisons.some(c => c.significant);
+  const explanation = anySignificant
+    ? `Tukey's HSD identified ${comparisons.filter(c => c.significant).length} significantly different group pair(s) at alpha=${alpha}.`
+    : `Tukey's HSD found no significantly different group pairs at alpha=${alpha}.`;
+
+  return { comparisons, anySignificant, explanation };
+}
+
+/**
+ * Approximate the critical value of the studentized range distribution q(alpha, k, df).
+ * Uses a simple approximation based on the t-distribution.
+ *
+ * @param {number} alpha — significance level
+ * @param {number} k — number of groups
+ * @param {number} df — degrees of freedom (within)
+ * @returns {number} critical value
+ */
+function studentizedRangeCritical(alpha, k, df) {
+  // Approximation: q ≈ sqrt(2) * t(alpha/(k*(k-1)), df)
+  // This is conservative (slightly overestimates the critical value)
+  const adjustedAlpha = alpha / (k * (k - 1));
+  const tCrit = tCriticalForAlpha(df, adjustedAlpha);
+  return Math.sqrt(2) * tCrit;
+}
+
+/**
+ * Get t-critical value for a given alpha (two-tailed).
+ * Extends the existing tCritical95 to support arbitrary alpha.
+ *
+ * @param {number} df — degrees of freedom
+ * @param {number} alpha — significance level (e.g., 0.05 for 95% CI)
+ * @returns {number} t-critical value
+ */
+function tCriticalForAlpha(df, alpha) {
+  // For alpha=0.05, use the existing table
+  if (Math.abs(alpha - 0.05) < 0.001) {
+    return tCritical95(df);
+  }
+
+  // For other alpha values, use approximation
+  // t ≈ z + (z^3 + z) / (4*df) + (5*z^5 + 16*z^3 + 3*z) / (96*df^2)
+  // where z is the standard normal critical value
+  const z = normalCriticalForAlpha(alpha);
+  const rounded = Math.floor(df);
+
+  if (rounded >= 1000) return z; // Large df → normal approximation
+
+  const term1 = (z ** 3 + z) / (4 * df);
+  const term2 = (5 * z ** 5 + 16 * z ** 3 + 3 * z) / (96 * df ** 2);
+  return z + term1 + term2;
+}
+
+/**
+ * Get the standard normal critical value for a two-tailed test.
+ * Uses a rational approximation.
+ *
+ * @param {number} alpha — significance level
+ * @returns {number} z-critical value
+ */
+function normalCriticalForAlpha(alpha) {
+  // Approximation of the inverse normal CDF
+  // For alpha=0.05, z=1.96; for alpha=0.01, z=2.576
+  const p = 1 - alpha / 2;
+  // Rational approximation (Abramowitz and Stegun)
+  const t = Math.sqrt(-2 * Math.log(1 - p));
+  const c0 = 2.515517;
+  const c1 = 0.802853;
+  const c2 = 0.010328;
+  const d1 = 1.432788;
+  const d2 = 0.189269;
+  const d3 = 0.001308;
+  return t - (c0 + c1 * t + c2 * t ** 2) / (1 + d1 * t + d2 * t ** 2 + d3 * t ** 3);
+}

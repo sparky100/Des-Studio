@@ -521,11 +521,13 @@ export function ExecuteCanvas({
             : servers;
           const busyCount = relevant.filter(e => e.status === "busy").length;
           const idleCount = relevant.filter(e => e.status === "idle").length;
+          const failedCount = relevant.filter(e => e.status === "failed").length;
           liveData = {
             serverTypeName:    serverType ?? null,
             capacity,
             busyCount,
             idleCount,
+            failedCount,
             utilisation:       capacity > 0 ? (busyCount / capacity) * 100 : 0,
             completionSignal:  snap.served,
           };

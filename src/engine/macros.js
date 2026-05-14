@@ -445,25 +445,58 @@ export const MACROS = [
     },
   },
 
-  // ── BATCH(QueueName, batchSize) — C-Event macro ────────────────────────────
+  // ── BATCH(QueueName, batchSize|Entity.attrName) — C-Event macro ────────────
+  // batchSize can be:
+  //   - A literal integer: BATCH(QueueName, 5)
+  //   - An entity attribute reference: BATCH(QueueName, Entity.batchSize)
+  //     Reads the attribute from the first waiting entity in the queue
   {
     name:    "BATCH",
-    pattern: /^BATCH\(([^,)]+)\s*,\s*(\d+)\)$/i,
+    pattern: /^BATCH\(([^,)]+)\s*,\s*(.+)\)$/i,
     apply(match, ctx) {
       const queueName = match[1].trim();
-      const batchSize = parseInt(match[2], 10);
+      const batchSizeArg = match[2].trim();
       const { entities, model, clock, msgs, setLastCustId, helpers, nextId } = ctx;
 
       const qDef = (model.queues || []).find(
         q => q.name?.trim().toLowerCase() === queueName.trim().toLowerCase()
       );
       if (!qDef) {
-        msgs.push(`BATCH(${queueName},${batchSize}): queue not found`);
+        msgs.push(`BATCH(${queueName},${batchSizeArg}): queue not found`);
         return;
       }
       const discipline = qDef.discipline || 'FIFO';
 
       const candidates = helpers.waitingInQueue?.(queueName, discipline, null, false) || [];
+
+      // Resolve batch size: literal number or entity attribute reference
+      let batchSize;
+      const attrMatch = batchSizeArg.match(/^Entity\.(\w+)$/i);
+      if (attrMatch) {
+        const attrName = attrMatch[1];
+        if (candidates.length === 0) {
+          msgs.push(`BATCH(${queueName},${batchSizeArg}): no waiting entities to read attribute from`);
+          return;
+        }
+        const firstEntity = candidates[0];
+        const attrValue = firstEntity.attrs?.[attrName];
+        if (attrValue == null) {
+          msgs.push(`BATCH(${queueName},${batchSizeArg}): entity has no '${attrName}' attribute`);
+          return;
+        }
+        batchSize = parseInt(attrValue, 10);
+        if (!Number.isInteger(batchSize) || batchSize < 1) {
+          msgs.push(`BATCH(${queueName},${batchSizeArg}): invalid batch size '${attrValue}' (must be integer >= 1)`);
+          return;
+        }
+      } else {
+        batchSize = parseInt(batchSizeArg, 10);
+        if (!Number.isInteger(batchSize) || batchSize < 1) {
+          msgs.push(`BATCH(${queueName},${batchSizeArg}): invalid batch size (must be integer >= 1)`);
+          return;
+        }
+      }
+
       if (candidates.length < batchSize) {
         msgs.push(`BATCH(${queueName},${batchSize}): only ${candidates.length} waiting — insufficient`);
         return;
@@ -501,7 +534,7 @@ export const MACROS = [
       markEntityWaiting(parent, clock, queueName);
       entities.push(parent);
       setLastCustId(parentId);
-      msgs.push(`BATCH: #${ids.join(', #')} → batch #${parentId} in "${queueName}"`);
+      msgs.push(`BATCH: #${ids.join(', #')} → batch #${parentId} in "${queueName}" (size=${batchSize})`);
     },
   },
 
@@ -685,6 +718,168 @@ export const MACROS = [
       } else {
         msgs.push(`REPAIR: ${repairedCount} ${sType} server(s) restored to idle`);
       }
+    },
+  },
+
+  // ── SPLIT(EntityType, N, TargetQueue) ──────────────────────────────────────
+  // Creates N-1 clones of the context entity, all placed in TargetQueue
+  {
+    name:    "SPLIT",
+    pattern: /^SPLIT\(([^,)]+)\s*,\s*(\d+)\s*,\s*([^,)]+)\)$/i,
+    apply(match, ctx) {
+      const entityType = match[1].trim();
+      const n = parseInt(match[2], 10);
+      const targetQueue = match[3].trim();
+      const { entities, clock, nextId, msgs, setLastCustId } = ctx;
+
+      const custId = ctx.felRef?._contextCustId ?? ctx.getLastCustId?.();
+      const cust = entities.find(e => e.id === custId);
+
+      if (!cust) {
+        msgs.push(`SPLIT(${entityType},${n},${targetQueue}): no context entity found`);
+        return;
+      }
+
+      if (n < 2) {
+        msgs.push(`SPLIT(${entityType},${n},${targetQueue}): N must be >= 2`);
+        return;
+      }
+
+      const childIds = [];
+      for (let i = 1; i < n; i++) {
+        const childId = nextId();
+        const child = {
+          id: childId,
+          type: entityType,
+          role: "customer",
+          status: "waiting",
+          arrivalTime: clock,
+          attrs: { ...cust.attrs },
+          queue: targetQueue,
+          lastQueue: targetQueue,
+          stages: [],
+          loopCount: 0,
+          _splitFrom: cust.id,
+          _splitIndex: i,
+        };
+        entities.push(child);
+        childIds.push(childId);
+      }
+
+      cust._splitParent = true;
+      cust._splitChildren = childIds;
+      setLastCustId?.(cust.id);
+
+      msgs.push(`SPLIT: #${cust.id} → ${n - 1} clones [${childIds.map(id => `#${id}`).join(', ')}] → "${targetQueue}"`);
+    },
+  },
+
+  // ── COSEIZE(Queue, ServerType1, ServerType2[, ...]) ────────────────────────
+  // Seizes one customer and multiple server types simultaneously
+  {
+    name:    "COSEIZE",
+    pattern: /^COSEIZE\(([^,)]+)\s*,\s*(.+)\)$/i,
+    apply(match, ctx) {
+      const queueName = match[1].trim();
+      const serverTypes = match[2].split(",").map(s => s.trim());
+      const { entities, helpers, clock, setLastCustId, setLastSrvId, msgs } = ctx;
+
+      const discipline = helpers.findQueueConfig?.(queueName)?.discipline || "FIFO";
+      const queueCandidates = helpers.waitingInQueue?.(queueName, discipline) || [];
+      const cust = queueCandidates[0];
+
+      if (!cust) {
+        msgs.push(`COSEIZE(${queueName}, ${serverTypes.join(', ')}): no waiting customer in "${queueName}"`);
+        return;
+      }
+
+      const idleServersByType = {};
+      for (const sType of serverTypes) {
+        const idle = helpers.idleOf(sType) || [];
+        if (idle.length === 0) {
+          msgs.push(`COSEIZE(${queueName}, ${serverTypes.join(', ')}): no idle ${sType}`);
+          return;
+        }
+        idleServersByType[sType] = idle[0];
+      }
+
+      for (const [sType, srv] of Object.entries(idleServersByType)) {
+        if (!claimServerForEntity(cust, srv, clock)) {
+          msgs.push(`COSEIZE: claim failed for ${sType} #${srv.id}`);
+          return;
+        }
+      }
+
+      cust.lastQueue = queueName;
+      cust.ceventName = ctx.ceventName;
+      setLastCustId(cust.id);
+      const srvIds = Object.values(idleServersByType).map(s => s.id);
+      setLastSrvId(srvIds[0]);
+
+      const serverDesc = Object.entries(idleServersByType)
+        .map(([type, srv]) => `#${srv.id} (${type})`)
+        .join(', ');
+      msgs.push(
+        `#${cust.id} → serving by ${serverDesc} ` +
+        `[waited ${(clock - cust.arrivalTime).toFixed(3)} t]`
+      );
+    },
+  },
+
+  // ── MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue) ───────────────────────
+  // Waits for one entity from each queue, pairs them, routes to TargetQueue
+  {
+    name:    "MATCH",
+    pattern: /^MATCH\(([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\)$/i,
+    apply(match, ctx) {
+      const typeA = match[1].trim();
+      const queueA = match[2].trim();
+      const typeB = match[3].trim();
+      const queueB = match[4].trim();
+      const targetQueue = match[5].trim();
+      const { entities, helpers, clock, msgs, nextId } = ctx;
+
+      const disciplineA = helpers.findQueueConfig?.(queueA)?.discipline || "FIFO";
+      const disciplineB = helpers.findQueueConfig?.(queueB)?.discipline || "FIFO";
+
+      const candidatesA = helpers.waitingInQueue?.(queueA, disciplineA) || [];
+      const candidatesB = helpers.waitingInQueue?.(queueB, disciplineB) || [];
+
+      const entityA = candidatesA[0];
+      const entityB = candidatesB[0];
+
+      if (!entityA || !entityB) {
+        msgs.push(`MATCH(${typeA},${queueA},${typeB},${queueB},${targetQueue}): no match — A=${candidatesA.length} B=${candidatesB.length}`);
+        return;
+      }
+
+      const parentId = nextId();
+      const parent = {
+        id: parentId,
+        type: `${typeA}+${typeB}`,
+        role: "batch",
+        status: "waiting",
+        arrivalTime: clock,
+        attrs: { ...entityA.attrs, ...entityB.attrs },
+        queue: targetQueue,
+        lastQueue: targetQueue,
+        stages: [],
+        loopCount: 0,
+        _matchedFrom: [entityA.id, entityB.id],
+      };
+      entities.push(parent);
+
+      clearWaitingState(entityA);
+      entityA.status = "done";
+      entityA.completionTime = clock;
+      entityA._matchedInto = parentId;
+
+      clearWaitingState(entityB);
+      entityB.status = "done";
+      entityB.completionTime = clock;
+      entityB._matchedInto = parentId;
+
+      msgs.push(`MATCH: #${entityA.id} (${typeA}) + #${entityB.id} (${typeB}) → #${parentId} → "${targetQueue}"`);
     },
   },
 ];
