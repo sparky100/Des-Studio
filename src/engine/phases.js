@@ -312,8 +312,17 @@ export function fireCEvent(ev, ctx) {
       delay = Math.max(0, parseFloat(srv?.attrs?.[attrName]) || 1);
       msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [server.${attrName}=${delay}]`);
     } else {
-      delay = Math.max(0, sample(cs.dist || "Fixed", cs.distParams || {}, ctx.rng, null, { clock }));
-      msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${cs.dist}(${delay.toFixed(3)})]`);
+      // Check if the customer has remaining service from preemption/failure
+      const custId = effectCtx._lastCustId;
+      const cust = custId ? ctx.entities.find(e => e.id === custId) : null;
+      if (cust && cust._remainingService != null && cust._remainingService > 0) {
+        delay = cust._remainingService;
+        delete cust._remainingService;
+        msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [remaining service]`);
+      } else {
+        delay = Math.max(0, sample(cs.dist || "Fixed", cs.distParams || {}, ctx.rng, null, { clock }));
+        msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${cs.dist}(${delay.toFixed(3)})]`);
+      }
     }
 
     felEntries.push({
@@ -323,6 +332,12 @@ export function fireCEvent(ev, ctx) {
       _contextCustId: cs.useEntityCtx ? effectCtx._lastCustId : undefined,
       _contextSrvId:  cs.useEntityCtx ? effectCtx._lastSrvId  : undefined,
     });
+
+    // Store scheduled duration on server for preemption/failure remaining-service calculation
+    if (cs.useEntityCtx && effectCtx._lastSrvId) {
+      const srv = ctx.entities.find(e => e.id === effectCtx._lastSrvId);
+      if (srv) srv._scheduledDuration = delay;
+    }
   }
 
   return { msgs, felEntries };

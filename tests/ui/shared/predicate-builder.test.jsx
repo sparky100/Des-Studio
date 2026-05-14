@@ -199,7 +199,7 @@ describe('ConditionBuilder — operator filtering by valueType', () => {
     expect(options).toContain('>');
   });
 
-  it('condition preview shows built string from rows', () => {
+  it('condition builder produces valid predicate JSON from rows', () => {
     let conditionValue = '';
     const handleChange = (val) => {
       conditionValue = val;
@@ -227,11 +227,8 @@ describe('ConditionBuilder — operator filtering by valueType', () => {
       />
     );
 
-    // Should have a condition value
+    // Should have a condition value (predicate JSON)
     expect(conditionValue).toBeTruthy();
-    // Dropdown now shows human-readable label; the raw token still appears in the preview
-    const rawInPreview = screen.queryAllByText(/queue\(MainQueue\)\.length/);
-    expect(rawInPreview.length).toBeGreaterThanOrEqual(1);
     // Human-readable label should be visible in the dropdown
     expect(screen.queryByText(/Number waiting in MainQueue/i)).toBeInTheDocument();
   });

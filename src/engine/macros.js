@@ -562,6 +562,131 @@ export const MACROS = [
       }
     },
   },
+
+  // ── PREEMPT(ServerType) ────────────────────────────────────────────────────
+  // Interrupts a busy server, re-queues the current customer with remaining service
+  {
+    name:    "PREEMPT",
+    pattern: /^PREEMPT\(([^,)]+)\)$/i,
+    apply(match, ctx) {
+      const sType = match[1].trim();
+      const { entities, clock, helpers, msgs, _arbitration } = ctx;
+      const key = normName(sType);
+
+      const busyServers = entities.filter(e =>
+        e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving")
+      );
+
+      if (busyServers.length === 0) {
+        msgs.push(`PREEMPT(${sType}): no busy server found`);
+        return;
+      }
+
+      const srv = busyServers[0];
+      const custId = srv.currentCustId;
+      const cust = entities.find(e => e.id === custId);
+
+      if (!cust) {
+        msgs.push(`PREEMPT(${sType}): server #${srv.id} has no customer`);
+        return;
+      }
+
+      const scheduledDuration = srv._scheduledDuration || 0;
+      const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart || clock)));
+      cust._remainingService = remainingService;
+
+      releaseServerClaim(cust, srv);
+      clearWaitingState(cust);
+      markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
+
+      if (_arbitration && typeof _arbitration === "object") {
+        Object.assign(_arbitration, {
+          type: "preemption",
+          serverType: sType,
+          serverId: srv.id,
+          preemptedEntity: cust.id,
+          remainingService: +remainingService.toFixed(4),
+        });
+      }
+
+      msgs.push(
+        `PREEMPT: server #${srv.id} (${sType}) interrupted #${cust.id} ` +
+        `[remaining ${remainingService.toFixed(3)} t] → re-queued`
+      );
+    },
+  },
+
+  // ── FAIL(ServerType) ───────────────────────────────────────────────────────
+  // Sets matching servers to failed state; busy servers' customers re-queued
+  {
+    name:    "FAIL",
+    pattern: /^FAIL\(([^,)]+)\)$/i,
+    apply(match, ctx) {
+      const sType = match[1].trim();
+      const { entities, clock, helpers, msgs } = ctx;
+      const key = normName(sType);
+
+      const servers = entities.filter(e =>
+        e.role === "server" && normName(e.type) === key && (e.status === "busy" || e.status === "serving" || e.status === "idle")
+      );
+
+      let failedCount = 0;
+      for (const srv of servers) {
+        if (srv.status === "busy" || srv.status === "serving") {
+          const custId = srv.currentCustId;
+          const cust = entities.find(e => e.id === custId);
+          if (cust) {
+            const scheduledDuration = srv._scheduledDuration || 0;
+            const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart || clock)));
+            cust._remainingService = remainingService;
+            releaseServerClaim(cust, srv);
+            clearWaitingState(cust);
+            markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
+            msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
+          }
+        }
+        srv.status = "failed";
+        srv._failedAt = clock;
+        failedCount++;
+      }
+
+      if (failedCount === 0) {
+        msgs.push(`FAIL(${sType}): no matching servers found`);
+      } else {
+        msgs.push(`FAIL: ${failedCount} ${sType} server(s) set to failed`);
+      }
+    },
+  },
+
+  // ── REPAIR(ServerType) ─────────────────────────────────────────────────────
+  // Sets failed servers back to idle
+  {
+    name:    "REPAIR",
+    pattern: /^REPAIR\(([^,)]+)\)$/i,
+    apply(match, ctx) {
+      const sType = match[1].trim();
+      const { entities, clock, msgs } = ctx;
+      const key = normName(sType);
+
+      const failedServers = entities.filter(e =>
+        e.role === "server" && normName(e.type) === key && e.status === "failed"
+      );
+
+      let repairedCount = 0;
+      for (const srv of failedServers) {
+        srv.status = "idle";
+        srv._failedAt = undefined;
+        srv._downtime = +(clock - (srv._failedAt || clock)).toFixed(4);
+        repairedCount++;
+      }
+
+      if (repairedCount === 0) {
+        msgs.push(`REPAIR(${sType}): no failed servers found`);
+      } else {
+        msgs.push(`REPAIR: ${repairedCount} ${sType} server(s) restored to idle`);
+      }
+    },
+  },
 ];
 
 /**

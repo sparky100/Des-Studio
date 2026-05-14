@@ -1,6 +1,6 @@
 # Sprint 32 — Resource Reliability
 
-**Status:** Proposed | **Started:** TBD | **Completed:** TBD
+**Status:** ✅ Complete | **Started:** 2026-05-14 | **Completed:** 2026-05-14
 
 ## Goal
 

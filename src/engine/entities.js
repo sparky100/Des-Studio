@@ -28,13 +28,14 @@ export const ENTITY_ROLES = {
 
 // Valid entity statuses
 export const ENTITY_STATUSES = {
-  waiting:  { color: "#f0883e", label: "Waiting"  },
-  serving:  { color: "#06b6d4", label: "Serving"  },
-  done:     { color: "#3fb950", label: "Done"     },
-  reneged:  { color: "#f85149", label: "Reneged"  },
-  idle:     { color: "#3fb950", label: "Idle"     },
-  busy:     { color: "#f59e0b", label: "Busy"     },
-  batched:  { color: "#8b5cf6", label: "Batched"  },
+  waiting:   { color: "#f0883e", label: "Waiting"   },
+  serving:   { color: "#06b6d4", label: "Serving"   },
+  done:      { color: "#3fb950", label: "Done"      },
+  reneged:   { color: "#f85149", label: "Reneged"   },
+  idle:      { color: "#3fb950", label: "Idle"      },
+  busy:      { color: "#f59e0b", label: "Busy"      },
+  failed:    { color: "#f85149", label: "Failed"    },
+  batched:   { color: "#8b5cf6", label: "Batched"   },
 };
 
 let _seq = 0;
