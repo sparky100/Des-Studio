@@ -84,8 +84,8 @@ const validModel = {
 };
 
 function openSweepSection() {
-  fireEvent.click(screen.getByRole('button', { name: /^experiments$/i }));
-  const header = screen.getByText('EXPERIMENTS');
+  fireEvent.click(screen.getByRole('button', { name: /^studies$/i }));
+  const header = screen.getByText('STUDIES');
   fireEvent.click(header.closest('div') || header);
 }
 

@@ -63,7 +63,7 @@ describe('model delete UI', () => {
   it('shows Delete on owned models', async () => {
     await renderLibrary();
 
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
 
   it('does not show Delete on public models owned by someone else', async () => {

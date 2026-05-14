@@ -7,12 +7,12 @@ describe("llm-proxy provider router", () => {
   it("keeps provider and model selection server-side", () => {
     expect(proxySource).toMatch(/LLM_PROVIDER/);
     expect(proxySource).toMatch(/LLM_MODEL/);
-    expect(proxySource).toMatch(/ANTHROPIC_MODEL/);
-    expect(proxySource).toMatch(/function getProviderConfig/);
+    expect(proxySource).toMatch(/DEFAULT_MODEL/);
+    expect(proxySource).toMatch(/async function callProvider/);
   });
 
   it("keeps backwards compatibility with the legacy Sprint 6 payload", () => {
-    expect(proxySource).toMatch(/Backwards compatibility/);
+    expect(proxySource).toMatch(/!body\.version/);
     expect(proxySource).toMatch(/body\.model !== config\.model/);
     expect(proxySource).toMatch(/max_tokens/);
   });

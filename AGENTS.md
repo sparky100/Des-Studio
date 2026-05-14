@@ -554,6 +554,24 @@ function buildEngine(model, seed, maxCycles = 500) { ... }
 
 **Every replication uses a unique integer seed.** The seed is stored with the run record in Supabase. A run replayed with the same seed must produce bit-identical results.
 
+### Reproducibility Contract (Sprint 29)
+
+The following invariants are non-negotiable and must be maintained across all engine changes:
+
+1. **Bit-identical replay**: `buildEngine(model, seed)` followed by the same sequence of `step()` calls must produce exactly the same entity arrival times, service times, and queue wait times for any given `seed` value.
+
+2. **Cross-replication independence**: Each replication uses seed `baseSeed + i`. Replications must not share PRNG state. No global PRNG state is permitted.
+
+3. **No `Math.random()` in engine layer**: All random sampling in `src/engine/` must go through the `rng` function passed to `buildEngine()`. Violations are caught by `grep -r "Math.random" src/engine/`.
+
+4. **Analytical validation gates** — the following benchmarks must exit 0 after any engine change:
+   - `node tests/engine/mm1_benchmark.js` — M/M/1, λ=0.9, μ=1.0, Wq analytical = 9.0, tolerance 5%
+   - `node tests/engine/mmc_benchmark.js` — M/M/c (c=2), λ=1.6, μ=1.0, Erlang-C Wq ≈ 1.7778, tolerance 5%
+
+5. **95% CI coverage** (Vitest): `tests/engine/replication-ci.test.js` asserts that 20+ replications produce a 95% confidence interval that contains the analytical mean wait for both M/M/1 and M/M/c models.
+
+6. **Seed storage**: Every run record in Supabase must store the integer seed used. The UI must display the seed. Modellers can reproduce any past run by re-entering the seed.
+
 ---
 
 
@@ -925,28 +943,24 @@ describe('saveModel', () => {
 - [ ] `deleteModel()` does not execute without a model `id` (guard against accidental table wipe)
 - [ ] `saveRun()` INSERT always includes the owning `model_id`
 
-### 12.7 The M/M/1 Correctness Benchmark
+### 12.7 Analytical Correctness Benchmarks
 
-The M/M/1 benchmark is not a unit test. It is a correctness gate run manually after any engine change. It must exist at `tests/engine/mm1_benchmark.js`.
+These benchmarks are not unit tests. They are correctness gates run manually (and in CI) after any engine change. They live in `tests/engine/` and must exit 0.
 
-```javascript
-// tests/engine/mm1_benchmark.js
-// Usage: node tests/engine/mm1_benchmark.js
-// Pass criteria: simulated mean wait within 5% of analytical value
+**M/M/1 benchmark** (`tests/engine/mm1_benchmark.js`):
+- λ=0.9, μ=1.0, ρ=0.9
+- Analytical Wq = ρ / (μ·(1−ρ)) = 9.0 time units
+- N=10 000 arrivals, warmup 1000, tolerance 5%
+- `node tests/engine/mm1_benchmark.js`
 
-const LAMBDA = 0.9;   // arrival rate
-const MU = 1.0;       // service rate
-const RHO = LAMBDA / MU;                          // utilisation = 0.9
-const ANALYTICAL_MEAN_WAIT = RHO / (MU * (1 - RHO)); // = 9.0 time units
-const N_ARRIVALS = 10000;
-const TOLERANCE = 0.05; // 5%
+**M/M/c benchmark** (`tests/engine/mmc_benchmark.js`) — added Sprint 29:
+- λ=1.6, μ=1.0, c=2, ρ=0.8
+- Erlang-C Wq ≈ 1.7778 time units
+- N_SERVED=2000, N_WARMUP=500, fixed seed 42, tolerance 5%
+- `node tests/engine/mmc_benchmark.js`
 
-// Build and run the M/M/1 model using buildEngine()
-// Compare simulated mean wait against ANALYTICAL_MEAN_WAIT
-// Exit 0 if within tolerance, exit 1 if not
-```
-
-**Sprint 1 is not complete until this benchmark exits 0.**
+**Sprint 1 is not complete until the M/M/1 benchmark exits 0.**
+**Sprint 29 adds the M/M/c benchmark as a permanent gate.**
 
 ### 12.8 Completion Gates by Sprint
 
@@ -960,6 +974,8 @@ These are the minimum test requirements before a sprint can be declared done. Co
 | Sprint 1 | Condition evaluator has no `new Function()` path | `npm test -- conditions` |
 | Sprint 1 | Queue discipline tests pass (FIFO, LIFO, PRIORITY) | `npm test -- entities` |
 | Sprint 1 | M/M/1 benchmark exits 0 | `node tests/engine/mm1_benchmark.js` |
+| Sprint 29 | M/M/c benchmark exits 0 | `node tests/engine/mmc_benchmark.js` |
+| Sprint 29 | Replication CI gate: 95% CI contains analytical Wq (M/M/1 + M/M/c) | `npm test -- replication-ci` |
 | Sprint 2 | UI test environment configured (jsdom) | `npm test -- ui` (no failures) |
 | Sprint 2 | DistPicker renders without ReferenceError | `npm test -- dist-picker` |
 | Sprint 2 | Predicate Builder type-safety tests pass | `npm test -- predicate-builder` |
@@ -1327,50 +1343,82 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 23 | ✅ Complete | 2026-05-11 | UI Interface Polish & Workflow Shell |
 | Sprint 24 | ✅ Complete | 2026-05-12 | Simulation Correctness & SimPy-Informed Remediation |
 | Sprint 25 | ✅ Complete | 2026-05-12 | Simulation Contract Consolidation |
+| Sprint 26 | ✅ Complete | 2026-05-12 | Resource Semantics and Waiting Behaviour |
+| Sprint 27 | ✅ Complete | 2026-05-13 | Simulation Debugging and Explainability |
+| Sprint 28 | ✅ Complete | 2026-05-14 | Experiments and Statistical Workbench |
+| Sprint 29 | 🔄 In Progress | 2026-05-14 | Test Infrastructure, Benchmarks, and Reproducibility |
 
 ---
 
-## 21. Current Sprint — Sprint 25 (Simulation Contract Consolidation)
+## 21. Current Sprint — Sprint 29 (Test Infrastructure, Benchmarks, and Reproducibility)
 
-**Goal:** Consolidate the simulation contract after Sprint 24 by making validation policy explicit, defining warm-up semantics for in-flight entities, and centralizing queue/entity arbitration behind one engine selection service.
+**Goal:** Harden the test infrastructure by fixing pre-existing test drift (18 failures), adding M/M/c analytical validation, documenting the reproducibility contract, establishing a performance envelope, and wiring benchmarks into CI.
 
 **Source reviews:**
-- `docs/reviews/simulation-architecture-review.md`
-- `docs/reviews/simpy-architecture-review.md`
-- `docs/reviews/sprint-24-completion-report.md`
-- `docs/reviews/sprint-25-simulation-contract-consolidation-plan.md`
+- `docs/reviews/sprint-29-pre-sprint-assessment.md`
+- `docs/reviews/sprint-28-experiments-and-statistical-workbench-plan.md`
 
-**Status:** ✅ Complete | **Started:** 2026-05-12 | **Completed:** 2026-05-12
+**Status:** 🔄 In Progress | **Started:** 2026-05-14
 
 **Implementation guardrails:**
-- Build on the existing `buildEngine()`, Phase A/B/C loop, macro registry, queue helpers, Execute panel, and DB wrappers; do not rewrite working systems.
-- Do not migrate the browser runtime to Python/SimPy in Sprint 25.
-- Preserve Pidd's Three-Phase restart rule and the existing behavior fixed in Sprint 24 unless the contract is being explicitly clarified.
-- Use SimPy concepts such as `Resource`, `PriorityResource`, `Store`, process-local waiting, and explicit timeout/request races as design references for JavaScript fixes.
-- Add focused regression tests before or alongside each fix.
-- No new dependencies unless explicitly reviewed first.
+- Fix only assertion drift — no engine rewrites unless a test reveals a genuine engine bug.
+- All new tests must use fixed seeds; no `Math.random()` in any test.
+- Benchmark scripts must exit 0 independently of the Vitest suite (they are node scripts, not Vitest tests).
+- Performance envelope document records baselines; do not gate CI on throughput numbers (environment variance too high).
+- No new runtime dependencies.
 
-| Feature / remediation | Status | Task clarity |
+| Feature | Status | Notes |
 |---|---|---|
-| F25.1 V8 validation contract | ✅ Complete | Missing both source and sink is blocking; exactly one missing side is a warning, and Execute mirrors that contract. |
-| F25.2 Warm-up semantics for in-flight entities | ✅ Complete | Active entities survive warm-up; scheduled completions still fire; wait/service/sojourn metrics are truncated at the warm-up boundary. |
-| F25.3 Queue/entity arbitration service | ✅ Complete | FIFO/LIFO/PRIORITY arbitration now flows through shared entity helpers for `ASSIGN`, `BATCH`, and `RENEGE_OLDEST`. |
-| F25.4 Contract-level regression coverage | ✅ Complete | Focused tests cover the V8 policy, warm-up truncation, in-flight completion handling, and centralized arbitration behavior. |
-| F25.5 SimPy-style documentation follow-through | ✅ Complete | Repo docs now describe the JavaScript equivalents of SimPy-style validation, waiting, and arbitration patterns. |
+| F29.0 — Fix 18 pre-existing test failures | ✅ Complete | All 18 were assertion drift (UI restructure, Sprint 28 tab rename, V8 validation policy, proxy contract). 947/947 passing. |
+| F29.1 — M/M/c analytical benchmark + CI gate | ✅ Complete | `tests/engine/mmc_benchmark.js` exits 0 (2.66% error, Erlang-C Wq=1.7778). `replication-ci.test.js` extended with 20-rep M/M/c CI gate. |
+| F29.2 — Reproducibility contract in AGENTS.md | ✅ Complete | Reproducibility Contract section added to §9.4; 5 invariants documented; ADR-004 cross-referenced. |
+| F29.3 — Performance timing script + envelope doc | ✅ Complete | `tests/engine/perf_timing.js` added. `docs/performance-envelope.md` created with benchmarked baselines. |
+| F29.4 — Locked golden regression fixtures | ✅ Complete | `tests/benchmarks/golden.test.js` — 4 tests pin M/M/1 and M/M/c mean wait to tight analytical windows (seed=42). |
+| F29.5 — GitHub Actions CI workflow | ✅ Complete | `.github/workflows/ci.yml` — 3 jobs: Vitest suite, analytical benchmarks, production build. |
+| F29.6 — RNG cross-replication independence test | ✅ Complete | 3 tests added to `tests/engine/distributions.test.js`: distinct traces, no shared state, 10 seeds all distinct. |
 
-**Sprint 25 contract notes:**
-- `Validation`: instead of a SimPy API, DES Studio enforces structural run preconditions in `src/engine/validation.js`; V8 is now an explicit product contract rather than an implied warning.
-- `Waiting / timeout races`: instead of `request | timeout`, the JavaScript engine preserves context-bound scheduled completions and reneging timers while truncating post-warm-up metrics at a clear reset boundary.
-- `Resource / store arbitration`: instead of `Resource` or `PriorityResource`, DES Studio now uses one helper-led arbitration path in `src/engine/entities.js` for queue- and type-based selection.
-
-**Sprint 25 exit gate:**
-- F25.1-F25.4 complete with regression tests.
-- Warm-up behavior is documented, not implied.
-- Arbitration logic has one authoritative selection path.
-- Focused tests pass for validation, warm-up, queue disciplines, batching, and Execute validation.
-- Architecture and sprint docs are updated with final contract decisions.
+**Sprint 29 exit gate:**
+- 947/947 Vitest tests passing (0 failures).
+- `node tests/engine/mm1_benchmark.js` exits 0.
+- `node tests/engine/mmc_benchmark.js` exits 0.
+- `tests/benchmarks/golden.test.js` (4 tests) passing.
+- `tests/engine/distributions.test.js` independence tests (3 tests) passing.
+- `docs/performance-envelope.md` exists with baseline data.
+- `.github/workflows/ci.yml` exists and is syntactically valid.
+- AGENTS.md reproducibility contract section complete.
+- Sprint history updated to Sprint 29.
 
 ### Recently Completed
+
+**Sprint 28 — Experiments and Statistical Workbench** (2026-05-14):
+- Saved experiment configurations (named snapshots of run parameters, storable and restorable from Execute panel)
+- CI precision display at a glance — half-width and sample-size indicators on all confidence interval cards
+- Warm-up transient diagnostics — batch-means chart with warm-up boundary marker, Welch's graphical test visualisation
+- Anomalous replication flagging — outlier detection (IQR/z-score) with per-replication badges in run history
+- Run organisation — archiving, tagging, and filter controls in the run history panel
+- Sprint 28 introduced the "Experiments" tab (saved experiment configs) ahead of the existing "Studies" (parametric sweep) tab in ExecutePanel
+- `tests/engine/replication-runner.test.js`, `tests/engine/statistics.test.js`, and all UI Execute tests updated
+
+**Sprint 27 — Simulation Debugging and Explainability** (2026-05-13):
+- First-class simulation debugging: structured `TraceEntry` schema in the engine covering Phase A/B/C entries with causal provenance
+- Event provenance — every B-event and C-event fire record carries `entityIds`, `newEvents`, and `arbitration` payloads
+- Arbitration trace — `ASSIGN` macro emits `{ type, candidates, winner, idleServers }` per selection
+- Phase C truncation warning — `WARNING` phase entry with `{ code, message }` when C-scan cycle limit hit
+- Execute panel explainability surfaces: event log filterable by phase, entity inspector panel, canvas node overlays
+- `tests/engine/trace-determinism.test.js` — full trace equivalence and category coverage tests
+
+**Sprint 26 — Resource Semantics and Waiting Behaviour** (2026-05-12):
+- Active service claims made explicit and mirrored (entity↔server bidirectional ownership)
+- Explicit waiting-ownership contract — entities in queue hold a waiting claim; released atomically on ASSIGN
+- Stale-claim and stale-waiting protections tightened (no phantom occupancy after COMPLETE/RENEGE)
+- Deferred interruption/preemption boundary documented (out of scope for the Three-Phase method)
+- Focused regression tests: contention, routing, recirculation, and lifecycle cleanup
+
+**Sprint 25 — Simulation Contract Consolidation** (2026-05-12):
+- V8 validation contract made explicit: missing both source and sink is blocking; exactly one missing side is a warning; Execute mirrors that contract.
+- Warm-up semantics for in-flight entities defined and implemented: active entities survive warm-up; wait/service/sojourn metrics truncated at warm-up boundary.
+- Queue/entity arbitration centralised: FIFO/LIFO/PRIORITY arbitration through shared entity helpers for `ASSIGN`, `BATCH`, and `RENEGE_OLDEST`.
+- Focused regression tests for validation, warm-up truncation, in-flight completion, and arbitration.
 
 **Sprint 23 — UI Interface Polish & Workflow Shell** (2026-05-11):
 - Added ModelDetail workflow modes: Visual Design, Entity Model, Event Logic, Validate, Execute, Results, and Access

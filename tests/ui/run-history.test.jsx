@@ -76,9 +76,10 @@ describe('run history', () => {
   it('shows run labels and export actions on the history page', async () => {
     renderDetail();
 
+    fireEvent.click(screen.getByRole('button', { name: /analysis/i }));
     fireEvent.click(screen.getByRole('tab', { name: /history/i }));
 
-    await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith('m1'));
+    await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith('m1', expect.objectContaining({ archived: false })));
     expect((await screen.findAllByText('Two servers')).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('LATEST RUN');
     expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('SERVED');
@@ -106,6 +107,7 @@ describe('run history', () => {
   it('downloads run history JSON from the page action', async () => {
     renderDetail();
 
+    fireEvent.click(screen.getByRole('button', { name: /analysis/i }));
     fireEvent.click(screen.getByRole('tab', { name: /history/i }));
     await screen.findAllByText('Two servers');
     fireEvent.click(screen.getByRole('button', { name: 'Export History' }));

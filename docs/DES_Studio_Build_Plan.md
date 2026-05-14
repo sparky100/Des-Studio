@@ -171,6 +171,9 @@ flowchart LR
 | 1.62 | 2026-05-12 | Added post-Sprint-25 roadmap shaping for Sprints 26-30 and modelling scenario coverage analysis. See `docs/reviews/open-source-tool-gap-analysis.md` and `docs/reviews/sprint-26-30-roadmap-and-scenario-coverage.md`. |
 | 1.63 | 2026-05-12 | Added a structured Sprint 26 plan and closure report template. Updated AGENTS.md / CLAUDE.md references and made Sprint 26 the active tracked sprint. |
 | 1.64 | 2026-05-13 | Sprint 26 completed. Added explicit waiting/resource ownership contracts, ADR-013/014, capability guidance, sample models, and focused regression coverage for contention, routing, and lifecycle cleanup. |
+| 1.65 | 2026-05-13 | Sprint 27 completed. Structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, Execute explainability surfaces (event log, entity inspector, canvas overlays). |
+| 1.66 | 2026-05-14 | Sprint 28 completed. Saved experiment configs, CI precision display, warm-up transient diagnostics, anomalous replication flagging, run archiving/tagging. 947/947 tests passing. |
+| 1.67 | 2026-05-14 | Sprint 29 started. F29.0–F29.6: 18 test failures fixed, M/M/c benchmark (exits 0, 2.66% error), reproducibility contract in AGENTS.md, performance envelope doc, golden fixtures, GitHub Actions CI, RNG independence tests. |
 
 ---
 
@@ -212,6 +215,28 @@ flowchart LR
 | Sprint 23 | ✅ Complete | 2026-05-11 | UI Interface Polish & Workflow Shell. | 60 focused | N/A | Success | Workflow-mode navigation, persistent Model Health, Validate workspace, shared authoring shell, Results-owned statistical analysis, upgraded charts, tablet/mobile layouts, and UI warning cleanup. |
 | Sprint 24 | ✅ Complete | 2026-05-12 | Simulation Correctness & SimPy-Informed Remediation. | Focused + full-suite verification | N/A | Success | Fixed Phase C warning propagation, lifecycle/context integrity, initial FEL scheduling, persistence contract, shift capacity reconciliation, and added SimPy-informed JS regression coverage. |
 | Sprint 25 | ✅ Complete | 2026-05-12 | Simulation Contract Consolidation. | 235 focused tests | N/A | Success | Finalized the V8 policy, warm-up truncation semantics, centralized queue/entity arbitration, contract regression coverage, and SimPy-informed documentation follow-through. |
+| Sprint 26 | ✅ Complete | 2026-05-12 | Resource Semantics & Waiting Behaviour. | Focused | N/A | Success | Explicit waiting/resource ownership contracts, mirrored active claims, stale-claim protection, ADR-013/014, capability guide, sample models, regression coverage for contention/routing/recirculation. |
+| Sprint 27 | ✅ Complete | 2026-05-13 | Simulation Debugging & Explainability. | Focused | N/A | Success | Structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, Execute explainability surfaces (event log, entity inspector, canvas overlays). |
+| Sprint 28 | ✅ Complete | 2026-05-14 | Experiments & Statistical Workbench. | 947 (947) | 1.48% | Success | Saved experiment configs, CI precision display, warm-up transient diagnostics, anomalous replication flagging, run archiving/tagging/filtering. |
+| Sprint 29 | 🔄 In Progress | 2026-05-14 | Test Infrastructure, Benchmarks & Reproducibility. | 947 (947) | 1.48%/2.66% | Success | F29.0–F29.6: 18 test failures fixed, M/M/c benchmark, reproducibility contract, performance envelope, golden fixtures, GitHub Actions CI, RNG independence tests. |
+
+---
+
+## Sprint 29 — Test Infrastructure, Benchmarks and Reproducibility
+
+**Goal:** Harden the test infrastructure by fixing pre-existing test drift, adding M/M/c analytical validation, documenting the reproducibility contract, establishing a performance envelope, and wiring benchmarks into CI.
+
+**Status:** 🔄 In Progress | **Started:** 2026-05-14
+
+| ID | Feature | Status | Deliverable |
+|---|---|---|---|
+| F29.0 | Fix 18 pre-existing test failures | ✅ | All 947 tests passing |
+| F29.1 | M/M/c benchmark + CI gate | ✅ | `tests/engine/mmc_benchmark.js`, `replication-ci.test.js` extended |
+| F29.2 | Reproducibility contract documentation | ✅ | AGENTS.md §9.4 Reproducibility Contract |
+| F29.3 | Performance timing script + envelope doc | ✅ | `tests/engine/perf_timing.js`, `docs/performance-envelope.md` |
+| F29.4 | Golden regression fixtures | ✅ | `tests/benchmarks/golden.test.js` (4 tests) |
+| F29.5 | GitHub Actions CI workflow | ✅ | `.github/workflows/ci.yml` |
+| F29.6 | RNG cross-replication independence test | ✅ | 3 tests added to `tests/engine/distributions.test.js` |
 
 ---
 

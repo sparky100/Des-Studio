@@ -100,7 +100,7 @@ describe("DashboardView", () => {
     getShareLink.mockResolvedValue(mockData);
     render(<DashboardView token="abc-123" />);
     await waitFor(() => {
-      expect(screen.getByText("QUEUES")).toBeTruthy();
+      expect(screen.getByText("QUEUE PERFORMANCE")).toBeTruthy();
       expect(screen.getAllByText("Customer").length).toBeGreaterThanOrEqual(1);
     });
   });
@@ -109,7 +109,7 @@ describe("DashboardView", () => {
     getShareLink.mockResolvedValue(mockData);
     render(<DashboardView token="abc-123" />);
     await waitFor(() => {
-      expect(screen.getByText("SERVERS")).toBeTruthy();
+      expect(screen.getByText("SERVER PERFORMANCE")).toBeTruthy();
     });
   });
 
