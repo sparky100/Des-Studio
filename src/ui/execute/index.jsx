@@ -8,8 +8,8 @@ import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { buildEngine } from "../../engine/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
-import { compareScenarios, detectWarmupWelch, summarizeReplicationResults } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights } from "../../db/models.js";
+import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
+import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment } from "../../db/models.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
@@ -21,7 +21,7 @@ import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { qrSvg } from "../share/qr.js";
 import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
-import { SweepChart, WarmupChart, Sweep2DGrid } from "./SweepViews.jsx";
+import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart } from "./SweepViews.jsx";
 import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 
 const numberDefault = (value, fallback) => {
@@ -82,6 +82,22 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [comparisonIdxA, setComparisonIdxA] = useState(0);
   const [comparisonIdxB, setComparisonIdxB] = useState(null);
   const [comparisonResult, setComparisonResult] = useState(null);
+  // F28.2: Run comparison
+  const [runCompareIdA, setRunCompareIdA] = useState("");
+  const [runCompareIdB, setRunCompareIdB] = useState("");
+  const [runCompareResult, setRunCompareResult] = useState(null);
+
+  // F28.1: Saved experiment definitions
+  const [experiments, setExperiments] = useState([]);
+  const [experimentsStatus, setExperimentsStatus] = useState("idle");
+  const [experimentsError, setExperimentsError] = useState("");
+  const [expFormOpen, setExpFormOpen] = useState(false);
+  const [expEditId, setExpEditId] = useState(null);
+  const [expFormName, setExpFormName] = useState("");
+  const [expFormDesc, setExpFormDesc] = useState("");
+  const [expFormOverrides, setExpFormOverrides] = useState([]);
+  const [expFormSaving, setExpFormSaving] = useState(false);
+
   const sweepRunnerRef = useRef(null);
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
@@ -539,6 +555,27 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     };
   }, [aiPanelOpen, modelId]);
 
+  // F28.1: load experiments when tab is opened
+  useEffect(() => {
+    if (executeSection !== "saved-experiments" || !modelId || !userId) return;
+    let cancelled = false;
+    setExperimentsStatus("loading");
+    setExperimentsError("");
+    fetchExperiments(modelId)
+      .then(rows => {
+        if (cancelled) return;
+        setExperiments(rows || []);
+        setExperimentsStatus("loaded");
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setExperiments([]);
+        setExperimentsError(err?.message || "Could not load experiments");
+        setExperimentsStatus("error");
+      });
+    return () => { cancelled = true; };
+  }, [executeSection, modelId, userId]);
+
   // Handle Analyse button from History tab — load saved run into AI panel
   useEffect(() => {
     if (!analyseRun || !modelId) return;
@@ -781,6 +818,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         {[
           { id: "run", label: "Run" },
           { id: "setup", label: "Setup" },
+          { id: "saved-experiments", label: "Experiments" },
           { id: "experiments", label: "Studies" },
         ].map(section => (
           <Btn
@@ -870,6 +908,26 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 {warmupDetection.explanation}
               </div>
             )}
+            {/* F28.4: Cumulative-mean chart from last replication timeSeries */}
+            {replicationResults.length > 0 && (() => {
+              const lastRep = replicationResults[replicationResults.length - 1];
+              const ts = lastRep?.result?.timeSeries;
+              if (!ts || ts.length < 2) return null;
+              const queueDepths = ts.map(p => {
+                const queues = Object.values(p.byQueue || {});
+                return queues.reduce((s, q) => s + (q?.waiting ?? 0), 0);
+              }).filter(Number.isFinite);
+              const cumMean = cumulativeMean(queueDepths);
+              if (cumMean.length < 2) return null;
+              return (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 4 }}>
+                    CUMULATIVE MEAN QUEUE DEPTH (last replication)
+                  </div>
+                  <CumulativeMeanChart points={cumMean} warmupPeriod={warmupPeriod} />
+                </div>
+              );
+            })()}
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -975,6 +1033,216 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         )}
           </div>
         )}
+      </div>
+      )}
+
+      {executeSection === "saved-experiments" && (
+      <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+        {/* Header row */}
+        <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SAVED EXPERIMENTS</span>
+          {userId && (
+            <Btn small variant="primary" onClick={() => {
+              setExpEditId(null);
+              setExpFormName("");
+              setExpFormDesc("");
+              setExpFormOverrides([]);
+              setExpFormOpen(true);
+            }}>
+              New Experiment
+            </Btn>
+          )}
+        </div>
+
+        {/* New / Edit form */}
+        {expFormOpen && (
+          <div style={{ padding: 16, borderBottom: `1px solid ${C.border}`, display: "flex", flexDirection: "column", gap: 12 }}>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+              {expEditId ? "EDIT EXPERIMENT" : "NEW EXPERIMENT"}
+            </span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Name *</span>
+              <input
+                aria-label="Experiment name"
+                type="text"
+                value={expFormName}
+                onChange={e => setExpFormName(e.target.value)}
+                placeholder="e.g. High-load scenario"
+                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }}
+              />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Description</span>
+              <input
+                aria-label="Experiment description"
+                type="text"
+                value={expFormDesc}
+                onChange={e => setExpFormDesc(e.target.value)}
+                placeholder="Optional notes"
+                style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }}
+              />
+            </div>
+            {/* Capture current execute settings */}
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+              Captures current settings: {replications} repl · seed {seed} · warm-up {warmupPeriod} · {terminationMode === "time" ? `duration ${maxSimTime}` : "condition stop"}
+            </div>
+            {/* Parameter overrides */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER OVERRIDES</span>
+                <Btn small variant="ghost" onClick={() => {
+                  if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
+                  setExpFormOverrides(prev => [...prev, { path: "", value: "" }]);
+                }}>
+                  + Add
+                </Btn>
+              </div>
+              {expFormOverrides.map((ov, idx) => (
+                <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <select
+                    aria-label={`Override parameter ${idx + 1}`}
+                    value={ov.path}
+                    onChange={e => {
+                      const path = e.target.value;
+                      setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, path } : o));
+                    }}
+                    style={{ flex: 2, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+                  >
+                    <option value="">Select parameter...</option>
+                    {sweepParams.map(p => (
+                      <option key={p.path} value={p.path}>{p.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    aria-label={`Override value ${idx + 1}`}
+                    type="number"
+                    value={ov.value}
+                    onChange={e => setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, value: e.target.value } : o))}
+                    placeholder="value"
+                    style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "5px 6px", outline: "none" }}
+                  />
+                  <Btn small variant="ghost" onClick={() => setExpFormOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn small variant="primary" disabled={!expFormName.trim() || expFormSaving} onClick={async () => {
+                const config = {
+                  replications,
+                  seed,
+                  warmupPeriod,
+                  maxSimTime,
+                  terminationMode,
+                  terminationCondition: terminationMode === "condition" ? terminationCondition : null,
+                  overrides: expFormOverrides.filter(o => o.path && o.value !== "").map(o => ({ path: o.path, value: Number(o.value) })),
+                };
+                setExpFormSaving(true);
+                try {
+                  if (expEditId) {
+                    const updated = await updateExperiment(expEditId, { name: expFormName.trim(), description: expFormDesc.trim() || null, config });
+                    setExperiments(prev => prev.map(e => e.id === expEditId ? updated : e));
+                  } else {
+                    const created = await saveExperiment({ modelId, userId, name: expFormName.trim(), description: expFormDesc.trim() || null, config });
+                    setExperiments(prev => [created, ...prev]);
+                  }
+                  setExpFormOpen(false);
+                  setExpEditId(null);
+                } catch (err) {
+                  setExperimentsError(err?.message || "Save failed");
+                } finally {
+                  setExpFormSaving(false);
+                }
+              }}>
+                {expFormSaving ? "Saving…" : "Save"}
+              </Btn>
+              <Btn small variant="ghost" onClick={() => { setExpFormOpen(false); setExpEditId(null); }}>Cancel</Btn>
+            </div>
+          </div>
+        )}
+
+        {/* Experiment list */}
+        <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+          {experimentsStatus === "loading" && (
+            <span style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>Loading…</span>
+          )}
+          {experimentsStatus === "error" && (
+            <span style={{ fontSize: 12, color: C.red, fontFamily: FONT }}>{experimentsError}</span>
+          )}
+          {experimentsStatus === "loaded" && experiments.length === 0 && !expFormOpen && (
+            <span style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>No saved experiments yet. Click "New Experiment" to create one.</span>
+          )}
+          {experiments.map(exp => (
+            <div key={exp.id} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                  <span style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 600 }}>{exp.name}</span>
+                  {exp.description && <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>{exp.description}</span>}
+                  <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                    {exp.config.replications} repl · seed {exp.config.seed} · warm-up {exp.config.warmupPeriod} · {exp.config.terminationMode === "time" ? `duration ${exp.config.maxSimTime}` : "condition stop"}
+                    {exp.config.overrides?.length > 0 && ` · ${exp.config.overrides.length} override${exp.config.overrides.length > 1 ? "s" : ""}`}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                  <Btn small variant="primary" onClick={() => {
+                    const cfg = exp.config;
+                    setReplications(cfg.replications ?? 1);
+                    setSeed(cfg.seed ?? seed);
+                    setWarmupPeriod(cfg.warmupPeriod ?? 0);
+                    setMaxSimTime(cfg.maxSimTime ?? 500);
+                    setTerminationMode(cfg.terminationMode ?? "time");
+                    setTerminationCondition(cfg.terminationCondition ?? null);
+                    setExecuteSection("run");
+                  }}>
+                    Load
+                  </Btn>
+                  <Btn small variant="ghost" onClick={() => {
+                    const cfg = exp.config;
+                    setReplications(cfg.replications ?? 1);
+                    setSeed(cfg.seed ?? seed);
+                    setWarmupPeriod(cfg.warmupPeriod ?? 0);
+                    setMaxSimTime(cfg.maxSimTime ?? 500);
+                    setTerminationMode(cfg.terminationMode ?? "time");
+                    setTerminationCondition(cfg.terminationCondition ?? null);
+                    setRunLabel(exp.name);
+                    setExecuteSection("run");
+                  }}>
+                    Run
+                  </Btn>
+                  <Btn small variant="ghost" onClick={() => {
+                    setExpEditId(exp.id);
+                    setExpFormName(exp.name);
+                    setExpFormDesc(exp.description || "");
+                    setExpFormOverrides((exp.config.overrides || []).map(o => ({ path: o.path, value: String(o.value) })));
+                    setExpFormOpen(true);
+                  }}>
+                    Edit
+                  </Btn>
+                  <Btn small variant="ghost" onClick={async () => {
+                    try {
+                      const cloned = await cloneExperiment(exp.id, userId);
+                      setExperiments(prev => [cloned, ...prev]);
+                    } catch (err) {
+                      setExperimentsError(err?.message || "Clone failed");
+                    }
+                  }}>
+                    Clone
+                  </Btn>
+                  <Btn small variant="ghost" onClick={async () => {
+                    if (!confirm(`Delete "${exp.name}"?`)) return;
+                    try {
+                      await deleteExperiment(exp.id);
+                      setExperiments(prev => prev.filter(e => e.id !== exp.id));
+                    } catch (err) {
+                      setExperimentsError(err?.message || "Delete failed");
+                    }
+                  }}>
+                    Delete
+                  </Btn>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
       )}
 
@@ -1683,65 +1951,252 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
             </div>
           )}
 
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
-              <thead>
-                <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                  <th style={{ padding: 8 }}>Rep #</th>
-                  <th style={{ padding: 8 }}>Seed</th>
-                  <th style={{ padding: 8 }}>Served</th>
-                  <th style={{ padding: 8 }}>Avg wait</th>
-                  <th style={{ padding: 8 }}>Avg service</th>
-                  <th style={{ padding: 8 }}>Avg sojourn</th>
-                  <th style={{ padding: 8 }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {replicationResults.map(payload => (
-                  <tr key={payload.replicationIndex} style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <td style={{ padding: 8 }}>{payload.replicationIndex + 1}</td>
-                    <td style={{ padding: 8, color: C.amber }}>{payload.seed}</td>
-                    <td style={{ padding: 8 }}>{payload.result?.summary?.served ?? "—"}</td>
-                    <td style={{ padding: 8 }}>{fmt(payload.result?.summary?.avgWait)}</td>
-                    <td style={{ padding: 8 }}>{fmt(payload.result?.summary?.avgSvc)}</td>
-                    <td style={{ padding: 8 }}>{fmt(payload.result?.summary?.avgSojourn)}</td>
-                    <td style={{ padding: 8 }}><Tag label="complete" color={C.green} /></td>
-                  </tr>
-                ))}
-                {!replicationResults.length && (
-                  <tr>
-                    <td colSpan={7} style={{ padding: 8, color: C.muted }}>Waiting for first replication result...</td>
-                  </tr>
+          {(() => {
+            const repCount = replicationResults.length;
+            const waitVals = replicationResults.map(p => p.result?.summary?.avgWait).filter(Number.isFinite);
+            const svcVals = replicationResults.map(p => p.result?.summary?.avgSvc).filter(Number.isFinite);
+            const servedVals = replicationResults.map(p => p.result?.summary?.served).filter(Number.isFinite);
+            const outlierWait = detectOutliers(waitVals);
+            const outlierSvc = detectOutliers(svcVals);
+            const outlierServed = detectOutliers(servedVals);
+            const minMaxRow = repCount >= 2 ? {
+              minWait: waitVals.length ? Math.min(...waitVals) : null,
+              maxWait: waitVals.length ? Math.max(...waitVals) : null,
+              minSvc: svcVals.length ? Math.min(...svcVals) : null,
+              maxSvc: svcVals.length ? Math.max(...svcVals) : null,
+              minServed: servedVals.length ? Math.min(...servedVals) : null,
+              maxServed: servedVals.length ? Math.max(...servedVals) : null,
+            } : null;
+            let waitFiniteIdx = 0, svcFiniteIdx = 0, servedFiniteIdx = 0;
+            return (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
+                  <thead>
+                    <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                      <th style={{ padding: 8 }}>Rep #</th>
+                      <th style={{ padding: 8 }}>Seed</th>
+                      <th style={{ padding: 8 }}>Served</th>
+                      <th style={{ padding: 8 }}>Reneged</th>
+                      <th style={{ padding: 8 }}>Avg wait</th>
+                      <th style={{ padding: 8 }}>Avg service</th>
+                      <th style={{ padding: 8 }}>Avg sojourn</th>
+                      <th style={{ padding: 8 }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {replicationResults.map(payload => {
+                      const summary = payload.result?.summary;
+                      const rowWait = summary?.avgWait;
+                      const rowSvc = summary?.avgSvc;
+                      const rowServed = summary?.served;
+                      const wi = Number.isFinite(rowWait) ? waitFiniteIdx++ : -1;
+                      const si = Number.isFinite(rowSvc) ? svcFiniteIdx++ : -1;
+                      const sei = Number.isFinite(rowServed) ? servedFiniteIdx++ : -1;
+                      const isWaitOutlier = wi >= 0 && outlierWait.outlierIndices.includes(wi);
+                      const isSvcOutlier = si >= 0 && outlierSvc.outlierIndices.includes(si);
+                      const isServedOutlier = sei >= 0 && outlierServed.outlierIndices.includes(sei);
+                      const isOutlier = isWaitOutlier || isSvcOutlier || isServedOutlier;
+                      const outlierMsg = [
+                        isWaitOutlier && `Avg wait outside fence [${fmt(outlierWait.lowerFence)}, ${fmt(outlierWait.upperFence)}]`,
+                        isSvcOutlier && `Avg service outside fence [${fmt(outlierSvc.lowerFence)}, ${fmt(outlierSvc.upperFence)}]`,
+                        isServedOutlier && `Served outside fence [${fmt(outlierServed.lowerFence)}, ${fmt(outlierServed.upperFence)}]`,
+                      ].filter(Boolean).join("; ");
+                      return (
+                        <tr key={payload.replicationIndex} style={{ borderBottom: `1px solid ${C.border}` }}>
+                          <td style={{ padding: 8 }}>{payload.replicationIndex + 1}</td>
+                          <td style={{ padding: 8, color: C.amber }}>{payload.seed}</td>
+                          <td style={{ padding: 8 }}>{summary?.served ?? "—"}</td>
+                          <td style={{ padding: 8 }}>{summary?.reneged ?? "—"}</td>
+                          <td style={{ padding: 8 }}>{fmt(rowWait)}</td>
+                          <td style={{ padding: 8 }}>{fmt(rowSvc)}</td>
+                          <td style={{ padding: 8 }}>{fmt(summary?.avgSojourn)}</td>
+                          <td style={{ padding: 8 }}>
+                            <Tag label="complete" color={C.green} />
+                            {isOutlier && (
+                              <span title={outlierMsg} style={{ marginLeft: 6, color: C.amber, cursor: "help" }}>⚠</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!replicationResults.length && (
+                      <tr>
+                        <td colSpan={8} style={{ padding: 8, color: C.muted }}>Waiting for first replication result...</td>
+                      </tr>
+                    )}
+                    {minMaxRow && (
+                      <tr style={{ borderTop: `2px solid ${C.border}`, color: C.muted, fontStyle: "italic" }}>
+                        <td style={{ padding: 8 }} colSpan={2}>Min / Max</td>
+                        <td style={{ padding: 8 }}>{minMaxRow.minServed ?? "—"} / {minMaxRow.maxServed ?? "—"}</td>
+                        <td style={{ padding: 8 }}>—</td>
+                        <td style={{ padding: 8 }}>{minMaxRow.minWait != null ? fmt(minMaxRow.minWait) : "—"} / {minMaxRow.maxWait != null ? fmt(minMaxRow.maxWait) : "—"}</td>
+                        <td style={{ padding: 8 }}>{minMaxRow.minSvc != null ? fmt(minMaxRow.minSvc) : "—"} / {minMaxRow.maxSvc != null ? fmt(minMaxRow.maxSvc) : "—"}</td>
+                        <td style={{ padding: 8 }}>—</td>
+                        <td style={{ padding: 8 }}>—</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+
+          {Object.values(aggregateStats).some(stat => stat.n >= 2) && (() => {
+            const ciRows = CI_METRICS.map(metric => {
+              const stat = aggregateStats[metric];
+              if (!stat || stat.n < 2) return null;
+              const relPrec = relativePrecision(stat);
+              const precColor = relPrec == null ? C.muted : relPrec < 5 ? C.green : relPrec < 15 ? C.amber : C.red;
+              const guidance = sampleSizeGuidance(stat);
+              return { metric, stat, relPrec, precColor, guidance };
+            }).filter(Boolean);
+            const guidanceRows = ciRows.filter(r => r.guidance != null);
+            return (
+              <>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
+                    <thead>
+                      <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                        <th style={{ padding: 8 }}>Metric</th>
+                        <th style={{ padding: 8 }}>Mean</th>
+                        <th style={{ padding: 8 }}>Lower 95%</th>
+                        <th style={{ padding: 8 }}>Upper 95%</th>
+                        <th style={{ padding: 8 }}>Half-width</th>
+                        <th style={{ padding: 8 }}>Rel. precision %</th>
+                        <th style={{ padding: 8 }}>n</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ciRows.map(({ metric, stat, relPrec, precColor }) => (
+                        <tr key={metric} style={{ borderBottom: `1px solid ${C.border}` }}>
+                          <td style={{ padding: 8 }}>{METRIC_LABELS[metric]}</td>
+                          <td style={{ padding: 8, color: C.accent }}>{fmt(stat.mean)}</td>
+                          <td style={{ padding: 8 }}>{fmt(stat.lower)}</td>
+                          <td style={{ padding: 8 }}>{fmt(stat.upper)}</td>
+                          <td style={{ padding: 8, color: C.amber }}>{fmt(stat.halfWidth)}</td>
+                          <td style={{ padding: 8 }}>
+                            {relPrec != null ? (
+                              <span style={{ color: precColor, fontWeight: 700 }}>{relPrec.toFixed(1)}%</span>
+                            ) : "—"}
+                          </td>
+                          <td style={{ padding: 8 }}>{stat.n}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {guidanceRows.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 6 }}>
+                    {guidanceRows.map(({ metric, guidance }) => (
+                      <span key={metric} style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+                        ~{guidance} more replication{guidance > 1 ? "s" : ""} needed to reach 5% precision on {METRIC_LABELS[metric]}
+                      </span>
+                    ))}
+                  </div>
                 )}
-              </tbody>
-            </table>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* F28.2: Run comparison panel — visible in run section when run history is available */}
+      {executeSection === "run" && savedRunHistory.length >= 2 && (
+        <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE RUNS</span>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 140 }}>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Baseline run</span>
+              <select
+                aria-label="Baseline run"
+                value={runCompareIdA}
+                onChange={e => { setRunCompareIdA(e.target.value); setRunCompareResult(null); }}
+                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
+              >
+                <option value="">Select run…</option>
+                {savedRunHistory.map(row => (
+                  <option key={row.id} value={row.id}>{row.run_label || `Run ${new Date(row.ran_at || Date.now()).toLocaleString()}`}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 140 }}>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Variant run</span>
+              <select
+                aria-label="Variant run"
+                value={runCompareIdB}
+                onChange={e => { setRunCompareIdB(e.target.value); setRunCompareResult(null); }}
+                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
+              >
+                <option value="">Select run…</option>
+                {savedRunHistory.filter(row => row.id !== runCompareIdA).map(row => (
+                  <option key={row.id} value={row.id}>{row.run_label || `Run ${new Date(row.ran_at || Date.now()).toLocaleString()}`}</option>
+                ))}
+              </select>
+            </div>
+            <Btn small variant="primary" disabled={!runCompareIdA || !runCompareIdB} onClick={() => {
+              const rowA = savedRunHistory.find(r => r.id === runCompareIdA);
+              const rowB = savedRunHistory.find(r => r.id === runCompareIdB);
+              const repsA = rowA?.results_json?.replicationResults || [];
+              const repsB = rowB?.results_json?.replicationResults || [];
+              if (repsA.length < 2 || repsB.length < 2) {
+                setRunCompareResult({ error: `Both runs must have at least 2 replications. Baseline: ${repsA.length}, Variant: ${repsB.length}.` });
+                return;
+              }
+              const labelA = rowA?.run_label || `Run A`;
+              const labelB = rowB?.run_label || `Run B`;
+              const result = compareScenarios(repsA, repsB, CI_METRICS, { labelA, labelB });
+              const meansA = {}, meansB = {};
+              for (const m of CI_METRICS) {
+                const parts = m.split(".");
+                const vA = repsA.map(r => { let v = r?.result || r; for (const p of parts) v = v?.[p]; return v; }).filter(Number.isFinite);
+                const vB = repsB.map(r => { let v = r?.result || r; for (const p of parts) v = v?.[p]; return v; }).filter(Number.isFinite);
+                meansA[m] = vA.length ? vA.reduce((s, v) => s + v, 0) / vA.length : null;
+                meansB[m] = vB.length ? vB.reduce((s, v) => s + v, 0) / vB.length : null;
+              }
+              setRunCompareResult({ ...result, meansA, meansB });
+            }}>
+              Compare
+            </Btn>
           </div>
 
-          {Object.values(aggregateStats).some(stat => stat.n >= 2) && (
+          {runCompareResult?.error && (
+            <div style={{ fontSize: 12, color: C.red, fontFamily: FONT }}>{runCompareResult.error}</div>
+          )}
+          {runCompareResult && !runCompareResult.error && (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
                 <thead>
                   <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                    <th style={{ padding: 8 }}>Metric</th>
-                    <th style={{ padding: 8 }}>Mean</th>
-                    <th style={{ padding: 8 }}>Lower 95%</th>
-                    <th style={{ padding: 8 }}>Upper 95%</th>
-                    <th style={{ padding: 8 }}>Half-width</th>
-                    <th style={{ padding: 8 }}>n</th>
+                    <th style={{ padding: "6px 8px" }}>KPI</th>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>{runCompareResult.labels?.a}</th>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>{runCompareResult.labels?.b}</th>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
+                    <th style={{ padding: "6px 8px" }}>Significant?</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {CI_METRICS.map(metric => {
-                    const stat = aggregateStats[metric];
-                    if (!stat || stat.n < 2) return null;
+                  {runCompareResult.comparisons?.map((c, i) => {
+                    const mA = runCompareResult.meansA?.[c.metric];
+                    const mB = runCompareResult.meansB?.[c.metric];
                     return (
-                      <tr key={metric} style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <td style={{ padding: 8 }}>{METRIC_LABELS[metric]}</td>
-                        <td style={{ padding: 8, color: C.accent }}>{fmt(stat.mean)}</td>
-                        <td style={{ padding: 8 }}>{fmt(stat.lower)}</td>
-                        <td style={{ padding: 8 }}>{fmt(stat.upper)}</td>
-                        <td style={{ padding: 8, color: C.amber }}>{fmt(stat.halfWidth)}</td>
-                        <td style={{ padding: 8 }}>{stat.n}</td>
+                      <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{mA != null ? fmt(mA) : "—"}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{mB != null ? fmt(mB) : "—"}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
+                          {c.meanDiff != null ? (c.meanDiff > 0 ? "+" : "") + fmt(c.meanDiff) : "—"}
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>
+                          {c.lower != null && c.upper != null ? `[${fmt(c.lower)}, ${fmt(c.upper)}]` : "—"}
+                        </td>
+                        <td style={{ padding: "6px 8px" }}>
+                          {c.significant95 ? (
+                            <span style={{ color: c.significant99 ? C.green : C.amber, fontWeight: 700 }}>
+                              {c.significant99 ? "Yes (99%)" : "Yes (95%)"}
+                            </span>
+                          ) : <span style={{ color: C.muted }}>No</span>}
+                        </td>
                       </tr>
                     );
                   })}

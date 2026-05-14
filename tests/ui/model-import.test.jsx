@@ -20,9 +20,14 @@ vi.mock('../../src/db/models.js', () => ({
 
 const session = { user: { id: 'user-1' } };
 const emptyModelJson = {
-  entityTypes: [],
+  entityTypes: [
+    { id: 'cust', name: 'Customer', role: 'customer', attrDefs: [] },
+  ],
   stateVariables: [],
-  bEvents: [],
+  bEvents: [
+    { id: 'arr', name: 'Arrival', scheduledTime: '0', effect: 'ARRIVE(Customer)', schedules: [] },
+    { id: 'comp', name: 'Complete', scheduledTime: '0', effect: 'COMPLETE(Customer)', schedules: [] },
+  ],
   cEvents: [],
   queues: [],
   graph: null,

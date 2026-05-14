@@ -149,6 +149,10 @@ describe('time-varying model validation', () => {
           { time: '150', capacity: '2' },
         ],
       }],
+      bEvents: [
+        { id: 'arr', name: 'Arrival', scheduledTime: '0', effect: 'ARRIVE(Customer)', schedules: [] },
+        { id: 'comp', name: 'Complete', scheduledTime: '0', effect: 'COMPLETE(Customer)', schedules: [] },
+      ],
     };
 
     const validation = validateModel(model);

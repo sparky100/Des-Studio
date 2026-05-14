@@ -103,3 +103,72 @@ describe('buildEngine — seeded reproducibility', () => {
     });
   });
 });
+
+// ── Cross-replication independence (Sprint 29 — F29.6) ───────────────────────
+//
+// Verifies that replications derived from baseSeed + i are truly independent:
+// each stream uses its own PRNG state and no shared mutable state leaks between
+// them.  Tests are structural (trace-level) rather than statistical.
+
+describe('cross-replication independence', () => {
+  const independenceModel = {
+    entityTypes: [
+      { id: 'et_cust', name: 'Customer', role: 'customer', count: 0, attrDefs: [] },
+      { id: 'et_srv',  name: 'Server',   role: 'server',   count: 1, attrDefs: [] },
+    ],
+    stateVariables: [],
+    bEvents: [
+      {
+        id: 'b_arrive', name: 'Arrival', scheduledTime: '0',
+        effect: 'ARRIVE(Customer)',
+        schedules: [{ eventId: 'b_arrive', dist: 'Exponential', distParams: { mean: '2' } }],
+      },
+      {
+        id: 'b_done', name: 'Complete', scheduledTime: '9999',
+        effect: 'COMPLETE()',
+        schedules: [],
+      },
+    ],
+    cEvents: [
+      {
+        id: 'c_seize', name: 'Seize',
+        condition: 'queue(Customer).length > 0 AND idle(Server).count > 0',
+        effect: 'ASSIGN(Customer, Server)',
+        cSchedules: [{ eventId: 'b_done', dist: 'Exponential', distParams: { mean: '1.5' }, useEntityCtx: true }],
+      },
+    ],
+    queues: [],
+  };
+
+  test('consecutive seeds (baseSeed+0, baseSeed+1) produce different traces', () => {
+    const r0 = buildEngine(independenceModel, 300, 0, 60).runAll();
+    const r1 = buildEngine(independenceModel, 301, 0, 60).runAll();
+
+    const msgs0 = r0.log.filter(e => e.phase === 'B').map(e => e.time).join(',');
+    const msgs1 = r1.log.filter(e => e.phase === 'B').map(e => e.time).join(',');
+    expect(msgs0).not.toBe(msgs1);
+  });
+
+  test('replication streams do not share PRNG state — running rep 0 does not affect rep 1', () => {
+    // Run rep 1 alone and compare against rep 1 run after rep 0 has completed.
+    // If state were shared, the second run of rep 1 would differ from the first.
+    const r1_alone   = buildEngine(independenceModel, 301, 0, 60).runAll();
+
+    // Run rep 0 fully first, then run rep 1 again.
+    buildEngine(independenceModel, 300, 0, 60).runAll(); // side-effect candidate
+    const r1_after0  = buildEngine(independenceModel, 301, 0, 60).runAll();
+
+    expect(r1_alone.summary.served).toBe(r1_after0.summary.served);
+    expect(r1_alone.summary.avgWait).toBe(r1_after0.summary.avgWait);
+    expect(r1_alone.finalTime).toBe(r1_after0.finalTime);
+  });
+
+  test('ten consecutive seeds all produce distinct average wait times', () => {
+    const BASE = 1000;
+    const avgWaits = Array.from({ length: 10 }, (_, i) =>
+      buildEngine(independenceModel, BASE + i, 0, 80).runAll().summary.avgWait
+    );
+    const unique = new Set(avgWaits);
+    expect(unique.size).toBe(10);
+  });
+});

@@ -367,6 +367,7 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     renege_rate:         s.total ? (s.reneged / s.total) : 0,
     results_json:        resultsJson,
     duration_ms:         config.durationMs || null,
+    run_label:           runLabel || null,
   }).select("id").single();
   if (error) throw error;
   return data?.id;
@@ -385,20 +386,86 @@ export function normalizeRunHistoryRow(row = {}) {
   return {
     ...row,
     avg_service_time: row.avg_service_time ?? row.results_json?.summary?.avgSvc ?? null,
-    run_label: row.results_json?.runLabel || row.results_json?.run_label || "",
+    // Prefer real column; fall back to JSON for legacy rows
+    run_label: row.run_label || row.results_json?.runLabel || row.results_json?.run_label || "",
+    tags: row.tags || [],
+    archived: row.archived || false,
     ai_insights: row.ai_insights || null,
   };
 }
 
-export async function fetchRunHistory(modelId) {
-  const { data, error } = await supabase
+export async function fetchRunHistory(modelId, filters = {}) {
+  const { search, tags, archived = false } = filters;
+  let query = supabase
     .from("simulation_runs")
-    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, seed, max_simulation_time, results_json, warmup_period, ai_insights")
+    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, seed, max_simulation_time, results_json, warmup_period, ai_insights, run_label, tags, archived")
     .eq("model_id", modelId)
+    .eq("archived", archived)
     .order("ran_at", { ascending: false })
     .limit(20);
+  if (tags && tags.length > 0) {
+    query = query.contains("tags", tags);
+  }
+  const { data, error } = await query;
   if (error) throw error;
-  return (data || []).map(normalizeRunHistoryRow);
+  const rows = (data || []).map(normalizeRunHistoryRow);
+  if (search && search.trim()) {
+    const q = search.trim().toLowerCase();
+    return rows.filter(r => (r.run_label || "").toLowerCase().includes(q));
+  }
+  return rows;
+}
+
+// --- F28.6: Run organisation helpers ---
+
+export async function updateRunLabel(runId, userId, label) {
+  const { error } = await supabase
+    .from("simulation_runs")
+    .update({ run_label: label || null })
+    .eq("id", runId)
+    .eq("run_by", userId);
+  if (error) throw error;
+  return { ok: true };
+}
+
+export async function updateRunTags(runId, userId, tags) {
+  const { error } = await supabase
+    .from("simulation_runs")
+    .update({ tags: Array.isArray(tags) ? tags : [] })
+    .eq("id", runId)
+    .eq("run_by", userId);
+  if (error) throw error;
+  return { ok: true };
+}
+
+export async function archiveRun(runId, userId) {
+  const { error } = await supabase
+    .from("simulation_runs")
+    .update({ archived: true })
+    .eq("id", runId)
+    .eq("run_by", userId);
+  if (error) throw error;
+  return { ok: true };
+}
+
+export async function unarchiveRun(runId, userId) {
+  const { error } = await supabase
+    .from("simulation_runs")
+    .update({ archived: false })
+    .eq("id", runId)
+    .eq("run_by", userId);
+  if (error) throw error;
+  return { ok: true };
+}
+
+export async function deleteSimulationRun(runId, userId) {
+  const { error } = await supabase
+    .from("simulation_runs")
+    .delete()
+    .eq("id", runId)
+    .eq("run_by", userId);
+  if (error) throw error;
+  return { ok: true };
 }
 
 export async function fetchRunStatsForModels(modelIds = [], userId) {
@@ -674,6 +741,87 @@ export async function updateUserRole(userId, role) {
     .from("profiles")
     .update({ role })
     .eq("id", userId);
+  if (error) throw error;
+  return { ok: true };
+}
+
+// --- F28.1: Saved Experiment Definitions ---
+
+function normalizeExperiment(row = {}) {
+  return {
+    id: row.id,
+    modelId: row.model_id,
+    userId: row.user_id,
+    name: row.name,
+    description: row.description ?? null,
+    config: row.config ?? {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export async function fetchExperiments(modelId) {
+  const { data, error } = await supabase
+    .from("experiments")
+    .select("*")
+    .eq("model_id", modelId)
+    .order("updated_at", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(normalizeExperiment);
+}
+
+export async function saveExperiment({ modelId, userId, name, description, config }) {
+  const { data, error } = await supabase
+    .from("experiments")
+    .insert({ model_id: modelId, user_id: userId, name, description: description || null, config })
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeExperiment(data);
+}
+
+export async function updateExperiment(id, { name, description, config }) {
+  const patch = {};
+  if (name !== undefined) patch.name = name;
+  if (description !== undefined) patch.description = description || null;
+  if (config !== undefined) patch.config = config;
+  const { data, error } = await supabase
+    .from("experiments")
+    .update(patch)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeExperiment(data);
+}
+
+export async function cloneExperiment(id, userId) {
+  const { data: src, error: fetchErr } = await supabase
+    .from("experiments")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (fetchErr) throw fetchErr;
+  const { data, error } = await supabase
+    .from("experiments")
+    .insert({
+      model_id: src.model_id,
+      user_id: userId,
+      name: `${src.name} (copy)`,
+      description: src.description,
+      config: src.config,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeExperiment(data);
+}
+
+export async function deleteExperiment(id) {
+  const { error } = await supabase
+    .from("experiments")
+    .delete()
+    .eq("id", id);
   if (error) throw error;
   return { ok: true };
 }

@@ -53,6 +53,11 @@ vi.mock('../../../src/db/models.js', () => ({
   saveSimulationRun: mockSaveSimulationRun,
   fetchUserSettings: vi.fn().mockResolvedValue({ schemaVersion: 1, settings: {} }),
   saveUserSettings: vi.fn().mockResolvedValue({ schemaVersion: 1, settings: {} }),
+  fetchExperiments: vi.fn().mockResolvedValue([]),
+  saveExperiment: vi.fn().mockResolvedValue({}),
+  updateExperiment: vi.fn().mockResolvedValue({}),
+  cloneExperiment: vi.fn().mockResolvedValue({}),
+  deleteExperiment: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 const validModel = {
@@ -79,8 +84,8 @@ const validModel = {
 };
 
 function openSweepSection() {
-  fireEvent.click(screen.getByRole('button', { name: /^experiments$/i }));
-  const header = screen.getByText('EXPERIMENTS');
+  fireEvent.click(screen.getByRole('button', { name: /^studies$/i }));
+  const header = screen.getByText('STUDIES');
   fireEvent.click(header.closest('div') || header);
 }
 
