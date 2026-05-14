@@ -803,11 +803,27 @@ export const MACROS = [
         idleServersByType[sType] = idle[0];
       }
 
-      for (const [sType, srv] of Object.entries(idleServersByType)) {
-        if (!claimServerForEntity(cust, srv, clock)) {
-          msgs.push(`COSEIZE: claim failed for ${sType} #${srv.id}`);
-          return;
-        }
+      // Claim all servers atomically — first uses claimServerForEntity (sets customer to serving),
+      // subsequent servers get auxiliary claims without re-checking customer status.
+      const serverEntries = Object.entries(idleServersByType);
+      const primarySrv = serverEntries[0][1];
+      if (!claimServerForEntity(cust, primarySrv, clock)) {
+        msgs.push(`COSEIZE: claim failed for ${serverEntries[0][0]} #${primarySrv.id}`);
+        return;
+      }
+
+      for (let i = 1; i < serverEntries.length; i++) {
+        const [sType, srv] = serverEntries[i];
+        srv.status = "busy";
+        srv.currentCustId = cust.id;
+        srv.resourceClaim = {
+          customerId: cust.id,
+          customerType: cust.type,
+          serverId: srv.id,
+          serverType: srv.type,
+          queueName: queueName,
+          claimedAt: clock,
+        };
       }
 
       cust.lastQueue = queueName;

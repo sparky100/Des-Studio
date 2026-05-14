@@ -511,6 +511,92 @@ const DATA_CENTER = {
   queues: [{ id: "q_job", name: "Job", customerType: "Job", capacity: "", discipline: "FIFO" }],
 };
 
+// ── Healthcare (Sprint 33) ────────────────────────────────────────────────────
+
+const SURGICAL_SUITE = {
+  name: "Surgical Suite",
+  description: "Operating room with elective and emergency surgeries. Each surgery requires a surgeon AND anesthetist simultaneously (COSEIZE). Queue prioritizes by urgency attribute. Emergency patients (urgency 1) are served first.",
+  domain: "Healthcare",
+  templateMeta: {
+    scenarioType: "Multi-resource surgery with priority queue",
+    keyMacros: ["ARRIVE", "COSEIZE", "COMPLETE"],
+    paramGuide: "Patient arrival mean 10 min. Surgery Triangular(10,20,40) min. Urgency Uniform(1,5) — lower is more urgent. 2 surgeons, 2 anesthetists.",
+    limitations: "No preemption modelling. Priority handled via queue discipline only.",
+  },
+  entityTypes: [
+    { id: "et_patient", name: "Patient", role: "customer", count: 0, attrDefs: [
+      { id: "a_urgency", name: "urgency", valueType: "number", defaultValue: 3, mutable: false,
+        dist: "Uniform", distParams: { min: "1", max: "5" } },
+    ]},
+    { id: "et_surgeon", name: "Surgeon", role: "server", count: 2, attrDefs: [] },
+    { id: "et_anesthetist", name: "Anesthetist", role: "server", count: 2, attrDefs: [] },
+  ],
+  stateVariables: [
+    { name: "surgeriesCompleted", initialValue: "0" },
+  ],
+  bEvents: [
+    { id: "b_arrive", name: "Patient Arrival", scheduledTime: "0", effect: "ARRIVE(Patient, SurgeryQueue)",
+      schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "10" } }] },
+    { id: "b_surgery_done", name: "Surgery Complete", scheduledTime: "9999", effect: "COMPLETE(); surgeriesCompleted++", schedules: [] },
+  ],
+  cEvents: [
+    { id: "c_surgery", name: "Start Surgery", priority: 1,
+      condition: "queue(SurgeryQueue).length > 0 AND idle(Surgeon).count > 0 AND idle(Anesthetist).count > 0",
+      effect: "COSEIZE(SurgeryQueue, Surgeon, Anesthetist)",
+      cSchedules: [{ eventId: "b_surgery_done", dist: "Triangular", distParams: { min: "10", mode: "20", max: "40" }, useEntityCtx: true }] },
+  ],
+  queues: [
+    { id: "q_surgery", name: "SurgeryQueue", customerType: "Patient", capacity: "", discipline: "PRIORITY(urgency)" },
+  ],
+};
+
+// ── Manufacturing (Sprint 33) ─────────────────────────────────────────────────
+
+const ORDER_FULFILLMENT = {
+  name: "Order Fulfillment",
+  description: "Orders and items arrive independently and must be synchronized (MATCH) before packing. Orders have due dates and are processed in Earliest Due Date order. Demonstrates entity matching and EDD queue discipline.",
+  domain: "Manufacturing",
+  templateMeta: {
+    scenarioType: "Entity synchronization with due-date scheduling",
+    keyMacros: ["ARRIVE", "MATCH", "ASSIGN", "COMPLETE"],
+    paramGuide: "Order arrival mean 5 min. Item arrival mean 5 min. Pack time Triangular(3,5,8) min. 2 packers. Due dates Uniform(30,120).",
+    limitations: "Single item per order. No partial fulfillment or backorder modelling.",
+  },
+  entityTypes: [
+    { id: "et_order", name: "Order", role: "customer", count: 0, attrDefs: [
+      { id: "a_dueDate", name: "dueDate", valueType: "number", defaultValue: 60, mutable: false,
+        dist: "Uniform", distParams: { min: "30", max: "120" } },
+    ]},
+    { id: "et_item", name: "Item", role: "customer", count: 0, attrDefs: [] },
+    { id: "et_packer", name: "Packer", role: "server", count: 2, attrDefs: [] },
+  ],
+  stateVariables: [
+    { name: "ordersFulfilled", initialValue: "0" },
+  ],
+  bEvents: [
+    { id: "b_order_arrive", name: "Order Arrival", scheduledTime: "0", effect: "ARRIVE(Order, OrderQueue)",
+      schedules: [{ eventId: "b_order_arrive", dist: "Exponential", distParams: { mean: "5" } }] },
+    { id: "b_item_arrive", name: "Item Arrival", scheduledTime: "0", effect: "ARRIVE(Item, ItemQueue)",
+      schedules: [{ eventId: "b_item_arrive", dist: "Exponential", distParams: { mean: "5" } }] },
+    { id: "b_pack_done", name: "Pack Complete", scheduledTime: "9999", effect: "COMPLETE(); ordersFulfilled++", schedules: [] },
+  ],
+  cEvents: [
+    { id: "c_match", name: "Match Order with Item", priority: 1,
+      condition: "queue(OrderQueue).length > 0 AND queue(ItemQueue).length > 0",
+      effect: "MATCH(Order, OrderQueue, Item, ItemQueue, FulfillmentQueue)",
+      cSchedules: [] },
+    { id: "c_pack", name: "Pack Order", priority: 2,
+      condition: "queue(FulfillmentQueue).length > 0 AND idle(Packer).count > 0",
+      effect: "ASSIGN(FulfillmentQueue, Packer)",
+      cSchedules: [{ eventId: "b_pack_done", dist: "Triangular", distParams: { min: "3", mode: "5", max: "8" }, useEntityCtx: true }] },
+  ],
+  queues: [
+    { id: "q_order", name: "OrderQueue", customerType: "Order", capacity: "", discipline: "EDD" },
+    { id: "q_item", name: "ItemQueue", customerType: "Item", capacity: "", discipline: "FIFO" },
+    { id: "q_fulfillment", name: "FulfillmentQueue", customerType: "Order", capacity: "", discipline: "EDD" },
+  ],
+};
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
 export const TEMPLATES = [
@@ -520,6 +606,7 @@ export const TEMPLATES = [
   { id: "er-triage",       ...ER_TRIAGE },
   { id: "outpatient-clinic", ...OUTPATIENT_CLINIC },
   { id: "ward-admission",  ...WARD_ADMISSION },
+  { id: "surgical-suite",  ...SURGICAL_SUITE },
   // Service Systems
   { id: "call-center",     ...CALL_CENTER },
   { id: "fast-food",       ...FAST_FOOD },
@@ -530,6 +617,7 @@ export const TEMPLATES = [
   { id: "factory",         ...FACTORY },
   { id: "construction",    ...CONSTRUCTION },
   { id: "warehouse",       ...WAREHOUSE },
+  { id: "order-fulfillment", ...ORDER_FULFILLMENT },
   // Logistics
   { id: "port-berth",      ...PORT_BERTH },
   // Technology
