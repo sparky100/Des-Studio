@@ -14,21 +14,38 @@ describe('All template models', () => {
     });
 
     it(`${template.name} — runs without crashing`, () => {
-      const engine = buildEngine(template, 42, 0, 20);
+      const engine = buildEngine(template, 42, 0, 100);
       const result = engine.runAll();
       expect(result).toBeDefined();
       expect(typeof result.summary).toBe('object');
     }, 10000);
 
+    it(`${template.name} — serves at least one entity (non-trivial output)`, () => {
+      const engine = buildEngine(template, 42, 0, 100);
+      const result = engine.runAll();
+      // Batch templates (factory, warehouse) count batched groups as departures
+      const output = (result.summary?.served ?? 0) + (result.summary?.departures ?? 0);
+      expect(output).toBeGreaterThan(0);
+    }, 10000);
+
     it(`${template.name} — same seed produces identical results`, () => {
-      const e1 = buildEngine(template, 99, 0, 10);
+      const e1 = buildEngine(template, 99, 0, 50);
       const r1 = e1.runAll();
 
-      const e2 = buildEngine(template, 99, 0, 10);
+      const e2 = buildEngine(template, 99, 0, 50);
       const r2 = e2.runAll();
 
       expect(r1.summary.departures).toBe(r2.summary.departures);
     }, 10000);
+
+    it(`${template.name} — has domain and templateMeta fields`, () => {
+      expect(typeof template.domain).toBe('string');
+      expect(template.domain.length).toBeGreaterThan(0);
+      expect(typeof template.templateMeta).toBe('object');
+      expect(typeof template.templateMeta.scenarioType).toBe('string');
+      expect(typeof template.templateMeta.paramGuide).toBe('string');
+      expect(typeof template.templateMeta.limitations).toBe('string');
+    });
   });
 });
 
@@ -96,6 +113,43 @@ describe('Specific template properties', () => {
     const t = TEMPLATES.find(t => t.id === 'airport');
     t.queues.forEach(q => {
       expect(parseInt(q.capacity, 10)).toBeGreaterThan(0);
+    });
+  });
+
+  it('Ward Bed Admission has finite admission queue and ward queue', () => {
+    const t = TEMPLATES.find(t => t.id === 'ward-admission');
+    expect(t).toBeDefined();
+    const admQ = t.queues.find(q => q.name === 'Admission');
+    const wardQ = t.queues.find(q => q.name === 'Ward');
+    expect(parseInt(admQ.capacity, 10)).toBeGreaterThan(0);
+    expect(parseInt(wardQ.capacity, 10)).toBeGreaterThan(0);
+  });
+
+  it('Bank Branch uses PRIORITY queue discipline', () => {
+    const t = TEMPLATES.find(t => t.id === 'bank-branch');
+    expect(t).toBeDefined();
+    const q = t.queues.find(q => q.discipline === 'PRIORITY');
+    expect(q).toBeDefined();
+  });
+
+  it('Retail Checkout has finite waiting queue', () => {
+    const t = TEMPLATES.find(t => t.id === 'retail-checkout');
+    expect(t).toBeDefined();
+    const q = t.queues[0];
+    expect(parseInt(q.capacity, 10)).toBeGreaterThan(0);
+  });
+
+  it('Port Berth has 3 berths', () => {
+    const t = TEMPLATES.find(t => t.id === 'port-berth');
+    expect(t).toBeDefined();
+    const berths = t.entityTypes.find(e => e.name === 'Berth');
+    expect(berths.count).toBe(3);
+  });
+
+  it('all templates have a domain field from the expected set', () => {
+    const validDomains = new Set(['Academic', 'Healthcare', 'Service Systems', 'Manufacturing', 'Logistics', 'Technology']);
+    TEMPLATES.forEach(t => {
+      expect(validDomains.has(t.domain)).toBe(true);
     });
   });
 });

@@ -173,7 +173,8 @@ flowchart LR
 | 1.64 | 2026-05-13 | Sprint 26 completed. Added explicit waiting/resource ownership contracts, ADR-013/014, capability guidance, sample models, and focused regression coverage for contention, routing, and lifecycle cleanup. |
 | 1.65 | 2026-05-13 | Sprint 27 completed. Structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, Execute explainability surfaces (event log, entity inspector, canvas overlays). |
 | 1.66 | 2026-05-14 | Sprint 28 completed. Saved experiment configs, CI precision display, warm-up transient diagnostics, anomalous replication flagging, run archiving/tagging. 947/947 tests passing. |
-| 1.67 | 2026-05-14 | Sprint 29 started. F29.0–F29.6: 18 test failures fixed, M/M/c benchmark (exits 0, 2.66% error), reproducibility contract in AGENTS.md, performance envelope doc, golden fixtures, GitHub Actions CI, RNG independence tests. |
+| 1.67 | 2026-05-14 | Sprint 29 completed. F29.0–F29.6: 18 test failures fixed, M/M/c benchmark (exits 0, 2.66% error), reproducibility contract in AGENTS.md, performance envelope doc, golden fixtures, GitHub Actions CI, RNG independence tests. |
+| 1.68 | 2026-05-14 | Sprint 30 completed. 14 templates across 6 domains (4 new). ARRIVE/ASSIGN macro bugs fixed in 9+6 templates. domain/templateMeta fields added. Gallery redesign: domain filter, search, richer cards. In-app Patterns Guide (6 patterns). docs/patterns/ reference files. 1000/1000 tests. |
 
 ---
 
@@ -218,7 +219,8 @@ flowchart LR
 | Sprint 26 | ✅ Complete | 2026-05-12 | Resource Semantics & Waiting Behaviour. | Focused | N/A | Success | Explicit waiting/resource ownership contracts, mirrored active claims, stale-claim protection, ADR-013/014, capability guide, sample models, regression coverage for contention/routing/recirculation. |
 | Sprint 27 | ✅ Complete | 2026-05-13 | Simulation Debugging & Explainability. | Focused | N/A | Success | Structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, Execute explainability surfaces (event log, entity inspector, canvas overlays). |
 | Sprint 28 | ✅ Complete | 2026-05-14 | Experiments & Statistical Workbench. | 947 (947) | 1.48% | Success | Saved experiment configs, CI precision display, warm-up transient diagnostics, anomalous replication flagging, run archiving/tagging/filtering. |
-| Sprint 29 | 🔄 In Progress | 2026-05-14 | Test Infrastructure, Benchmarks & Reproducibility. | 947 (947) | 1.48%/2.66% | Success | F29.0–F29.6: 18 test failures fixed, M/M/c benchmark, reproducibility contract, performance envelope, golden fixtures, GitHub Actions CI, RNG independence tests. |
+| Sprint 29 | ✅ Complete | 2026-05-14 | Test Infrastructure, Benchmarks & Reproducibility. | 1000 (1000) | 1.48%/2.66% | Success | F29.0–F29.6: 18 test failures fixed, M/M/c benchmark, reproducibility contract, performance envelope, golden fixtures, GitHub Actions CI, RNG independence tests. |
+| Sprint 30 | ✅ Complete | 2026-05-14 | Reusable Modelling Library & Scenario Packs. | 1000 (1000) | 1.48% | Success | 14 templates (4 new), ARRIVE/ASSIGN bugs fixed, domain+templateMeta fields, gallery redesign, in-app Patterns Guide, docs/patterns/ (6 files). |
 
 ---
 

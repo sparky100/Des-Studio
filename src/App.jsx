@@ -114,6 +114,65 @@ function extractImportedModelPayload(payload) {
 
 export { createSampleMm1Model, extractImportedModelPayload };
 
+const PATTERNS_GUIDE = [
+  { id:'p1', title:'Single-Queue Service (M/M/c)', macros:['ARRIVE','ASSIGN','COMPLETE'],
+    summary:'A pool of identical servers draws from one shared queue. Covers call centres, tellers, compute hosts.',
+    snippet:'ARRIVE(Customer, Queue)\nASSIGN(Queue, Server)\nCOMPLETE()',
+    templates:['mm1','call-center','bank-branch','data-center','port-berth'] },
+  { id:'p2', title:'Multi-Stage Sequential Routing', macros:['ARRIVE','ASSIGN','RELEASE','COMPLETE'],
+    summary:'Customers move through two or more stages in sequence. RELEASE frees the stage-A server and moves the customer into the stage-B queue.',
+    snippet:'ARRIVE(Customer, StageA)\nASSIGN(StageA, ServerA)\nRELEASE(ServerA, StageB)\nASSIGN(StageB, ServerB)\nCOMPLETE()',
+    templates:['er-triage','outpatient-clinic','fast-food','construction','ward-admission','airport'] },
+  { id:'p3', title:'Batching and Assembly', macros:['ARRIVE','BATCH','ASSIGN','COMPLETE'],
+    summary:'Individual items accumulate in a queue until N are present, then merge into one batch entity for processing.',
+    snippet:'ARRIVE(Item, Items)\nBATCH(Items, N)          ← C-event priority 1\nASSIGN(Items, Worker)   ← C-event priority 2\nCOMPLETE()',
+    templates:['factory','warehouse'] },
+  { id:'p4', title:'Reneging and Abandonment', macros:['ARRIVE','RENEGE','ASSIGN','COMPLETE'],
+    summary:'Customers waiting beyond their patience time self-remove. Wire the patience timer as a second schedule on the ARRIVE B-event with isRenege:true.',
+    snippet:'ARRIVE(Customer, Queue)\n  ↳ reschedule self\n  ↳ schedule RENEGE timer  isRenege:true\nRENEGE(ctx)\nASSIGN(Queue, Server)\nCOMPLETE()',
+    templates:['call-center'] },
+  { id:'p5', title:'Finite Capacity and Balking', macros:['ARRIVE'],
+    summary:'Set a capacity on the queue. ARRIVE silently discards customers that arrive when the queue is full — no extra macros needed.',
+    snippet:'Queue: WaitingArea  capacity=20\nARRIVE(Customer, WaitingArea)  ← balks if full',
+    templates:['airport','ward-admission','retail-checkout'] },
+  { id:'p6', title:'Priority Queue', macros:['ARRIVE','ASSIGN','COMPLETE'],
+    summary:'Set discipline=PRIORITY on the queue and add a numeric "priority" attribute to the entity type. Lower number = higher urgency.',
+    snippet:'EntityType: Customer  attrDefs: [priority dist=Uniform(1,5)]\nQueue: Queue  discipline=PRIORITY\nASSIGN(Queue, Server)  ← picks lowest priority number first',
+    templates:['er-triage','bank-branch'] },
+];
+
+const PatternsGuidePanel=({onClose})=>(
+  <div style={{position:'fixed',top:0,right:0,bottom:0,width:480,maxWidth:'95vw',background:C.surface,borderLeft:`1px solid ${C.border}`,zIndex:1100,display:'flex',flexDirection:'column',boxShadow:'-8px 0 32px #000a'}}>
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+      <div>
+        <div style={{fontSize:13,fontWeight:700,color:C.text}}>Modelling Patterns</div>
+        <div style={{fontSize:10,color:C.muted,marginTop:2}}>6 reusable patterns for DES Studio models</div>
+      </div>
+      <button type="button" onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:18,cursor:'pointer',lineHeight:1}}>✕</button>
+    </div>
+    <div style={{overflowY:'auto',flex:1,padding:'12px 18px',display:'flex',flexDirection:'column',gap:14}}>
+      {PATTERNS_GUIDE.map((p,i)=>(
+        <div key={p.id} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:14}}>
+          <div style={{display:'flex',alignItems:'flex-start',gap:8,marginBottom:6}}>
+            <div style={{fontSize:10,fontWeight:700,color:C.accent,background:C.accent+'22',borderRadius:10,padding:'2px 7px',flexShrink:0}}>P{i+1}</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.text,lineHeight:1.3}}>{p.title}</div>
+          </div>
+          <div style={{fontSize:10,color:C.muted,lineHeight:1.5,marginBottom:8}}>{p.summary}</div>
+          <pre style={{fontSize:9,color:C.green,background:C.bg,borderRadius:4,padding:'8px 10px',overflowX:'auto',margin:'0 0 8px',lineHeight:1.6,fontFamily:"'JetBrains Mono',monospace"}}>{p.snippet}</pre>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap',alignItems:'center'}}>
+            <span style={{fontSize:9,color:C.muted,marginRight:2}}>macros:</span>
+            {p.macros.map(m=><span key={m} style={{fontSize:9,color:C.accent,background:C.accent+'18',borderRadius:3,padding:'1px 5px',fontFamily:'monospace'}}>{m}</span>)}
+          </div>
+          <div style={{display:'flex',gap:4,flexWrap:'wrap',alignItems:'center',marginTop:5}}>
+            <span style={{fontSize:9,color:C.muted,marginRight:2}}>templates:</span>
+            {p.templates.map(t=><span key={t} style={{fontSize:9,color:C.muted,background:C.border+'66',borderRadius:3,padding:'1px 5px'}}>{t}</span>)}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 const FirstRunPanel=({onCreateBlank,onBrowseTemplates})=>(
   <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,flexWrap:"wrap"}}>
     <div>
@@ -154,6 +213,9 @@ export default function App(){
   const [authPassword,setAuthPassword]=useState('')
   const [authError,setAuthError]=useState('')
   const [shareToken,setShareToken]=useState(null)
+  const [tmplSearch,setTmplSearch]=useState('')
+  const [tmplDomain,setTmplDomain]=useState('All')
+  const [showPatternsGuide,setShowPatternsGuide]=useState(false)
 
   const handleAuth=useCallback(async()=>{
     setAuthError('')
@@ -577,21 +639,71 @@ export default function App(){
           message="The model list could not render."
           onReset={loadData}
         >
-          {tab==='templates'&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:10}}>
-            {TEMPLATES.map(t => (
-              <div key={t.id} role="button" tabIndex={0} aria-label={`Try ${t.name}`}
-                onClick={() => handleStartTemplate(t)}
-                onKeyDown={e => { if (e.key === 'Enter') handleStartTemplate(t); }}
-                style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:12,cursor:'pointer',display:'flex',flexDirection:'column',gap:6}}
-                onMouseEnter={e => e.currentTarget.style.borderColor = C.accent + '66'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
-              >
-                <div style={{fontSize:12,fontWeight:700,color:C.text}}>{t.name}</div>
-                <div style={{fontSize:10,color:C.muted,lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{t.description}</div>
-                <div style={{fontSize:9,color:C.accent,fontWeight:600}}>▶ Start from template</div>
+          {tab==='templates'&&(()=>{
+            const DOMAIN_COLORS = {'Academic':'#7c6fcd','Healthcare':'#3b9e78','Service Systems':'#c0813a','Manufacturing':'#3a82c0','Logistics':'#9e3b7a','Technology':'#3a9ec0'};
+            const allDomains = ['All',...Array.from(new Set(TEMPLATES.map(t=>t.domain)))];
+            const q = tmplSearch.trim().toLowerCase();
+            const visible = TEMPLATES.filter(t => {
+              if (tmplDomain !== 'All' && t.domain !== tmplDomain) return false;
+              if (q && !t.name.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q) && !(t.templateMeta?.scenarioType||'').toLowerCase().includes(q)) return false;
+              return true;
+            });
+            return (
+              <div>
+                <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+                  <input
+                    type="search" placeholder="Search templates…" value={tmplSearch}
+                    onChange={e=>setTmplSearch(e.target.value)}
+                    style={{flex:'1 1 160px',minWidth:120,padding:'5px 10px',background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,outline:'none'}}
+                  />
+                  <button type="button" onClick={()=>setShowPatternsGuide(true)}
+                    style={{padding:'5px 12px',borderRadius:4,border:`1px solid ${C.border}`,background:'transparent',color:C.muted,fontFamily:FONT,fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}
+                    onMouseEnter={e=>e.currentTarget.style.color=C.accent}
+                    onMouseLeave={e=>e.currentTarget.style.color=C.muted}
+                  >Patterns Guide</button>
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                    {allDomains.map(d=>(
+                      <button key={d} type="button" onClick={()=>setTmplDomain(d)}
+                        style={{padding:'4px 10px',borderRadius:12,border:`1px solid ${tmplDomain===d?(DOMAIN_COLORS[d]||C.accent):C.border}`,background:tmplDomain===d?(DOMAIN_COLORS[d]||C.accent)+'22':'transparent',color:tmplDomain===d?(DOMAIN_COLORS[d]||C.accent):C.muted,fontFamily:FONT,fontSize:11,cursor:'pointer',fontWeight:tmplDomain===d?700:400}}
+                      >{d}</button>
+                    ))}
+                  </div>
+                </div>
+                {visible.length===0
+                  ? <div style={{color:C.muted,fontSize:12,padding:'24px 0',textAlign:'center'}}>No templates match your search.</div>
+                  : <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(210px,1fr))',gap:10}}>
+                    {visible.map(t => {
+                      const dc = DOMAIN_COLORS[t.domain]||C.accent;
+                      return (
+                        <div key={t.id} role="button" tabIndex={0} aria-label={`Try ${t.name}`}
+                          onClick={() => handleStartTemplate(t)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleStartTemplate(t); }}
+                          style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:12,cursor:'pointer',display:'flex',flexDirection:'column',gap:6}}
+                          onMouseEnter={e => e.currentTarget.style.borderColor = dc+'88'}
+                          onMouseLeave={e => e.currentTarget.style.borderColor = C.border}
+                        >
+                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:4}}>
+                            <div style={{fontSize:12,fontWeight:700,color:C.text,lineHeight:1.3}}>{t.name}</div>
+                            <div style={{fontSize:9,fontWeight:700,color:dc,background:dc+'22',borderRadius:8,padding:'2px 6px',whiteSpace:'nowrap',flexShrink:0}}>{t.domain}</div>
+                          </div>
+                          {t.templateMeta?.scenarioType&&<div style={{fontSize:10,color:C.accent,fontWeight:600}}>{t.templateMeta.scenarioType}</div>}
+                          <div style={{fontSize:10,color:C.muted,lineHeight:1.4,display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden'}}>{t.description}</div>
+                          {t.templateMeta?.keyMacros?.length>0&&(
+                            <div style={{display:'flex',flexWrap:'wrap',gap:3}}>
+                              {t.templateMeta.keyMacros.map(m=>(
+                                <span key={m} style={{fontSize:9,color:C.muted,background:C.border+'66',borderRadius:3,padding:'1px 5px',fontFamily:'monospace'}}>{m}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{fontSize:9,color:dc,fontWeight:600,marginTop:'auto'}}>▶ Start from template</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                }
               </div>
-            ))}
-          </div>}
+            );
+          })()}
           {tab==='my'&&(myModels.length===0
             ?<FirstRunPanel
               onCreateBlank={()=>setShowNew(true)}
@@ -620,6 +732,7 @@ export default function App(){
           setOpenId(m.id)
         }}/>
       )}
+      {showPatternsGuide&&<PatternsGuidePanel onClose={()=>setShowPatternsGuide(false)}/>}
       {showForkConfirm && modelToFork && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#000000aa',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
           <div role="dialog" aria-modal="true" aria-labelledby="fork-public-model-title" style={{background:C.panel,padding:24,borderRadius:10,width:400,maxWidth:'90vw',display:'flex',flexDirection:'column',gap:20}}>
