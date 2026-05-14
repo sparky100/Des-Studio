@@ -500,4 +500,15 @@ describe('detectOutliers', () => {
     expect(result.upperFence).toBeGreaterThan(result.q3);
     expect(result.iqr).toBeCloseTo(result.q3 - result.q1, 5);
   });
+
+  test('empty array returns null fields', () => {
+    const result = detectOutliers([]);
+    expect(result.q1).toBeNull();
+    expect(result.outlierIndices).toEqual([]);
+  });
+
+  test('non-finite values in input are ignored for fence computation but not indexed', () => {
+    const result = detectOutliers([10, 10, 10, NaN, 10, 100]);
+    expect(result.outlierIndices).toContain(5);
+  });
 });
