@@ -409,9 +409,10 @@ const cycleLog = [];
         );
         let repairedCount = 0;
         for (const srv of failedServers) {
+          const failedAt = srv._failedAt;
           srv.status = "idle";
           srv._failedAt = undefined;
-          srv._downtime = +(clock - (srv._failedAt || clock)).toFixed(4);
+          srv._downtime = failedAt != null ? +(clock - failedAt).toFixed(4) : 0;
           repairedCount++;
         }
         const msg = `REPAIR: ${repairedCount} ${sType} server(s) restored at t=${clock.toFixed(3)}`;
@@ -728,7 +729,7 @@ const cycleLog = [];
       avgSvc:            avgSvc    != null ? +avgSvc.toFixed(4)    : null,
       avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
       maxSojourn:        maxSojourn!= null ? +maxSojourn.toFixed(4): null,
-      avgWIP:            clock > 0 ? +(_wipIntegral / clock).toFixed(4) : 0,
+      avgWIP:            (clock - _statsResetTime) > 0 ? +(_wipIntegral / (clock - _statsResetTime)).toFixed(4) : 0,
       perResource:       Object.keys(perResource).length ? perResource : undefined,
       warmupPeriod,
       excludedCount:     _excludedCount,
