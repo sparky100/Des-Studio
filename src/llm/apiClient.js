@@ -132,7 +132,7 @@ export async function callModelBuilder(systemPrompt, messages = [], onComplete, 
       body: JSON.stringify(buildLlmRequest({
         kind: LLM_TASKS.MODEL_BUILDER,
         messages: requestMessages,
-        maxTokens: 4000,
+        maxTokens: 8000,
         stream: false,
         responseFormat: LLM_RESPONSE_FORMATS.JSON,
       })),
