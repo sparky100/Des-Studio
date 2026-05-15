@@ -1,5 +1,6 @@
-// ui/execute/SweepViews.jsx — SweepChart, WarmupChart, Sweep2DGrid
+// ui/execute/SweepViews.jsx — SweepChart, WarmupChart, Sweep2DGrid, QueueHistogram, EntitySummaryTable
 
+import { useMemo, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { fmt, METRIC_LABELS } from "./executeHelpers.js";
@@ -466,6 +467,281 @@ export function QueueDepthTimePlot({ timeSeries, queues, width = 400, height = 1
             {qName}
           </span>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ── QueueHistogram — per-queue wait time distribution bar chart ───────────────
+export function QueueHistogram({ waitDist }) {
+  if (!waitDist || !Object.keys(waitDist).length) return null;
+  const queues = Object.entries(waitDist).filter(([, d]) => d && d.n > 0);
+  if (!queues.length) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+        WAIT TIME DISTRIBUTIONS (per queue)
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+        {queues.map(([qName, d]) => (
+          <QueueHistogramCard key={qName} name={qName} dist={d} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function QueueHistogramCard({ name, dist }) {
+  const values = Array.isArray(dist.values) && dist.values.length > 0 ? dist.values : null;
+  const W = 200, H = 90, PAD = { top: 8, right: 8, bottom: 20, left: 30 };
+  const plotW = W - PAD.left - PAD.right;
+  const plotH = H - PAD.top - PAD.bottom;
+
+  // Build histogram bins from raw values or approximate from percentiles
+  let bins = [];
+  if (values && values.length >= 3) {
+    const minV = Math.min(...values);
+    const maxV = Math.max(...values);
+    const range = maxV - minV || 1;
+    const N = Math.min(10, Math.ceil(Math.sqrt(values.length)));
+    const binSize = range / N;
+    const counts = Array(N).fill(0);
+    values.forEach(v => {
+      const idx = Math.min(Math.floor((v - minV) / binSize), N - 1);
+      counts[idx]++;
+    });
+    bins = counts.map((count, i) => ({
+      x: minV + i * binSize,
+      xEnd: minV + (i + 1) * binSize,
+      count,
+    }));
+  } else {
+    // Approximate from percentiles: p0≈0, p50, p90, p95, p99
+    const pts = [
+      { x: 0, cumP: 0 },
+      { x: dist.p50 ?? dist.mean * 0.8, cumP: 0.5 },
+      { x: dist.p90 ?? dist.mean * 1.5, cumP: 0.9 },
+      { x: dist.p95 ?? dist.mean * 1.8, cumP: 0.95 },
+      { x: dist.p99 ?? dist.mean * 2.5, cumP: 0.99 },
+    ].filter(p => p.x != null && Number.isFinite(p.x));
+    for (let i = 1; i < pts.length; i++) {
+      bins.push({ x: pts[i - 1].x, xEnd: pts[i].x, count: (pts[i].cumP - pts[i - 1].cumP) * (dist.n || 1) });
+    }
+  }
+
+  if (!bins.length) return null;
+  const maxCount = Math.max(...bins.map(b => b.count), 1);
+  const xMin = bins[0].x;
+  const xMax = bins[bins.length - 1].xEnd;
+  const xScale = v => PAD.left + (v - xMin) / (xMax - xMin || 1) * plotW;
+  const yScale = count => PAD.top + plotH - (count / maxCount) * plotH;
+
+  // Percentile markers
+  const pMarkers = [
+    dist.p50 != null && { label: "p50", x: dist.p50, color: C.green },
+    dist.p90 != null && { label: "p90", x: dist.p90, color: C.amber },
+    dist.p99 != null && { label: "p99", x: dist.p99, color: C.red },
+  ].filter(Boolean);
+
+  return (
+    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10 }}>
+      <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, fontWeight: 700, marginBottom: 4 }}>{name}</div>
+      <svg width={W} height={H} style={{ display: "block", overflow: "visible" }}>
+        {/* Bars */}
+        {bins.map((b, i) => {
+          const bx = xScale(b.x);
+          const bw = Math.max(1, xScale(b.xEnd) - bx - 1);
+          const by = yScale(b.count);
+          const bh = plotH - (by - PAD.top);
+          return <rect key={i} x={bx} y={by} width={bw} height={bh} fill={C.cEvent + "66"} stroke={C.cEvent + "99"} strokeWidth={0.5} />;
+        })}
+        {/* Percentile lines */}
+        {pMarkers.map(m => {
+          const mx = xScale(m.x);
+          if (mx < PAD.left || mx > W - PAD.right) return null;
+          return (
+            <g key={m.label}>
+              <line x1={mx} y1={PAD.top} x2={mx} y2={PAD.top + plotH} stroke={m.color} strokeWidth={1} strokeDasharray="3,2" />
+              <text x={mx + 2} y={PAD.top + 7} fill={m.color} fontSize={7} fontFamily="monospace">{m.label}</text>
+            </g>
+          );
+        })}
+        {/* X axis ticks */}
+        {[xMin, (xMin + xMax) / 2, xMax].map((v, i) => (
+          <text key={i} x={xScale(v)} y={H - 4} textAnchor="middle" fill={C.muted} fontSize={7} fontFamily="monospace">
+            {v.toFixed(1)}
+          </text>
+        ))}
+        {/* Y axis label */}
+        <text x={8} y={H / 2} textAnchor="middle" fill={C.muted} fontSize={7} fontFamily="monospace"
+          transform={`rotate(-90, 8, ${H / 2})`}>count</text>
+      </svg>
+      <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <span>n={dist.n}</span>
+        <span>mean={fmt(dist.mean, 1)}</span>
+        {dist.p90 != null && <span style={{ color: C.amber }}>p90={fmt(dist.p90, 1)}</span>}
+        {dist.p99 != null && <span style={{ color: C.red }}>p99={fmt(dist.p99, 1)}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ── EntitySummaryTable — per-entity lifecycle table ───────────────────────────
+const OUTCOME_COLOR = { done: C.green, served: C.green, reneged: C.red, waiting: C.amber, active: C.cEvent };
+const fmtT = v => v != null && Number.isFinite(v) ? v.toFixed(2) : "—";
+
+export function EntitySummaryTable({ entitySummary, meanWait }) {
+  const [sortKey, setSortKey] = useState("arrivalTime");
+  const [sortAsc, setSortAsc] = useState(true);
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [outcomeFilter, setOutcomeFilter] = useState("all");
+
+  const customers = useMemo(
+    () => (entitySummary || []).filter(e => e.role !== "server"),
+    [entitySummary]
+  );
+
+  const entityTypes = useMemo(() => [...new Set(customers.map(e => e.type).filter(Boolean))], [customers]);
+  const outcomes = useMemo(() => [...new Set(customers.map(e => e.status).filter(Boolean))], [customers]);
+
+  const computeWait = e => {
+    if (e.stages?.length) return e.stages.reduce((s, st) => s + ((st.serviceStartedAt ?? st.serviceStart ?? 0) - (st.waitStartedAt ?? st.arrivalTime ?? 0)), 0);
+    if (e.serviceStart != null && e.arrivalTime != null) return Math.max(0, e.serviceStart - e.arrivalTime);
+    return null;
+  };
+
+  const computeSvc = e => {
+    if (e.stages?.length) return e.stages.reduce((s, st) => s + ((st.serviceEndedAt ?? st.completionTime ?? 0) - (st.serviceStartedAt ?? st.serviceStart ?? 0)), 0);
+    if (e.serviceStart != null && e.completionTime != null) return Math.max(0, e.completionTime - e.serviceStart);
+    return null;
+  };
+
+  const computeSojourn = e => {
+    const end = e.completionTime ?? e.renegeTime;
+    if (end != null && e.arrivalTime != null) return Math.max(0, end - e.arrivalTime);
+    return null;
+  };
+
+  const rows = useMemo(() => customers.map(e => ({
+    ...e,
+    _wait: computeWait(e),
+    _svc: computeSvc(e),
+    _sojourn: computeSojourn(e),
+    _attrStr: Object.entries(e.attrs || {}).map(([k, v]) => `${k}=${v}`).join(", "),
+  })), [customers]);
+
+  const filtered = useMemo(() => rows.filter(r => {
+    if (typeFilter !== "all" && r.type !== typeFilter) return false;
+    if (outcomeFilter !== "all" && r.status !== outcomeFilter) return false;
+    return true;
+  }), [rows, typeFilter, outcomeFilter]);
+
+  const sorted = useMemo(() => {
+    const key = sortKey;
+    return [...filtered].sort((a, b) => {
+      const av = key.startsWith("_") ? a[key] : (a[key] ?? 0);
+      const bv = key.startsWith("_") ? b[key] : (b[key] ?? 0);
+      if (av == null && bv == null) return 0;
+      if (av == null) return sortAsc ? 1 : -1;
+      if (bv == null) return sortAsc ? -1 : 1;
+      return sortAsc ? (av < bv ? -1 : av > bv ? 1 : 0) : (av > bv ? -1 : av < bv ? 1 : 0);
+    });
+  }, [filtered, sortKey, sortAsc]);
+
+  const setSort = col => {
+    if (sortKey === col) setSortAsc(a => !a);
+    else { setSortKey(col); setSortAsc(true); }
+  };
+
+  const thStyle = (col) => ({
+    padding: "6px 8px", cursor: "pointer", userSelect: "none",
+    color: sortKey === col ? C.accent : C.muted,
+    fontWeight: sortKey === col ? 700 : 400, fontSize: 10, whiteSpace: "nowrap",
+    background: "transparent", border: "none", textAlign: "left", fontFamily: FONT,
+  });
+
+  if (!customers.length) return (
+    <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, padding: 12, fontStyle: "italic" }}>
+      Entity summary not available for this run type. Run a single simulation (not batch) to see per-entity detail.
+    </div>
+  );
+
+  const anomalies = meanWait != null && meanWait > 0
+    ? sorted.filter(r => r._wait != null && r._wait > meanWait * 3)
+    : [];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {anomalies.length > 0 && (
+        <div style={{ background: C.amber + "12", border: `1px solid ${C.amber}44`, borderRadius: 5,
+          padding: "8px 12px", fontSize: 11, fontFamily: FONT, color: C.amber }}>
+          ⚠ {anomalies.length} {anomalies.length === 1 ? "entity" : "entities"} waited more than 3× the mean wait ({fmtT(meanWait)} units).
+          {" "}Longest: {fmtT(Math.max(...anomalies.map(r => r._wait)))} units.
+        </div>
+      )}
+
+      {/* Filters */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 7px", outline: "none" }}>
+          <option value="all">All types</option>
+          {entityTypes.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)}
+          style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 7px", outline: "none" }}>
+          <option value="all">All outcomes</option>
+          {outcomes.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+          {filtered.length} / {customers.length} entities
+        </span>
+      </div>
+
+      <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: 380 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
+          <thead style={{ position: "sticky", top: 0, background: C.surface, zIndex: 1 }}>
+            <tr>
+              {[
+                ["id", "ID"], ["type", "Type"], ["status", "Outcome"],
+                ["arrivalTime", "Arrived"], ["_wait", "Wait"], ["_svc", "Service"],
+                ["_sojourn", "Sojourn"], ["_attrStr", "Attributes"],
+              ].map(([col, label]) => (
+                <th key={col}>
+                  <button style={thStyle(col)} onClick={() => setSort(col)}>
+                    {label} {sortKey === col ? (sortAsc ? "▲" : "▼") : ""}
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((e, i) => {
+              const isAnomaly = meanWait != null && e._wait != null && e._wait > meanWait * 3;
+              const outcomeColor = OUTCOME_COLOR[e.status] || C.muted;
+              return (
+                <tr key={e.id || i} style={{
+                  borderBottom: `1px solid ${C.border}22`,
+                  background: isAnomaly ? C.amber + "08" : i % 2 === 0 ? C.surface + "44" : "transparent",
+                }}>
+                  <td style={{ padding: "4px 8px", color: C.muted, whiteSpace: "nowrap" }}>{e.id}</td>
+                  <td style={{ padding: "4px 8px", color: C.cEvent }}>{e.type}</td>
+                  <td style={{ padding: "4px 8px" }}>
+                    <span style={{ color: outcomeColor, fontWeight: 700 }}>{e.status}</span>
+                    {isAnomaly && <span style={{ color: C.amber, marginLeft: 4 }}>⚠</span>}
+                  </td>
+                  <td style={{ padding: "4px 8px", color: C.muted }}>{fmtT(e.arrivalTime)}</td>
+                  <td style={{ padding: "4px 8px", color: e._wait != null && meanWait != null && e._wait > meanWait * 2 ? C.amber : C.text }}>
+                    {fmtT(e._wait)}
+                  </td>
+                  <td style={{ padding: "4px 8px" }}>{fmtT(e._svc)}</td>
+                  <td style={{ padding: "4px 8px" }}>{fmtT(e._sojourn)}</td>
+                  <td style={{ padding: "4px 8px", color: C.muted, fontSize: 10 }}>{e._attrStr || "—"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
