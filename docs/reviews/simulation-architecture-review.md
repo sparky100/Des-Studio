@@ -1,6 +1,6 @@
 # Simulation Architecture Review
 
-**Version:** 2.0 — status table added after Sprint 35
+**Version:** 3.0 — all H-severity and M1 findings closed after Sprint 36
 **Review date:** 2026-05-12
 **Last updated:** 2026-05-15
 
@@ -11,12 +11,12 @@ Scope: simulation engine correctness, event scheduling, queue handling, entity l
 | ID | Severity | Finding | Status | Sprint Closed |
 |----|----------|---------|--------|---------------|
 | H1 | High | Phase C truncation not propagated from `runAll()` | ✅ Closed | Sprint 31–33 |
-| H2 | High | Reneging timers bind to wrong entity globally | 🔴 Open | — |
-| H3 | High | `COMPLETE()` allows waiting customers to become done | 🔴 Open | — |
-| H4 | High | Service duration biased for `serviceStart = 0` | 🔴 Open | — |
-| H5 | High | Initial B-events after t=900 silently excluded | 🔴 Open | — |
-| H6 | High | Persisted model omits `graph` and `experimentDefaults` | 🔴 Open | — |
-| M1 | Medium | Shift-capacity reduction leaves excess busy servers permanently | 🔴 Open | — |
+| H2 | High | Reneging timers bind to wrong entity globally | ✅ Closed | Pre-review (confirmed Sprint 36) |
+| H3 | High | `COMPLETE()` allows waiting customers to become done | ✅ Closed | Pre-review (confirmed Sprint 36) |
+| H4 | High | Service duration biased for `serviceStart = 0` | ✅ Closed | Sprint 36 |
+| H5 | High | Initial B-events after t=900 silently excluded | ✅ Closed | Pre-review (confirmed Sprint 36) |
+| H6 | High | Persisted model omits `graph` and `experimentDefaults` | ✅ Closed | Sprint 31–35 |
+| M1 | Medium | Shift-capacity reduction leaves excess busy servers permanently | ✅ Closed | Pre-review (confirmed Sprint 36) |
 | M2 | Medium | Warmup reset leaves stale customer-context FEL entries | ✅ Closed | Sprint 35 |
 | M3 | Medium | V8 validation warns where contract says block | ✅ Closed (product decision) | Sprint 35 |
 | M4 | Medium | Queue discipline logic duplicated between helpers and `ASSIGN()` | 🔴 Open | — |

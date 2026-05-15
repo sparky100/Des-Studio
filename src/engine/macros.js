@@ -692,7 +692,7 @@ export const MACROS = [
       }
 
       const scheduledDuration = srv._scheduledDuration || 0;
-      const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart || clock)));
+      const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
       cust._remainingService = remainingService;
 
       releaseServerClaim(cust, srv);
@@ -737,7 +737,7 @@ export const MACROS = [
           const cust = entities.find(e => e.id === custId);
           if (cust) {
             const scheduledDuration = srv._scheduledDuration || 0;
-            const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart || clock)));
+            const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
             cust._remainingService = remainingService;
             releaseServerClaim(cust, srv);
             clearWaitingState(cust);
@@ -1009,6 +1009,28 @@ export const MACROS = [
       const value = evalEntityExpr(expr, { state, clock, entity });
       entity.attrs[attrName] = value;
       msgs.push(`SET_ATTR #${entity.id}.${attrName} = ${value}`);
+    },
+  },
+
+  // ── COST(expr) ────────────────────────────────────────────────────────────
+  // Accumulates a cost amount to state.__totalCost. Uses the same safe
+  // arithmetic evaluator as SET/SET_ATTR — supports Entity.attr, state vars,
+  // clock, +−×÷, and math functions (min/max/abs/round/floor/ceil).
+  {
+    name:    "COST",
+    pattern: /^COST\((.+)\)$/i,
+    apply(match, ctx) {
+      const { state, clock, entities, felRef, getLastCustId, msgs } = ctx;
+      const expr   = match[1].trim();
+      const custId = felRef?._contextCustId ?? getLastCustId();
+      const entity = custId != null ? entities.find(e => e.id === custId) : null;
+      const amount = evalEntityExpr(expr, { state, clock, entity });
+      if (!Number.isFinite(amount)) {
+        msgs.push(`COST: expression "${expr}" did not evaluate to a finite number (got ${amount})`);
+        return;
+      }
+      state.__totalCost = (state.__totalCost || 0) + amount;
+      msgs.push(`COST += ${amount.toFixed(4)} (total ${state.__totalCost.toFixed(4)})`);
     },
   },
 ];
