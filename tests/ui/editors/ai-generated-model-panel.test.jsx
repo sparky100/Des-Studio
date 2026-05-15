@@ -500,4 +500,98 @@ describe("AiGeneratedModelPanel", () => {
     expect(screen.getByText(/fixed batch size to 2/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/model proposal preview/i)).toBeInTheDocument();
   });
+
+  it("retries up to 3 times on persistent validation errors", async () => {
+    let callCount = 0;
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      callCount++;
+      // Return a model with no ARRIVE or COMPLETE (triggers V8) on every call
+      const response = {
+        intent: "build",
+        questions: null,
+        explanation: `Attempt ${callCount}`,
+        proposedModel: {
+          entityTypes: [{ id: "cust", name: "Customer", role: "customer", attrDefs: [] }],
+          stateVariables: [], bEvents: [], cEvents: [], queues: [],
+        },
+      };
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "broken model" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    // 1 initial call + 3 retries = 4 total calls maximum
+    await waitFor(() => expect(mockCallModelBuilder).toHaveBeenCalledTimes(4), { timeout: 5000 });
+    expect(screen.getByText(/still has.*issue/i)).toBeInTheDocument();
+  });
+
+  it("shows 'Based on template' note when intent is template", async () => {
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      const response = {
+        intent: "template",
+        templateId: "call-center",
+        questions: null,
+        flowDescription: "Callers arrive, wait, are served by agents.",
+        explanation: "Adapted the Call Center template.",
+        proposedModel: {
+          ...model,
+          entityTypes: [
+            { id: "caller", name: "Caller", role: "customer", attrDefs: [] },
+            { id: "agent",  name: "Agent",  role: "server", count: 3, attrDefs: [] },
+          ],
+        },
+      };
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A call centre with 3 agents" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+    await waitFor(() => expect(screen.getByText(/based on template.*call-center/i)).toBeInTheDocument());
+  });
+
+  it("normalizes Schedule distribution distParams preserving times array and jitterParams", async () => {
+    const handleApply = vi.fn();
+    mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
+      const response = {
+        intent: "build",
+        questions: null,
+        explanation: "Built a scheduled model.",
+        proposedModel: {
+          entityTypes: [{ id: "cust", name: "Customer", role: "customer", attrDefs: [] }],
+          stateVariables: [],
+          bEvents: [{
+            id: "arr", name: "Arrive", scheduledTime: "0", effect: "ARRIVE(Customer, Queue)",
+            schedules: [{
+              eventId: "arr",
+              dist: "Schedule",
+              distParams: { times: [10, 20, 30], jitterDist: "Normal", jitterParams: { stddev: "3" } },
+            }],
+          }],
+          cEvents: [],
+          queues: [{ id: "q", name: "Queue", customerType: "Customer", discipline: "FIFO" }],
+        },
+      };
+      onComplete(response);
+      return response;
+    });
+
+    render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={handleApply} />);
+    fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Scheduled arrivals" } });
+    fireEvent.click(screen.getByRole("button", { name: /send/i }));
+    await screen.findByLabelText(/model proposal preview/i);
+    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
+
+    const applied = handleApply.mock.calls[0][0];
+    const sched = applied.bEvents[0].schedules[0];
+    expect(sched.dist).toBe("Schedule");
+    expect(Array.isArray(sched.distParams.times)).toBe(true);
+    expect(sched.distParams.times).toEqual([10, 20, 30]);
+    expect(sched.distParams.jitterParams).toEqual({ stddev: "3" });
+  });
 });
