@@ -1498,7 +1498,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 {/* 1D results: line chart + table */}
                 {sweepMode === "1d" && (
                   <>
-                    <SweepChart results={sweepResults} metric={sweepKpiMetric} paramLabel={sweepSelectedParam?.label || ""} />
+                    <SweepChart results={sweepResults} metric={sweepKpiMetric} paramLabel={sweepSelectedParam?.label || ""} goals={model.goals || []} />
                     <div style={{ overflowX: "auto" }}>
                       <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
                         <thead>
@@ -1513,17 +1513,36 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                           </tr>
                         </thead>
                         <tbody>
-                          {sweepResults.map((pt, i) => (
-                            <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                              <td style={{ padding: "6px 8px", color: C.amber, fontWeight: 700 }}>{pt.value}</td>
-                              <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.served"]?.mean)}</td>
-                              <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgWait"]?.mean)}</td>
-                              <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgSvc"]?.mean)}</td>
-                              <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgSojourn"]?.mean)}</td>
-                              <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.reneged"]?.mean)}</td>
-                              <td style={{ padding: "6px 8px" }}>{pt.replications?.length || 0}</td>
-                            </tr>
-                          ))}
+                          {sweepResults.map((pt, i) => {
+                            const goals = model.goals || [];
+                            const STAT_KEY = { avgWait:"summary.avgWait", avgSvc:"summary.avgSvc", avgSojourn:"summary.avgSojourn", served:"summary.served", reneged:"summary.reneged", totalCost:"summary.totalCost" };
+                            const feasible = goals.length
+                              ? goals.filter(g=>g.metric&&g.target).every(g=>{
+                                  const k=STAT_KEY[g.metric]; if(!k) return true;
+                                  const v=pt.aggregateStats[k]?.mean; if(v==null||!Number.isFinite(v)) return true;
+                                  const t=parseFloat(g.target); const op=g.operator||"<";
+                                  return op==="<"?v<t:op==="<="?v<=t:op===">"?v>t:op===">="?v>=t:Math.abs(v-t)<0.001;
+                                })
+                              : null;
+                            return (
+                              <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, opacity: feasible===false?0.5:1 }}>
+                                <td style={{ padding: "6px 8px", color: C.amber, fontWeight: 700 }}>
+                                  {goals.length>0 && (
+                                    <span style={{ marginRight: 4, fontSize: 10, color: feasible===true?C.green:feasible===false?C.red:C.muted }}>
+                                      {feasible===true?"✓":feasible===false?"✗":"·"}
+                                    </span>
+                                  )}
+                                  {pt.value}
+                                </td>
+                                <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.served"]?.mean)}</td>
+                                <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgWait"]?.mean)}</td>
+                                <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgSvc"]?.mean)}</td>
+                                <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.avgSojourn"]?.mean)}</td>
+                                <td style={{ padding: "6px 8px" }}>{fmt(pt.aggregateStats["summary.reneged"]?.mean)}</td>
+                                <td style={{ padding: "6px 8px" }}>{pt.replications?.length || 0}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -1539,6 +1558,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                       paramLabelA={sweepSelectedParam?.label || "X"}
                       paramLabelB={sweepSelectedParamB?.label || "Y"}
                       onCellClick={cell => setSelectedCell(cell)}
+                      goals={model.goals || []}
                     />
                     {selectedCell && (
                       <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
