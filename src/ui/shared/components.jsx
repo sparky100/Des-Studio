@@ -194,35 +194,125 @@ const PiecewiseEditor=({value,onChange,compact})=>{
   );
 };
 
-const ScheduleEditor=({value,onChange})=>{
+const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
   const dp=value?.distParams||{};
-  const times=Array.isArray(dp.times)?dp.times:[];
+  const hasRows=Array.isArray(dp.rows);
+  const times=hasRows?dp.rows.map(r=>r.time):(Array.isArray(dp.times)?dp.times:[]);
   const jitterDist=dp.jitterDist||"";
   const jitterParams=dp.jitterParams||{};
   const updDp=(patch)=>onChange({...value,distParams:{...dp,...patch}});
   const [rawText,setRawText]=React.useState(times.join(", "));
+  const [rowsMode,setRowsMode]=React.useState(hasRows&&attrDefs.length>0);
 
   const commitText=(text)=>{
     const parsed=text.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean).map(Number).filter(n=>Number.isFinite(n));
-    updDp({times:parsed});
+    updDp({times:parsed,rows:undefined});
+  };
+
+  const toggleRowsMode=(on)=>{
+    setRowsMode(on);
+    if(on){
+      const baseRows=times.map(t=>({time:t,attrs:{}}));
+      updDp({rows:baseRows.length?baseRows:[{time:0,attrs:{}}],times:undefined});
+    } else {
+      const flatTimes=(dp.rows||[]).map(r=>Number(r.time)).filter(n=>Number.isFinite(n));
+      setRawText(flatTimes.join(", "));
+      updDp({times:flatTimes,rows:undefined});
+    }
+  };
+
+  const updateRow=(idx,field,val)=>{
+    const rows=(dp.rows||[]).map((r,i)=>i===idx?{...r,[field]:field==="time"?Number(val):val}:r);
+    updDp({rows});
+  };
+
+  const updateRowAttr=(idx,attrName,val)=>{
+    const rows=(dp.rows||[]).map((r,i)=>i===idx?{...r,attrs:{...r.attrs,[attrName]:val===""?undefined:Number(val)}}:r);
+    updDp({rows});
+  };
+
+  const addRow=()=>{
+    const rows=[...(dp.rows||[]),{time:0,attrs:{}}];
+    updDp({rows});
+  };
+
+  const removeRow=(idx)=>{
+    const rows=(dp.rows||[]).filter((_,i)=>i!==idx);
+    updDp({rows});
   };
 
   const inpSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,
     fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"};
   const selSt={...inpSt,color:C.cEvent};
   const labelSt={fontSize:10,color:C.muted,fontFamily:FONT};
+  const thSt={fontSize:10,color:C.muted,fontFamily:FONT,padding:"2px 6px",textAlign:"left",whiteSpace:"nowrap"};
+  const tdSt={padding:"2px 4px"};
+
+  const numAttrDefs=attrDefs.filter(a=>a.name);
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
-      <div>
-        <div style={{...labelSt,marginBottom:4}}>Planned arrival times (absolute, comma-separated):</div>
-        <textarea rows={3} value={rawText}
-          onChange={e=>setRawText(e.target.value)}
-          onBlur={e=>commitText(e.target.value)}
-          placeholder="e.g. 0, 30, 60, 90, 120"
-          style={{...inpSt,width:"100%",resize:"vertical",boxSizing:"border-box",color:C.amber}}/>
-        <div style={{...labelSt,marginTop:2}}>{times.length} planned arrival{times.length!==1?"s":""}</div>
-      </div>
+      {numAttrDefs.length>0&&(
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <span style={labelSt}>Mode:</span>
+          <button onClick={()=>toggleRowsMode(false)}
+            style={{...inpSt,cursor:"pointer",color:rowsMode?C.muted:C.amber,background:rowsMode?"transparent":C.bg+"99"}}>
+            Times list
+          </button>
+          <button onClick={()=>toggleRowsMode(true)}
+            style={{...inpSt,cursor:"pointer",color:rowsMode?C.amber:C.muted,background:rowsMode?C.bg+"99":"transparent"}}>
+            Arrival attributes
+          </button>
+        </div>
+      )}
+      {!rowsMode&&(
+        <div>
+          <div style={{...labelSt,marginBottom:4}}>Planned arrival times (absolute, comma-separated):</div>
+          <textarea rows={3} value={rawText}
+            onChange={e=>setRawText(e.target.value)}
+            onBlur={e=>commitText(e.target.value)}
+            placeholder="e.g. 0, 30, 60, 90, 120"
+            style={{...inpSt,width:"100%",resize:"vertical",boxSizing:"border-box",color:C.amber}}/>
+          <div style={{...labelSt,marginTop:2}}>{times.length} planned arrival{times.length!==1?"s":""}</div>
+        </div>
+      )}
+      {rowsMode&&(
+        <div style={{overflowX:"auto"}}>
+          <table style={{borderCollapse:"collapse",width:"100%",fontFamily:FONT}}>
+            <thead>
+              <tr>
+                <th style={thSt}>#</th>
+                <th style={thSt}>Time</th>
+                {numAttrDefs.map(a=><th key={a.name} style={thSt}>{a.name}</th>)}
+                <th style={thSt}/>
+              </tr>
+            </thead>
+            <tbody>
+              {(dp.rows||[]).map((row,i)=>(
+                <tr key={i}>
+                  <td style={{...tdSt,color:C.muted,fontSize:10,fontFamily:FONT}}>{i+1}</td>
+                  <td style={tdSt}>
+                    <input type="number" value={row.time??""} style={{...inpSt,width:70}}
+                      onChange={e=>updateRow(i,"time",e.target.value)}/>
+                  </td>
+                  {numAttrDefs.map(a=>(
+                    <td key={a.name} style={tdSt}>
+                      <input type="number" value={row.attrs?.[a.name]??""} style={{...inpSt,width:70}}
+                        onChange={e=>updateRowAttr(i,a.name,e.target.value)}/>
+                    </td>
+                  ))}
+                  <td style={tdSt}>
+                    <button onClick={()=>removeRow(i)} style={{background:"transparent",border:"none",
+                      color:C.muted,cursor:"pointer",fontSize:12,padding:"0 4px"}}>×</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button onClick={addRow} style={{...inpSt,cursor:"pointer",marginTop:4,color:C.green}}>+ Add row</button>
+          <div style={{...labelSt,marginTop:4}}>{(dp.rows||[]).length} planned arrival{(dp.rows||[]).length!==1?"s":""}</div>
+        </div>
+      )}
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
         <span style={labelSt}>Jitter:</span>
         <select value={jitterDist} style={selSt}
@@ -255,7 +345,7 @@ const ScheduleEditor=({value,onChange})=>{
   );
 };
 
-const DistPicker=({value,onChange,compact,allowPiecewise=true})=>{
+const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
   const fileRef=useRef(null);
   const [csvParse,setCsvParse]=useState(null); // { fileName, headers, rows, colIdx }
 
@@ -352,7 +442,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true})=>{
       </div>
 
       {isPiecewise&&<PiecewiseEditor value={v} onChange={onChange} compact={compact}/>}
-      {isSchedule&&<ScheduleEditor value={v} onChange={onChange}/>}
+      {isSchedule&&<ScheduleEditor value={v} onChange={onChange} attrDefs={attrDefs}/>}
 
       {/* Column picker — appears after file is parsed */}
       {csvParse&&(

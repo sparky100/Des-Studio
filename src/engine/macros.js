@@ -297,12 +297,14 @@ export const MACROS = [
 
       // ── Normal join ───────────────────────────────────────────────────────
       const id = ctx.nextId();
+      const sampledAttrs = sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng);
+      const rowAttrs = felRef?._scheduleRowAttrs ?? null;
       const ent = {
         id,
         type:           typeName,
         role:           et?.role || "customer",
         queue:          queueName,
-        attrs:          sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
+        attrs:          rowAttrs ? { ...sampledAttrs, ...rowAttrs } : sampledAttrs,
         arrivalTime:    clock,
         stages:         [],
         lastStageStart: null,
