@@ -2,7 +2,8 @@
 import { useState, useEffect, useCallback, Fragment } from "react";
 import { C, FONT } from "./shared/tokens.js";
 import { Btn, Tag, SH, InfoBox } from "./shared/components.jsx";
-import { getPlatformConfig, setPlatformConfig, fetchAllUsers, updateUserRole } from "../db/models.js";
+import { getPlatformConfig, setPlatformConfig, fetchAllUsers, updateUserRole,
+         suspendUser, unsuspendUser, logAdminAction, fetchAuditLog } from "../db/models.js";
 
 const LLM_PROVIDERS = [
   { value: "anthropic",    label: "Anthropic" },
@@ -21,6 +22,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const [llmConfig, setLlmConfig] = useState(null);
   const [limits, setLimits] = useState(null);
   const [users, setUsers] = useState([]);
+  const [auditLog, setAuditLog] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
@@ -37,14 +39,16 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [llmCfg, limitsCfg, allUsers] = await Promise.all([
+      const [llmCfg, limitsCfg, allUsers, log] = await Promise.all([
         getPlatformConfig("llm"),
         getPlatformConfig("limits"),
         fetchAllUsers(),
+        fetchAuditLog(100),
       ]);
       setLlmConfig(llmCfg);
       setLimits(limitsCfg);
       setUsers(allUsers || []);
+      setAuditLog(log || []);
       if (llmCfg) {
         setProvider(llmCfg.provider || "anthropic");
         setModel(llmCfg.model || "claude-sonnet-4-20250514");
@@ -84,6 +88,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       const value = { provider, model, temperature, maxTokensPerRun: maxTokens, rateLimitPerHour: rateLimit };
       if (apiKey) value.apiKey = apiKey;
       await setPlatformConfig("llm", value, userId);
+      await logAdminAction("update_config", null, "llm");
       setSaveStatus({ state: "success", message: "LLM configuration saved." });
     } catch (err) {
       setSaveStatus({ state: "error", message: err.message });
@@ -98,6 +103,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
         maxModelsPerUser: maxModels, maxRunsPerModel: maxRuns,
         maxReplications, maxSweepPoints, maxSimTime,
       }, userId);
+      await logAdminAction("update_config", null, "limits");
       setSaveStatus({ state: "success", message: "Limits saved." });
     } catch (err) {
       setSaveStatus({ state: "error", message: err.message });
@@ -107,8 +113,30 @@ function AdminPanel({ userId, isAdmin, onClose }) {
 
   const handleRoleChange = async (targetId, role) => {
     try {
+      const prev = users.find(u => u.id === targetId);
       await updateUserRole(targetId, role);
-      setUsers(prev => prev.map(u => u.id === targetId ? { ...u, role } : u));
+      await logAdminAction(role === "admin" ? "promote" : "demote", targetId, null, prev?.role, role);
+      setUsers(us => us.map(u => u.id === targetId ? { ...u, role, isAdmin: role === "admin" } : u));
+    } catch (err) {
+      setSaveStatus({ state: "error", message: err.message });
+    }
+  };
+
+  const handleSuspend = async (targetId) => {
+    try {
+      await suspendUser(targetId);
+      await logAdminAction("suspend", targetId);
+      setUsers(us => us.map(u => u.id === targetId ? { ...u, suspended: true } : u));
+    } catch (err) {
+      setSaveStatus({ state: "error", message: err.message });
+    }
+  };
+
+  const handleUnsuspend = async (targetId) => {
+    try {
+      await unsuspendUser(targetId);
+      await logAdminAction("unsuspend", targetId);
+      setUsers(us => us.map(u => u.id === targetId ? { ...u, suspended: false } : u));
     } catch (err) {
       setSaveStatus({ state: "error", message: err.message });
     }
@@ -121,9 +149,10 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   });
 
   const TABS = [
-    { id: "llm",    label: "LLM Provider" },
-    { id: "limits", label: "Platform Limits" },
-    { id: "users",  label: "Users" },
+    { id: "llm",      label: "LLM Provider" },
+    { id: "limits",   label: "Platform Limits" },
+    { id: "users",    label: "Users" },
+    { id: "auditlog", label: "Audit Log" },
   ];
 
   if (!isAdmin) {
@@ -262,14 +291,14 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                      {["User", "Role", "Actions"].map(h => (
+                      {["User", "Role", "Status", "Actions"].map(h => (
                         <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 10, letterSpacing: 1 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {users.map(u => (
-                      <tr key={u.id} style={{ borderBottom: `1px solid ${C.border}30` }}>
+                      <tr key={u.id} style={{ borderBottom: `1px solid ${C.border}30`, opacity: u.suspended ? 0.6 : 1 }}>
                         <td style={{ padding: "6px 10px", color: C.text }}>
                           <div>{u.username || u.email || u.id?.slice(0, 8)}</div>
                           <div style={{ fontSize: 9, color: C.muted }}>{u.id}</div>
@@ -278,13 +307,68 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                           <Tag label={u.role || "user"} color={u.isAdmin ? C.accent : C.muted} />
                         </td>
                         <td style={{ padding: "6px 10px" }}>
+                          {u.suspended
+                            ? <Tag label="suspended" color={C.red} />
+                            : <Tag label="active" color={C.green} />}
+                        </td>
+                        <td style={{ padding: "6px 10px" }}>
                           <div style={{ display: "flex", gap: 6 }}>
-                            {u.isAdmin ? (
-                              <Btn small variant="ghost" onClick={() => handleRoleChange(u.id, "user")}>Demote to User</Btn>
+                            {u.id !== userId && (u.isAdmin ? (
+                              <Btn small variant="ghost" onClick={() => handleRoleChange(u.id, "user")}>Demote</Btn>
                             ) : (
-                              <Btn small variant="ghost" onClick={() => handleRoleChange(u.id, "admin")}>Promote to Admin</Btn>
-                            )}
+                              <Btn small variant="ghost" onClick={() => handleRoleChange(u.id, "admin")}>Promote</Btn>
+                            ))}
+                            {u.id !== userId && (u.suspended ? (
+                              <Btn small variant="ghost" onClick={() => handleUnsuspend(u.id)}>Unsuspend</Btn>
+                            ) : (
+                              <Btn small variant="ghost" onClick={() => handleSuspend(u.id)}>Suspend</Btn>
+                            ))}
                           </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* ── AUDIT LOG ── */}
+          {tab === "auditlog" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <SH label="Admin Audit Log" color={C.amber} />
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Last 100 admin actions.</div>
+              {auditLog.length === 0 ? (
+                <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>No actions recorded yet.</div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                      {["Time", "Action", "Target", "Detail"].map(h => (
+                        <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 10, letterSpacing: 1 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLog.map(entry => (
+                      <tr key={entry.id} style={{ borderBottom: `1px solid ${C.border}20` }}>
+                        <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>
+                          {new Date(entry.createdAt).toLocaleString()}
+                        </td>
+                        <td style={{ padding: "6px 10px" }}>
+                          <Tag label={entry.action} color={
+                            entry.action === "suspend" ? C.red :
+                            entry.action === "unsuspend" ? C.green :
+                            entry.action === "promote" ? C.accent : C.muted
+                          } />
+                        </td>
+                        <td style={{ padding: "6px 10px", color: C.muted, fontSize: 10 }}>
+                          {entry.targetId?.slice(0, 8) || entry.targetKey || "—"}
+                        </td>
+                        <td style={{ padding: "6px 10px", color: C.text }}>
+                          {entry.oldValue && entry.newValue
+                            ? `${entry.oldValue} → ${entry.newValue}`
+                            : entry.oldValue || entry.newValue || "—"}
                         </td>
                       </tr>
                     ))}

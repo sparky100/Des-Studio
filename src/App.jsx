@@ -18,6 +18,7 @@ import { validateModel }                    from "./engine/validation.js";
 import { TEMPLATES }                        from "./engine/templates.js";
 import DashboardView                        from "./ui/share/DashboardView.jsx";
 import { AdminPanel }                       from "./ui/AdminPanel.jsx";
+import { UserSettingsPanel }               from "./ui/UserSettingsPanel.jsx";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
 
@@ -212,6 +213,11 @@ export default function App(){
   const [authEmail,setAuthEmail]=useState('')
   const [authPassword,setAuthPassword]=useState('')
   const [authError,setAuthError]=useState('')
+  const [showResetSent,setShowResetSent]=useState(false)
+  const [isRecoverySession,setIsRecoverySession]=useState(false)
+  const [newPassword,setNewPassword]=useState('')
+  const [newPasswordConfirm,setNewPasswordConfirm]=useState('')
+  const [showSettings,setShowSettings]=useState(false)
   const [shareToken,setShareToken]=useState(null)
   const [tmplSearch,setTmplSearch]=useState('')
   const [tmplDomain,setTmplDomain]=useState('All')
@@ -230,14 +236,38 @@ export default function App(){
     }catch(e){setAuthError(e.message)}
   },[authMode,authEmail,authPassword])
 
+  const handleForgotPassword=useCallback(async()=>{
+    setAuthError('')
+    if(!authEmail){setAuthError('Enter your email address first.');return}
+    try{
+      const redirectTo=window.location.origin+window.location.pathname
+      const{error}=await supabase.auth.resetPasswordForEmail(authEmail,{redirectTo})
+      if(error)throw error
+      setShowResetSent(true)
+    }catch(e){setAuthError(e.message)}
+  },[authEmail])
+
+  const handlePasswordReset=useCallback(async()=>{
+    setAuthError('')
+    if(newPassword.length<8){setAuthError('Password must be at least 8 characters.');return}
+    if(newPassword!==newPasswordConfirm){setAuthError('Passwords do not match.');return}
+    try{
+      const{error}=await supabase.auth.updateUser({password:newPassword})
+      if(error)throw error
+      setIsRecoverySession(false)
+      setNewPassword('');setNewPasswordConfirm('')
+    }catch(e){setAuthError(e.message)}
+  },[newPassword,newPasswordConfirm])
+
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
       setSession(session)
       if(!session)setLoading(false)
     })
-    const {data:{subscription}}=supabase.auth.onAuthStateChange((_,session)=>{
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
+      if(event==='PASSWORD_RECOVERY'){setIsRecoverySession(true)}
       setSession(session)
-      if(!session){setLoading(false);setModels([]);setProfile(null)}
+      if(!session){setLoading(false);setModels([]);setProfile(null);setIsRecoverySession(false)}
     })
     return ()=>subscription.unsubscribe()
   },[])
@@ -435,6 +465,15 @@ export default function App(){
     );
   }
 
+  if(showSettings){
+    return (
+      <div style={{background:C.bg,minHeight:'100vh'}}>
+        <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');`}</style>
+        <UserSettingsPanel userId={uid} onClose={()=>setShowSettings(false)} />
+      </div>
+    );
+  }
+
   if(openId){
     const model = models.find(m => m.id === openId) || localModel;
     const isOwner = model?.owner_id === uid;
@@ -480,6 +519,53 @@ export default function App(){
     )
   }
 
+  if(session && isRecoverySession){
+    return(
+      <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
+        <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 24px',display:'flex',alignItems:'center',height:52}}>
+          <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2}}>DES STUDIO</div>
+        </div>
+        <div style={{maxWidth:400,margin:'0 auto',padding:'60px 24px'}}>
+          <div style={{fontSize:18,fontWeight:700,color:C.text,marginBottom:20}}>Set new password</div>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <input type="password" placeholder="New password (min 8 chars)" value={newPassword}
+              onChange={e=>setNewPassword(e.target.value)}
+              style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:13,padding:'8px 10px',outline:'none'}}/>
+            <input type="password" placeholder="Confirm new password" value={newPasswordConfirm}
+              onChange={e=>setNewPasswordConfirm(e.target.value)}
+              onKeyDown={e=>{if(e.key==='Enter')handlePasswordReset()}}
+              style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:13,padding:'8px 10px',outline:'none'}}/>
+            {authError&&<div style={{fontSize:11,color:C.red}}>{authError}</div>}
+            <button type="button" onClick={handlePasswordReset}
+              style={{background:C.accent,color:'#fff',border:'none',borderRadius:4,fontFamily:FONT,fontSize:13,padding:'8px 16px',cursor:'pointer',fontWeight:600}}>
+              Update Password
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if(session && profile?.suspended){
+    return(
+      <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
+        <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 24px',display:'flex',alignItems:'center',height:52}}>
+          <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2}}>DES STUDIO</div>
+        </div>
+        <div style={{maxWidth:480,margin:'0 auto',padding:'60px 24px',textAlign:'center'}}>
+          <div style={{fontSize:18,fontWeight:700,color:C.red,marginBottom:12}}>Account Suspended</div>
+          <div style={{fontSize:13,color:C.muted,lineHeight:1.7,marginBottom:24}}>
+            Your account has been suspended. Please contact support if you believe this is an error.
+          </div>
+          <button type="button" onClick={signOut}
+            style={{background:'#ffffff08',border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,fontFamily:FONT,fontSize:12,padding:'8px 20px',cursor:'pointer',fontWeight:600}}>
+            Sign Out
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   if(!session){
     return(
       <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
@@ -507,6 +593,11 @@ export default function App(){
                 <button type="button" onClick={()=>{setAuthMode('signup');setAuthError('')}}
                   style={{flex:1,background:authMode==='signup'?C.accent+'18':'none',border:authMode==='signup'?`1px solid ${C.accent}44`:`1px solid ${C.border}`,borderRadius:4,color:authMode==='signup'?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'6px 12px',cursor:'pointer',fontWeight:600}}>Sign Up</button>
               </div>
+              {showResetSent ? (
+                <div style={{fontSize:12,color:C.green,lineHeight:1.6}}>
+                  Password reset email sent. Check your inbox and click the link to set a new password.
+                </div>
+              ) : (
               <div style={{display:'flex',flexDirection:'column',gap:10}}>
                 <input type="email" placeholder="Email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)}
                   style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:13,padding:'8px 10px',outline:'none'}}/>
@@ -517,7 +608,14 @@ export default function App(){
                   style={{background:C.accent,color:'#fff',border:'none',borderRadius:4,fontFamily:FONT,fontSize:13,padding:'8px 16px',cursor:'pointer',fontWeight:600}}>
                   {authMode==='signin'?'Sign In':'Sign Up'}
                 </button>
+                {authMode==='signin'&&(
+                  <button type="button" onClick={handleForgotPassword}
+                    style={{background:'none',border:'none',color:C.muted,fontFamily:FONT,fontSize:11,cursor:'pointer',textAlign:'left',padding:0}}>
+                    Forgot password?
+                  </button>
+                )}
               </div>
+              )}
             </div>
           )}
         </div>
@@ -539,6 +637,12 @@ export default function App(){
             </div>
             <span style={{fontSize:12,color:C.muted}}>{profile.full_name}</span>
           </div>
+        )}
+        {session && (
+          <button type="button" onClick={()=>setShowSettings(true)}
+            style={{background:'#ffffff08',border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,fontFamily:FONT,fontSize:11,padding:'5px 12px',cursor:'pointer',fontWeight:600}}>
+            Settings
+          </button>
         )}
         {session && isAdmin && (
           <button type="button" onClick={()=>{setShowAdmin(true);setOpenId(null)}}
