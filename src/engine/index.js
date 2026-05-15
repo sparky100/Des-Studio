@@ -708,6 +708,9 @@ const cycleLog = [];
       r.utilisation = r.total > 0 ? +(r.busyCount / r.total).toFixed(4) : 0;
     }
 
+    const totalCost   = state.__totalCost || 0;
+    const costPerServed = served.length > 0 ? +(totalCost / served.length).toFixed(4) : null;
+
     return {
       total:             customers.length,
       served:            served.length,
@@ -717,6 +720,8 @@ const cycleLog = [];
       avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
       maxSojourn:        maxSojourn!= null ? +maxSojourn.toFixed(4): null,
       avgWIP:            (clock - _statsResetTime) > 0 ? +(_wipIntegral / (clock - _statsResetTime)).toFixed(4) : 0,
+      totalCost:         +totalCost.toFixed(4),
+      costPerServed,
       perResource:       Object.keys(perResource).length ? perResource : undefined,
       warmupPeriod,
       excludedCount:     _excludedCount,
