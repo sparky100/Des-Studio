@@ -138,16 +138,19 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     aggregateStats: results.aggregateStats || {},
   };
 
-  const goalsInstr = model.goals?.length
-    ? " Performance goals were set for this model. Assess each goal against the results and note whether it was met or missed."
+  const goalGaps = buildGoalGaps(model, results);
+  const goalsInstr = goalGaps?.length
+    ? ` Performance goals were set. For each goal use this format: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])". Cite exact numbers from the goalGaps data.`
     : "";
+
+  if (goalGaps?.length) payload.goalGaps = goalGaps;
 
   return {
     kind: "narrative",
     messages: makeMessages(
       system,
       payload,
-      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish between typical and extreme waits." + goalsInstr
+      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish typical from extreme waits." + goalsInstr
     ),
     max_tokens: 450,
   };
@@ -191,39 +194,160 @@ export function buildSensitivityPrompt(modelName = DEFAULT_MODEL_NAME, experimen
   };
 }
 
+// ── Goal gap analysis ────────────────────────────────────────────────────────
+// Maps goal metric names to aggregateStats keys
+const GOAL_STAT_KEY = {
+  avgWait:    "summary.avgWait",
+  avgSvc:     "summary.avgSvc",
+  avgSojourn: "summary.avgSojourn",
+  served:     "summary.served",
+  reneged:    "summary.reneged",
+  totalCost:  "summary.totalCost",
+};
+
+function buildGoalGaps(model = {}, results = {}) {
+  const goals = model.goals || [];
+  if (!goals.length) return null;
+  const summary = getSummary(results);
+  const agg = results.aggregateStats || {};
+  return goals.filter(g => g.metric && g.target).map(g => {
+    const statKey = GOAL_STAT_KEY[g.metric];
+    const current = statKey
+      ? finiteOrNull(agg[statKey]?.mean ?? summary[g.metric])
+      : finiteOrNull(summary[g.metric]);
+    const target = parseFloat(g.target);
+    const op = g.operator || "<";
+    let met = null;
+    if (current != null) {
+      if (op === "<")  met = current < target;
+      else if (op === "<=") met = current <= target;
+      else if (op === ">")  met = current > target;
+      else if (op === ">=") met = current >= target;
+      else if (op === "==") met = Math.abs(current - target) < 0.001;
+    }
+    const gap = current != null ? +(current - target).toFixed(4) : null;
+    return {
+      metric: g.metric,
+      label: g.label || `${g.metric} ${op} ${target}`,
+      operator: op,
+      target,
+      current,
+      gap,
+      met,
+    };
+  });
+}
+
+// Evaluate whether a single sweep point's aggregateStats satisfies all goals.
+// Returns { feasible: bool, gaps: [{metric, met, current, target}] }
+export function evaluateSweepPointGoals(goals = [], aggregateStats = {}) {
+  if (!goals.length) return { feasible: null, gaps: [] };
+  const gaps = goals.filter(g => g.metric && g.target).map(g => {
+    const statKey = GOAL_STAT_KEY[g.metric];
+    const current = statKey ? finiteOrNull(aggregateStats[statKey]?.mean) : null;
+    const target = parseFloat(g.target);
+    const op = g.operator || "<";
+    let met = null;
+    if (current != null) {
+      if (op === "<")  met = current < target;
+      else if (op === "<=") met = current <= target;
+      else if (op === ">")  met = current > target;
+      else if (op === ">=") met = current >= target;
+      else if (op === "==") met = Math.abs(current - target) < 0.001;
+    }
+    return { metric: g.metric, label: g.label || `${g.metric} ${op} ${target}`, operator: op, target, current, met };
+  });
+  const feasible = gaps.every(g => g.met === true);
+  return { feasible, gaps };
+}
+
 export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results = {}) {
-  const system = "You are an expert simulation analyst. Given a model and its run results, suggest specific structural changes to improve performance. Be concise: 150-200 words. Recommend concrete numeric changes (e.g. 'increase capacity from 2 to 3', 'add a server'). You have per-queue wait percentile data (p50, p90, p95, p99), per-resource utilisation and idle count, and per-queue blocking/balking counters. Use these to pinpoint the bottleneck precisely.";
-  const entityTypes = (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count }));
-  const queues = (model.queues || []).map(q => ({ name: q.name, discipline: q.discipline, capacity: q.capacity, customerType: q.customerType }));
+  const system = [
+    "You are a queueing systems expert and simulation analyst.",
+    "Your role is to give specific, actionable, quantified improvement recommendations based on discrete-event simulation results.",
+    "You have access to: per-queue wait percentiles (p50/p90/p95/p99), per-resource utilisation fractions,",
+    "replication confidence intervals (CI 95%), per-queue blocking and balking counts,",
+    "and when set, performance goals with their current gaps.",
+    "You MUST follow the 6-step framework and output schema described in the instruction.",
+    "Never give vague advice like 'consider increasing capacity' — always name the exact parameter and specific value.",
+  ].join(" ");
+
+  const entityTypes = (model.entityTypes || []).map(e => ({
+    name: e.name, role: e.role, count: e.count,
+    attrDefs: (e.attrDefs || []).filter(a => a.name).map(a => ({ name: a.name, dist: a.dist })),
+  }));
+  const queues = (model.queues || []).map(q => ({
+    name: q.name, discipline: q.discipline, capacity: q.capacity ?? null, customerType: q.customerType,
+  }));
+
+  const kpis = buildKpis(model, results);
+  const goalGaps = buildGoalGaps(model, results);
+
+  // CI data from aggregateStats (replications)
+  const agg = results.aggregateStats || {};
+  const confidenceIntervals = Object.entries(agg)
+    .filter(([, s]) => s && s.n >= 2)
+    .map(([name, s]) => ({
+      metric: name,
+      mean: finiteOrNull(s.mean),
+      ci95Lower: finiteOrNull(s.lower),
+      ci95Upper: finiteOrNull(s.upper),
+      n: s.n,
+      ciWidth: (s.upper != null && s.lower != null) ? +(s.upper - s.lower).toFixed(4) : null,
+    }));
+
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
-      goals: goalsToPrompt(model),
       entityTypes,
       queues,
       flowSummary: queues
         .filter(q => q.customerType)
         .map(q => `${q.customerType} entities wait in queue '${q.name}'`)
-        .join("; ") || "No queue-entity associations defined.",
+        .join("; ") || "No explicit queue-entity associations.",
     },
     experiment: extractExperiment(experimentConfig),
-    kpis: buildKpis(model, results),
+    kpis,
+    goalGaps: goalGaps?.length ? goalGaps : undefined,
+    confidenceIntervals: confidenceIntervals.length ? confidenceIntervals : undefined,
     waitDist: results.waitDist || {},
     perQueue: results.perQueue || {},
   };
 
-  const suggestionGoals = model.goals?.length
-    ? " Performance goals were defined for this model — your recommendations should prioritise changes that help meet those goals."
+  const highLoadWarning = kpis.resources.some(r => r.utilisation != null && r.utilisation > 0.85)
+    ? " NOTE: At least one resource has utilisation > 0.85 — this is the HIGH LOAD REGIME where wait times are non-linearly sensitive to capacity; small capacity increases have outsized impact."
     : "";
+
+  const goalInstruction = goalGaps?.length
+    ? ` GOALS are defined — your primary objective is to identify changes that close the goal gaps. Address each unmet goal explicitly using the goalGaps data provided (field: current, target, gap, met).`
+    : " No performance goals are set — prioritise reducing the most extreme waiting time or highest-utilisation bottleneck.";
+
+  const instruction = [
+    "Apply this 6-step framework for EVERY suggestion:",
+    "1. BINDING CONSTRAINT: State which metric is farthest from its goal (or most critical). Give exact current value and target.",
+    "2. CAUSE: Trace to root cause using utilisation, arrival rate, service time, percentile data, and blocking/balking counts. Name the specific resource or queue.",
+    "3. PROPOSED CHANGE: Name the exact parameter, its current value, and a specific proposed value — never use vague 'increase/decrease' without a number.",
+    "4. PREDICTED EFFECT: Use queueing theory (Little's Law, M/M/c) or CI extrapolation to quantify the expected improvement as a range. State uncertainty when CIs are wide.",
+    "5. GOAL IMPACT: For each suggestion, state which goals would be met, which remain missed, which are unaffected.",
+    "6. RANKING: If multiple suggestions, rank by expected impact on the binding constraint and explain the trade-off.",
+    "",
+    "OUTPUT FORMAT — use this exact schema for each suggestion:",
+    "Suggestion N — [parameter or change]",
+    "  Current: [exact value with units/context]",
+    "  Proposed: [specific value or range]",
+    "  Predicted effect: [metric] [direction] from [current] to ~[predicted range]",
+    "  Goal impact: [goal label] → met / still missed / unaffected",
+    "  Confidence: high / moderate / low — [one-line reason citing CIs or queueing regime]",
+    "",
+    goalInstruction,
+    highLoadWarning,
+  ].join("\n");
+
   return {
     kind: "suggestion",
-    messages: makeMessages(
-      system,
-      payload,
-      "Based on the KPI data, identify the primary bottleneck and recommend a specific model change. Consider per-queue wait percentiles (p50, p90, p95), per-resource utilisation, and blocking/balking counters. State the expected impact (e.g. 'mean wait would drop from 8.2 to ~4.5'). If multiple changes are needed, prioritise the single most impactful one." + suggestionGoals
-    ),
-    max_tokens: 450,
+    messages: makeMessages(system, payload, instruction),
+    max_tokens: 800,
   };
 }
 

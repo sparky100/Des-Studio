@@ -4,10 +4,36 @@ import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { fmt, METRIC_LABELS } from "./executeHelpers.js";
 
-export function SweepChart({ results, metric, paramLabel }) {
+// Check whether a sweep point's aggregateStats satisfies all goals.
+// goals: array of {metric, operator, target} from model.goals
+// Returns true if all goals met, false if any missed, null if no goals or no data.
+function pointIsFeasible(goals, aggregateStats) {
+  if (!goals?.length) return null;
+  const STAT_KEY = {
+    avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn",
+    served: "summary.served", reneged: "summary.reneged", totalCost: "summary.totalCost",
+  };
+  for (const g of goals) {
+    const key = STAT_KEY[g.metric];
+    if (!key) continue;
+    const val = aggregateStats[key]?.mean;
+    if (val == null || !Number.isFinite(val)) return null;
+    const t = parseFloat(g.target);
+    const op = g.operator || "<";
+    const met =
+      op === "<"  ? val < t  :
+      op === "<=" ? val <= t :
+      op === ">"  ? val > t  :
+      op === ">=" ? val >= t :
+      Math.abs(val - t) < 0.001;
+    if (!met) return false;
+  }
+  return true;
+}
+
+export function SweepChart({ results, metric, paramLabel, goals = [] }) {
   if (!results?.length) return null;
 
-  const values = results.map(r => r.value);
   const statPath = metric;
   const means = results.map(r => r.aggregateStats[statPath]?.mean ?? null);
 
@@ -20,7 +46,7 @@ export function SweepChart({ results, metric, paramLabel }) {
     );
   }
 
-  const W = 400, H = 160, PAD = { top: 16, right: 16, bottom: 28, left: 50 };
+  const W = 400, H = 170, PAD = { top: 16, right: 20, bottom: 28, left: 50 };
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
 
@@ -29,60 +55,123 @@ export function SweepChart({ results, metric, paramLabel }) {
   const vMeans = valid.map(r => r.aggregateStats[statPath].mean);
   const vLowers = valid.map(r => r.aggregateStats[statPath]?.lower ?? r.aggregateStats[statPath].mean);
   const vUppers = valid.map(r => r.aggregateStats[statPath]?.upper ?? r.aggregateStats[statPath].mean);
+  const feasibility = valid.map(r => pointIsFeasible(goals, r.aggregateStats));
+
+  // Goal threshold lines that match the displayed metric
+  const STAT_KEY = {
+    avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn",
+    served: "summary.served", reneged: "summary.reneged", totalCost: "summary.totalCost",
+  };
+  const matchingGoals = goals.filter(g => STAT_KEY[g.metric] === metric && g.target != null);
 
   const xMin = Math.min(...vValues);
   const xMax = Math.max(...vValues);
-  const yMin = Math.min(...vLowers);
-  const yMax = Math.max(...vUppers);
+  const allY = [...vLowers, ...vUppers, ...matchingGoals.map(g => parseFloat(g.target))].filter(Number.isFinite);
+  const yMin = Math.min(...allY);
+  const yMax = Math.max(...allY);
   const yRange = yMax - yMin || 1;
-  const yPad = yRange * 0.1;
+  const yPad = yRange * 0.12;
 
   const xScale = (v) => PAD.left + (v - xMin) / (xMax - xMin || 1) * plotW;
   const yScale = (v) => PAD.top + plotH - (v - (yMin - yPad)) / (yRange + 2 * yPad) * plotH;
 
   const linePath = vValues.map((v, i) => `${i === 0 ? "M" : "L"}${xScale(v).toFixed(1)},${yScale(vMeans[i]).toFixed(1)}`).join(" ");
   const ciUpperPath = vValues.map((v, i) => `${i === 0 ? "M" : "L"}${xScale(v).toFixed(1)},${yScale(vUppers[i]).toFixed(1)}`).join(" ");
-  const ciLowerPath = vValues.map((v, i) => `${i === 0 ? "L" : "L"}${xScale(v).toFixed(1)},${yScale(vLowers[i]).toFixed(1)}`).join(" ");
   const ciPolygon = ciUpperPath + " " + [...vValues].reverse().map((v, i) => {
     const idx = vValues.length - 1 - i;
     return `L${xScale(vValues[idx]).toFixed(1)},${yScale(vLowers[idx]).toFixed(1)}`;
   }).join(" ") + " Z";
 
-  const yTicks = Array.from({ length: 5 }, (_, i) => {
-    const frac = i / 4;
-    return (yMin - yPad) + frac * (yRange + 2 * yPad);
-  });
+  const yTicks = Array.from({ length: 5 }, (_, i) => (yMin - yPad) + (i / 4) * (yRange + 2 * yPad));
+
+  // Best feasible point: lowest mean among feasible points (or highest for served)
+  const feasibleIndices = vValues.map((_, i) => i).filter(i => feasibility[i] === true);
+  const isHigherBetter = metric.includes("served");
+  const bestIdx = feasibleIndices.length
+    ? feasibleIndices.reduce((best, i) =>
+        isHigherBetter ? (vMeans[i] > vMeans[best] ? i : best) : (vMeans[i] < vMeans[best] ? i : best),
+        feasibleIndices[0])
+    : null;
+
+  const hasGoals = goals.length > 0;
+  const feasibleCount = feasibility.filter(f => f === true).length;
 
   return (
     <div style={{ background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 12, overflow: "hidden" }}>
+      {hasGoals && (
+        <div style={{ fontSize: 10, fontFamily: FONT, marginBottom: 6, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ color: feasibleCount > 0 ? C.green : C.red }}>
+            {feasibleCount}/{valid.length} points satisfy all goals
+          </span>
+          {matchingGoals.map((g, i) => (
+            <span key={i} style={{ color: C.amber }}>
+              — goal: {g.metric} {g.operator} {g.target}
+            </span>
+          ))}
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: C.muted }}>
+            <svg width={10} height={10}><circle cx={5} cy={5} r={4} fill={C.green} /></svg> feasible
+            <svg width={10} height={10} style={{ marginLeft: 4 }}><circle cx={5} cy={5} r={4} fill={C.muted} opacity={0.5} /></svg> infeasible
+          </span>
+        </div>
+      )}
       <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
         {yTicks.map((tick, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)}
-              stroke={C.border} strokeWidth={1} />
-            <text x={PAD.left - 6} y={yScale(tick) + 3} textAnchor="end" fill={C.label} fontSize={9} fontFamily="monospace">
+            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} />
+            <text x={PAD.left - 6} y={yScale(tick) + 3} textAnchor="end" fill={C.muted} fontSize={9} fontFamily="monospace">
               {tick.toFixed(1)}
             </text>
           </g>
         ))}
+        {/* Goal threshold lines */}
+        {matchingGoals.map((g, gi) => {
+          const ty = yScale(parseFloat(g.target));
+          if (!Number.isFinite(ty)) return null;
+          return (
+            <g key={gi}>
+              <line x1={PAD.left} y1={ty} x2={W - PAD.right} y2={ty}
+                stroke={C.amber} strokeWidth={1.5} strokeDasharray="6,3" />
+              <text x={W - PAD.right + 2} y={ty + 3} fill={C.amber} fontSize={8} fontFamily="monospace">
+                {g.operator}{g.target}
+              </text>
+            </g>
+          );
+        })}
         <path d={ciPolygon} fill={`${C.accent}22`} />
-        <path d={ciUpperPath} fill="none" stroke={`${C.accent}66`} strokeWidth={1} strokeDasharray="4,3" />
-        <path d={[...vValues].reverse().map((v, i) => {
-          const idx = vValues.length - 1 - i;
-          return `${i === 0 ? "M" : "L"}${xScale(vValues[idx]).toFixed(1)},${yScale(vLowers[idx]).toFixed(1)}`;
-        }).join(" ")} fill="none" stroke={`${C.accent}66`} strokeWidth={1} strokeDasharray="4,3" />
+        <path d={ciUpperPath} fill="none" stroke={`${C.accent}55`} strokeWidth={1} strokeDasharray="4,3" />
+        <path d={vValues.map((v, i) => `${i === 0 ? "M" : "L"}${xScale(v).toFixed(1)},${yScale(vLowers[i]).toFixed(1)}`).join(" ")}
+          fill="none" stroke={`${C.accent}55`} strokeWidth={1} strokeDasharray="4,3" />
         <path d={linePath} fill="none" stroke={C.accent} strokeWidth={2} />
-        {vValues.map((v, i) => (
-          <circle key={i} cx={xScale(v)} cy={yScale(vMeans[i])} r={3} fill={C.accent} stroke={C.bg} strokeWidth={1} />
-        ))}
-        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.label} fontSize={9} fontFamily={FONT}>
+        {/* Data points — coloured by feasibility */}
+        {vValues.map((v, i) => {
+          const f = feasibility[i];
+          const isBest = i === bestIdx;
+          const col = !hasGoals ? C.accent : f === true ? C.green : f === false ? C.red : C.muted;
+          return (
+            <g key={i}>
+              <circle cx={xScale(v)} cy={yScale(vMeans[i])} r={isBest ? 5 : 3.5}
+                fill={col} stroke={C.bg} strokeWidth={1.5} opacity={f === false ? 0.5 : 1} />
+              {isBest && (
+                <text x={xScale(v)} y={yScale(vMeans[i]) - 8} textAnchor="middle"
+                  fill={C.green} fontSize={8} fontFamily="monospace" fontWeight="bold">best</text>
+              )}
+            </g>
+          );
+        })}
+        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={9} fontFamily={FONT}>
           {paramLabel || "Parameter value"}
         </text>
-        <text x={8} y={H / 2} textAnchor="middle" fill={C.label} fontSize={9} fontFamily={FONT}
+        <text x={8} y={H / 2} textAnchor="middle" fill={C.muted} fontSize={9} fontFamily={FONT}
           transform={`rotate(-90, 8, ${H / 2})`}>
           {METRIC_LABELS[metric] || metric}
         </text>
       </svg>
+      {bestIdx != null && (
+        <div style={{ fontSize: 10, fontFamily: FONT, color: C.green, marginTop: 4 }}>
+          Best feasible: {paramLabel || "param"} = <strong>{vValues[bestIdx]}</strong>,
+          {" "}{METRIC_LABELS[metric] || metric} = <strong>{vMeans[bestIdx]?.toFixed(3)}</strong>
+        </div>
+      )}
     </div>
   );
 }
@@ -188,7 +277,7 @@ export function CumulativeMeanChart({ points, warmupPeriod, width = 320, height 
   );
 }
 
-export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellClick }) {
+export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellClick, goals = [] }) {
   if (!results?.length) return null;
 
   const valueAs = [...new Set(results.map(r => r.valueA))].sort((a, b) => a - b);
@@ -213,8 +302,40 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
     }
   };
 
+  const hasGoals = goals.length > 0;
+  const feasibleCells = hasGoals
+    ? results.filter(r => pointIsFeasible(goals, r.aggregateStats) === true)
+    : [];
+  const feasibleCount = feasibleCells.length;
+
+  // Best feasible cell (lowest mean, or highest for served)
+  const isHigherBetter = metric.includes("served");
+  const bestCell = feasibleCells.length
+    ? feasibleCells.reduce((best, r) => {
+        const vm = r.aggregateStats[metric]?.mean;
+        const bm = best.aggregateStats[metric]?.mean;
+        return Number.isFinite(vm) && (isHigherBetter ? vm > bm : vm < bm) ? r : best;
+      })
+    : null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {hasGoals && (
+        <div style={{ fontSize: 10, fontFamily: FONT, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ color: feasibleCount > 0 ? C.green : C.red }}>
+            {feasibleCount}/{results.length} cells satisfy all goals
+          </span>
+          {bestCell && (
+            <span style={{ color: C.green }}>
+              Best feasible: {paramLabelA}={bestCell.valueA}, {paramLabelB}={bestCell.valueB},
+              {" "}{METRIC_LABELS[metric] || metric}={fmt(bestCell.aggregateStats[metric]?.mean)}
+            </span>
+          )}
+          <span style={{ color: C.muted }}>
+            ✗ = infeasible (misses a goal)
+          </span>
+        </div>
+      )}
       <div style={{ overflowX: "auto" }}>
         <table style={{ borderCollapse: "collapse", color: C.text, fontSize: 11, textAlign: "center" }}>
           <thead>
@@ -232,22 +353,30 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
                 {valueBs.map(vb => {
                   const cell = getCell(va, vb);
                   const mean = cell?.aggregateStats[metric]?.mean;
+                  const feasible = hasGoals && cell ? pointIsFeasible(goals, cell.aggregateStats) : null;
+                  const isBest = hasGoals && cell && cell === bestCell;
                   return (
                     <td key={vb}
                       onClick={() => onCellClick?.(cell)}
+                      title={hasGoals && feasible === false ? "Infeasible — misses one or more goals" : undefined}
                       style={{
                         padding: "8px 10px",
                         background: colorFor(mean),
                         color: C.bg,
-                        fontWeight: 700,
+                        fontWeight: isBest ? 900 : 700,
                         minWidth: 60,
                         cursor: onCellClick ? "pointer" : "default",
-                        border: "2px solid transparent",
+                        border: isBest ? `2px solid ${C.green}` : "2px solid transparent",
+                        opacity: feasible === false ? 0.35 : 1,
+                        position: "relative",
                         transition: "border-color 0.15s",
                       }}
                       onMouseEnter={e => { if (onCellClick) e.currentTarget.style.borderColor = "#fff"; }}
-                      onMouseLeave={e => { if (onCellClick) e.currentTarget.style.borderColor = "transparent"; }}>
-                      {fmt(mean)}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = isBest ? C.green : "transparent"; }}>
+                      {feasible === false ? (
+                        <span style={{ display: "block", fontSize: 9, opacity: 0.7 }}>✗ {fmt(mean)}</span>
+                      ) : fmt(mean)}
+                      {isBest && <span style={{ display: "block", fontSize: 8, color: C.green }}>★ best</span>}
                     </td>
                   );
                 })}
