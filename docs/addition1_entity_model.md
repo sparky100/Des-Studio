@@ -2,7 +2,7 @@
 
 > **Foundational Reference:** This document defines the entity model, attribute schema, and original action vocabulary for Sprints 1-3. It remains authoritative for entity class definitions, attribute types, and the core macro patterns.
 >
-> **Extended Macros:** For the complete current macro vocabulary (12 macros including PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, MATCH, dynamic BATCH, BATCH, UNBATCH), see `AGENTS.md` Section 5.1.
+> **Extended Macros:** For the complete current macro vocabulary (15 macros including PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, MATCH, SET, SET_ATTR, COST, dynamic BATCH, BATCH, UNBATCH, RELEASE), see `AGENTS.md` Section 5.1.
 >
 > **Queue Disciplines:** For the complete queue discipline set (FIFO, LIFO, PRIORITY, SPT, EDD, PRIORITY(attrName)), see `AGENTS.md` Section 6.
 >

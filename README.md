@@ -28,7 +28,7 @@ The project has completed **33 sprints** covering the full DES modelling lifecyc
 | Statistical output analyzer (Welch, batch-means, Bonferroni) | Complete |
 | Shareable results dashboard + QR codes | Complete |
 | CSV import bridge with distribution fitting | Complete |
-| Community gallery and template library (14 templates) | Complete |
+| Community gallery and template library (16 templates) | Complete |
 | Resource preemption, breakdowns, MTBF/MTTR | Complete |
 | Advanced scheduling (SPLIT, COSEIZE, MATCH, dynamic BATCH) | Complete |
 | Queue disciplines (FIFO, LIFO, PRIORITY, SPT, EDD, PRIORITY(attr)) | Complete |
@@ -118,7 +118,7 @@ Key rules:
 | `AGENTS.md` | Architectural contract, sprint history, coding conventions, test strategy |
 | `docs/DES_Studio_Build_Plan.md` | Living roadmap, sprint status, implementation prompts |
 | `docs/DES_Studio_User_Guide.md` | End-user guide for modellers |
-| `docs/Template Models Guide.md` | Detailed explanations of all 14 template models |
+| `docs/Template Models Guide.md` | Detailed explanations of all 16 template models |
 | `docs/addition1_entity_model.md` | Entity model, macros, distributions, validation schema |
 | `docs/capability-gap-analysis.md` | DES Studio vs professional tools (SimPy, AnyLogic, JaamSim) |
 | `docs/patterns/` | Reusable modelling pattern references (6 patterns) |
@@ -128,7 +128,7 @@ Key rules:
 
 ## Macro Vocabulary
 
-DES Studio supports 12 macros across B-Events and C-Events:
+DES Studio supports 15 macros across B-Events and C-Events:
 
 | Macro | Phase | Purpose |
 |---|---|---|
@@ -145,6 +145,9 @@ DES Studio supports 12 macros across B-Events and C-Events:
 | `SPLIT` | B/C-Event | Creates N-1 clones of context entity |
 | `COSEIZE` | C-Event | Atomically seizes multiple server types simultaneously |
 | `MATCH` | C-Event | Pairs entities from two queues into batch |
+| `SET` | B/C-Event | Computes state variable via safe arithmetic expression |
+| `SET_ATTR` | B/C-Event | Computes entity attribute via safe arithmetic expression |
+| `COST` | B/C-Event | Records cost events for economic analysis |
 
 ## Roadmap
 
