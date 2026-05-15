@@ -91,6 +91,27 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       opts.push({label:`${v} = 0`,value:`${v} = 0`});
     });
   }
+  // SET state variable
+  if(svNames.length>0){
+    opts.push({label:'── SET state variable ──',value:'',disabled:true});
+    svNames.forEach(v=>{
+      opts.push({label:`SET ${v} = 0`,value:`SET(${v}, 0)`});
+      opts.push({label:`SET ${v} = ${v} + 1`,value:`SET(${v}, ${v} + 1)`});
+    });
+  }
+  // SET_ATTR entity attribute
+  const custAttrs=(entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).map(a=>a.name).filter(Boolean));
+  if(custAttrs.length>0){
+    opts.push({label:'── SET_ATTR entity attribute ──',value:'',disabled:true});
+    custAttrs.forEach(a=>{
+      opts.push({label:`SET_ATTR ${a} = 0`,value:`SET_ATTR(${a}, 0)`});
+      opts.push({label:`SET_ATTR ${a} = Entity.${a} + 1`,value:`SET_ATTR(${a}, Entity.${a} + 1)`});
+    });
+  }
+  // COST
+  opts.push({label:'── COST (accumulate to summary.totalCost) ──',value:'',disabled:true});
+  opts.push({label:'COST(1) — flat rate',value:'COST(1)'});
+  custAttrs.forEach(a=>{opts.push({label:`COST(Entity.${a})`,value:`COST(Entity.${a})`});});
   const ctNames = (containerTypes||[]).map(ct=>ct.id).filter(Boolean);
   if(ctNames.length>0){
     opts.push({label:'── DRAIN container (fires when level ≥ amount) ──',value:'',disabled:true});
@@ -162,6 +183,42 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerType
     });
   } else {
     opts.push({label:'No state variables defined',value:'',disabled:true});
+  }
+  // SET state variable
+  if(svNames.length>0){
+    opts.push({label:'── SET state variable ──',value:'',disabled:true});
+    svNames.forEach(v=>{
+      opts.push({label:`SET ${v} = 0`,value:`SET(${v}, 0)`});
+      opts.push({label:`SET ${v} = ${v} + 1`,value:`SET(${v}, ${v} + 1)`});
+    });
+  }
+  // SET_ATTR entity attribute
+  const custAttrs=(entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).map(a=>a.name).filter(Boolean));
+  if(custAttrs.length>0){
+    opts.push({label:'── SET_ATTR entity attribute ──',value:'',disabled:true});
+    custAttrs.forEach(a=>{
+      opts.push({label:`SET_ATTR ${a} = 0`,value:`SET_ATTR(${a}, 0)`});
+    });
+  }
+  // COST
+  opts.push({label:'── COST (accumulate to summary.totalCost) ──',value:'',disabled:true});
+  opts.push({label:'COST(1) — flat rate',value:'COST(1)'});
+  custAttrs.forEach(a=>{opts.push({label:`COST(Entity.${a})`,value:`COST(Entity.${a})`});});
+  // PREEMPT, FAIL, REPAIR
+  if(servers.length>0){
+    opts.push({label:'── Server interruption / failure ──',value:'',disabled:true});
+    servers.forEach(s=>{
+      opts.push({label:`PREEMPT ${s} — interrupt current service`,value:`PREEMPT(${s})`});
+      opts.push({label:`FAIL all ${s} servers`,value:`FAIL(${s})`});
+      opts.push({label:`REPAIR ${s} servers`,value:`REPAIR(${s})`});
+    });
+  }
+  // SPLIT
+  if(queues.length>0&&custs.length>0){
+    opts.push({label:'── SPLIT (clone entity to queue) ──',value:'',disabled:true});
+    queues.forEach(q=>{
+      opts.push({label:`SPLIT 2 copies → ${queueDisplayName(q.name)}`,value:`SPLIT(2, ${q.name})`});
+    });
   }
   const ctNames = (containerTypes||[]).map(ct=>ct.id).filter(Boolean);
   if(ctNames.length>0){

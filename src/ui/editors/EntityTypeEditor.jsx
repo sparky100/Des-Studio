@@ -1,5 +1,5 @@
 import { C, FONT, normTypeName } from "../shared/tokens.js";
-import { Tag, Btn, CommitInput, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { AttrEditor } from "./AttrEditor.jsx";
 
 const EntityTypeEditor=({types,onChange})=>{
@@ -115,6 +115,32 @@ const EntityTypeEditor=({types,onChange})=>{
                   </span>
                 </>
               )}
+            </div>
+          )}
+          {et.role==="server"&&(
+            <div style={{background:C.surface,border:`1px solid ${C.server}22`,borderRadius:6,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+              <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:FONT,fontSize:11,color:et.mtbfDist?C.server:C.muted,fontWeight:700}}>
+                <input type="checkbox" checked={!!et.mtbfDist} style={{accentColor:C.server}}
+                  onChange={e=>{const n=[...types];n[i]=e.target.checked?{...n[i],mtbfDist:"Exponential",mtbfDistParams:{mean:"60"},mttrDist:"Exponential",mttrDistParams:{mean:"10"}}:{...n[i],mtbfDist:undefined,mtbfDistParams:undefined,mttrDist:undefined,mttrDistParams:undefined};onChange(n);}}/>
+                Model server failures (MTBF / MTTR)
+              </label>
+              {et.mtbfDist&&(<>
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>MTBF dist:</span>
+                  <DistPicker compact allowPiecewise={false}
+                    value={{dist:et.mtbfDist||"Exponential",distParams:et.mtbfDistParams||{mean:"60"}}}
+                    onChange={v=>{const n=[...types];n[i]={...n[i],mtbfDist:v.dist,mtbfDistParams:v.distParams};onChange(n);}}/>
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>MTTR dist:</span>
+                  <DistPicker compact allowPiecewise={false}
+                    value={{dist:et.mttrDist||"Exponential",distParams:et.mttrDistParams||{mean:"10"}}}
+                    onChange={v=>{const n=[...types];n[i]={...n[i],mttrDist:v.dist,mttrDistParams:v.distParams};onChange(n);}}/>
+                </div>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
+                  The engine automatically schedules FAIL and REPAIR events for servers of this type.
+                </span>
+              </>)}
             </div>
           )}
           <input value={et.description||""} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
