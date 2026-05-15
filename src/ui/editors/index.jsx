@@ -7,4 +7,5 @@ export { ConditionBuilder, buildConditionStr, defaultConditionValueForType, rows
 export { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 export { CEventEditor } from "./CEventEditor.jsx";
 export { QueueEditor } from "./QueueEditor.jsx";
+export { ContainerEditor } from "./ContainerEditor.jsx";
 export { toTitleCase, normTypeName, conditionOptions, assignOptions, bEffectOptions, DropField, displayEventName, queueDisplayName } from "./helpers.jsx";

@@ -165,6 +165,17 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     try   { state[sv.name] = JSON.parse(sv.initialValue); }
     catch { state[sv.name] = sv.initialValue; }
   }
+  // Container/level resources (G21)
+  for (const ct of runtimeModel.containerTypes || []) {
+    const cap  = isFinite(parseFloat(ct.capacity)) ? parseFloat(ct.capacity) : Infinity;
+    const init = Math.min(Math.max(parseFloat(ct.initialLevel) || 0, 0), cap);
+    state[`__container_${ct.id}`]         = init;
+    state[`__containerCap_${ct.id}`]      = cap;
+    state[`__containerMin_${ct.id}`]      = init;
+    state[`__containerMax_${ct.id}`]      = init;
+    state[`__containerIntegral_${ct.id}`] = 0;
+    state[`__containerPrev_${ct.id}`]     = 0;
+  }
 
   // ── Entity pool ───────────────────────────────────────────────────────────
   let _seq = 0;
@@ -230,6 +241,15 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       }
     }
 
+    // Container level snapshot for canvas display
+    const containers = {};
+    for (const ct of runtimeModel.containerTypes || []) {
+      containers[ct.id] = {
+        level:    state[`__container_${ct.id}`] ?? 0,
+        capacity: state[`__containerCap_${ct.id}`] ?? Infinity,
+      };
+    }
+
     return {
       clock:    clock || 0,
       served:   state.__served  || 0,
@@ -242,6 +262,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       byQueue,
       nextArrivals,
       eventCounts: { ..._eventCounts },
+      containers:  Object.keys(containers).length ? containers : undefined,
     };
   }
 
@@ -711,6 +732,23 @@ const cycleLog = [];
     const totalCost   = state.__totalCost || 0;
     const costPerServed = served.length > 0 ? +(totalCost / served.length).toFixed(4) : null;
 
+    // Container level summary (G21)
+    const containerLevels = {};
+    const elapsed = clock - _statsResetTime;
+    for (const ct of runtimeModel.containerTypes || []) {
+      const level = state[`__container_${ct.id}`] ?? 0;
+      const integral = state[`__containerIntegral_${ct.id}`] ?? 0;
+      const prev = state[`__containerPrev_${ct.id}`] ?? 0;
+      // Flush remaining area up to current clock
+      const totalIntegral = integral + level * Math.max(0, clock - prev);
+      containerLevels[ct.id] = {
+        min:   +(state[`__containerMin_${ct.id}`] ?? level).toFixed(4),
+        max:   +(state[`__containerMax_${ct.id}`] ?? level).toFixed(4),
+        avg:   elapsed > 0 ? +(totalIntegral / elapsed).toFixed(4) : +level.toFixed(4),
+        final: +level.toFixed(4),
+      };
+    }
+
     return {
       total:             customers.length,
       served:            served.length,
@@ -723,6 +761,7 @@ const cycleLog = [];
       totalCost:         +totalCost.toFixed(4),
       costPerServed,
       perResource:       Object.keys(perResource).length ? perResource : undefined,
+      containerLevels:   Object.keys(containerLevels).length ? containerLevels : undefined,
       warmupPeriod,
       excludedCount:     _excludedCount,
       phaseCTruncated:   _phaseCTruncated,

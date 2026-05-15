@@ -570,5 +570,52 @@ export function validateModel(model) {
     }
   });
 
+  // ── V26: Container types — valid id/capacity/initialLevel ──────────────────
+  const containerTypes = model.containerTypes || [];
+  const containerIds = new Set();
+  containerTypes.forEach((ct, i) => {
+    const id = (ct.id || '').trim();
+    if (!id) {
+      err('V26', `Container at position ${i + 1} has an empty id.`, 'containers');
+    } else if (containerIds.has(id.toLowerCase())) {
+      err('V26', `Duplicate container id: '${id}'.`, 'containers');
+    } else {
+      containerIds.add(id.toLowerCase());
+    }
+    const cap = parseFloat(ct.capacity);
+    if (!isNaN(cap) && cap <= 0) {
+      err('V26', `Container '${id || i + 1}': capacity must be > 0.`, 'containers');
+    }
+    const init = parseFloat(ct.initialLevel);
+    if (!isNaN(init)) {
+      if (init < 0) {
+        err('V26', `Container '${id || i + 1}': initialLevel must be >= 0.`, 'containers');
+      }
+      if (!isNaN(cap) && cap > 0 && init > cap) {
+        err('V26', `Container '${id || i + 1}': initialLevel (${init}) exceeds capacity (${cap}).`, 'containers');
+      }
+    }
+  });
+
+  // ── V27: FILL/DRAIN must reference a declared container ──────────────────
+  const containerIdsLower = new Set([...containerIds]);
+  const checkContainerRefs = (events, tab) => {
+    events.forEach(ev => {
+      const text = effectText(ev.effect);
+      const hits = text.match(/\b(FILL|DRAIN)\([^)]+\)/gi) || [];
+      hits.forEach(hit => {
+        const inner = hit.match(/\b(FILL|DRAIN)\(([^,)]+)/i);
+        if (!inner) return;
+        const macro = inner[1].toUpperCase();
+        const name  = inner[2].trim();
+        if (!containerIdsLower.has(name.toLowerCase())) {
+          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ${macro} references undeclared container '${name}'.`, tab);
+        }
+      });
+    });
+  };
+  checkContainerRefs(bEvents, 'bevents');
+  checkContainerRefs(cEvents, 'cevents');
+
   return { errors, warnings };
 }

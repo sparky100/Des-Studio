@@ -11,7 +11,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState, selectWaiting, listWaiting } from "./entities.js";
 
 // ── Safe scalar expression evaluator (replaces new Function in applyScalar) ──
 
@@ -332,9 +332,7 @@ export const MACROS = [
         ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
 
-      const allWaiting = helpers.waitingOf(cType, "FIFO", null);
-      const queueCandidates = helpers.waitingInQueue?.(cType, discipline, filterFn) || [];
-      const typeCandidates = !matchedQ ? (helpers.waitingOf?.(cType, discipline, filterFn) || []) : [];
+      const candidates = listWaiting(cType, discipline, entities, filterFn, !!matchedQ);
       const allIdleServers = helpers.idleOf(sType) || [];
 
       const arbitration = {
@@ -342,7 +340,7 @@ export const MACROS = [
         serverType: sType,
         discipline,
         queueName: matchedQ ? cType : null,
-        candidates: (queueCandidates.length ? queueCandidates : typeCandidates).map(e => ({
+        candidates: candidates.map(e => ({
           entityId: e.id,
           type: e.type,
           key: "arrivalTime",
@@ -351,12 +349,8 @@ export const MACROS = [
         idleServers: allIdleServers.map(s => ({ serverId: s.id, type: s.type })),
       };
 
-      let cust = queueCandidates[0];
-      if (!cust && !matchedQ) {
-        cust = typeCandidates[0];
-      }
-
-      const srv = allIdleServers[0] || null;
+      const cust = candidates[0] ?? null;
+      const srv = allIdleServers[0] ?? null;
 
       if (cust && srv) {
         const queuedAt = cust.queue;
@@ -369,7 +363,7 @@ export const MACROS = [
         setLastCustId(cust.id);
         setLastSrvId(srv.id);
         arbitration.winner = { entityId: cust.id, serverId: srv.id };
-        arbitration.losers = (queueCandidates.length ? queueCandidates : typeCandidates)
+        arbitration.losers = candidates
           .filter(e => e.id !== cust.id)
           .map(e => ({ entityId: e.id, reason: "lower priority or later arrival" }));
         if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
@@ -379,10 +373,10 @@ export const MACROS = [
         );
       } else {
         arbitration.noMatch = true;
-        arbitration.candidateCount = (queueCandidates.length ? queueCandidates : typeCandidates).length;
+        arbitration.candidateCount = candidates.length;
         arbitration.idleServerCount = allIdleServers.length;
         if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
-        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${(queueCandidates.length ? queueCandidates : typeCandidates).length} idle=${allIdleServers.length}`);
+        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${candidates.length} idle=${allIdleServers.length}`);
       }
     },
   },
@@ -534,7 +528,7 @@ export const MACROS = [
       }
       const discipline = qDef.discipline || 'FIFO';
 
-      const candidates = helpers.waitingInQueue?.(queueName, discipline, null, false) || [];
+      const candidates = listWaiting(queueName, discipline, entities, null, true, false);
 
       // Resolve batch size: literal number or entity attribute reference
       let batchSize;
@@ -646,13 +640,11 @@ export const MACROS = [
     name:    "RENEGE_OLDEST",
     pattern: /^RENEGE_OLDEST\((\w+)\)$/i,
     apply(match, ctx) {
-      const { helpers, state, clock, msgs } = ctx;
+      const { helpers, entities, state, clock, msgs } = ctx;
       const cType = match[1].trim();
       const matchedQ = helpers.findQueueConfig?.(cType);
       const discipline = matchedQ?.discipline || 'FIFO';
-      const ent = matchedQ
-        ? helpers.selectWaitingInQueue?.(cType, discipline)
-        : helpers.selectWaitingOf?.(cType, discipline);
+      const ent = selectWaiting(cType, discipline, entities, null, !!matchedQ);
       if (ent) {
         clearWaitingState(ent);
         ent.status     = "reneged";
@@ -660,6 +652,78 @@ export const MACROS = [
         state.__reneged = (state.__reneged || 0) + 1;
         msgs.push(`#${ent.id} (${cType}) reneged after ${(clock - ent.arrivalTime).toFixed(3)} t`);
       }
+    },
+  },
+
+  // ── FILL(ContainerName, amount) — B-event macro ───────────────────────────
+  // Adds `amount` to a named container level; clamps to capacity.
+  {
+    name:    "FILL",
+    pattern: /^FILL\(([^,)]+)\s*,\s*([^)]+)\)$/i,
+    apply(match, ctx) {
+      const cName  = match[1].trim();
+      const amount = parseFloat(match[2].trim());
+      const { state, clock, msgs } = ctx;
+      const key    = `__container_${cName}`;
+      const capKey = `__containerCap_${cName}`;
+      if (!(key in state)) {
+        msgs.push(`FILL(${cName}): container '${cName}' not declared in containerTypes`);
+        return;
+      }
+      if (isNaN(amount) || amount <= 0) {
+        msgs.push(`FILL(${cName},${match[2].trim()}): amount must be a positive number`);
+        return;
+      }
+      // Flush time-integral before changing level
+      const prev  = state[`__containerPrev_${cName}`] ?? clock;
+      state[`__containerIntegral_${cName}`] =
+        (state[`__containerIntegral_${cName}`] ?? 0) + state[key] * Math.max(0, clock - prev);
+      state[`__containerPrev_${cName}`] = clock;
+
+      const cap      = state[capKey] ?? Infinity;
+      const newLevel = Math.min(state[key] + amount, cap);
+      state[key] = newLevel;
+      if (newLevel < (state[`__containerMin_${cName}`] ?? newLevel)) state[`__containerMin_${cName}`] = newLevel;
+      if (newLevel > (state[`__containerMax_${cName}`] ?? newLevel)) state[`__containerMax_${cName}`] = newLevel;
+      msgs.push(`FILL(${cName},${amount}): level → ${newLevel.toFixed(4)}${newLevel >= cap ? ' [at capacity]' : ''}`);
+      ctx.trace?.push?.({ event: "Fill", container: cName, amount, level: newLevel, time: clock });
+    },
+  },
+
+  // ── DRAIN(ContainerName, amount) — C-event macro ──────────────────────────
+  // Guard: level >= amount. Subtracts amount from container level.
+  {
+    name:    "DRAIN",
+    pattern: /^DRAIN\(([^,)]+)\s*,\s*([^)]+)\)$/i,
+    apply(match, ctx) {
+      const cName  = match[1].trim();
+      const amount = parseFloat(match[2].trim());
+      const { state, clock, msgs } = ctx;
+      const key = `__container_${cName}`;
+      if (!(key in state)) {
+        msgs.push(`DRAIN(${cName}): container '${cName}' not declared in containerTypes`);
+        return;
+      }
+      if (isNaN(amount) || amount <= 0) {
+        msgs.push(`DRAIN(${cName},${match[2].trim()}): amount must be a positive number`);
+        return;
+      }
+      if (state[key] < amount) {
+        msgs.push(`DRAIN(${cName},${amount}): guard failed — level ${state[key].toFixed(4)} < ${amount}`);
+        return;
+      }
+      // Flush time-integral before changing level
+      const prev = state[`__containerPrev_${cName}`] ?? clock;
+      state[`__containerIntegral_${cName}`] =
+        (state[`__containerIntegral_${cName}`] ?? 0) + state[key] * Math.max(0, clock - prev);
+      state[`__containerPrev_${cName}`] = clock;
+
+      const newLevel = state[key] - amount;
+      state[key] = newLevel;
+      if (newLevel < (state[`__containerMin_${cName}`] ?? newLevel)) state[`__containerMin_${cName}`] = newLevel;
+      if (newLevel > (state[`__containerMax_${cName}`] ?? newLevel)) state[`__containerMax_${cName}`] = newLevel;
+      msgs.push(`DRAIN(${cName},${amount}): level → ${newLevel.toFixed(4)}`);
+      ctx.trace?.push?.({ event: "Drain", container: cName, amount, level: newLevel, time: clock });
     },
   },
 
