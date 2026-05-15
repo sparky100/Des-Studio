@@ -21,7 +21,8 @@ import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { qrSvg } from "../share/qr.js";
 import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
-import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart } from "./SweepViews.jsx";
+import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
+import { LogViewer } from "./LogViewer.jsx";
 import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 
 const numberDefault = (value, fallback) => {
@@ -1791,6 +1792,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
         <Btn variant={view === "visual" ? "primary" : "ghost"} onClick={() => setView("visual")}>Live View</Btn>
         <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Analysis</Btn>
+        <Btn variant={view === "log" ? "primary" : "ghost"} onClick={() => setView("log")}>Log</Btn>
+        <Btn variant={view === "histograms" ? "primary" : "ghost"} onClick={() => setView("histograms")} disabled={!results?.waitDist}>Histograms</Btn>
+        <Btn variant={view === "entities" ? "primary" : "ghost"} onClick={() => setView("entities")} disabled={!results?.entitySummary?.length}>Entities</Btn>
         <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results</Btn>
         <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
         <Btn variant="ghost" onClick={() => { setShowShareModal(true); loadShareLinks(); }} disabled={!canShare}>Share</Btn>
@@ -1945,28 +1949,43 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
                 gap: 10,
               }}>
-                {CI_METRICS.map(metric => {
-                  const stat = aggregateStats[metric];
-                  if (!stat || stat.n < 2) return null;
-                  return (
-                    <div key={metric} style={{
-                      background: C.surface,
-                      border: `1px solid ${C.border}`,
-                      borderRadius: 5,
-                      padding: "10px 12px",
-                    }}>
-                      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 4 }}>
-                        {METRIC_LABELS[metric]}
+                {(() => {
+                  const goals = model.goals || [];
+                  const GOAL_KEY = { avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn", served: "summary.served", reneged: "summary.reneged", totalCost: "summary.totalCost" };
+                  return CI_METRICS.map(metric => {
+                    const stat = aggregateStats[metric];
+                    if (!stat || stat.n < 2) return null;
+                    const matchingGoals = goals.filter(g => g.metric && g.target && GOAL_KEY[g.metric] === metric);
+                    let goalMet = null;
+                    if (matchingGoals.length > 0) {
+                      goalMet = matchingGoals.every(g => {
+                        const t = parseFloat(g.target);
+                        if (!Number.isFinite(t)) return true;
+                        return g.operator === ">=" ? stat.mean >= t : g.operator === ">" ? stat.mean > t : g.operator === "<=" ? stat.mean <= t : stat.mean < t;
+                      });
+                    }
+                    return (
+                      <div key={metric} style={{
+                        background: C.surface,
+                        border: `1px solid ${goalMet === true ? C.green : goalMet === false ? C.red : C.border}`,
+                        borderRadius: 5,
+                        padding: "10px 12px",
+                      }}>
+                        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 4 }}>
+                          {METRIC_LABELS[metric]}
+                          {goalMet === true && <span style={{ marginLeft: 5, color: C.green }}>✓</span>}
+                          {goalMet === false && <span style={{ marginLeft: 5, color: C.red }}>✗</span>}
+                        </div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: C.accent, fontFamily: FONT }}>
+                          {fmt(stat.mean)}
+                        </div>
+                        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>
+                          ±{fmt(stat.halfWidth)} (95% CI)
+                        </div>
                       </div>
-                      <div style={{ fontSize: 18, fontWeight: 700, color: C.accent, fontFamily: FONT }}>
-                        {fmt(stat.mean)}
-                      </div>
-                      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>
-                        ±{fmt(stat.halfWidth)} (95% CI)
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  });
+                })()}
               </div>
             </div>
           )}
@@ -2263,52 +2282,15 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       })()}
 
       {view === "log" && (
-        <div style={{ background: C.logBg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>SIMULATION LOG (NEWEST FIRST)</div>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.server, fontFamily: FONT }}>
-              Steps: {log.length} | Clock: {currentSnap?.clock?.toFixed(0) || '—'}
-            </div>
-          </div>
-          <div style={{ maxHeight: 350, overflowY: 'auto' }}>
-            {log.length === 0 ? <div style={{ color: C.muted, fontSize: 12 }}>Log empty. Run simulation to see events.</div> :
-              [...log].reverse().map((r, i) => (
-              <div key={i}>
-                  {r.phase === "WARMUP" && (
-                    <div style={{ padding: "12px 0", borderBottom: `1px solid ${C.border}`, borderTop: `1px solid ${C.border}`, margin: "8px 0", textAlign: "center", color: C.amber, fontSize: 11, fontWeight: 700, letterSpacing: 1.5, background: `${C.warmup}22` }}>
-                      ──── WARM-UP ENDED AT T={r.time?.toFixed(0)} ────
-                    </div>
-                  )}
-                  <div style={{ fontSize: 12, fontFamily: "monospace", color: r.phase === "WARMUP" ? C.amber : C.kpiSvc, borderBottom: `1px solid ${C.cardBg}`, padding: "4px 0" }}>
-                    <span style={{ color: C.label }}>[t={r.time?.toFixed(0)}]</span> <PhaseTag phase={r.phase} /> {r.message}
-                  </div>
-                </div>
-              ))
-            }
-          </div>
-        </div>
+        <LogViewer log={log} currentClock={currentSnap?.clock} />
       )}
 
-      {view === "entities" && currentSnap && (
-        <div style={{ background: C.logBg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", color: "#fff", fontSize: 12, textAlign: "left" }}>
-            <thead>
-              <tr style={{ color: C.label, borderBottom: `2px solid ${C.border}` }}>
-                <th style={{ padding: 8 }}>Entity</th><th style={{ padding: 8 }}>Type</th><th style={{ padding: 8 }}>Status</th><th style={{ padding: 8 }}>Queue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentSnap.entities.map(e => (
-                <tr key={e.id} style={{ borderBottom: `1px solid ${C.cardBg}` }}>
-                  <td style={{ padding: 8, color: C.kpiArr }}>#{e.id}</td>
-                  <td style={{ padding: 8 }}>{e.type}</td>
-                  <td style={{ padding: 8 }}><Tag label={e.status} color={e.status === 'waiting' ? C.bEvent : C.kpiSvc} /></td>
-                  <td style={{ padding: 8, color: C.label }}>{e.queue || "None"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {view === "histograms" && (
+        <QueueHistogram waitDist={results?.waitDist} />
+      )}
+
+      {view === "entities" && (
+        <EntitySummaryTable entitySummary={results?.entitySummary} meanWait={results?.summary?.avgWait} />
       )}
 
       {view === "results" && (
