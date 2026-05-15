@@ -116,7 +116,7 @@ export function validateModel(model) {
   // ── V5: Distribution parameters in valid bounds (+ V11 warning) ────────────
   function checkDist(dist, params, context, tab) {
     const distName = normalizeDistributionName(dist);
-    if (!distName || distName === 'ServerAttr') return;
+    if (!distName || distName === 'ServerAttr' || distName === 'EntityAttr') return;
     const p = params || {};
     if (distName === 'Piecewise') {
       const periods = getPiecewisePeriods(p);

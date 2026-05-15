@@ -263,7 +263,10 @@ export function fireBEvent(ev, ctx) {
   for (const sched of ev.schedules || []) {
     const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);
     if (!tmpl) continue;
-    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng, null, { clock, state: ctx.state, schedKey: sched.eventId }));
+    const schedCtx = { clock, state: ctx.state, schedKey: sched.eventId };
+    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng, null, schedCtx));
+    // Carry per-arrival row attrs from schedule rows[] (S40.2)
+    const rowAttrs = ctx.state?.[`__schedRowAttrs_${sched.eventId}`] ?? null;
     let renegeTarget;
     if (sched.isRenege) {
       renegeTarget = effectCtx._lastCustId;
@@ -276,11 +279,12 @@ export function fireBEvent(ev, ctx) {
     }
     felEntries.push({
       ...tmpl,
-      scheduledTime:    clock + delay,
-      _sampledDelay:    `${sched.dist}(${delay.toFixed(3)})`,
-      _isRenege:        !!sched.isRenege,
-      _contextCustId:   sched.isRenege ? renegeTarget : effectCtx._lastCustId,
-      _contextSrvId:    effectCtx._lastSrvId,
+      scheduledTime:        clock + delay,
+      _sampledDelay:        `${sched.dist}(${delay.toFixed(3)})`,
+      _isRenege:            !!sched.isRenege,
+      _contextCustId:       sched.isRenege ? renegeTarget : effectCtx._lastCustId,
+      _contextSrvId:        effectCtx._lastSrvId,
+      _scheduleRowAttrs:    rowAttrs || undefined,
     });
     msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${sched.dist}(${delay.toFixed(3)})]`);
   }
@@ -311,6 +315,16 @@ export function fireCEvent(ev, ctx) {
       const attrName = cs.distParams?.attr || "serviceTime";
       delay = Math.max(0, parseFloat(srv?.attrs?.[attrName]) || 1);
       msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [server.${attrName}=${delay}]`);
+    } else if (cs.dist === "EntityAttr") {
+      const custId   = effectCtx._lastCustId;
+      const cust     = custId ? ctx.entities.find(e => e.id === custId) : null;
+      const attrName = cs.distParams?.attr || "serviceTime";
+      const raw      = cust?.attrs?.[attrName];
+      if (raw == null) {
+        msgs.push(`EntityAttr: entity #${custId} has no attribute '${attrName}' — delay = 0`);
+      }
+      delay = Math.max(0, parseFloat(raw) || 0);
+      msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [entity.${attrName}=${delay}]`);
     } else {
       // Check if the customer has remaining service from preemption/failure
       const custId = effectCtx._lastCustId;

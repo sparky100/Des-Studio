@@ -483,3 +483,60 @@ describe("V27 — FILL/DRAIN must reference declared container", () => {
     expect(errors.filter(e => e.code === "V27")).toHaveLength(0);
   });
 });
+
+// ── S40.1 — EntityAttr skips distribution parameter validation ────────────────
+
+describe("V5 — EntityAttr skips dist validation", () => {
+  const baseModel = {
+    entityTypes: [
+      { id: "J", name: "Job", role: "customer", attrDefs: [] },
+      { id: "W", name: "Worker", role: "server", count: "1", attrDefs: [] },
+    ],
+    queues: [{ id: "q", name: "Queue", customerType: "Job", discipline: "FIFO" }],
+    stateVariables: [],
+    bEvents: [
+      { id: "arr", name: "Arrive", scheduledTime: "0", effect: "ARRIVE(Job, Queue)", schedules: [] },
+      { id: "done", name: "Complete", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+    ],
+    containerTypes: [],
+  };
+
+  it("does not emit V5 error for EntityAttr cSchedule without extra params", () => {
+    const model = {
+      ...baseModel,
+      cEvents: [{
+        id: "c1", name: "Assign", condition: "true",
+        effect: "ASSIGN(Queue, Worker)",
+        cSchedules: [{ eventId: "done", dist: "EntityAttr", distParams: { attr: "serviceTime" }, useEntityCtx: true }],
+      }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V5")).toHaveLength(0);
+  });
+
+  it("does not emit V5 error for EntityAttr with empty distParams", () => {
+    const model = {
+      ...baseModel,
+      cEvents: [{
+        id: "c1", name: "Assign", condition: "true",
+        effect: "ASSIGN(Queue, Worker)",
+        cSchedules: [{ eventId: "done", dist: "EntityAttr", distParams: {}, useEntityCtx: true }],
+      }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V5")).toHaveLength(0);
+  });
+
+  it("does not emit V5 for ServerAttr (existing behavior preserved)", () => {
+    const model = {
+      ...baseModel,
+      cEvents: [{
+        id: "c1", name: "Assign", condition: "true",
+        effect: "ASSIGN(Queue, Worker)",
+        cSchedules: [{ eventId: "done", dist: "ServerAttr", distParams: { attr: "serviceTime" }, useEntityCtx: true }],
+      }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V5")).toHaveLength(0);
+  });
+});

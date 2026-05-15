@@ -30,6 +30,9 @@ const DIST_ALIASES = {
   serverattr: "ServerAttr",
   "server-attr": "ServerAttr",
   server_attr: "ServerAttr",
+  entityattr: "EntityAttr",
+  "entity-attr": "EntityAttr",
+  entity_attr: "EntityAttr",
   piecewise: "Piecewise",
   schedule: "Schedule",
   plan: "Schedule",
@@ -162,12 +165,22 @@ export const DISTRIBUTIONS = {
       return Math.max(0, parseFloat(v) || 1);
     },
   },
+  EntityAttr: {
+    params: ["attr"],
+    label:  "Entity attribute",
+    hint:   "Read named attribute from the arriving customer entity",
+    sample: () => 0, // resolved in phases.js via effectCtx._lastCustId
+  },
   Schedule: {
     params: [],
     label:  "Schedule (planned times)",
-    hint:   "Arrivals at planned absolute times; optional jitter",
+    hint:   "Arrivals at planned absolute times; optional jitter. Use rows[] for per-arrival attributes.",
     sample: (p, rng, _serverAttrs, context = {}) => {
-      const times = Array.isArray(p.times) ? p.times.map(Number) : [];
+      // rows[] (S40.2) takes priority; fall back to flat times[]
+      const rows  = Array.isArray(p.rows) ? p.rows : null;
+      const times = rows
+        ? rows.map(r => Number(r.time))
+        : (Array.isArray(p.times) ? p.times.map(Number) : []);
       if (!times.length) return 1e9;
 
       const { state, schedKey = "default", clock = 0 } = context;
@@ -178,7 +191,12 @@ export const DISTRIBUTIONS = {
 
       const plannedTime = times[idx];
       if (!Number.isFinite(plannedTime)) return 1e9;
-      if (state) state[stateKey] = idx + 1;
+      if (state) {
+        state[stateKey] = idx + 1;
+        // Store per-arrival attrs so ARRIVE can merge them (S40.2)
+        const rowAttrs = rows?.[idx]?.attrs ?? null;
+        state[`__schedRowAttrs_${schedKey}`] = rowAttrs;
+      }
 
       // Signed jitter (unclipped so arrivals can be early or late)
       let jitter = 0;
