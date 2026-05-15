@@ -16,6 +16,7 @@
 | v1.3 | 2026-05-14 | Sprint 33 | Closed G06 (SPLIT), G07 (COSEIZE), G08 (SPT/EDD/PRIORITY), G09 (dynamic BATCH), G10 (MATCH), G12 (histograms), G13 (ANOVA), G16 (failure UI) |
 | v1.4 | 2026-05-15 | Post-sprint review | Corrected four engine bugs found during code review: B1 (REPAIR _downtime always 0), B2 (avgWIP denominator wrong with warmup), B3 (COSEIZE auxiliary servers not released — caused surgical-suite deadlock after first service), B4 (SPLIT child entities missing waitingSince/waitingFor metadata). Scoring matrix updated for G01/G04/G05/G11/G14/G15 which were still showing pre-implementation statuses. Coverage table recalculated. |
 | v1.5 | 2026-05-15 | Sprint 34 | Partial close of G02 (scripting): added `SET(varName, expr)` and `SET_ATTR(attrName, expr)` macros with safe arithmetic expression evaluator supporting Entity attribute refs, state variable refs, clock, arithmetic operators, and math functions (min/max/abs/round/floor/ceil). F matrix row 2 updated ❌→⚠️. Coverage table updated. |
+| v1.6 | 2026-05-15 | Sprint 35 | Engine correctness fixes — no scoring matrix changes. M2: warmup FEL pruning narrowed to context-dependent events only, fixing replication CI gate (ci.n now reaches full replication count with warmup enabled). M3: V8 product decision documented (both-missing=error, individual-missing=warning). L1: dead summary block removed. Architecture review updated to v2.0 with finding status table for all 16 H/M/L findings. |
 
 ---
 
@@ -217,68 +218,45 @@ DES Studio makes a deliberate safety-first choice: all logic is expressed throug
 
 ---
 
-## Section 4: Recommended Next Sprints
+## Section 4: Sprint Delivery History
 
-### Sprint 31 — Expressiveness & Observability (Low-Risk, Additive)
+All gaps from the original 24-gap register have now been either closed, partially closed, or explicitly deferred to backlog. Sprints 31–35 delivered the following:
 
-**Goal:** Close quick-win gaps that improve model expressiveness and add live observability during execution. All changes are additive — no existing engine contracts modified.
+| Sprint | Gaps closed | Key deliverables |
+|--------|-------------|-----------------|
+| 31 | G05, G11, G15 | Clock token in conditions, WIP metric, live queue-depth time-plot |
+| 32 | G01, G04, G14 | PREEMPT, FAIL/REPAIR macros, MTBF/MTTR auto-scheduling |
+| 33 | G06, G07, G08, G09, G10, G12, G13, G16 | SPLIT, COSEIZE, SPT/EDD/PRIORITY, dynamic BATCH, MATCH, histograms, ANOVA/Tukey, failure UI |
+| Post-review | B1–B4 | Four engine bug fixes: _downtime, avgWIP denominator, COSEIZE release, SPLIT child metadata |
+| 34 | G02 (partial) | SET and SET_ATTR macros; safe arithmetic expression evaluator with math functions |
+| 35 | — (correctness) | Warmup FEL pruning fix, dead code removal, V8 product decision documented |
 
-| Feature | Gap # | Status | Notes |
-|---------|-------|--------|-------|
-| Clock token in Condition Builder UI | G05 | ✅ Complete | `clock` added to `buildConditionTokens()` |
-| WIP time-average metric | G11 | ✅ Complete | `avgWIP` exposed in `getSummary()` |
-| Live queue-depth time-plot | G15 | ✅ Complete | "Charts" tab in BottomPanel with `QueueDepthTimePlot` |
+### Remaining open gaps
 
-**Exit gate:** All 3 features tested; no regressions; `npm test -- --run` passes; `npm run build` passes.
+| Gap | Category | Assessment |
+|-----|----------|------------|
+| G02 ⚠️ | F — Scripting | Coroutine-style multi-step logic is an architectural non-starter for the three-phase declarative model. SET/SET_ATTR cover the practical common cases. No further progress expected without a fundamental rearchitecture. |
+| G17 ❌ | D — Cost | Cost-per-entity and resource-hour costing. Useful for business-case modelling. Medium effort — addable as state variables with SET macros already. |
+| G21 ❌ | B — Resources | Container/level resource (continuous tank). Rare in queueing models; approximable with state variable + C-event guard today. Low priority. |
+| G24 ❌ | F — Extensibility | Public embeddable API.  is stable internally; formal API documentation and a thin public wrapper would unlock embedding use cases. Low effort. |
+| G18 ❌ | C — Queuing | Jockeying (entities move between queues). Very complex; extremely low practical demand. Backlog indefinitely. |
+| G19, G20, G22 ❌ | A/E — Spatial | 2D layout, 3D, GIS. Out of scope for a browser-based declarative tool at DES Studio's market positioning. |
+| G23 ❌ | F — Scripting | Entity-to-entity rendezvous. Rare in three-phase DES; would require significant engine extension. Backlog. |
 
----
+### Architecture correctness items (from simulation-architecture-review.md)
 
-### Sprint 32 — Resource Reliability (High-Impact, Moderate Complexity)
+These are **not** capability gaps against comparator tools, but open engine correctness findings that affect result accuracy:
 
-**Goal:** Add resource failure/repair cycles and preemption — the two biggest resource modelling gaps.
+| Finding | Severity | Impact |
+|---------|----------|--------|
+| H2 — Reneging timer binding to wrong entity | High | Correctness: wrong customer may renege in multi-queue models |
+| H3 — COMPLETE() accepts waiting entities | High | Correctness: impossible entity states; masks cancellation bugs |
+| H4 — serviceStart=0 bias in avgSvc | High | Correctness: service-time KPIs understated for t=0 service start |
+| H5 — Initial FEL cap at t=900 | High | Correctness: events scheduled past t=900 silently dropped |
+| H6 — Persistence omits graph/experimentDefaults | High | Data integrity: layout and experiment settings can be lost on save |
+| M1 — Shift-capacity busy-server reconciliation | Medium | Correctness: post-shift capacity can exceed target |
 
-| Feature | Gap # | Status | Notes |
-|---------|-------|--------|-------|
-| Resource preemption | G01 | ✅ Complete | `PREEMPT(ServerType)` macro; interrupted entity re-queues with `_remainingService` |
-| Resource breakdowns / failures | G04 | ✅ Complete | `FAIL(ServerType)` and `REPAIR(ServerType)` macros; MTBF/MTTR auto-scheduling |
-| Entity splitting / cloning | G06 | ❌ Deferred | Moved to Sprint 33 |
-| Multi-resource co-seize | G07 | ❌ Deferred | Moved to Sprint 33 |
-
----
-
-### Sprint 33 — Advanced Scheduling & Analytics (Medium-Impact) ✅ Complete
-
-**Goal:** Extend queue discipline options, batch flexibility, entity composition, and multi-scenario statistical analysis.
-
-| Feature | Gap # | Status | Notes |
-|---|---|---|---|
-| Entity splitting / cloning | G06 | ✅ Complete | `SPLIT(Type, N, TargetQueue)` macro; creates N-1 child entities with parent-child tracking |
-| Multi-resource co-seize | G07 | ✅ Complete | `COSEIZE(Queue, ServerType1, ServerType2[, ...])` atomic multi-resource seizure |
-| Custom queue sort key (SPT, EDD, attr-based) | G08 | ✅ Complete | `SPT`, `EDD`, `PRIORITY(attrName)` disciplines with FIFO tiebreaker |
-| Batch size by attribute or condition | G09 | ✅ Complete | `BATCH(Queue, Entity.attrName)` reads batch size from entity attribute |
-| Entity matching / synchronisation | G10 | ✅ Complete | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` macro |
-| Histogram collector for custom metrics | G12 | ✅ Complete | `buildHistogram()` and `buildHistogramFD()` (Freedman-Diaconis) |
-| ANOVA / multi-scenario comparison | G13 | ✅ Complete | `oneWayANOVA()` with F-test + `tukeyHSD()` post-hoc with Bonferroni |
-| Resource failure state in UI (complete) | G16 | ✅ Complete | Execute canvas Activity nodes show failed servers (red dots, warning badge) |
-
-**Exit gate:** ✅ Met — 37 new tests, 695/695 engine tests passing, build clean, capability guide created. **Post-sprint review:** four engine bugs fixed (B1–B4); 10 regression tests added; full suite 1074/1074 passing.
-
----
-
-### Sprint 34 — Computed Attribute Expressions ✅ Complete
-
-**Goal:** Partially close G02 by adding safe, declarative arithmetic expression support covering the three most common scripting use cases in DES models.
-
-| Feature | Gap # | Status | Notes |
-|---|---|---|---|
-| `SET(varName, expr)` macro | G02 (partial) | ✅ Complete | Evaluates safe arithmetic expression with Entity.attr, state var, clock references |
-| `SET_ATTR(attrName, expr)` macro | G02 (partial) | ✅ Complete | Mutates current entity's attribute mid-process; immediate effect on routing predicates |
-| Math functions in expressions | G02 (partial) | ✅ Complete | `min(a,b)`, `max(a,b)`, `abs(a)`, `round(a)`, `floor(a)`, `ceil(a)` |
-| Routing on computed attributes | G02 (partial) | ✅ Complete | Emergent: SET_ATTR updates are visible to existing `evaluatePredicate` routing |
-
-**Exit gate:** ✅ Met — 16 new tests; full suite 1090/1090 passing; no regressions.
-
----
+H2–H5 are genuine engine correctness bugs. H6 and M1 are data integrity and accuracy issues. These are higher priority than any capability gap for a production-quality tool.
 
 ## Appendix: Coverage Summary
 
@@ -297,11 +275,12 @@ Counts are derived from the Section 1 scoring matrix. Each row in the matrix is 
 *Coverage % = (✅ + 0.5×⚠️) / Total. Remaining ❌ items (conveyors, state machine, container resources, 2D/3D/GIS environments, general scripting / coroutines) are either architectural non-starters for a browser-based declarative tool or explicitly deferred backlog items.*
 
 **Remaining open gaps by priority:**
-1. G02 — General-purpose scripting / custom process logic (F, High) — ⚠️ partially closed (Sprint 34); coroutine/multi-step sub-case is an architectural constraint
-2. G17 — Cost modelling (D, Low) — Sprint 35 candidate
-3. G21 — Container / level resource (B, Low) — Sprint 34 candidate
-4. G24 — Public embeddable API (F, Low) — Sprint 34 candidate
-5. G18 — Jockeying (C, Low) — Backlog (very low practical demand)
+1. G02 ⚠️ — General-purpose scripting (F, High) — partially closed; coroutine/multi-step sub-case is an architectural constraint of the three-phase model
+2. H2–H5 from architecture review — engine correctness bugs (reneging, COMPLETE on waiting entities, serviceStart=0, FEL t=900 cap) — higher priority than any capability gap
+3. G17 ❌ — Cost modelling (D, Low) — medium effort; partially addressable with SET macros today
+4. G24 ❌ — Public embeddable API (F, Low) — low effort; buildEngine() is stable
+5. G21 ❌ — Container/level resource (B, Low) — approximable with state variables today
+6. G18 ❌ — Jockeying (C, Low) — backlog (very low practical demand)
 
 **What changed in v1.5 vs v1.4 (Sprint 34):**
 
