@@ -1,8 +1,45 @@
 # Simulation Architecture Review
 
-Review date: 2026-05-12
+**Version:** 2.0 — status table added after Sprint 35
+**Review date:** 2026-05-12
+**Last updated:** 2026-05-15
 
 Scope: simulation engine correctness, event scheduling, queue handling, entity lifecycle, deterministic reproducibility, UI/engine separation, rendering performance, persistence/data model design, extensibility, and simulation test coverage.
+
+## Finding Status Summary
+
+| ID | Severity | Finding | Status | Sprint Closed |
+|----|----------|---------|--------|---------------|
+| H1 | High | Phase C truncation not propagated from `runAll()` | ✅ Closed | Sprint 31–33 |
+| H2 | High | Reneging timers bind to wrong entity globally | 🔴 Open | — |
+| H3 | High | `COMPLETE()` allows waiting customers to become done | 🔴 Open | — |
+| H4 | High | Service duration biased for `serviceStart = 0` | 🔴 Open | — |
+| H5 | High | Initial B-events after t=900 silently excluded | 🔴 Open | — |
+| H6 | High | Persisted model omits `graph` and `experimentDefaults` | 🔴 Open | — |
+| M1 | Medium | Shift-capacity reduction leaves excess busy servers permanently | 🔴 Open | — |
+| M2 | Medium | Warmup reset leaves stale customer-context FEL entries | ✅ Closed | Sprint 35 |
+| M3 | Medium | V8 validation warns where contract says block | ✅ Closed (product decision) | Sprint 35 |
+| M4 | Medium | Queue discipline logic duplicated between helpers and `ASSIGN()` | 🔴 Open | — |
+| M5 | Medium | Legacy string conditions parallel JSON predicate language | 🔴 Open | — |
+| M6 | Medium | Replication compaction drops `phaseCTruncated` field | ✅ Closed | Sprint 31–33 |
+| L1 | Low | `runAll()` has dead local summary calculations | ✅ Closed | Sprint 35 |
+| L2 | Low | Execute rendering repeatedly filters full entity arrays | 🔴 Open | — |
+| L3 | Low | `Math.random()` outside simulation engine | ✅ Accepted | — |
+| L4 | Low | Baseline Supabase schema not in committed migrations | 🔴 Open | — |
+
+### Closure Notes
+
+**H1** — `phaseCTruncated: _phaseCTruncated` returned at top level from `runAll()` in Sprints 31–33. UI now reads the top-level flag.
+
+**M2** — Sprint 35 added `_requiresCtxEntity: true` to cSchedule FEL entries and narrowed warmup pruning to only `_isRenege` and `_requiresCtxEntity` entries. This correctly prunes stale COMPLETE/RENEGE events for removed entities without killing B-event self-schedules (next ARRIVE). Verified by 2 replication CI tests (30 M/M/1 + 20 M/M/c replications each with warmup=200, full `ci.n` achieved).
+
+**M3** — Product decision: making individual missing-source or missing-sink a hard blocker would break ~20 UI tests and prevent valid one-way flows. Documented in code with product-decision comment. The V8 rule remains: both missing = hard error; individual missing = warning.
+
+**M6** — `phaseCTruncated` preserved in `compactReplicationPayload()` in Sprint 31–33.
+
+**L1** — Dead summary block removed from `runAll()` in Sprint 35. All summary construction now routes through `getSummary()`.
+
+**L3** — Accepted: `Math.random()` in `src/db/local.js` and `src/db/models.js` is for local IDs and share tokens, not simulation reproducibility. No simulation test needed.
 
 ## Executive Summary
 

@@ -368,6 +368,17 @@ const cycleLog = [];
         entities = entities.filter(e => e.role === 'server' || (e.status !== 'done' && e.status !== 'reneged'));
         const afterCount = entities.filter(e => e.role !== 'server').length;
         _excludedCount = beforeCount - afterCount;
+        // M2 fix: prune FEL entries whose context entity was removed at warmup.
+        // Only prune events that require the context entity to function (RENEGE and
+        // cSchedule-based COMPLETE entries with _requiresCtxEntity). Regular B-event
+        // self-schedules (e.g. next ARRIVE) carry _contextCustId as metadata only and
+        // must NOT be pruned — they remain valid regardless of the creating entity's fate.
+        const activeIds = new Set(entities.map(e => e.id));
+        fel = fel.filter(ev => {
+          if (ev._contextCustId == null) return true;
+          if (!ev._isRenege && !ev._requiresCtxEntity) return true;
+          return activeIds.has(ev._contextCustId);
+        });
         continue; // Proceed to next due event
       }
 
@@ -583,30 +594,6 @@ const cycleLog = [];
     } else if (fel.length === 0 && !_terminationConditionMet) {
       log.push(makeTraceEntry("END", { message: "FEL empty — simulation complete" }));
     }
-
-    const customers    = entities.filter(e => e.role !== "server");
-    const served       = customers.filter(e => e.status === "done");
-    const reneged      = customers.filter(e => e.status === "reneged");
-
-    const waitSamples = served.map(entityWaitAfterWarmup);
-    const avgWait = waitSamples.length
-      ? waitSamples.reduce((s, value) => s + value, 0) / waitSamples.length
-      : null;
-    const serviceSamples = served
-      .map(entityServiceAfterWarmup)
-      .filter(value => value != null);
-    const avgSvc = serviceSamples.length
-      ? serviceSamples.reduce((s, value) => s + value, 0) / serviceSamples.length
-      : null;
-    const sojournSamples = customers
-      .map(entitySojournAfterWarmup)
-      .filter(value => value != null);
-    const avgSojourn = sojournSamples.length
-      ? sojournSamples.reduce((s, value) => s + value, 0) / sojournSamples.length
-      : null;
-    const maxSojourn = sojournSamples.length
-      ? Math.max(...sojournSamples)
-      : null;
 
     return {
       finalTime: clock,
