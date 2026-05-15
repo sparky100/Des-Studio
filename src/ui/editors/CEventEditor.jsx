@@ -209,6 +209,8 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                       </strong> at <strong style={{color:C.amber}}>
                         clock + {s.dist==="ServerAttr"
                           ? `server.${s.distParams?.attr||"serviceTime"}`
+                          : s.dist==="EntityAttr"
+                          ? `entity.${s.distParams?.attr||"serviceTime"}`
                           : `sample(${s.dist||"Fixed"})`}
                       </strong>
                       {s.useEntityCtx&&<span style={{color:C.purple}}> · carrying cust+server IDs</span>}

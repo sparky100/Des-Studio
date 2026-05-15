@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { mulberry32, sample } from '../../src/engine/distributions.js';
+import { mulberry32, sample, normalizeDistributionName, DISTRIBUTIONS } from '../../src/engine/distributions.js';
 import { buildEngine } from '../../src/engine/index.js';
 
 // Tests for seeded PRNG reproducibility (Sprint 1 Task 4).
@@ -170,5 +170,81 @@ describe('cross-replication independence', () => {
     );
     const unique = new Set(avgWaits);
     expect(unique.size).toBe(10);
+  });
+});
+
+// ── S40.1 — EntityAttr distribution ──────────────────────────────────────────
+
+describe('EntityAttr distribution — S40.1', () => {
+  test('normalizes entityattr aliases to EntityAttr', () => {
+    expect(normalizeDistributionName('entityattr')).toBe('EntityAttr');
+    expect(normalizeDistributionName('entity-attr')).toBe('EntityAttr');
+    expect(normalizeDistributionName('entity_attr')).toBe('EntityAttr');
+    expect(normalizeDistributionName('EntityAttr')).toBe('EntityAttr');
+  });
+
+  test('EntityAttr is registered in DISTRIBUTIONS with correct metadata', () => {
+    const def = DISTRIBUTIONS['EntityAttr'];
+    expect(def).toBeDefined();
+    expect(def.params).toContain('attr');
+    expect(def.label).toBeTruthy();
+    expect(def.hint).toBeTruthy();
+  });
+
+  test('sample() for EntityAttr returns 0 (resolved in phases.js)', () => {
+    const rng = mulberry32(1);
+    const result = sample('EntityAttr', { attr: 'serviceTime' }, rng);
+    expect(result).toBe(0);
+  });
+});
+
+// ── S40.2 — Schedule rows[] ───────────────────────────────────────────────────
+
+describe('Schedule rows[] — S40.2', () => {
+  test('rows[] timing: delay = plannedTime - clock', () => {
+    const rng = mulberry32(1);
+    const state = {};
+    const params = { rows: [{ time: 20, attrs: { x: 1 } }, { time: 45, attrs: { x: 2 } }] };
+    const d1 = sample('Schedule', params, rng, null, { state, schedKey: 'r', clock: 0 });
+    expect(d1).toBe(20);
+    const d2 = sample('Schedule', params, rng, null, { state, schedKey: 'r', clock: 20 });
+    expect(d2).toBe(25);
+  });
+
+  test('rows[] stores attrs in state under __schedRowAttrs_<key>', () => {
+    const rng = mulberry32(1);
+    const state = {};
+    const params = { rows: [{ time: 5, attrs: { priority: 3 } }] };
+    sample('Schedule', params, rng, null, { state, schedKey: 'k', clock: 0 });
+    expect(state['__schedRowAttrs_k']).toEqual({ priority: 3 });
+  });
+
+  test('rows[] without attrs stores null for that row', () => {
+    const rng = mulberry32(1);
+    const state = {};
+    const params = { rows: [{ time: 5 }] };
+    sample('Schedule', params, rng, null, { state, schedKey: 'k', clock: 0 });
+    expect(state['__schedRowAttrs_k']).toBeNull();
+  });
+
+  test('rows[] backward-compatible: times[] path still works unchanged', () => {
+    const rng = mulberry32(1);
+    const state = {};
+    const params = { times: [10, 20, 30] };
+    const d1 = sample('Schedule', params, rng, null, { state, schedKey: 't', clock: 0 });
+    expect(d1).toBe(10);
+    expect(state['__schedRowAttrs_t']).toBeNull();
+  });
+
+  test('rows[] increments schedule index correctly across calls', () => {
+    const rng = mulberry32(1);
+    const state = {};
+    const params = { rows: [{ time: 1 }, { time: 2 }, { time: 3 }] };
+    sample('Schedule', params, rng, null, { state, schedKey: 's', clock: 0 });
+    expect(state['__schedIdx_s']).toBe(1);
+    sample('Schedule', params, rng, null, { state, schedKey: 's', clock: 1 });
+    expect(state['__schedIdx_s']).toBe(2);
+    sample('Schedule', params, rng, null, { state, schedKey: 's', clock: 2 });
+    expect(state['__schedIdx_s']).toBe(3);
   });
 });

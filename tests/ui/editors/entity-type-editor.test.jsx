@@ -15,6 +15,8 @@ describe('EntityTypeEditor — shift schedules (F7.6)', () => {
     const handleChange = vi.fn();
     render(<EntityTypeEditor types={[serverType]} onChange={handleChange} />);
 
+    // Shift Schedule section starts collapsed — open it first, then enable via checkbox
+    fireEvent.click(screen.getByText(/Shift Schedule/i));
     fireEvent.click(screen.getByLabelText(/Use shift schedule/i));
 
     expect(handleChange).toHaveBeenCalledOnce();

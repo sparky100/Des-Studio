@@ -20,6 +20,9 @@ describe('BEventEditor — queue-aware effect options', () => {
       />
     );
 
+    // EffectPicker shows the dropdown only after opening it
+    fireEvent.click(screen.getByText('+ Add Effect'));
+
     expect(screen.getByRole('option', { name: 'Add Patient to Triage Queue' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: 'Add Patient to Lab Queue' })).not.toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Add Specimen to Lab Queue' })).toBeInTheDocument();
@@ -52,6 +55,9 @@ describe('BEventEditor — queue-aware effect options', () => {
         cEvents={[]}
       />
     );
+
+    // EffectPicker shows the dropdown only after opening it
+    fireEvent.click(screen.getByText('+ Add Effect'));
 
     expect(screen.getByRole('option', { name: 'Add Customer to Waiting Queue' })).toBeInTheDocument();
   });

@@ -1,5 +1,5 @@
 import { C, FONT, normTypeName } from "../shared/tokens.js";
-import { Tag, Btn, CommitInput, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { AttrEditor } from "./AttrEditor.jsx";
 
 const EntityTypeEditor=({types,onChange})=>{
@@ -84,38 +84,68 @@ const EntityTypeEditor=({types,onChange})=>{
             onChange={v=>upd(i,'attrDefs',v)}
           />
           {et.role==="server"&&(
-            <div style={{background:C.surface,border:`1px solid ${C.server}22`,borderRadius:6,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
-              <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:FONT,fontSize:11,color:et.shiftSchedule?C.server:C.muted,fontWeight:700}}>
+            <SectionPanel
+              label="Shift Schedule"
+              status={Array.isArray(et.shiftSchedule)?`${et.shiftSchedule.length} shift${et.shiftSchedule.length!==1?"s":""}` :"off"}
+              color={C.server}>
+              <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:FONT,fontSize:11,color:Array.isArray(et.shiftSchedule)?C.server:C.muted}}>
                 <input type="checkbox" checked={Array.isArray(et.shiftSchedule)} onChange={e=>setShiftEnabled(i,e.target.checked)} style={{accentColor:C.server}}/>
-                Use shift schedule
+                Use shift schedule (overrides static pool size)
               </label>
-              {Array.isArray(et.shiftSchedule)&&(
-                <>
-                  {(et.shiftSchedule||[]).map((step,j)=>{
-                    const time=parseFloat(step.time);
-                    const prev=j>0?parseFloat(et.shiftSchedule[j-1].time):null;
-                    const capacity=Number(step.capacity);
-                    const invalidTime=!Number.isFinite(time)||(j===0&&time!==0)||(j>0&&Number.isFinite(prev)&&time<prev);
-                    const invalidCapacity=!Number.isInteger(capacity)||capacity<1;
-                    return (
-                      <div key={j} style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from t:</span>
-                        <input type="number" value={step.time??""} disabled={j===0} onChange={e=>updShift(i,j,{time:e.target.value})}
-                          style={{width:72,background:"transparent",border:`1px solid ${invalidTime?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none",opacity:j===0?0.7:1}}/>
-                        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>capacity:</span>
-                        <input type="number" value={step.capacity??""} onChange={e=>updShift(i,j,{capacity:e.target.value})}
-                          style={{width:72,background:"transparent",border:`1px solid ${invalidCapacity?C.red:C.border}`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}/>
-                        <Btn small variant="danger" ariaLabel={`Remove shift period ${j + 1}`} onClick={()=>remShift(i,j)}>x</Btn>
-                      </div>
-                    );
-                  })}
-                  <Btn small variant="ghost" onClick={()=>addShift(i)} style={{alignSelf:"flex-start"}}>+ Add Shift</Btn>
-                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
-                    The first shift sets initial capacity; static count is ignored while this is enabled.
-                  </span>
-                </>
-              )}
-            </div>
+              {Array.isArray(et.shiftSchedule)&&(<>
+                {(et.shiftSchedule||[]).map((step,j)=>{
+                  const time=parseFloat(step.time);
+                  const prev=j>0?parseFloat(et.shiftSchedule[j-1].time):null;
+                  const capacity=Number(step.capacity);
+                  const invalidTime=!Number.isFinite(time)||(j===0&&time!==0)||(j>0&&Number.isFinite(prev)&&time<prev);
+                  const invalidCapacity=!Number.isInteger(capacity)||capacity<1;
+                  return (
+                    <div key={j} style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>from t:</span>
+                      <input type="number" value={step.time??""} disabled={j===0} onChange={e=>updShift(i,j,{time:e.target.value})}
+                        style={{width:72,background:"transparent",border:`1px solid ${invalidTime?C.red:C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none",opacity:j===0?0.7:1}}/>
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>capacity:</span>
+                      <input type="number" value={step.capacity??""} onChange={e=>updShift(i,j,{capacity:e.target.value})}
+                        style={{width:72,background:"transparent",border:`1px solid ${invalidCapacity?C.red:C.border}`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:11,padding:"4px 7px",outline:"none"}}/>
+                      <Btn small variant="danger" ariaLabel={`Remove shift period ${j+1}`} onClick={()=>remShift(i,j)}>x</Btn>
+                    </div>
+                  );
+                })}
+                <Btn small variant="ghost" onClick={()=>addShift(i)} style={{alignSelf:"flex-start"}}>+ Add Shift</Btn>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
+                  The first shift sets initial capacity; static count is ignored while this is enabled.
+                </span>
+              </>)}
+            </SectionPanel>
+          )}
+          {et.role==="server"&&(
+            <SectionPanel
+              label="Failure Model (MTBF / MTTR)"
+              status={et.mtbfDist?"configured":"off"}
+              color={C.red}>
+              <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:FONT,fontSize:11,color:et.mtbfDist?C.red:C.muted}}>
+                <input type="checkbox" checked={!!et.mtbfDist} style={{accentColor:C.red}}
+                  onChange={e=>{const n=[...types];n[i]=e.target.checked?{...n[i],mtbfDist:"Exponential",mtbfDistParams:{mean:"60"},mttrDist:"Exponential",mttrDistParams:{mean:"10"}}:{...n[i],mtbfDist:undefined,mtbfDistParams:undefined,mttrDist:undefined,mttrDistParams:undefined};onChange(n);}}/>
+                Model server failures
+              </label>
+              {et.mtbfDist&&(<>
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>MTBF dist:</span>
+                  <DistPicker compact allowPiecewise={false}
+                    value={{dist:et.mtbfDist||"Exponential",distParams:et.mtbfDistParams||{mean:"60"}}}
+                    onChange={v=>{const n=[...types];n[i]={...n[i],mtbfDist:v.dist,mtbfDistParams:v.distParams};onChange(n);}}/>
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:80}}>MTTR dist:</span>
+                  <DistPicker compact allowPiecewise={false}
+                    value={{dist:et.mttrDist||"Exponential",distParams:et.mttrDistParams||{mean:"10"}}}
+                    onChange={v=>{const n=[...types];n[i]={...n[i],mttrDist:v.dist,mttrDistParams:v.distParams};onChange(n);}}/>
+                </div>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
+                  The engine automatically schedules FAIL and REPAIR events for servers of this type.
+                </span>
+              </>)}
+            </SectionPanel>
           )}
           <input value={et.description||""} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
             style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",width:"100%",boxSizing:"border-box"}}/>
