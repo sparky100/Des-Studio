@@ -311,6 +311,9 @@ export function validateModel(model) {
 
   // A "sink" is effectively an entity reaching a terminal status (done or reneged)
   // This check is a heuristic based on event effects that lead to termination.
+  // Product decision (Sprint 35 / M3 review): individual missing source/sink is intentionally
+  // a warning, not a blocker — valid one-way flows and custom termination conditions exist.
+  // Only the complete absence of both source AND sink is blocked.
   if (hasArrive && !hasSinkMacro) {
     warn('V8',
       'No B-Event with a COMPLETE() or RENEGE() effect was found — entities may never leave the system.',

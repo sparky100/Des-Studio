@@ -18,6 +18,8 @@ const DIST_NAMES = {
   serverattr: "ServerAttr",
   "server-attr": "ServerAttr",
   server_attr: "ServerAttr",
+  schedule: "Schedule",
+  plan: "Schedule",
 };
 
 function unwrapProposedModel(proposedModel = {}) {
@@ -178,7 +180,9 @@ function normalizeDistribution(input = {}, fallback = { dist: "Fixed", distParam
   }
 
   for (const key of Object.keys(params)) {
-    if (key !== "values" && key !== "periods") params[key] = numericString(params[key]);
+    if (key !== "values" && key !== "periods" && key !== "times" && key !== "jitterParams") {
+      params[key] = numericString(params[key]);
+    }
   }
 
   return { dist, distParams: params };
@@ -421,34 +425,40 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
 
     if (!response) { setLoading(false); return; }
 
-    // Validation retry loop — max 1 retry when validation errors found
+    // Validation retry loop — up to 3 retries with cumulative error history
     if (response.proposedModel) {
       let proposal = unwrapProposedModel(response.proposedModel);
-      const validation = validateModel(proposal);
+      let validation = validateModel(proposal);
+      let retryMessages = messages;
+      const MAX_RETRIES = 3;
 
-      if (validation.errors?.length) {
+      for (let attempt = 0; attempt < MAX_RETRIES && validation.errors?.length; attempt++) {
         const errorSummary = validation.errors.map(e => `[${e.code}] ${e.message}`).join("\n");
         setHistory(prev => [...prev, {
           role: "system",
-          content: `The draft hit ${validation.errors.length} model issue(s). Asking the assistant to correct them...`,
+          content: `Draft has ${validation.errors.length} issue(s) (attempt ${attempt + 1}/${MAX_RETRIES}). Asking the assistant to fix them...`,
         }]);
 
-        const retryMessages = [...messages, {
+        retryMessages = [...retryMessages, {
           role: "user",
-          content: `The proposal had validation errors that must be fixed. Please correct ALL of these and return a complete corrected model:\n${errorSummary}`,
+          content: `The proposal has validation errors that must ALL be fixed. Return a complete corrected model:\n${errorSummary}`,
         }];
 
         const retryResponse = await callModelBuilder(systemPrompt, retryMessages, () => {}, () => {});
         if (retryResponse?.proposedModel) {
           proposal = unwrapProposedModel(retryResponse.proposedModel);
           response = retryResponse;
+          validation = validateModel(proposal);
+          // Append the assistant's retry response so the next retry has full context
+          retryMessages = [...retryMessages, { role: "assistant", content: JSON.stringify(retryResponse) }];
+        } else {
+          break;
         }
       }
 
       setProposal(proposal);
-      const finalValidation = validateModel(proposal);
-      if (finalValidation.errors?.length) {
-        setNotice(`This draft still has ${finalValidation.errors.length} model issue(s). Tidy those up in the editors before running.`);
+      if (validation.errors?.length) {
+        setNotice(`This draft still has ${validation.errors.length} model issue(s). Tidy those up in the editors before running.`);
       }
     }
 
@@ -459,9 +469,12 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     const newTurns = [{ role: "assistant", content }];
 
     if (response.flowDescription && response.intent !== "clarify") {
+      const templateNote = response.intent === "template" && response.templateId
+        ? `Based on template: ${response.templateId}\n\n`
+        : "";
       newTurns.unshift({
         role: "system",
-        content: `Working draft:\n${response.flowDescription}`,
+        content: `${templateNote}Working draft:\n${response.flowDescription}`,
       });
     }
 

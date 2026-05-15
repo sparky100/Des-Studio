@@ -1,9 +1,35 @@
-const MACROS = ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE", "BATCH", "UNBATCH"];
-const DISTRIBUTIONS = ["exponential", "uniform", "normal", "triangular", "fixed", "lognormal", "empirical", "piecewise"];
+// All macros available in B-events and C-events
+const B_EVENT_MACROS = ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE", "UNBATCH",
+  "PREEMPT", "FAIL", "REPAIR", "SPLIT", "SET", "SET_ATTR", "COST"];
+const C_EVENT_MACROS = ["ASSIGN", "BATCH", "COSEIZE", "MATCH", "SET", "SET_ATTR", "COST"];
+const ALL_MACROS     = [...new Set([...B_EVENT_MACROS, ...C_EVENT_MACROS])];
+
+const DISTRIBUTIONS = [
+  "exponential", "uniform", "normal", "triangular", "fixed",
+  "erlang", "empirical", "piecewise", "schedule",
+];
+
 const MODEL_SECTIONS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues"];
 
-const B_EVENT_MACROS = ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE", "UNBATCH"];
-const C_EVENT_MACROS = ["ASSIGN", "BATCH"];
+// Concise catalogue used in system prompt — one row per template
+const TEMPLATE_CATALOGUE = [
+  { id: "mm1",               name: "M/M/1 Queue",            domain: "Academic",        scenario: "Single-server queue",               macros: "ARRIVE ASSIGN COMPLETE",            when: "Simple single-server benchmark" },
+  { id: "er-triage",         name: "ER Triage",               domain: "Healthcare",      scenario: "Two-stage priority queue",          macros: "ARRIVE ASSIGN RELEASE COMPLETE",    when: "Triage then treatment, multiple priority levels" },
+  { id: "outpatient-clinic", name: "Outpatient Clinic",       domain: "Healthcare",      scenario: "Two-stage multi-server clinic",      macros: "ARRIVE ASSIGN RELEASE COMPLETE",    when: "Check-in then consultation stages" },
+  { id: "ward-admission",    name: "Ward Bed Admission",      domain: "Healthcare",      scenario: "Finite-capacity bed admission",      macros: "ARRIVE ASSIGN RELEASE COMPLETE",    when: "Hospital beds with finite ward capacity" },
+  { id: "surgical-suite",    name: "Surgical Suite",          domain: "Healthcare",      scenario: "Multi-resource co-seize",           macros: "COSEIZE COMPLETE",                  when: "Surgery needing operating room + anaesthetist simultaneously" },
+  { id: "call-center",       name: "Call Center",             domain: "Service Systems", scenario: "Multi-server with abandonment",      macros: "ARRIVE ASSIGN COMPLETE RENEGE",     when: "Phone queues where callers abandon if wait too long" },
+  { id: "fast-food",         name: "Fast Food Drive-Through", domain: "Service Systems", scenario: "Three-stage sequential routing",     macros: "ARRIVE ASSIGN RELEASE COMPLETE",    when: "Order → payment → pickup multi-stage service" },
+  { id: "airport",           name: "Airport Security",        domain: "Service Systems", scenario: "Finite-capacity multi-server",       macros: "ARRIVE ASSIGN COMPLETE",            when: "Security lanes with limited waiting space" },
+  { id: "bank-branch",       name: "Bank Branch",             domain: "Service Systems", scenario: "Multi-teller priority queue",        macros: "ARRIVE ASSIGN COMPLETE",            when: "Branch with priority and standard customers" },
+  { id: "retail-checkout",   name: "Retail Checkout",         domain: "Service Systems", scenario: "Multi-lane parallel checkout",       macros: "ARRIVE ASSIGN COMPLETE",            when: "Supermarket with parallel service lanes" },
+  { id: "factory",           name: "Factory Assembly",        domain: "Manufacturing",   scenario: "Batch production line",             macros: "ARRIVE BATCH ASSIGN COMPLETE",      when: "Items assembled or processed in groups" },
+  { id: "construction",      name: "Construction Site",       domain: "Manufacturing",   scenario: "State-variable job tracking",        macros: "ARRIVE ASSIGN COMPLETE SET",        when: "Trucks/vehicles with job counting" },
+  { id: "warehouse",         name: "Warehouse Fulfilment",    domain: "Manufacturing",   scenario: "Batch order consolidation",         macros: "ARRIVE BATCH UNBATCH COMPLETE",     when: "Order picking, consolidation, dispatch" },
+  { id: "order-fulfillment", name: "Order Fulfilment",        domain: "Manufacturing",   scenario: "Entity synchronisation",            macros: "ARRIVE MATCH COMPLETE",             when: "Match orders with inventory items (two-party sync)" },
+  { id: "port-berth",        name: "Port Berth Operations",   domain: "Logistics",       scenario: "Finite berth capacity",             macros: "ARRIVE ASSIGN COMPLETE",            when: "Ships docking at a finite number of berths" },
+  { id: "data-center",       name: "Data Center",             domain: "Technology",      scenario: "Large parallel server pool",        macros: "ARRIVE ASSIGN COMPLETE",            when: "Job processing across a large number of servers" },
+];
 
 function trimHistory(history = [], limit = 10) {
   return history.slice(-limit).map(turn => ({
@@ -13,6 +39,10 @@ function trimHistory(history = [], limit = 10) {
 }
 
 export function buildModelBuilderSystemPrompt() {
+  const catalogueLines = TEMPLATE_CATALOGUE.map(t =>
+    `  id:${t.id} | "${t.name}" (${t.domain}) | ${t.scenario} | macros: ${t.macros} | use when: ${t.when}`
+  ).join("\n");
+
   return [
     "You are a DES Studio model construction assistant.",
     "Return only valid JSON. Do not include Markdown fences or commentary outside JSON.",
@@ -25,8 +55,8 @@ export function buildModelBuilderSystemPrompt() {
     "C-Events: id, name, priority, condition predicate JSON, effect, cSchedules. cSchedules must include eventId plus dist and distParams.",
     "Queues: id, name, discipline FIFO|LIFO|PRIORITY, customerType (required — must be the name of the customer entityType whose entities arrive into this queue via ARRIVE(); must match an entityType with role customer).",
     "Every queue MUST include customerType matching the first argument of the ARRIVE() macro that targets it. Never omit customerType.",
-    `Permitted macros only: ${MACROS.join(", ")}.`,
-    `Permitted distributions only: ${DISTRIBUTIONS.join(", ")}.`,
+    `Permitted B-event macros: ${B_EVENT_MACROS.join(", ")}.`,
+    `Permitted C-event macros: ${C_EVENT_MACROS.join(", ")}.`,
     "Use DES Studio distribution shape exactly: {\"dist\":\"Exponential\",\"distParams\":{\"mean\":\"5\"}} for average time-between-arrivals; {\"dist\":\"Fixed\",\"distParams\":{\"value\":\"7.5\"}} for deterministic service time.",
     "If the user gives an arrival rate lambda per time unit, convert it to Exponential mean = 1 / lambda in distParams.mean.",
     "If the user answers timing questions, copy those numbers into schedule distParams or server serviceTime attrDefs; never leave timing defaults such as mean 1 or value 0.",
@@ -49,13 +79,43 @@ export function buildModelBuilderSystemPrompt() {
     "Keep generated model proposals compact: use short IDs, concise names, and only include fields required by DES Studio.",
     "Keep explanation to one short sentence when proposedModel is present.",
 
+    "=== TEMPLATE CATALOGUE (prefer adapting over building from scratch) ===",
+    "When the user describes a system that matches one of the templates below, set intent to \"template\", include the matching templateId in your response, and return a proposedModel that adapts the template to the user's specific parameters (entity names, server counts, timing values, distributions).",
+    "Adapting a template is always preferred over building from scratch — it produces a working model faster and with fewer structural errors.",
+    "Available templates:",
+    catalogueLines,
+    "If the request matches no template, set intent to \"build\" as normal.",
+
+    "=== ADVANCED MACROS (use when the scenario requires them) ===",
+    "PREEMPT(ServerType) — Interrupt a server's current service; the entity re-queues with remaining service time preserved. Use for emergency override or priority interruption.",
+    "FAIL(ServerType) — Mark a server as failed and interrupt any in-progress service. Always paired with a scheduled REPAIR B-event. Use for machine breakdowns, MTBF/MTTR modelling.",
+    "REPAIR(ServerType) — Restore a failed server to idle; triggers a C-scan for waiting entities. B-event effect only.",
+    "SPLIT(Type, N, Queue) — Clone the context entity N-1 times and place clones in Queue. Use for parallel sub-tasks, order line splitting.",
+    "COSEIZE(Queue, Srv1, Srv2, ...) — Atomically seize one customer and multiple server types simultaneously. Fails cleanly if any server is unavailable. Use for surgical suites, multi-resource workstations.",
+    "MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue) — Pair one entity from each queue into a combined batch. Use for order+item synchronisation or two-party matching (see order-fulfillment template).",
+    "SET(varName, expr) — Set a state variable to an arithmetic expression. Supports Entity.attrName, other state variables, clock, +−×÷(), min/max/abs/round/floor/ceil.",
+    "SET_ATTR(attrName, expr) — Set the context entity's attribute to an expression. Use for computed routing scores, elapsed time recording, derived values.",
+    "COST(expr) — Accumulate a numeric expression to summary.totalCost. Same expression syntax as SET/SET_ATTR. Use for per-entity costing, revenue tracking.",
+
+    "=== DISTRIBUTION SELECTION GUIDE ===",
+    "Exponential(mean) — random memoryless inter-arrival or service times. Most common. mean = 1/rate. Example: {\"dist\":\"Exponential\",\"distParams\":{\"mean\":\"6\"}}.",
+    "Triangular(min, mode, max) — expert estimate with a range (best/likely/worst). Good when you have rough bounds. Example: {\"dist\":\"Triangular\",\"distParams\":{\"min\":\"3\",\"mode\":\"7\",\"max\":\"15\"}}.",
+    "Normal(mean, stddev) — roughly symmetric variation. Use stddev < mean/3 to avoid negative samples. Example: {\"dist\":\"Normal\",\"distParams\":{\"mean\":\"10\",\"stddev\":\"2\"}}.",
+    "Fixed(value) — deterministic/constant. Use for scheduled processes or initial calibration. Example: {\"dist\":\"Fixed\",\"distParams\":{\"value\":\"5\"}}.",
+    "Uniform(min, max) — equal probability across [min, max]. Use when only bounds are known.",
+    "Erlang(k, mean) — k-phase process, more regular than Exponential. Use for multi-step service where k=2 or k=3.",
+    "Empirical (CSV) — samples uniformly from an imported data set. Use when you have real observed times to sample from.",
+    "Piecewise — time-varying rate (e.g. morning rush vs afternoon). Use when arrival rate changes predictably over the day.",
+    "Schedule — planned arrival times (appointment schedule, production plan). The B-event's scheduledTime fires the first arrival; times[] holds subsequent absolute times. Example: {\"dist\":\"Schedule\",\"distParams\":{\"times\":[30,60,90,120],\"jitterDist\":\"Normal\",\"jitterParams\":{\"stddev\":\"3\"}}}.",
+
     "=== FLOW-FIRST MODEL BUILDING (CRITICAL) ===",
     "Before proposing a model, you MUST first describe the entity flow through the system in flowDescription. This is more important than getting numeric parameters right.",
     "Think step by step: identify every entity type and trace its full path through the system — which queues does it wait in, which server serves it, where does it go after service?",
     "The flow description must explicitly list each entity type followed by its journey: arrives into which queue, which C-event starts its service (ASSIGN to which server), which B-event completes its service, and whether it exits or routes to another queue.",
     "Every queue must correspond to an entity type that waits in it. The customerType field on the queue MUST match the entity type name. If a queue exists, you must be able to state: 'X entities wait in Queue Y'.",
-    "Response schema: {\"intent\":\"build|refine|clarify\",\"questions\":[\"...\"]|null,\"flowDescription\":\"Entity flow explanation — required when intent is build or refine\",\"proposedModel\":object|null,\"explanation\":\"plain English summary\"}",
-    "The flowDescription field is REQUIRED when intent is build or refine. Do not omit it.",
+    "Response schema: {\"intent\":\"build|refine|clarify|template\",\"templateId\":\"template-id-or-null\",\"questions\":[\"...\"]|null,\"flowDescription\":\"Entity flow explanation — required when intent is build, refine, or template\",\"proposedModel\":object|null,\"explanation\":\"plain English summary\"}",
+    "The flowDescription field is REQUIRED when intent is build, refine, or template. Do not omit it.",
+    "When intent is template, set templateId to the matching template id from the catalogue above.",
     "Example flowDescription: 'Customer entities arrive into MainQueue. StartService C-event (ASSIGN(MainQueue, Clerk)) begins service when queue has waiting customers and a Clerk is idle. It schedules ServiceComplete B-event (COMPLETE()) via cSchedules with the service time distribution. After COMPLETE(), the customer departs the system.'",
 
     "=== C-EVENT → B-EVENT PATTERN ===",
@@ -83,7 +143,7 @@ export function buildModelBuilderSystemPrompt() {
     "Example: ER Triage model with TreatmentPriority queue — entityType 'Patient' has attrDef {name:'priority', valueType:'number', defaultValue:3, mutable:true}, and queue 'TreatmentQueue' has discipline:'PRIORITY', customerType:'Patient'.",
 
     "=== MODEL STRUCTURE RULES ===",
-    "If intent is build or refine, proposedModel must contain all five top-level sections, even when some are empty arrays.",
+    "If intent is build, refine, or template, proposedModel must contain all five top-level sections, even when some are empty arrays.",
   ].join("\n");
 }
 
@@ -93,13 +153,13 @@ export function buildModelBuilderUserMessage(description, currentModel = {}, con
     ? (results
       ? "Refine the current model based on the simulation results. Use KPI data to identify bottlenecks and suggest targeted structural changes (e.g. add servers, adjust routing, increase capacity)."
       : "Refine the current model unless the user explicitly requests a full rebuild.")
-    : "Build a DES Studio model proposal from the request.";
+    : "Build a DES Studio model proposal from the request. Check the template catalogue first — if a template matches, adapt it rather than building from scratch.";
   return JSON.stringify({
     currentModel: hasCurrentModel ? currentModel : null,
     conversationHistory: trimHistory(conversationHistory),
     simulationResults: results || null,
     userRequest: String(description || ""),
     instruction,
-    requiredResponseKeys: ["intent", "questions", "proposedModel", "explanation"],
+    requiredResponseKeys: ["intent", "templateId", "questions", "proposedModel", "explanation"],
   }, null, 2);
 }

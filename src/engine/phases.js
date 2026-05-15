@@ -263,7 +263,7 @@ export function fireBEvent(ev, ctx) {
   for (const sched of ev.schedules || []) {
     const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);
     if (!tmpl) continue;
-    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng, null, { clock }));
+    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng, null, { clock, state: ctx.state, schedKey: sched.eventId }));
     let renegeTarget;
     if (sched.isRenege) {
       renegeTarget = effectCtx._lastCustId;
@@ -327,10 +327,11 @@ export function fireCEvent(ev, ctx) {
 
     felEntries.push({
       ...tmpl,
-      scheduledTime:  clock + delay,
-      _sampledDelay:  `${cs.dist}(${delay.toFixed(3)})`,
-      _contextCustId: cs.useEntityCtx ? effectCtx._lastCustId : undefined,
-      _contextSrvId:  cs.useEntityCtx ? effectCtx._lastSrvId  : undefined,
+      scheduledTime:       clock + delay,
+      _sampledDelay:       `${cs.dist}(${delay.toFixed(3)})`,
+      _contextCustId:      cs.useEntityCtx ? effectCtx._lastCustId : undefined,
+      _contextSrvId:       cs.useEntityCtx ? effectCtx._lastSrvId  : undefined,
+      _requiresCtxEntity:  cs.useEntityCtx ? true : undefined,
     });
 
     // Store scheduled duration on server for preemption/failure remaining-service calculation
