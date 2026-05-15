@@ -102,7 +102,7 @@ describe("validateModel", () => {
     expect(result.warnings.filter(w => w.code === "V8")).toEqual([]);
   });
 
-  it("warns when a source exists but no sink exists", () => {
+  it("warns (not blocks) when a source exists but no sink exists", () => {
     const model = {
       entityTypes: [],
       stateVariables: [],
@@ -120,7 +120,7 @@ describe("validateModel", () => {
     ]));
   });
 
-  it("warns when a sink exists but no source exists", () => {
+  it("warns (not blocks) when a sink exists but no source exists", () => {
     const model = {
       entityTypes: [],
       stateVariables: [],
