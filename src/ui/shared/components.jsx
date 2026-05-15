@@ -480,5 +480,39 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
   );
 };
 
-export { ErrorBoundary, Tag, PhaseTag, Avatar, Btn, Field, CommitInput, SH, InfoBox, Empty, DistPicker };
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION PANEL — collapsible accordion section with status badge
+// ═══════════════════════════════════════════════════════════════════════════════
+const isActiveStatus = s => s && s !== "off" && s !== "0" && s !== "none";
+const SectionPanel = ({label, status, color=C.muted, children, defaultOpen=false}) => {
+  const [open, setOpen] = useState(() => defaultOpen || isActiveStatus(status));
+  return (
+    <div style={{background:C.surface,borderRadius:5,border:`1px solid ${C.border}`}}>
+      <button onClick={()=>setOpen(o=>!o)}
+        style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
+          padding:"8px 12px",background:"transparent",border:"none",cursor:"pointer",borderRadius:5}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10,color,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,textTransform:"uppercase"}}>{label}</span>
+          {status!=null&&(
+            <span style={{fontSize:10,fontFamily:FONT,
+              color:isActiveStatus(status)?color:C.muted,
+              background:(isActiveStatus(status)?color:C.muted)+"18",
+              border:`1px solid ${(isActiveStatus(status)?color:C.muted)}44`,
+              borderRadius:4,padding:"1px 6px",whiteSpace:"nowrap"}}>
+              {status}
+            </span>
+          )}
+        </div>
+        <span style={{fontSize:10,color:C.muted,fontFamily:FONT,marginLeft:8}}>{open?"▾":"▸"}</span>
+      </button>
+      {open&&(
+        <div style={{padding:"0 12px 12px",display:"flex",flexDirection:"column",gap:8}}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export { ErrorBoundary, Tag, PhaseTag, Avatar, Btn, Field, CommitInput, SH, InfoBox, Empty, DistPicker, SectionPanel };
 
