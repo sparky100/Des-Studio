@@ -28,6 +28,27 @@ function safeArithmetic(s) {
   }
   function parsePrimary() {
     skipWS();
+    // Math functions: min(a,b), max(a,b), abs(a), round(a), floor(a), ceil(a)
+    const rest = s.slice(i);
+    const fnM  = rest.match(/^(min|max|abs|round|floor|ceil)\s*\(/i);
+    if (fnM) {
+      const fn = fnM[1].toLowerCase();
+      i += fnM[0].length;
+      const arg1 = parseAddSub();
+      skipWS();
+      let result;
+      if (fn === 'abs' || fn === 'round' || fn === 'floor' || fn === 'ceil') {
+        if (i < s.length && s[i] === ')') i++;
+        result = Math[fn](arg1);
+      } else {
+        if (i < s.length && s[i] === ',') i++;
+        const arg2 = parseAddSub();
+        skipWS();
+        if (i < s.length && s[i] === ')') i++;
+        result = fn === 'min' ? Math.min(arg1, arg2) : Math.max(arg1, arg2);
+      }
+      return result;
+    }
     if (i < s.length && s[i] === '(') {
       i++;
       const v = parseAddSub();
@@ -72,13 +93,46 @@ function safeEvalScalar(v) {
     return s.slice(1, -1);
   if (s === 'true')  return true;
   if (s === 'false') return false;
-  if (/^[\d\s+\-*/.()]+$/.test(s)) {
-    const n = safeArithmetic(s);
-    if (!isNaN(n)) return n;
-  }
-  const n = Number(s);
-  if (!isNaN(n) && s !== '') return n;
+  const n = safeArithmetic(s);
+  if (!isNaN(n)) return n;
+  const direct = Number(s);
+  if (!isNaN(direct) && s !== '') return direct;
   return s; // raw string fallback — matches previous behaviour for unresolved identifiers
+}
+
+// Evaluate an expression that may reference Entity.<attr>, state variables, clock,
+// arithmetic operators (+,-,*,/), parentheses, and math functions (min,max,abs,round,floor,ceil).
+// Never calls eval or new Function.
+function evalEntityExpr(expr, { state, clock, entity }) {
+  let s = String(expr).trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))
+    return s.slice(1, -1);
+  // Substitute Entity.attrName references
+  s = s.replace(/\bEntity\.(\w+)\b/g, (_, attrName) => {
+    const v = entity?.attrs?.[attrName];
+    if (v === undefined) return '0';
+    if (typeof v === 'string') return `"${v}"`;
+    return String(+v || 0);
+  });
+  // Substitute state variables — longest names first to avoid partial replacement
+  Object.keys(state || {})
+    .filter(k => !k.startsWith('__'))
+    .sort((a, b) => b.length - a.length)
+    .forEach(k => {
+      s = s.replace(new RegExp(`\\b${k}\\b`, 'g'),
+        typeof state[k] === 'string' ? `"${state[k]}"` : String(state[k] ?? 0));
+    });
+  s = s.replace(/\bclock\b/g, String(clock));
+  s = s.trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))
+    return s.slice(1, -1);
+  if (s === 'true') return true;
+  if (s === 'false') return false;
+  const n = safeArithmetic(s);
+  if (!isNaN(n)) return n;
+  const num = Number(s);
+  if (!isNaN(num) && s !== '') return num;
+  return s;
 }
 
 function normName(value) {
@@ -911,6 +965,50 @@ export const MACROS = [
       entityB._matchedInto = parentId;
 
       msgs.push(`MATCH: #${entityA.id} (${typeA}) + #${entityB.id} (${typeB}) → #${parentId} → "${targetQueue}"`);
+    },
+  },
+
+  // ── SET(varName, expr) ────────────────────────────────────────────────────
+  // Updates a state variable using a safe arithmetic expression.
+  // expr may reference: Entity.<attr>, state variables, clock,
+  // arithmetic (+,-,*,/), parentheses, and math functions
+  // (min(a,b), max(a,b), abs(a), round(a), floor(a), ceil(a)).
+  {
+    name:    "SET",
+    pattern: /^SET\((\w+)\s*,\s*(.+)\)$/i,
+    apply(match, ctx) {
+      const varName = match[1].trim();
+      const expr    = match[2].trim();
+      const { state, clock, entities, getLastCustId, msgs } = ctx;
+      const custId  = getLastCustId();
+      const entity  = custId != null ? entities.find(e => e.id === custId) : null;
+      const value   = evalEntityExpr(expr, { state, clock, entity });
+      state[varName] = value;
+      msgs.push(`SET ${varName} = ${value}`);
+    },
+  },
+
+  // ── SET_ATTR(attrName, expr) / SET_ATTR(Entity.attrName, expr) ────────────
+  // Mutates an attribute on the current context entity.
+  // expr may reference: Entity.<attr>, state variables, clock,
+  // arithmetic (+,-,*,/), parentheses, and math functions.
+  {
+    name:    "SET_ATTR",
+    pattern: /^SET_ATTR\((?:Entity\.)?(\w+)\s*,\s*(.+)\)$/i,
+    apply(match, ctx) {
+      const attrName = match[1].trim();
+      const expr     = match[2].trim();
+      const { state, clock, entities, getLastCustId, msgs } = ctx;
+      const custId   = getLastCustId();
+      const entity   = custId != null ? entities.find(e => e.id === custId) : null;
+      if (!entity) {
+        msgs.push(`SET_ATTR(${attrName}): no context entity — use after ARRIVE, ASSIGN, or COSEIZE`);
+        return;
+      }
+      if (!entity.attrs) entity.attrs = {};
+      const value = evalEntityExpr(expr, { state, clock, entity });
+      entity.attrs[attrName] = value;
+      msgs.push(`SET_ATTR #${entity.id}.${attrName} = ${value}`);
     },
   },
 ];

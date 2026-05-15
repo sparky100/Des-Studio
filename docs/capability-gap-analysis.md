@@ -1,6 +1,6 @@
 # DES Studio — Capability Gap Analysis
 
-**Date:** 2026-05-14 (updated post-Sprint 33)
+**Date:** 2026-05-15 (updated post sprint 31-33 review)
 **Scope:** DES Studio vs SimPy 4.x, AnyLogic 8.x (Process Modelling Library), JaamSim 2024
 **Method:** Web-fetched reference feature lists + full codebase audit (engine, macros, UI, tests, templates)
 
@@ -14,6 +14,8 @@
 | v1.1 | 2026-05-14 | Sprint 31 | Closed G05 (clock token), G11 (WIP metric), G15 (live time-plot) |
 | v1.2 | 2026-05-14 | Sprint 32 | Closed G01 (preemption), G04 (resource failures/MTBF/MTTR) |
 | v1.3 | 2026-05-14 | Sprint 33 | Closed G06 (SPLIT), G07 (COSEIZE), G08 (SPT/EDD/PRIORITY), G09 (dynamic BATCH), G10 (MATCH), G12 (histograms), G13 (ANOVA), G16 (failure UI) |
+| v1.4 | 2026-05-15 | Post-sprint review | Corrected four engine bugs found during code review: B1 (REPAIR _downtime always 0), B2 (avgWIP denominator wrong with warmup), B3 (COSEIZE auxiliary servers not released — caused surgical-suite deadlock after first service), B4 (SPLIT child entities missing waitingSince/waitingFor metadata). Scoring matrix updated for G01/G04/G05/G11/G14/G15 which were still showing pre-implementation statuses. Coverage table recalculated. |
+| v1.5 | 2026-05-15 | Sprint 34 | Partial close of G02 (scripting): added `SET(varName, expr)` and `SET_ATTR(attrName, expr)` macros with safe arithmetic expression evaluator supporting Entity attribute refs, state variable refs, clock, arithmetic operators, and math functions (min/max/abs/round/floor/ceil). F matrix row 2 updated ❌→⚠️. Coverage table updated. |
 
 ---
 
@@ -50,9 +52,9 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | Server utilisation tracking | ⚠️ manual | ✅ | ✅ | ✅ per-type utilisation | — |
 | Shift schedules (capacity change) | ❌ | ✅ | ✅ | ✅ SHIFT_CHANGE B-event | — |
 | Dynamic capacity increase/decrease | ❌ | ✅ | ✅ | ✅ retireIdleExcessServers | — |
-| Resource preemption | ✅ PreemptiveResource | ✅ | ✅ priority maintenance | ❌ | **High Gap** |
-| Resource breakdowns / failures | ❌ | ✅ | ✅ Maintenance block | ❌ | Gap |
-| Resource repair / MTTR | ❌ | ✅ | ✅ | ❌ | Gap |
+| Resource preemption | ✅ PreemptiveResource | ✅ | ✅ priority maintenance | ✅ PREEMPT macro | — |
+| Resource breakdowns / failures | ❌ | ✅ | ✅ Maintenance block | ✅ FAIL macro; MTBF auto-scheduling | — |
+| Resource repair / MTTR | ❌ | ✅ | ✅ | ✅ REPAIR macro; MTTR auto-scheduling | — |
 | Multiple resource types per task | ⚠️ manual | ✅ | ✅ SeizeSet | ✅ COSEIZE macro | — |
 | Resource state: idle/busy/failed/off-shift | ⚠️ 2 states | ✅ 4+ states | ✅ 4+ states | ✅ idle/busy/failed | — |
 | Container (level/tank resource) | ✅ Container | ✅ | ✅ | ❌ | Gap |
@@ -93,7 +95,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | Reneged / balked counts | ⚠️ manual | ✅ | ✅ | ✅ | — |
 | Per-queue utilisation | ⚠️ manual | ✅ | ✅ | ✅ per-type util% | — |
 | Wait-time distribution (percentiles) | ⚠️ manual | ✅ | ✅ | ✅ p50/p90/p95/p99 | — |
-| WIP (work in progress) | ⚠️ manual | ✅ | ✅ | ⚠️ in-flight entity count | Gap |
+| WIP (work in progress) | ⚠️ manual | ✅ | ✅ | ✅ avgWIP (time-integral, Little's Law) | — |
 | Queue length time-series | ⚠️ manual | ✅ | ✅ | ✅ _timeSeries[] | — |
 | Event fire counts | ⚠️ manual | ✅ | ✅ | ✅ _eventCounts | — |
 | Replication support | ⚠️ manual | ✅ | ✅ | ✅ runReplications() | — |
@@ -130,7 +132,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | 3D environment / animation | ❌ | ✅ | ✅ | ❌ | Gap |
 | GIS / map integration | ❌ | ✅ | ❌ | ❌ | Gap |
 | Histogram / bar charts inline | ❌ | ✅ | ✅ | ✅ histogram collector | — |
-| Time-plot / signal charts | ❌ | ✅ | ✅ | ⚠️ cumulative mean only | Gap |
+| Time-plot / signal charts | ❌ | ✅ | ✅ | ✅ QueueDepthTimePlot in BottomPanel Charts tab | — |
 | Model sharing / public gallery | ❌ | ❌ | ❌ | ✅ | — |
 | Shareable results dashboard (URL) | ❌ | ⚠️ | ❌ | ✅ QR + hash route | — |
 | AI-assisted model generation | ❌ | ❌ | ❌ | ✅ LLM authoring | — |
@@ -144,15 +146,15 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | Feature | SimPy | AnyLogic | JaamSim | DES Studio | Gap? |
 |---|---|---|---|---|---|
 | General-purpose scripting language | ✅ Python | ✅ Java | ❌ | ❌ | Gap |
-| Custom logic in process steps | ✅ yield | ✅ code blocks | ❌ | ❌ | **High Gap** |
+| Custom logic in process steps | ✅ yield | ✅ code blocks | ❌ | ⚠️ SET/SET_ATTR macros; arithmetic + math fns; no coroutines | Gap |
 | Custom condition expressions | ✅ Python | ✅ Java | ✅ input lang | ⚠️ token-based DSL | Gap |
-| Clock value in conditions | ✅ env.now | ✅ | ✅ | ⚠️ engine supports `clock` token; not exposed in UI Condition Builder | Gap |
+| Clock value in conditions | ✅ env.now | ✅ | ✅ | ✅ `clock` token in Condition Builder UI + runtime evaluator | — |
 | Custom distributions | ✅ any fn | ✅ | ✅ | ⚠️ Empirical / CSV only | Gap |
 | Distribution fitting from data | ❌ | ❌ | ❌ | ✅ fitDistribution() | — |
 | Macro / block extensibility | ❌ | ⚠️ | ❌ | ✅ MACROS registry | — |
 | Safe execution (no code injection) | ❌ | ❌ | ❌ | ✅ no new Function() | — |
 | Event listeners / callbacks | ✅ | ✅ | ❌ | ⚠️ phase hooks internal | Gap |
-| Process-level interrupts | ✅ interrupt() | ✅ | ❌ | ❌ | Gap |
+| Process-level interrupts | ✅ interrupt() | ✅ | ❌ | ✅ via PREEMPT macro (G01/G14) | — |
 | Entity-to-entity events / rendezvous | ✅ | ✅ | ⚠️ | ❌ | Gap |
 | External data import (DB / files) | ⚠️ manual | ✅ | ✅ | ✅ CSV import | — |
 | API surface for embedding | ✅ Python API | ✅ | ❌ | ⚠️ buildEngine() internal | Gap |
@@ -167,16 +169,16 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | # | Feature | Category | Priority | Status | Notes |
 |---|---|---|---|---|---|
 | G01 | **Resource preemption** | B | **High** | ✅ Complete | `PREEMPT(ServerType)` macro; interrupted entity re-queues with `_remainingService`; trace entry emitted. Sprint 32. |
-| G02 | **General-purpose scripting / custom process logic** | F | **High** | ❌ Open | Three-phase declarative model is architecturally intentional. Partial mitigation: structured C-event priority chain. | Sprint 33 |
+| G02 | **General-purpose scripting / custom process logic** | F | **High** | ⚠️ Partial | Sprint 34: `SET(varName, expr)` and `SET_ATTR(attrName, expr)` macros close three high-value sub-cases: (1) entity attribute mutation mid-process, (2) state variable arithmetic with entity/clock/state references and math functions, (3) routing based on computed attributes. Multi-step coroutine-style logic (arbitrary branching, loops, sequential waiting within a single entity's lifetime) remains architecturally impossible in Pidd's three-phase model. |
 | G03 | ~~**Probabilistic / conditional routing**~~ | A | ~~High~~ | ~~Sprint 31~~ ✅ Resolved | Both conditional routing (predicate-based branches) and probabilistic routing (probability-weighted selection) implemented in `fireBEvent()`. V17/V18 validation rules cover both. |
-| G04 | **Resource breakdowns / failures** | B | **High** | ✅ Complete | `FAIL(ServerType)` and `REPAIR(ServerType)` macros; `failed` server state; MTBF/MTTR auto-scheduling. Sprint 32. |
+| G04 | **Resource breakdowns / failures** | B | **High** | ✅ Complete | `FAIL(ServerType)` and `REPAIR(ServerType)` macros; `failed` server state; MTBF/MTTR auto-scheduling. Sprint 32. **Review fix B1:** `_downtime` was always 0 because `srv._failedAt` was cleared before being read; fixed by saving to a local variable first. |
 | G05 | ~~**Clock value in conditions**~~ | F | ~~Low~~ | ~~Sprint 31~~ ✅ Resolved | `clock` token added to `buildConditionTokens()`. Engine already supported it at runtime. |
-| G06 | ~~**Entity splitting / cloning**~~ | A | ~~Med~~ | ~~Sprint 33~~ ✅ Resolved | `SPLIT(EntityType, N, TargetQueue)` macro creates N-1 clones with parent-child tracking (`_splitParent`, `_splitChildren`, `_splitFrom`, `_splitIndex`). |
-| G07 | ~~**Multiple resource types per task (co-seize)**~~ | B | ~~Med~~ | ~~Sprint 33~~ ✅ Resolved | `COSEIZE(Queue, ServerType1, ServerType2[, ...])` atomically seizes one customer and multiple server types. Fails if any type has no idle server. |
+| G06 | ~~**Entity splitting / cloning**~~ | A | ~~Med~~ | ~~Sprint 33~~ ✅ Resolved | `SPLIT(EntityType, N, TargetQueue)` macro creates N-1 clones with parent-child tracking (`_splitParent`, `_splitChildren`, `_splitFrom`, `_splitIndex`). **Review fix B4:** child entities were missing `waitingSince`/`waitingFor` because `markEntityWaiting()` was not called; queue wait-time tracking for split children is now correct. |
+| G07 | ~~**Multiple resource types per task (co-seize)**~~ | B | ~~Med~~ | ~~Sprint 33~~ ✅ Resolved | `COSEIZE(Queue, ServerType1, ServerType2[, ...])` atomically seizes one customer and multiple server types. Fails if any type has no idle server. **Review fix B3 (critical):** after COMPLETE fired, only the primary server was released; auxiliary servers (e.g. Anesthetist in the Surgical Suite) remained permanently `busy`, deadlocking the model after the first service. COMPLETE now scans for and releases all servers still referencing the completed customer. |
 | G08 | ~~**Custom / SPT queue comparator**~~ | C | ~~Med~~ | ~~Sprint 33~~ ✅ Resolved | `SPT`, `EDD`, and `PRIORITY(attrName)` queue disciplines implemented. All use FIFO tiebreaker. |
 | G09 | ~~**Batch size by condition / attribute**~~ | C | ~~Med~~ | ~~Sprint 33~~ ✅ Resolved | `BATCH(Queue, Entity.attrName)` reads batch size from first waiting entity's attribute. Fixed integer syntax still supported. |
 | G10 | ~~**Entity matching / synchronisation**~~ | C | ~~Med~~ | ~~Sprint 33~~ ✅ Resolved | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` pairs one entity from each queue into a batch entity. Originals marked `done` with `_matchedInto`. |
-| G11 | ~~**WIP (work-in-progress) metric**~~ | D | ~~Med~~ | ~~Sprint 31~~ ✅ Resolved | `avgWIP` exposed in `getSummary()`. Little's Law: `avgWIP ≈ λ × avgSojourn`. |
+| G11 | ~~**WIP (work-in-progress) metric**~~ | D | ~~Med~~ | ~~Sprint 31~~ ✅ Resolved | `avgWIP` exposed in `getSummary()`. Little's Law: `avgWIP ≈ λ × avgSojourn`. **Review fix B2:** when a warmup period is configured, `_wipIntegral` is correctly reset at the warmup boundary but `getSummary()` divided by `clock` (total time) instead of `clock - _statsResetTime` (post-warmup elapsed time), causing systematic underestimation. |
 | G12 | ~~**Histogram output for arbitrary metrics**~~ | D | ~~Med~~ | ~~Sprint 33~~ ✅ Resolved | `buildHistogram()` (equal-width bins) and `buildHistogramFD()` (Freedman-Diaconis automatic bin selection) in statistics.js. |
 | G13 | ~~**ANOVA / ranking-and-selection**~~ | D | ~~Med~~ | ~~Sprint 33~~ ✅ Resolved | `oneWayANOVA()` with F-test, p-value approximation (Lanczos), and `tukeyHSD()` post-hoc test with Bonferroni correction. |
 | G14 | ~~**Process-level interrupts**~~ | F | ~~Med~~ | ~~Sprint 32~~ ✅ Resolved | Covered by G01 preemption. `PREEMPT(ServerType)` interrupts mid-service entities. |
@@ -199,19 +201,19 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 DES Studio implements the essential entity lifecycle: typed entities with sampled attributes, multi-stage routing via RELEASE, recirculation tracking, balking/reneging, and both **conditional routing** (predicate-based branches) and **probabilistic routing** (probability-weighted selection). **Entity splitting/cloning** (G06) and **entity matching/synchronisation** (G10) are now implemented via the `SPLIT` and `MATCH` macros, closing the two most impactful gaps in this category. Entity conveyors and spatial movement remain out of scope for the tool's browser-based positioning.
 
 ### B — Resource & Server Model
-Server pools, multi-capacity types, shift schedules, dynamic capacity adjustment, and utilisation tracking are all solid. **Resource preemption** (G01), **resource failures/breakdowns** (G04), and **multi-resource co-seize** (G07) are now implemented — the three highest-impact gaps in this category have been closed. Interrupted entities preserve remaining service time and resume correctly. MTBF/MTTR cycles are auto-scheduled from server entity type configuration. The `failed` server state is now fully visualized on the Execute canvas (G16).
+Server pools, multi-capacity types, shift schedules, dynamic capacity adjustment, and utilisation tracking are all solid. **Resource preemption** (G01), **resource failures/breakdowns** (G04), and **multi-resource co-seize** (G07) are now implemented — the three highest-impact gaps in this category have been closed. Interrupted entities preserve remaining service time via `_remainingService` and resume correctly on re-seizure. MTBF/MTTR failure/repair cycles are auto-scheduled from server entity type configuration, with downtime accurately tracked per server. COSEIZE atomically seizes all required server types or fails cleanly; all co-seized servers are correctly released when service completes. The remaining gaps are Container/level resources and Store/filter-store resources, both of which require a fluid-model extension beyond the current three-phase entity paradigm.
 
 ### C — Queueing & Scheduling
 Queue discipline coverage (FIFO, LIFO, PRIORITY), finite capacity, balking, reneging, batching, and unbatching are all implemented and tested. DES Studio is ahead of SimPy here by providing these as first-class guided features. **Custom sort comparators** (G08) — SPT, EDD, and PRIORITY(attrName) — are now implemented. **Entity matching/synchronisation** (G10) and **dynamic batch sizing** (G09) are also closed. Jockeying remains the only queueing gap and is low-priority.
 
 ### D — Statistical Output
-DES Studio's statistical output is arguably its strongest differentiator: 95% CI, batch means, paired t-test, 1D/2D parametric sweeps, warm-up with Welch's graphical test, anomalous replication flagging, run labelling/tagging/archiving, and saved experiment configurations are all implemented — capabilities that SimPy entirely lacks and AnyLogic only covers with its Experiments framework. **WIP time-average** (G11), **histogram collectors** (G12), and **multi-scenario ANOVA with Tukey HSD** (G13) are now implemented, closing all statistical gaps in this category.
+DES Studio's statistical output is arguably its strongest differentiator: 95% CI, batch means, paired t-test, 1D/2D parametric sweeps, warm-up with Welch's graphical test, anomalous replication flagging, run labelling/tagging/archiving, and saved experiment configurations are all implemented — capabilities that SimPy entirely lacks and AnyLogic only covers with its Experiments framework. **WIP time-average** (G11), **histogram collectors** (G12), and **multi-scenario ANOVA with Tukey HSD** (G13) are all implemented. `avgWIP` is a true time-integral average (∫ WIP dt / post-warmup elapsed time), consistent with Little's Law. Histogram bins use either equal-width or Freedman-Diaconis automatic sizing. ANOVA uses an F-test with incomplete-beta p-value approximation (Lanczos log-gamma); Tukey HSD identifies significantly different group pairs. All statistical gaps in this category are now closed; Cost/ROI modelling (G17) remains the only open item.
 
 ### E — Visual Authoring
-The visual authoring surface is comprehensive for a browser-based tool: canvas DAG editor, real-time token animation, per-node live counts, structured trace/event log, entity inspector, KPI cards, sweep charts, and a model gallery with sharing and forking. **Live queue-depth time-plot** (G15) is now implemented as a Charts tab in the BottomPanel. The remaining gap is the **failed server node state visual** on the execute canvas (G16 — partial). 2D spatial layouts and 3D environments are out of scope for the tool's positioning.
+The visual authoring surface is comprehensive for a browser-based tool: canvas DAG editor, real-time token animation, per-node live counts, structured trace/event log, entity inspector, KPI cards, sweep charts, and a model gallery with sharing and forking. **Live queue-depth time-plot** (G15) is implemented as a Charts tab in the BottomPanel (one SVG line per queue, colour-coded). **Failed server visualisation** (G16) is complete: Execute canvas Activity nodes show failed servers as red dots in the pool grid with a "⚠ N failed" badge. The remaining gaps are 2D spatial layout, 3D environments, and GIS integration, all of which are out of scope for a browser-first tool at DES Studio's positioning.
 
 ### F — Scripting & Extensibility
-DES Studio makes a deliberate safety-first choice: all logic is expressed through a declarative macro and condition token system with no `new Function()` or `eval()`. This prevents code injection and makes the tool accessible to non-programmers, but it means **sequential process logic** (loops, conditionals, multi-step waiting within a single entity's lifetime) is not expressible — a fundamental architectural constraint that SimPy Python and AnyLogic Java code blocks resolve trivially. The **clock token** (G05) is now exposed in the UI Condition Builder. The macro registry and distribution registry are already open to extension without touching engine internals.
+DES Studio makes a deliberate safety-first choice: all logic is expressed through a declarative macro and condition token system with no `new Function()` or `eval()`. This prevents code injection and makes the tool accessible to non-programmers. **Sprint 34** partially closes the scripting gap with two new macros: `SET(varName, expr)` updates any scalar state variable using a safe arithmetic expression that can reference entity attributes (`Entity.<attrName>`), other state variables, `clock`, arithmetic operators, and math functions (`min`, `max`, `abs`, `round`, `floor`, `ceil`). `SET_ATTR(attrName, expr)` mutates an attribute on the current context entity mid-process, enabling computed priority scoring, cost calculation, and derived attribute routing — all without `eval`. The **clock token** (G05) is exposed in the UI Condition Builder. The macro registry and distribution registry are open to extension without touching engine internals. What remains impossible under the three-phase declarative model is **coroutine-style multi-step waiting** within a single entity's lifetime (arbitrary loops, branching, sequential suspension) — the fundamental capability that SimPy Python and AnyLogic Java code blocks provide.
 
 ---
 
@@ -259,27 +261,65 @@ DES Studio makes a deliberate safety-first choice: all logic is expressed throug
 | ANOVA / multi-scenario comparison | G13 | ✅ Complete | `oneWayANOVA()` with F-test + `tukeyHSD()` post-hoc with Bonferroni |
 | Resource failure state in UI (complete) | G16 | ✅ Complete | Execute canvas Activity nodes show failed servers (red dots, warning badge) |
 
-**Exit gate:** ✅ Met — 37 new tests, 695/695 engine tests passing, build clean, capability guide created.
+**Exit gate:** ✅ Met — 37 new tests, 695/695 engine tests passing, build clean, capability guide created. **Post-sprint review:** four engine bugs fixed (B1–B4); 10 regression tests added; full suite 1074/1074 passing.
+
+---
+
+### Sprint 34 — Computed Attribute Expressions ✅ Complete
+
+**Goal:** Partially close G02 by adding safe, declarative arithmetic expression support covering the three most common scripting use cases in DES models.
+
+| Feature | Gap # | Status | Notes |
+|---|---|---|---|
+| `SET(varName, expr)` macro | G02 (partial) | ✅ Complete | Evaluates safe arithmetic expression with Entity.attr, state var, clock references |
+| `SET_ATTR(attrName, expr)` macro | G02 (partial) | ✅ Complete | Mutates current entity's attribute mid-process; immediate effect on routing predicates |
+| Math functions in expressions | G02 (partial) | ✅ Complete | `min(a,b)`, `max(a,b)`, `abs(a)`, `round(a)`, `floor(a)`, `ceil(a)` |
+| Routing on computed attributes | G02 (partial) | ✅ Complete | Emergent: SET_ATTR updates are visible to existing `evaluatePredicate` routing |
+
+**Exit gate:** ✅ Met — 16 new tests; full suite 1090/1090 passing; no regressions.
 
 ---
 
 ## Appendix: Coverage Summary
 
+Counts are derived from the Section 1 scoring matrix. Each row in the matrix is one assessed feature.
+
 | Category | Features Assessed | DES Studio ✅ | DES Studio ⚠️ | DES Studio ❌ | Coverage % |
 |----------|-------------------|---------------|---------------|---------------|------------|
-| A — Core entity model | 14 | 13 | 1 | 0 | 96% |
-| B — Resource & server model | 14 | 13 | 1 | 0 | 96% |
-| C — Queueing & scheduling | 19 | 18 | 1 | 0 | 97% |
-| D — Statistical output | 24 | 22 | 2 | 0 | 96% |
-| E — Visual authoring | 21 | 18 | 1 | 2 | 88% |
-| F — Scripting & extensibility | 16 | 9 | 4 | 3 | 69% |
-| **Total** | **108** | **93** | **10** | **5** | **91%** |
+| A — Core entity model | 14 | 11 | 1 | 2 | 82% |
+| B — Resource & server model | 14 | 11 | 1 | 2 | 82% |
+| C — Queueing & scheduling | 18 | 17 | 0 | 1 | 94% |
+| D — Statistical output | 27 | 26 | 0 | 1 | 96% |
+| E — Visual authoring | 20 | 17 | 0 | 3 | 85% |
+| F — Scripting & extensibility | 16 | 9 | 5 | 2 | 72% |
+| **Total** | **109** | **91** | **7** | **11** | **87%** |
 
-*Coverage % = (✅ + 0.5×⚠️) / Total*
+*Coverage % = (✅ + 0.5×⚠️) / Total. Remaining ❌ items (conveyors, state machine, container resources, 2D/3D/GIS environments, general scripting / coroutines) are either architectural non-starters for a browser-based declarative tool or explicitly deferred backlog items.*
 
-**Top 5 highest-priority gaps (remaining):**
-1. G02 — General-purpose scripting / custom process logic (F, High)
-2. G17 — Cost modelling (D, Low)
-3. G21 — Container / level resource (B, Low)
-4. G24 — Public embeddable API (F, Low)
-5. G18 — Jockeying (C, Low)
+**Remaining open gaps by priority:**
+1. G02 — General-purpose scripting / custom process logic (F, High) — ⚠️ partially closed (Sprint 34); coroutine/multi-step sub-case is an architectural constraint
+2. G17 — Cost modelling (D, Low) — Sprint 35 candidate
+3. G21 — Container / level resource (B, Low) — Sprint 34 candidate
+4. G24 — Public embeddable API (F, Low) — Sprint 34 candidate
+5. G18 — Jockeying (C, Low) — Backlog (very low practical demand)
+
+**What changed in v1.5 vs v1.4 (Sprint 34):**
+
+| Section | Item | Before | After | Reason |
+|---------|------|--------|-------|--------|
+| F | Custom logic in process steps | ❌ High Gap | ⚠️ | SET/SET_ATTR macros close attribute mutation, state arithmetic, computed routing sub-cases |
+| Gap register | G02 | ❌ Open | ⚠️ Partial | Sprint 34 delivery |
+| F coverage | Scripting & extensibility | 69% | 72% | One ❌→⚠️ (row 2 of F matrix) |
+| Total | All categories | 86% (91✅ 6⚠️ 12❌) | 87% (91✅ 7⚠️ 11❌) | G02 partial close |
+
+**What changed in v1.4 vs v1.3 (post-review fixes):**
+
+| Section | Item | Before | After | Reason |
+|---------|------|--------|-------|--------|
+| B | Resource preemption | ❌ High Gap | ✅ | Scoring matrix not updated after Sprint 32 delivery |
+| B | Resource breakdowns/failures | ❌ Gap | ✅ | Scoring matrix not updated after Sprint 32 delivery |
+| B | Resource repair/MTTR | ❌ Gap | ✅ | Scoring matrix not updated after Sprint 32 delivery |
+| D | WIP (work in progress) | ⚠️ Gap | ✅ | Scoring matrix not updated after Sprint 31 delivery; B2 bug also fixed |
+| E | Time-plot / signal charts | ⚠️ Gap | ✅ | Scoring matrix not updated after Sprint 31 delivery |
+| F | Clock value in conditions | ⚠️ Gap | ✅ | Scoring matrix not updated after Sprint 31 delivery |
+| F | Process-level interrupts | ❌ Gap | ✅ | Resolved by G01 preemption (G14 cross-reference) |
