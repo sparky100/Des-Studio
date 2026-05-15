@@ -15,6 +15,7 @@
 | v1.2 | 2026-05-14 | Sprint 32 | Closed G01 (preemption), G04 (resource failures/MTBF/MTTR) |
 | v1.3 | 2026-05-14 | Sprint 33 | Closed G06 (SPLIT), G07 (COSEIZE), G08 (SPT/EDD/PRIORITY), G09 (dynamic BATCH), G10 (MATCH), G12 (histograms), G13 (ANOVA), G16 (failure UI) |
 | v1.4 | 2026-05-15 | Post-sprint review | Corrected four engine bugs found during code review: B1 (REPAIR _downtime always 0), B2 (avgWIP denominator wrong with warmup), B3 (COSEIZE auxiliary servers not released — caused surgical-suite deadlock after first service), B4 (SPLIT child entities missing waitingSince/waitingFor metadata). Scoring matrix updated for G01/G04/G05/G11/G14/G15 which were still showing pre-implementation statuses. Coverage table recalculated. |
+| v1.5 | 2026-05-15 | Sprint 34 | Partial close of G02 (scripting): added `SET(varName, expr)` and `SET_ATTR(attrName, expr)` macros with safe arithmetic expression evaluator supporting Entity attribute refs, state variable refs, clock, arithmetic operators, and math functions (min/max/abs/round/floor/ceil). F matrix row 2 updated ❌→⚠️. Coverage table updated. |
 
 ---
 
@@ -145,7 +146,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | Feature | SimPy | AnyLogic | JaamSim | DES Studio | Gap? |
 |---|---|---|---|---|---|
 | General-purpose scripting language | ✅ Python | ✅ Java | ❌ | ❌ | Gap |
-| Custom logic in process steps | ✅ yield | ✅ code blocks | ❌ | ❌ | **High Gap** |
+| Custom logic in process steps | ✅ yield | ✅ code blocks | ❌ | ⚠️ SET/SET_ATTR macros; arithmetic + math fns; no coroutines | Gap |
 | Custom condition expressions | ✅ Python | ✅ Java | ✅ input lang | ⚠️ token-based DSL | Gap |
 | Clock value in conditions | ✅ env.now | ✅ | ✅ | ✅ `clock` token in Condition Builder UI + runtime evaluator | — |
 | Custom distributions | ✅ any fn | ✅ | ✅ | ⚠️ Empirical / CSV only | Gap |
@@ -168,7 +169,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | # | Feature | Category | Priority | Status | Notes |
 |---|---|---|---|---|---|
 | G01 | **Resource preemption** | B | **High** | ✅ Complete | `PREEMPT(ServerType)` macro; interrupted entity re-queues with `_remainingService`; trace entry emitted. Sprint 32. |
-| G02 | **General-purpose scripting / custom process logic** | F | **High** | ❌ Open | Three-phase declarative model is architecturally intentional. Partial mitigation: structured C-event priority chain. | Sprint 33 |
+| G02 | **General-purpose scripting / custom process logic** | F | **High** | ⚠️ Partial | Sprint 34: `SET(varName, expr)` and `SET_ATTR(attrName, expr)` macros close three high-value sub-cases: (1) entity attribute mutation mid-process, (2) state variable arithmetic with entity/clock/state references and math functions, (3) routing based on computed attributes. Multi-step coroutine-style logic (arbitrary branching, loops, sequential waiting within a single entity's lifetime) remains architecturally impossible in Pidd's three-phase model. |
 | G03 | ~~**Probabilistic / conditional routing**~~ | A | ~~High~~ | ~~Sprint 31~~ ✅ Resolved | Both conditional routing (predicate-based branches) and probabilistic routing (probability-weighted selection) implemented in `fireBEvent()`. V17/V18 validation rules cover both. |
 | G04 | **Resource breakdowns / failures** | B | **High** | ✅ Complete | `FAIL(ServerType)` and `REPAIR(ServerType)` macros; `failed` server state; MTBF/MTTR auto-scheduling. Sprint 32. **Review fix B1:** `_downtime` was always 0 because `srv._failedAt` was cleared before being read; fixed by saving to a local variable first. |
 | G05 | ~~**Clock value in conditions**~~ | F | ~~Low~~ | ~~Sprint 31~~ ✅ Resolved | `clock` token added to `buildConditionTokens()`. Engine already supported it at runtime. |
@@ -212,7 +213,7 @@ DES Studio's statistical output is arguably its strongest differentiator: 95% CI
 The visual authoring surface is comprehensive for a browser-based tool: canvas DAG editor, real-time token animation, per-node live counts, structured trace/event log, entity inspector, KPI cards, sweep charts, and a model gallery with sharing and forking. **Live queue-depth time-plot** (G15) is implemented as a Charts tab in the BottomPanel (one SVG line per queue, colour-coded). **Failed server visualisation** (G16) is complete: Execute canvas Activity nodes show failed servers as red dots in the pool grid with a "⚠ N failed" badge. The remaining gaps are 2D spatial layout, 3D environments, and GIS integration, all of which are out of scope for a browser-first tool at DES Studio's positioning.
 
 ### F — Scripting & Extensibility
-DES Studio makes a deliberate safety-first choice: all logic is expressed through a declarative macro and condition token system with no `new Function()` or `eval()`. This prevents code injection and makes the tool accessible to non-programmers, but it means **sequential process logic** (loops, conditionals, multi-step waiting within a single entity's lifetime) is not expressible — a fundamental architectural constraint that SimPy Python and AnyLogic Java code blocks resolve trivially. The **clock token** (G05) is now exposed in the UI Condition Builder. The macro registry and distribution registry are already open to extension without touching engine internals.
+DES Studio makes a deliberate safety-first choice: all logic is expressed through a declarative macro and condition token system with no `new Function()` or `eval()`. This prevents code injection and makes the tool accessible to non-programmers. **Sprint 34** partially closes the scripting gap with two new macros: `SET(varName, expr)` updates any scalar state variable using a safe arithmetic expression that can reference entity attributes (`Entity.<attrName>`), other state variables, `clock`, arithmetic operators, and math functions (`min`, `max`, `abs`, `round`, `floor`, `ceil`). `SET_ATTR(attrName, expr)` mutates an attribute on the current context entity mid-process, enabling computed priority scoring, cost calculation, and derived attribute routing — all without `eval`. The **clock token** (G05) is exposed in the UI Condition Builder. The macro registry and distribution registry are open to extension without touching engine internals. What remains impossible under the three-phase declarative model is **coroutine-style multi-step waiting** within a single entity's lifetime (arbitrary loops, branching, sequential suspension) — the fundamental capability that SimPy Python and AnyLogic Java code blocks provide.
 
 ---
 
@@ -264,6 +265,21 @@ DES Studio makes a deliberate safety-first choice: all logic is expressed throug
 
 ---
 
+### Sprint 34 — Computed Attribute Expressions ✅ Complete
+
+**Goal:** Partially close G02 by adding safe, declarative arithmetic expression support covering the three most common scripting use cases in DES models.
+
+| Feature | Gap # | Status | Notes |
+|---|---|---|---|
+| `SET(varName, expr)` macro | G02 (partial) | ✅ Complete | Evaluates safe arithmetic expression with Entity.attr, state var, clock references |
+| `SET_ATTR(attrName, expr)` macro | G02 (partial) | ✅ Complete | Mutates current entity's attribute mid-process; immediate effect on routing predicates |
+| Math functions in expressions | G02 (partial) | ✅ Complete | `min(a,b)`, `max(a,b)`, `abs(a)`, `round(a)`, `floor(a)`, `ceil(a)` |
+| Routing on computed attributes | G02 (partial) | ✅ Complete | Emergent: SET_ATTR updates are visible to existing `evaluatePredicate` routing |
+
+**Exit gate:** ✅ Met — 16 new tests; full suite 1090/1090 passing; no regressions.
+
+---
+
 ## Appendix: Coverage Summary
 
 Counts are derived from the Section 1 scoring matrix. Each row in the matrix is one assessed feature.
@@ -275,17 +291,26 @@ Counts are derived from the Section 1 scoring matrix. Each row in the matrix is 
 | C — Queueing & scheduling | 18 | 17 | 0 | 1 | 94% |
 | D — Statistical output | 27 | 26 | 0 | 1 | 96% |
 | E — Visual authoring | 20 | 17 | 0 | 3 | 85% |
-| F — Scripting & extensibility | 16 | 9 | 4 | 3 | 69% |
-| **Total** | **109** | **91** | **6** | **12** | **86%** |
+| F — Scripting & extensibility | 16 | 9 | 5 | 2 | 72% |
+| **Total** | **109** | **91** | **7** | **11** | **87%** |
 
-*Coverage % = (✅ + 0.5×⚠️) / Total. Remaining ❌ items (conveyors, state machine, container resources, 2D/3D/GIS environments, general scripting) are either architectural non-starters for a browser-based declarative tool or explicitly deferred backlog items.*
+*Coverage % = (✅ + 0.5×⚠️) / Total. Remaining ❌ items (conveyors, state machine, container resources, 2D/3D/GIS environments, general scripting / coroutines) are either architectural non-starters for a browser-based declarative tool or explicitly deferred backlog items.*
 
 **Remaining open gaps by priority:**
-1. G02 — General-purpose scripting / custom process logic (F, High) — architectural intentional constraint
-2. G17 — Cost modelling (D, Low) — Sprint 34 candidate
+1. G02 — General-purpose scripting / custom process logic (F, High) — ⚠️ partially closed (Sprint 34); coroutine/multi-step sub-case is an architectural constraint
+2. G17 — Cost modelling (D, Low) — Sprint 35 candidate
 3. G21 — Container / level resource (B, Low) — Sprint 34 candidate
 4. G24 — Public embeddable API (F, Low) — Sprint 34 candidate
 5. G18 — Jockeying (C, Low) — Backlog (very low practical demand)
+
+**What changed in v1.5 vs v1.4 (Sprint 34):**
+
+| Section | Item | Before | After | Reason |
+|---------|------|--------|-------|--------|
+| F | Custom logic in process steps | ❌ High Gap | ⚠️ | SET/SET_ATTR macros close attribute mutation, state arithmetic, computed routing sub-cases |
+| Gap register | G02 | ❌ Open | ⚠️ Partial | Sprint 34 delivery |
+| F coverage | Scripting & extensibility | 69% | 72% | One ❌→⚠️ (row 2 of F matrix) |
+| Total | All categories | 86% (91✅ 6⚠️ 12❌) | 87% (91✅ 7⚠️ 11❌) | G02 partial close |
 
 **What changed in v1.4 vs v1.3 (post-review fixes):**
 
