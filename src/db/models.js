@@ -23,6 +23,7 @@ export function normalizeProfile(profile = {}) {
     ...profile,
     role,
     isAdmin: role === "admin",
+    suspended: profile.suspended ?? false,
   };
 }
 
@@ -743,6 +744,55 @@ export async function updateUserRole(userId, role) {
     .eq("id", userId);
   if (error) throw error;
   return { ok: true };
+}
+
+export async function suspendUser(userId) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ suspended: true, suspended_at: new Date().toISOString() })
+    .eq("id", userId);
+  if (error) throw error;
+  return { ok: true };
+}
+
+export async function unsuspendUser(userId) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ suspended: false, suspended_at: null })
+    .eq("id", userId);
+  if (error) throw error;
+  return { ok: true };
+}
+
+export async function logAdminAction(action, targetId = null, targetKey = null, oldValue = null, newValue = null) {
+  const { error } = await supabase.rpc("log_admin_action", {
+    p_action:     action,
+    p_target_id:  targetId,
+    p_target_key: targetKey,
+    p_old_value:  oldValue != null ? String(oldValue) : null,
+    p_new_value:  newValue != null ? String(newValue) : null,
+  });
+  if (error) throw error;
+  return { ok: true };
+}
+
+export async function fetchAuditLog(limit = 100) {
+  const { data, error } = await supabase
+    .from("admin_audit_log")
+    .select("id, actor_id, action, target_id, target_key, old_value, new_value, created_at")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []).map(row => ({
+    id:        row.id,
+    actorId:   row.actor_id,
+    action:    row.action,
+    targetId:  row.target_id,
+    targetKey: row.target_key,
+    oldValue:  row.old_value,
+    newValue:  row.new_value,
+    createdAt: row.created_at,
+  }));
 }
 
 // --- F28.1: Saved Experiment Definitions ---

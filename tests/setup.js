@@ -33,6 +33,7 @@ const mockQuery = {
 
 const mockSupabase = {
   from: vi.fn(() => mockQuery),
+  rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
   auth: {
     getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
     onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
