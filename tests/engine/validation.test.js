@@ -376,3 +376,110 @@ describe("validateModel", () => {
     expect(result.errors.filter(error => error.code === "V17" || error.code === "V18")).toEqual([]);
   });
 });
+
+// ── V26 / V27: Container validation (Sprint 39) ───────────────────────────────
+
+const baseModel = {
+  entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
+};
+
+describe("V26 — container type validation", () => {
+  it("passes for a valid container with capacity and initialLevel", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "Tank", capacity: "1000", initialLevel: "500" }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V26")).toHaveLength(0);
+  });
+
+  it("errors when container id is empty", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "", capacity: "1000", initialLevel: "0" }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V26")).toBe(true);
+  });
+
+  it("errors on duplicate container id", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [
+        { id: "Tank", capacity: "1000", initialLevel: "0" },
+        { id: "Tank", capacity: "500",  initialLevel: "0" },
+      ],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V26")).toBe(true);
+  });
+
+  it("errors when capacity is <= 0", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "Tank", capacity: "0", initialLevel: "0" }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V26")).toBe(true);
+  });
+
+  it("errors when initialLevel is negative", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "Tank", capacity: "1000", initialLevel: "-10" }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V26")).toBe(true);
+  });
+
+  it("errors when initialLevel exceeds capacity", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "Tank", capacity: "100", initialLevel: "150" }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V26")).toBe(true);
+  });
+});
+
+describe("V27 — FILL/DRAIN must reference declared container", () => {
+  it("passes when FILL references a declared container", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "Fuel", capacity: "500", initialLevel: "200" }],
+      bEvents: [{ id: "f1", name: "Fill", effect: "FILL(Fuel, 50)", schedules: [] }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V27")).toHaveLength(0);
+  });
+
+  it("errors when FILL references an undeclared container in B-event", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [],
+      bEvents: [{ id: "f1", name: "Fill", effect: "FILL(Ghost, 50)", schedules: [] }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V27")).toBe(true);
+  });
+
+  it("errors when DRAIN references an undeclared container in C-event", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [],
+      cEvents: [{ id: "d1", name: "Drain", condition: "true", effect: "DRAIN(Ghost, 10)", cSchedules: [] }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.some(e => e.code === "V27")).toBe(true);
+  });
+
+  it("is case-insensitive when matching container id", () => {
+    const model = {
+      ...baseModel,
+      containerTypes: [{ id: "fuel", capacity: "500", initialLevel: "0" }],
+      bEvents: [{ id: "f1", name: "Fill", effect: "FILL(Fuel, 50)", schedules: [] }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V27")).toHaveLength(0);
+  });
+});
