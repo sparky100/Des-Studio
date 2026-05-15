@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.64 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.71 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -70,10 +70,18 @@ flowchart LR
   S22 --> S23["Sprint 23<br/>UI Interface Polish<br/>& Workflow Shell"]
   S23 --> S24["Sprint 24<br/>Simulation Correctness<br/>& SimPy-Informed Remediation"]
   S24 --> S25["Sprint 25<br/>Simulation Contract<br/>Consolidation"]
+  S25 --> S26["Sprint 26<br/>Resource Semantics<br/>& Waiting Behaviour"]
+  S26 --> S27["Sprint 27<br/>Simulation Debugging<br/>& Explainability"]
+  S27 --> S28["Sprint 28<br/>Experiments &<br/>Statistical Workbench"]
+  S28 --> S29["Sprint 29<br/>Test Infrastructure,<br/>Benchmarks & CI"]
+  S29 --> S30["Sprint 30<br/>Reusable Modelling<br/>Library & Templates"]
+  S30 --> S31["Sprint 31<br/>Expressiveness &<br/>Observability"]
+  S31 --> S32["Sprint 32<br/>Resource Reliability<br/>& Preemption"]
+  S32 --> S33["Sprint 33<br/>Advanced Scheduling<br/>& Analytics"]
 
   classDef done fill:#143d2a,stroke:#31a24c,color:#f2fff7;
   classDef future fill:#2a2438,stroke:#a78bfa,color:#f5f3ff;
-  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S14,S15,S16,S17,S18,S19,S20,S21,S22,S23 done;
+  class PS,S1,S2,S3,S4,S5,S6,S7A,S7B,S7,S8A,S8,S8B,S9A,S9,S9B,S9C,S10,S11,S12,S13,PST,S14,S15,S16,S17,S18,S19,S20,S21,S22,S23,S24,S25,S26,S27,S28,S29,S30,S31,S32,S33 done;
   class S24,S25 future;
 ```
 
@@ -104,7 +112,14 @@ flowchart LR
 | Simulation correctness remediation | ✅ Complete | Sprint 24 closed the urgent engine correctness defects, propagated Phase C warnings, hardened lifecycle/event context behavior, aligned persistence, and added regression coverage. |
 | Simulation contract consolidation | ✅ Complete | Sprint 25 finalized the V8 policy, warm-up truncation semantics for in-flight entities, one queue/entity arbitration path, and contract-level regression coverage. |
 | Resource semantics and waiting behaviour | ✅ Complete | Sprint 26 hardened waiting ownership, mirrored resource claims, deterministic idle-server arbitration, lifecycle cleanup across routing/recirculation, and the associated ADR/test/doc set. |
-| Next roadmap shape | 🔄 In progress | Sprint 27+ roadmap remains captured in `docs/reviews/sprint-26-30-roadmap-and-scenario-coverage.md`. |
+| Simulation debugging and explainability | ✅ Complete | Sprint 27: structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, Execute explainability surfaces (event log, entity inspector, canvas overlays). |
+| Experiments and statistical workbench | ✅ Complete | Sprint 28: saved experiment configs, CI precision display, warm-up transient diagnostics, anomalous replication flagging, run archiving/tagging/filtering. 947/947 tests passing. |
+| Test infrastructure, benchmarks and reproducibility | ✅ Complete | Sprint 29: 18 test failures fixed, M/M/c benchmark, reproducibility contract, performance envelope, golden fixtures, GitHub Actions CI, RNG independence tests. 1000/1000 tests. |
+| Reusable modelling library and scenario packs | ✅ Complete | Sprint 30: 14 templates across 6 domains, ARRIVE/ASSIGN macro bugs fixed, domain+templateMeta fields, gallery redesign, in-app Patterns Guide, docs/patterns/ (6 files). |
+| Expressiveness and observability | ✅ Complete | Sprint 31: clock token in Condition Builder, WIP time-average metric (Little's Law), live queue-depth time-plot in Execute canvas Charts tab. |
+| Resource reliability and preemption | ✅ Complete | Sprint 32: PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure events. |
+| Advanced scheduling and analytics | ✅ Complete | Sprint 33: SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
+| Next roadmap shape | 🔄 In progress | Sprint 34+ roadmap to be defined. |
 
 ### Key Issues and Watchpoints
 
@@ -175,6 +190,9 @@ flowchart LR
 | 1.66 | 2026-05-14 | Sprint 28 completed. Saved experiment configs, CI precision display, warm-up transient diagnostics, anomalous replication flagging, run archiving/tagging. 947/947 tests passing. |
 | 1.67 | 2026-05-14 | Sprint 29 completed. F29.0–F29.6: 18 test failures fixed, M/M/c benchmark (exits 0, 2.66% error), reproducibility contract in AGENTS.md, performance envelope doc, golden fixtures, GitHub Actions CI, RNG independence tests. |
 | 1.68 | 2026-05-14 | Sprint 30 completed. 14 templates across 6 domains (4 new). ARRIVE/ASSIGN macro bugs fixed in 9+6 templates. domain/templateMeta fields added. Gallery redesign: domain filter, search, richer cards. In-app Patterns Guide (6 patterns). docs/patterns/ reference files. 1000/1000 tests. |
+| 1.69 | 2026-05-14 | Sprint 31 completed. Clock token in Condition Builder, WIP time-average metric (Little's Law), live queue-depth time-plot in Execute canvas Charts tab. |
+| 1.70 | 2026-05-14 | Sprint 32 completed. PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure events. |
+| 1.71 | 2026-05-15 | Sprint 33 completed. SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. Documentation cleanup: archived 17 superseded/scratch files. |
 
 ---
 
@@ -221,6 +239,9 @@ flowchart LR
 | Sprint 28 | ✅ Complete | 2026-05-14 | Experiments & Statistical Workbench. | 947 (947) | 1.48% | Success | Saved experiment configs, CI precision display, warm-up transient diagnostics, anomalous replication flagging, run archiving/tagging/filtering. |
 | Sprint 29 | ✅ Complete | 2026-05-14 | Test Infrastructure, Benchmarks & Reproducibility. | 1000 (1000) | 1.48%/2.66% | Success | F29.0–F29.6: 18 test failures fixed, M/M/c benchmark, reproducibility contract, performance envelope, golden fixtures, GitHub Actions CI, RNG independence tests. |
 | Sprint 30 | ✅ Complete | 2026-05-14 | Reusable Modelling Library & Scenario Packs. | 1000 (1000) | 1.48% | Success | 14 templates (4 new), ARRIVE/ASSIGN bugs fixed, domain+templateMeta fields, gallery redesign, in-app Patterns Guide, docs/patterns/ (6 files). |
+| Sprint 31 | ✅ Complete | 2026-05-14 | Expressiveness & Observability. | Focused | N/A | Success | Clock token in Condition Builder, WIP time-average metric (Little's Law), live queue-depth time-plot in Execute canvas Charts tab. |
+| Sprint 32 | ✅ Complete | 2026-05-14 | Resource Reliability & Preemption. | Focused | N/A | Success | PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure. |
+| Sprint 33 | ✅ Complete | 2026-05-14 | Advanced Scheduling & Analytics. | 695 (695) | N/A | Success | SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
 
 ---
 
@@ -356,6 +377,13 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 24 | Simulation Correctness & SimPy-Informed Remediation | complete: urgent engine correctness fixes, SimPy-style JS lifecycle/resource guidance, persistence contract alignment, regression coverage |
 | Sprint 25 | Simulation Contract Consolidation | complete: V8 validation policy, warm-up semantics, centralized queue/entity arbitration, contract regression coverage |
 | Sprint 26 | Resource Semantics & Waiting Behaviour | complete: explicit waiting ownership, mirrored resource claims, deterministic contention helpers, lifecycle cleanup across routing/recirculation, ADRs, sample models, and focused regression coverage |
+| Sprint 27 | Simulation Debugging & Explainability | complete: structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, Execute explainability surfaces |
+| Sprint 28 | Experiments & Statistical Workbench | complete: saved experiment configs, CI precision display, warm-up transient diagnostics, anomalous replication flagging, run archiving/tagging |
+| Sprint 29 | Test Infrastructure, Benchmarks & Reproducibility | complete: 18 test failures fixed, M/M/c benchmark, reproducibility contract, performance envelope, golden fixtures, GitHub Actions CI |
+| Sprint 30 | Reusable Modelling Library & Scenario Packs | complete: 14 templates across 6 domains, ARRIVE/ASSIGN bugs fixed, domain+templateMeta fields, gallery redesign, Patterns Guide |
+| Sprint 31 | Expressiveness & Observability | complete: clock token in Condition Builder, WIP time-average metric, live queue-depth time-plot |
+| Sprint 32 | Resource Reliability & Preemption | complete: PREEMPT, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation |
+| Sprint 33 | Advanced Scheduling & Analytics | complete: SPLIT/COSEIZE/MATCH macros, dynamic BATCH, SPT/EDD/PRIORITY queues, histograms, ANOVA with Tukey HSD |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
@@ -386,6 +414,20 @@ The existing Forms/Tabs editor remains the stable manual authoring mode througho
 | Shareable results dashboard | ✅ QR code generator; hash-route public DashboardView; share modal with widget picker and copy/revoke per link | Sprint 15 |
 | Parametric sweep and parameter exploration | ✅ Sweepable param discovery; range+step config; multi-point orchestration; SweepChart with CI polygon ribbon and results table | Sprint 16 |
 | Scenario comparison with statistical confidence | ✅ Paired-t confidence interval on differences; side-by-side KPI comparison for sweep points | Sprint 16 |
+| Clock token in conditions | ✅ `clock` variable available in Condition Builder for time-based logic | Sprint 31 |
+| WIP time-average metric | ✅ `avgWIP` exposed in summary; Little's Law validation (avgWIP ≈ λ × avgSojourn) | Sprint 31 |
+| Live queue-depth time-plot | ✅ QueueDepthTimePlot component in Execute canvas Charts tab; one line per queue, colour-coded | Sprint 31 |
+| Resource preemption | ✅ PREEMPT(ServerType) macro; interrupted entities re-queued with `_remainingService` preserved | Sprint 32 |
+| Resource breakdowns and repair | ✅ FAIL/REPAIR macros; `failed` server status; MTBF/MTTR scheduling via server entity type distributions | Sprint 32 |
+| Remaining service time preservation | ✅ `_scheduledDuration` stored on server; remaining service calculated and used on re-seize after preemption/failure | Sprint 32 |
+| SPLIT macro | ✅ Creates N-1 clones of context entity; tracks parent-child relationships via `_splitParent`/`_splitChildren`/`_splitFrom`/`_splitIndex` | Sprint 33 |
+| COSEIZE macro | ✅ Atomically seizes multiple server types simultaneously; all-or-nothing claim | Sprint 33 |
+| MATCH macro | ✅ Pairs entities from two queues into batch entity; validates entity types against typeA/typeB parameters | Sprint 33 |
+| Dynamic BATCH sizing | ✅ Batch size from entity attribute: `BATCH(Queue, Entity.attrName)` | Sprint 33 |
+| SPT/EDD/PRIORITY queue disciplines | ✅ SPT (shortest processing time), EDD (earliest due date), PRIORITY(attrName) — attribute-based sorting | Sprint 33 |
+| Histogram collection | ✅ Equal-width and Freedman-Diaconis automatic bin selection; pure statistical utility | Sprint 33 |
+| One-way ANOVA with Tukey HSD | ✅ ANOVA F-test with Tukey HSD post-hoc for pairwise comparisons; pure statistical utility | Sprint 33 |
+| Resource failure visualization | ✅ Failed server dots (red) and warning badge on Execute canvas Activity nodes | Sprint 33 |
 
 ---
 
@@ -1542,6 +1584,8 @@ npm run build
 | ADR-010 | Visual Designer canvas and graph metadata | Sprint 9A | ✅ Accepted — `@xyflow/react`; optional layout-only `model_json.graph` |
 | ADR-011 | Conditional routing schema | Sprint 10 | ✅ Accepted — routing table on RELEASE (Option A). |
 | ADR-012 | Recirculation and batching design | Sprint 12 | ✅ Accepted — back-edge loop:true flag; BATCH queue-accumulation (Option A); UNBATCH restore originals. |
+| ADR-013 | Resource claim and waiting ownership | Sprint 26 | ✅ Accepted — explicit waiting/resource ownership contracts, mirrored active claims. |
+| ADR-014 | Preemption and interruption deferral | Sprint 26 | ✅ Accepted — preemption boundary documented; out of scope for Three-Phase method (later implemented in Sprint 32). |
 
 ---
 

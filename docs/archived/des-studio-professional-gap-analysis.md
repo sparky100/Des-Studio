@@ -1,3 +1,7 @@
+> **SUPERSEDED** — This document has been replaced by `docs/capability-gap-analysis.md`.
+> All gap analysis findings have been incorporated into the current capability gap analysis.
+> Date superseded: 2026-05-15
+
 # DES Studio — Professional Gap Analysis
 
 **Date:** 2026-05-08  

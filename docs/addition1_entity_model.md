@@ -1,8 +1,12 @@
-# DES Tool — Specification Addition 1
-## Entity Model, Attribute Schema & Action Vocabulary
-**Status:** Approved for Sprint 1 | **Version:** 1.0
+# DES Studio — Entity Model, Attribute Schema & Action Vocabulary
 
----
+> **Foundational Reference:** This document defines the entity model, attribute schema, and original action vocabulary for Sprints 1-3. It remains authoritative for entity class definitions, attribute types, and the core macro patterns.
+>
+> **Extended Macros:** For the complete current macro vocabulary (12 macros including PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, MATCH, dynamic BATCH, BATCH, UNBATCH), see `AGENTS.md` Section 5.1.
+>
+> **Queue Disciplines:** For the complete queue discipline set (FIFO, LIFO, PRIORITY, SPT, EDD, PRIORITY(attrName)), see `AGENTS.md` Section 6.
+>
+> **Date:** Original 2026-04-30 | Updated 2026-05-15
 
 ## 1. Purpose & Scope
 
@@ -538,16 +542,52 @@ Before marking the Predicate Builder feature complete, verify all of the followi
 
 ## 10. Out of Scope for This Version
 
-The following are valid future extensions but are **not supported** in the current version. If a modeller's use case requires one of these, the correct answer is that this version does not support it — not to add a workaround.
+The following were valid future extensions at the time of writing but have since been implemented:
 
-- **Conditional routing** — different next nodes from one Activity based on state
-- **Resource pooling** — shared capacity across resource types
+- ~~**Conditional routing**~~ — ✅ Implemented in Sprint 10 (RELEASE routing table with conditions and probabilistic routing)
+- ~~**Resource pooling**~~ — ✅ Implemented in Sprint 10 (multi-server resources with capacity > 1)
+- ~~**Pre-emption**~~ — ✅ Implemented in Sprint 32 (PREEMPT macro with remaining service time preservation)
+- ~~**Entity splitting**~~ — ✅ Implemented in Sprint 33 (SPLIT macro creating N-1 clones)
+
+The following remain **out of scope**:
+
 - **Batch arrivals** — multiple entities created per ARRIVE event
-- **Pre-emption** — interrupting an in-service entity to serve a higher-priority one
-- **Entity splitting** — fork patterns (single entity dispatched to multiple downstream paths)
 - **Multiple entity classes per Source** — one Source generates one class only
 
 The following are **explicitly in scope** and should not be treated as out of scope when encountered during development:
 
 - **CSV-imported empirical distributions** — see Section 6.3. Values are extracted at import time and stored in model_json. No runtime file access.
 - **Additional parametric distribution types** — added via the registry pattern in distributions.js. No ADR required unless the sampler interface changes.
+
+## 11. Extended Macro Vocabulary (Post-Sprint 3)
+
+The original 5 macros (ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE) defined in Sections 7.1-7.5 have been extended. The complete current macro set is documented in `AGENTS.md` Section 5.1:
+
+| Macro | Sprint | Purpose |
+|---|---|---|
+| ARRIVE | 1 | Creates entity, places in queue, schedules next arrival |
+| ASSIGN | 1 | Seizes resource for entity, schedules completion |
+| COMPLETE | 1 | Releases resource, records stats, routes entity |
+| RELEASE | 1 | Frees resource and routes entity to another queue |
+| RENEGE | 1 | Removes oldest waiting entity from queue |
+| BATCH | 12 | Accumulates N entities into one batch |
+| UNBATCH | 12 | Restores children from parent batch |
+| PREEMPT | 32 | Interrupts busy server; re-queues entity with remaining service |
+| FAIL | 32 | Sets matching servers to failed status |
+| REPAIR | 32 | Restores failed servers to idle |
+| SPLIT | 33 | Creates N-1 clones of context entity |
+| COSEIZE | 33 | Atomically seizes multiple server types simultaneously |
+| MATCH | 33 | Pairs entities from two queues into batch |
+
+## 12. Extended Queue Disciplines (Post-Sprint 3)
+
+The original 3 queue disciplines (FIFO, LIFO, PRIORITY) defined in Section 8 have been extended. The complete current set is documented in `AGENTS.md` Section 6:
+
+| Discipline | Sprint | Selection Rule |
+|---|---|---|
+| FIFO | 1 | Smallest arrivalTime |
+| LIFO | 1 | Largest arrivalTime |
+| PRIORITY | 1 | Smallest priority attribute value (FIFO tiebreaker) |
+| SPT | 33 | Shortest processing time first |
+| EDD | 33 | Earliest due date first |
+| PRIORITY(attrName) | 33 | Lowest value of specified attribute |

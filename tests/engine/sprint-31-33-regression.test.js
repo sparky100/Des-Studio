@@ -452,9 +452,16 @@ describe('Sprint 33: SPLIT macro edge cases', () => {
       bEvents: [
         { id: "arrival", name: "Arrival", effect: "ARRIVE(Item, Input)", scheduledTime: "0",
           schedules: [{ eventId: "arrival", dist: "Fixed", distParams: { value: "1" } }] },
-        { id: "split", name: "Split", effect: "SPLIT(Item, 2, Output)", scheduledTime: "5", schedules: [] },
       ],
-      cEvents: [],
+      cEvents: [
+        {
+          id: "c1",
+          name: "Split",
+          condition: "queue(Input).length > 0",
+          effect: "SPLIT(Item, 2, Output)",
+          cSchedules: [],
+        },
+      ],
     };
 
     const engine = buildEngine(model, 42, 0, 6);
@@ -486,15 +493,23 @@ describe('Sprint 33: SPLIT macro edge cases', () => {
       bEvents: [
         { id: "arrival", name: "Arrival", effect: "ARRIVE(Item, Input)", scheduledTime: "0",
           schedules: [{ eventId: "arrival", dist: "Fixed", distParams: { value: "1" } }] },
-        { id: "split", name: "Split", effect: "SPLIT(Item, 3, Output)", scheduledTime: "5", schedules: [] },
       ],
-      cEvents: [],
+      cEvents: [
+        {
+          id: "c1",
+          name: "Split",
+          condition: "queue(Input).length > 0",
+          effect: "SPLIT(Item, 3, Output)",
+          cSchedules: [],
+        },
+      ],
     };
 
     const engine = buildEngine(model, 42, 0, 6);
     const result = engine.runAll();
 
     const children = result.entitySummary.filter(e => e._splitFrom != null);
+    expect(children.length).toBeGreaterThan(0);
     children.forEach(child => {
       expect(child.attrs.priority).toBe(5);
       expect(child.attrs.label).toBe("test");
@@ -546,17 +561,17 @@ describe('Sprint 33: COSEIZE edge cases', () => {
           name: "Co-Seize",
           condition: "queue(Queue).length > 0",
           effect: "COSEIZE(Queue, Server1, Server2, Server3)",
-          cSchedules: [{ eventId: "complete", dist: "Fixed", distParams: { value: "2" }, useEntityCtx: true }],
+          cSchedules: [{ eventId: "complete", dist: "Fixed", distParams: { value: "5" }, useEntityCtx: true }],
         },
       ],
     };
 
-    const engine = buildEngine(model, 42, 0, 10);
+    const engine = buildEngine(model, 42, 0, 3);
     const result = engine.runAll();
 
-    // All three server types should be busy
+    // All three server types should be busy (service time 5, sim ends at 3)
     const servers = result.entitySummary.filter(e => e.role === "server");
-    const busyServers = servers.filter(s => s.status === "busy" || s.stages?.length > 0);
+    const busyServers = servers.filter(s => s.status === "busy" || s.status === "serving");
     expect(busyServers.length).toBe(3);
   });
 
@@ -565,7 +580,7 @@ describe('Sprint 33: COSEIZE edge cases', () => {
       entityTypes: [
         { id: "item", name: "Item", role: "customer", attrDefs: [] },
         { id: "srv1", name: "Server1", role: "server", count: 1, attrDefs: [] },
-        { id: "srv2", name: "Server2", role: "server", count: 0, attrDefs: [] },
+        { id: "srv2", name: "Server2", role: "server", count: 1, attrDefs: [] },
       ],
       stateVariables: [],
       queues: [
@@ -574,29 +589,42 @@ describe('Sprint 33: COSEIZE edge cases', () => {
       bEvents: [
         { id: "arrival", name: "Arrival", effect: "ARRIVE(Item, Queue)", scheduledTime: "0",
           schedules: [{ eventId: "arrival", dist: "Fixed", distParams: { value: "1" } }] },
+        { id: "complete", name: "Complete", effect: "COMPLETE()", scheduledTime: "9999", schedules: [] },
       ],
       cEvents: [
         {
           id: "c1",
+          name: "Seize Server1 only",
+          condition: "queue(Queue).length > 0 AND idle(Server1).count > 0",
+          effect: "ASSIGN(Queue, Server1)",
+          cSchedules: [{ eventId: "complete", dist: "Fixed", distParams: { value: "10" }, useEntityCtx: true }],
+          priority: 1,
+        },
+        {
+          id: "c2",
           name: "Co-Seize",
           condition: "queue(Queue).length > 0",
           effect: "COSEIZE(Queue, Server1, Server2)",
           cSchedules: [],
+          priority: 2,
         },
       ],
     };
 
-    const engine = buildEngine(model, 42, 0, 10);
+    const engine = buildEngine(model, 42, 0, 3);
     const result = engine.runAll();
 
-    // Server1 should still be idle (not partially seized)
+    // Server1 should be busy (seized by c1), Server2 should be idle
+    // COSEIZE should have failed atomically (logged error) because Server1 is busy
     const servers = result.entitySummary.filter(e => e.role === "server");
     const srv1 = servers.find(s => s.type === "Server1");
-    expect(srv1.status).toBe("idle");
+    const srv2 = servers.find(s => s.type === "Server2");
+    expect(srv1.status).toBe("busy");
+    expect(srv2.status).toBe("idle");
 
     // Should have logged the failure
     const logs = result.log.filter(entry =>
-      entry.message && entry.message.includes('no idle Server2')
+      entry.message && entry.message.includes('no idle Server1')
     );
     expect(logs.length).toBeGreaterThan(0);
   });

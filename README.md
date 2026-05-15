@@ -8,25 +8,32 @@ The app lets simulation modellers define entity types, queues, B-Events, C-Event
 
 Version: `7.0.0`
 
-The project has completed the core DES engine, editor, execution, replication, export, accessibility, AI insights, platform foundation, and dynamic modelling work through Sprint 7.
-
-Latest roadmap status from `docs/DES_Studio_Build_Plan.md`:
+The project has completed **33 sprints** covering the full DES modelling lifecycle — from engine safety and correctness through advanced scheduling macros, resource reliability, and statistical analytics.
 
 | Area | Status |
 |---|---|
-| Core DES engine and validation | Complete |
-| Forms/Tabs model editor | Complete and actively preserved |
-| Experiment controls, warm-up, termination, forked public runs | Complete |
+| Core DES engine (Three-Phase A/B/C) | Complete |
+| Engine safety (XSS fix, seeded RNG, queue disciplines) | Complete |
+| Forms/Tabs model editor (5 editors, Predicate Builder) | Complete |
+| Visual Designer (@xyflow/react graph-first authoring) | Complete |
+| Execute canvas (live topology-derived flow view) | Complete |
+| Experiment controls (warm-up, termination, seed, fork) | Complete |
 | Replication runner, confidence intervals, run history | Complete |
-| Import/export, onboarding, accessibility, production polish | Complete |
-| AI results insights via Supabase Edge Function proxy | Complete |
-| Platform roles, user settings, TypeScript contracts | Complete |
+| Import/export, accessibility, production polish | Complete |
+| AI model authoring and results queries | Complete |
+| Platform roles, user settings, SaaS admin | Complete |
 | Dynamic distributions and time-varying resources | Complete |
-| LLM provider architecture preflight | Current next |
-| AI generated model authoring | Planned |
-| Visual Designer authoring | Planned |
-
-Most recent recorded completion gate: Sprint 7 passed with `369` tests and a successful production build.
+| Modelling expressiveness (routing, pooling, batching, recirculation) | Complete |
+| Parametric sweeps (1D + 2D), scenario comparison | Complete |
+| Statistical output analyzer (Welch, batch-means, Bonferroni) | Complete |
+| Shareable results dashboard + QR codes | Complete |
+| CSV import bridge with distribution fitting | Complete |
+| Community gallery and template library (14 templates) | Complete |
+| Resource preemption, breakdowns, MTBF/MTTR | Complete |
+| Advanced scheduling (SPLIT, COSEIZE, MATCH, dynamic BATCH) | Complete |
+| Queue disciplines (FIFO, LIFO, PRIORITY, SPT, EDD, PRIORITY(attr)) | Complete |
+| Histograms and ANOVA with Tukey HSD | Complete |
+| Test infrastructure, benchmarks, CI pipeline | Complete |
 
 ## Tech Stack
 
@@ -37,7 +44,9 @@ Most recent recorded completion gate: Sprint 7 passed with `369` tests and a suc
 | Language | JavaScript/JSX with incremental TypeScript for contracts |
 | Styling | Inline style objects using shared tokens |
 | Database/auth | Supabase JS client 2.45.0 |
+| Canvas / DAG | @xyflow/react |
 | Tests | Vitest, jsdom, React Testing Library |
+| CI | GitHub Actions (test + benchmark + build) |
 
 ## Getting Started
 
@@ -69,55 +78,80 @@ npm run build
 ## Useful Commands
 
 ```bash
-npm test
-npm test -- ui
-npm test -- engine
-npm run typecheck
-npm run build
-```
+# Development
+npm run dev
 
-Focused verification commands used in recent sprints include:
+# Testing
+npm test                              # Watch mode — all tests
+npm test -- --run                     # Single pass, no watch
+npm test -- engine                    # Engine tests only
+npm test -- ui                        # UI tests only
 
-```bash
-npm test -- db onboarding model-export contracts
-npm test -- llm execute-panel
-npm test -- accessibility delete-model onboarding
+# Correctness gates
+node tests/engine/mm1_benchmark.js    # M/M/1 analytical validation
+node tests/engine/mmc_benchmark.js    # M/M/c analytical validation
+
+# Build
+npm run build                         # Production build
+npm run preview                       # Preview production build locally
 ```
 
 ## Architecture Rules
 
-Before changing code, read `CLAUDE.md` or `AGENTS.md`. They are the architectural contract for the project.
+Before changing code, read `AGENTS.md`. It is the architectural contract for the project.
 
 Key rules:
 
-- Preserve working components; extend or fix in place.
+- Preserve working components; extend or fix in place — never rewrite from scratch.
 - Keep `src/engine/` pure JavaScript with no React or DOM access.
 - Keep Supabase access inside `src/db/models.js` or `src/db/supabase.js`.
-- Use structured pickers and the Predicate Builder for modelling logic. Do not add free-text logic fields.
+- Use structured pickers and the Predicate Builder for modelling logic. No free-text logic fields.
 - Never use `eval`, `new Function`, or client-side LLM API keys.
-- Use seeded RNG for simulation sampling; do not use `Math.random()` in simulation code.
-- Keep one canonical `model_json` across Forms/Tabs, AI Generated Model, and future Visual Designer modes.
+- Use seeded RNG for simulation sampling; never `Math.random()` in engine code.
+- One canonical `model_json` across Forms/Tabs, AI Generated Model, and Visual Designer modes.
 - Do not add dependencies without explicitly reviewing and documenting the decision.
 
 ## Documentation
 
-Important project documents:
-
 | Document | Purpose |
 |---|---|
-| `CLAUDE.md` | Architectural contract and current implementation rules |
-| `AGENTS.md` | Codex-facing architectural contract |
+| `AGENTS.md` | Architectural contract, sprint history, coding conventions, test strategy |
 | `docs/DES_Studio_Build_Plan.md` | Living roadmap, sprint status, implementation prompts |
+| `docs/DES_Studio_User_Guide.md` | End-user guide for modellers |
+| `docs/Template Models Guide.md` | Detailed explanations of all 14 template models |
 | `docs/addition1_entity_model.md` | Entity model, macros, distributions, validation schema |
-| `docs/decisions/` | Architectural Decision Records |
-| `AUDIT.md` | Full audit findings and known issue context |
+| `docs/capability-gap-analysis.md` | DES Studio vs professional tools (SimPy, AnyLogic, JaamSim) |
+| `docs/patterns/` | Reusable modelling pattern references (6 patterns) |
+| `docs/decisions/` | Architectural Decision Records (ADR-001 through ADR-014) |
+| `docs/reviews/` | Sprint closure reports, capability guides, pre-sprint assessments |
+| `docs/archived/` | Superseded historical documents (reference only) |
+
+## Macro Vocabulary
+
+DES Studio supports 12 macros across B-Events and C-Events:
+
+| Macro | Phase | Purpose |
+|---|---|---|
+| `ARRIVE` | B-Event | Creates entity, places in queue, schedules next arrival |
+| `ASSIGN` | C-Event | Seizes resource for entity, schedules completion |
+| `COMPLETE` | B-Event | Releases resource, records stats, entity departs |
+| `RELEASE` | B-Event | Frees resource and routes entity to another queue |
+| `RENEGE` | B-Event | Removes oldest waiting entity from queue (abandonment) |
+| `BATCH` | C-Event | Accumulates N entities into one batch |
+| `UNBATCH` | B-Event | Restores children from parent batch |
+| `PREEMPT` | C-Event | Interrupts busy server; re-queues entity with remaining service |
+| `FAIL` | B-Event | Sets matching servers to failed status |
+| `REPAIR` | B-Event | Restores failed servers to idle |
+| `SPLIT` | B/C-Event | Creates N-1 clones of context entity |
+| `COSEIZE` | C-Event | Atomically seizes multiple server types simultaneously |
+| `MATCH` | C-Event | Pairs entities from two queues into batch |
 
 ## Roadmap
 
 The product architecture is one canonical simulation model with three authoring modes:
 
-1. Forms/Tabs editor: current stable manual authoring mode.
-2. AI Generated Model: planned natural-language model authoring over validated `model_json`.
-3. Visual Designer: planned graph-first authoring surface over the same canonical model.
+1. **Forms/Tabs editor:** stable manual authoring mode with structured pickers.
+2. **AI Generated Model:** natural-language model authoring over validated `model_json`.
+3. **Visual Designer:** graph-first authoring surface over the same canonical model.
 
-The immediate next planned work is Sprint 8A: provider-neutral LLM routing before adding AI model authoring in Sprint 8.
+All three modes write to the same `model_json` — changes in one are reflected in the others.

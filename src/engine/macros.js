@@ -731,13 +731,24 @@ export const MACROS = [
       const entityType = match[1].trim();
       const n = parseInt(match[2], 10);
       const targetQueue = match[3].trim();
-      const { entities, clock, nextId, msgs, setLastCustId } = ctx;
+      const { entities, clock, nextId, msgs, setLastCustId, helpers } = ctx;
 
-      const custId = ctx.felRef?._contextCustId ?? ctx.getLastCustId?.();
-      const cust = entities.find(e => e.id === custId);
+      let custId = ctx.felRef?._contextCustId ?? ctx.getLastCustId?.();
+      let cust = custId ? entities.find(e => e.id === custId) : null;
+
+      // Fallback: find a waiting customer of the specified entity type
+      if (!cust && helpers) {
+        const waiting = helpers.waitingOf?.(entityType) || [];
+        cust = waiting[0] || null;
+      }
 
       if (!cust) {
         msgs.push(`SPLIT(${entityType},${n},${targetQueue}): no context entity found`);
+        return;
+      }
+
+      // Prevent re-splitting an entity that has already been split
+      if (cust._splitParent) {
         return;
       }
 

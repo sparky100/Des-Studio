@@ -158,6 +158,74 @@ Orders arrive every 3 minutes. When 5 orders accumulate, `BATCH(Order, 5)` conso
 
 ---
 
+## 11. Ward Bed Admission
+
+**Concept:** Two-stage hospital admission with bed capacity constraints.
+
+Patients arrive and undergo assessment by 2 nurses (triangular 3-8 min), then queue for one of 10 ward beds (uniform 12-48 hour stay). When the ward is full, patients queue in the Admission area — this is "bed-blocking." State variables `admissions` and `bedBlocks` track throughput and blocking events.
+
+**What to watch:** The Admission queue has capacity 5 — when full, new arrivals are lost. The Ward queue has capacity 20. Bed-blocking occurs when all 10 beds are occupied and assessed patients must wait. Compare admission rate against bed turnover.
+
+**Entity types:** Patient (arriving), Nurse (2), Bed (10)
+
+**Macro:** `RELEASE(Nurse, Ward)` for multi-stage routing; `COMPLETE()` for discharge
+
+**State variables:** `admissions` (total admitted), `bedBlocks` (patients blocked waiting for bed)
+
+**Queue capacity:** Admission cap 5, Ward cap 20 — models finite waiting space
+
+---
+
+## 12. Bank Branch
+
+**Concept:** Multi-server priority queue with customer segmentation.
+
+Customers arrive every 3 minutes and queue for 4 tellers. Each customer has a `priority` attribute (Uniform 1-5) — lower values are served first. Premium customers (priority 1-2) jump ahead of standard customers (priority 3-5) in the queue.
+
+**What to watch:** The queue uses PRIORITY discipline. Customers with lower priority numbers are served first even if they arrived later. Watch for priority inversion — a high-priority customer arriving after several low-priority customers will be served ahead of them.
+
+**Entity types:** Customer (arriving, with `priority` attribute), Teller (4)
+
+**Attribute:** `priority` — Uniform(1, 5), lower = served first
+
+**Discipline:** PRIORITY on the main queue
+
+**Distribution:** Exponential arrivals (mean 3 min), Uniform service (3-8 min)
+
+---
+
+## 13. Retail Checkout
+
+**Concept:** Multi-server finite-capacity queue with balking.
+
+Shoppers arrive every 1.5 minutes and queue for 6 checkout lanes. The waiting area has capacity 20 — when full, new shoppers balk (leave without shopping). Service time varies by basket size (triangular 2-5-15 min).
+
+**What to watch:** When the waiting area reaches 20, new arrivals are lost. The balking rate is a key metric — high balking suggests more checkouts are needed. Compare throughput against balking rate to find the optimal number of lanes.
+
+**Entity types:** Shopper (arriving), Checkout (6)
+
+**Queue capacity:** 20 on the waiting area — models finite waiting space
+
+**Distribution:** Exponential arrivals (mean 1.5 min), Triangular service (2, 5, 15 min)
+
+---
+
+## 14. Port Berth Operations
+
+**Concept:** Multi-server high-utilisation queue with congestion.
+
+Vessels arrive every 8 hours and queue for one of 3 berths. Unloading takes 4-16 hours (triangular). With arrival rate close to service capacity, utilisation is around 83% — demonstrating congestion and berth capacity planning.
+
+**What to watch:** With 3 berths and high utilisation, the queue grows during peak arrival periods. Average waiting time is sensitive to small changes in arrival rate or service time. State variable `vesselsDeparted` tracks throughput.
+
+**Entity types:** Vessel (arriving), Berth (3)
+
+**Distribution:** Exponential arrivals (mean 8 h), Triangular unloading (4, 8, 16 h)
+
+**Key metric:** Utilisation ~83%; average wait time sensitive to arrival rate changes
+
+---
+
 ## Macro Quick Reference
 
 | Macro | Phase | Purpose |
@@ -168,6 +236,12 @@ Orders arrive every 3 minutes. When 5 orders accumulate, `BATCH(Order, 5)` conso
 | `ASSIGN(QueueName, ResourceType)` | C-Event | Seizes a resource for an entity, schedules completion |
 | `RENEGE(EntityType)` | B-Event | Removes the oldest waiting entity from queue (abandonment) |
 | `BATCH(QueueName, Count)` | C-Event | Accumulates N entities into one batch |
+| `PREEMPT(ServerType)` | C-Event | Interrupts busy servers; re-queues entity with remaining service |
+| `FAIL(ServerType)` | B-Event | Sets matching servers to failed status; re-queues busy entities |
+| `REPAIR(ServerType)` | B-Event | Restores failed servers to idle status |
+| `SPLIT(EntityType, N, TargetQueue)` | B/C-Event | Creates N-1 clones of context entity |
+| `COSEIZE(Queue, ServerType1, ...)` | C-Event | Atomically seizes multiple server types simultaneously |
+| `MATCH(TypeA, QueueA, TypeB, QueueB, Output)` | C-Event | Pairs entities from two queues into batch |
 | `;` chaining | Any | Separate multiple actions, e.g. `RELEASE(Loader, Weigh); trucksLoaded++` |
 
 ---
@@ -182,3 +256,7 @@ Each template's **Step Log** shows every event in order with clock timestamps. T
 - **Fast Food, Construction, Outpatient** — cycle time through multi-stage systems
 - **Factory, Warehouse** — batching efficiency (throughput vs unbatched)
 - **Airport** — balking rate at finite-capacity queues
+- **Ward Bed Admission** — bed-blocking rate (patients waiting for beds)
+- **Bank Branch** — priority queue behaviour (premium customers served first)
+- **Retail Checkout** — balking rate vs checkout lane count
+- **Port Berth Operations** — congestion at high utilisation (83%)

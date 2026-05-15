@@ -1,3 +1,7 @@
+> **SUPERSEDED** — This document overlaps with `DES_Studio_Specification.md` and both have been
+> superseded by `AGENTS.md` which contains the current authoritative specification.
+> Date superseded: 2026-05-15
+
 # DES Studio — Solution Description
 *A Professional Discrete Event Simulation Modelling Tool*
 *Document version 1.0 | Based on: Specification v1, Full Codebase Audit 2026-04-30, Sprint Plan v2.0*

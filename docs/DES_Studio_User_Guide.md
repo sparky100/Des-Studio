@@ -57,6 +57,10 @@ Available templates:
 | Data Center | Server rack processing with cooling constraints. |
 | Outpatient Clinic | Multi-stage clinic flow with doctor and nurse resources. |
 | Warehouse Picking | Order picking and packing with batch consolidation. |
+| Ward Bed Admission | Hospital admission with bed capacity constraints and bed-blocking. |
+| Bank Branch | Multi-server priority queue with customer segmentation. |
+| Retail Checkout | Multi-server finite-capacity queue with balking. |
+| Port Berth Operations | Multi-server high-utilisation queue with congestion. |
 
 ### Public Library
 
@@ -249,6 +253,64 @@ In practice, this means:
 - debugging run behaviour is easier because queue/service ownership is more deliberate
 
 DES Studio still does **not** support first-class preemption or interruption. A busy resource does not yet pause one entity to serve another higher-priority one mid-service.
+
+### Resource Preemption and Breakdowns
+
+DES Studio supports resource preemption and breakdown/repair cycles for modelling real-world resource reliability.
+
+**Preemption:** The `PREEMPT(ServerType)` macro interrupts busy servers of the specified type. The interrupted entity is re-queued with its remaining service time preserved (`_remainingService`). When the entity is re-seized, it resumes with the remaining service time instead of resampling a new duration.
+
+**Breakdowns and Repair:** The `FAIL(ServerType)` macro sets all matching servers to a `failed` status. Failed servers are excluded from idle/busy counts and cannot be seized. The `REPAIR(ServerType)` macro restores failed servers to `idle` status.
+
+**MTBF/MTTR Scheduling:** Server entity types can define `mtbfDist` (mean time between failures) and `mttrDist` (mean time to repair) distributions. The engine automatically schedules recurring FAILURE and REPAIR events in the Future Event List.
+
+**Remaining Service Time:** When a server is preempted or fails, the remaining service time is calculated as `scheduledDuration - (clock - serviceStart)`. This value is preserved on the entity and used when the entity is re-seized, ensuring accurate service time accounting.
+
+**Visualization:** Failed servers are shown as red dots on Activity nodes in the Execute canvas, with a warning badge indicating the failure count.
+
+### Advanced Scheduling Macros
+
+DES Studio includes three advanced scheduling macros for complex resource coordination:
+
+**SPLIT(EntityType, N, TargetQueue):** Creates N-1 clones of the context entity, all placed in the target queue. The original entity is marked as the parent (`_splitParent = true`) with a `_splitChildren` array tracking clone IDs. Each clone carries `_splitFrom` (parent ID) and `_splitIndex` (clone number). Useful for modelling inspection splitting, copy operations, or parallel processing paths.
+
+**COSEIZE(Queue, ServerType1, ServerType2, ...):** Atomically seizes one customer and multiple server types simultaneously. All server types must have at least one idle server available; if any type is fully busy, the COSEIZE fails entirely (no partial seizure). Useful for modelling operations requiring multiple coordinated resources, such as surgeries requiring a surgeon and anesthetist.
+
+**MATCH(TypeA, QueueA, TypeB, QueueB, OutputQueue):** Pairs one entity of TypeA from QueueA with one entity of TypeB from QueueB, routing both to the OutputQueue. Entity types are validated against the typeA/typeB parameters — only matching entities are selected. Useful for modelling assembly operations where two different component types must be paired.
+
+### Queue Disciplines
+
+In addition to FIFO, LIFO, and PRIORITY, DES Studio supports three attribute-based queue disciplines:
+
+| Discipline | Selection Rule | Use Case |
+|---|---|---|
+| SPT | Shortest processing time first (based on entity service time attribute) | Minimise average wait time |
+| EDD | Earliest due date first (based on entity due date attribute) | Meet deadlines, minimise lateness |
+| PRIORITY(attrName) | Lowest numeric value of the specified attribute first | Custom priority ordering |
+
+For SPT and EDD, the entity type must have a numeric attribute named `serviceTime` or `dueDate` respectively. For PRIORITY(attrName), specify the attribute name in parentheses, e.g. `PRIORITY(urgency)`.
+
+### WIP Time-Average Metric
+
+DES Studio tracks the time-average Work-In-Progress (WIP) metric using Little's Law. The `avgWIP` value is exposed in the run summary and represents the average number of entities in the system over the observation period (after warm-up, if configured).
+
+Little's Law validation: `avgWIP ≈ λ × avgSojourn` should hold within 15% for stable queueing models, where λ is the effective arrival rate and avgSojourn is the average time entities spend in the system.
+
+### Clock Token in Conditions
+
+The `clock` variable is available in the Condition Builder for writing time-based logic. For example, `clock > 100` can be used to trigger events only after a certain simulation time, or `clock < 50 AND queue(Queue).length > 0` to apply different behaviour during an initial period.
+
+### Live Queue-Depth Time-Plot
+
+When detailed output is enabled, the Execute canvas Charts tab includes a live queue-depth time-plot showing one line per queue, colour-coded with a legend. This reuses the existing `_timeSeries[]` data collected during simulation runs and helps visualise queue dynamics over time.
+
+### Histogram and ANOVA Analysis
+
+DES Studio includes statistical utilities for analysing simulation output:
+
+**Histograms:** Equal-width and Freedman-Diaconis automatic bin selection are available for wait time and service time distributions. Histograms show the shape of the distribution and can be compared across replications or scenarios.
+
+**One-Way ANOVA:** Analysis of variance with Tukey HSD post-hoc testing is available for comparing means across multiple scenarios or replications. The ANOVA F-test determines whether there are statistically significant differences between group means, and Tukey HSD identifies which specific pairs differ.
 
 ## 7. Distributions
 
@@ -548,29 +610,51 @@ Do not enter secrets or API keys into the browser. Provider credentials are hand
 - Configure finite queue capacity and overflow routing for realistic system behaviour.
 - Use BATCH/UNBATCH for assembly operations where multiple components form a single product.
 - Use rework loops for inspection/rework processes, with maxLoopCount set appropriately.
+- Use PREEMPT for modelling high-priority interruptions of ongoing service.
+- Use FAIL/REPAIR with MTBF/MTTR distributions for resource reliability modelling.
+- Use COSEIZE when an operation requires multiple resources simultaneously (e.g., surgeon + anesthetist).
+- Use SPLIT for parallel processing paths or inspection splitting.
+- Use MATCH for pairing different entity types from separate queues.
+- Use SPT/EDD queue disciplines to optimise for wait time or deadline adherence.
+- Check the WIP time-average metric against Little's Law (avgWIP ≈ λ × avgSojourn) for model validation.
 
 ## 18. Glossary
 
 | Term | Meaning |
 |---|---|
+| ANOVA | Analysis of variance — statistical test for comparing means across multiple groups. |
 | Balking | An entity declining to join a queue based on a condition or probability. |
 | Batch | A group of entities accumulated and processed as a single unit (BATCH macro). |
 | B-Event | A scheduled event that fires at a known simulation time. |
 | C-Event | A conditional event that fires when its condition is true. |
 | Confidence interval | A range describing uncertainty across replications. |
+| COSEIZE | Macro that atomically seizes multiple server types simultaneously. |
 | DES | Discrete-event simulation. |
+| EDD | Earliest Due Date — queue discipline selecting entities with the earliest due date first. |
 | Entity | An object moving through or supporting the system, such as a customer or server. |
+| FAIL | Macro that sets matching servers to failed status, re-queuing busy entities. |
 | FEL | Future Event List, the ordered list of scheduled events. |
 | Fork | A private copy of a public model made for another user's run or edit workflow. |
+| Histogram | Distribution visualization showing frequency of values across bins. |
+| Little's Law | Relationship: avgWIP = λ × avgSojourn — used to validate model consistency. |
 | Loop count | The number of times an entity has passed through a rework cycle (Entity.loopCount). |
+| MATCH | Macro that pairs entities from two queues into a batch entity. |
+| MTBF | Mean Time Between Failures — average time between resource breakdowns. |
+| MTTR | Mean Time To Repair — average time to restore a failed resource. |
 | Overflow | Routing of a blocked or balking entity to an alternative queue or system exit. |
+| Preemption | Interrupting a busy server to serve a higher-priority entity (PREEMPT macro). |
 | Queue | A waiting line for entities. |
 | Recirculation | Routing an entity back through an earlier stage for rework or multi-pass processing. |
+| REPAIR | Macro that restores failed servers to idle status. |
 | Replication | One independent run of the same model. |
 | Seed | A number used to make random sampling reproducible. |
+| SPT | Shortest Processing Time — queue discipline selecting entities with shortest service time first. |
+| SPLIT | Macro that creates N-1 clones of a context entity for parallel processing. |
 | Template | A pre-built simulation model used as a starting point. |
+| Tukey HSD | Post-hoc test following ANOVA to identify which specific group pairs differ. |
 | Unbatch | The process of restoring individual entities from a batch group (UNBATCH macro). |
 | Warm-up | Initial simulation period excluded from statistics. |
+| WIP | Work-In-Progress — time-average number of entities in the system (avgWIP). |
 
 ## 19. Where To Go Next
 
@@ -588,6 +672,9 @@ For a new user, the recommended learning path is:
 For deeper reference material, see:
 
 - `README.md` for project setup and roadmap status.
-- `CLAUDE.md` or `AGENTS.md` for architectural rules.
+- `AGENTS.md` for architectural rules and the complete sprint history.
 - `docs/addition1_entity_model.md` for the model schema and distribution details.
 - `docs/DES_Studio_Build_Plan.md` for roadmap and sprint history.
+- `docs/Template Models Guide.md` for detailed explanations of all 14 template models.
+- `docs/patterns/` for reusable modelling pattern references (6 patterns).
+- `docs/archived/` for superseded historical documents (reference only).

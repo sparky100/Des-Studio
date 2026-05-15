@@ -1,3 +1,7 @@
+> **SUPERSEDED** — This specification covered Sprints 1-11 and has been superseded by `AGENTS.md`
+> which contains the current authoritative specification for all sprints through 35.
+> Date superseded: 2026-05-15
+
 # DES Studio — Complete Specification
 
 **Version:** 7.0.0  

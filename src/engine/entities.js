@@ -52,10 +52,18 @@ export function queueDisciplineComparator(discipline = "FIFO") {
   // PRIORITY(attrName) — sort by specified attribute, FIFO tiebreaker
   const priorityMatch = d.match(/^PRIORITY\((\w+)\)$/);
   if (priorityMatch) {
-    const attrName = priorityMatch[1];
+    const attrNameUpper = priorityMatch[1];
     return (a, b) => {
-      const pa = Number(a.attrs?.[attrName] ?? Infinity);
-      const pb = Number(b.attrs?.[attrName] ?? Infinity);
+      // Case-insensitive attribute lookup — discipline is uppercased but attrs keep original casing
+      const findAttr = (entity) => {
+        if (!entity.attrs) return Infinity;
+        for (const key of Object.keys(entity.attrs)) {
+          if (key.toUpperCase() === attrNameUpper) return Number(entity.attrs[key]);
+        }
+        return Infinity;
+      };
+      const pa = findAttr(a);
+      const pb = findAttr(b);
       if (pa !== pb) return pa - pb;
       return (a.arrivalTime || 0) - (b.arrivalTime || 0);
     };

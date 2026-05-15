@@ -1,3 +1,7 @@
+> **SUPERSEDED** — This audit has been superseded by `docs/reviews/simulation-architecture-review.md`.
+> All findings have been incorporated into AGENTS.md and subsequent sprint work.
+> Date superseded: 2026-05-15
+
 # DES Studio — Full Codebase Audit
 
 **Date:** 2026-04-30  

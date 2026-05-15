@@ -1,3 +1,6 @@
+> **SUPERSEDED** — This orientation document has been superseded by `docs/reviews/simulation-architecture-review.md`.
+> Date superseded: 2026-05-15
+
 # Audit Part 1 — Orientation
 
 ## Folder Structure
