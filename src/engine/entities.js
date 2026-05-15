@@ -100,6 +100,39 @@ export function sortWaitingEntities(waiting, discipline = "FIFO") {
   return [...waiting].sort(queueDisciplineComparator(discipline));
 }
 
+/**
+ * Single authoritative queue-discipline selector (M4).
+ * Returns the first entity from `entities` waiting in the named queue or type,
+ * sorted by discipline. Set `isQueueName=true` to match entity.queue; false for entity.type.
+ */
+export function selectWaiting(token, discipline, entities, filterFn = null, isQueueName = false) {
+  const key = norm(token);
+  let pool = entities.filter(e => {
+    if (e.status !== "waiting") return false;
+    return isQueueName
+      ? (e.queue && norm(e.queue) === key)
+      : (norm(e.type) === key);
+  });
+  if (filterFn) pool = pool.filter(filterFn);
+  return sortWaitingEntities(pool, discipline)[0] ?? null;
+}
+
+/**
+ * Sorted-list variant of selectWaiting. `includeBatches=false` excludes batch entities.
+ */
+export function listWaiting(token, discipline, entities, filterFn = null, isQueueName = false, includeBatches = true) {
+  const key = norm(token);
+  let pool = entities.filter(e => {
+    if (e.status !== "waiting") return false;
+    if (!includeBatches && e.role === "batch") return false;
+    return isQueueName
+      ? (e.queue && norm(e.queue) === key)
+      : (norm(e.type) === key);
+  });
+  if (filterFn) pool = pool.filter(filterFn);
+  return sortWaitingEntities(pool, discipline);
+}
+
 export function sortResourceEntities(resources) {
   return [...resources].sort((a, b) => {
     const timeDelta = (a.arrivalTime || 0) - (b.arrivalTime || 0);

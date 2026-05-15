@@ -1,8 +1,11 @@
 // engine/conditions.js — Condition evaluator
 //
 // Two public evaluators are exported:
-//   evaluatePredicate(predicate, state) — safe evaluator for Addition 1 §4 JSON predicates
-//   evalCondition(conditionStr, helpers, state, clock) — legacy string evaluator (no new Function)
+//   evaluatePredicate(predicate, state) — PRIMARY: safe evaluator for JSON predicates (Addition 1 §4).
+//                                         Use this for all new conditions.
+//   evalCondition(conditionStr, helpers, state, clock) — BACKWARD-COMPAT ADAPTER: handles legacy
+//                                         string conditions authored in older models. Not for new use.
+//                                         Left-to-right AND/OR semantics (no precedence grouping).
 //
 // EXTENDING evalCondition tokens:
 //   1. Add a replacement rule in evalCondition below
@@ -124,7 +127,10 @@ export function evaluatePredicate(predicate, state) {
 }
 
 /**
+ * BACKWARD-COMPAT ADAPTER — for legacy string conditions only. Use evaluatePredicate for new code.
+ *
  * Evaluate a condition string against current simulation state.
+ * AND/OR are evaluated left-to-right with no precedence grouping.
  *
  * Supported tokens:
  *   queue(Type).length    — number of waiting entities of Type

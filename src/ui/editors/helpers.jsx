@@ -50,7 +50,7 @@ const conditionOptions = (entityTypes, stateVariables=[], queues=[]) => {
   return opts;
 };
 
-const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName="") => {
+const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName="", containerTypes=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const opts = [{label:'— select effect —',value:''}];
@@ -91,10 +91,19 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       opts.push({label:`${v} = 0`,value:`${v} = 0`});
     });
   }
+  const ctNames = (containerTypes||[]).map(ct=>ct.id).filter(Boolean);
+  if(ctNames.length>0){
+    opts.push({label:'── DRAIN container (fires when level ≥ amount) ──',value:'',disabled:true});
+    ctNames.forEach(c=>{
+      opts.push({label:`Drain ${c} by 10`,value:`DRAIN(${c}, 10)`});
+      opts.push({label:`Drain ${c} by 50`,value:`DRAIN(${c}, 50)`});
+      opts.push({label:`Drain ${c} by 100`,value:`DRAIN(${c}, 100)`});
+    });
+  }
   return opts;
 };
 
-const bEffectOptions = (entityTypes, queues=[], stateVariables=[]) => {
+const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerTypes=[]) => {
   const custs   = (entityTypes||[]).filter(e=>e.role==='customer').map(e=>normTypeName(e.name));
   const servers = (entityTypes||[]).filter(e=>e.role==='server').map(e=>normTypeName(e.name));
   const opts = [{label:'— select effect —',value:''}];
@@ -153,6 +162,15 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[]) => {
     });
   } else {
     opts.push({label:'No state variables defined',value:'',disabled:true});
+  }
+  const ctNames = (containerTypes||[]).map(ct=>ct.id).filter(Boolean);
+  if(ctNames.length>0){
+    opts.push({label:'── FILL container ──',value:'',disabled:true});
+    ctNames.forEach(c=>{
+      opts.push({label:`Fill ${c} by 10`,value:`FILL(${c}, 10)`});
+      opts.push({label:`Fill ${c} by 50`,value:`FILL(${c}, 50)`});
+      opts.push({label:`Fill ${c} by 100`,value:`FILL(${c}, 100)`});
+    });
   }
   return opts;
 };
