@@ -31,6 +31,8 @@ const DIST_ALIASES = {
   "server-attr": "ServerAttr",
   server_attr: "ServerAttr",
   piecewise: "Piecewise",
+  schedule: "Schedule",
+  plan: "Schedule",
 };
 
 export function normalizeDistributionName(dist) {
@@ -158,6 +160,43 @@ export const DISTRIBUTIONS = {
     sample: (p, _rng, serverAttrs) => {
       const v = serverAttrs?.[p.attr || "serviceTime"];
       return Math.max(0, parseFloat(v) || 1);
+    },
+  },
+  Schedule: {
+    params: [],
+    label:  "Schedule (planned times)",
+    hint:   "Arrivals at planned absolute times; optional jitter",
+    sample: (p, rng, _serverAttrs, context = {}) => {
+      const times = Array.isArray(p.times) ? p.times.map(Number) : [];
+      if (!times.length) return 1e9;
+
+      const { state, schedKey = "default", clock = 0 } = context;
+      const stateKey = `__schedIdx_${schedKey}`;
+      const idx = (state && state[stateKey] != null) ? state[stateKey] : 0;
+
+      if (idx >= times.length) return 1e9;  // plan exhausted — no more arrivals
+
+      const plannedTime = times[idx];
+      if (!Number.isFinite(plannedTime)) return 1e9;
+      if (state) state[stateKey] = idx + 1;
+
+      // Signed jitter (unclipped so arrivals can be early or late)
+      let jitter = 0;
+      if (p.jitterDist && rng) {
+        const jp = p.jitterParams || {};
+        const jd = normalizeDistributionName(p.jitterDist);
+        if (jd === "Normal") {
+          const m = parseFloat(jp.mean ?? 0) || 0;
+          const s = parseFloat(jp.stddev) || 1;
+          const u1 = Math.max(1e-15, rng()), u2 = rng();
+          jitter = m + s * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+        } else if (jd === "Uniform") {
+          const lo = parseFloat(jp.min) || 0, hi = parseFloat(jp.max) || 1;
+          jitter = lo + rng() * (hi - lo);
+        }
+      }
+
+      return Math.max(0, plannedTime - clock + jitter);
     },
   },
 };
