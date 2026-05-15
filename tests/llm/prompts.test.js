@@ -242,4 +242,192 @@ describe("LLM prompt builders", () => {
       expect(parsed.data.timeSeriesAvailable).toBe(false);
     });
   });
+
+  describe("Sprint 45 — enriched prompt grounding", () => {
+    it("includes maxSojourn and avgWIP in kpis", () => {
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 20, served: 18, reneged: 2, avgWait: 8.2, avgSvc: 4.1, avgSojourn: 12.3, maxSojourn: 45.0, avgWIP: 3.2 } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.kpis.maxSojourn).toBe(45.0);
+      expect(payload.kpis.avgWIP).toBe(3.2);
+    });
+
+    it("includes totalCost and costPerServed in kpis when non-zero", () => {
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2, totalCost: 500, costPerServed: 50 } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.kpis.totalCost).toBe(500);
+      expect(payload.kpis.costPerServed).toBe(50);
+    });
+
+    it("includes containerLevels in kpis when present", () => {
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2, containerLevels: { Tank: { min: 0, max: 100, avg: 42, final: 60 } } } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.kpis.containerLevels).toEqual({ Tank: { min: 0, max: 100, avg: 42, final: 60 } });
+    });
+
+    it("includes warnings and phaseCTruncated in kpis when set", () => {
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2, phaseCTruncated: true, warnings: ["Phase C truncated after 500 passes"] } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.kpis.warning_phaseCTruncated).toBe(true);
+      expect(payload.kpis.warnings).toContain("Phase C truncated after 500 passes");
+    });
+
+    it("includes server failure model in entity types", () => {
+      const modelWithFailure = {
+        ...model,
+        entityTypes: [{
+          id: "s1", name: "Machine", role: "server", count: 3,
+          mtbfDist: "Exponential", mtbfDistParams: { mean: 60 },
+          mttrDist: "Exponential", mttrDistParams: { mean: 10 },
+        }],
+      };
+      const prompt = buildSuggestionPrompt(modelWithFailure, {}, { summary: { total: 5, served: 5, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 } });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.entityTypes[0].failureModel).toEqual(expect.objectContaining({
+        mtbfDist: "Exponential",
+        mttrDist: "Exponential",
+      }));
+    });
+
+    it("includes shift schedule summary for server entity types", () => {
+      const modelWithShift = {
+        ...model,
+        entityTypes: [{
+          id: "s1", name: "Clerk", role: "server", count: 1,
+          shiftSchedule: [{ time: 0, capacity: 2 }, { time: 480, capacity: 1 }],
+        }],
+      };
+      const prompt = buildSuggestionPrompt(modelWithShift, {}, { summary: { total: 5, served: 5, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 } });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.entityTypes[0].shiftSchedule).toBe("2 period(s)");
+    });
+
+    it("includes queue overflowDestination when set", () => {
+      const modelWithOverflow = {
+        ...model,
+        queues: [{ id: "q1", name: "Main Queue", discipline: "FIFO", overflowDestination: "Backup Queue" }],
+      };
+      const prompt = buildSuggestionPrompt(modelWithOverflow, {}, { summary: { total: 5, served: 5, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 } });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.queues[0].overflowDestination).toBe("Backup Queue");
+    });
+
+    it("includes B-event digest with routing type, loop guard, and balk mode", () => {
+      const modelWithEvents = {
+        ...model,
+        bEvents: [
+          {
+            id: "b1", name: "Patient Arrives",
+            effect: ["ARRIVE(Patient)"],
+            defaultQueueName: "Triage",
+            loopConfig: { maxLoopCount: 5, exitQueueName: "Exit" },
+            balkProbability: 0.2,
+            schedules: [{ dist: "Exponential", distParams: { mean: 5 } }],
+          },
+          {
+            id: "b2", name: "Nurse Treats",
+            effect: ["COMPLETE(Patient)", "RELEASE(Nurse)"],
+            probabilisticRouting: [{ probability: 0.7, queueName: "Recovery" }, { probability: 0.3, queueName: "Discharge" }],
+          },
+        ],
+      };
+      const prompt = buildSuggestionPrompt(modelWithEvents, {}, { summary: { total: 5, served: 5, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 } });
+      const payload = JSON.parse(prompt.messages[1].content);
+      const b1 = payload.model.bEvents[0];
+      const b2 = payload.model.bEvents[1];
+      expect(b1.effectTypes).toContain("ARRIVE");
+      expect(b1.loopGuard).toMatch(/max 5x/);
+      expect(b1.balkMode).toBe("probability:0.2");
+      expect(b1.arrivalStreams).toBe(1);
+      expect(b2.routing).toBe("probabilistic");
+      expect(b2.effectTypes).toContain("COMPLETE");
+    });
+
+    it("includes C-event digest when C-events are present", () => {
+      const modelWithCEvents = {
+        ...model,
+        cEvents: [
+          { id: "c1", name: "Check Queue Length", effect: ["SET(alert, 1)"], priority: 1 },
+        ],
+      };
+      const prompt = buildSuggestionPrompt(modelWithCEvents, {}, { summary: { total: 5, served: 5, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 } });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.cEvents).toHaveLength(1);
+      expect(payload.model.cEvents[0].name).toBe("Check Queue Length");
+      expect(payload.model.cEvents[0].effectTypes).toContain("SET");
+      expect(payload.model.cEvents[0].priority).toBe(1);
+    });
+
+    it("includes state variables in suggestion prompt", () => {
+      const modelWithState = {
+        ...model,
+        stateVariables: [{ name: "priority", initialValue: 0 }, { name: "queueLimit", initialValue: 20 }],
+      };
+      const prompt = buildSuggestionPrompt(modelWithState, {}, { summary: { total: 5, served: 5, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 } });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.stateVariables).toHaveLength(2);
+      expect(payload.model.stateVariables[0]).toEqual({ name: "priority", initialValue: 0 });
+    });
+
+    it("includes state variables in narrative prompt", () => {
+      const modelWithState = {
+        ...model,
+        stateVariables: [{ name: "shiftMode", initialValue: 1 }],
+      };
+      const prompt = buildNarrativePrompt(modelWithState, {}, { summary: { total: 5, served: 5, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 } });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.stateVariables[0].name).toBe("shiftMode");
+    });
+
+    it("includes entity anomaly digest when anomalies are present", () => {
+      const entitySummary = [
+        { id: 1, type: "Patient", stages: [{ stageWait: 50 }] },
+        { id: 2, type: "Patient", stages: [{ stageWait: 2 }] },
+        { id: 3, type: "Patient", stages: [{ stageWait: 3 }] },
+        { id: 4, type: "Patient", stages: [{ stageWait: 2 }] },
+        { id: 5, type: "Patient", stages: [{ stageWait: 3 }] },
+      ];
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 5, served: 5, reneged: 0, avgWait: 4, avgSvc: 1, avgSojourn: 5 }, entitySummary }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.entityAnomalies).toBeDefined();
+      expect(payload.entityAnomalies.anomalyCount).toBe(1);
+      expect(payload.entityAnomalies.worstWait).toBe(50);
+      expect(payload.entityAnomalies.byType.Patient).toBe(1);
+    });
+
+    it("omits entity anomalies when no anomalies exceed threshold", () => {
+      const entitySummary = [
+        { id: 1, type: "Patient", stages: [{ stageWait: 5 }] },
+        { id: 2, type: "Patient", stages: [{ stageWait: 6 }] },
+      ];
+      const prompt = buildSuggestionPrompt(
+        model, {},
+        { summary: { total: 2, served: 2, reneged: 0, avgWait: 5.5, avgSvc: 1, avgSojourn: 6.5 }, entitySummary }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.entityAnomalies).toBeUndefined();
+    });
+
+    it("narrative prompt mentions phaseCTruncated caveat in instruction", () => {
+      const prompt = buildNarrativePrompt(
+        model, {},
+        { summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2, phaseCTruncated: true } }
+      );
+      expect(prompt.messages[1].content).toMatch(/Phase C was truncated|caveat/i);
+    });
+  });
 });
