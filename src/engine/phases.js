@@ -263,7 +263,7 @@ export function fireBEvent(ev, ctx) {
   for (const sched of ev.schedules || []) {
     const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);
     if (!tmpl) continue;
-    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng, null, { clock }));
+    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng, null, { clock, state: ctx.state, schedKey: sched.eventId }));
     let renegeTarget;
     if (sched.isRenege) {
       renegeTarget = effectCtx._lastCustId;

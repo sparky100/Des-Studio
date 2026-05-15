@@ -194,6 +194,67 @@ const PiecewiseEditor=({value,onChange,compact})=>{
   );
 };
 
+const ScheduleEditor=({value,onChange})=>{
+  const dp=value?.distParams||{};
+  const times=Array.isArray(dp.times)?dp.times:[];
+  const jitterDist=dp.jitterDist||"";
+  const jitterParams=dp.jitterParams||{};
+  const updDp=(patch)=>onChange({...value,distParams:{...dp,...patch}});
+  const [rawText,setRawText]=React.useState(times.join(", "));
+
+  const commitText=(text)=>{
+    const parsed=text.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean).map(Number).filter(n=>Number.isFinite(n));
+    updDp({times:parsed});
+  };
+
+  const inpSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,
+    fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"};
+  const selSt={...inpSt,color:C.cEvent};
+  const labelSt={fontSize:10,color:C.muted,fontFamily:FONT};
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
+      <div>
+        <div style={{...labelSt,marginBottom:4}}>Planned arrival times (absolute, comma-separated):</div>
+        <textarea rows={3} value={rawText}
+          onChange={e=>setRawText(e.target.value)}
+          onBlur={e=>commitText(e.target.value)}
+          placeholder="e.g. 0, 30, 60, 90, 120"
+          style={{...inpSt,width:"100%",resize:"vertical",boxSizing:"border-box",color:C.amber}}/>
+        <div style={{...labelSt,marginTop:2}}>{times.length} planned arrival{times.length!==1?"s":""}</div>
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={labelSt}>Jitter:</span>
+        <select value={jitterDist} style={selSt}
+          onChange={e=>updDp({jitterDist:e.target.value,jitterParams:{}})}>
+          <option value="">None</option>
+          <option value="Normal">Normal (symmetric ±)</option>
+          <option value="Uniform">Uniform (min to max)</option>
+        </select>
+        {jitterDist==="Normal"&&(
+          <label style={{display:"flex",alignItems:"center",gap:4}}>
+            <span style={labelSt}>stddev:</span>
+            <input type="number" value={jitterParams.stddev||""} style={{...inpSt,width:60}}
+              onChange={e=>updDp({jitterParams:{...jitterParams,stddev:e.target.value}})}/>
+          </label>
+        )}
+        {jitterDist==="Uniform"&&(<>
+          <label style={{display:"flex",alignItems:"center",gap:4}}>
+            <span style={labelSt}>min:</span>
+            <input type="number" value={jitterParams.min||""} style={{...inpSt,width:60}}
+              onChange={e=>updDp({jitterParams:{...jitterParams,min:e.target.value}})}/>
+          </label>
+          <label style={{display:"flex",alignItems:"center",gap:4}}>
+            <span style={labelSt}>max:</span>
+            <input type="number" value={jitterParams.max||""} style={{...inpSt,width:60}}
+              onChange={e=>updDp({jitterParams:{...jitterParams,max:e.target.value}})}/>
+          </label>
+        </>)}
+      </div>
+    </div>
+  );
+};
+
 const DistPicker=({value,onChange,compact,allowPiecewise=true})=>{
   const fileRef=useRef(null);
   const [csvParse,setCsvParse]=useState(null); // { fileName, headers, rows, colIdx }
@@ -202,15 +263,18 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true})=>{
   const isImported=v.dist==="Empirical"&&Array.isArray(v.distParams?.values)&&v.distParams.values.length>0;
   const dd=DISTRIBUTIONS[v.dist||"Fixed"]||DISTRIBUTIONS.Fixed;
   const isPiecewise=v.dist==="Piecewise";
+  const isSchedule=v.dist==="Schedule";
 
   const selSt={width:compact?160:200,background:C.bg,border:`1px solid ${C.cEvent}55`,
     borderRadius:4,color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"};
 
   const handleDistChange=(sel)=>{
     if(sel==="__csv__"){fileRef.current?.click();return;}
-    onChange({...v,dist:sel,distParams:sel==="Piecewise"
-      ?{periods:[{startTime:"0",distribution:{dist:"Exponential",distParams:{mean:"1"}}}]}
-      :{}});
+    const defaultParams=
+      sel==="Piecewise" ? {periods:[{startTime:"0",distribution:{dist:"Exponential",distParams:{mean:"1"}}}]}
+      :sel==="Schedule" ? {times:[]}
+      :{};
+    onChange({...v,dist:sel,distParams:defaultParams});
     setCsvParse(null);
   };
 
@@ -273,8 +337,8 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true})=>{
           <option disabled value="">──────────</option>
           <option value="__csv__">⬆ Import from CSV…</option>
         </select>
-        {/* Param inputs — shown for non-CSV distributions */}
-        {!isImported&&!isPiecewise&&dd.params.map(param=>(
+        {/* Param inputs — shown for non-CSV, non-custom distributions */}
+        {!isImported&&!isPiecewise&&!isSchedule&&dd.params.map(param=>(
           <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
             <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
             <input type="number" value={(v.distParams||{})[param]||""}
@@ -288,6 +352,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true})=>{
       </div>
 
       {isPiecewise&&<PiecewiseEditor value={v} onChange={onChange} compact={compact}/>}
+      {isSchedule&&<ScheduleEditor value={v} onChange={onChange}/>}
 
       {/* Column picker — appears after file is parsed */}
       {csvParse&&(
