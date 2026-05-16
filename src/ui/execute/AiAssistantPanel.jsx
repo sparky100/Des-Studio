@@ -4,8 +4,113 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
-import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildResultsQueryPrompt, buildSensitivityPrompt, buildSuggestionPrompt } from "../../llm/prompts.js";
+import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildResultsQueryPrompt, buildSensitivityPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
+
+function ConfidenceBadge({ confidence }) {
+  const color = confidence === "high" ? C.green : confidence === "medium" ? C.amber : C.red;
+  return (
+    <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 700, color, border: `1px solid ${color}44`, borderRadius: 3, padding: "1px 5px", letterSpacing: 1 }}>
+      {String(confidence || "").toUpperCase()}
+    </span>
+  );
+}
+
+function BeforeAfterTable({ goals, baselineStats, afterStats }) {
+  if (!goals || !goals.length) return null;
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10, fontFamily: FONT, marginTop: 8 }}>
+      <thead>
+        <tr>
+          {["Metric", "Before", "After", "Goal", "Met?"].map(h => (
+            <th key={h} style={{ textAlign: "left", color: C.muted, padding: "2px 4px", borderBottom: `1px solid ${C.border}` }}>{h}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {goals.map(g => {
+          const beforeStat = baselineStats?.[g.metric];
+          const afterStat = afterStats?.[g.metric];
+          const beforeVal = beforeStat?.mean ?? null;
+          const afterVal = afterStat?.mean ?? null;
+          const met = afterVal !== null
+            ? (g.operator === "<"  ? afterVal < g.target
+             : g.operator === "<=" ? afterVal <= g.target
+             : g.operator === ">"  ? afterVal > g.target
+             : g.operator === ">=" ? afterVal >= g.target
+             : afterVal === g.target)
+            : null;
+          const metColor = met === true ? C.green : met === false ? C.red : C.muted;
+          const fmt = v => v === null ? "—" : Number.isFinite(v) ? v.toFixed(2) : "—";
+          return (
+            <tr key={g.metric}>
+              <td style={{ color: C.text, padding: "2px 4px" }}>{g.label || g.metric}</td>
+              <td style={{ color: C.muted, padding: "2px 4px" }}>{fmt(beforeVal)}</td>
+              <td style={{ color: met === true ? C.green : met === false ? C.red : C.text, padding: "2px 4px" }}>{fmt(afterVal)}</td>
+              <td style={{ color: C.muted, padding: "2px 4px" }}>{g.operator} {g.target}</td>
+              <td style={{ color: metColor, padding: "2px 4px", fontWeight: 700 }}>{met === true ? "Yes" : met === false ? "No" : "—"}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
+function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, verifyStatus, verifyResult }) {
+  const isManual = suggestion.change?.type === "manual";
+  const canApply = !isManual && typeof onRunWithPatch === "function";
+  const running = verifyStatus === "running";
+
+  const changeLabel = isManual
+    ? "Manual change required"
+    : `${suggestion.change?.target} count/capacity/value: ${suggestion.change?.from} -> ${suggestion.change?.to}`;
+
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, marginTop: 8, background: C.surface }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 700, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 3, padding: "1px 5px" }}>
+          #{suggestion.rank}
+        </span>
+        <ConfidenceBadge confidence={suggestion.confidence} />
+      </div>
+      <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
+        <span style={{ color: C.muted, fontSize: 10 }}>Constraint: </span>{suggestion.constraint}
+      </div>
+      <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
+        <span style={{ color: C.muted, fontSize: 10 }}>Cause: </span>{suggestion.cause}
+      </div>
+      <div style={{ color: isManual ? C.muted : C.amber, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
+        <span style={{ color: C.muted, fontSize: 10 }}>Proposed: </span>{changeLabel}
+      </div>
+      <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
+        <span style={{ color: C.muted, fontSize: 10 }}>Predicted: </span>{suggestion.predicted}
+      </div>
+      <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 6 }}>
+        <span style={{ color: C.muted, fontSize: 10 }}>Goal impact: </span>{suggestion.goalImpact}
+      </div>
+      <Btn
+        small
+        variant="primary"
+        disabled={!canApply || running}
+        onClick={() => onRunWithPatch(suggestion)}
+        style={{ width: "100%", justifyContent: "center" }}
+      >
+        {running ? "Running..." : "Apply & Re-run"}
+      </Btn>
+      {verifyResult && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BEFORE / AFTER</div>
+          <BeforeAfterTable
+            goals={model?.goals || []}
+            baselineStats={aggregateStats}
+            afterStats={verifyResult.aggregateStats}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 export const AiAssistantPanel = ({
   model,
@@ -17,6 +122,7 @@ export const AiAssistantPanel = ({
   comparisonError,
   onClose,
   onSaveInsights,
+  onRunWithPatch,
 }) => {
   const [response, setResponse] = useState("");
   const [status, setStatus] = useState("idle");
@@ -25,6 +131,10 @@ export const AiAssistantPanel = ({
   const [queryText, setQueryText] = useState("");
   const [conversationHistory, setConversationHistory] = useState([]);
   const [savedSummary, setSavedSummary] = useState(null);
+  const [activeKind, setActiveKind] = useState(null);
+  const [parsedSuggestion, setParsedSuggestion] = useState(null);
+  const [verifyStatus, setVerifyStatus] = useState({});
+  const [verifyResults, setVerifyResults] = useState({});
   const abortRef = useRef(null);
   const responseAreaRef = useRef(null);
   const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
@@ -44,23 +154,35 @@ export const AiAssistantPanel = ({
     }
   }, [response, conversationHistory]);
 
-  const runPrompt = useCallback((prompt) => {
+  const runPrompt = useCallback((prompt, kind = null) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setResponse("");
     setError("");
     setStatus("loading");
+    setActiveKind(kind);
+    if (kind !== "suggestion") {
+      setParsedSuggestion(null);
+      setVerifyStatus({});
+      setVerifyResults({});
+    }
 
+    let accumulated = "";
     streamNarrative(prompt, {
       signal: controller.signal,
       onToken: token => {
         setStatus("streaming");
-        setResponse(prev => `${prev}${token}`);
+        accumulated += token;
+        setResponse(accumulated);
       },
       onComplete: () => {
         abortRef.current = null;
         setStatus("complete");
+        if (kind === "suggestion") {
+          setParsedSuggestion(parseSuggestionResponse(accumulated));
+          setResponse("");
+        }
       },
       onError: err => {
         abortRef.current = null;
@@ -77,6 +199,7 @@ export const AiAssistantPanel = ({
     abortRef.current = controller;
     setError("");
     setStatus("streaming");
+    setActiveKind("query");
 
     const userEntry = { role: "user", content: question };
     setConversationHistory(prev => [...prev, userEntry]);
@@ -129,13 +252,16 @@ export const AiAssistantPanel = ({
     setResponse("");
     setStatus("idle");
     setError("");
+    setParsedSuggestion(null);
+    setVerifyStatus({});
+    setVerifyResults({});
   };
 
   const explainResults = () => {
     runPrompt(buildNarrativePrompt(model, exportConfig, {
       ...results,
       aggregateStats,
-    }));
+    }), "narrative");
   };
 
   const compareRuns = () => {
@@ -148,19 +274,37 @@ export const AiAssistantPanel = ({
       model.name,
       makeRunPromptPayload("Current completed run", { results, experiment: exportConfig }),
       comparisonPayload
-    ));
+    ), "comparison");
   };
 
   const explainSensitivity = () => {
-    runPrompt(buildSensitivityPrompt(model.name, exportConfig, ciResults));
+    runPrompt(buildSensitivityPrompt(model.name, exportConfig, ciResults), "sensitivity");
   };
 
   const suggestChanges = () => {
     runPrompt(buildSuggestionPrompt(model, exportConfig, {
       ...results,
       aggregateStats,
-    }));
+    }), "suggestion");
   };
+
+  const handleApplyAndRerun = useCallback(async (suggestion) => {
+    if (!onRunWithPatch) return;
+    const rank = suggestion.rank;
+    setVerifyStatus(prev => ({ ...prev, [rank]: "running" }));
+    try {
+      const patched = applySuggestionPatch(model, suggestion.change);
+      const result = await onRunWithPatch(patched);
+      if (result) {
+        setVerifyResults(prev => ({ ...prev, [rank]: result }));
+        setVerifyStatus(prev => ({ ...prev, [rank]: "done" }));
+      } else {
+        setVerifyStatus(prev => ({ ...prev, [rank]: "error" }));
+      }
+    } catch {
+      setVerifyStatus(prev => ({ ...prev, [rank]: "error" }));
+    }
+  }, [model, onRunWithPatch]);
 
   const handleQueryKeyDown = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -172,6 +316,31 @@ export const AiAssistantPanel = ({
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
 
   const renderContent = () => {
+    if (parsedSuggestion) {
+      return (
+        <div>
+          {parsedSuggestion.analysis && (
+            <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, lineHeight: 1.7, marginBottom: 10, whiteSpace: "pre-wrap" }}>
+              {parsedSuggestion.analysis}
+            </div>
+          )}
+          {parsedSuggestion.suggestions.length === 0 && (
+            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>No structured suggestions found.</div>
+          )}
+          {parsedSuggestion.suggestions.map(s => (
+            <SuggestionCard
+              key={s.rank}
+              suggestion={s}
+              model={model}
+              aggregateStats={aggregateStats}
+              onRunWithPatch={onRunWithPatch ? (sug) => handleApplyAndRerun(sug) : null}
+              verifyStatus={verifyStatus[s.rank]}
+              verifyResult={verifyResults[s.rank]}
+            />
+          ))}
+        </div>
+      );
+    }
     if (conversationHistory.length > 0) {
       return conversationHistory.map((entry, i) => (
         <div key={i} style={{ marginBottom: 10 }}>
@@ -264,11 +433,11 @@ export const AiAssistantPanel = ({
         borderRadius: 6,
         padding: 12,
         overflowY: "auto",
-        color: response ? C.text : C.muted,
+        color: (response || parsedSuggestion) ? C.text : C.muted,
         fontFamily: FONT,
         fontSize: 12,
         lineHeight: 1.7,
-        whiteSpace: "pre-wrap",
+        whiteSpace: parsedSuggestion ? "normal" : "pre-wrap",
       }}>
         {renderContent()}
       </div>
@@ -283,8 +452,8 @@ export const AiAssistantPanel = ({
             setSavedSummary(insights);
           }}>Save to run</Btn>
         )}
-        {savedSummary && <span style={{ fontSize: 10, color: C.green, fontFamily: FONT, fontWeight: 700, alignSelf: "center" }}>✓ Saved</span>}
-        {conversationHistory.length > 0 && !isStreaming && <Btn small variant="ghost" onClick={clearConversation}>Clear</Btn>}
+        {savedSummary && <span style={{ fontSize: 10, color: C.green, fontFamily: FONT, fontWeight: 700, alignSelf: "center" }}>Saved</span>}
+        {(conversationHistory.length > 0 || parsedSuggestion) && !isStreaming && <Btn small variant="ghost" onClick={clearConversation}>Clear</Btn>}
       </div>
 
       <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
