@@ -301,8 +301,20 @@ export function fitDistribution(values) {
     fitTriangular(values, stats),
   ].filter(Boolean);
 
-  // Sort parametric by KS
-  parametric.sort((a, b) => a.ks - b.ks);
+  // Sort parametric by KS; when normal and lognormal are both candidates and
+  // the original data has near-zero skewness, prefer normal (principle of parsimony).
+  parametric.sort((a, b) => {
+    const diff = a.ks - b.ks;
+    if (Math.abs(diff) < 0.03) {
+      // Tiebreak: prefer normal over lognormal for symmetric data (skewness near 0)
+      const preference = { normal: 0, exponential: 1, uniform: 2, triangular: 3, lognormal: 4, fixed: 5, empirical: 6 };
+      const symScore = Math.abs(stats.skewness) < 0.5 ? 1 : -1;
+      const prefA = (preference[a.type] ?? 99) * symScore;
+      const prefB = (preference[b.type] ?? 99) * symScore;
+      if (prefA !== prefB) return prefA - prefB;
+    }
+    return diff;
+  });
 
   // Use the best parametric fit if it's reasonable; otherwise empirical
   const bestParametric = parametric[0];
