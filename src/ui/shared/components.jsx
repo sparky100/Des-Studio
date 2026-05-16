@@ -2,6 +2,8 @@
 import React, { Component, useEffect, useId, useState, useRef } from "react";
 import { C, FONT, SPACE, RADIUS, TYPO, alpha } from "./tokens.js";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
+import { DIST_GROUPS, DIST_HELP, getDistGroup, validateDistParams } from "./DistHelp.js";
+import { DistSparkline } from "./DistSparkline.jsx";
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -366,13 +368,23 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
 
 const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
   const fileRef=useRef(null);
-  const [csvParse,setCsvParse]=useState(null); // { fileName, headers, rows, colIdx }
+  const [csvParse,setCsvParse]=useState(null);
+  const [showHelp,setShowHelp]=useState(false);
+  const [showPreview,setShowPreview]=useState(false);
+  const [blurErrors,setBlurErrors]=useState({}); // { param: errorMsg }
 
   const v=value||{dist:"Exponential",distParams:{}};
   const isImported=v.dist==="Empirical"&&Array.isArray(v.distParams?.values)&&v.distParams.values.length>0;
   const dd=DISTRIBUTIONS[v.dist||"Fixed"]||DISTRIBUTIONS.Fixed;
   const isPiecewise=v.dist==="Piecewise";
   const isSchedule=v.dist==="Schedule";
+
+  // Derive current family from distribution
+  const currentGroup=getDistGroup(v.dist)||DIST_GROUPS[0];
+  const [selectedFamily,setSelectedFamily]=useState(currentGroup.id);
+
+  // Keep selectedFamily in sync when distribution changes externally
+  const syncedFamily=getDistGroup(v.dist)?.id||selectedFamily;
 
   const selSt={width:compact?160:200,background:C.bg,border:`1px solid ${C.cEvent}55`,
     borderRadius:4,color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"};
@@ -385,12 +397,34 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
       :{};
     onChange({...v,dist:sel,distParams:defaultParams});
     setCsvParse(null);
+    setBlurErrors({});
+  };
+
+  const handleFamilyChange=(fid)=>{
+    setSelectedFamily(fid);
+    const group=DIST_GROUPS.find(g=>g.id===fid);
+    if(!group)return;
+    // If current dist not in new family, switch to first of that family
+    if(!group.dists.includes(v.dist)){
+      const first=group.dists.find(d=>allowPiecewise||d!=="Piecewise")||group.dists[0];
+      if(first) handleDistChange(first);
+    }
+  };
+
+  const handleParamChange=(param,val)=>{
+    onChange({...v,distParams:{...(v.distParams||{}),[param]:val}});
+  };
+
+  const handleParamBlur=(param)=>{
+    const errors=validateDistParams(v.dist,v.distParams||{});
+    const err=errors.find(e=>e.param===param);
+    setBlurErrors(prev=>({...prev,[param]:err?err.message:null}));
   };
 
   const handleFileSelect=(e)=>{
     const file=e.target.files?.[0];
     if(!file)return;
-    e.target.value=""; // allow re-selecting same file
+    e.target.value="";
     const reader=new FileReader();
     reader.onload=(evt)=>{
       const lines=evt.target.result.split(/\r?\n/).filter(l=>l.trim());
@@ -434,36 +468,105 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
   const btnSt=(col)=>({background:col+"18",border:`1px solid ${col}55`,borderRadius:4,
     color:col,fontFamily:FONT,fontSize:11,padding:"3px 10px",cursor:"pointer"});
 
+  const distHelp=DIST_HELP[v.dist]||null;
+  const activeFamilyId=syncedFamily;
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:6}}>
-      {/* Hidden file input */}
       <input ref={fileRef} type="file" accept=".csv" style={{display:"none"}} onChange={handleFileSelect}/>
 
-      {/* Distribution selector row */}
-      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-        <select value={v.dist||"Exponential"} onChange={e=>handleDistChange(e.target.value)} style={selSt}>
-          {Object.keys(DISTRIBUTIONS).filter(d=>allowPiecewise||d!=="Piecewise").map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
-          <option disabled value="">──────────</option>
-          <option value="__csv__">⬆ Import from CSV…</option>
-        </select>
-        {/* Param inputs — shown for non-CSV, non-custom distributions */}
-        {!isImported&&!isPiecewise&&!isSchedule&&dd.params.map(param=>(
-          <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
-            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
-            <input type="number" value={(v.distParams||{})[param]||""}
-              onChange={e=>onChange({...v,distParams:{...(v.distParams||{}),[param]:e.target.value}})}
-              style={{width:60,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,
-                color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}/>
-          </div>
-        ))}
-        {/* Re-import button shown when CSV is loaded */}
-        {isImported&&<button onClick={()=>fileRef.current?.click()} style={btnSt(C.cEvent)}>Re-import CSV</button>}
+      {/* Family segmented buttons */}
+      <div role="group" aria-label="Distribution family" style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+        {DIST_GROUPS.map(g=>{
+          const active=g.id===activeFamilyId;
+          return (
+            <button key={g.id} onClick={()=>handleFamilyChange(g.id)}
+              aria-pressed={active}
+              style={{background:active?C.cEvent+"22":"transparent",
+                border:`1px solid ${active?C.cEvent:C.border}`,
+                borderRadius:RADIUS.sm,color:active?C.cEvent:C.muted,
+                fontFamily:FONT,fontSize:10,padding:"3px 8px",cursor:"pointer",
+                fontWeight:active?700:400}}>
+              {g.label}
+            </button>
+          );
+        })}
       </div>
+
+      {/* Distribution selector row */}
+      <div style={{display:"flex",gap:6,alignItems:"flex-start",flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flex:1}}>
+          <select value={v.dist||"Exponential"} onChange={e=>handleDistChange(e.target.value)} style={selSt}>
+            {(DIST_GROUPS.find(g=>g.id===activeFamilyId)?.dists||[])
+              .filter(d=>allowPiecewise||d!=="Piecewise")
+              .filter(d=>DISTRIBUTIONS[d])
+              .map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
+            {activeFamilyId==="fromdata"&&<option value="__csv__">⬆ Import from CSV…</option>}
+          </select>
+
+          {/* Param inputs with blur validation */}
+          {!isImported&&!isPiecewise&&!isSchedule&&dd.params.map(param=>{
+            const helpTxt=distHelp?.params?.[param];
+            const errMsg=blurErrors[param];
+            return (
+              <div key={param} style={{display:"flex",flexDirection:"column",gap:2}}>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}} title={helpTxt||""}>{param}:</span>
+                  <input type="number" value={(v.distParams||{})[param]||""}
+                    aria-label={param}
+                    aria-describedby={helpTxt?`dp-help-${param}`:undefined}
+                    onChange={e=>handleParamChange(param,e.target.value)}
+                    onBlur={()=>handleParamBlur(param)}
+                    style={{width:60,background:"transparent",
+                      border:`1px solid ${errMsg?C.red:C.border}`,
+                      borderRadius:RADIUS.sm,color:C.amber,fontFamily:FONT,fontSize:11,
+                      padding:"3px 6px",outline:"none"}}/>
+                </div>
+                {errMsg&&(
+                  <span role="alert" style={{fontSize:10,color:C.red,fontFamily:FONT}}>{errMsg}</span>
+                )}
+              </div>
+            );
+          })}
+
+          {isImported&&<button onClick={()=>fileRef.current?.click()} style={btnSt(C.cEvent)}>Re-import CSV</button>}
+        </div>
+
+        {/* Help toggle */}
+        {distHelp&&(
+          <button onClick={()=>setShowHelp(v=>!v)} aria-pressed={showHelp}
+            aria-label={showHelp?"Hide distribution help":"Show distribution help"}
+            style={{background:showHelp?C.accent+"22":"transparent",
+              border:`1px solid ${showHelp?C.accent:C.border}`,
+              borderRadius:RADIUS.sm,color:showHelp?C.accent:C.muted,
+              fontFamily:FONT,fontSize:11,padding:"3px 7px",cursor:"pointer",flexShrink:0}}>
+            ?
+          </button>
+        )}
+      </div>
+
+      {/* Inline help card */}
+      {showHelp&&distHelp&&(
+        <div style={{background:alpha(C.accent,0.05),border:`1px solid ${alpha(C.accent,0.2)}`,
+          borderRadius:RADIUS.md,padding:`${SPACE.sm}px ${SPACE.md}px`,display:"flex",flexDirection:"column",gap:6}}>
+          <div style={{fontSize:11,color:C.text,fontFamily:FONT,lineHeight:1.6}}>{distHelp.summary}</div>
+          {dd.params.length>0&&(
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {dd.params.map(p=>distHelp.params?.[p]&&(
+                <div key={p} style={{fontSize:10,fontFamily:FONT}}>
+                  <span style={{color:C.accent,fontWeight:700}}>{p}</span>
+                  <span style={{color:C.muted,marginLeft:4}}>{distHelp.params[p]}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {isPiecewise&&<PiecewiseEditor value={v} onChange={onChange} compact={compact}/>}
       {isSchedule&&<ScheduleEditor value={v} onChange={onChange} attrDefs={attrDefs}/>}
 
-      {/* Column picker — appears after file is parsed */}
+      {/* CSV column picker */}
       {csvParse&&(
         <div style={{background:C.surface,border:`1px solid ${C.cEvent}44`,borderRadius:6,padding:"10px 12px",
           display:"flex",flexDirection:"column",gap:8}}>
@@ -482,7 +585,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
         </div>
       )}
 
-      {/* Summary for imported CSV */}
+      {/* Imported CSV summary */}
       {isImported&&v._csvStats&&(
         <div style={{fontSize:10,color:C.muted,fontFamily:FONT,background:C.surface,borderRadius:4,padding:"4px 10px"}}>
           {v.sourceFile} · col: <span style={{color:C.amber}}>{v.column}</span> ·{" "}
@@ -491,9 +594,22 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
         </div>
       )}
 
-      {/* Distribution hint for non-CSV modes */}
-      {!isImported&&!csvParse&&!isPiecewise&&(
-        <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>{dd.hint}</span>
+      {/* Preview toggle + sparkline */}
+      {!isImported&&!csvParse&&!isPiecewise&&!isSchedule&&(
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic",flex:1}}>{dd.hint}</span>
+            <button onClick={()=>setShowPreview(v=>!v)} aria-pressed={showPreview}
+              aria-label={showPreview?"Hide distribution preview":"Show distribution preview"}
+              style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:RADIUS.sm,
+                color:C.muted,fontFamily:FONT,fontSize:10,padding:"2px 7px",cursor:"pointer"}}>
+              {showPreview?"Hide preview":"Preview ▾"}
+            </button>
+          </div>
+          {showPreview&&(
+            <DistSparkline dist={v.dist} distParams={v.distParams||{}}/>
+          )}
+        </div>
       )}
     </div>
   );
