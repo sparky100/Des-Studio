@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  applySuggestionPatch,
   buildCiResults,
   buildComparisonPrompt,
+  buildGoalGaps,
   buildNarrativePrompt,
   buildResultsQueryPrompt,
   buildSensitivityPrompt,
   buildSuggestionPrompt,
+  parseSuggestionResponse,
   promptWordEstimate,
 } from "../../src/llm/prompts.js";
 
@@ -240,6 +243,133 @@ describe("LLM prompt builders", () => {
       const parsed = JSON.parse(prompt.messages[prompt.messages.length - 1].content);
       expect(parsed.data.kpis.avgWait).toBe(0);
       expect(parsed.data.timeSeriesAvailable).toBe(false);
+    });
+  });
+});
+
+describe("Sprint 46 — AI apply & verify", () => {
+  const goalModel = {
+    name: "Clinic",
+    goals: [
+      { metric: "summary.avgWait", operator: "<", target: 3, label: "Avg wait < 3" },
+      { metric: "summary.served", operator: ">=", target: 100, label: "Served >= 100" },
+    ],
+  };
+
+  describe("buildGoalGaps", () => {
+    it("met goal returns met: true", () => {
+      const stats = {
+        "summary.avgWait": { mean: 2.1, n: 5 },
+        "summary.served": { mean: 120, n: 5 },
+      };
+      const gaps = buildGoalGaps(goalModel, stats);
+      expect(gaps[0].met).toBe(true);
+      expect(gaps[1].met).toBe(true);
+    });
+
+    it("missed goal returns met: false and positive gap", () => {
+      const stats = {
+        "summary.avgWait": { mean: 4.2, n: 5 },
+        "summary.served": { mean: 80, n: 5 },
+      };
+      const gaps = buildGoalGaps(goalModel, stats);
+      expect(gaps[0].met).toBe(false);
+      expect(gaps[0].gap).toBeGreaterThan(0);
+      expect(gaps[1].met).toBe(false);
+    });
+
+    it("null aggregateStats returns met: false", () => {
+      const gaps = buildGoalGaps(goalModel, {});
+      expect(gaps[0].met).toBe(false);
+      expect(gaps[0].current).toBeNull();
+      expect(gaps[0].gap).toBeNull();
+    });
+  });
+
+  describe("parseSuggestionResponse", () => {
+    it("extracts JSON from markdown code fences", () => {
+      const text = '```json\n{"analysis":"test analysis","suggestions":[{"rank":1,"constraint":"avgWait = 4.2 (goal: < 3)","cause":"high util","change":{"type":"entityTypeCount","target":"Nurse","from":2,"to":3},"predicted":"~2 min","goalImpact":"MET","confidence":"high"}]}\n```';
+      const result = parseSuggestionResponse(text);
+      expect(result.analysis).toBe("test analysis");
+      expect(result.suggestions).toHaveLength(1);
+      expect(result.suggestions[0].rank).toBe(1);
+      expect(result.suggestions[0].change.type).toBe("entityTypeCount");
+    });
+
+    it("falls back to analysis text when no JSON", () => {
+      const text = "Consider adding more servers to reduce wait times.";
+      const result = parseSuggestionResponse(text);
+      expect(result.analysis).toBe(text);
+      expect(result.suggestions).toHaveLength(0);
+    });
+
+    it("handles malformed JSON gracefully", () => {
+      const text = "```json\n{broken json here\n```";
+      const result = parseSuggestionResponse(text);
+      expect(result.analysis).toBeTruthy();
+      expect(result.suggestions).toHaveLength(0);
+    });
+  });
+
+  describe("applySuggestionPatch", () => {
+    const baseModel = {
+      entityTypes: [{ id: "e1", name: "Nurse", role: "server", count: 2 }],
+      queues: [{ id: "q1", name: "Main queue", capacity: 10 }],
+      stateVariables: [{ id: "v1", name: "shiftActive", initialValue: 1 }],
+    };
+
+    it("entityTypeCount changes correct entity", () => {
+      const patched = applySuggestionPatch(baseModel, { type: "entityTypeCount", target: "Nurse", from: 2, to: 3 });
+      expect(patched.entityTypes[0].count).toBe(3);
+    });
+
+    it("queueCapacity changes correct queue", () => {
+      const patched = applySuggestionPatch(baseModel, { type: "queueCapacity", target: "Main queue", from: 10, to: 20 });
+      expect(patched.queues[0].capacity).toBe(20);
+    });
+
+    it("stateVariable changes initial value", () => {
+      const patched = applySuggestionPatch(baseModel, { type: "stateVariable", target: "shiftActive", from: 1, to: 0 });
+      expect(patched.stateVariables[0].initialValue).toBe(0);
+    });
+
+    it("unknown target returns model unchanged (no crash)", () => {
+      const patched = applySuggestionPatch(baseModel, { type: "entityTypeCount", target: "Doctor", from: 1, to: 2 });
+      expect(patched.entityTypes[0].count).toBe(2);
+    });
+
+    it("does not mutate original model", () => {
+      const original = JSON.parse(JSON.stringify(baseModel));
+      applySuggestionPatch(baseModel, { type: "entityTypeCount", target: "Nurse", from: 2, to: 5 });
+      expect(baseModel.entityTypes[0].count).toBe(original.entityTypes[0].count);
+    });
+  });
+
+  describe("buildSuggestionPrompt — Sprint 46", () => {
+    const modelWithGoals = {
+      name: "Clinic",
+      description: "A small clinic.",
+      goals: [{ metric: "summary.avgWait", operator: "<", target: 3, label: "Avg wait < 3 min" }],
+      entityTypes: [{ id: "e1", name: "Nurse", role: "server", count: 2 }],
+      queues: [{ id: "q1", name: "Main queue", discipline: "FIFO" }],
+      stateVariables: [],
+    };
+
+    it("includes goalGaps in payload when goals exist", () => {
+      const prompt = buildSuggestionPrompt(
+        modelWithGoals,
+        { warmupPeriod: 10, maxSimTime: 200, replications: 3, seed: 42 },
+        { aggregateStats: { "summary.avgWait": { mean: 4.2, n: 3 } } }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.model.goalGaps).toBeDefined();
+      expect(payload.model.goalGaps[0].met).toBe(false);
+      expect(payload.model.goalGaps[0].current).toBe(4.2);
+    });
+
+    it("system prompt contains 'binding constraint'", () => {
+      const prompt = buildSuggestionPrompt(modelWithGoals, {}, {});
+      expect(prompt.messages[0].content).toMatch(/binding constraint/i);
     });
   });
 });
