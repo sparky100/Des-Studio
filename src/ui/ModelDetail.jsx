@@ -3,6 +3,8 @@ import { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } fro
 import pkg from '../../package.json';
 import { C, FONT, RADIUS, SPACE, SHADOW, Z, alpha } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
+import { useToast } from "./shared/ToastContext.jsx";
+import { SkeletonPanel } from "./shared/SkeletonPanel.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
 import { GoalsEditor } from "./editors/GoalsEditor.jsx";
@@ -213,9 +215,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
       access:        modelData.access         || {},
     };
   });
+  const toast = useToast();
   const [tab,setTab]=useState(initialTab||"overview");
   const [dirty,setDirty]=useState(false);
-  const [saveStatus,setSaveStatus]=useState(null);
   const [saving,setSaving]=useState(false);
   const [discardConfirm,setDiscardConfirm]=useState(false);
   const [past,setPast]=useState([]);    // undo stack — model snapshots, capped at 20
@@ -227,6 +229,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [historyShowArchived,setHistoryShowArchived]=useState(false);
   const [historyEditLabelId,setHistoryEditLabelId]=useState(null);
   const [historyEditLabelVal,setHistoryEditLabelVal]=useState("");
+  const [historySelected,setHistorySelected]=useState(new Set());
   const [shareLinksMap,setShareLinksMap]=useState({});
   const [showCsvImport,setShowCsvImport]=useState(false);
   const [analyseRun,setAnalyseRun]=useState(null);
@@ -320,15 +323,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     setFuture([]);
     setModel(merged);
     setSaving(true);
-    setSaveStatus({state:"saving",message:"Saving generated model..."});
     try{
       await overrides.onSave?.(merged);
       setDirty(false);
-      setSaveStatus({state:"success",message:"Saved"});
+      toast.success("Model saved");
       await onRefresh?.();
     }catch(error){
       setDirty(true);
-      setSaveStatus({state:"error",message:error?.message||"Save failed"});
+      toast.error(error?.message || "Save failed");
       throw error;
     }finally{
       setSaving(false);
@@ -368,15 +370,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
 
   const save=async()=>{
     setSaving(true);
-    setSaveStatus({state:"saving",message:"Saving..."});
     try{
       await overrides.onSave?.(model);
       setDirty(false);
-      setSaveStatus({state:"success",message:"Saved"});
+      toast.success("Model saved");
       await onRefresh?.();
     }catch(error){
       setDirty(true);
-      setSaveStatus({state:"error",message:error?.message||"Save failed"});
+      toast.error(error?.message || "Save failed");
     }finally{
       setSaving(false);
     }
@@ -458,11 +459,30 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const exportRunHistoryJson = () => {
     const payload = buildRunHistoryExportPayload(model, historyRows);
     downloadJsonFile(payload, `des-studio-run-history-${slugifyModelName(model.name)}.json`);
+    toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as JSON`);
   };
 
   const exportRunHistoryCsv = () => {
     const csv = buildRunHistoryCsv(historyRows);
     downloadTextFile(csv, `des-studio-run-history-${slugifyModelName(model.name)}.csv`, "text/csv;charset=utf-8");
+    toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as CSV`);
+  };
+
+  const exportSelectedCsv = () => {
+    const rows = historyRows.filter(r => historySelected.has(r.id));
+    const csv = buildRunHistoryCsv(rows);
+    downloadTextFile(csv, `des-studio-selected-runs-${slugifyModelName(model.name)}.csv`, "text/csv;charset=utf-8");
+    toast.success(`Exported ${rows.length} selected run${rows.length !== 1 ? "s" : ""} as CSV`);
+  };
+  const archiveSelected = async () => {
+    const userId = overrides.userId;
+    if (!userId) return;
+    const ids = [...historySelected];
+    await Promise.all(ids.map(id => archiveRun(id, userId).catch(() => {})));
+    if (!historyShowArchived) setHistoryRows(prev => prev.filter(r => !historySelected.has(r.id)));
+    else setHistoryRows(prev => prev.map(r => historySelected.has(r.id) ? { ...r, archived: true } : r));
+    setHistorySelected(new Set());
+    toast.success(`Archived ${ids.length} run${ids.length !== 1 ? "s" : ""}`);
   };
 
   const hasResultsPayload = row => {
@@ -780,16 +800,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         <Tag label={`v${pkg.version}`} color={C.purple}/>
         {canEdit&&<Btn small variant="ghost" onClick={undo} disabled={!past.length} title="Undo the last model edit (Ctrl+Z)" ariaLabel="Undo last model edit">↩ Undo</Btn>}
         {canEdit&&<Btn small variant="ghost" onClick={redo} disabled={!future.length} title="Redo the last undone model edit (Ctrl+Shift+Z)" ariaLabel="Redo last model edit">↪ Redo</Btn>}
-        {saveStatus&&(
-          <div role={saveStatus.state==="error"?"alert":"status"} style={{
-            color: saveStatus.state==="error"?C.red:saveStatus.state==="success"?C.green:C.muted,
-            fontFamily:FONT,
-            fontSize:11,
-            fontWeight:700,
-          }}>
-            {saveStatus.message}
-          </div>
-        )}
         {canEdit&&dirty&&(
           <div style={{display:"flex",gap:6,alignItems:"center"}}>
             <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save"}</Btn>
@@ -915,19 +925,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         )}
         {tab==="visual"&&(
           renderAuthoringShell(
-            <Suspense fallback={
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: 48,
-                color: C.muted,
-                fontFamily: FONT,
-                fontSize: 12,
-              }}>
-                Loading Visual Designer…
-              </div>
-            }>
+            <Suspense fallback={<SkeletonPanel rows={5} />}>
               <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel}/>
             </Suspense>
           )
@@ -1153,6 +1151,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             {!historyLoading&&!historyError&&historyRows.length===0&&(
               <Empty icon="📊" msg="No runs yet. Run the simulation from the Execute tab."/>
             )}
+            {historySelected.size > 0 && (
+              <div style={{background:alpha(C.accent,0.08),border:`1px solid ${alpha(C.accent,0.3)}`,borderRadius:6,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:4}}>
+                <span style={{fontSize:12,fontFamily:FONT,color:C.text}}>{historySelected.size} run{historySelected.size!==1?"s":""} selected</span>
+                <Btn small variant="ghost" onClick={archiveSelected}>Archive selected</Btn>
+                <Btn small variant="ghost" onClick={exportSelectedCsv}>Export selected as CSV</Btn>
+                <Btn small variant="ghost" onClick={()=>setHistorySelected(new Set())}>Clear selection</Btn>
+              </div>
+            )}
             {!historyLoading&&historyRows.length>0&&(
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 {(() => {
@@ -1180,9 +1186,20 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 <div style={{overflowX:"auto"}}>
                 <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FONT,fontSize:11}}>
                   <thead>
-                    <tr>{["Date / Time","Label","Served","Reneged","Avg Wait","Summary","Reshare","Actions"].map(h=>(
-                      <th key={h} scope="col" style={{textAlign:"left",padding:"6px 12px",color:C.muted,borderBottom:`1px solid ${C.border}`,fontSize:11,letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
-                    ))}</tr>
+                    <tr>
+                      <th scope="col" style={{padding:"6px 8px",borderBottom:`1px solid ${C.border}`,width:32}}>
+                        <input type="checkbox" aria-label="Select all runs"
+                          checked={historySelected.size>0&&historyRows.every(r=>historySelected.has(r.id))}
+                          onChange={e=>{
+                            if(e.target.checked) setHistorySelected(new Set(historyRows.map(r=>r.id)));
+                            else setHistorySelected(new Set());
+                          }}
+                        />
+                      </th>
+                      {["Date / Time","Label","Served","Reneged","Avg Wait","Summary","Reshare","Actions"].map(h=>(
+                        <th key={h} scope="col" style={{textAlign:"left",padding:"6px 12px",color:C.muted,borderBottom:`1px solid ${C.border}`,fontSize:11,letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
+                      ))}
+                    </tr>
                   </thead>
                   <tbody>
                     {historyRows.filter(row => {
@@ -1197,7 +1214,19 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                       const isEditingLabel = historyEditLabelId === row.id;
                       const userId = overrides.userId;
                       return(
-                        <tr key={row.id} style={{background:i%2===0?C.surface+"60":"transparent",opacity:row.archived?0.55:1}}>
+                        <tr key={row.id} style={{background:historySelected.has(row.id)?alpha(C.accent,0.06):i%2===0?C.surface+"60":"transparent",opacity:row.archived?0.55:1}}>
+                          <td style={{padding:"6px 8px"}}>
+                            <input type="checkbox" aria-label={`Select run ${row.run_label||dateStr}`}
+                              checked={historySelected.has(row.id)}
+                              onChange={e=>{
+                                setHistorySelected(prev=>{
+                                  const next=new Set(prev);
+                                  e.target.checked?next.add(row.id):next.delete(row.id);
+                                  return next;
+                                });
+                              }}
+                            />
+                          </td>
                           <td style={{padding:"6px 12px",color:C.muted,whiteSpace:"nowrap"}}>{dateStr} {timeStr}</td>
                           <td style={{padding:"6px 12px",minWidth:120}}>
                             {isEditingLabel ? (

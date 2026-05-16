@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
+import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
 import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildResultsQueryPrompt, buildSensitivityPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
@@ -131,6 +132,7 @@ export const AiAssistantPanel = ({
   onSaveInsights,
   onRunWithPatch,
 }) => {
+  const toast = useToast();
   const [response, setResponse] = useState("");
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -193,11 +195,13 @@ export const AiAssistantPanel = ({
       },
       onError: err => {
         abortRef.current = null;
-        setError(err?.message || "Analysis unavailable");
+        const msg = err?.message || "Analysis unavailable";
+        setError(msg);
         setStatus("error");
+        if (/rate.?limit|429/i.test(msg)) toast.warning("AI rate limit reached. Please wait a moment and try again.");
       },
     });
-  }, []);
+  }, [toast]);
 
   const runQuery = useCallback((question) => {
     if (!question.trim() || !results) return;
@@ -234,11 +238,13 @@ export const AiAssistantPanel = ({
       },
       onError: err => {
         abortRef.current = null;
-        setError(err?.message || "Query unavailable");
+        const msg = err?.message || "Query unavailable";
+        setError(msg);
         setStatus("error");
+        if (/rate.?limit|429/i.test(msg)) toast.warning("AI rate limit reached. Please wait a moment and try again.");
       },
     });
-  }, [model, results, aggregateStats, conversationHistory]);
+  }, [model, results, aggregateStats, conversationHistory, toast]);
 
   const stopStream = () => {
     abortRef.current?.abort();

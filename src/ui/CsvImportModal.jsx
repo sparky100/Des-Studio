@@ -2,9 +2,11 @@
 import { useState, useRef, useCallback } from "react";
 import { C, FONT, Z } from "./shared/tokens.js";
 import { Btn } from "./shared/components.jsx";
+import { useToast } from "./shared/ToastContext.jsx";
 import { csvToEntityType } from "../engine/distribution-fitting.js";
 
 export function CsvImportModal({ onClose, onApply }) {
+  const toast = useToast();
   const [step, setStep] = useState("upload"); // upload | preview | error
   const [fileName, setFileName] = useState("");
   const [entityName, setEntityName] = useState("Imported Entity");
@@ -41,6 +43,7 @@ export function CsvImportModal({ onClose, onApply }) {
   const handleApply = () => {
     if (entityType) {
       onApply(entityType);
+      toast.success(`Imported entity type "${entityType.name}" from CSV`);
       onClose();
     }
   };

@@ -12,6 +12,8 @@ import { fetchModels, fetchProfiles,
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
 import { C, FONT, GOOGLE_FONT_URL, SHADOW, RADIUS, Z } from "./ui/shared/tokens.js";
 import { Btn, Empty, ErrorBoundary }        from "./ui/shared/components.jsx";
+import { ToastProvider }                    from "./ui/shared/ToastContext.jsx";
+import { KeyboardShortcutsModal }           from "./ui/shared/KeyboardShortcutsModal.jsx";
 import { extractImportedModelPayload }      from "./ui/shared/utils.js";
 import { ModelCard, ModelDetail,
          NewModelModal }                    from "./ui/ModelDetail.jsx";
@@ -203,6 +205,7 @@ export default function App(){
   const [tmplSearch,setTmplSearch]=useState('')
   const [tmplDomain,setTmplDomain]=useState('All')
   const [showPatternsGuide,setShowPatternsGuide]=useState(false)
+  const [showKeyboardShortcuts,setShowKeyboardShortcuts]=useState(false)
 
   const handleAuth=useCallback(async()=>{
     setAuthError('')
@@ -299,6 +302,17 @@ export default function App(){
   },[session])
 
   useEffect(()=>{loadData()},[loadData])
+
+  useEffect(()=>{
+    const onKey=e=>{
+      if(e.key==='?' && !e.ctrlKey && !e.metaKey && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){
+        e.preventDefault();
+        setShowKeyboardShortcuts(v=>!v);
+      }
+    };
+    window.addEventListener('keydown',onKey);
+    return ()=>window.removeEventListener('keydown',onKey);
+  },[])
 
   const uid=session?.user?.id
   const isAdmin=profile?.isAdmin===true
@@ -640,6 +654,7 @@ export default function App(){
   }
 
   return(
+    <ToastProvider>
     <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
       <style>{`*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:${C.bg};}::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px;}@import url('${GOOGLE_FONT_URL}');`}</style>
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 24px',display:'flex',alignItems:'center',gap:16,height:52}}>
@@ -894,6 +909,10 @@ export default function App(){
           </div>
         </div>
       )}
+      {showKeyboardShortcuts && (
+        <KeyboardShortcutsModal onClose={()=>setShowKeyboardShortcuts(false)}/>
+      )}
     </div>
+    </ToastProvider>
   )
 }
