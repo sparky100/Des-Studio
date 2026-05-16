@@ -139,7 +139,15 @@ const PATTERNS_GUIDE = [
   { id:'p6', title:'Priority Queue', macros:['ARRIVE','ASSIGN','COMPLETE'],
     summary:'Set discipline=PRIORITY on the queue and add a numeric "priority" attribute to the entity type. Lower number = higher urgency.',
     snippet:'EntityType: Customer  attrDefs: [priority dist=Uniform(1,5)]\nQueue: Queue  discipline=PRIORITY\nASSIGN(Queue, Server)  ← picks lowest priority number first',
-    templates:['er-triage','bank-branch'] },
+    templates:['er-triage','bank-branch','priority-ed-balking'] },
+  { id:'p7', title:'Server Failures and Repair', macros:['FAIL','REPAIR'],
+    summary:'Set mtbfDist and mttrDist on a server entity type. The engine automatically schedules FAIL and REPAIR events. Effective capacity = count × availability.',
+    snippet:'EntityType: Machine  mtbfDist=Exponential{mean:120}  mttrDist=Exponential{mean:20}\n→ availability ≈ 120/(120+20) = 85.7%',
+    templates:['machine-shop-failures'] },
+  { id:'p8', title:'Cost Tracking', macros:['COST'],
+    summary:'Add COST(amount) to any B-event effect. Costs accumulate in totalCost. Set a totalCost goal and use the parametric sweep to find the cheapest feasible configuration.',
+    snippet:'B-event: Call Handled  effect: ["COMPLETE()", "COST(5)"]\nGoal: totalCost < 500',
+    templates:['cost-call-centre'] },
 ];
 
 const PatternsGuidePanel=({onClose})=>(

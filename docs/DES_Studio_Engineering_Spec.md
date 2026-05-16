@@ -1,0 +1,492 @@
+# DES Studio — Engineering Specification
+
+**Version:** 1.0.0
+**Date:** 2026-05-16
+**Sprint baseline:** Sprint 45
+**Status:** Living document — updated at end of each sprint
+
+---
+
+## Version History
+
+| Version | Date | Sprint | Changes |
+|---------|------|--------|---------|
+| v1.0 | 2026-05-16 | Sprint 45 | Initial specification — Sprint 45 baseline covering engine, data model, macros, AI analysis, UI workspace, validation, and non-functional requirements |
+
+---
+
+## 1. Product Overview
+
+DES Studio is a browser-based, no-code discrete-event simulation (DES) tool targeting operations analysts, industrial engineers, and service-design practitioners who need to model and optimise queueing systems without writing simulation code.
+
+**Target user:** A domain expert who understands queueing concepts (arrivals, service, queues, resources) but is not a software developer. The tool must be learnable in an afternoon and must produce statistically sound results without requiring the user to configure statistical machinery by hand.
+
+**Key differentiators:**
+
+- **Browser-native, no install.** The entire engine runs in the user's browser using pure JavaScript (no server-side compute required for simulation execution). Models are authored, run, and analysed in a single browser tab.
+- **No-code authoring.** All model logic is expressed through structured UI editors — B-event and C-event editors, queue configuration, entity type forms, and a Visual Designer canvas — rather than code. A safe declarative macro language replaces scripting.
+- **Three-Phase method.** The engine implements Pidd's canonical Three-Phase DES algorithm, giving it rigorous theoretical grounding and predictable Phase C semantics (restart rule, conditional event ordering by priority).
+- **AI-integrated analysis.** An AI Insights panel produces narrative summaries, structured improvement recommendations, replication sensitivity analysis, two-run comparisons, and interactive Q&A, all grounded in the full run result payload.
+- **Production-grade statistics.** Warmup period removal, parallel replication workers, 95% confidence intervals (batch means), parametric sweep (1D and 2D), ANOVA with Tukey HSD post-hoc test, anomalous replication flagging, and Welch's graphical warm-up test are all built in.
+
+---
+
+## 2. Architecture Overview
+
+### 2.1 Three-Phase DES Engine
+
+The engine (`src/engine/index.js`, `src/engine/phases.js`) is a pure JavaScript module with no DOM dependencies. It can run in the main browser thread, in a Web Worker (for parallel replications), or in Node.js (for headless/CLI execution).
+
+The engine is instantiated by calling `buildEngine(model, seed, warmupPeriod, maxSimTime, terminationCondition, maxCycles, maxCPasses, collectTimeSeries)`. The returned object exposes:
+- `runAll()` — run to completion, return result object
+- `step()` — advance one Phase A→B→C cycle, return trace messages
+- `getSnap()` — return a real-time snapshot of entity counts, queue depths, FEL size, and event fire counts
+- `getFelSize()` — return the current number of events in the Future Event List
+
+### 2.2 React Frontend
+
+The UI is built with React and Vite. There is no CSS framework dependency; all styling uses inline styles with design tokens from `src/ui/shared/tokens.js`. This avoids class-name conflicts and makes the styling contract explicit: colours, spacing, border radii, and font sizes are imported from a single source of truth.
+
+The three authoring modes are:
+- **Forms/Tabs editor** — the primary authoring interface, structured as a multi-tab ModelDetail panel (Entities, Queues, B-Events, C-Events, State Variables, Goals)
+- **AI Generator** — the user describes their system in natural language and the LLM generates a complete model JSON
+- **Visual Designer** — a canvas-based DAG editor (`src/ui/visual-designer/`) where the user drags and connects nodes representing entity types, queues, and events
+
+### 2.3 Supabase Backend
+
+Supabase provides PostgreSQL-backed persistence via `src/db/supabase.js`. The database stores:
+- User accounts (Supabase Auth)
+- Model records (`models` table: id, name, description, model JSON, owner, created_at, updated_at, is_public, tags)
+- Run history (`run_results` table: model_id, run_label, summary, experiment config, tags, archived flag)
+- Saved experiment configurations (`experiments` table)
+
+An anonymous mode (no Supabase connection) uses `src/db/local.js` which persists to browser localStorage with the same interface contract.
+
+### 2.4 LLM Integration
+
+AI analysis is provided by `src/llm/prompts.js`, which builds structured prompt payloads, and `src/llm/apiClient.js`, which handles the API call. The AI Insights panel in the Execute workspace calls five prompt builders:
+- `buildNarrativePrompt` — narrative result interpretation (150-200 words, max_tokens 450)
+- `buildSuggestionPrompt` — 6-step structured improvement recommendations (max_tokens 600)
+- `buildSensitivityPrompt` — replication CI uncertainty analysis (150-200 words, max_tokens 450)
+- `buildComparisonPrompt` — two-run side-by-side comparison (200-250 words, max_tokens 550)
+- `buildResultsQueryPrompt` — conversational Q&A against run results
+
+---
+
+## 3. Data Model
+
+A DES Studio model is a JSON object stored in the `models` table. All fields below are at the top level of this object unless noted.
+
+### 3.1 Model JSON Structure
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string (UUID) | Supabase-assigned unique identifier |
+| `name` | string | Human-readable model name |
+| `description` | string | Freeform model description, included in AI prompts |
+| `entityTypes` | EntityType[] | Array of entity class definitions (customers and servers) |
+| `queues` | Queue[] | Array of queue definitions |
+| `bEvents` | BEvent[] | Array of B-event (bound/scheduled event) definitions |
+| `cEvents` | CEvent[] | Array of C-event (conditional event) definitions |
+| `stateVariables` | StateVariable[] | Array of global scalar state variable definitions |
+| `goals` | Goal[] | Array of performance goal definitions used for AI gap analysis and sweep colouring |
+| `containerTypes` | ContainerType[] | Array of container (level resource) definitions |
+| `graph` | object | Visual Designer layout (nodes, edges, viewport) — persisted by `src/ui/visual-designer/graph.js` |
+| `experimentDefaults` | object | Default execution parameters: `maxSimTime`, `warmupPeriod`, `replications`, `seed`, `terminationMode`, `terminationCondition` |
+
+### 3.2 Entity Type Schema
+
+Entity types are defined in the `entityTypes` array. Each entry has `role: "customer"` or `role: "server"`. Batch roles are modelled as customer entities with special macro handling.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique within the model |
+| `name` | string | Display name; used as the type identifier in macro calls (e.g. `ARRIVE(Customer)`) |
+| `role` | `"customer"` or `"server"` | Determines engine treatment |
+| `count` | number (integer >= 1) | Initial number of server instances; not meaningful for customer types |
+| `attrDefs` | AttrDef[] | Attribute definitions: `{name, valueType, dist, distParams, defaultValue, mutable}` |
+| `mtbfDist` | string | Distribution name for mean-time-between-failures (server only) |
+| `mtbfDistParams` | object | Distribution parameters for MTBF sampling |
+| `mttrDist` | string | Distribution name for mean-time-to-repair (server only) |
+| `mttrDistParams` | object | Distribution parameters for MTTR sampling |
+| `shiftSchedule` | ShiftPeriod[] | Capacity schedule: `[{time, capacity}, ...]` sorted ascending by time; must start at time 0 |
+
+### 3.3 Queue Schema
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique within the model |
+| `name` | string | Display name; referenced in macro calls and conditions |
+| `discipline` | `"FIFO"` / `"LIFO"` / `"PRIORITY"` / `"SPT"` / `"EDD"` | Queue service discipline; defaults to `"FIFO"` |
+| `capacity` | integer >= 1 or null | Maximum waiting entities; `null` means unlimited |
+| `customerType` | string | Name of the entity type expected to wait in this queue |
+| `overflowDestination` | string or null | Queue name to route blocked/balked entities to; `null` means exit system |
+| `balkProbability` | number [0,1] or null | Probability that an arriving entity balks (defined on the B-event, propagated here for reference) |
+| `balkCondition` | object or null | Predicate Builder condition object evaluated at arrival to determine balking |
+
+### 3.4 B-Event Schema
+
+B-events (bound events) are pre-scheduled occurrences on the Future Event List. They represent arrivals, service completions, failures, repairs, and any other time-triggered logic.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique within the model |
+| `name` | string | Display name |
+| `scheduledTime` | number | Initial scheduled time for the event in the FEL |
+| `effect` | string[] | Array of macro call strings, executed in order when the event fires |
+| `schedules` | Schedule[] | Re-scheduling rules: `[{dist, distParams, isRenege}]`; each fires a new instance of this B-event after the sampled inter-event time |
+| `routing` | RoutingBranch[] | Conditional routing table: `[{condition, queueName}]`; mutually exclusive with `probabilisticRouting` |
+| `probabilisticRouting` | ProbBranch[] | Probabilistic routing: `[{probability, queueName}]`; probabilities must sum to 1.0 +/- 0.001 |
+| `defaultQueueName` | string or null | Fallback queue name when no routing branch matches |
+| `loopConfig` | object or null | Loop guard: `{maxLoopCount: integer >= 1, exitQueueName: string or null}` — caps recirculation to prevent infinite loops |
+| `balkProbability` | number [0,1] or null | Probability-based balking applied at arrival before entity joins the queue |
+| `balkCondition` | object or null | Predicate Builder condition object evaluated at arrival; overrides balkProbability if both set |
+| `description` | string | Freeform description shown in editors |
+
+### 3.5 C-Event Schema
+
+C-events (conditional events) are tested in Phase C of each engine cycle. They fire whenever their condition evaluates to true and an eligible entity is present.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique within the model |
+| `name` | string | Display name |
+| `condition` | object | Predicate Builder condition object (clauses of tokens evaluated against state and queue depths) |
+| `effect` | string[] | Array of macro call strings, executed when the condition is satisfied |
+| `cSchedules` | Schedule[] | Optional re-scheduling rules triggered when this C-event fires |
+| `entityFilter` | string or null | Entity type name to restrict which entities are eligible; `null` means any |
+| `priority` | number or null | Phase C ordering priority; lower values fire first; null defaults to 0 |
+
+### 3.6 State Variable Schema
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique within the model |
+| `name` | string | Variable name; referenced in macro expressions as `varName` and in conditions as a token |
+| `initialValue` | string | Serialised initial value (parsed as JSON; falls back to string if parse fails) |
+
+### 3.7 Goal Schema
+
+Goals define performance targets used by `buildGoalGaps()` for AI prompt grounding, and by `evaluateSweepPointGoals()` for feasibility colouring in SweepChart and Sweep2DGrid.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `metric` | `"avgWait"` / `"avgSvc"` / `"avgSojourn"` / `"served"` / `"reneged"` / `"totalCost"` | KPI to evaluate |
+| `operator` | `"<"` / `"<="` / `">"` / `">="` | Comparison operator |
+| `target` | number | Target threshold value |
+| `label` | string | Human-readable label shown in UI and AI prompts |
+
+### 3.8 Run Result Schema
+
+A completed run returns the following structure from `engine.runAll()`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `summary.served` | number | Count of entities that completed service |
+| `summary.reneged` | number | Count of entities that reneged (abandoned) |
+| `summary.avgWait` | number | Mean wait time across all queues (post-warmup) |
+| `summary.avgSvc` | number | Mean service time |
+| `summary.avgSojourn` | number | Mean end-to-end sojourn time (wait + service) |
+| `summary.maxSojourn` | number | Maximum sojourn time observed |
+| `summary.avgWIP` | number | Time-average work-in-progress (Little's Law integral: WIP integral / post-warmup elapsed time) |
+| `summary.totalCost` | number | Cumulative cost accumulated via COST() macro |
+| `summary.costPerServed` | number | `totalCost / served` |
+| `summary.perResource` | object | Per-server-type: `{utilisation, busyCount, idleCount, total}` |
+| `summary.containerLevels` | object | Per-container: `{current, min, max, mean}` |
+| `summary.warnings` | string[] | Non-fatal engine warnings emitted during the run |
+| `summary.phaseCTruncated` | boolean | True if Phase C hit `maxCPasses` in any cycle |
+| `waitDist` | object | Per-queue wait-time distribution: `{mean, p50, p90, p95, p99, n}` |
+| `perQueue` | object | Per-queue operational counts: `{blockingCount, balkCount}` |
+| `entitySummary` | object[] | Per-entity record: `{id, type, arrivalTime, stages[], waitTime, serviceTime, sojournTime, status}` |
+| `timeSeries` | object | Time-series snapshots of queue depths and server states (collected when `collectTimeSeries=true`) |
+| `aggregateStats` | object | Replication confidence intervals: per `summary.*` key, `{mean, lower, upper, n}` at 95% CI |
+
+---
+
+## 4. Engine Specification (Three-Phase Method)
+
+The engine implements Pidd's Three-Phase DES algorithm exactly:
+
+### Phase A — Clock Advance
+
+Advance the simulation clock to the time of the next event in the Future Event List (FEL). If the FEL is empty, the run terminates. If a termination condition is configured and evaluates to true at this point, the run terminates.
+
+### Phase B — Fire Bound Events
+
+Execute all bound events (B-events) whose scheduled time equals the current clock. Events are processed in FEL order (by scheduled time, with ties broken by insertion order). Each B-event fires its `effect` array of macros in sequence. A B-event may reschedule itself by emitting a new FEL entry through its `schedules` configuration.
+
+### Phase C — Conditional Event Scan
+
+Scan all C-events in priority order (ascending `priority` field). For each C-event whose condition evaluates to true and whose entity filter is satisfied, fire it. After any C-event fires, restart the scan from the beginning (the restart rule). Continue until a complete scan pass finds no fireable C-events. If the pass count exceeds `maxCPasses` (default 500), set `phaseCTruncated = true` and proceed to Phase A.
+
+### Warmup Period
+
+The `warmupPeriod` parameter specifies a time at which the statistical accumulators are reset. At the warmup boundary, `_wipIntegral`, `_statsResetTime`, and per-entity wait/service accumulation are all reset. FEL events that do not depend on simulation context are pruned at the warmup boundary; context-dependent events (those with `_requiresCtxEntity = true`) are retained.
+
+### Termination
+
+Two termination modes are supported:
+- **Time-based:** the run ends when `clock >= maxSimTime`.
+- **Condition-based:** the run ends when `terminationCondition` evaluates to true at the start of Phase A.
+
+### Replications
+
+Replications run in parallel Web Workers via `src/engine/replication-runner.js`. Each replication uses a different seed derived from the base seed (via `mulberry32`). Results are aggregated using `confidenceInterval95()` to produce 95% CIs for all summary statistics. `aggregateStats` keys follow the pattern `"summary.<field>"`.
+
+---
+
+## 5. Effect Macro Specification
+
+Macros are strings in the `effect` array of B-events and C-events. They are parsed by the registry in `src/engine/macros.js`. No `eval()` or `new Function()` is used; each macro is matched by a regex pattern and dispatched to a pure apply function.
+
+| Macro | Syntax | Description | Key side effects |
+|-------|--------|-------------|-----------------|
+| `ARRIVE` | `ARRIVE(Type)` or `ARRIVE(Type, QueueName)` | Creates a new entity of the given type and places it in the named queue. Applies balking (condition or probability) and finite capacity checks first. | Increments queue depth; emits FEL entry for any reneging schedule |
+| `SEIZE` | `SEIZE(Queue, ServerType)` | C-event macro: claims one idle server of ServerType for the first waiting entity in Queue. | Sets server status to `busy`; sets entity status to `inService` |
+| `RELEASE` | `RELEASE(Queue)` or `RELEASE(Queue, TargetQueue)` | Releases the server serving the context entity and optionally routes the entity to a target queue. | Sets server to `idle`; updates service time stats |
+| `COMPLETE` | `COMPLETE()` | Marks the context entity as `done` and releases its server. Final stage in a typical entity lifecycle. | Increments `__served`; records sojourn time |
+| `RENEGE` | `RENEGE(ctx)` | Marks the context entity (identified by `ctx`) as `reneged` and removes it from its queue. | Increments `__reneged` |
+| `PREEMPT` | `PREEMPT(ServerType)` | Interrupts the in-service entity on the lowest-priority server of the given type. The interrupted entity re-queues with `_remainingService` preserved. | Sets interrupted entity to `waiting`; emits trace entry |
+| `FAIL` | `FAIL(ServerType)` | Fails a currently idle server of the given type; sets its status to `failed`. MTBF/MTTR events are auto-scheduled from entity type config. | Sets server to `failed`; records `_failedAt` timestamp |
+| `REPAIR` | `REPAIR(ServerType)` | Repairs the first failed server of the given type; returns it to `idle`. | Records downtime in `_downtime`; sets server to `idle` |
+| `SPLIT` | `SPLIT(EntityType, N, TargetQueue)` | Creates N-1 clone entities from the context entity. Clones are placed in TargetQueue with parent-child tracking: `_splitParent`, `_splitChildren`, `_splitFrom`, `_splitIndex`. | N-1 new entities added to entity pool |
+| `BATCH` | `BATCH(Queue, N)` or `BATCH(Queue, Entity.attrName)` | Collects N waiting entities from Queue and merges them into a single batch entity. Batch size can be a literal integer or read from the first waiting entity's attribute. | N-1 originals marked `done`; one batch entity replaces them |
+| `UNBATCH` | `UNBATCH(Queue)` | Splits a batch entity back into its constituent entities, placing each in Queue. | Original batch entity marked `done`; constituent entities restored |
+| `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from QueueA with one from QueueB into a combined batch entity, placed in TargetQueue. | Originals marked with `_matchedInto` |
+| `COSEIZE` | `COSEIZE(Queue, ServerType1, ServerType2[, ...])` | Atomically seizes one entity from Queue and one server of each listed type. Fails cleanly (no partial seize) if any type has no idle server. | All named server types set to `busy` |
+| `SET` | `SET(varName, expr)` | Evaluates the arithmetic expression `expr` and writes the result to state variable `varName`. | Mutates `state[varName]` |
+| `SET_ATTR` | `SET_ATTR(attrName, expr)` | Evaluates `expr` and writes the result to the context entity's attribute `attrName`. | Mutates `entity.attrs[attrName]` |
+| `COST` | `COST(expr)` | Evaluates `expr` and adds the result to `summary.totalCost`. | Increments `summary.totalCost` |
+| `FILL` | `FILL(containerId, expr)` | Adds the value of `expr` to the named container, clamped to the container's capacity. | Updates `state[__container_<id>]` |
+| `DRAIN` | `DRAIN(containerId, expr)` | Subtracts the value of `expr` from the named container, clamped to zero. | Updates `state[__container_<id>]` |
+
+**Safe expression evaluator:** The expression parser in `macros.js` is a hand-written recursive-descent parser supporting: numeric literals, `+`, `-`, `*`, `/`, parentheses, `Entity.<attrName>`, `<stateVarName>`, `clock`, and math functions `min(a,b)`, `max(a,b)`, `abs(a)`, `round(a)`, `floor(a)`, `ceil(a)`. No `eval()` or `new Function()` is used at any point in the engine.
+
+---
+
+## 6. AI Analysis Specification
+
+All prompt builders are in `src/llm/prompts.js`. The word count of each assembled payload is capped at `MAX_PROMPT_WORDS = 2000` via the `truncateWords()` helper before the API call.
+
+### 6.1 buildNarrativePrompt
+
+**Inputs:** `model`, `experimentConfig`, `results`
+
+**Grounded data:** per-queue wait percentiles (p50/p90/p95/p99), per-resource utilisation and idle counts, per-queue blocking and balking counts, cost metrics (`totalCost`, `costPerServed`), `avgWIP`, `maxSojourn`, container levels, engine warnings, `phaseCTruncated` flag, goals (via `goalsToPrompt()`), goal gap analysis (via `buildGoalGaps()`), state variables, `aggregateStats` (replication CIs).
+
+**Output format:** Plain English narrative, 150-200 words. If goals are set, each goal is reported using the format: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])".
+
+**max_tokens:** 450
+
+### 6.2 buildSuggestionPrompt
+
+**Inputs:** `model`, `experimentConfig`, `results`
+
+**Grounded data:** All narrative data plus B-event structure digest (effect types, routing type, loop guard, balk mode, arrival streams, fire counts from `_eventCounts`), C-event digest (effect types, priority), entity type failure/repair model, shift schedule flags, queue overflow destinations, entity anomaly digest (anomaly count, rate, worst wait, by-type breakdown, threshold — entities with wait > 3x mean wait), `confidenceIntervals` from `aggregateStats`.
+
+**6-step output schema:**
+1. Identify the binding constraint (bottleneck queue or resource)
+2. Quantify the gap from goals (if goals are set)
+3. Propose a specific change with exact parameter values
+4. Estimate expected improvement
+5. Identify risks or side effects
+6. Suggest a next experiment to validate
+
+**max_tokens:** 600
+
+### 6.3 buildSensitivityPrompt
+
+**Inputs:** `modelName`, `experimentConfig`, `ciResults` (pre-computed CI array)
+
+**Output format:** 150-200 words explaining CI width, which KPIs are uncertain, and which conclusions are robust enough to act on.
+
+**max_tokens:** 450
+
+### 6.4 buildResultsQueryPrompt
+
+**Inputs:** `model`, `results`, `userQuestion` (string)
+
+Conversational Q&A. The payload is the same KPI structure as `buildNarrativePrompt`. The user's question is appended as the instruction. The LLM answers factually from the provided data.
+
+### 6.5 buildComparisonPrompt
+
+**Inputs:** `modelName`, `runA` (result object), `runB` (result object)
+
+Compares two named runs side by side in an Option A / Option B frame. Identifies meaningful differences, likely tradeoffs, and uncertain results.
+
+**max_tokens:** 550
+
+### 6.6 evaluateSweepPointGoals
+
+**Signature:** `evaluateSweepPointGoals(goals, aggregateStats) → {feasible: boolean, gaps: [{metric, met, current, target, operator, label}]}`
+
+Called for each point in a 1D sweep or 2D sweep grid to determine whether the point satisfies all model goals. Results drive feasibility colouring in SweepChart (green/red markers) and Sweep2DGrid (heatmap cell tinting).
+
+`feasible` is `true` only when every goal's `met` field is `true`. If any goal's current value cannot be read from `aggregateStats`, `met` is `null` and `feasible` is `false`.
+
+### 6.7 buildGoalGaps
+
+**Signature:** `buildGoalGaps(model, results) → GoalGap[] | null`
+
+Pre-computes goal gap data for inclusion in both the narrative and suggestion prompts. For each goal, returns: `metric`, `label`, `operator`, `target`, `current` (actual value from `aggregateStats` CI mean or `summary` for single runs), `gap` (`current - target`), and `met` (boolean result of applying the operator).
+
+---
+
+## 7. UI Workspace Specification
+
+### 7.1 Model Library
+
+The Model Library is the root view of the application. It shows all saved models (user's own and public models) as cards with name, description, creation date, and tags. Actions: create new model, clone (fork) a model, open a model, delete a model. Public models can be forked to the user's account. A search/filter bar supports text search and tag filtering.
+
+### 7.2 Forms/Tabs Editors
+
+The primary model authoring interface. Organised as a multi-tab panel:
+
+- **Entities tab** — `EntityTypeEditor`: create/edit entity types; configure role, count, attribute definitions (name, type, distribution, mutable flag); configure MTBF/MTTR distributions for server types; configure shift schedules.
+- **Queues tab** — `QueueEditor`: create/edit queues; configure discipline, capacity, customerType, overflowDestination, balkProbability, balkCondition (Predicate Builder inline).
+- **B-Events tab** — `BEventEditor`: create/edit B-events; configure scheduledTime, effect array (EffectPicker component), schedules, routing tables, probabilistic routing, loopConfig (Loop Guard UI), balkProbability, balkCondition.
+- **C-Events tab** — `CEventEditor`: create/edit C-events; configure condition (Predicate Builder), effect array, cSchedules, entityFilter, priority.
+- **State Variables tab** — create/edit state variables; configure name and initialValue.
+- **Goals tab** — `GoalsEditor`: create/edit performance goals; configure metric, operator, target, label.
+
+**EffectPicker:** A structured editor for the `effect` array. Presents each macro as a guided form with labelled argument fields rather than requiring the user to type raw macro strings. Available macros are presented from the MACROS registry.
+
+**SectionPanel:** A collapsible panel wrapper used consistently across all editor tabs to group related configuration fields.
+
+**Predicate Builder:** A visual condition builder that produces the `condition` object used by C-events and balkCondition. Supports clauses connected by AND/OR; each clause is a token-based expression comparing queue depths, state variables, entity attributes, clock, or numeric literals using comparison operators.
+
+### 7.3 Execute Panel
+
+The Execute panel is the primary result-viewing workspace. It has five views:
+
+- **Live View** — real-time execution animation. The canvas shows entity tokens moving through the model. Per-node entity count overlays update on each engine step. Execution speed is user-configurable.
+- **Log** — `LogViewer`: structured trace log showing every macro firing with phase, time, entity ID, type, and message. Filterable by phase and event type.
+- **Histograms** — `QueueHistogram`: wait-time frequency distributions per queue, displayed as bar charts with Freedman-Diaconis automatic bin sizing.
+- **Entities** — `EntitySummaryTable`: per-entity table showing arrival time, stages, wait time, service time, sojourn time, and final status. Sortable and filterable.
+- **Analysis** — KPI cards (goal-aware: green/red border based on goal met/missed), AI Insights panel (narrative, suggestions, sensitivity, comparison, Q&A), sweep configuration and results (SweepChart 1D, Sweep2DGrid 2D), replication configuration and CI results, ANOVA panel.
+
+**Sweep execution:** The user configures a parameter (any numeric field in the model JSON, selected by dot-path), a range, and step count. `src/engine/sweep-runner.js` runs one set of replications per parameter value. Each point's `aggregateStats` is passed to `evaluateSweepPointGoals()` to determine feasibility colouring.
+
+### 7.4 Visual Designer
+
+The Visual Designer (`src/ui/visual-designer/`) is a canvas-based DAG editor. Nodes represent entity types and queues. Edges represent flow relationships. The designer reads and writes the `graph` field of the model JSON. Changes in the Visual Designer are reflected in the Forms/Tabs editors and vice versa (bidirectional sync via the shared model state).
+
+Node types: EntityTypeNode (circle), QueueNode (rectangle), EventNode (diamond). Connections are drawn as directed arrows. The palette allows dragging new nodes onto the canvas. Clicking a node opens the corresponding editor form in an inspector panel.
+
+### 7.5 AI Insights Panel
+
+Located in the Execute panel's Analysis view. Contains five sub-panels:
+- **Narrative** — calls `buildNarrativePrompt`; displays the resulting 150-200 word plain-English interpretation.
+- **Suggestions** — calls `buildSuggestionPrompt`; displays the 6-step structured recommendations.
+- **Sensitivity** — calls `buildSensitivityPrompt`; displays CI uncertainty analysis (available only after replications).
+- **Compare** — calls `buildComparisonPrompt`; the user selects two saved runs to compare.
+- **Ask** — conversational Q&A input; calls `buildResultsQueryPrompt` on each submission.
+
+---
+
+## 8. Non-Functional Requirements
+
+### 8.1 Performance
+
+- The engine must handle 10,000+ events in a single run without UI lag. Achieved through the pure-JS engine with no DOM interaction during execution.
+- Replication workers run in parallel Web Workers, one per CPU core up to the configured replication count, using `navigator.hardwareConcurrency`.
+- Sweep runs use the same worker pool architecture as replications.
+- The Visual Designer canvas must remain interactive at 60 fps with up to 100 nodes.
+
+### 8.2 Browser Support
+
+- Modern Chromium (Chrome 110+, Edge 110+), Firefox 110+, Safari 16+.
+- Web Workers and `structuredClone` are required; these are available in all supported browsers.
+- No IE11 support; no polyfill budget for legacy browsers.
+
+### 8.3 Storage
+
+- **Authenticated mode:** Supabase PostgreSQL via `src/db/supabase.js`. Model JSON stored in a `jsonb` column. Run results stored as compressed JSON.
+- **Anonymous mode:** `src/db/local.js` provides the same interface contract backed by `localStorage`. Models and results are persisted across page reloads but not across devices.
+- Model JSON should remain under 500 KB for comfortable browser storage and Supabase column limits.
+
+### 8.4 Security
+
+- No `eval()` or `new Function()` anywhere in the engine or UI. The safe arithmetic evaluator in `macros.js` is a hand-written recursive-descent parser.
+- The condition evaluator in `src/engine/conditions.js` uses token matching, not code execution.
+- Supabase Row Level Security (RLS) ensures users can only read/write their own models. Public models are read-only to non-owners.
+- LLM API keys are stored server-side; the frontend calls the LLM through a Supabase Edge Function or a thin proxy, never exposing keys to the browser.
+
+### 8.5 Test Coverage
+
+- Unit tests use Vitest. All engine functions (phases, macros, conditions, distributions, statistics, validation) have dedicated test files in `src/engine/__tests__/`.
+- UI component tests cover all editor forms, the execute panel views, sweep configuration, and the Visual Designer.
+- Minimum passing test count: 1248 tests.
+- Test suite must pass before any sprint delivery is marked complete.
+
+---
+
+## 9. Validation Rules
+
+`validateModel(model)` in `src/engine/validation.js` returns `{errors, warnings}`. Errors are blocking (run is prevented); warnings are non-blocking (run proceeds with a visible banner). Each issue carries `{code, message, tab}` where `tab` maps to the editor tab that should highlight the error.
+
+| Code | Severity | Rule |
+|------|----------|------|
+| V1 | Error | Every entity type must have a unique, non-empty name |
+| V2 | Error | Attribute names must be unique within each entity type |
+| V3 | Error | Every `defaultValue` must match its declared `valueType` (number/boolean/string) |
+| V4 | Error | A queue with `discipline: "PRIORITY"` requires the entity type to have an attribute named `priority` |
+| V5 | Error | Distribution parameters must be within valid bounds (e.g. Exponential mean > 0, Uniform max > min, Triangular min <= mode <= max) |
+| V6 | Error | Every `schedules[].eventId` and `cSchedules[].eventId` must reference an existing B-event ID |
+| V8 | Error (both missing) / Warning (one missing) | Model must have at least one ARRIVE source or at least one COMPLETE/RENEGE sink; absence of both is a blocking error; absence of one is a warning |
+| V9 | Error | C-event conditions must reference only defined queue names |
+| V10 | Error | Attribute names must not start with the reserved namespace prefixes `Resource` or `Queue` |
+| V11 | Warning | Normal distribution where mean < 2 x stddev — negative samples likely (engine clamps to 0) |
+| V12 | Error | Piecewise distribution must have at least one period; must start at time 0; nested piecewise not supported |
+| V13 | Error | Piecewise periods must be sorted ascending by `startTime` |
+| V14 | Error | Shift schedule must have a numeric time at each period; must start at time 0; times must be ascending; capacity must be integer >= 1 |
+| V15 | Warning | A shift change time is after the configured run duration (the shift will never fire) |
+| V16 | Warning | No `maxSimTime` or `terminationCondition` configured — run may execute until cycle limit |
+| V17 | Error | Routing table entries must reference defined queues; `defaultQueueName` must be a defined queue; routing and RELEASE target are mutually exclusive |
+| V18 | Error | Probabilistic routing probabilities must sum to 1.0 +/- 0.001; probabilistic routing and conditional routing are mutually exclusive |
+| V19 | Error | Server entity type `count` must be an integer >= 1 when specified |
+| V20 | Error | Queue `capacity` must be integer >= 1 when specified; `overflowDestination` must reference a defined queue |
+| V21 | Error | `balkProbability` must be in [0, 1] |
+| V22 | Error | BATCH `batchSize` must be integer >= 2; referenced queue must exist |
+| V23 | Error | UNBATCH referenced queue must exist |
+| V24 | Error | `loopConfig.maxLoopCount` must be integer >= 1; `loopConfig.exitQueueName` must be a defined queue when specified |
+| V25 | Warning | `RENEGE(TypeName)` silently fails; the correct form is `RENEGE(ctx)` |
+| V26 | Error | Container `id` must be unique and non-empty; `capacity` must be > 0; `initialLevel` must be >= 0 and <= capacity |
+| V27 | Error | FILL/DRAIN macro must reference a declared container ID |
+
+---
+
+## 10. Configuration and Settings
+
+### 10.1 Experiment Defaults
+
+Stored in `model.experimentDefaults`. These are the defaults pre-populated in the Execute panel; the user can override them per-run.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `maxSimTime` | number | 500 | Simulation end time (time-based termination) |
+| `warmupPeriod` | number | 0 | Warmup duration; stats collection begins after this time |
+| `replications` | integer | 1 | Number of independent replications per experiment |
+| `seed` | integer | random | Base PRNG seed for reproducibility; each replication derives its seed from this base via `mulberry32` |
+| `terminationMode` | `"time"` or `"condition"` | `"time"` | Determines whether the run ends at `maxSimTime` or when `terminationCondition` evaluates to true |
+| `terminationCondition` | object or null | null | Predicate Builder condition object evaluated at Phase A to trigger termination |
+
+### 10.2 User Settings
+
+Per-user settings (stored in Supabase user profile or localStorage in anonymous mode):
+
+| Setting | Type | Description |
+|---------|------|-------------|
+| `executionSpeed` | integer (steps/tick) | Controls the rate at which engine steps fire during live animated execution |
+| `kpiSlots` | string[] | Which KPI cards to display in the Execute panel Analysis view; user-configurable up to 8 slots |
+| `animationEnabled` | boolean | Whether the Live View token animation is enabled; disabling it improves execution throughput for large models |
+| `collectTimeSeries` | boolean | Whether queue-depth time-series snapshots are collected during execution; required for the Charts tab time-plot; adds memory overhead for long runs |
+
+### 10.3 Engine Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `DEFAULT_MAX_SIM_TIME` | 500 | Default run duration in simulation time units |
+| `maxCycles` | 5000 | Maximum number of Phase A→B→C cycles before the run is force-terminated |
+| `maxCPasses` | 500 | Maximum Phase C scan passes per cycle before `phaseCTruncated` is set |
+| `MAX_PROMPT_WORDS` | 2000 | Maximum words in any assembled AI prompt payload before truncation |

@@ -1,6 +1,6 @@
 # DES Studio — Capability Gap Analysis
 
-**Date:** 2026-05-15 (updated post sprint 31-33 review)
+**Date:** 2026-05-16 (updated post sprint 45)
 **Scope:** DES Studio vs SimPy 4.x, AnyLogic 8.x (Process Modelling Library), JaamSim 2024
 **Method:** Web-fetched reference feature lists + full codebase audit (engine, macros, UI, tests, templates)
 
@@ -17,6 +17,11 @@
 | v1.4 | 2026-05-15 | Post-sprint review | Corrected four engine bugs found during code review: B1 (REPAIR _downtime always 0), B2 (avgWIP denominator wrong with warmup), B3 (COSEIZE auxiliary servers not released — caused surgical-suite deadlock after first service), B4 (SPLIT child entities missing waitingSince/waitingFor metadata). Scoring matrix updated for G01/G04/G05/G11/G14/G15 which were still showing pre-implementation statuses. Coverage table recalculated. |
 | v1.5 | 2026-05-15 | Sprint 34 | Partial close of G02 (scripting): added `SET(varName, expr)` and `SET_ATTR(attrName, expr)` macros with safe arithmetic expression evaluator supporting Entity attribute refs, state variable refs, clock, arithmetic operators, and math functions (min/max/abs/round/floor/ceil). F matrix row 2 updated ❌→⚠️. Coverage table updated. |
 | v1.6 | 2026-05-15 | Sprint 35 | Engine correctness fixes — no scoring matrix changes. M2: warmup FEL pruning narrowed to context-dependent events only, fixing replication CI gate (ci.n now reaches full replication count with warmup enabled). M3: V8 product decision documented (both-missing=error, individual-missing=warning). L1: dead summary block removed. Architecture review updated to v2.0 with finding status table for all 16 H/M/L findings. |
+| v1.7 | 2026-05-15 | Sprint 41 | UI exposure: COST, PREEMPT, FAIL, REPAIR, SPLIT, SET, SET_ATTR added to B/C-event editors. No scoring matrix changes (capabilities existed, just not in UI). |
+| v1.8 | 2026-05-15 | Sprint 42 | UI usability: SectionPanel, EffectPicker, loopConfig Loop Guard UI, balkCondition expression UI. No scoring matrix changes. |
+| v1.9 | 2026-05-15 | Sprint 43 | AI: buildGoalGaps(), evaluateSweepPointGoals(), goal-driven sweep feasibility colouring in SweepChart and Sweep2DGrid. |
+| v2.0 | 2026-05-15 | Sprint 44 | Execution insights: LogViewer, QueueHistogram, EntitySummaryTable, goal-aware KPI cards. |
+| v2.1 | 2026-05-16 | Sprint 45 | AI prompt grounding: enriched KPI payload, B-event/C-event digest, server failure model, state variables, entity anomaly digest, MAX_PROMPT_WORDS 2000. |
 
 ---
 
@@ -320,3 +325,29 @@ Counts are derived from the Section 1 scoring matrix. Each row in the matrix is 
 | E | Time-plot / signal charts | ⚠️ Gap | ✅ | Scoring matrix not updated after Sprint 31 delivery |
 | F | Clock value in conditions | ⚠️ Gap | ✅ | Scoring matrix not updated after Sprint 31 delivery |
 | F | Process-level interrupts | ❌ Gap | ✅ | Resolved by G01 preemption (G14 cross-reference) |
+
+---
+
+## Section 7: AI Analysis Capability Coverage
+
+The AI analysis layer (src/llm/prompts.js) now receives the following data for every suggestion and narrative prompt. This table tracks AI grounding coverage.
+
+| Data category | Available in engine | In AI suggestion prompt | In AI narrative prompt | In AI query prompt |
+|---------------|--------------------|-----------------------|----------------------|-------------------|
+| Per-queue wait percentiles (p50-p99) | ✅ | ✅ S43 | ✅ S43 | ✅ |
+| Per-resource utilisation/idle | ✅ | ✅ | ✅ | ✅ |
+| Goal gaps (current vs target) | ✅ | ✅ S43 | ✅ S43 | ✅ |
+| Replication CI / aggregateStats | ✅ | ✅ | ✅ | — |
+| maxSojourn, avgWIP | ✅ | ✅ S45 | ✅ S45 | — |
+| totalCost, costPerServed | ✅ | ✅ S45 | ✅ S45 | — |
+| containerLevels | ✅ | ✅ S45 | ✅ S45 | — |
+| Engine warnings / phaseCTruncated | ✅ | ✅ S45 | ✅ S45 | — |
+| Server failure/repair model | ✅ | ✅ S45 | ✅ S45 | — |
+| Shift schedule flag | ✅ | ✅ S45 | — | — |
+| Queue overflow destination | ✅ | ✅ S45 | — | — |
+| B-event structure digest | ✅ | ✅ S45 | — | — |
+| C-event structure digest | ✅ | ✅ S45 | — | — |
+| State variables | ✅ | ✅ S45 | ✅ S45 | ✅ |
+| Entity anomaly digest | ✅ S44 | ✅ S45 | — | — |
+| Time-series data | ✅ | — (flag only) | — | flag only |
+| Event fire counts | ✅ (snap) | ✅ S45 (single run) | — | — |

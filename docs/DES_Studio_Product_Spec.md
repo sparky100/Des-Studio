@@ -1,0 +1,275 @@
+# DES Studio — Product Specification
+**Version:** 1.0.0
+**Date:** 2026-05-16
+**Sprint baseline:** Sprint 45
+**Status:** Living document — reviewed and updated at end of each sprint
+
+---
+
+## Version History
+
+| Version | Date | Sprint | Changes |
+|---------|------|--------|---------|
+| v1.0.0 | 2026-05-16 | Sprint 45 | Initial product specification |
+
+---
+
+## 1. Product Vision
+
+DES Studio is a browser-native, no-code discrete-event simulation platform that enables operations analysts and simulation practitioners to build, run, and optimise queueing models without writing code. Users describe a system in terms of arrivals, queues, resources, and service times; the platform constructs, executes, and analyses the model and then surfaces results through interactive charts, animated flow views, and AI-generated narratives. The goal is to compress the modelling cycle — scenario to model to experiment to actionable insight — from days to hours, making rigorous simulation accessible to anyone who understands a queue.
+
+---
+
+## 2. Target Users and Use Cases
+
+### Operations Analyst
+
+**Who they are.** An analyst working inside a hospital, call centre, airport, logistics hub, or public sector organisation. They are responsible for recommending staffing levels, capacity investments, or process redesigns. They understand queueing concepts (utilisation, wait time, throughput) but are not software developers.
+
+**What they want.** They want to justify a decision — "we need three more nurses on the morning shift" — with quantitative evidence rather than gut feel. They need confidence intervals, scenario comparisons, and a way to share results with a manager who will not run the model themselves.
+
+**Features they primarily use.** Forms/Tabs editors for precise model control; Replication batch for statistical confidence; Parametric Sweep with Goal Feasibility to find the minimum staffing that meets a service-level target; the Analysis view for KPI summaries; Share link and QR code to present results to decision-makers.
+
+---
+
+### Engineering Student
+
+**Who they are.** An undergraduate or postgraduate student studying industrial engineering, operations research, systems engineering, or health informatics. They are learning discrete-event simulation for the first time and need to connect theoretical concepts (M/M/c queues, Erlang-C, Little's Law) to observable behaviour.
+
+**What they want.** They want to experiment without fear of breaking something. They want to start from a working example, change one parameter, and immediately see what happens. They also want the AI to explain what they are seeing — not just report numbers, but help them understand why a 90% utilised server produces such a long queue.
+
+**Features they primarily use.** Template Library (especially M/M/1 and ER Triage) as learning scaffolds; AI Model Generator to bootstrap unfamiliar scenarios; AI Insights — specifically Interpret Results and Ask a Question — to build intuition; Live View to watch entity flow animate in real time; Histograms to understand wait-time distributions visually.
+
+---
+
+### Consultant / Decision Maker
+
+**Who they are.** A management consultant who builds models for clients, or a senior manager or executive who needs to view and share a colleague's model. They may not build models themselves, but they need to read results, validate that the scenario is realistic, and distribute findings.
+
+**What they want.** They want a polished, self-contained results view they can open without a login, share in a meeting via QR code, and hand off to others. They need KPI cards to tell an immediate pass/fail story against agreed service-level targets.
+
+**Features they primarily use.** Share link with configurable widget visibility; QR code for presentation sharing; read-only DashboardView of saved run results; goal-aware KPI cards showing green or red against targets; Export CSV for further analysis in Excel or PowerPoint.
+
+---
+
+## 3. Core Capabilities
+
+### 3.1 Model Authoring
+
+DES Studio provides three authoring modes. All three modes edit the same underlying model — they are different views onto one canonical model definition, not separate formats. Switching between modes never loses data or requires a conversion step.
+
+**Forms/Tabs.** The default authoring mode. Each model element type (Entity Types, Queues, B-Events, C-Events, State Variables, Performance Goals, Containers) has its own tab with structured fields, dropdown selectors, and distribution pickers. This mode is the most precise: every field is explicitly visible and every option is reachable. Best for modellers who know exactly what they want to configure, or who need to check that a parameter was set correctly.
+
+**AI Generator.** The "Generate with AI" button accepts a natural-language scenario description and produces a complete starter model: entity types, queues, events, distributions, and suggested performance goals. The AI Generator is best used for bootstrapping — it creates the structural skeleton in seconds, which the modeller then refines in Forms/Tabs or the Visual Designer. The AI Generator also supports results-informed refinement: after a run it can propose model changes based on what the results reveal, using the same structured six-step analysis as Suggest Improvements.
+
+**Visual Designer.** A drag-and-drop canvas showing the model as a flow graph — queues as rectangles, events as rounded rectangles or diamonds, entity types as circles, with arcs connecting them. The Visual Designer is best for reviewing topology, confirming that routing connections are correct, and presenting the model structure to stakeholders. Clicking any node opens an inspector panel with the same editable fields as Forms/Tabs.
+
+---
+
+### 3.2 Model Elements
+
+#### Entity Types
+
+Entity types define the actors in the model. A customer entity type (patients, calls, trucks, jobs) arrives, waits in queues, receives service, and departs. A server entity type (nurses, agents, machines, beds) holds the resource capacity that customer entities compete for.
+
+Each entity type can carry named attributes — numeric values that travel with every instance through the model (for example, a severity score for patients, a priority level for jobs, or a due date for manufacturing orders). Attributes can be updated mid-simulation using the SET_ATTR macro, enabling dynamic priority reordering and conditional routing decisions.
+
+Server entity types support **failure models** — each server can be configured with a mean time between failures (MTBF) and mean time to repair (MTTR). When a server fails, in-progress service is interrupted with remaining service time preserved; when repair completes, the server re-enters the available pool. Server entity types also support **shift schedules** — time-varying capacity that models day/night shifts, weekend staffing, and seasonal variation by specifying how many server units are active at each time point.
+
+#### Queues
+
+Queues are the buffers where customer entities wait for service. Each queue is configured with a **discipline** that determines selection order: FIFO (first in, first out), LIFO (last in, first out), Priority (by a numeric entity attribute — lowest value served first), SPT (shortest processing time first), EDD (earliest due date first), or a named attribute-based priority.
+
+Queues support a finite **capacity** limit. When the queue is full, arriving entities are directed to an **overflow destination** (a different queue or a sink). Queues also support **balking** — either a probability that any arriving entity simply leaves, or a conditional expression (balkCondition) that evaluates queue state and entity attributes to decide whether a specific arriving entity joins or leaves.
+
+#### B-Events (Bound Events)
+
+B-Events are the time-scheduled workhorses of the model. They fire at a specific simulated time: arrivals inject new entities into the system, service completions free resources and route entities onward, and failure events place servers into a down state. Each B-Event carries a distribution that governs when its next occurrence is scheduled and an effect sequence specifying what happens when it fires. A **loop guard** can be placed on a B-Event to cap the number of times an entity recirculates through it, preventing infinite rework loops.
+
+#### C-Events (Conditional Events)
+
+C-Events fire when a condition becomes true during the model's conditional phase. They are the resource allocation decisions: "if there is a patient waiting and a doctor is free, start the consultation." C-Events are tested repeatedly after every B-Event until no more can fire. They model the state-driven logic that separates real operational systems from simple flow diagrams.
+
+#### State Variables
+
+State variables are model-level numeric counters or flags that any event can read or write. They are used to track cumulative counts (total calls handled, total cost accrued), implement custom flags (rush hour active), or accumulate metrics that are not automatically captured by the engine. State variables are visible in the event log and in the Analysis view.
+
+#### Performance Goals
+
+Performance goals define the feasibility thresholds that turn the tool from a measurement instrument into a decision-support system. A goal specifies a metric (average wait time, queue length, utilisation, throughput, total cost), an operator, and a target value — for example, "average wait in the Emergency Queue must be less than 5 minutes." Goals drive the colour coding of sweep charts, focus AI suggestions on unmet targets, and display pass/fail indicators on every KPI card.
+
+#### Containers
+
+Containers are level-based resource pools: a named quantity with a capacity and a current level. Unlike server entity types — which model discrete resource units — a container models a continuous or large-integer resource such as a blood bank inventory, a fuel tank, or a warehouse buffer. The FILL macro adds a specified quantity to the container; the DRAIN macro removes a quantity but only fires when the current level is sufficient, making drain a conditional operation. This allows inventory replenishment and consumption to be modelled precisely.
+
+---
+
+### 3.3 Effect Macros
+
+Effect macros are the action vocabulary of DES Studio. They appear in the Effects field of every B-Event and C-Event. Multiple macros can be chained in sequence in a single effects field.
+
+#### Flow Control
+
+| Macro | Plain-English Purpose |
+|-------|-----------------------|
+| ARRIVE | Creates a new entity instance and injects it into a target queue, then schedules the next arrival |
+| COMPLETE | Marks an entity as served, records its lifecycle statistics, and removes it from active service |
+| RELEASE | Frees one unit of a server resource and routes the entity to the next queue in the flow |
+| ASSIGN | Takes the next eligible entity from a queue and binds it to a free server, starting the service clock |
+| RENEGE | Removes an entity that has waited too long from a queue before it reaches service |
+
+#### Resource Management
+
+| Macro | Plain-English Purpose |
+|-------|-----------------------|
+| PREEMPT | Interrupts the entity currently in service on a server and replaces it with a higher-priority entity; the displaced entity re-enters the queue with its remaining service time preserved |
+| FAIL | Places a server into a failed (unavailable) state, re-queuing any entity that was mid-service |
+| REPAIR | Restores a failed server to idle status so it can resume accepting entities |
+
+#### Entity Transformation
+
+| Macro | Plain-English Purpose |
+|-------|-----------------------|
+| SPLIT | Creates N−1 clones of the current entity, each following an independent downstream path — useful for parallel lab tests or order line splitting |
+| BATCH | Collects N individual entities from a queue into a single batch entity for group processing |
+| UNBATCH | Restores the original individual entities from a completed batch back into a target queue |
+| MATCH | Pairs one entity from each of two queues into a single batch — models kitting and assembly operations where two components must meet |
+
+#### State Manipulation
+
+| Macro | Plain-English Purpose |
+|-------|-----------------------|
+| SET | Sets a model-level state variable to a given value |
+| SET_ATTR | Updates a named attribute on the current entity instance mid-simulation (enables dynamic priority changes and conditional downstream routing) |
+| COST | Adds a calculated amount to the entity's cost record and to the model's cumulative cost total |
+
+#### Container
+
+| Macro | Plain-English Purpose |
+|-------|-----------------------|
+| FILL | Adds a quantity to a named container, up to its capacity |
+| DRAIN | Removes a quantity from a named container; only fires when the current level is sufficient |
+
+---
+
+### 3.4 Running Experiments
+
+**Single run.** The simplest experiment: the model runs from time zero to the configured end time. The modeller can step through events one at a time in single-step mode to inspect every event in sequence, or click Run All to complete the run in one pass. Auto-run mode drives the simulation continuously at an adjustable speed, updating Live View in real time.
+
+**Replication batch.** A batch of independent runs, each using a different random seed, executed in parallel. DES Studio aggregates the replications and reports a 95% confidence interval for every KPI. Outlier replications — those deviating more than two standard deviations from the batch mean — are flagged. Replications are the right experiment mode when statistical rigour matters: a single run is one observation; thirty replications produce a distribution of outcomes.
+
+**Parametric sweep (1D).** One model parameter is varied across a defined range and step size — for example, server count from 1 to 8. DES Studio runs the full replication batch at each value and plots a KPI response curve. When performance goals are defined, each point on the curve is coloured green (all goals met) or red (at least one goal violated), so the feasible region is immediately visible.
+
+**Parametric sweep (2D).** Two parameters are varied simultaneously across a grid. DES Studio runs the full replication batch at every grid point and renders the results as a heatmap. The same goal-feasibility colouring applies — green cells are feasible configurations; red cells are not. The best feasible point (meeting all goals at minimum cost or maximum throughput) is annotated on the heatmap. This mode is particularly effective for staffing optimisation: vary both server count and shift length, for instance, and find the minimum-cost configuration that still meets service-level targets.
+
+---
+
+### 3.5 Execution Panel Views
+
+**Live View.** An animated canvas showing entity tokens (small circles, coloured by entity type) flowing along arcs between queues and events in real time. Queue nodes swell visually as entities accumulate. Server nodes display their current state — idle, busy, or failed — through colour coding. Live View is used to confirm that model topology is wired correctly and to demonstrate system behaviour to stakeholders who may not be familiar with tables and charts.
+
+**Log.** A scrollable, searchable event-by-event record of everything that happened during the run. Each row shows simulation time, event phase (B or C), event name, entity ID, and a plain-English description of the action. The log can be filtered by phase and searched by entity or event name. The full log exports to CSV for external analysis in spreadsheets or scripting environments.
+
+**Histograms.** A bar chart of waiting time for each queue, showing the empirical distribution of how long entities waited before service began. Vertical markers indicate the p50, p90, and p99 percentiles. Histograms make tail behaviour visible — a mean wait of five minutes with a p99 of forty minutes tells a very different story than a mean of five minutes with a p99 of eight minutes.
+
+**Entities.** A per-entity lifecycle table. Each row represents one entity instance; columns include arrival time, service start time, departure time, time spent waiting, and any custom attribute values. The table is sortable and filterable. An anomaly detection layer highlights rows where waiting time or total time in system is more than three standard deviations from the mean, enabling fast identification of individual outlier cases and root-cause investigation.
+
+**Analysis.** The primary results dashboard, built on the ResultsWorkspace. It presents aggregate KPI cards (throughput, mean wait, mean time in system, goal pass/fail status with green or red borders), per-queue wait statistics (mean, maximum, p50, p90, p99), per-resource utilisation bars, a cumulative mean chart with Welch warmup cutoff marked, and — when replications have been run — a replication summary table showing the mean and 95% confidence interval for every KPI.
+
+---
+
+### 3.6 AI Insights
+
+The AI Insights panel provides five analytical capabilities, all grounded in the current run's results and the model definition. As of Sprint 45, every AI call receives the model's performance goals, structural summary, per-queue wait distributions, entity failure counts, and anomaly data — giving the AI the specific context it needs to make precise, actionable observations rather than generic queueing advice.
+
+**1. Interpret Results.** Produces a plain-English narrative of what the simulation found: overall system performance, which queues are longest, which resources are most utilised, whether performance goals are met, and any notable patterns such as queue oscillation or a long warmup transient.
+
+**2. Suggest Improvements.** Produces a structured six-step analysis for each suggested change. The steps are: (1) identify the binding constraint — the queue, resource, or event limiting performance; (2) diagnose the root cause — why the constraint exists; (3) propose a specific, actionable change to the model; (4) estimate the predicted effect quantitatively; (5) assess whether the change is expected to bring the model within the configured performance goal thresholds; and (6) rank all suggestions by expected value. Because the AI receives goal gap data directly, suggestions focus on whatever is blocking feasibility first.
+
+**3. Sensitivity Analysis.** Assesses how much uncertainty exists in the results. The output identifies KPIs with wide confidence intervals relative to their point estimates, flags parameters where small changes produce large KPI swings, and recommends whether the current replication count is sufficient to draw reliable conclusions.
+
+**4. Ask a Question.** A free-form conversational interface. The modeller types any question about the model or the run — "Why is utilisation above 90%?", "What would happen if I added a priority queue for urgent patients?", "Is the warmup period long enough?" — and the AI answers using the model JSON and the current results as context.
+
+**5. Compare Runs.** The modeller selects two saved runs from Run History and requests a comparison. The AI produces a narrative covering which run performed better on each KPI, whether differences are statistically meaningful given confidence interval overlap, and an interpretation of why the results differ — based on the different model parameters or structural changes between the two runs.
+
+---
+
+### 3.7 Sharing and Exporting
+
+**Share link.** From any model or saved run, a unique shareable URL can be generated. The share modal lets the modeller configure which widgets are visible to the recipient — for example, showing only the KPI summary and queue stats but not the full event log. Recipients can view results in read-only mode without signing in.
+
+**QR code.** The share modal also generates a QR code alongside the URL, suitable for display in presentations or printed reports. Scanning the code opens the same read-only results view.
+
+**Export results.** From the Analysis view or Run History, results can be exported as CSV (KPI summary table, per-queue stats, per-resource utilisation, and optionally the per-entity lifecycle table — suitable for Excel or R) or as JSON (the full results object including replication data and confidence intervals — suitable for archival or programmatic processing). The event log can be exported separately as CSV from the Log view.
+
+**Export model.** The model definition can be downloaded as a JSON file and imported into any DES Studio instance, enabling model portability and sharing of model structures separately from results.
+
+---
+
+## 4. Performance Goals and Feasibility
+
+Performance goals are a first-class feature of DES Studio, not an afterthought. A goal specifies a metric, an operator, and a target — for example, `avgWait < 3` or `utilisation < 0.85`. Multiple goals can be defined on the same model.
+
+Once goals are defined, they influence the tool's behaviour across every surface:
+
+- **KPI cards in the Analysis view** show a green border when a goal is met and a red border when it is violated — giving an immediate pass/fail read without requiring the user to compare numbers manually.
+- **Parametric sweep charts** colour every data point on the response curve: green when all goals are met at that parameter value (the feasible region), red when at least one goal is violated. This makes the feasibility boundary visually immediate.
+- **AI Insights receives the goal gap data directly.** When Suggest Improvements or Sensitivity Analysis runs, the AI knows not just the current KPI values but how far each KPI sits from its target. This directs suggestions toward whatever is preventing feasibility rather than toward general optimisation.
+- **2D sweep heatmaps** apply the same colouring logic across the full parameter grid, enabling the identification of minimum-cost or minimum-staffing feasible configurations at a glance.
+
+---
+
+## 5. Template Library
+
+The template library provides 17 pre-built simulation models organised across six domains. Clicking a template in the Templates tab saves a private, editable copy to the modeller's account and opens it with automatic execution enabled — results appear within seconds, so the model can be explored before anything is changed.
+
+Templates are read-only originals; each modeller's copy is fully owned by them. All templates carry domain and metadata fields used by the gallery's domain filter and search, and all templates are validated to produce non-zero throughput on a clean run.
+
+| # | Template Name | Domain | Primary Concept |
+|---|---------------|--------|-----------------|
+| 1 | M/M/1 Queue | Academic | Single-server benchmark; compare against analytical formula |
+| 2 | Call Center | Service Systems | Multi-server queue with RENEGE abandonment |
+| 3 | ER Triage | Healthcare | Two-stage priority queue with severity attribute |
+| 4 | Fast Food Drive-Through | Service Systems | Three-stage sequential routing |
+| 5 | Factory Assembly | Manufacturing | BATCH macro — accumulate parts before processing |
+| 6 | Airport Security | Service Systems | Finite queue capacity with balking |
+| 7 | Construction Logistics | Logistics | RELEASE macro with state variable counters |
+| 8 | Data Center | Technology | Large resource pool (10 servers), light load |
+| 9 | Outpatient Clinic | Healthcare | Two-stage RELEASE routing with state tracking |
+| 10 | Warehouse Picking | Logistics | BATCH consolidation before processing |
+| 11 | Ward Bed Admission | Healthcare | Finite-capacity bed pool with bed-blocking |
+| 12 | Bank Branch | Service Systems | PRIORITY queue discipline with customer segmentation |
+| 13 | Retail Checkout | Service Systems | Multi-server finite-capacity queue with balking |
+| 14 | Port Berth Operations | Logistics | High-utilisation multi-server congestion |
+| 15 | Machine Shop with Failures | Manufacturing | FAIL/REPAIR macros, MTBF/MTTR, PREEMPT for urgent jobs |
+| 16 | Priority ED with Triage Escalation | Healthcare | SET_ATTR mid-flight, balkCondition expression, Loop Guard recirculation cap |
+| 17 | Cost-Optimised Call Centre | Service Systems | COST macro, totalCost goal, Parametric Sweep with Goal Feasibility |
+
+Templates 15, 16, and 17 were added at Sprint 45 to demonstrate capabilities introduced in Sprints 32–44 — specifically failure modelling, mid-flight attribute updates, conditional balking expressions, loop guards, and cost optimisation workflows.
+
+---
+
+## 6. Limitations and Known Constraints
+
+DES Studio is a mature and widely capable tool, but the following limitations apply as of Sprint 45.
+
+**No entity conveyors or transporters.** Material-handling systems that model the physical movement of entities between locations — conveyor belts, automated guided vehicles, fork-lift routing — are not natively supported. These require continuous spatial modelling that is outside the discrete-event entity-flow paradigm the current engine implements.
+
+**loopConfig and balkCondition are partially wired.** Both the Loop Guard (loopConfig) and queue-level conditional balking (balkCondition) are fully exposed in the model editor and are included in the model definition. Engine evaluation of these expressions is partially implemented as of Sprint 45; complete wiring is planned for Sprint 46.
+
+**No real-time collaboration.** DES Studio is a single-user tool per model session. Two users editing the same model simultaneously will overwrite each other's changes. There is no presence indicator, conflict resolution, or live cursors. This is a known gap that would require a separate collaboration infrastructure layer.
+
+**Templates are read-only originals.** When a user opens a template, DES Studio creates a private copy. The original template cannot be edited by regular users. Template updates (bug fixes, new capabilities) are applied to the originals and propagate to users who open the template after the update — but do not automatically update copies that were already made.
+
+**AI Insights require a configured LLM API key.** The five AI Insights capabilities (Interpret Results, Suggest Improvements, Sensitivity Analysis, Ask a Question, Compare Runs) depend on a large language model provider configured by the platform administrator. DES Studio deployments without a configured API key will show the AI Insights panel but will be unable to generate responses. Self-hosted deployments require an Anthropic or OpenAI API key set in the platform admin panel.
+
+---
+
+## 7. Roadmap (Sprint 46 Candidates)
+
+The following capabilities are the leading candidates for Sprint 46, based on open gaps and user feedback at the close of Sprint 45.
+
+- **Engine wiring for loopConfig and balkCondition.** Complete the runtime evaluation of Loop Guard expressions and conditional balking expressions, closing the gap between the fully-exposed UI fields and the partially-wired engine behaviour.
+- **AI comparison mode with goal gap awareness.** Extend the Compare Runs AI capability to receive goal gap data for both selected runs, enabling the AI to characterise not just which run performed better but which run was closer to satisfying the defined feasibility targets.
+- **Prompt caching for reduced AI latency.** Apply prompt caching to the model context and goals portions of AI Insights calls, which are repeated across all five capability types, to reduce API cost and response time for users who run multiple AI analyses in a single session.
+- **Per-replication entity anomaly aggregation.** Extend the Entities view anomaly detection to aggregate across replications, surfacing entity types and attribute combinations that are consistently anomalous across multiple runs rather than just within a single run.
