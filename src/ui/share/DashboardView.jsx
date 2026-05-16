@@ -344,7 +344,7 @@ export default function DashboardView({ token, onBack }) {
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   {["Queue", "Served", "Mean wait", "p50", "p90", "p99"].map(h => (
-                    <th key={h} style={{ padding: "4px 8px", textAlign: h === "Queue" ? "left" : "right", fontWeight: 600, color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 0.8 }}>
+                    <th key={h} scope="col" style={{ padding: "4px 8px", textAlign: h === "Queue" ? "left" : "right", fontWeight: 600, color: C.muted, fontFamily: FONT, fontSize: 11, letterSpacing: 0.8 }}>
                       {h}
                     </th>
                   ))}
@@ -377,7 +377,7 @@ export default function DashboardView({ token, onBack }) {
               <thead>
                 <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                   {["Type", "Count", "Mean svc time", "Completions"].map(h => (
-                    <th key={h} style={{ padding: "4px 8px", textAlign: h === "Type" ? "left" : "right", fontWeight: 600, color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 0.8 }}>{h}</th>
+                    <th key={h} scope="col" style={{ padding: "4px 8px", textAlign: h === "Type" ? "left" : "right", fontWeight: 600, color: C.muted, fontFamily: FONT, fontSize: 11, letterSpacing: 0.8 }}>{h}</th>
                   ))}
                 </tr>
               </thead>

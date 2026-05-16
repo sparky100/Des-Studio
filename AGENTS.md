@@ -1,13 +1,11 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-16 | Reflects: Sprint 45 — AI Prompt Grounding complete.*
+*Last updated: 2026-05-16 | Reflects: Sprint 53 — God Component Decomposition complete.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Sprint plan: `docs/reviews/sprint-45-plan.md`
-- Sprint closure report: `docs/reviews/sprint-45-closure-report.md`
-- Sprint capability guide: `docs/sprint-45-ai-prompt-grounding-guide.md`
+- Latest closure report: `docs/reviews/sprint-53-closure.md`
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
@@ -64,7 +62,15 @@ project root
 │   │   │   └── index.jsx
 │   │   └── shared/
 │   │       ├── tokens.js            ← Style tokens (colours, spacing, typography)
-│   │       └── components.jsx       ← Shared UI components (DistPicker — has latent bug, see §9)
+│   │       ├── components.jsx       ← Shared UI components (DistPicker with family groups + sparkline)
+│   │       ├── hooks.js             ← useViewport() hook (ResizeObserver); BP breakpoint constants
+│   │       ├── ToastContext.jsx     ← Toast notification system (portal, variants, auto-dismiss)
+│   │       ├── SkeletonPanel.jsx    ← Skeleton loading placeholder with CSS pulse animation
+│   │       ├── KeyboardShortcutsModal.jsx ← Global ? shortcut modal
+│   │       ├── DistHelp.js          ← Distribution family groups, help metadata, validateDistParams()
+│   │       └── DistSparkline.jsx    ← 120×40 SVG sparkline previews for distributions
+│   │   ├── AuthShell.jsx            ← Self-contained auth forms (sign-in, sign-up, password recovery)
+│   │   └── ModelHistoryTab.jsx      ← Run history tab extracted from ModelDetail
 │   ├── db/
 │   │   ├── models.js                ← Supabase CRUD wrappers
 │   │   └── supabase.js              ← Client singleton
@@ -284,7 +290,7 @@ ModelDetail (parent)
 **Editor rules that apply to all tabs:**
 
 - Every editor reads from and writes to `model_json` in Supabase via `src/db/models.js`. No editor stores local-only state that is not persisted.
-- Save is currently manual — the modeller clicks Save. The UI shows a `saveStatus` banner (saving / saved / error). This must be preserved; do not remove the banner.
+- Save is manual — the modeller clicks Save. Save feedback is delivered via the `ToastContext` toast system (success/error toasts). The old `saveStatus` state banner was removed in Sprint 50 and replaced with toasts.
 - The Back button currently discards unsaved changes silently. This is a known defect — it must warn the user before navigating away. Do not add new navigation without this guard.
 - Inline validation on save is absent — empty names, blank conditions, and malformed schedules are accepted silently. All editors must be updated to validate before persisting (see Section 8, validation rules V1–V11).
 - No editor may introduce a free-text field for simulation logic. All logic entry uses structured pickers and the Predicate Builder only.
@@ -1118,6 +1124,7 @@ const { data } = await supabase
 
 ### 16.3 Auth State in Components
 
+- **`src/ui/AuthShell.jsx`** owns all auth form state (email, password, mode, errors). It calls supabase auth methods directly for sign-in, sign-up, forgot password, and password update. App.jsx only passes `isRecoverySession` (a boolean) and `onRecoveryComplete` to it.
 - Components that require authentication must read the session from `App.jsx` via context or props — never by calling `supabase.auth.getSession()` directly inside a component.
 - If a component renders before auth resolves, it must show a loading state — not an empty or broken UI.
 - Navigation away from an unsaved model must warn the user before discarding changes, regardless of auth state.
@@ -1366,10 +1373,17 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 31 | ✅ Complete | 2026-05-14 | Expressiveness & Observability: clock token in UI, WIP time-average metric, live queue-depth time-plot |
 | Sprint 32 | ✅ Complete | 2026-05-14 | Resource Reliability: preemption, breakdowns/failures with MTBF/MTTR |
 | Sprint 33 | ✅ Complete | 2026-05-14 | Advanced Scheduling & Analytics: SPLIT, COSEIZE, MATCH, dynamic BATCH, SPT/EDD/PRIORITY queues, histograms, ANOVA |
+| Sprint 47 | ✅ Complete | 2026-05-16 | Toast notification system (ToastContext, portal, variants, auto-dismiss) |
+| Sprint 48 | ✅ Complete | 2026-05-16 | Skeleton loading states, keyboard shortcuts modal (? key), global keydown in App.jsx |
+| Sprint 49 | ✅ Complete | 2026-05-16 | Starter guide localStorage persistence, bulk run history selection |
+| Sprint 50 | ✅ Complete | 2026-05-16 | Toast integration across ModelDetail, CsvImportModal, AiAssistantPanel (save, export, rate-limit) |
+| Sprint 51 | ✅ Complete | 2026-05-16 | DistPicker redesign: family groups, inline validation, sparkline preview, DistHelp metadata |
+| Sprint 52 | ✅ Complete | 2026-05-16 | Responsive layout: useViewport hook, ResizeObserver, "More ▾" compact tab bar, ExecutePanel stacking, AdminPanel mobile |
+| Sprint 53 | ✅ Complete | 2026-05-16 | God component decomposition: AuthShell extracted from App.jsx, ModelHistoryTab extracted from ModelDetail.jsx |
 
 ---
 
-## 21. Current Sprint — Sprint 30 (Reusable Modelling Library and Scenario Packs)
+## 21. Current Sprint — Sprint 53 complete; see Sprint History for next steps
 
 **Goal:** Expand the built-in template library from 10 to 14 templates across 6 domains, fix all broken templates (ARRIVE and ASSIGN macro bugs), add `domain`/`templateMeta` fields, upgrade the template gallery UI with domain filtering and search, add an in-app Patterns Guide panel, and document 6 reusable modelling patterns.
 

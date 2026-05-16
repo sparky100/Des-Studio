@@ -580,11 +580,11 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
             <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 11 }}>
               <thead>
                 <tr style={{ color: C.muted, borderBottom: `2px solid ${C.border}` }}>
-                  <th style={{ padding: "4px 8px", textAlign: "left" }}>ID</th>
-                  <th style={{ padding: "4px 8px", textAlign: "left" }}>Type</th>
-                  <th style={{ padding: "4px 8px", textAlign: "left" }}>Status</th>
-                  <th style={{ padding: "4px 8px", textAlign: "left" }}>Location</th>
-                  <th style={{ padding: "4px 8px", textAlign: "right" }}>Age</th>
+                  <th scope="col" style={{ padding: "4px 8px", textAlign: "left" }}>ID</th>
+                  <th scope="col" style={{ padding: "4px 8px", textAlign: "left" }}>Type</th>
+                  <th scope="col" style={{ padding: "4px 8px", textAlign: "left" }}>Status</th>
+                  <th scope="col" style={{ padding: "4px 8px", textAlign: "left" }}>Location</th>
+                  <th scope="col" style={{ padding: "4px 8px", textAlign: "right" }}>Age</th>
                 </tr>
               </thead>
               <tbody>

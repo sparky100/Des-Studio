@@ -1,7 +1,9 @@
 // ui/shared/components.jsx — Reusable micro-components
 import React, { Component, useEffect, useId, useState, useRef } from "react";
-import { C, FONT } from "./tokens.js";
+import { C, FONT, SPACE, RADIUS, TYPO, alpha } from "./tokens.js";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
+import { DIST_GROUPS, DIST_HELP, getDistGroup, validateDistParams } from "./DistHelp.js";
+import { DistSparkline } from "./DistSparkline.jsx";
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -31,8 +33,8 @@ class ErrorBoundary extends Component {
 
     return (
       <div role="alert" style={{
-        background: C.red + "12",
-        border: `1px solid ${C.red}44`,
+        background: alpha(C.red, 0.07),
+        border: `1px solid ${alpha(C.red, 0.27)}`,
         borderRadius: 8,
         padding: 14,
         color: C.text,
@@ -61,7 +63,7 @@ class ErrorBoundary extends Component {
 }
 
 const Tag=React.memo(({label,color=C.muted})=>(
-  <span style={{background:color+"18",border:`1px solid ${color}44`,color,borderRadius:3,padding:"2px 7px",fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",fontFamily:FONT}}>{label}</span>
+  <span style={{background:color+"18",border:`1px solid ${color}44`,color,borderRadius:3,padding:"2px 7px",fontSize:11,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",fontFamily:FONT}}>{label}</span>
 ));
 const PhaseTag=React.memo(({phase})=>{
   const cfg={A:{color:C.phaseA,label:"Phase A"},B:{color:C.phaseB,label:"Phase B"},
@@ -73,21 +75,38 @@ const PhaseTag=React.memo(({phase})=>{
 const Avatar=({u,size=28})=>(
   <div style={{width:size,height:size,borderRadius:"50%",background:u.color+"22",border:`1.5px solid ${u.color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.38,fontWeight:700,color:u.color,fontFamily:FONT,flexShrink:0}}>{u.initials}</div>
 );
+/**
+ * Btn — primary action button.
+ * Variants: "primary" (accent fill), "ghost" (subtle surface), "danger" (red tint),
+ *           "amber" (warning tint), "success" (green tint — use sparingly for confirmation states).
+ */
 const Btn=({children,onClick,variant="ghost",small,disabled,full,style={},ariaLabel,title,type="button"})=>{
-  const v={primary:{bg:C.accent,fg:"#080c10",br:C.accent},ghost:{bg:"#ffffff08",fg:C.text,br:C.border},
-    danger:{bg:C.red+"18",fg:C.red,br:C.red+"44"},success:{bg:C.green+"18",fg:C.green,br:C.green+"44"},
-    amber:{bg:C.amber+"18",fg:C.amber,br:C.amber+"44"}}[variant]||{bg:"#ffffff08",fg:C.text,br:C.border};
-  return <button type={type} onClick={onClick} disabled={disabled} aria-label={ariaLabel} title={title} style={{background:v.bg,color:v.fg,border:`1px solid ${v.br}`,borderRadius:5,padding:small?"4px 10px":"7px 14px",fontSize:small?11:12,fontWeight:600,fontFamily:FONT,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.45:1,display:"inline-flex",alignItems:"center",gap:6,width:full?"100%":undefined,justifyContent:full?"center":undefined,transition:"opacity .15s",flexShrink:0,...style}}>{children}</button>;
+  const v={
+    primary:{bg:C.accent,            fg:"#080c10",br:C.accent},
+    ghost:  {bg:C.surfaceHover,      fg:C.text,   br:C.border},
+    danger: {bg:alpha(C.red,0.09),   fg:C.red,    br:alpha(C.red,0.27)},
+    success:{bg:alpha(C.green,0.09), fg:C.green,  br:alpha(C.green,0.27)},
+    amber:  {bg:alpha(C.amber,0.09), fg:C.amber,  br:alpha(C.amber,0.27)},
+  }[variant]||{bg:C.surfaceHover,fg:C.text,br:C.border};
+  return <button type={type} onClick={onClick} disabled={disabled} aria-label={ariaLabel} title={title}
+    style={{background:v.bg,color:v.fg,border:`1px solid ${v.br}`,borderRadius:RADIUS.md,
+      padding:small?`${SPACE.xs}px ${SPACE.sm+2}px`:`${SPACE.sm-1}px ${SPACE.md+2}px`,
+      fontSize:small?11:12,fontWeight:600,fontFamily:FONT,cursor:disabled?"not-allowed":"pointer",
+      opacity:disabled?0.45:1,display:"inline-flex",alignItems:"center",gap:SPACE.sm-2,
+      width:full?"100%":undefined,justifyContent:full?"center":undefined,
+      transition:"opacity 120ms ease",flexShrink:0,...style}}>{children}</button>;
 };
 const Field=({label,value,onChange,multiline,rows=2,placeholder="",autoFocus=false,inputStyle={}})=>{
   const generatedId=useId();
   const id=`field-${generatedId}`;
+  const inputBase={background:C.bg,border:`1px solid ${C.border}`,borderRadius:RADIUS.sm,color:C.text,
+    fontFamily:FONT,fontSize:12,padding:`${SPACE.sm}px ${SPACE.sm+2}px`,outline:"none"};
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:5}}>
-      {label&&<label htmlFor={id} style={{fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.muted,textTransform:"uppercase",fontFamily:FONT}}>{label}</label>}
+    <div style={{display:"flex",flexDirection:"column",gap:SPACE.xs+1}}>
+      {label&&<label htmlFor={id} style={{...TYPO.label,color:C.muted,fontFamily:FONT,letterSpacing:"1.5px"}}>{label}</label>}
       {multiline
-        ?<textarea id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} autoFocus={autoFocus} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",resize:"vertical",outline:"none",lineHeight:1.6,...inputStyle}}/>
-        :<input id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",outline:"none",width:"100%",boxSizing:"border-box",...inputStyle}}/>}
+        ?<textarea id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} autoFocus={autoFocus} style={{...inputBase,resize:"vertical",lineHeight:1.6,...inputStyle}}/>
+        :<input id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} style={{...inputBase,width:"100%",boxSizing:"border-box",...inputStyle}}/>}
     </div>
   );
 };
@@ -140,17 +159,19 @@ const CommitInput=({
   );
 };
 const SH=({label,color=C.muted,children})=>(
-  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${C.border}`,paddingBottom:8,marginBottom:12}}>
-    <span style={{fontSize:10,fontWeight:700,letterSpacing:1.8,textTransform:"uppercase",color,fontFamily:FONT}}>{label}</span>
+  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${C.border}`,paddingBottom:SPACE.sm,marginBottom:SPACE.md}}>
+    <span style={{...TYPO.label,letterSpacing:"1.8px",color,fontFamily:FONT}}>{label}</span>
     {children}
   </div>
 );
 const InfoBox=({color,children})=>(
-  <div style={{background:color+"0f",border:`1px solid ${color}33`,borderRadius:6,padding:"10px 14px",fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.8}}>{children}</div>
+  <div style={{background:alpha(color,0.06),border:`1px solid ${alpha(color,0.2)}`,borderRadius:RADIUS.md,padding:`${SPACE.sm+2}px ${SPACE.md+2}px`,fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.8}}>{children}</div>
 );
-const Empty=({icon,msg})=>(
-  <div style={{textAlign:"center",padding:"24px 16px",color:C.muted,fontFamily:FONT,fontSize:12}}>
-    <div style={{fontSize:24,marginBottom:8}}>{icon}</div>{msg}
+const Empty=({icon,msg,action})=>(
+  <div style={{textAlign:"center",padding:"24px 16px",color:C.muted,fontFamily:FONT,fontSize:12,display:"flex",flexDirection:"column",alignItems:"center",gap:SPACE.sm}}>
+    <div style={{fontSize:24}}>{icon}</div>
+    <div>{msg}</div>
+    {action&&<Btn small variant="ghost" onClick={action.onClick}>{action.label}</Btn>}
   </div>
 );
 
@@ -281,10 +302,10 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
           <table style={{borderCollapse:"collapse",width:"100%",fontFamily:FONT}}>
             <thead>
               <tr>
-                <th style={thSt}>#</th>
-                <th style={thSt}>Time</th>
-                {numAttrDefs.map(a=><th key={a.name} style={thSt}>{a.name}</th>)}
-                <th style={thSt}/>
+                <th scope="col" style={thSt}>#</th>
+                <th scope="col" style={thSt}>Time</th>
+                {numAttrDefs.map(a=><th key={a.name} scope="col" style={thSt}>{a.name}</th>)}
+                <th scope="col" style={thSt}/>
               </tr>
             </thead>
             <tbody>
@@ -302,7 +323,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
                     </td>
                   ))}
                   <td style={tdSt}>
-                    <button onClick={()=>removeRow(i)} style={{background:"transparent",border:"none",
+                    <button onClick={()=>removeRow(i)} aria-label={`Remove arrival row ${i+1}`} style={{background:"transparent",border:"none",
                       color:C.muted,cursor:"pointer",fontSize:12,padding:"0 4px"}}>×</button>
                   </td>
                 </tr>
@@ -347,13 +368,23 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
 
 const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
   const fileRef=useRef(null);
-  const [csvParse,setCsvParse]=useState(null); // { fileName, headers, rows, colIdx }
+  const [csvParse,setCsvParse]=useState(null);
+  const [showHelp,setShowHelp]=useState(false);
+  const [showPreview,setShowPreview]=useState(false);
+  const [blurErrors,setBlurErrors]=useState({}); // { param: errorMsg }
 
   const v=value||{dist:"Exponential",distParams:{}};
   const isImported=v.dist==="Empirical"&&Array.isArray(v.distParams?.values)&&v.distParams.values.length>0;
   const dd=DISTRIBUTIONS[v.dist||"Fixed"]||DISTRIBUTIONS.Fixed;
   const isPiecewise=v.dist==="Piecewise";
   const isSchedule=v.dist==="Schedule";
+
+  // Derive current family from distribution
+  const currentGroup=getDistGroup(v.dist)||DIST_GROUPS[0];
+  const [selectedFamily,setSelectedFamily]=useState(currentGroup.id);
+
+  // Keep selectedFamily in sync when distribution changes externally
+  const syncedFamily=getDistGroup(v.dist)?.id||selectedFamily;
 
   const selSt={width:compact?160:200,background:C.bg,border:`1px solid ${C.cEvent}55`,
     borderRadius:4,color:C.cEvent,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"};
@@ -366,12 +397,34 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
       :{};
     onChange({...v,dist:sel,distParams:defaultParams});
     setCsvParse(null);
+    setBlurErrors({});
+  };
+
+  const handleFamilyChange=(fid)=>{
+    setSelectedFamily(fid);
+    const group=DIST_GROUPS.find(g=>g.id===fid);
+    if(!group)return;
+    // If current dist not in new family, switch to first of that family
+    if(!group.dists.includes(v.dist)){
+      const first=group.dists.find(d=>allowPiecewise||d!=="Piecewise")||group.dists[0];
+      if(first) handleDistChange(first);
+    }
+  };
+
+  const handleParamChange=(param,val)=>{
+    onChange({...v,distParams:{...(v.distParams||{}),[param]:val}});
+  };
+
+  const handleParamBlur=(param)=>{
+    const errors=validateDistParams(v.dist,v.distParams||{});
+    const err=errors.find(e=>e.param===param);
+    setBlurErrors(prev=>({...prev,[param]:err?err.message:null}));
   };
 
   const handleFileSelect=(e)=>{
     const file=e.target.files?.[0];
     if(!file)return;
-    e.target.value=""; // allow re-selecting same file
+    e.target.value="";
     const reader=new FileReader();
     reader.onload=(evt)=>{
       const lines=evt.target.result.split(/\r?\n/).filter(l=>l.trim());
@@ -415,36 +468,105 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
   const btnSt=(col)=>({background:col+"18",border:`1px solid ${col}55`,borderRadius:4,
     color:col,fontFamily:FONT,fontSize:11,padding:"3px 10px",cursor:"pointer"});
 
+  const distHelp=DIST_HELP[v.dist]||null;
+  const activeFamilyId=syncedFamily;
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:6}}>
-      {/* Hidden file input */}
       <input ref={fileRef} type="file" accept=".csv" style={{display:"none"}} onChange={handleFileSelect}/>
 
-      {/* Distribution selector row */}
-      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-        <select value={v.dist||"Exponential"} onChange={e=>handleDistChange(e.target.value)} style={selSt}>
-          {Object.keys(DISTRIBUTIONS).filter(d=>allowPiecewise||d!=="Piecewise").map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
-          <option disabled value="">──────────</option>
-          <option value="__csv__">⬆ Import from CSV…</option>
-        </select>
-        {/* Param inputs — shown for non-CSV, non-custom distributions */}
-        {!isImported&&!isPiecewise&&!isSchedule&&dd.params.map(param=>(
-          <div key={param} style={{display:"flex",alignItems:"center",gap:4}}>
-            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>{param}:</span>
-            <input type="number" value={(v.distParams||{})[param]||""}
-              onChange={e=>onChange({...v,distParams:{...(v.distParams||{}),[param]:e.target.value}})}
-              style={{width:60,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,
-                color:C.amber,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}/>
-          </div>
-        ))}
-        {/* Re-import button shown when CSV is loaded */}
-        {isImported&&<button onClick={()=>fileRef.current?.click()} style={btnSt(C.cEvent)}>Re-import CSV</button>}
+      {/* Family segmented buttons */}
+      <div role="group" aria-label="Distribution family" style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+        {DIST_GROUPS.map(g=>{
+          const active=g.id===activeFamilyId;
+          return (
+            <button key={g.id} onClick={()=>handleFamilyChange(g.id)}
+              aria-pressed={active}
+              style={{background:active?C.cEvent+"22":"transparent",
+                border:`1px solid ${active?C.cEvent:C.border}`,
+                borderRadius:RADIUS.sm,color:active?C.cEvent:C.muted,
+                fontFamily:FONT,fontSize:10,padding:"3px 8px",cursor:"pointer",
+                fontWeight:active?700:400}}>
+              {g.label}
+            </button>
+          );
+        })}
       </div>
+
+      {/* Distribution selector row */}
+      <div style={{display:"flex",gap:6,alignItems:"flex-start",flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flex:1}}>
+          <select value={v.dist||"Exponential"} onChange={e=>handleDistChange(e.target.value)} style={selSt}>
+            {(DIST_GROUPS.find(g=>g.id===activeFamilyId)?.dists||[])
+              .filter(d=>allowPiecewise||d!=="Piecewise")
+              .filter(d=>DISTRIBUTIONS[d])
+              .map(d=><option key={d} value={d}>{DISTRIBUTIONS[d].label}</option>)}
+            {activeFamilyId==="fromdata"&&<option value="__csv__">⬆ Import from CSV…</option>}
+          </select>
+
+          {/* Param inputs with blur validation */}
+          {!isImported&&!isPiecewise&&!isSchedule&&dd.params.map(param=>{
+            const helpTxt=distHelp?.params?.[param];
+            const errMsg=blurErrors[param];
+            return (
+              <div key={param} style={{display:"flex",flexDirection:"column",gap:2}}>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}} title={helpTxt||""}>{param}:</span>
+                  <input type="number" value={(v.distParams||{})[param]||""}
+                    aria-label={param}
+                    aria-describedby={helpTxt?`dp-help-${param}`:undefined}
+                    onChange={e=>handleParamChange(param,e.target.value)}
+                    onBlur={()=>handleParamBlur(param)}
+                    style={{width:60,background:"transparent",
+                      border:`1px solid ${errMsg?C.red:C.border}`,
+                      borderRadius:RADIUS.sm,color:C.amber,fontFamily:FONT,fontSize:11,
+                      padding:"3px 6px",outline:"none"}}/>
+                </div>
+                {errMsg&&(
+                  <span role="alert" style={{fontSize:10,color:C.red,fontFamily:FONT}}>{errMsg}</span>
+                )}
+              </div>
+            );
+          })}
+
+          {isImported&&<button onClick={()=>fileRef.current?.click()} style={btnSt(C.cEvent)}>Re-import CSV</button>}
+        </div>
+
+        {/* Help toggle */}
+        {distHelp&&(
+          <button onClick={()=>setShowHelp(v=>!v)} aria-pressed={showHelp}
+            aria-label={showHelp?"Hide distribution help":"Show distribution help"}
+            style={{background:showHelp?C.accent+"22":"transparent",
+              border:`1px solid ${showHelp?C.accent:C.border}`,
+              borderRadius:RADIUS.sm,color:showHelp?C.accent:C.muted,
+              fontFamily:FONT,fontSize:11,padding:"3px 7px",cursor:"pointer",flexShrink:0}}>
+            ?
+          </button>
+        )}
+      </div>
+
+      {/* Inline help card */}
+      {showHelp&&distHelp&&(
+        <div style={{background:alpha(C.accent,0.05),border:`1px solid ${alpha(C.accent,0.2)}`,
+          borderRadius:RADIUS.md,padding:`${SPACE.sm}px ${SPACE.md}px`,display:"flex",flexDirection:"column",gap:6}}>
+          <div style={{fontSize:11,color:C.text,fontFamily:FONT,lineHeight:1.6}}>{distHelp.summary}</div>
+          {dd.params.length>0&&(
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {dd.params.map(p=>distHelp.params?.[p]&&(
+                <div key={p} style={{fontSize:10,fontFamily:FONT}}>
+                  <span style={{color:C.accent,fontWeight:700}}>{p}</span>
+                  <span style={{color:C.muted,marginLeft:4}}>{distHelp.params[p]}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {isPiecewise&&<PiecewiseEditor value={v} onChange={onChange} compact={compact}/>}
       {isSchedule&&<ScheduleEditor value={v} onChange={onChange} attrDefs={attrDefs}/>}
 
-      {/* Column picker — appears after file is parsed */}
+      {/* CSV column picker */}
       {csvParse&&(
         <div style={{background:C.surface,border:`1px solid ${C.cEvent}44`,borderRadius:6,padding:"10px 12px",
           display:"flex",flexDirection:"column",gap:8}}>
@@ -463,7 +585,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
         </div>
       )}
 
-      {/* Summary for imported CSV */}
+      {/* Imported CSV summary */}
       {isImported&&v._csvStats&&(
         <div style={{fontSize:10,color:C.muted,fontFamily:FONT,background:C.surface,borderRadius:4,padding:"4px 10px"}}>
           {v.sourceFile} · col: <span style={{color:C.amber}}>{v.column}</span> ·{" "}
@@ -472,9 +594,22 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
         </div>
       )}
 
-      {/* Distribution hint for non-CSV modes */}
-      {!isImported&&!csvParse&&!isPiecewise&&(
-        <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>{dd.hint}</span>
+      {/* Preview toggle + sparkline */}
+      {!isImported&&!csvParse&&!isPiecewise&&!isSchedule&&(
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic",flex:1}}>{dd.hint}</span>
+            <button onClick={()=>setShowPreview(v=>!v)} aria-pressed={showPreview}
+              aria-label={showPreview?"Hide distribution preview":"Show distribution preview"}
+              style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:RADIUS.sm,
+                color:C.muted,fontFamily:FONT,fontSize:10,padding:"2px 7px",cursor:"pointer"}}>
+              {showPreview?"Hide preview":"Preview ▾"}
+            </button>
+          </div>
+          {showPreview&&(
+            <DistSparkline dist={v.dist} distParams={v.distParams||{}}/>
+          )}
+        </div>
       )}
     </div>
   );
@@ -487,26 +622,26 @@ const isActiveStatus = s => s && s !== "off" && s !== "0" && s !== "none";
 const SectionPanel = ({label, status, color=C.muted, children, defaultOpen=false}) => {
   const [open, setOpen] = useState(() => defaultOpen || isActiveStatus(status));
   return (
-    <div style={{background:C.surface,borderRadius:5,border:`1px solid ${C.border}`}}>
+    <div style={{background:C.surface,borderRadius:RADIUS.md,border:`1px solid ${C.border}`}}>
       <button onClick={()=>setOpen(o=>!o)}
         style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
-          padding:"8px 12px",background:"transparent",border:"none",cursor:"pointer",borderRadius:5}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:10,color,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,textTransform:"uppercase"}}>{label}</span>
+          padding:`${SPACE.sm}px ${SPACE.md}px`,background:"transparent",border:"none",cursor:"pointer",borderRadius:RADIUS.md}}>
+        <div style={{display:"flex",alignItems:"center",gap:SPACE.sm}}>
+          <span style={{...TYPO.label,color,fontFamily:FONT}}>{label}</span>
           {status!=null&&(
-            <span style={{fontSize:10,fontFamily:FONT,
+            <span style={{...TYPO.caption,fontFamily:FONT,
               color:isActiveStatus(status)?color:C.muted,
-              background:(isActiveStatus(status)?color:C.muted)+"18",
-              border:`1px solid ${(isActiveStatus(status)?color:C.muted)}44`,
-              borderRadius:4,padding:"1px 6px",whiteSpace:"nowrap"}}>
+              background:alpha(isActiveStatus(status)?color:C.muted,0.09),
+              border:`1px solid ${alpha(isActiveStatus(status)?color:C.muted,0.27)}`,
+              borderRadius:RADIUS.sm,padding:"1px 6px",whiteSpace:"nowrap"}}>
               {status}
             </span>
           )}
         </div>
-        <span style={{fontSize:10,color:C.muted,fontFamily:FONT,marginLeft:8}}>{open?"▾":"▸"}</span>
+        <span style={{fontSize:11,color:C.muted,fontFamily:FONT,marginLeft:SPACE.sm}}>{open?"▾":"▸"}</span>
       </button>
       {open&&(
-        <div style={{padding:"0 12px 12px",display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{padding:`0 ${SPACE.md}px ${SPACE.md}px`,display:"flex",flexDirection:"column",gap:SPACE.sm}}>
           {children}
         </div>
       )}

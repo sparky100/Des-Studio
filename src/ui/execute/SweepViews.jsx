@@ -341,9 +341,9 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
         <table style={{ borderCollapse: "collapse", color: C.text, fontSize: 11, textAlign: "center" }}>
           <thead>
             <tr>
-              <th style={{ padding: "6px 8px", color: C.muted, fontSize: 10 }}>{paramLabelA} \ {paramLabelB}</th>
+              <th scope="col" style={{ padding: "6px 8px", color: C.muted, fontSize: 11 }}>{paramLabelA} \ {paramLabelB}</th>
               {valueBs.map(vb => (
-                <th key={vb} style={{ padding: "6px 8px", color: C.muted, fontSize: 10 }}>{fmt(vb)}</th>
+                <th key={vb} scope="col" style={{ padding: "6px 8px", color: C.muted, fontSize: 11 }}>{fmt(vb)}</th>
               ))}
             </tr>
           </thead>
@@ -707,7 +707,7 @@ export function EntitySummaryTable({ entitySummary, meanWait }) {
                 ["arrivalTime", "Arrived"], ["_wait", "Wait"], ["_svc", "Service"],
                 ["_sojourn", "Sojourn"], ["_attrStr", "Attributes"],
               ].map(([col, label]) => (
-                <th key={col}>
+                <th key={col} scope="col">
                   <button style={thStyle(col)} onClick={() => setSort(col)}>
                     {label} {sortKey === col ? (sortAsc ? "▲" : "▼") : ""}
                   </button>

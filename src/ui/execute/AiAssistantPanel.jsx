@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
+import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
 import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildResultsQueryPrompt, buildSensitivityPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
@@ -23,7 +24,7 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
       <thead>
         <tr>
           {["Metric", "Before", "After", "Goal", "Met?"].map(h => (
-            <th key={h} style={{ textAlign: "left", color: C.muted, padding: "2px 4px", borderBottom: `1px solid ${C.border}` }}>{h}</th>
+            <th key={h} scope="col" style={{ textAlign: "left", color: C.muted, padding: "2px 4px", borderBottom: `1px solid ${C.border}` }}>{h}</th>
           ))}
         </tr>
       </thead>
@@ -98,7 +99,14 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, ver
       >
         {running ? "Running..." : "Apply & Re-run"}
       </Btn>
-      {verifyResult && (
+      {running && (
+        <div style={{ marginTop: 8, padding: "10px 12px", background: C.surface, borderRadius: 6, border: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic", animation: "pulse 1.5s ease-in-out infinite" }}>
+            Verifying…
+          </div>
+        </div>
+      )}
+      {!running && verifyResult && (
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BEFORE / AFTER</div>
           <BeforeAfterTable
@@ -124,6 +132,7 @@ export const AiAssistantPanel = ({
   onSaveInsights,
   onRunWithPatch,
 }) => {
+  const toast = useToast();
   const [response, setResponse] = useState("");
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -186,11 +195,13 @@ export const AiAssistantPanel = ({
       },
       onError: err => {
         abortRef.current = null;
-        setError(err?.message || "Analysis unavailable");
+        const msg = err?.message || "Analysis unavailable";
+        setError(msg);
         setStatus("error");
+        if (/rate.?limit|429/i.test(msg)) toast.warning("AI rate limit reached. Please wait a moment and try again.");
       },
     });
-  }, []);
+  }, [toast]);
 
   const runQuery = useCallback((question) => {
     if (!question.trim() || !results) return;
@@ -227,11 +238,13 @@ export const AiAssistantPanel = ({
       },
       onError: err => {
         abortRef.current = null;
-        setError(err?.message || "Query unavailable");
+        const msg = err?.message || "Query unavailable";
+        setError(msg);
         setStatus("error");
+        if (/rate.?limit|429/i.test(msg)) toast.warning("AI rate limit reached. Please wait a moment and try again.");
       },
     });
-  }, [model, results, aggregateStats, conversationHistory]);
+  }, [model, results, aggregateStats, conversationHistory, toast]);
 
   const stopStream = () => {
     abortRef.current?.abort();
@@ -435,7 +448,7 @@ export const AiAssistantPanel = ({
         </div>
       )}
 
-      <div ref={responseAreaRef} style={{
+      <div ref={responseAreaRef} aria-live="polite" aria-label="AI analysis response" style={{
         flex: 1,
         background: C.bg,
         border: `1px solid ${C.border}`,

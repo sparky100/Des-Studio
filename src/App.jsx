@@ -10,8 +10,12 @@ import { fetchModels, fetchProfiles,
          setVisibility, setAccess, forkModel,
          fetchRunStatsForModels }         from "./db/models.js";
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
-import { C, FONT, GOOGLE_FONT_URL }         from "./ui/shared/tokens.js";
+import { C, FONT, GOOGLE_FONT_URL, SHADOW, RADIUS, Z } from "./ui/shared/tokens.js";
 import { Btn, Empty, ErrorBoundary }        from "./ui/shared/components.jsx";
+import { ToastProvider }                    from "./ui/shared/ToastContext.jsx";
+import { KeyboardShortcutsModal }           from "./ui/shared/KeyboardShortcutsModal.jsx";
+import { AuthShell }                        from "./ui/AuthShell.jsx";
+import { extractImportedModelPayload }      from "./ui/shared/utils.js";
 import { ModelCard, ModelDetail,
          NewModelModal }                    from "./ui/ModelDetail.jsx";
 import { validateModel }                    from "./engine/validation.js";
@@ -20,7 +24,6 @@ import DashboardView                        from "./ui/share/DashboardView.jsx";
 import { AdminPanel }                       from "./ui/AdminPanel.jsx";
 import { UserSettingsPanel }               from "./ui/UserSettingsPanel.jsx";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
 
 function createSampleMm1Model() {
   return {
@@ -84,35 +87,6 @@ function createSampleMm1Model() {
   };
 }
 
-function extractImportedModelPayload(payload) {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error("Import file must contain a DES Studio model JSON object.");
-  }
-
-  const source = payload.model_json && typeof payload.model_json === "object"
-    ? payload.model_json
-    : payload;
-  const sourceName = (payload.name || source.name || "Imported model").trim?.() || "Imported model";
-  const model = {
-    name: `${sourceName} (Imported)`,
-    description: payload.description || source.description || "",
-    visibility: "private",
-    access: {},
-  };
-
-  for (const key of MODEL_JSON_KEYS) {
-    if (key === 'graph' || key === 'experimentDefaults') {
-      model[key] = source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])
-        ? source[key]
-        : key === 'graph' ? null : {};
-    } else {
-      model[key] = Array.isArray(source[key]) ? source[key] : [];
-    }
-  }
-
-  return model;
-}
-
 export { createSampleMm1Model, extractImportedModelPayload };
 
 const PATTERNS_GUIDE = [
@@ -151,13 +125,13 @@ const PATTERNS_GUIDE = [
 ];
 
 const PatternsGuidePanel=({onClose})=>(
-  <div style={{position:'fixed',top:0,right:0,bottom:0,width:480,maxWidth:'95vw',background:C.surface,borderLeft:`1px solid ${C.border}`,zIndex:1100,display:'flex',flexDirection:'column',boxShadow:'-8px 0 32px #000a'}}>
+  <div role="dialog" aria-modal="true" aria-labelledby="patterns-guide-title" style={{position:'fixed',top:0,right:0,bottom:0,width:480,maxWidth:'95vw',background:C.surface,borderLeft:`1px solid ${C.border}`,zIndex:Z.modal,display:'flex',flexDirection:'column',boxShadow:SHADOW.panel}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
       <div>
-        <div style={{fontSize:13,fontWeight:700,color:C.text}}>Modelling Patterns</div>
-        <div style={{fontSize:10,color:C.muted,marginTop:2}}>6 reusable patterns for DES Studio models</div>
+        <div id="patterns-guide-title" style={{fontSize:13,fontWeight:700,color:C.text}}>Modelling Patterns</div>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>6 reusable patterns for DES Studio models</div>
       </div>
-      <button type="button" onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:18,cursor:'pointer',lineHeight:1}}>✕</button>
+      <button type="button" aria-label="Close patterns guide" onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:18,cursor:'pointer',lineHeight:1}}>✕</button>
     </div>
     <div style={{overflowY:'auto',flex:1,padding:'12px 18px',display:'flex',flexDirection:'column',gap:14}}>
       {PATTERNS_GUIDE.map((p,i)=>(
@@ -211,61 +185,21 @@ export default function App(){
   const [modelToFork,setModelToFork]=useState(null)
   const [showStarterGuideForId,setShowStarterGuideForId]=useState(null)
   const [importStatus,setImportStatus]=useState(null)
+  const [showPasteJson,setShowPasteJson]=useState(false)
+  const [pasteJsonText,setPasteJsonText]=useState('')
   const [runStatsError,setRunStatsError]=useState('')
   const [actionError,setActionError]=useState('')
   const importFileRef=useRef(null)
   const [localModel,setLocalModel]=useState(null) // anonymous mode: opened model
   const [isTemplate,setIsTemplate]=useState(false) // template quick-start flag
-  const [showAuth,setShowAuth]=useState(false)
-  const [authMode,setAuthMode]=useState('signin')
-  const [authEmail,setAuthEmail]=useState('')
-  const [authPassword,setAuthPassword]=useState('')
-  const [authError,setAuthError]=useState('')
-  const [showResetSent,setShowResetSent]=useState(false)
   const [isRecoverySession,setIsRecoverySession]=useState(false)
-  const [newPassword,setNewPassword]=useState('')
-  const [newPasswordConfirm,setNewPasswordConfirm]=useState('')
   const [showSettings,setShowSettings]=useState(false)
   const [shareToken,setShareToken]=useState(null)
   const [tmplSearch,setTmplSearch]=useState('')
   const [tmplDomain,setTmplDomain]=useState('All')
   const [showPatternsGuide,setShowPatternsGuide]=useState(false)
+  const [showKeyboardShortcuts,setShowKeyboardShortcuts]=useState(false)
 
-  const handleAuth=useCallback(async()=>{
-    setAuthError('')
-    try{
-      if(authMode==='signin'){
-        const{error}=await supabase.auth.signInWithPassword({email:authEmail,password:authPassword})
-        if(error)throw error
-      }else{
-        const{error}=await supabase.auth.signUp({email:authEmail,password:authPassword})
-        if(error)throw error
-      }
-    }catch(e){setAuthError(e.message)}
-  },[authMode,authEmail,authPassword])
-
-  const handleForgotPassword=useCallback(async()=>{
-    setAuthError('')
-    if(!authEmail){setAuthError('Enter your email address first.');return}
-    try{
-      const redirectTo=window.location.origin+window.location.pathname
-      const{error}=await supabase.auth.resetPasswordForEmail(authEmail,{redirectTo})
-      if(error)throw error
-      setShowResetSent(true)
-    }catch(e){setAuthError(e.message)}
-  },[authEmail])
-
-  const handlePasswordReset=useCallback(async()=>{
-    setAuthError('')
-    if(newPassword.length<8){setAuthError('Password must be at least 8 characters.');return}
-    if(newPassword!==newPasswordConfirm){setAuthError('Passwords do not match.');return}
-    try{
-      const{error}=await supabase.auth.updateUser({password:newPassword})
-      if(error)throw error
-      setIsRecoverySession(false)
-      setNewPassword('');setNewPasswordConfirm('')
-    }catch(e){setAuthError(e.message)}
-  },[newPassword,newPasswordConfirm])
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -326,6 +260,17 @@ export default function App(){
   },[session])
 
   useEffect(()=>{loadData()},[loadData])
+
+  useEffect(()=>{
+    const onKey=e=>{
+      if(e.key==='?' && !e.ctrlKey && !e.metaKey && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){
+        e.preventDefault();
+        setShowKeyboardShortcuts(v=>!v);
+      }
+    };
+    window.addEventListener('keydown',onKey);
+    return ()=>window.removeEventListener('keydown',onKey);
+  },[])
 
   const uid=session?.user?.id
   const isAdmin=profile?.isAdmin===true
@@ -405,6 +350,41 @@ export default function App(){
     };
     reader.readAsText(file);
   }, [uid, loadData]);
+
+  const handlePasteJsonImport = useCallback(async () => {
+    if (!uid) return;
+    setImportStatus({ state: "loading", message: "Validating JSON..." });
+    try {
+      const payload = JSON.parse(pasteJsonText);
+      const importedModel = extractImportedModelPayload(payload);
+      const importedValidation = validateModel(importedModel);
+      if (importedValidation.errors.length > 0) {
+        setImportStatus({
+          state: "error",
+          message: "Import blocked by validation errors.",
+          items: importedValidation.errors.map(e => `[${e.code}] ${e.message}`),
+        });
+        return;
+      }
+      const saved = await saveModel(importedModel, uid);
+      await loadData();
+      setImportStatus({
+        state: importedValidation.warnings.length ? "warning" : "success",
+        message: importedValidation.warnings.length
+          ? "Imported with validation warnings."
+          : "Model imported successfully.",
+        items: importedValidation.warnings.map(w => `[${w.code}] ${w.message}`),
+      });
+      setShowPasteJson(false);
+      setPasteJsonText('');
+      setOpenId(saved.id);
+    } catch (e) {
+      setImportStatus({
+        state: "error",
+        message: e instanceof SyntaxError ? `Invalid JSON: ${e.message}` : `Import failed: ${e.message}`,
+      });
+    }
+  }, [uid, pasteJsonText, loadData]);
 
   const handleStartTemplate = useCallback(async (template) => {
     if(!uid)return;
@@ -528,30 +508,7 @@ export default function App(){
   }
 
   if(session && isRecoverySession){
-    return(
-      <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
-        <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 24px',display:'flex',alignItems:'center',height:52}}>
-          <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2}}>DES STUDIO</div>
-        </div>
-        <div style={{maxWidth:400,margin:'0 auto',padding:'60px 24px'}}>
-          <div style={{fontSize:18,fontWeight:700,color:C.text,marginBottom:20}}>Set new password</div>
-          <div style={{display:'flex',flexDirection:'column',gap:10}}>
-            <input type="password" placeholder="New password (min 8 chars)" value={newPassword}
-              onChange={e=>setNewPassword(e.target.value)}
-              style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:13,padding:'8px 10px',outline:'none'}}/>
-            <input type="password" placeholder="Confirm new password" value={newPasswordConfirm}
-              onChange={e=>setNewPasswordConfirm(e.target.value)}
-              onKeyDown={e=>{if(e.key==='Enter')handlePasswordReset()}}
-              style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:13,padding:'8px 10px',outline:'none'}}/>
-            {authError&&<div style={{fontSize:11,color:C.red}}>{authError}</div>}
-            <button type="button" onClick={handlePasswordReset}
-              style={{background:C.accent,color:'#fff',border:'none',borderRadius:4,fontFamily:FONT,fontSize:13,padding:'8px 16px',cursor:'pointer',fontWeight:600}}>
-              Update Password
-            </button>
-          </div>
-        </div>
-      </div>
-    )
+    return <AuthShell isRecoverySession onRecoveryComplete={()=>setIsRecoverySession(false)} signOut={signOut}/>;
   }
 
   if(session && profile?.suspended){
@@ -575,63 +532,11 @@ export default function App(){
   }
 
   if(!session){
-    return(
-      <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
-        <style>{`*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:${C.bg};}::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px;}@import url('${GOOGLE_FONT_URL}');`}</style>
-        <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 24px',display:'flex',alignItems:'center',gap:16,height:52}}>
-          <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2}}>DES STUDIO</div>
-          <div style={{fontSize:11,color:C.muted,borderLeft:`1px solid ${C.border}`,paddingLeft:16}}>Three-Phase · Entities · Servers</div>
-          <div style={{flex:1}}/>
-        </div>
-        <div style={{maxWidth:400,margin:'0 auto',padding:'60px 24px',textAlign:'center'}}>
-          <div style={{fontSize:20,fontWeight:700,color:C.text,marginBottom:12}}>DES Studio</div>
-          <div style={{fontSize:13,color:C.muted,lineHeight:1.6,marginBottom:24}}>
-            Discrete-event simulation modelling tool. Sign in to build, run, and share models.
-          </div>
-          {!showAuth ? (
-            <button type="button" onClick={()=>setShowAuth(true)}
-              style={{background:C.accent,color:'#fff',border:'none',borderRadius:6,fontFamily:FONT,fontSize:14,padding:'10px 28px',cursor:'pointer',fontWeight:700}}>
-              Sign In / Sign Up
-            </button>
-          ) : (
-            <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:20,textAlign:'left'}}>
-              <div style={{display:'flex',gap:8,marginBottom:16}}>
-                <button type="button" onClick={()=>{setAuthMode('signin');setAuthError('')}}
-                  style={{flex:1,background:authMode==='signin'?C.accent+'18':'none',border:authMode==='signin'?`1px solid ${C.accent}44`:`1px solid ${C.border}`,borderRadius:4,color:authMode==='signin'?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'6px 12px',cursor:'pointer',fontWeight:600}}>Sign In</button>
-                <button type="button" onClick={()=>{setAuthMode('signup');setAuthError('')}}
-                  style={{flex:1,background:authMode==='signup'?C.accent+'18':'none',border:authMode==='signup'?`1px solid ${C.accent}44`:`1px solid ${C.border}`,borderRadius:4,color:authMode==='signup'?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:'6px 12px',cursor:'pointer',fontWeight:600}}>Sign Up</button>
-              </div>
-              {showResetSent ? (
-                <div style={{fontSize:12,color:C.green,lineHeight:1.6}}>
-                  Password reset email sent. Check your inbox and click the link to set a new password.
-                </div>
-              ) : (
-              <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                <input type="email" placeholder="Email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)}
-                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:13,padding:'8px 10px',outline:'none'}}/>
-                <input type="password" placeholder="Password" value={authPassword} onChange={e=>setAuthPassword(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')handleAuth()}}
-                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:13,padding:'8px 10px',outline:'none'}}/>
-                {authError&&<div style={{fontSize:11,color:C.red}}>{authError}</div>}
-                <button type="button" onClick={handleAuth}
-                  style={{background:C.accent,color:'#fff',border:'none',borderRadius:4,fontFamily:FONT,fontSize:13,padding:'8px 16px',cursor:'pointer',fontWeight:600}}>
-                  {authMode==='signin'?'Sign In':'Sign Up'}
-                </button>
-                {authMode==='signin'&&(
-                  <button type="button" onClick={handleForgotPassword}
-                    style={{background:'none',border:'none',color:C.muted,fontFamily:FONT,fontSize:11,cursor:'pointer',textAlign:'left',padding:0}}>
-                    Forgot password?
-                  </button>
-                )}
-              </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    )
+    return <AuthShell isRecoverySession={false} signOut={signOut}/>;
   }
 
   return(
+    <ToastProvider>
     <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
       <style>{`*{box-sizing:border-box;margin:0;padding:0;}::-webkit-scrollbar{width:6px;}::-webkit-scrollbar-track{background:${C.bg};}::-webkit-scrollbar-thumb{background:${C.border};border-radius:3px;}@import url('${GOOGLE_FONT_URL}');`}</style>
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 24px',display:'flex',alignItems:'center',gap:16,height:52}}>
@@ -675,7 +580,8 @@ export default function App(){
               style={{display:"none"}}
               onChange={handleImportFile}
             />
-            <Btn variant="ghost" onClick={()=>importFileRef.current?.click()}>Import Model</Btn>
+            <Btn variant="ghost" onClick={()=>importFileRef.current?.click()}>Import File</Btn>
+            <Btn variant="ghost" onClick={()=>{ setPasteJsonText(''); setImportStatus(null); setShowPasteJson(true); }}>Paste JSON</Btn>
             <Btn variant="primary" onClick={()=>setShowNew(true)}>+ New Model</Btn>
           </div>
         </div>
@@ -845,8 +751,36 @@ export default function App(){
         }}/>
       )}
       {showPatternsGuide&&<PatternsGuidePanel onClose={()=>setShowPatternsGuide(false)}/>}
+      {showPasteJson && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:C.overlay,display:'flex',alignItems:'center',justifyContent:'center',zIndex:Z.modal}}>
+          <div role="dialog" aria-modal="true" aria-labelledby="paste-json-title" style={{background:C.panel,padding:24,borderRadius:10,width:560,maxWidth:'95vw',display:'flex',flexDirection:'column',gap:16}}>
+            <h2 id="paste-json-title" style={{fontSize:16,fontWeight:700,color:C.text,margin:0}}>Import Model from JSON</h2>
+            <p style={{fontSize:12,color:C.muted,margin:0}}>Paste a DES Studio model JSON object below. The model will be validated before saving.</p>
+            <textarea
+              aria-label="Model JSON"
+              value={pasteJsonText}
+              onChange={e=>setPasteJsonText(e.target.value)}
+              placeholder={'{\n  "name": "My Model",\n  "entityTypes": [...],\n  ...\n}'}
+              spellCheck={false}
+              style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,height:260,outline:'none',padding:'8px 10px',resize:'vertical',width:'100%',boxSizing:'border-box'}}
+            />
+            {importStatus && importStatus.state !== 'loading' && (
+              <div style={{background:importStatus.state==='error'?C.red+'18':importStatus.state==='warning'?C.amber+'18':C.green+'18',border:`1px solid ${importStatus.state==='error'?C.red+'44':importStatus.state==='warning'?C.amber+'44':C.green+'44'}`,borderRadius:5,color:importStatus.state==='error'?C.red:importStatus.state==='warning'?C.amber:C.green,fontSize:12,fontFamily:FONT,padding:'8px 10px',display:'flex',flexDirection:'column',gap:4}}>
+                <div>{importStatus.message}</div>
+                {(importStatus.items||[]).map((item,i)=><div key={i} style={{color:C.muted}}>{item}</div>)}
+              </div>
+            )}
+            <div style={{display:'flex',justifyContent:'flex-end',gap:10}}>
+              <Btn variant="ghost" onClick={()=>{setShowPasteJson(false);setPasteJsonText('');setImportStatus(null);}}>Cancel</Btn>
+              <Btn variant="primary" disabled={!pasteJsonText.trim()} onClick={handlePasteJsonImport}>
+                {importStatus?.state==='loading'?'Importing…':'Import Model'}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
       {showForkConfirm && modelToFork && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#000000aa',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:C.overlay,display:'flex',alignItems:'center',justifyContent:'center',zIndex:Z.modal}}>
           <div role="dialog" aria-modal="true" aria-labelledby="fork-public-model-title" style={{background:C.panel,padding:24,borderRadius:10,width:400,maxWidth:'90vw',display:'flex',flexDirection:'column',gap:20}}>
             <h2 id="fork-public-model-title" style={{fontSize:18,fontWeight:700,color:C.text}}>Run Public Model</h2>
             <p style={{fontSize:13,color:C.muted}}>To run "{modelToFork.name}", a private copy will be created in your library. You will own this copy and its run history.</p>
@@ -857,6 +791,10 @@ export default function App(){
           </div>
         </div>
       )}
+      {showKeyboardShortcuts && (
+        <KeyboardShortcutsModal onClose={()=>setShowKeyboardShortcuts(false)}/>
+      )}
     </div>
+    </ToastProvider>
   )
 }

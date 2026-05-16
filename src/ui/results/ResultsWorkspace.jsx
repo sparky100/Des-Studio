@@ -180,7 +180,7 @@ function DataPreviewShell({ summary, onExport, children }) {
 function SeriesDataPreview({ series }) {
   const points = Array.isArray(series?.points) ? series.points : [];
   if (!points.length) return null;
-  const th = label => <th key={label} style={{ padding: "4px 8px", textAlign: "right", color: C.muted, fontFamily: FONT, fontSize: 9, fontWeight: 700 }}>{label}</th>;
+  const th = label => <th key={label} scope="col" style={{ padding: "4px 8px", textAlign: "right", color: C.muted, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>{label}</th>;
   const td = (label, value, color = C.text) => <td key={label} style={{ padding: "4px 8px", textAlign: "right", color, fontFamily: FONT, fontSize: 10 }}>{value}</td>;
   const filename = `des-studio-chart-${slugify(series.label)}.csv`;
   return (
@@ -208,7 +208,7 @@ function SeriesDataPreview({ series }) {
 function WaitValuesPreview({ dist }) {
   const values = Array.isArray(dist?.values) ? dist.values : [];
   if (!values.length) return null;
-  const th = label => <th key={label} style={{ padding: "4px 8px", textAlign: "right", color: C.muted, fontFamily: FONT, fontSize: 9, fontWeight: 700 }}>{label}</th>;
+  const th = label => <th key={label} scope="col" style={{ padding: "4px 8px", textAlign: "right", color: C.muted, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>{label}</th>;
   const td = (label, value, color = C.text) => <td key={label} style={{ padding: "4px 8px", textAlign: "right", color, fontFamily: FONT, fontSize: 10 }}>{value}</td>;
   const filename = `des-studio-wait-samples-${slugify(dist.label)}.csv`;
   return (
