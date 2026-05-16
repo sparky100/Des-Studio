@@ -1794,6 +1794,27 @@ npm run build
 
 ---
 
+---
+
+### Sprint 54 — Cost Modelling Visibility ✅
+
+**Goal:** Surface the existing `totalCost`/`costPerServed` engine data in all results views and add per-entity cost tracking.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F54.1 — Options doc corrected | ✅ | Option 1 marked complete (Sprint 36); status table updated |
+| F54.2 — CI_METRICS + METRIC_LABELS | ✅ | `totalCost`/`costPerServed` in tile grid, CI precision table, sample-size guidance |
+| F54.3 — ANALYSIS_METRICS | ✅ | Available in batch-means metric selector in ResultsWorkspace |
+| F54.4 — Single-run cost section | ✅ | `COST SUMMARY` MetricStrip in ResultsWorkspace when `totalCost > 0` |
+| F54.5 — Per-entity cost | ✅ | `entity.attrs.__cost` accumulation in COST macro |
+| F54.6 — Per-entity cost tests | ✅ | 2 new tests in G17 suite; 13/13 cost tests pass |
+
+**Deferred:** Option 4 (cost breakdown by event `summary.costBreakdown`) — Sprint 55 candidate.
+
+---
+
 *End of build plan. Update after each sprint.*
 *The most important rule: read the existing file before changing it.*
 *Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec — never add a free-text escape hatch.*

@@ -4,13 +4,15 @@ import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
 
 export const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
-export const CI_METRICS = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.served", "summary.reneged"];
+export const CI_METRICS = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.served", "summary.reneged", "summary.totalCost", "summary.costPerServed"];
 export const METRIC_LABELS = {
   "summary.avgWait": "Avg wait",
   "summary.avgSvc": "Avg service",
   "summary.avgSojourn": "Avg sojourn",
   "summary.served": "Served",
   "summary.reneged": "Reneged",
+  "summary.totalCost": "Total cost",
+  "summary.costPerServed": "Cost / served",
 };
 
 export const fmt = (value, digits = 0) => Number.isFinite(value) ? value.toFixed(digits) : "—";

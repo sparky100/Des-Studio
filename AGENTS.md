@@ -1380,10 +1380,11 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 51 | ✅ Complete | 2026-05-16 | DistPicker redesign: family groups, inline validation, sparkline preview, DistHelp metadata |
 | Sprint 52 | ✅ Complete | 2026-05-16 | Responsive layout: useViewport hook, ResizeObserver, "More ▾" compact tab bar, ExecutePanel stacking, AdminPanel mobile |
 | Sprint 53 | ✅ Complete | 2026-05-16 | God component decomposition: AuthShell extracted from App.jsx, ModelHistoryTab extracted from ModelDetail.jsx |
+| Sprint 54 | ✅ Complete | 2026-05-16 | Cost modelling visibility: totalCost/costPerServed in CI_METRICS, ANALYSIS_METRICS, ResultsWorkspace tile; per-entity cost in entity.attrs.__cost |
 
 ---
 
-## 21. Current Sprint — Sprint 53 complete; see Sprint History for next steps
+## 21. Current Sprint — Sprint 54 complete; see Sprint History for next steps
 
 **Goal:** Expand the built-in template library from 10 to 14 templates across 6 domains, fix all broken templates (ARRIVE and ASSIGN macro bugs), add `domain`/`templateMeta` fields, upgrade the template gallery UI with domain filtering and search, add an in-app Patterns Guide panel, and document 6 reusable modelling patterns.
 

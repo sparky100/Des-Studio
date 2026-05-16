@@ -36,6 +36,8 @@ const ANALYSIS_METRICS = [
   { path: "summary.avgSvc", label: "Avg service" },
   { path: "summary.avgSojourn", label: "Avg sojourn" },
   { path: "summary.served", label: "Served" },
+  { path: "summary.totalCost", label: "Total cost" },
+  { path: "summary.costPerServed", label: "Cost / served" },
 ];
 
 function getPathValue(source, path) {
@@ -651,6 +653,19 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
             ))}
           </div>
         </ChartSectionShell>
+      )}
+
+      {Number.isFinite(results?.summary?.totalCost) && results.summary.totalCost > 0 && (
+        <section aria-label="Cost summary" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COST SUMMARY</div>
+          <MetricStrip
+            items={[
+              { label: "Total cost", value: formatNumber(results.summary.totalCost), color: C.accent },
+              { label: "Cost / served", value: results.summary.costPerServed != null ? formatNumber(results.summary.costPerServed) : "—", color: C.amber },
+              { label: "Served", value: results.summary.served ?? "—" },
+            ]}
+          />
+        </section>
       )}
 
       <ResultsAnalysisPanel results={results} replicationResults={replicationResults} warmupDetection={warmupDetection} />
