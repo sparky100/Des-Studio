@@ -1,5 +1,5 @@
 const DEFAULT_MODEL_NAME = "Untitled model";
-const MAX_PROMPT_WORDS = 1500;
+const MAX_PROMPT_WORDS = 2000;
 
 function finiteOrNull(value) {
   const number = Number(value);
@@ -44,6 +44,7 @@ function extractQueues(model = {}, results = {}) {
         discipline: queue.discipline || "FIFO",
         capacity: queue.capacity ?? null,
         customerType: queue.customerType || null,
+        overflowDestination: queue.overflowDestination || undefined,
         meanWait: finiteOrNull(wd.mean),
         maxWait: finiteOrNull(summary.maxWait),
         p50: finiteOrNull(wd.p50),
@@ -62,13 +63,26 @@ function extractResources(model = {}, summary = {}) {
   const servers = (model.entityTypes || []).filter(entity => entity.role === "server");
   return servers.map(server => {
     const pr = summary.perResource?.[server.name];
-    return {
+    const result = {
       name: server.name || server.id || "Server",
+      count: finiteOrNull(server.count),
       utilisation: finiteOrNull(pr?.utilisation ?? summary.resourceUtilisation?.[server.name] ?? summary.utilisation),
       busyCount: finiteOrNull(pr?.busyCount ?? summary.busyCount),
       idleCount: finiteOrNull(pr?.idleCount),
       totalServers: finiteOrNull(pr?.total),
     };
+    if (server.mtbfDist) {
+      result.failureModel = {
+        mtbfDist: server.mtbfDist,
+        mtbfParams: server.mtbfDistParams || {},
+        mttrDist: server.mttrDist || null,
+        mttrParams: server.mttrDistParams || {},
+      };
+    }
+    if (Array.isArray(server.shiftSchedule) && server.shiftSchedule.length > 0) {
+      result.shiftSchedule = `${server.shiftSchedule.length} period(s)`;
+    }
+    return result;
   });
 }
 
@@ -82,9 +96,87 @@ function extractExperiment(experimentConfig = {}) {
   };
 }
 
+function extractBEvents(model = {}, results = {}) {
+  const bEvents = model.bEvents || [];
+  if (!bEvents.length) return undefined;
+  const eventCounts = results.snap?.eventCounts || {};
+  return bEvents.map(ev => {
+    const effects = Array.isArray(ev.effect) ? ev.effect : (ev.effect ? [ev.effect] : []);
+    const effectTypes = [...new Set(
+      effects.map(e => String(e).match(/^\w+/)?.[0]?.toUpperCase()).filter(Boolean)
+    )];
+    const hasCond = Array.isArray(ev.routing) && ev.routing.length > 0;
+    const hasProb = Array.isArray(ev.probabilisticRouting) && ev.probabilisticRouting.length > 0;
+    const routingType = hasProb ? "probabilistic" : hasCond ? "conditional" : ev.defaultQueueName ? "fixed" : "none";
+    const entry = {
+      name: ev.name || ev.id || "Event",
+      effectTypes: effectTypes.length ? effectTypes : ["(none)"],
+      routing: routingType,
+    };
+    if (ev.defaultQueueName) entry.defaultQueue = ev.defaultQueueName;
+    if (ev.balkCondition) entry.balkMode = "condition";
+    else if (ev.balkProbability != null) entry.balkMode = `probability:${ev.balkProbability}`;
+    if (ev.loopConfig?.maxLoopCount) {
+      entry.loopGuard = `max ${ev.loopConfig.maxLoopCount}x${ev.loopConfig.exitQueueName ? ` → ${ev.loopConfig.exitQueueName}` : ""}`;
+    }
+    if (Array.isArray(ev.schedules) && ev.schedules.length > 0) {
+      entry.arrivalStreams = ev.schedules.length;
+      if (ev.schedules.some(s => s.isRenege)) entry.hasReneging = true;
+    }
+    if (eventCounts[ev.id]) entry.fireCount = eventCounts[ev.id];
+    return entry;
+  });
+}
+
+function extractCEvents(model = {}) {
+  const cEvents = model.cEvents || [];
+  if (!cEvents.length) return undefined;
+  return cEvents.map(ev => {
+    const effects = Array.isArray(ev.effect) ? ev.effect : (ev.effect ? [ev.effect] : []);
+    const effectTypes = [...new Set(
+      effects.map(e => String(e).match(/^\w+/)?.[0]?.toUpperCase()).filter(Boolean)
+    )];
+    const entry = {
+      name: ev.name || ev.id || "Event",
+      effectTypes: effectTypes.length ? effectTypes : ["(none)"],
+    };
+    if (ev.priority != null) entry.priority = ev.priority;
+    return entry;
+  });
+}
+
+function extractEntityAnomalies(results = {}) {
+  const entitySummary = results.entitySummary;
+  if (!Array.isArray(entitySummary) || entitySummary.length === 0) return undefined;
+  const meanWait = finiteOrNull(getSummary(results).avgWait);
+  if (!meanWait || meanWait <= 0) return undefined;
+  const threshold = meanWait * 3;
+  const anomalies = entitySummary.filter(e => {
+    const wait = Array.isArray(e.stages)
+      ? e.stages.reduce((s, st) => s + (st.stageWait || 0), 0)
+      : finiteOrNull(e.waitTime) ?? 0;
+    return Number.isFinite(wait) && wait > threshold;
+  });
+  if (!anomalies.length) return undefined;
+  const byType = {};
+  anomalies.forEach(e => { const t = e.type || "unknown"; byType[t] = (byType[t] || 0) + 1; });
+  const worstWait = Math.max(...anomalies.map(e =>
+    Array.isArray(e.stages)
+      ? e.stages.reduce((s, st) => s + (st.stageWait || 0), 0)
+      : finiteOrNull(e.waitTime) ?? 0
+  ));
+  return {
+    anomalyCount: anomalies.length,
+    anomalyRate: +(anomalies.length / entitySummary.length).toFixed(4),
+    worstWait: +worstWait.toFixed(4),
+    byType,
+    threshold: +threshold.toFixed(4),
+  };
+}
+
 function buildKpis(model = {}, results = {}) {
   const summary = getSummary(results);
-  return {
+  const kpis = {
     queues: extractQueues(model, results),
     resources: extractResources(model, summary),
     throughput: finiteOrNull(summary.served ?? summary.throughput),
@@ -94,7 +186,15 @@ function buildKpis(model = {}, results = {}) {
     avgWait: finiteOrNull(summary.avgWait),
     avgService: finiteOrNull(summary.avgSvc),
     avgSojourn: finiteOrNull(summary.avgSojourn),
+    maxSojourn: finiteOrNull(summary.maxSojourn),
+    avgWIP: finiteOrNull(summary.avgWIP),
   };
+  if (summary.totalCost) kpis.totalCost = finiteOrNull(summary.totalCost);
+  if (summary.costPerServed) kpis.costPerServed = finiteOrNull(summary.costPerServed);
+  if (summary.containerLevels) kpis.containerLevels = summary.containerLevels;
+  if (summary.phaseCTruncated) kpis.warning_phaseCTruncated = true;
+  if (summary.warnings?.length) kpis.warnings = summary.warnings;
+  return kpis;
 }
 
 function goalsToPrompt(model = {}) {
@@ -119,17 +219,22 @@ function makeMessages(system, payload, instruction) {
 }
 
 export function buildNarrativePrompt(model = {}, experimentConfig = {}, results = {}) {
-  const system = "You are an expert simulation analyst. Interpret the following discrete-event simulation results for a non-specialist audience. Be concise: 150-200 words. Use plain English. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, and per-queue blocking/balking counters.";
+  const system = "You are an expert simulation analyst. Interpret the following discrete-event simulation results for a non-specialist audience. Be concise: 150-200 words. Use plain English. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, per-queue blocking/balking counters, cost metrics, WIP, and container levels where applicable.";
   const waitDist = results.waitDist || {};
   const waitDistForPrompt = Object.keys(waitDist).length
     ? Object.fromEntries(Object.entries(waitDist).map(([q, w]) => [q, { n: w.n, mean: w.mean, p50: w.p50, p90: w.p90, p95: w.p95, p99: w.p99 }]))
     : undefined;
   const perQueue = results.perQueue || {};
+  const stateVariables = (model.stateVariables || []).filter(v => v.name).map(v => ({
+    name: v.name, initialValue: v.initialValue ?? null,
+  }));
+
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
       goals: goalsToPrompt(model),
+      ...(stateVariables.length ? { stateVariables } : {}),
     },
     experiment: extractExperiment(experimentConfig),
     kpis: buildKpis(model, results),
@@ -145,12 +250,16 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
 
   if (goalGaps?.length) payload.goalGaps = goalGaps;
 
+  const warningsInstr = payload.kpis.warning_phaseCTruncated
+    ? " NOTE: Phase C was truncated during this run — some conditional events may not have fired. Mention this caveat."
+    : "";
+
   return {
     kind: "narrative",
     messages: makeMessages(
       system,
       payload,
-      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish typical from extreme waits." + goalsInstr
+      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish typical from extreme waits. If cost or WIP data is present, comment on it briefly." + goalsInstr + warningsInstr
     ),
     max_tokens: 450,
   };
@@ -265,19 +374,32 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
   const system = [
     "You are a queueing systems expert and simulation analyst.",
     "Your role is to give specific, actionable, quantified improvement recommendations based on discrete-event simulation results.",
-    "You have access to: per-queue wait percentiles (p50/p90/p95/p99), per-resource utilisation fractions,",
+    "You have access to: per-queue wait percentiles (p50/p90/p95/p99), per-resource utilisation with failure/repair distributions,",
     "replication confidence intervals (CI 95%), per-queue blocking and balking counts,",
+    "model event structure (B-event/C-event digest with routing types, loop guards, balking modes, arrival streams),",
+    "state variables, cost metrics, WIP (Little's Law), container levels, entity anomaly counts,",
     "and when set, performance goals with their current gaps.",
     "You MUST follow the 6-step framework and output schema described in the instruction.",
     "Never give vague advice like 'consider increasing capacity' — always name the exact parameter and specific value.",
+    "When the model has a failure/repair model on a resource, factor availability into capacity calculations.",
+    "When a loop guard is present, consider whether the loop count limit is causing premature exits.",
+    "When state variables are present, they may represent conditions that affect routing or service rates.",
   ].join(" ");
 
-  const entityTypes = (model.entityTypes || []).map(e => ({
-    name: e.name, role: e.role, count: e.count,
-    attrDefs: (e.attrDefs || []).filter(a => a.name).map(a => ({ name: a.name, dist: a.dist })),
-  }));
+  const entityTypes = (model.entityTypes || []).map(e => {
+    const entry = {
+      name: e.name, role: e.role, count: e.count,
+      attrDefs: (e.attrDefs || []).filter(a => a.name).map(a => ({ name: a.name, dist: a.dist })),
+    };
+    if (e.role === "server") {
+      if (e.mtbfDist) entry.failureModel = { mtbfDist: e.mtbfDist, mtbfParams: e.mtbfDistParams, mttrDist: e.mttrDist, mttrParams: e.mttrDistParams };
+      if (Array.isArray(e.shiftSchedule) && e.shiftSchedule.length > 0) entry.shiftSchedule = `${e.shiftSchedule.length} period(s)`;
+    }
+    return entry;
+  });
   const queues = (model.queues || []).map(q => ({
     name: q.name, discipline: q.discipline, capacity: q.capacity ?? null, customerType: q.customerType,
+    ...(q.overflowDestination ? { overflowDestination: q.overflowDestination } : {}),
   }));
 
   const kpis = buildKpis(model, results);
@@ -296,6 +418,13 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
       ciWidth: (s.upper != null && s.lower != null) ? +(s.upper - s.lower).toFixed(4) : null,
     }));
 
+  const bEvents = extractBEvents(model, results);
+  const cEvents = extractCEvents(model);
+  const stateVariables = (model.stateVariables || []).filter(v => v.name).map(v => ({
+    name: v.name, initialValue: v.initialValue ?? null,
+  }));
+  const entityAnomalies = extractEntityAnomalies(results);
+
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
@@ -306,6 +435,9 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
         .filter(q => q.customerType)
         .map(q => `${q.customerType} entities wait in queue '${q.name}'`)
         .join("; ") || "No explicit queue-entity associations.",
+      ...(bEvents ? { bEvents } : {}),
+      ...(cEvents ? { cEvents } : {}),
+      ...(stateVariables.length ? { stateVariables } : {}),
     },
     experiment: extractExperiment(experimentConfig),
     kpis,
@@ -313,6 +445,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     confidenceIntervals: confidenceIntervals.length ? confidenceIntervals : undefined,
     waitDist: results.waitDist || {},
     perQueue: results.perQueue || {},
+    ...(entityAnomalies ? { entityAnomalies } : {}),
   };
 
   const highLoadWarning = kpis.resources.some(r => r.utilisation != null && r.utilisation > 0.85)
