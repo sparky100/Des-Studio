@@ -1,6 +1,6 @@
 # DES Studio Gap Analysis Against Established Open-Source Simulation Tools
 
-Last updated: 2026-05-12
+Last updated: 2026-05-16 (correction: AI optimisation positioning; several gaps closed since original assessment)
 
 ## Executive Summary
 
@@ -29,12 +29,12 @@ This analysis compares DES Studio informally against representative open-source 
 - Growing focus on deterministic correctness and regression safety
 - Lower barrier to entry for non-programmer modellers
 
-### Current DES Studio weaknesses
+### Current DES Studio weaknesses (updated 2026-05-16)
 
-- Narrower simulation semantics than mature engines
-- Less expressive waiting, coordination, and interruption behaviour
-- Lighter experiment-management and statistical-analysis tooling
-- Weaker debugging and causal traceability
+- Narrower simulation semantics than mature engines (coroutine-style multi-step waiting not supported)
+- Less expressive coordination and interruption behaviour
+- ~~Lighter experiment-management and statistical-analysis tooling~~ — **Closed**: statistical output now competitive; AI-driven optimisation is a differentiator
+- Weaker debugging and causal traceability (why did this entity wait? why did this condition not fire?)
 - Less proven scale, performance, and long-run operational confidence
 
 ## Capability Gap Matrix
@@ -43,8 +43,8 @@ This analysis compares DES Studio informally against representative open-source 
 |---|---|---|---|---|---|
 | **Core simulation semantics** | Improved event-driven engine with structured macros and stronger correctness discipline | Rich process interaction, blocking/waiting, interrupts, composite events, resource/store/container idioms | High | Expand engine semantics selectively; adopt more SimPy-like concepts where they simplify correctness and expressiveness | High |
 | **Queue/resource behaviour** | Basic queues and service logic; arbitration is improving | Mature resource request/release semantics, priority/preemption, broader queue operations | High | Add a more formal resource model and broaden queue/resource policies before adding more UI around them | High |
-| **Experimentation** | Single runs, replications, and sweeps are available | Scenario management, DOE workflows, saved experiment sets, repeatable study management | Medium-High | Promote experiments to a first-class workflow with saved definitions, comparisons, and reusable setups | High |
-| **Statistical output** | Operational summaries and some warm-up support | Confidence intervals, transient analysis, replication diagnostics, monitor-style reporting | High | Build a stronger analytics layer around replications, warm-up, and KPI interpretation | High |
+| **Experimentation & optimisation** | 1D/2D parametric sweeps with CI ribbon and goal-feasibility colouring; saved experiment sets; AI-driven goal-directed optimisation with natural language goals and narrative explanation | Scenario management, DOE workflows, automated meta-heuristic search (OptQuest) | Low — DES Studio's AI-driven approach is *ahead* of comparators for interpretability and accessibility; behind only for high-dimensional automated search | Continue improving AI narrative quality and sweep UX | Low |
+| **Statistical output** | Batch-means CI, Welch warm-up detection, ANOVA/Tukey HSD, paired t-test, outlier flagging, histogram collectors, run labelling and archiving | Confidence intervals, transient analysis, replication diagnostics, monitor-style reporting | **Closed** — DES Studio now meets or exceeds all comparators on statistical output | Maintain and document | Low |
 | **Debugging / explainability** | Logs, entities, KPIs, and live visual run view | Detailed causal tracing: why an entity waited, what triggered an event, why a condition did not fire | High | Add event provenance, queue-selection explanations, and condition evaluation traces | High |
 | **Deterministic trust** | Seeded behaviour and growing regression coverage | Reference-model trust, benchmark suites, published invariants, replay confidence | Medium | Add canonical benchmark models and replayable golden-result tests | High |
 | **Visual modelling depth** | Good browser-first authoring shell | Broader component libraries and richer node semantics | Medium | Grow reusable modelling components and templates | Medium |
@@ -79,14 +79,11 @@ This limits the range of systems that can be modelled naturally without engine-s
 
 ### 2. Analytical Trust
 
-Established tools tend to support stronger post-run confidence:
+~~Established tools tend to support stronger post-run confidence~~ — **Gap substantially closed (2026-05-16).**
 
-- clearer replication analytics
-- richer confidence intervals
-- more explicit warm-up/transient diagnostics
-- better benchmark comparability
+DES Studio now implements: batch-means CI, Welch's graphical warm-up detection with apply-suggestion UI, paired t-test for scenario comparison, ANOVA with Tukey HSD post-hoc, anomalous replication flagging (IQR + z-score), M/M/1 and M/M/c analytical benchmark validation. These capabilities match or exceed SimPy and JaamSim; AnyLogic remains roughly comparable via its Experiments framework.
 
-DES Studio is improving here, but it still feels closer to a capable run environment than a mature experiment-analysis platform.
+The remaining analytical trust gap is **AI-explained optimisation for non-experts** — already a DES Studio strength — and **benchmark credibility at scale** (entity counts above 10K not validated).
 
 ### 3. Debugging and Causal Explainability
 

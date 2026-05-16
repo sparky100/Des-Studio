@@ -22,6 +22,7 @@
 | v1.9 | 2026-05-15 | Sprint 43 | AI: buildGoalGaps(), evaluateSweepPointGoals(), goal-driven sweep feasibility colouring in SweepChart and Sweep2DGrid. |
 | v2.0 | 2026-05-15 | Sprint 44 | Execution insights: LogViewer, QueueHistogram, EntitySummaryTable, goal-aware KPI cards. |
 | v2.1 | 2026-05-16 | Sprint 45 | AI prompt grounding: enriched KPI payload, B-event/C-event digest, server failure model, state variables, entity anomaly digest, MAX_PROMPT_WORDS 2000. |
+| v2.2 | 2026-05-16 | Post-Sprint 55a | AI optimisation positioning corrected. Professional gap analysis annotation added. DES Studio's goal-driven sweep + AI narrative reframed as a differentiator, not a gap. Section D narrative and competitive differentiators table updated. |
 
 ---
 
@@ -115,7 +116,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 | 1D parametric sweep | ❌ | ✅ Experiment | ✅ | ✅ with CI ribbon | — |
 | 2D parametric sweep | ❌ | ✅ | ⚠️ | ✅ heatmap grid | — |
 | ANOVA / ranking & selection | ❌ | ⚠️ | ❌ | ✅ oneWayANOVA + tukeyHSD | — |
-| Cost / ROI modelling | ❌ | ✅ | ✅ | ❌ | Gap |
+| Cost / ROI modelling | ❌ | ✅ | ✅ | ✅ COST macro; totalCost/costPerServed | — |
 | Histogram output (freq distribution) | ⚠️ manual | ✅ | ✅ | ✅ buildHistogram / buildHistogramFD | — |
 | Entity-level data export | ⚠️ manual | ✅ | ✅ | ✅ entitySummary[] | — |
 | Structured trace / event log export | ❌ | ⚠️ | ❌ | ✅ cycleLog[] | — |
@@ -213,7 +214,25 @@ Server pools, multi-capacity types, shift schedules, dynamic capacity adjustment
 Queue discipline coverage (FIFO, LIFO, PRIORITY), finite capacity, balking, reneging, batching, and unbatching are all implemented and tested. DES Studio is ahead of SimPy here by providing these as first-class guided features. **Custom sort comparators** (G08) — SPT, EDD, and PRIORITY(attrName) — are now implemented. **Entity matching/synchronisation** (G10) and **dynamic batch sizing** (G09) are also closed. Jockeying remains the only queueing gap and is low-priority.
 
 ### D — Statistical Output
-DES Studio's statistical output is arguably its strongest differentiator: 95% CI, batch means, paired t-test, 1D/2D parametric sweeps, warm-up with Welch's graphical test, anomalous replication flagging, run labelling/tagging/archiving, and saved experiment configurations are all implemented — capabilities that SimPy entirely lacks and AnyLogic only covers with its Experiments framework. **WIP time-average** (G11), **histogram collectors** (G12), and **multi-scenario ANOVA with Tukey HSD** (G13) are all implemented. `avgWIP` is a true time-integral average (∫ WIP dt / post-warmup elapsed time), consistent with Little's Law. Histogram bins use either equal-width or Freedman-Diaconis automatic sizing. ANOVA uses an F-test with incomplete-beta p-value approximation (Lanczos log-gamma); Tukey HSD identifies significantly different group pairs. **Cost/ROI modelling** (G17) is now implemented via `COST(expr)` macro — per-entity costs, attribute-based costs, and time-based costs are all expressible. Time-integral resource costing (busyTime × costRate) is deferred. All statistical gaps in this category are now closed.
+DES Studio's statistical output is its strongest differentiator overall: 95% CI, batch means, paired t-test, 1D/2D parametric sweeps, warm-up with Welch's graphical test, anomalous replication flagging, run labelling/tagging/archiving, and saved experiment configurations are all implemented — capabilities that SimPy entirely lacks and AnyLogic only covers with its Experiments framework. **WIP time-average** (G11), **histogram collectors** (G12), and **multi-scenario ANOVA with Tukey HSD** (G13) are all implemented. `avgWIP` is a true time-integral average (∫ WIP dt / post-warmup elapsed time), consistent with Little's Law. Histogram bins use either equal-width or Freedman-Diaconis automatic sizing. ANOVA uses an F-test with incomplete-beta p-value approximation (Lanczos log-gamma); Tukey HSD identifies significantly different group pairs. **Cost/ROI modelling** (G17) is now implemented via `COST(expr)` macro — per-entity costs, attribute-based costs, and time-based costs are all expressible. Time-integral resource costing (busyTime × costRate) is deferred. All statistical gaps in this category are now closed.
+
+**AI-driven optimisation — DES Studio's primary differentiator vs all comparators:**
+
+Earlier assessments labelled "optimization" a high-severity gap because DES Studio lacks an OptQuest-style black-box meta-heuristic search engine. This framing is wrong for DES Studio's target users. DES Studio implements a qualitatively different and in key respects superior optimisation approach:
+
+| Capability | OptQuest (Arena/Simio/AnyLogic) | DES Studio |
+|-----------|--------------------------------|------------|
+| Goal specification | Numeric objective + constraint bounds | Natural language goals (`buildGoalGaps()`) |
+| Parameter space exploration | Black-box heuristic search; returns a single "optimal" point | Full 1D/2D exhaustive sweep; entire tradeoff surface visible |
+| Transparency | Opaque — "solution: servers=4" | Interactive — user sees every configuration's performance |
+| Tradeoff visibility | Post-hoc Pareto report | Live heatmap with goal-feasibility colouring (`evaluateSweepPointGoals()`) |
+| Result explanation | None | AI narrative: "4 servers keeps utilisation at 72%, below the 80% target…" |
+| Expertise required | Optimisation specialist | Analyst or manager |
+| AI model generation | None | AI can generate configurations that satisfy goals directly |
+
+**Where OptQuest still leads:** parameter spaces larger than ~4 dimensions (combinatorial sweep becomes expensive), formal convergence guarantees on non-convex spaces, and fully automated multi-objective Pareto search without user steering.
+
+**Assessment:** For DES Studio's declared market — operations analysts, consultants, service system designers, educators — the AI-driven goal-directed approach produces *more useful* outputs than OptQuest: interpretable, explainable, and presentable to non-technical stakeholders without requiring optimisation expertise. The "optimization gap" framing in earlier versions of this document was comparing against the wrong use case.
 
 ### E — Visual Authoring
 The visual authoring surface is comprehensive for a browser-based tool: canvas DAG editor, real-time token animation, per-node live counts, structured trace/event log, entity inspector, KPI cards, sweep charts, and a model gallery with sharing and forking. **Live queue-depth time-plot** (G15) is implemented as a Charts tab in the BottomPanel (one SVG line per queue, colour-coded). **Failed server visualisation** (G16) is complete: Execute canvas Activity nodes show failed servers as red dots in the pool grid with a "⚠ N failed" badge. The remaining gaps are 2D spatial layout, 3D environments, and GIS integration, all of which are out of scope for a browser-first tool at DES Studio's positioning.
