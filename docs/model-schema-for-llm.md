@@ -506,3 +506,151 @@ Requirements:
 - `name` fields are the human-readable labels shown in the UI. They are also used as references in macro arguments — **they must match exactly including case**.
 - Queue `name` is referenced in: `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `ASSIGN(QueueName, Server)`, condition predicates `queue(QueueName)`, `overflowDestination`, `defaultQueueName`, routing `queueName`.
 - Entity type `name` is referenced in: `ARRIVE(EntityType, ...)`, `ASSIGN(QueueName, ServerType)`, `RELEASE(ServerType, ...)`, condition predicates `idle(ServerType)`, `busy(ServerType)`, queue `customerType`.
+
+---
+
+## 14. Agent API — Programmatic Model Import
+
+An agent or script can validate and save a model in a single HTTP call without opening the UI.
+
+### Endpoint
+
+```
+POST https://<project-ref>.supabase.co/functions/v1/import-model
+```
+
+Replace `<project-ref>` with your Supabase project reference ID (visible in the project URL).
+
+### Authentication
+
+Pass a valid Supabase JWT in the `Authorization` header:
+
+```
+Authorization: Bearer <your-jwt>
+```
+
+Obtain a JWT by calling `supabase.auth.signInWithPassword()` or via the Supabase Auth API:
+
+```bash
+curl -s -X POST \
+  https://<project-ref>.supabase.co/auth/v1/token?grant_type=password \
+  -H "apikey: <anon-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"yourpassword"}' \
+  | jq -r '.access_token'
+```
+
+### Request Body
+
+```json
+{
+  "model": { ... },
+  "name": "My Model Name (optional override)"
+}
+```
+
+- `model` (required): a DES Studio model JSON object matching the schema in §1–§13
+- `name` (optional): if provided, overrides the `name` field inside `model`
+
+### Success Response — 201
+
+```json
+{
+  "ok": true,
+  "modelId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "warnings": []
+}
+```
+
+The model is saved as a private model owned by the authenticated user. Open it in the UI at:
+`https://<your-des-studio-url>/#model/<modelId>`
+
+### Error Responses
+
+**401 Unauthorized** — missing or invalid JWT:
+```json
+{ "ok": false, "errors": ["Authentication required."] }
+```
+
+**400 Bad Request** — malformed request body:
+```json
+{ "ok": false, "errors": ["Request must include a 'model' object."] }
+```
+
+**422 Unprocessable Entity** — model fails structural validation:
+```json
+{
+  "ok": false,
+  "errors": [
+    "[V8] No arrival source and no sink: add an ARRIVE(Type) effect and a COMPLETE() or RENEGE() effect.",
+    "[V1] Duplicate entity class name: 'Customer'."
+  ],
+  "warnings": []
+}
+```
+
+**500 Internal Server Error** — database error:
+```json
+{ "ok": false, "errors": ["Database error: <message>"] }
+```
+
+### Complete curl Example
+
+```bash
+# 1. Get a JWT (store in TOKEN)
+TOKEN=$(curl -s -X POST \
+  https://<project-ref>.supabase.co/auth/v1/token?grant_type=password \
+  -H "apikey: <anon-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"yourpassword"}' \
+  | jq -r '.access_token')
+
+# 2. POST the model
+curl -s -X POST \
+  https://<project-ref>.supabase.co/functions/v1/import-model \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "M/M/1 Queue",
+    "model": {
+      "entityTypes": [
+        { "id": "et_customer", "name": "Customer", "role": "customer" },
+        { "id": "et_server",   "name": "Server",   "role": "server", "count": 1 }
+      ],
+      "queues": [
+        { "id": "q_main", "name": "Queue", "customerType": "Customer", "discipline": "FIFO" }
+      ],
+      "bEvents": [
+        { "id": "b_arrive",   "name": "Arrival",  "scheduledTime": "0",    "effect": "ARRIVE(Customer, Queue)",
+          "schedules": [{ "eventId": "b_arrive",   "dist": "Exponential", "distParams": { "mean": "1" } }] },
+        { "id": "b_complete", "name": "Complete",  "scheduledTime": "9999", "effect": "COMPLETE()", "schedules": [] }
+      ],
+      "cEvents": [
+        { "id": "c_seize", "name": "Start Service", "priority": 1,
+          "condition": "queue(Queue).length > 0 AND idle(Server).count > 0",
+          "effect": "ASSIGN(Queue, Server)",
+          "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "0.8" }, "useEntityCtx": true }] }
+      ],
+      "stateVariables": [],
+      "goals": [],
+      "containerTypes": [],
+      "experimentDefaults": { "maxSimTime": 500, "warmupPeriod": 50, "replications": 10 }
+    }
+  }' | jq .
+```
+
+Expected output:
+```json
+{
+  "ok": true,
+  "modelId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "warnings": []
+}
+```
+
+### Validation Rules Checked by the API
+
+The endpoint applies the same structural validation as the UI import pipeline. The checks cover:
+V1 (entity names), V2 (attribute names), V4 (PRIORITY discipline), V8 (arrival/sink), V9 (queue condition refs), V19 (server count), V20 (queue capacity), V21 (balk probability).
+
+Full distribution-parameter validation (V5, V11–V13) and shift-schedule validation (V14–V15) are enforced by the engine at run time. The API focuses on structural correctness sufficient to save a model safely.

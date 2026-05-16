@@ -12,6 +12,7 @@ import { fetchModels, fetchProfiles,
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
 import { C, FONT, GOOGLE_FONT_URL }         from "./ui/shared/tokens.js";
 import { Btn, Empty, ErrorBoundary }        from "./ui/shared/components.jsx";
+import { extractImportedModelPayload }      from "./ui/shared/utils.js";
 import { ModelCard, ModelDetail,
          NewModelModal }                    from "./ui/ModelDetail.jsx";
 import { validateModel }                    from "./engine/validation.js";
@@ -20,7 +21,6 @@ import DashboardView                        from "./ui/share/DashboardView.jsx";
 import { AdminPanel }                       from "./ui/AdminPanel.jsx";
 import { UserSettingsPanel }               from "./ui/UserSettingsPanel.jsx";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
 
 function createSampleMm1Model() {
   return {
@@ -82,35 +82,6 @@ function createSampleMm1Model() {
       },
     ],
   };
-}
-
-function extractImportedModelPayload(payload) {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error("Import file must contain a DES Studio model JSON object.");
-  }
-
-  const source = payload.model_json && typeof payload.model_json === "object"
-    ? payload.model_json
-    : payload;
-  const sourceName = (payload.name || source.name || "Imported model").trim?.() || "Imported model";
-  const model = {
-    name: `${sourceName} (Imported)`,
-    description: payload.description || source.description || "",
-    visibility: "private",
-    access: {},
-  };
-
-  for (const key of MODEL_JSON_KEYS) {
-    if (key === 'graph' || key === 'experimentDefaults') {
-      model[key] = source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])
-        ? source[key]
-        : key === 'graph' ? null : {};
-    } else {
-      model[key] = Array.isArray(source[key]) ? source[key] : [];
-    }
-  }
-
-  return model;
 }
 
 export { createSampleMm1Model, extractImportedModelPayload };
@@ -211,6 +182,8 @@ export default function App(){
   const [modelToFork,setModelToFork]=useState(null)
   const [showStarterGuideForId,setShowStarterGuideForId]=useState(null)
   const [importStatus,setImportStatus]=useState(null)
+  const [showPasteJson,setShowPasteJson]=useState(false)
+  const [pasteJsonText,setPasteJsonText]=useState('')
   const [runStatsError,setRunStatsError]=useState('')
   const [actionError,setActionError]=useState('')
   const importFileRef=useRef(null)
@@ -405,6 +378,41 @@ export default function App(){
     };
     reader.readAsText(file);
   }, [uid, loadData]);
+
+  const handlePasteJsonImport = useCallback(async () => {
+    if (!uid) return;
+    setImportStatus({ state: "loading", message: "Validating JSON..." });
+    try {
+      const payload = JSON.parse(pasteJsonText);
+      const importedModel = extractImportedModelPayload(payload);
+      const importedValidation = validateModel(importedModel);
+      if (importedValidation.errors.length > 0) {
+        setImportStatus({
+          state: "error",
+          message: "Import blocked by validation errors.",
+          items: importedValidation.errors.map(e => `[${e.code}] ${e.message}`),
+        });
+        return;
+      }
+      const saved = await saveModel(importedModel, uid);
+      await loadData();
+      setImportStatus({
+        state: importedValidation.warnings.length ? "warning" : "success",
+        message: importedValidation.warnings.length
+          ? "Imported with validation warnings."
+          : "Model imported successfully.",
+        items: importedValidation.warnings.map(w => `[${w.code}] ${w.message}`),
+      });
+      setShowPasteJson(false);
+      setPasteJsonText('');
+      setOpenId(saved.id);
+    } catch (e) {
+      setImportStatus({
+        state: "error",
+        message: e instanceof SyntaxError ? `Invalid JSON: ${e.message}` : `Import failed: ${e.message}`,
+      });
+    }
+  }, [uid, pasteJsonText, loadData]);
 
   const handleStartTemplate = useCallback(async (template) => {
     if(!uid)return;
@@ -675,7 +683,8 @@ export default function App(){
               style={{display:"none"}}
               onChange={handleImportFile}
             />
-            <Btn variant="ghost" onClick={()=>importFileRef.current?.click()}>Import Model</Btn>
+            <Btn variant="ghost" onClick={()=>importFileRef.current?.click()}>Import File</Btn>
+            <Btn variant="ghost" onClick={()=>{ setPasteJsonText(''); setImportStatus(null); setShowPasteJson(true); }}>Paste JSON</Btn>
             <Btn variant="primary" onClick={()=>setShowNew(true)}>+ New Model</Btn>
           </div>
         </div>
@@ -845,6 +854,34 @@ export default function App(){
         }}/>
       )}
       {showPatternsGuide&&<PatternsGuidePanel onClose={()=>setShowPatternsGuide(false)}/>}
+      {showPasteJson && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#000000aa',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+          <div role="dialog" aria-modal="true" aria-labelledby="paste-json-title" style={{background:C.panel,padding:24,borderRadius:10,width:560,maxWidth:'95vw',display:'flex',flexDirection:'column',gap:16}}>
+            <h2 id="paste-json-title" style={{fontSize:16,fontWeight:700,color:C.text,margin:0}}>Import Model from JSON</h2>
+            <p style={{fontSize:12,color:C.muted,margin:0}}>Paste a DES Studio model JSON object below. The model will be validated before saving.</p>
+            <textarea
+              aria-label="Model JSON"
+              value={pasteJsonText}
+              onChange={e=>setPasteJsonText(e.target.value)}
+              placeholder={'{\n  "name": "My Model",\n  "entityTypes": [...],\n  ...\n}'}
+              spellCheck={false}
+              style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,height:260,outline:'none',padding:'8px 10px',resize:'vertical',width:'100%',boxSizing:'border-box'}}
+            />
+            {importStatus && importStatus.state !== 'loading' && (
+              <div style={{background:importStatus.state==='error'?C.red+'18':importStatus.state==='warning'?C.amber+'18':C.green+'18',border:`1px solid ${importStatus.state==='error'?C.red+'44':importStatus.state==='warning'?C.amber+'44':C.green+'44'}`,borderRadius:5,color:importStatus.state==='error'?C.red:importStatus.state==='warning'?C.amber:C.green,fontSize:12,fontFamily:FONT,padding:'8px 10px',display:'flex',flexDirection:'column',gap:4}}>
+                <div>{importStatus.message}</div>
+                {(importStatus.items||[]).map((item,i)=><div key={i} style={{color:C.muted}}>{item}</div>)}
+              </div>
+            )}
+            <div style={{display:'flex',justifyContent:'flex-end',gap:10}}>
+              <Btn variant="ghost" onClick={()=>{setShowPasteJson(false);setPasteJsonText('');setImportStatus(null);}}>Cancel</Btn>
+              <Btn variant="primary" disabled={!pasteJsonText.trim()} onClick={handlePasteJsonImport}>
+                {importStatus?.state==='loading'?'Importing…':'Import Model'}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
       {showForkConfirm && modelToFork && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#000000aa',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
           <div role="dialog" aria-modal="true" aria-labelledby="fork-public-model-title" style={{background:C.panel,padding:24,borderRadius:10,width:400,maxWidth:'90vw',display:'flex',flexDirection:'column',gap:20}}>
