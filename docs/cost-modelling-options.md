@@ -1,104 +1,88 @@
 # Cost Modelling — Options & Assessment
 
 **Date:** 2026-05-15
-**Status:** For review
+**Updated:** 2026-05-16 (post-Sprint 54 implementation)
+**Status:** Options 1, 2a, 2b, 3 delivered. Option 4 deferred.
 
 ## Current State
 
-The engine already has a working `COST(expr)` macro that accumulates to `state.__totalCost`. After a simulation run, `result.summary.totalCost` and `result.summary.costPerServed` are available. However, the feature is largely invisible:
+The engine has a working `COST(expr)` macro that accumulates to `state.__totalCost` and `entity.attrs.__cost`. After a simulation run, `result.summary.totalCost`, `result.summary.costPerServed`, and per-entity `result.entitySummary[i].attrs.__cost` are all available.
 
-- `COST()` does not appear in any effect builder dropdown
-- `totalCost` / `costPerServed` are not displayed anywhere in the UI
-- There is no per-entity cost tracking, only a global aggregate
-- There is no cost breakdown by event or queue
+Sprint 54 delivery summary:
+- ✓ Option 1 — COST in effect builder (delivered Sprint 36, predates this document)
+- ✓ Option 2a — totalCost/costPerServed in aggregate result tiles and CI table
+- ✓ Option 2b — totalCost/costPerServed in ANALYSIS_METRICS / batch-means dropdown
+- ✓ Option 3 — per-entity cost accumulation in entity.attrs.__cost
+- ◷ Option 4 — cost breakdown by event (deferred, see below)
 
 The four options below are ordered by effort, smallest first.
 
 ---
 
-## Option 1 — Effect builder visibility
+## Option 1 — Effect builder visibility ✅ Complete (Sprint 36)
 
 **What:** Add `COST()` options to the B-event and C-event effect builder dropdowns.
 
-**Why:** The feature exists but is invisible to modellers who have not read the documentation.  Adding it to the dropdown menus (the same pattern used for `FILL`/`DRAIN` in Sprint 39) makes it discoverable without any engine changes.
+**Status:** Done. `COST(1) — flat rate` and `COST(Entity.<attr>)` options appear in `bEffectOptions` and `assignOptions` in `src/ui/editors/helpers.jsx`.
 
-**How:** Extend `bEffectOptions` and `assignOptions` in `src/ui/editors/helpers.jsx`.  When an entity type is selected, pre-populate the expression with `Entity.<attrName>` choices drawn from the entity type's `attrDefs`.
-
-**Files:** `src/ui/editors/helpers.jsx` (one function each)
-
-**Effort:** Small — follows an established pattern, no engine changes needed.
-
-**Outcome:** Modellers can add cost effects via the UI without knowing the macro syntax.
+**Files:** `src/ui/editors/helpers.jsx`
 
 ---
 
-## Option 2 — Results display
+## Option 2 — Results display ✅ Complete (Sprint 54)
 
 **What:** Surface `totalCost` and `costPerServed` in the results canvas.
 
-**Why:** The numbers are computed but never shown. Closing this gap completes the basic cost reporting loop.
+### 2a — Summary stat tiles ✅
 
-**Two sub-options:**
+`totalCost` and `costPerServed` added to `CI_METRICS` and `METRIC_LABELS` in `executeHelpers.js`. They now appear in:
+- The aggregate results tile grid after a replication batch completes
+- The CI precision table (mean, lower/upper 95%, relative precision %)
+- A dedicated cost section in `ResultsWorkspace` when `totalCost > 0` on a single run
 
-### 2a — Summary stat tiles (simplest)
-Add `totalCost` and `costPerServed` as stat tiles on the existing results summary panel alongside avgWait and served. Requires a small change to the results canvas component.
+**Files:** `src/ui/execute/executeHelpers.js`, `src/ui/results/ResultsWorkspace.jsx`
 
-**Files:** Results canvas/summary component
+### 2b — Analysis metrics integration ✅
 
-**Effort:** Small.
+`totalCost` and `costPerServed` added to `ANALYSIS_METRICS` in `ResultsWorkspace.jsx`. They are now selectable in the batch-means confidence interval dropdown.
 
-### 2b — Analysis metrics integration (richer)
-Add `totalCost` and `costPerServed` to the `ANALYSIS_METRICS` array used by the results workspace. This makes them available in charts, sweep outputs, and replication confidence intervals automatically.
-
-**Files:** Results workspace / analysis metrics definition
-
-**Effort:** Small–Medium (depends on how `ANALYSIS_METRICS` is structured).
+**Files:** `src/ui/results/ResultsWorkspace.jsx`
 
 ---
 
-## Option 3 — Per-entity cost accumulation
+## Option 3 — Per-entity cost accumulation ✅ Complete (Sprint 54)
 
-**What:** Track cumulative cost on each entity (e.g. `entity.totalCost`) in addition to the global accumulator.
+**What:** Track cumulative cost on each entity (`entity.attrs.__cost`) in addition to the global accumulator.
 
-**Why:** The global `totalCost` tells you the aggregate but nothing about the distribution. Per-entity cost enables:
-- Cost histograms and percentiles
-- Identifying high-cost entities / outliers
-- Cost breakdown by entity type or priority class
+**Status:** Done. The COST macro now writes `entity.attrs.__cost = (entity.attrs.__cost || 0) + amount` for the context entity (same as `sojournTime` pattern). Available in `result.entitySummary[i].attrs.__cost`.
 
-**How:** The `COST(expr)` macro would also write to `entity.attrs.totalCost` for the context entity (using `_lastCustId`, the same mechanism as `sojournTime`). This flows through automatically to `entitySummary` in `runAll()`.
-
-**Files:** `src/engine/macros.js` (COST macro), `tests/engine/`
-
-**Effort:** Medium.
-
-**Outcome:** `result.entitySummary[i].attrs.totalCost` available per entity; cost distribution analysis becomes possible.
+**Files:** `src/engine/macros.js`, `tests/engine/sprint-36-cost-api.test.js`
 
 ---
 
-## Option 4 — Cost breakdown by event or queue
+## Option 4 — Cost breakdown by event ◷ Deferred
 
 **What:** A `costBreakdown: { [eventName]: number }` field in the summary, showing how much cost was accumulated by each COST-bearing event.
 
-**Why:** Models with multiple cost sources (e.g. labour cost in C-event, material cost in B-event, penalty cost on reneging) produce a single aggregate that is hard to decompose. A breakdown makes it easy to see which events dominate total cost.
+**Why:** Models with multiple cost sources produce a single aggregate that is hard to decompose. A breakdown makes it easy to see which events dominate total cost.
 
-**How:** The COST macro records the event name alongside the amount, accumulating into `state.__costByEvent[eventName]`. `getSummary()` copies this into `summary.costBreakdown`.  Could optionally be extended to break down by queue.
+**How:** The COST macro would record the event name alongside the amount, accumulating into `state.__costByEvent[eventName]`. `getSummary()` copies this into `summary.costBreakdown`.
 
 **Files:** `src/engine/macros.js`, `src/engine/index.js`, `tests/engine/`
 
 **Effort:** Medium–Large.
 
-**Outcome:** `result.summary.costBreakdown` shows per-event cost contributions; visible in results panel if option 2 is also implemented.
+**Status:** Deferred. Recommended as Sprint 55 candidate once the basic reporting (Options 2a/2b) is used in practice.
 
 ---
 
 ## Summary
 
-| Option | Scope | Effort | Value | Dependencies |
-|--------|-------|--------|-------|--------------|
-| 1 — Effect builder helpers | UI only | Small | High — makes feature discoverable | None |
-| 2a — Summary stat tiles | UI only | Small | High — closes basic reporting loop | None |
-| 2b — Analysis metrics integration | UI only | Small–Medium | Medium–High — enables sweep/replication cost analysis | None |
-| 3 — Per-entity cost | Engine + tests | Medium | Medium–High — enables cost distribution | None |
-| 4 — Cost breakdown by event | Engine + UI | Medium–Large | Medium — useful for complex multi-source models | Options 2a/2b recommended first |
+| Option | Scope | Effort | Status |
+|--------|-------|--------|--------|
+| 1 — Effect builder helpers | UI only | Small | ✅ Sprint 36 |
+| 2a — Summary stat tiles | UI only | Small | ✅ Sprint 54 |
+| 2b — Analysis metrics integration | UI only | Small | ✅ Sprint 54 |
+| 3 — Per-entity cost | Engine + tests | Small | ✅ Sprint 54 |
+| 4 — Cost breakdown by event | Engine + UI | Medium–Large | ◷ Deferred |
 
-**Recommended sequence:** Options 1 and 2a are independent quick wins that surface existing functionality. Option 3 adds analytical depth. Option 4 is worth considering only once the basics are visible and used in practice.

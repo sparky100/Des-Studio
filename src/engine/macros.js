@@ -1096,6 +1096,7 @@ export const MACROS = [
         return;
       }
       state.__totalCost = (state.__totalCost || 0) + amount;
+      if (entity) entity.attrs.__cost = (entity.attrs.__cost || 0) + amount;
       msgs.push(`COST += ${amount.toFixed(4)} (total ${state.__totalCost.toFixed(4)})`);
     },
   },

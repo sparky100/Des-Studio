@@ -84,6 +84,23 @@ describe('G17 — COST macro and summary.totalCost', () => {
     const costLog = log.filter(e => e.message?.includes('COST:') && e.message?.includes('finite'));
     expect(costLog.length).toBeGreaterThan(0);
   });
+
+  test('COST accumulates per-entity cost in entity.attrs.__cost', () => {
+    const engine = buildEngine(makeServiceModel('ASSIGN(Queue, Server); COST(7)'), 42, 0, 20);
+    const { entitySummary } = engine.runAll();
+    const costEntities = entitySummary.filter(e => e.role !== 'server' && e.attrs.__cost != null);
+    expect(costEntities.length).toBeGreaterThan(0);
+    for (const entity of costEntities) {
+      expect(entity.attrs.__cost).toBeCloseTo(7, 5);
+    }
+  });
+
+  test('entities without COST macro have no __cost attribute', () => {
+    const engine = buildEngine(makeServiceModel('ASSIGN(Queue, Server)'), 42, 0, 20);
+    const { entitySummary } = engine.runAll();
+    const costEntities = entitySummary.filter(e => e.attrs.__cost != null);
+    expect(costEntities.length).toBe(0);
+  });
 });
 
 // ── G24: Public API module exports ─────────────────────────────────────────
