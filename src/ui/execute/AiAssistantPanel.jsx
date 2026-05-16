@@ -316,12 +316,21 @@ export const AiAssistantPanel = ({
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
 
   const renderContent = () => {
+    if (isStreaming && activeKind === "suggestion") {
+      return (
+        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
+          Building suggestions…
+        </div>
+      );
+    }
     if (parsedSuggestion) {
+      const analysisText = parsedSuggestion.analysis
+        .replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
       return (
         <div>
-          {parsedSuggestion.analysis && (
+          {analysisText && (
             <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, lineHeight: 1.7, marginBottom: 10, whiteSpace: "pre-wrap" }}>
-              {parsedSuggestion.analysis}
+              {analysisText}
             </div>
           )}
           {parsedSuggestion.suggestions.length === 0 && (
@@ -345,7 +354,7 @@ export const AiAssistantPanel = ({
       return conversationHistory.map((entry, i) => (
         <div key={i} style={{ marginBottom: 10 }}>
           <div style={{
-            color: entry.role === "user" ? C.accent : C.primary,
+            color: entry.role === "user" ? C.accent : C.text,
             fontFamily: FONT,
             fontWeight: 700,
             fontSize: 10,
