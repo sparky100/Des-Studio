@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.71 | Created: 2026-04-30 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.76 | Created: 2026-04-30 | Updated: 2026-05-16 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -1604,6 +1604,106 @@ npm run build
 | C9 | Low | avg_service_time column mismatch | `db/models.js:127` | S5 F5.6 | ✅ |
 | C10 | Low | Distribution inputs missing type=number | `editors/index.jsx:171,241,731` | S1 F1.5 | ✅ |
 | C11 | Low | DistPicker ReferenceError | `components.jsx` | S1 F1.6 | ✅ |
+
+---
+
+---
+
+## Sprints 41-45: Capability Exposure, UI Refinement & AI Depth
+
+### Sprint 41 — Expose Engine Capabilities in UI ✅
+
+**Goal:** Surface the engine macros added in Sprints 31–33 (COST, PREEMPT, FAIL, REPAIR, SPLIT, SET, SET_ATTR) in the structured editors so modellers can use them without writing raw JSON.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F41.1 — COST macro in BEventEditor | ✅ | COST action added to B-event effect picker; cost parameter field wired |
+| F41.2 — PREEMPT macro in CEventEditor | ✅ | PREEMPT action available in C-event editor with priority field |
+| F41.3 — FAIL/REPAIR macros in BEventEditor | ✅ | FAIL and REPAIR actions added; MTBF/MTTR fields exposed |
+| F41.4 — SPLIT macro in BEventEditor | ✅ | SPLIT action with count and target queue fields |
+| F41.5 — SET/SET_ATTR macros in editors | ✅ | SET (state variable assignment) and SET_ATTR (entity attribute write) in effect pickers |
+| F41.6 — EffectPicker chip selector | ✅ | Shared EffectPicker component used across BEventEditor and CEventEditor |
+
+---
+
+### Sprint 42 — UI Usability Overhaul ✅
+
+**Goal:** Improve the structural clarity of all editors through accordion sections, chip-based selectors, and new fields for loop guard and balk condition.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F42.1 — SectionPanel accordion | ✅ | Collapsible SectionPanel component used in all editors |
+| F42.2 — EffectPicker chip selector | ✅ | Action selection via chip row instead of dropdown |
+| F42.3 — loopConfig Loop Guard field | ✅ | BEventEditor exposes loopConfig (maxLoops, loopQueue) for recirculation cap |
+| F42.4 — balkCondition expression field | ✅ | QueueEditor exposes balkCondition predicate builder field |
+| F42.5 — EntityTypeEditor accordion sections | ✅ | Attributes, distributions, and server failure model in collapsible sections |
+
+---
+
+### Sprint 43 — Quantified AI Suggestions + Goal-Driven Sweep ✅
+
+**Goal:** Upgrade AI suggestions from qualitative text to structured, quantified recommendations; add goal-driven sweep so the AI can search for parameter combinations that satisfy modeller-defined targets.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F43.1 — 6-step structured AI suggestion framework | ✅ | Suggestions include: observation, root cause, proposed change, expected impact (quantified), confidence, and risk |
+| F43.2 — buildGoalGaps() | ✅ | Computes gap between current KPIs and modeller-defined goal thresholds |
+| F43.3 — evaluateSweepPointGoals() | ✅ | Scores each sweep point against all goals; returns feasibility flag and gap vector |
+| F43.4 — Goal-aware SweepChart | ✅ | SweepChart highlights feasible parameter regions; goal threshold drawn as horizontal line |
+| F43.5 — Goal-aware Sweep2DGrid | ✅ | 2D grid cells coloured by feasibility (green = all goals met, amber = partial, red = none) |
+
+---
+
+### Sprint 44 — Execution Panel Insights ✅
+
+**Goal:** Enrich the execution panel with production-quality log viewing, queue wait distribution histograms, sortable entity lifecycle tables, and goal-aware KPI cards.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F44.1 — LogViewer with phase filters/search/CSV export | ✅ | Phase A/B/C filter chips, free-text search, CSV export button |
+| F44.2 — QueueHistogram | ✅ | Per-queue wait time distribution histogram (binned bar chart) |
+| F44.3 — EntitySummaryTable | ✅ | Sortable, filterable entity lifecycle table with anomaly detection (highlighted rows for outlier sojourn times) |
+| F44.4 — Goal-aware KPI cards | ✅ | KPI cards show green/amber/red status against goal thresholds |
+| F44.5 — Log/Histograms/Entities toolbar buttons | ✅ | Execute panel toolbar buttons to toggle LogViewer, QueueHistogram, and EntitySummaryTable panels |
+
+---
+
+### Sprint 45 — AI Prompt Grounding ✅
+
+**Goal:** Ground all AI prompts (suggestion, narrative, sweep) in richer simulation context so recommendations are more specific and actionable.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F45.1 — Enriched buildKpis | ✅ | buildKpis now includes maxSojourn, avgWIP, cost totals, container counts, and engine warnings |
+| F45.2 — Server failure model in entity types | ✅ | Entity type JSON includes serverFailureModel (MTBF, MTTR, distribution) surfaced in prompts |
+| F45.3 — B-event digest | ✅ | AI prompts receive a digest of all B-events including routing table, loopGuard config, and balkMode |
+| F45.4 — C-event digest | ✅ | AI prompts receive a digest of all C-events with their condition and action summary |
+| F45.5 — State variables in suggestion + narrative prompts | ✅ | State variable names and current values included in suggestion and narrative prompt context |
+| F45.6 — Entity anomaly digest | ✅ | Anomalous entity sojourn times summarised and passed to AI prompts for targeted suggestions |
+| F45.7 — MAX_PROMPT_WORDS 1500→2000 | ✅ | Prompt word cap raised from 1500 to 2000 to accommodate richer context |
+
+---
+
+## Sprint 46 Candidates
+
+The following items are candidates for Sprint 46. None are committed until a sprint plan document is written.
+
+| Candidate | Rationale |
+|---|---|
+| loopConfig and balkCondition engine wiring | UI fields exist (Sprint 42) but the engine does not yet evaluate loopConfig.maxLoops or balkCondition predicates — modellers can enter values but they have no effect |
+| AI comparison mode with goal gaps | Side-by-side AI analysis of two saved runs showing which goals each run satisfies and what changed |
+| Prompt caching (Anthropic cache headers on stable prompt segments) | System prompt and model digest are stable across suggestions in one session; cache_control headers would reduce latency and cost |
+| Per-replication entity anomaly aggregation | EntitySummaryTable currently shows anomalies from the last replication only; aggregate across all replications for more statistically reliable anomaly detection |
 
 ---
 

@@ -1,14 +1,15 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-14 | Reflects: Sprint 33 — Advanced Scheduling & Analytics complete.*
+*Last updated: 2026-05-16 | Reflects: Sprint 45 — AI Prompt Grounding complete.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Sprint plan: `docs/reviews/sprint-32-plan.md`
-- Sprint closure report: `docs/reviews/sprint-32-closure-report.md`
-- Sprint capability guide: `docs/reviews/sprint-32-capability-guide.md`
-- Post-Sprint-25 roadmap and scenario coverage: `docs/reviews/sprint-26-30-roadmap-and-scenario-coverage.md`
+- Sprint plan: `docs/reviews/sprint-45-plan.md`
+- Sprint closure report: `docs/reviews/sprint-45-closure-report.md`
+- Sprint capability guide: `docs/sprint-45-ai-prompt-grounding-guide.md`
+- Build plan: `docs/DES_Studio_Build_Plan.md`
+- Roadmap: `docs/DES_Studio_Build_Plan.md`
 
 ---
 
@@ -92,6 +93,20 @@ project root
 - All Supabase access goes through `src/db/models.js` or `src/db/supabase.js`. Never query Supabase directly from a UI component.
 - `tokens.js` is the single source of truth for all colours, spacing, and font sizes. Never hardcode style values.
 - TypeScript is permitted incrementally for shared contracts and low-risk modules. Do not start a broad conversion without an explicit migration task.
+
+---
+
+## 3b. UI-Capability Parity Rule
+
+**Every engine or AI capability added must be exposed in the UI across all relevant workspaces.** This rule exists because multiple sprints built engine features (COST macro, PREEMPT, FAIL, REPAIR, SET_ATTR) that were not accessible from the UI until a catch-up sprint.
+
+Before closing a sprint that adds an engine macro, AI prompt capability, or new model field:
+1. Confirm the capability is accessible from the relevant editor (BEventEditor, CEventEditor, QueueEditor, EntityTypeEditor)
+2. Confirm the execution panel surfaces any corresponding output (KPI, chart, table, log entry)
+3. Confirm the AI prompts receive any new data needed to reason about the capability
+4. If any of these three points is not satisfied, add a follow-on item to the next sprint plan before closing
+
+This rule applies symmetrically: if an AI capability is added (new prompt field, new analysis), the UI must reflect it (new chart, new card, new view, new tooltip).
 
 ---
 
@@ -1593,6 +1608,26 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 - `createShareLink()` uses `crypto.randomUUID()` for token generation
 - `revokeShareLink()` sets `revoked_at` with owner guard
 - `listShareLinks()` filters by `run_id` ordered by `created_at` desc
+
+---
+
+## N. End-of-Sprint Maintenance Checklist
+
+At the end of every sprint, the following documents MUST be reviewed and updated before the sprint is closed. If a document does not need changes, record that explicitly in the closure report.
+
+| Document | What to update |
+|----------|---------------|
+| `AGENTS.md` | Sprint tracking block (current sprint plan/closure/capability guide links), any new architectural rules, any new file paths |
+| `docs/DES_Studio_Build_Plan.md` | Mark completed sprints ✅, update the roadmap diagram, add new sprint entries |
+| `docs/capability-gap-analysis.md` | Update the scoring matrix for any gaps closed, add version history entry |
+| `docs/DES_Studio_User_Guide.md` | Add any new user-facing features; update version history table |
+| `docs/DES_Studio_Specification.md` | Update functional specification sections affected by the sprint |
+| `docs/Template Models Guide.md` | Add or update templates if the sprint added modelling capabilities that templates should demonstrate |
+| Sprint plan: `docs/reviews/sprint-NN-plan.md` | Must exist before sprint starts |
+| Sprint closure: `docs/reviews/sprint-NN-closure-report.md` | Must exist before sprint is marked complete |
+| Sprint capability guide: `docs/sprint-NN-[topic]-guide.md` | Required for any sprint that adds user-facing features |
+
+Failure to complete this checklist means the sprint is not closed.
 
 ---
 

@@ -599,6 +599,122 @@ const ORDER_FULFILLMENT = {
 
 // ── Export ────────────────────────────────────────────────────────────────────
 
+// ── Sprint 41-45: New capability templates ───────────────────────────────────
+
+const MACHINE_SHOP_FAILURES = {
+  name: "Machine Shop with Failures",
+  description: "CNC machine shop with 3 machines subject to random breakdowns (MTBF 120 min) and repair (MTTR 20 min). Jobs queue and wait for an available, working machine. Shows how server downtime reduces effective throughput.",
+  domain: "Manufacturing",
+  templateMeta: {
+    scenarioType: "Multi-server queue with server failures and repair",
+    keyMacros: ["ARRIVE", "ASSIGN", "COMPLETE"],
+    paramGuide: "Job arrival mean 5 min. Processing Triangular(10,15,25) min. MTBF 120 min, MTTR 20 min → ≈86% availability per machine.",
+    limitations: "No job priority or routing. Failure model uses exponential MTBF/MTTR.",
+  },
+  entityTypes: [
+    { id: "et_job",     name: "Job",     role: "customer", count: 0, attrDefs: [] },
+    { id: "et_machine", name: "Machine", role: "server",   count: 3, attrDefs: [],
+      mtbfDist: "Exponential", mtbfDistParams: { mean: "120" },
+      mttrDist: "Exponential", mttrDistParams: { mean: "20" } },
+  ],
+  stateVariables: [],
+  goals: [
+    { metric: "served",  operator: ">=", target: "40",  label: "served >= 40" },
+    { metric: "avgWait", operator: "<",  target: "15",  label: "avgWait < 15 min" },
+  ],
+  bEvents: [
+    { id: "b_arrive",   name: "Job Arrives",     scheduledTime: "0",    effect: "ARRIVE(Job, JobQueue)",
+      schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "5" } }] },
+    { id: "b_complete", name: "Machining Done",  scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+  ],
+  cEvents: [{
+    id: "c_seize", name: "Start Machining", priority: 1,
+    condition: "queue(JobQueue).length > 0 AND idle(Machine).count > 0",
+    effect: "ASSIGN(Job, Machine)",
+    cSchedules: [{ eventId: "b_complete", dist: "Triangular", distParams: { min: "10", mode: "15", max: "25" }, useEntityCtx: true }],
+  }],
+  queues: [{ id: "q_job", name: "JobQueue", customerType: "Job", capacity: "", discipline: "FIFO" }],
+};
+
+const PRIORITY_ED_BALKING = {
+  name: "Priority ED with Balking",
+  description: "Emergency department with priority triage (severity 1–5). High-severity patients jump the queue. Patients balk at a 10% rate when the department is busy. Use the PRIORITY discipline and goal-aware sweep to find minimum doctor count.",
+  domain: "Healthcare",
+  templateMeta: {
+    scenarioType: "Priority queue with balking and attribute-based ordering",
+    keyMacros: ["ARRIVE", "ASSIGN", "COMPLETE"],
+    paramGuide: "Arrival mean 4 min. Severity Uniform(1,5). Consultation Triangular(15,25,40) min. 3 doctors. Balk probability 10%.",
+    limitations: "No triage pre-assessment stage. Severity assigned once at arrival.",
+  },
+  entityTypes: [
+    { id: "et_patient", name: "Patient", role: "customer", count: 0, attrDefs: [
+      { id: "a_sev", name: "severity", valueType: "number", defaultValue: 3, mutable: false,
+        dist: "Uniform", distParams: { min: "1", max: "5" } },
+    ]},
+    { id: "et_doctor", name: "Doctor", role: "server", count: 3, attrDefs: [] },
+  ],
+  stateVariables: [],
+  goals: [
+    { metric: "avgWait", operator: "<",  target: "20", label: "avgWait < 20 min" },
+    { metric: "reneged", operator: "<",  target: "10", label: "balked < 10" },
+  ],
+  bEvents: [
+    { id: "b_arrive",   name: "Patient Arrives",     scheduledTime: "0",    effect: "ARRIVE(Patient, Waiting)",
+      balkProbability: 0.1,
+      schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "4" } }] },
+    { id: "b_complete", name: "Consultation Done",   scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+  ],
+  cEvents: [{
+    id: "c_consult", name: "Start Consultation", priority: 1,
+    condition: "queue(Waiting).length > 0 AND idle(Doctor).count > 0",
+    effect: "ASSIGN(Patient, Doctor)",
+    cSchedules: [{ eventId: "b_complete", dist: "Triangular", distParams: { min: "15", mode: "25", max: "40" }, useEntityCtx: true }],
+  }],
+  queues: [{ id: "q_wait", name: "Waiting", customerType: "Patient", capacity: "30", discipline: "PRIORITY" }],
+};
+
+const COST_CALL_CENTRE = {
+  name: "Cost-Optimised Call Centre",
+  description: "Call centre where each handled call incurs a £5 service cost and each abandoned call incurs a £2 penalty. Goal: keep totalCost under £500 and avgWait under 3 min. Use the goal-aware parametric sweep on agent count to find the cheapest configuration that meets both goals.",
+  domain: "Service Systems",
+  templateMeta: {
+    scenarioType: "Multi-server queue with cost tracking and goal-feasibility sweep",
+    keyMacros: ["ARRIVE", "ASSIGN", "COMPLETE", "RENEGE", "COST"],
+    paramGuide: "Call arrival mean 2 min. Handle time Exponential mean 5 min. 3 agents. Renege after 8 min. Service cost £5, abandonment penalty £2.",
+    limitations: "Flat per-call cost — no per-minute agent cost modelling.",
+  },
+  entityTypes: [
+    { id: "et_call",  name: "Call",  role: "customer", count: 0, attrDefs: [] },
+    { id: "et_agent", name: "Agent", role: "server",   count: 3, attrDefs: [] },
+  ],
+  stateVariables: [],
+  goals: [
+    { metric: "totalCost", operator: "<",  target: "500", label: "totalCost < £500" },
+    { metric: "avgWait",   operator: "<",  target: "3",   label: "avgWait < 3 min" },
+  ],
+  bEvents: [
+    { id: "b_arrive",   name: "Call Arrives",    scheduledTime: "0",
+      effect: "ARRIVE(Call, Queue)",
+      schedules: [
+        { eventId: "b_arrive", dist: "Exponential", distParams: { mean: "2" } },
+        { eventId: "b_renege", dist: "Constant",    distParams: { value: "8" }, isRenege: true },
+      ]},
+    { id: "b_renege",   name: "Call Abandoned",  scheduledTime: "9999",
+      effect: ["RENEGE(Queue)", "COST(2)"],
+      schedules: [] },
+    { id: "b_complete", name: "Call Handled",    scheduledTime: "9999",
+      effect: ["COMPLETE()", "COST(5)"],
+      schedules: [] },
+  ],
+  cEvents: [{
+    id: "c_answer", name: "Answer Call", priority: 1,
+    condition: "queue(Queue).length > 0 AND idle(Agent).count > 0",
+    effect: "ASSIGN(Call, Agent)",
+    cSchedules: [{ eventId: "b_complete", dist: "Exponential", distParams: { mean: "5" }, useEntityCtx: true }],
+  }],
+  queues: [{ id: "q_calls", name: "Queue", customerType: "Call", capacity: "20", discipline: "FIFO" }],
+};
+
 export const TEMPLATES = [
   // Academic
   { id: "mm1",             ...MM1 },
@@ -622,4 +738,8 @@ export const TEMPLATES = [
   { id: "port-berth",      ...PORT_BERTH },
   // Technology
   { id: "data-center",     ...DATA_CENTER },
+  // Capability showcases (Sprint 41-45)
+  { id: "machine-shop-failures",  ...MACHINE_SHOP_FAILURES },
+  { id: "priority-ed-balking",    ...PRIORITY_ED_BALKING },
+  { id: "cost-call-centre",       ...COST_CALL_CENTRE },
 ];

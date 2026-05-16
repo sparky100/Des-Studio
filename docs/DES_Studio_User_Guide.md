@@ -1,680 +1,634 @@
-# DES Studio User Guide
+# DES Studio — User Guide
 
-*Draft help documentation for new users.*
+Version: 1.5.0 (Sprints 1–45)
 
-DES Studio is a browser-based discrete-event simulation modelling application. It helps you define, run, compare, and export simulation models without writing code.
+---
 
-The application is designed for modellers who understand queues, entities, resources, arrivals, service activities, and event-based simulation. DES Studio uses Pidd's Three-Phase Method:
+## Version History
 
-- Phase A advances the simulation clock.
-- Phase B fires scheduled events at the current time.
-- Phase C repeatedly checks conditional events until no more can fire.
+| Version | Sprints | Summary |
+|---------|---------|---------|
+| v1.0.0 | 1–30 | Core simulation engine, Three-Phase execution, Forms/Tabs editors, Execute panel, replication runner, parametric sweep |
+| v1.1.0 | 31–33 | Preemption (PREEMPT macro), server failures/repair (FAIL/REPAIR), enhanced analytics and run comparison |
+| v1.2.0 | 34–40 | Extended distribution library, entity attribute model, BATCH/SPLIT/MATCH macros, container resource pools, COST macro |
+| v1.3.0 | 41–42 | Visual Designer (drag-and-drop canvas), full UI capability exposure for all model element fields |
+| v1.4.0 | 43–44 | AI Insights panel (Interpret Results, Suggest Improvements, Sensitivity Analysis, Ask a Question, Compare Runs), Execution Insights |
+| v1.5.0 | 45 | AI prompt grounding — results and model context injected into all AI analysis calls for higher-quality suggestions |
 
-You do not need to write simulation logic manually. Models are built through structured editors, a visual graph canvas, and validated form controls.
+---
 
-## 1. Main Areas Of The Application
+## 1. Introduction
 
-DES Studio has two main working areas:
+DES Studio is a browser-based discrete-event simulation tool for modellers who need to build, run, and analyse queue-based models without writing code. All model elements are configured through structured editors, a visual canvas, or an AI-assisted generator. Experiments are run directly in the browser; results appear as live animations, event logs, histograms, and statistical summaries.
 
-| Area | Purpose |
-|---|---|
-| Model Library | Create, import, open, share, and delete models. |
-| Model Detail | Edit a selected model, run experiments, review history, and export results. |
+**Who it is for.** DES Studio targets simulation practitioners — analysts, engineers, operations researchers, and students — who understand queuing concepts (arrivals, service, waiting, resources) and want to move quickly from a scenario description to quantitative results.
 
-When you sign in, DES Studio opens the Model Library. If you are not signed in, DES Studio works in anonymous mode using browser local storage. Your models and run history are saved locally and are specific to that browser.
+---
 
-## 2. Model Library
+### 1.1 New to discrete-event simulation? Start here
 
-The Model Library shows the models you can access.
+> **Already familiar with DES?** Skip to [Section 2 — Getting Started](#2-getting-started).
 
-### My Models
+#### What is a queue?
 
-`My Models` contains models you own or models that have been shared with you.
+A queue is any place where demand exceeds capacity — even temporarily. Patients waiting for a doctor, jobs waiting for a machine, calls holding for an agent. Queues are the primary source of delay in real systems, and their behaviour is often counterintuitive: a server that is 90% utilised has a wait time roughly nine times longer than one at 50% utilisation. Simulation lets you explore this numerically before committing resources.
 
-From here you can:
+#### What is discrete-event simulation?
 
-- Create a blank model.
-- Create the sample M/M/1 queue model.
-- Import a DES Studio JSON model.
-- Open an existing model.
-- Delete a model that you own.
+Discrete-event simulation (DES) models a system by tracking *events* that happen at specific moments in time, rather than continuous differential equations. Examples: a customer arrives, a service ends, a machine fails. The simulation clock jumps from event to event; nothing happens between events, making DES extremely efficient even for complex systems running over months of simulated time.
 
-### Templates
+**Entities** are the objects that flow through the model: customers, jobs, patients, vehicles. Entities arrive, wait in queues, receive service from resources, and depart. **Servers** (resources) are the capacity-limiting elements: agents, machines, beds, lanes.
 
-The `Templates` tab contains pre-built simulation models covering common scenarios. Templates are read-only — clicking one creates a new private model from the template definition and opens it in the Execute tab for immediate use.
+#### The Three-Phase Method — explained simply
 
-Available templates:
+DES Studio uses Pidd's Three-Phase Method:
 
-| Template | Description |
-|---|---|
-| M/M/1 Queue | Single-server queue with exponential arrivals and service. |
-| Call Center | Multi-agent call centre with queuing and abandonment. |
-| ER Triage | Emergency department with triage levels and priority queues. |
-| Fast Food Restaurant | Kitchen and service counter with parallel cook stations. |
-| Factory Assembly | Production line with component batching. |
-| Airport Security | Security screening with multiple lanes and finite queue capacity. |
-| Construction Logistics | Material delivery and crane allocation. |
-| Data Center | Server rack processing with cooling constraints. |
-| Outpatient Clinic | Multi-stage clinic flow with doctor and nurse resources. |
-| Warehouse Picking | Order picking and packing with batch consolidation. |
-| Ward Bed Admission | Hospital admission with bed capacity constraints and bed-blocking. |
-| Bank Branch | Multi-server priority queue with customer segmentation. |
-| Retail Checkout | Multi-server finite-capacity queue with balking. |
-| Port Berth Operations | Multi-server high-utilisation queue with congestion. |
+| Phase | Plain English |
+|-------|--------------|
+| **A** | Jump the clock to the moment of the next event. |
+| **B** | Fire everything scheduled for right now (arrivals, completions, failures). |
+| **C** | Check "can anything start now?" — e.g. "patient waiting AND doctor free → start consultation." Keep checking until nothing more can start. |
 
-### Public Library
+B handles *scheduled* triggers. C handles *state-driven* triggers. The separation keeps the engine's behaviour predictable and theoretically grounded.
 
-`Public Library` shows public models owned by other users.
+#### When to use simulation vs. analytical formulas
 
-When you open a public model that you do not own, DES Studio creates a private fork before running it. This protects the original model and keeps your run history separate from the owner's run history.
+| Situation | Formula sufficient? | Use simulation? |
+|-----------|--------------------|-----------------| 
+| Single queue, single server, exponential distributions (M/M/1) | Yes | Either |
+| Multiple queues, multi-stage routing | No | Yes |
+| Priority queues, preemption, balking | No | Yes |
+| Time-varying arrivals (rush hours, shift changes) | No | Yes |
+| Server failures and repair | No | Yes |
+| You need confidence intervals across scenarios | No | Yes |
 
-## 3. Creating Your First Model
+#### The five-step lifecycle every DES model follows
 
-If your library is empty, the first-run panel offers three choices:
+```
+1. ARRIVE     → entity enters a queue          (B-event fires)
+2. Wait       → entity sits in queue
+3. ASSIGN     → C-event binds entity to server (service starts)
+4. [service duration passes]
+5. COMPLETE   → entity departs; server freed   (B-event fires)
+```
 
-| Option | When to use it |
-|---|---|
-| Create blank model | Start from scratch. |
-| Create sample M/M/1 model | Learn from a runnable single-server queue. |
-| Import JSON | Load an exported DES Studio model. |
+Everything else in DES Studio (priority, multi-stage routing, failures, cost tracking, loop guards) is layered on top of this pattern.
 
-For a first walkthrough, choose `Create sample M/M/1 model` or open a template from the Templates tab. These give you a working model with exponential arrivals, one server, a FIFO queue, and an execute-ready configuration.
+---
 
-## 4. Model Detail Tabs
+**The Three-Phase Method.** DES Studio implements Pidd's Three-Phase Method, a classical approach to discrete-event simulation:
 
-Opening a model takes you to the Model Detail view. This view is organized into tabs.
+| Phase | What happens |
+|-------|--------------|
+| A | The simulation clock advances to the time of the next scheduled event. |
+| B | All B-Events (Bound events) scheduled for the current clock time fire in sequence. |
+| C | All C-Events (Conditional events) are tested repeatedly until none can fire. |
 
-| Tab | What it is for |
-|---|---|
-| AI Generated Model | Experimental or planned AI-assisted model authoring, depending on the deployed version. |
-| Overview | Model name, description, high-level structure, and run count. |
-| Entity Types | Define customers, servers, and their attributes. |
-| State Vars | Define model-level numeric state variables. |
-| B-Events | Define scheduled events such as arrivals and completions. |
-| C-Events | Define conditional events such as seizing a server when a queue is non-empty. |
-| Queues | Define waiting lines, queue disciplines, finite capacity, and overflow routing. |
-| Visual Designer | Graph-based visual model authoring with a draggable node palette. |
-| Execute | Run the simulation, replications, and view live results. |
-| History | Review and export previous runs. |
-| Access | Owner-only sharing and visibility controls. |
+This structure means that B-Events handle time-scheduled actions (arrivals, service completions) while C-Events handle state-triggered actions (start a service when a server is free and a queue is non-empty). You do not need to manage the event calendar directly — DES Studio handles it.
 
-If you edit a model, a `Save` button appears. Use it to persist your changes. If you try to leave with unsaved changes, DES Studio warns you before discarding them.
+**Modelling workflow.** A typical workflow is:
 
-Undo and redo are available while editing.
+1. Define entity types, queues, B-Events, and C-Events in the Forms/Tabs editors (or generate a skeleton with the AI Model Generator).
+2. Set performance goals so the tool and AI have feasibility targets.
+3. Run a single experiment and inspect Live View, Log, Histograms, and Analysis.
+4. Use AI Insights to interpret results and get structured improvement suggestions.
+5. Run replications for statistical confidence, then sweep a parameter to find the feasible region.
+6. Save and share runs.
 
-## 5. Visual Designer
+---
 
-The Visual Designer tab provides a graph-based authoring canvas alongside the Forms/Tabs editors. Models can be built using either approach — changes in one mode are reflected in the other.
+## 2. Getting Started
 
-### Node Palette
+### Sign-in and anonymous mode
 
-The left sidebar contains a palette of four node types:
+Open DES Studio in a modern browser. You can sign in with a Supabase-authenticated account (email/password or OAuth) or continue in **anonymous mode**, which stores all data in browser local storage. Anonymous models are private to that browser session; they are not backed up remotely. Sign in to unlock cloud saving and public sharing.
 
-| Node Type | Colour | Purpose |
-|---|---|---|
-| Source | Green | Entity arrival point. Configures entity type, target queue, and inter-arrival distribution. |
-| Queue | Teal | Waiting line for entities. Configures name, entity type, discipline, capacity, and overflow. |
-| Activity | Purple | Service or processing step. Configures condition, entity filter, server type, and service time. |
-| Sink | Red | Entity exit point. Configures terminal macro (COMPLETE or RENEGE). |
+### The Model Library
 
-Nodes can be clicked (adds at default position) or dragged from the palette onto the canvas.
+After sign-in (or on first open), DES Studio shows the Model Library with two tabs:
 
-### Connections
+| Tab | Contents |
+|-----|----------|
+| My Models | Models you own or that have been shared with you. Create blank, import JSON, open, or delete. |
+| Templates | Pre-built read-only models. Clicking a template creates a private copy and opens it immediately. |
 
-Drag from one node's output handle to another node's input handle to create a connection. Edge types include:
+### Creating a model
 
-| Edge Type | Style | Meaning |
-|---|---|---|
-| Arrival | Solid | Source to Queue. |
-| Condition | Solid | Queue to Activity. |
-| Routing | Solid | Activity to Queue (with optional condition labels). |
-| Terminal | Solid | Activity to Sink. |
-| Overflow | Solid with label | Queue to overflow destination when queue is full. |
-| Loop / rework | Amber dashed | Activity back to an earlier Queue for rework passes. |
+Click **New Model** in My Models. Give the model a name and (optionally) a description. DES Studio creates an empty model and opens it in the Model Detail view.
 
-Right-click an edge to delete it.
+### Three authoring modes
 
-### Node Inspector
+Inside the Model Detail view you can build your model three ways — all editing the same canonical model JSON:
 
-Clicking a node opens an inspector panel on the right side with fields specific to that node type. The inspector allows editing of all model parameters associated with the node — entity types, distributions, conditions, server types, and queue configuration.
+| Mode | Access | Best for |
+|------|--------|----------|
+| Forms/Tabs editors | Default view; tabs for each element type | Precise, field-by-field editing of every model element |
+| AI Model Generator | "Generate with AI" button | Bootstrapping a model from a natural-language scenario description |
+| Visual Designer | "Visual Designer" tab | Seeing the model as a flow graph; drag-and-drop topology editing |
 
-### Validation
+---
 
-A validation checklist below the palette shows any canonical model errors or warnings. Clicking a validation item highlights the affected node on the canvas.
+## 3. Building Your First Model — A Worked Example
 
-## 6. Core Modelling Concepts
+This section walks through building a simple GP surgery model to illustrate the complete modelling workflow.
 
-### Entity Types
+**Scenario.** Patients arrive at a GP surgery with exponentially distributed inter-arrival times, mean 8 minutes. Two GPs are available; each consultation lasts an exponentially distributed time, mean 12 minutes. The surgery session runs for 480 minutes (one working day). We want average patient waiting time to be under 15 minutes.
 
-Entity types describe the things that move through or support the system.
+### Step 1: Create entity types
 
-Common examples:
+Open the **Entity Types** tab and create two entities:
 
-- `Customer`
-- `Patient`
-- `Job`
-- `Server`
-- `Nurse`
-- `Machine`
+- **Patient** — type: `customer`. Patients arrive, wait, and depart.
+- **GP** — type: `server`, initial count: `2`. GPs hold the resource that customers compete for.
 
-An entity type can include attributes, such as priority, category, service requirement, or any other value needed by the model.
+### Step 2: Create a queue
 
-### Queues
+Open the **Queues** tab and create:
 
-Queues hold waiting entities.
+- **Waiting Room** — discipline: `FIFO`, capacity: leave blank (unlimited).
 
-DES Studio supports queue discipline in the engine. Typical disciplines include:
+### Step 3: Create B-Events
 
-| Discipline | Meaning |
-|---|---|
-| FIFO | First in, first out. |
-| LIFO | Last in, first out. |
-| PRIORITY | Lowest numeric priority value is selected first, with FIFO as a tie-breaker. |
+Open the **B-Events** tab and create two B-Events.
 
-Only use `PRIORITY` when the relevant entity type has a numeric priority attribute.
+**Patient Arrives**
+- Schedule / inter-arrival distribution: `Exponential`, mean: `8`
+- Effects: `ARRIVE(Patient)`
+- Routing: `Waiting Room` (entity goes to this queue after the event fires)
 
-**Finite queue capacity:** Queues can be configured with a maximum capacity. When a queue reaches its capacity limit, arriving entities are blocked and routed to an overflow destination (another queue or system exit).
+**GP Consultation**
+- This B-event represents the end of a consultation. It is scheduled when a GP begins seeing a patient (via the C-Event below).
+- Effects: `COMPLETE(Patient)`, `RELEASE(GP)`
+- Distribution: `Exponential`, mean: `12`
 
-**Balking:** Arrival B-Events can be configured with a balking condition or probability. When the condition is true (or a random sample falls below the probability threshold), the entity declines to join the queue and is routed to the overflow destination instead. Balking count is recorded per queue.
+### Step 4: Create a C-Event
 
-**Overflow routing:** Both blocking (finite capacity) and balking use a shared `overflowDestination` field on the Queue definition. Overflow entities can be directed to another queue or exit the system entirely.
+Open the **C-Events** tab and create:
 
-### B-Events
+**Start Consultation**
+- Condition: `Waiting Room not empty AND GP idle`
+- Effects: `ASSIGN(GP, Waiting Room)`
+- cSchedule: `Exponential`, mean: `12` — this schedules the GP Consultation B-Event at the computed completion time
 
-B-Events are scheduled events. They happen at a known simulation time.
+In every Phase C pass, DES Studio tests this condition. When a patient is waiting and a GP is free, the event fires: a patient is taken from the Waiting Room, assigned to a GP, and a completion event is placed in the event calendar.
 
-Common B-Event examples:
+### Step 5: Set a performance goal
 
-- A customer arrives.
-- A service activity completes.
-- A reneging timeout occurs.
-- A time-varying arrival rate changes.
-- A resource shift changes capacity.
-- A batch of entities is unbatched (UNBATCH).
+Open the **Performance Goals** tab and add:
 
-B-Events can schedule future B-Events using distributions.
+- Metric: `avgWait`, queue: `Waiting Room`, operator: `<`, target: `15`
 
-### C-Events
+Goals are used by the AI Insights engine and by sweep feasibility colouring. Without goals the tool still runs; goals make AI suggestions more targeted.
 
-C-Events are conditional events. They fire when their condition is true.
+### Step 6: Run the model
 
-Common C-Example examples:
+Open the **Execute** tab and click **Run All** (or use **Auto-run** with the speed slider). DES Studio will run the model to clock time 480.
 
-- If a customer is waiting and a server is idle, start service.
-- If a queue has capacity and a blocked entity exists, move the entity forward.
-- If enough entities are waiting in a queue, form them into a batch (BATCH).
+Switch to **Live View**: you will see animated entity tokens (circles) flowing from the Patient Arrives event into the Waiting Room queue, being picked up by the GP Consultation event, and departing. When both GPs are busy, tokens queue up visually.
 
-C-Events have explicit priorities. Lower numbers fire first. After any C-Event fires, DES Studio restarts the C-Event scan from the highest priority event, following the Three-Phase Method.
+### Step 7: Read the results
 
-### Batching (BATCH / UNBATCH)
+Switch to **Analysis** view:
 
-BATCH is a C-Event macro that accumulates entities from a queue into a batch group. When enough entities have accumulated, a single batch entity is created with the accumulated entities stored in its `batch.children` array. The batch entity uses the accumulated children as a single unit for downstream processing.
+- **KPI cards**: overall throughput, mean waiting time, mean time in system.
+- **Per-queue stats**: Waiting Room — mean wait, maximum wait, p50/p90/p99 percentiles, mean queue length.
+- **Per-resource utilisation**: GP utilisation (fraction of time GPs are busy).
+- **Cumulative mean chart**: shows how the running mean of wait time stabilises over the run.
 
-UNBATCH is a B-Event macro that restores the original child entities from a batch. The children are placed into a target queue as independent entities, and the parent batch entity is marked as complete.
+If the goal (avgWait < 15) is met, the goal row shows green. If not, it shows red.
 
-Batching is useful for assembly operations, kitting, and order consolidation.
+### Step 8: Use AI Insights
 
-### Recirculation (Rework Loops)
+Click the **AI Insights** panel and select **Suggest Improvements**. The AI will:
 
-DES Studio supports controlled recirculation through back-edges. Entity movement through a loop is governed by:
+1. Identify the binding constraint (likely: Waiting Room queue length driven by GP utilisation).
+2. Diagnose the root cause.
+3. Propose a change (e.g., add a third GP or reduce consultation time variability).
+4. Predict the effect on wait time.
+5. Assess impact on the performance goal.
+6. Rank suggestions by expected value.
 
-- **Entity.loopCount:** An auto-maintained attribute counting how many times an entity has passed through the loop.
-- **maxLoopCount:** A configurable limit on the number of recirculations allowed.
-- **exitQueueName:** The queue where the entity is routed when the loop limit is reached. If no exit queue is configured, the entity is marked as done.
+### Step 9: Run a parametric sweep
 
-Loops are visible in the Visual Designer as amber dashed edges labelled with the maximum loop count.
+Open **Experiments → Parametric Sweep**. Set:
 
-### State Variables
+- Parameter: `GP count` (the server count of the GP entity type)
+- Range: `1` to `4`, step `1`
 
-State variables store model-level numeric values. They are useful for counters, flags represented numerically, thresholds, or values used in conditions.
+Click **Run Sweep**. DES Studio runs the model once per parameter value. The results chart shows average wait time vs. GP count. Points that meet the goal (avgWait < 15) are coloured green; infeasible points are red. The best feasible point is annotated.
 
-### Conditional Routing
+---
 
-B-Event RELEASE macro schedule rows can include a routing table with conditions and destination queues. When a RELEASE fires, conditions are evaluated in order; the first match determines the entity's destination. A `defaultQueueName` provides a fallback if no condition matches.
+## 4. Model Elements Reference
 
-Probabilistic routing using weighted random branch selection (with seeded RNG) is also supported. Probabilities are configured on the RELEASE schedule row.
+### 4.1 Entity Types
 
-### Multi-Server Resource Pooling
+Entity types define the actors in your model.
 
-Resources (servers) can have a capacity greater than 1. A resource with capacity N can serve up to N entities concurrently. The engine tracks idle and busy counts per resource type. The Predicate Builder exposes `idleCount` and `busyCount` for all resources.
+| Field | Description |
+|-------|-------------|
+| Name | Unique identifier used in macros (e.g., `ARRIVE(Patient)`) |
+| Type | `customer` — arrives, waits, is served, departs; `server` — holds resources that customers compete for; `batch` — a group of entities treated as one unit |
+| Initial count | For servers: the number of resource units available at time 0 |
+| Attributes | Named numeric values carried by each entity instance (e.g., `priority`, `dueDate`) |
 
-### Waiting and resource ownership
+### 4.2 Queues
 
-Recent engine work makes waiting and service ownership more explicit.
+Queues are buffers where customer entities wait.
 
-- A queued entity is not just "somehow waiting". It is explicitly recorded as waiting for a named queue.
-- When a server claims an entity, the relationship is mirrored on both sides: the entity knows which server is serving it, and the server knows which entity it is serving.
-- When the entity is released, completes, reneges, or exits the system, that ownership is cleared.
+| Field | Description |
+|-------|-------------|
+| Name | Unique identifier |
+| Discipline | `FIFO` (first in, first out), `LIFO` (last in, first out), `Priority` (by entity attribute), `SPT` (shortest processing time first), `EDD` (earliest due date first) |
+| Capacity | Maximum number of entities the queue can hold. Leave blank for unlimited. |
+| Overflow destination | If capacity is full, arriving entities go here instead |
+| balkCondition | Expression evaluated on arrival; if true the entity balks (does not join) |
+| balkProbability | Probability [0,1] that an arriving entity balks regardless of queue state |
 
-In practice, this means:
+### 4.3 B-Events (Bound Events)
 
-- queue routing, release, recirculation, and batching flows behave more consistently
-- stale timers are less likely to mutate entities that already moved on
-- debugging run behaviour is easier because queue/service ownership is more deliberate
+B-Events fire at a specific point in simulated time. They are the time-scheduled workhorses: arrivals, service completions, scheduled breakdowns.
 
-DES Studio still does **not** support first-class preemption or interruption. A busy resource does not yet pause one entity to serve another higher-priority one mid-service.
+| Field | Description |
+|-------|-------------|
+| Name | Unique identifier |
+| Schedule / inter-arrival distribution | Distribution governing when the next occurrence is scheduled |
+| Effects | One or more effect macros executed when the event fires (see Section 5) |
+| Routing | Queue or C-Event that receives the entity after the event fires |
+| Loop guard | Optional: maximum number of times this event can re-schedule itself (prevents infinite arrival loops) |
+| Hold effects | Effects applied while the event is "in progress" (between scheduling and firing) |
 
-### Resource Preemption and Breakdowns
+B-Events support **balking** — if a `balkCondition` or `balkProbability` is set, entities generated by this event may be diverted before entering the system.
 
-DES Studio supports resource preemption and breakdown/repair cycles for modelling real-world resource reliability.
+### 4.4 C-Events (Conditional Events)
 
-**Preemption:** The `PREEMPT(ServerType)` macro interrupts busy servers of the specified type. The interrupted entity is re-queued with its remaining service time preserved (`_remainingService`). When the entity is re-seized, it resumes with the remaining service time instead of resampling a new duration.
+C-Events fire when their condition becomes true during Phase C. They are tested repeatedly until no more can fire in the current pass.
 
-**Breakdowns and Repair:** The `FAIL(ServerType)` macro sets all matching servers to a `failed` status. Failed servers are excluded from idle/busy counts and cannot be seized. The `REPAIR(ServerType)` macro restores failed servers to `idle` status.
+| Field | Description |
+|-------|-------------|
+| Name | Unique identifier |
+| Condition | Boolean expression (e.g., `WaitingRoom.length > 0 AND GP.idle > 0`) |
+| Effects | Macros executed when the condition is satisfied |
+| cSchedule | Distribution used to schedule a subsequent B-Event when this C-Event fires (e.g., service duration) |
+| Priority | Order in which C-Events are tested when multiple could fire simultaneously |
 
-**MTBF/MTTR Scheduling:** Server entity types can define `mtbfDist` (mean time between failures) and `mttrDist` (mean time to repair) distributions. The engine automatically schedules recurring FAILURE and REPAIR events in the Future Event List.
+C-Events model resource allocation decisions: they connect queues to servers by testing availability and performing ASSIGN.
 
-**Remaining Service Time:** When a server is preempted or fails, the remaining service time is calculated as `scheduledDuration - (clock - serviceStart)`. This value is preserved on the entity and used when the entity is re-seized, ensuring accurate service time accounting.
+### 4.5 State Variables
 
-**Visualization:** Failed servers are shown as red dots on Activity nodes in the Execute canvas, with a warning badge indicating the failure count.
+State variables are model-level counters or flags accessible in conditions and effects.
 
-### Advanced Scheduling Macros
+| Field | Description |
+|-------|-------------|
+| Name | Unique identifier |
+| Type | `integer`, `float`, or `boolean` |
+| Initial value | Value at simulation start |
 
-DES Studio includes three advanced scheduling macros for complex resource coordination:
+Use state variables to track cumulative counts, implement shift schedules, or create custom flags (e.g., `rushHour = true`). Access them in conditions as plain names; set them with `SET(varName, expr)`.
 
-**SPLIT(EntityType, N, TargetQueue):** Creates N-1 clones of the context entity, all placed in the target queue. The original entity is marked as the parent (`_splitParent = true`) with a `_splitChildren` array tracking clone IDs. Each clone carries `_splitFrom` (parent ID) and `_splitIndex` (clone number). Useful for modelling inspection splitting, copy operations, or parallel processing paths.
+### 4.6 Performance Goals
 
-**COSEIZE(Queue, ServerType1, ServerType2, ...):** Atomically seizes one customer and multiple server types simultaneously. All server types must have at least one idle server available; if any type is fully busy, the COSEIZE fails entirely (no partial seizure). Useful for modelling operations requiring multiple coordinated resources, such as surgeries requiring a surgeon and anesthetist.
+Goals define feasibility thresholds for AI suggestions and sweep colouring.
 
-**MATCH(TypeA, QueueA, TypeB, QueueB, OutputQueue):** Pairs one entity of TypeA from QueueA with one entity of TypeB from QueueB, routing both to the OutputQueue. Entity types are validated against the typeA/typeB parameters — only matching entities are selected. Useful for modelling assembly operations where two different component types must be paired.
+| Field | Description |
+|-------|-------------|
+| Metric | Statistical measure: `avgWait`, `avgQueueLength`, `utilisation`, `throughput`, `totalCost` |
+| Queue / resource | Which queue or resource the metric applies to |
+| Operator | `<`, `<=`, `>`, `>=`, `=` |
+| Target | Numeric threshold |
 
-### Queue Disciplines
+### 4.7 Containers
 
-In addition to FIFO, LIFO, and PRIORITY, DES Studio supports three attribute-based queue disciplines:
+Containers are resource pools with structured fill and drain operations.
 
-| Discipline | Selection Rule | Use Case |
-|---|---|---|
-| SPT | Shortest processing time first (based on entity service time attribute) | Minimise average wait time |
-| EDD | Earliest due date first (based on entity due date attribute) | Meet deadlines, minimise lateness |
-| PRIORITY(attrName) | Lowest numeric value of the specified attribute first | Custom priority ordering |
+| Field | Description |
+|-------|-------------|
+| Name | Unique identifier |
+| Initial level | Starting quantity in the container |
+| Capacity | Maximum level |
+| FILL macro | Add quantity to the container: `FILL(containerName, amount)` |
+| DRAIN macro | Remove quantity: `DRAIN(containerName, amount)` |
 
-For SPT and EDD, the entity type must have a numeric attribute named `serviceTime` or `dueDate` respectively. For PRIORITY(attrName), specify the attribute name in parentheses, e.g. `PRIORITY(urgency)`.
+Use containers to model inventory, blood bank stocks, fuel reserves, or any depletable shared resource.
 
-### WIP Time-Average Metric
+---
 
-DES Studio tracks the time-average Work-In-Progress (WIP) metric using Little's Law. The `avgWIP` value is exposed in the run summary and represents the average number of entities in the system over the observation period (after warm-up, if configured).
+## 5. Effect Macros Reference
 
-Little's Law validation: `avgWIP ≈ λ × avgSojourn` should hold within 15% for stable queueing models, where λ is the effective arrival rate and avgSojourn is the average time entities spend in the system.
+Effect macros are the action vocabulary of DES Studio. They appear in the Effects field of B-Events and C-Events.
 
-### Clock Token in Conditions
+| Macro | Syntax | What it does | When to use |
+|-------|--------|--------------|-------------|
+| ARRIVE | `ARRIVE(entityType)` | Creates a new entity instance of the given type and injects it into the model | The arrival B-Event that generates new customers |
+| COMPLETE | `COMPLETE(customerType)` | Marks the entity as served and removes it from active service | End of service B-Event; pairs with RELEASE |
+| RELEASE | `RELEASE(serverType)` | Frees one unit of the server resource | End of service, after COMPLETE |
+| ASSIGN | `ASSIGN(serverType, queueName)` | Removes the next entity from the queue, binds it to a free server unit | Start-of-service C-Event |
+| RENEGE | `RENEGE(queueName)` | Removes a waiting entity from a queue after a timeout (reneging) | Modelling impatient customers |
+| BATCH | `BATCH(n, entityType)` | Collects n individual entities of the given type into a single batch entity | Assembly, group boarding, bulk processing |
+| SPLIT | `SPLIT(n)` | Clones the current entity into n copies, each following independent paths | Parallel processing, order splitting |
+| MATCH | `MATCH(batch, entityType)` | Joins an individual entity to an existing batch | Partial assembly, kitting |
+| PREEMPT | `PREEMPT(serverType, custId)` | Interrupts the entity currently in service on the server and replaces it with the higher-priority entity | Emergency/priority override |
+| FAIL | `FAIL(serverType)` | Places the server into a failed (unavailable) state | Random breakdowns |
+| REPAIR | `REPAIR(serverType)` | Restores the server from failed state back to idle | End of repair B-Event |
+| COST | `COST(amount)` | Adds amount to the model's cumulative cost total | Cost-benefit analysis, penalty tracking |
+| SET | `SET(varName, expr)` | Sets a state variable to the value of an expression | Shift changes, counters, flags |
+| SET_ATTR | `SET_ATTR(attrName, expr)` | Sets an attribute on the current entity instance | Recording arrival time, priority, due date |
 
-The `clock` variable is available in the Condition Builder for writing time-based logic. For example, `clock > 100` can be used to trigger events only after a certain simulation time, or `clock < 50 AND queue(Queue).length > 0` to apply different behaviour during an initial period.
+Multiple macros can be listed in order in the same Effects field; they execute sequentially when the event fires.
 
-### Live Queue-Depth Time-Plot
+---
 
-When detailed output is enabled, the Execute canvas Charts tab includes a live queue-depth time-plot showing one line per queue, colour-coded with a legend. This reuses the existing `_timeSeries[]` data collected during simulation runs and helps visualise queue dynamics over time.
+## 6. Distributions Reference
 
-### Histogram and ANOVA Analysis
+Distributions control when events occur or how long they last.
 
-DES Studio includes statistical utilities for analysing simulation output:
+| Distribution | Parameters | Typical use |
+|-------------|------------|-------------|
+| Exponential | `mean` | Memoryless inter-arrival and service times (M/M/c baseline) |
+| Normal | `mean`, `stdDev` | Service times when empirical data is approximately bell-shaped |
+| Uniform | `min`, `max` | Service times with known lower and upper bounds, no preference |
+| Triangular | `min`, `mode`, `max` | Service time estimates when only three-point estimates are available |
+| Erlang | `k`, `mean` | Sum of k exponential phases; more regular than Exponential |
+| Constant | `value` | Deterministic fixed duration (use sparingly; removes variability) |
+| Deterministic | `value` | Synonym for Constant |
+| LogNormal | `mean`, `stdDev` | Right-skewed service times; common in healthcare and IT |
+| Weibull | `scale`, `shape` | Equipment lifetime, failure time-to-event |
+| PERT | `min`, `mode`, `max` | Like Triangular but smoother; good for project activity durations |
+| Poisson | `mean` | Number of arrivals in a fixed interval (not a duration — use carefully) |
+| Schedule | `[(time, rate), ...]` | Time-varying arrival rate defined as a step function |
+| EntityAttr | `attrName` | Duration drawn from an attribute already set on the entity |
+| ServerAttr | `attrName` | Duration drawn from an attribute on the assigned server entity |
 
-**Histograms:** Equal-width and Freedman-Diaconis automatic bin selection are available for wait time and service time distributions. Histograms show the shape of the distribution and can be compared across replications or scenarios.
+---
 
-**One-Way ANOVA:** Analysis of variance with Tukey HSD post-hoc testing is available for comparing means across multiple scenarios or replications. The ANOVA F-test determines whether there are statistically significant differences between group means, and Tukey HSD identifies which specific pairs differ.
+## 7. Running Experiments
 
-## 7. Distributions
+### 7.1 Single run
 
-Distributions control random durations and samples, such as inter-arrival time, service time, patience time, or time-varying rate bands.
+Click **Run All** in the Execute panel to run the model from time 0 to the configured end time in one step. Use **Single-step** to advance one event at a time (useful for debugging). **Auto-run** drives the simulation continuously at an adjustable speed, animating Live View in real time.
 
-Supported distribution types include:
+### 7.2 Replication batch (confidence intervals)
 
-| Distribution | Typical use |
-|---|---|
-| Fixed | Deterministic duration. |
-| Exponential | Inter-arrival or service time in queueing models. |
-| Uniform | Duration between a minimum and maximum. |
-| Normal | Duration around a mean with variation. |
-| Triangular | Duration with minimum, most likely, and maximum values. |
-| Lognormal | Positive skewed durations. |
-| Empirical | Sampling from imported or entered observed values. |
-| Piecewise/time-varying | Different distribution behavior by simulation time band. |
+Open **Experiments → Replication Run**. Set the number of replications (typically 30–100) and optionally a different random seed per replication. DES Studio runs all replications in parallel and aggregates results:
 
-All simulation sampling is seedable. Re-running the same model with the same seed should produce the same result.
+- Mean and 95% confidence interval for each KPI
+- Outlier detection (replications deviating more than 2σ from the batch mean are flagged)
+- Per-replication results available in the run history table
 
-## 8. Building A Simple Queueing Model
+Use replications whenever you need statistical rigour. A single run gives one observation; replications give a distribution of outcomes.
 
-This example describes the usual structure for a single-server queue.
+### 7.3 Parametric sweep (1D and 2D)
 
-### Step 1: Define entity types
+Open **Experiments → Parametric Sweep**.
 
-Create:
+**1D sweep:** Choose one model parameter (e.g., server count, arrival rate, mean service time), set a range and step size. DES Studio runs the full replication batch at each parameter value and plots KPI vs. parameter.
 
-- A customer entity type, such as `Customer`.
-- A server entity type, such as `Server`, with a count of `1`.
+**2D sweep:** Choose two parameters, each with its own range. DES Studio runs a grid of experiments and renders a heatmap of the chosen KPI. Feasibility colouring applies: cells meeting all performance goals are green; cells that violate at least one goal are red. The best feasible point is annotated with a marker.
 
-### Step 2: Define a queue
+### 7.4 Saving and comparing runs
 
-Create a queue for waiting customers.
+After any run click **Save Run** (or it saves automatically). Each saved run stores:
 
-For a basic model:
+- Model snapshot (the exact JSON at run time)
+- All result statistics
+- Configuration (replications, end time, seed)
 
-- Name: `Customer`
-- Discipline: `FIFO`
+Open **Run History** to list, re-open, or delete saved runs. Select two runs and click **Compare** to view a side-by-side KPI table and charts. The AI **Compare Runs** feature provides a narrative comparison (see Section 9.5).
 
-### Step 3: Define an arrival B-Event
+### 7.5 Warmup period and Welch detection
 
-Create a B-Event for arrivals.
+Long-running models may start in an unrealistic empty state. The Analysis view applies **Welch's method** to detect the warmup period automatically: it finds the point in the cumulative mean chart where the running mean stabilises. Statistics reported in the KPI summary exclude data from before the detected warmup cutoff, giving steady-state estimates rather than transient ones.
 
-The arrival event usually:
+You can override the warmup period manually by entering a fixed value in the Analysis settings.
 
-- Creates a new customer.
-- Places the customer in the customer queue.
-- Schedules the next arrival using an inter-arrival distribution.
+---
 
-### Step 4: Define a completion B-Event
+## 8. Execution Panel Views
 
-Create a B-Event for service completion.
+### 8.1 Live View
 
-The completion event usually:
+The Live View renders an animated canvas of the model graph while the simulation runs. Entity tokens (small circles coloured by entity type) flow along arcs between queues and events. Queue nodes swell visibly when entities accumulate. Server nodes show idle/busy/failed states with colour coding. Use Live View to:
 
-- Releases the server.
-- Records service and waiting statistics.
-- Routes the customer out of the system or to the next stage.
+- Confirm the model topology is wired correctly
+- Spot unexpected bottlenecks developing
+- Demonstrate the model to stakeholders
 
-### Step 5: Define a service-start C-Event
+### 8.2 Log view
 
-Create a C-Event that checks whether:
+The Log view is a scrollable, searchable event log showing every event that fired during the run. Each row includes:
 
-- The customer queue has at least one waiting customer.
-- A server is idle.
+- Simulation time
+- Phase (B or C)
+- Event name
+- Entity ID
+- Description of what happened
 
-When the condition is true, the C-Event starts service and schedules a completion event using a service-time distribution.
+Filter by phase (B-only, C-only, or both) to focus on scheduled vs. conditional activity. Search by entity ID or event name. Export the full log as CSV for external analysis.
 
-### Step 6: Validate and run
+### 8.3 Histograms
 
-Open the `Execute` tab and run the model. DES Studio validates the model before execution. Blocking validation errors must be fixed before a run can start.
+The Histograms view shows a bar chart of waiting time for each queue in the model. The x-axis is waiting time; the y-axis is frequency. Vertical markers indicate the p50, p90, and p99 percentiles. Use histograms to:
 
-## 9. Running A Model
+- Identify long-tail waiting time distributions
+- Check whether a service meets percentile-based SLAs (e.g., 90% of patients wait under 20 minutes)
 
-Use the `Execute` tab to run simulations.
+### 8.4 Entities view
 
-Depending on the model and current application version, the Execute tab may include:
+The Entities view is a per-entity lifecycle table. Each row is one entity instance; columns include arrival time, service start time, departure time, time in queue, time in service, and any custom attributes. The table is:
 
-- Single-run controls.
-- Replication controls.
-- Seed input or random seed controls.
-- Warm-up period.
-- Maximum simulation time.
-- Live visual canvas (topology-derived flow view).
-- Global KPI stats bar with configurable metrics.
-- Bottom panel with tabs: Step Log, Entity Table, Stage KPIs, and Charts.
-- Step-through mode (one Phase A/B/C cycle at a time).
-- Speed slider (0.5x to 10x animation speed).
-- Summary statistics.
-- Confidence interval results.
-- AI-generated results insights.
+- Sortable by any column
+- Filterable by entity type, time range, or attribute value
+- Equipped with anomaly detection — rows where wait time or time in system is more than 3σ from the mean are highlighted
 
-When opening a template model, the Execute tab loads automatically with the simulation ready to run.
+Use the Entities view to find individual outlier cases and trace why a specific entity experienced an unusually long wait.
 
-### Seeds
+### 8.5 Analysis view
 
-A seed controls the random stream. Use a fixed seed when you need reproducible results. Randomize the seed when you want a new independent run.
+The Analysis view (ResultsWorkspace) is the primary results dashboard. It contains:
 
-### Warm-up
+| Panel | Contents |
+|-------|----------|
+| KPI summary | Throughput, mean wait, mean time in system, goal status (green/red) |
+| Per-queue wait stats | Mean, max, p50, p90, p99 for each queue |
+| Per-resource utilisation | Fraction of time each server type was busy, with a utilisation bar |
+| Cumulative mean chart | Running mean of the primary KPI over simulation time, with warmup cutoff marked |
+| Replication CI table | When replications are run: mean ± 95% CI for each KPI |
 
-Warm-up lets the model run for an initial period before statistics are collected. This helps reduce startup bias in steady-state simulations.
+---
 
-### Replications
+## 9. AI Insights
 
-Replications run the same model multiple times with different seeds. DES Studio summarizes the results and can calculate confidence intervals for key measures.
+The AI Insights panel provides five analytical capabilities, all grounded in the current run's results and the model JSON (as of v1.5.0).
 
-### Execute Canvas
+### 9.1 Interpret Results (narrative)
 
-When a model has `model_json.graph` layout metadata (set via the Visual Designer), the Execute tab shows the simulation flow as an interactive canvas. Each node type renders live state:
+Click **Interpret Results** to receive a plain-English narrative of what the simulation found. The output covers:
 
-- **Source node:** Next arrival countdown with pulse animation on arrival.
-- **Queue node:** Depth badge showing current waiting count and capacity. Entity token dots (coloured by type). Optional live sparkline of queue depth history.
-- **Activity node:** Server pool dot-grid with busy/idle states, utilisation percentage, and completion signal.
-- **Sink node:** Total served count and throughput rate.
+- Overall system performance (throughput, average wait)
+- Which queues are longest, which resources are most utilised
+- Whether performance goals are met
+- Notable patterns (e.g., queue oscillation, warmup transient)
 
-Entity tokens animate along edges when routing events fire. Animation can be toggled off.
+### 9.2 Suggest Improvements (6-step structured analysis)
 
-### Stage KPIs
+Click **Suggest Improvements** for a structured diagnostic. For each suggestion the AI produces:
 
-The Stage KPIs tab in the bottom panel shows live per-queue and per-server performance metrics:
+1. **Binding constraint** — the queue, resource, or event limiting system performance
+2. **Root cause** — why the constraint exists (arrival rate vs. capacity mismatch, high variability, etc.)
+3. **Proposed change** — a specific, actionable model change (add a server, change a distribution, add a priority rule)
+4. **Predicted effect** — quantitative estimate of the improvement (e.g., "expected to reduce mean wait by ~30%")
+5. **Goal impact** — whether the change is predicted to bring the model within performance goal thresholds
+6. **Ranking** — suggestions ordered by expected value and confidence
 
-- **Queue rows:** Queue name, current depth, mean wait, max wait, total arrivals, reneged count.
-- **Server rows:** Server type, capacity, busy count, utilisation %, mean service time, completions.
+### 9.3 Sensitivity Analysis
 
-Event fire counts (how many times each B-Event and C-Event fired) are shown in a separate table above.
+Click **Sensitivity Analysis** to assess how much uncertainty exists in the results. The output includes:
 
-## 10. Understanding Results
+- Width of confidence intervals relative to point estimates
+- Parameters where small changes have large KPI effects (high sensitivity)
+- Recommendations on replication count if CIs are wide
 
-DES Studio can show several result views:
+### 9.4 Ask a Question
 
-| View | Purpose |
-|---|---|
-| Visual View | Shows the current system state, including queues, entities, and servers. |
-| Step Log | Shows phase-tagged simulation events with clock times. |
-| Entity Table | Shows entity status during or after a run. |
-| Stage KPIs | Live per-queue and per-server performance metrics and event fire counts. |
-| Charts | Queue depth and server utilisation time-series charts (when detailed output is enabled). |
-| Summary | Shows totals and averages such as arrived, served, reneged, wait time, and service time. |
-| Confidence Intervals | Summarizes replication uncertainty. |
-| AI Insights | Provides plain-language interpretation of completed run results. |
+Type any question about the model or results in the text box and click **Ask**. Examples:
 
-The Step Log is useful when checking whether the model behaves as intended. It can reveal when arrivals, completions, C-Events, rate changes, or shift changes occur.
+- "Why is utilisation above 90%?"
+- "What would happen if I added a priority queue for urgent patients?"
+- "Is the warmup period long enough?"
 
-## 11. Run History
+The AI answers using the current model JSON and results as context.
 
-The `History` tab shows recent runs for the selected model.
+### 9.5 Compare Runs
 
-Run history can include:
+Select two saved runs from the Run History and click **Compare Runs**. The AI produces a narrative comparison covering:
 
-- Run label.
-- Date and time.
-- Seed.
-- Number of replications.
-- Warm-up period.
-- Maximum simulation time.
-- Arrivals, completions, and reneges.
-- Average wait and service measures.
-- Duration.
+- Which run performed better on each KPI
+- Whether the difference is statistically meaningful (CI overlap)
+- Interpretation of why results differ (different parameters, different model structure)
 
-You can export run history as JSON or CSV.
+### 9.6 Best practices for getting good AI suggestions
 
-## 12. Importing And Exporting
+- **Set performance goals first.** Without goals the AI cannot assess feasibility or rank suggestions by goal impact.
+- **Run replications before using AI Insights.** Point estimates from a single run have high variance; the AI's predictions are more reliable when based on CI-validated KPIs.
+- **Use descriptive names.** Name your queues and entity types clearly (e.g., "Emergency Waiting Room" not "Q1") — the AI uses these names to produce readable, specific output.
+- **Annotate the model description.** A model description explaining the real-world context helps the AI tailor suggestions to the scenario (e.g., "GP surgery, 08:00–16:00, two GPs").
+- **Run warmup detection first.** If Welch detection finds a long warmup, extend the run time so the steady-state sample is large enough for reliable statistics.
 
-### Export a model
+---
 
-Use `Export JSON` from the Model Detail header. DES Studio exports the current model as a JSON file.
+## 10. Visual Designer
 
-If the model contains validation errors, DES Studio asks you to confirm before exporting.
+The Visual Designer provides a drag-and-drop canvas view of the model. It is accessed via the **Visual Designer** tab in the Model Detail view. All changes made in the Visual Designer are reflected immediately in the Forms/Tabs editors, and vice versa.
 
-### Import a model
+### 10.1 Node types
 
-Use `Import JSON` from the Model Library. Imported models are saved as private models owned by you.
+| Node type | Represents | Visual appearance |
+|-----------|------------|-------------------|
+| Queue | A waiting queue | Rectangle with discipline label |
+| B-Event | A bound (time-scheduled) event | Rounded rectangle with clock icon |
+| C-Event | A conditional event | Diamond shape |
+| Entity Type | A customer or server entity type | Circle with entity name |
 
-DES Studio validates imported models. Blocking validation errors prevent the import.
+### 10.2 Drawing connections
 
-### Export run results
+Click and drag from a node's output port to another node's input port to create a connection (edge). Connections represent flow relationships:
 
-Use result export controls in the Execute or History areas. JSON is best when you want complete structured data. CSV is best when you want to analyze rows in a spreadsheet.
+| Connection type | From → To | Meaning |
+|-----------------|-----------|---------|
+| Arrive-to-queue | B-Event → Queue | Entities created by this B-Event enter this queue |
+| Queue-to-event | Queue → C-Event | This queue feeds this C-Event's condition |
+| Event-to-queue | C/B-Event → Queue | This event routes entities to this queue |
+| Entity-to-event | Entity Type → B-Event | This entity type is the subject of the event |
 
-## 13. Sharing And Access
+DES Studio validates connections and highlights invalid ports in red.
 
-Model owners can control visibility and access.
+### 10.3 Node inspector
 
-| Setting | Meaning |
-|---|---|
-| Private | Only the owner and explicitly shared users can access the model. |
-| Public | Other authenticated users can see the model in the Public Library. |
-| Viewer | A shared user can view the model. |
-| Editor | A shared user can edit the model. |
+Click any node to open the **Node Inspector** panel on the right. The inspector shows all editable fields for that element — the same fields available in the Forms/Tabs editor. Changes take effect immediately and are reflected in both the canvas and the structured editor.
 
-Public model runs by non-owners use a fork. This means the original public model is not changed by another user's execution or run history.
+### 10.4 Syncing with editors
 
-## 14. Validation Messages
+The Visual Designer and the Forms/Tabs editors share a single canonical model JSON. There is no separate "sync" step — the two views are always in sync. You can switch between them at any time without losing changes.
 
-DES Studio validates models before running and during key import/apply workflows.
+---
 
-Validation messages are shown near the affected editor tab where possible. In the Visual Designer, clicking a validation item highlights the affected node on the canvas.
+## 11. Sharing and Exporting
 
-Blocking errors prevent execution. Examples include:
+### 11.1 Share link and QR code
 
-- Empty or duplicate entity type names.
-- Duplicate attributes within an entity type.
-- Distribution parameters outside valid bounds.
-- Conditions that reference undefined variables or attributes.
-- Priority queues without a numeric priority attribute.
-- Finite queue capacity overflow destination referencing a non-existent queue.
-- BATCH macro with size less than 2.
-- UNBATCH referencing a non-existent queue.
-- Loop guard maxLoopCount less than 1.
-- Resource capacity less than 1 or non-integer.
+From the Model Detail view, click **Share**. DES Studio generates a unique shareable URL for the current model (or the current run results snapshot). A QR code is displayed alongside the link. Recipients who open the link can view the model and results in read-only mode without signing in.
 
-Warnings do not always prevent execution, but they indicate something worth checking. For example, a normal distribution with a mean too close to its standard deviation may create many negative samples that need clamping.
+To revoke a share link, click **Unshare** — the link will stop resolving.
 
-Validation currently focuses on model structure and supported patterns. Some waiting/resource behaviours are enforced by engine lifecycle rules rather than separate validation errors. As Sprint 26 closes out, the user-facing guidance and sample models will be the main reference for those behaviours.
+### 11.2 Export results as JSON or CSV
 
-## 15. Dynamic Modelling Features
+In the Analysis view or Run History, click **Export**:
 
-Recent versions of DES Studio support dynamic behaviour over simulation time.
+- **CSV**: KPI summary table, per-queue stats, per-resource utilisation, and (optionally) the per-entity lifecycle table. Suitable for import into Excel or R.
+- **JSON**: Full results object including all raw statistics, replication data, and confidence intervals. Suitable for programmatic processing or archiving.
 
-### Time-varying arrivals
+The event log can also be exported as CSV from the Log view.
 
-Arrival behavior can change by time band. This is useful for systems where demand varies by time of day or operating period.
+### 11.3 Export model as JSON
 
-For example:
+From the Model Detail view click **Export Model**. DES Studio downloads the model definition as a `.json` file. This file can be imported into any DES Studio instance via **Import** in the Model Library.
 
-| Time band | Arrival pattern |
-|---|---|
-| 0 to 120 | Low arrival rate |
-| 120 to 360 | Peak arrival rate |
-| 360 to 480 | Lower arrival rate |
+---
 
-DES Studio records rate-change markers in the run log so you can inspect when these changes occur.
+## 12. Common Modelling Patterns
 
-### Resource shift schedules
+The following patterns cover the most frequently modelled scenarios. Each is available as a template in the Model Library.
 
-Resource capacity can change over time. This is useful for modelling staff shifts, machine availability, or scheduled capacity changes.
+| Pattern | Key elements | Notes |
+|---------|--------------|-------|
+| Single queue / service (M/M/c) | One customer type, one server type, one queue, one arrival B-Event, one start-service C-Event, one completion B-Event | The canonical baseline; validate against M/M/c analytical formula |
+| Multi-stage routing | Multiple queues and server types chained; routing configured in each B-Event's Routing field | Ensures entity flows from stage 1 to stage 2 to stage 3 |
+| Priority queues | Queue discipline set to `Priority`; entity attribute `priority` set with `SET_ATTR(priority, expr)` on arrival | Higher priority number = served first (configurable) |
+| Batching and assembly | `BATCH(n, entityType)` collects n entities; subsequent events fire on the batch | Model group boarding, kitting, bulk transport |
+| Entity splitting | `SPLIT(n)` creates n copies from one entity; each copy follows independent downstream paths | Parallel lab tests, order line splitting |
+| Resource failures and repair | Failure B-Event uses `FAIL(serverType)`; repair B-Event uses `REPAIR(serverType)` | Set failure inter-arrival and repair time distributions on respective B-Events |
+| Time-varying capacity (shift schedules) | Use a `Schedule` distribution on arrival B-Events, or `SET` a state variable to change server count at shift change times | Model morning rush, night shift, seasonal demand |
+| Loop guards (recirculation) | B-Event or C-Event routes an entity back to an earlier queue; loop guard field sets maximum re-entries | Model rework loops, retry queues; always set a guard to prevent infinite loops |
+| Cost tracking | `COST(amount)` in service and waiting effects; `totalCost` performance goal | Model cost per unit time waiting, cost per service, penalty costs |
 
-When capacity increases, DES Studio adds idle resource instances. When capacity decreases, idle excess instances can be retired. Busy excess instances finish their current work and may produce warnings depending on the scenario.
+---
 
-### Finite queues and balking
+## 13. Troubleshooting
 
-Queues can be configured with a maximum capacity. When full, arriving entities are blocked and routed to an overflow destination (another queue or system exit). Arrival B-Events can also be configured with balking — entities may probabilistically or conditionally decline to join a queue, with overflow routing applied. Blocking and balking counts are recorded per queue in the results summary.
+### Model validation errors
 
-### Overflow routing
+DES Studio validates the model JSON before every run. Common errors:
 
-Blocked (queue full) or balking (declined to join) entities are sent to the configured overflow destination — either another queue for further processing, or system exit. Overflow routing reuses the same routing infrastructure as conditional routing.
+| Error | Cause | Fix |
+|-------|-------|-----|
+| "Unknown entity type in ARRIVE" | Macro references an entity type name that does not exist | Check spelling in the macro matches the Entity Types tab exactly |
+| "Queue not found in ASSIGN" | ASSIGN references a queue that has not been defined | Create the queue in the Queues tab or correct the name |
+| "No B-Event schedules arrivals" | The model has no ARRIVE macro, so no entities enter the system | Ensure at least one B-Event has `ARRIVE(...)` in its effects |
+| "Circular routing without loop guard" | An entity can loop indefinitely | Add a loop guard count to the routing B-Event |
 
-### Recirculation and rework loops
+### Simulation not progressing
 
-Entities can be routed through rework loops for multi-pass processing. Each entity tracks its loop count automatically. Configurable limits prevent infinite loops, and entities exceeding the limit are routed to an exit queue or marked as done. The Visual Designer shows loop edges as amber dashed lines.
+If the simulation clock does not advance (Auto-run shows the same time), check:
 
-### Time-series output
+- All C-Events have reachable conditions. If a C-Event's condition can never be true (e.g., it references a queue that nothing routes to), Phase C stalls.
+- At least one B-Event is scheduled. If all B-Events require a prior ASSIGN before they fire, the system may start empty with no scheduled events.
+- The end time is greater than 0.
 
-When detailed output is enabled, the engine records queue depth and resource utilisation at each clock advance. The Charts tab in the Execute bottom panel renders time-series line charts for each queue and server type. A waiting time histogram shows per-queue wait distributions with p50, p90, p95, and p99 percentile markers.
+### High utilisation / long queues
 
-## 16. AI Features
+When server utilisation approaches or exceeds 95%, queues grow without bound in finite run time. This is expected queuing behaviour, not a bug. Options:
 
-DES Studio includes AI-assisted model creation and results interpretation through a server-side LLM proxy. AI analysis is advisory and does not change the model or engine.
+- Add more server capacity (increase initial count on the server entity type).
+- Reduce arrival rate (increase mean inter-arrival time).
+- Run a parametric sweep to find the minimum server count that meets your performance goal.
 
-### AI-Generated Model Authoring
+### Unexpected reneging
 
-The AI Generated Model tab allows you to describe a simulation model in natural language. The AI generates a structured model proposal that can be reviewed, partially applied, or edited before saving.
+If entities are disappearing from queues earlier than expected, check:
 
-When the AI proposal contains validation errors, the system attempts one automatic retry with error feedback. If issues cannot be resolved, the retry explanation is shown in the conversation history alongside any unfixable issues displayed as a notice.
+- `balkCondition` or `balkProbability` on queues — entities may be balking on arrival.
+- `RENEGE` macros in B-Events — a timeout may be triggering sooner than intended. Check the distribution mean on the reneging B-Event.
 
-### Results-Informed Refinement
+### Phase C truncation warning
 
-When refining a model through the AI, the system can incorporate run results (KPI data such as arrivals, completions, wait times, and utilisation) to suggest targeted improvements for identified bottlenecks.
-
-### Suggest Model Changes
-
-After a completed run, the AI Assistant in the Execute panel includes a "Suggest model changes" button. This sends the current model structure and KPI data to the LLM, which recommends structural changes to improve performance. Suggestions are displayed as narrative text in the AI Assistant panel.
-
-### Results Insights
-
-AI result features may include:
-
-- KPI narrative.
-- Scenario comparison.
-- Sensitivity commentary.
-
-Do not enter secrets or API keys into the browser. Provider credentials are handled server-side.
-
-## 17. Practical Tips
-
-- Start with the sample M/M/1 model or a template to learn the workflow.
-- Use the Visual Designer for graph-based editing — it shows the flow structure visually.
-- Use the Forms/Tabs editors for precise configuration of conditions, distributions, and routing.
-- Build small models first, then add complexity.
-- Use fixed seeds while debugging.
-- Use the Step Log to check event order.
-- Use validation messages before assuming a model is wrong.
-- Run multiple replications before trusting averages.
-- Export JSON before making large structural changes.
-- Keep names consistent, especially queue names, entity type names, and event names.
-- Configure finite queue capacity and overflow routing for realistic system behaviour.
-- Use BATCH/UNBATCH for assembly operations where multiple components form a single product.
-- Use rework loops for inspection/rework processes, with maxLoopCount set appropriately.
-- Use PREEMPT for modelling high-priority interruptions of ongoing service.
-- Use FAIL/REPAIR with MTBF/MTTR distributions for resource reliability modelling.
-- Use COSEIZE when an operation requires multiple resources simultaneously (e.g., surgeon + anesthetist).
-- Use SPLIT for parallel processing paths or inspection splitting.
-- Use MATCH for pairing different entity types from separate queues.
-- Use SPT/EDD queue disciplines to optimise for wait time or deadline adherence.
-- Check the WIP time-average metric against Little's Law (avgWIP ≈ λ × avgSojourn) for model validation.
-
-## 18. Glossary
-
-| Term | Meaning |
-|---|---|
-| ANOVA | Analysis of variance — statistical test for comparing means across multiple groups. |
-| Balking | An entity declining to join a queue based on a condition or probability. |
-| Batch | A group of entities accumulated and processed as a single unit (BATCH macro). |
-| B-Event | A scheduled event that fires at a known simulation time. |
-| C-Event | A conditional event that fires when its condition is true. |
-| Confidence interval | A range describing uncertainty across replications. |
-| COSEIZE | Macro that atomically seizes multiple server types simultaneously. |
-| DES | Discrete-event simulation. |
-| EDD | Earliest Due Date — queue discipline selecting entities with the earliest due date first. |
-| Entity | An object moving through or supporting the system, such as a customer or server. |
-| FAIL | Macro that sets matching servers to failed status, re-queuing busy entities. |
-| FEL | Future Event List, the ordered list of scheduled events. |
-| Fork | A private copy of a public model made for another user's run or edit workflow. |
-| Histogram | Distribution visualization showing frequency of values across bins. |
-| Little's Law | Relationship: avgWIP = λ × avgSojourn — used to validate model consistency. |
-| Loop count | The number of times an entity has passed through a rework cycle (Entity.loopCount). |
-| MATCH | Macro that pairs entities from two queues into a batch entity. |
-| MTBF | Mean Time Between Failures — average time between resource breakdowns. |
-| MTTR | Mean Time To Repair — average time to restore a failed resource. |
-| Overflow | Routing of a blocked or balking entity to an alternative queue or system exit. |
-| Preemption | Interrupting a busy server to serve a higher-priority entity (PREEMPT macro). |
-| Queue | A waiting line for entities. |
-| Recirculation | Routing an entity back through an earlier stage for rework or multi-pass processing. |
-| REPAIR | Macro that restores failed servers to idle status. |
-| Replication | One independent run of the same model. |
-| Seed | A number used to make random sampling reproducible. |
-| SPT | Shortest Processing Time — queue discipline selecting entities with shortest service time first. |
-| SPLIT | Macro that creates N-1 clones of a context entity for parallel processing. |
-| Template | A pre-built simulation model used as a starting point. |
-| Tukey HSD | Post-hoc test following ANOVA to identify which specific group pairs differ. |
-| Unbatch | The process of restoring individual entities from a batch group (UNBATCH macro). |
-| Warm-up | Initial simulation period excluded from statistics. |
-| WIP | Work-In-Progress — time-average number of entities in the system (avgWIP). |
-
-## 19. Where To Go Next
-
-For a new user, the recommended learning path is:
-
-1. Browse the Templates tab and open a model that matches your domain.
-2. Run it once from the Execute tab.
-3. Review the Step Log, Entity Table, and Stage KPIs.
-4. Open the Visual Designer to see the model flow visually.
-5. Change the arrival or service distribution using the Forms/Tabs editors.
-6. Run several replications.
-7. Export the results.
-8. Create a blank model for your own system.
-
-For deeper reference material, see:
-
-- `README.md` for project setup and roadmap status.
-- `AGENTS.md` for architectural rules and the complete sprint history.
-- `docs/addition1_entity_model.md` for the model schema and distribution details.
-- `docs/DES_Studio_Build_Plan.md` for roadmap and sprint history.
-- `docs/Template Models Guide.md` for detailed explanations of all 14 template models.
-- `docs/patterns/` for reusable modelling pattern references (6 patterns).
-- `docs/archived/` for superseded historical documents (reference only).
+If the log shows "Phase C truncated after N iterations", a C-Event condition is remaining true after each firing, causing an infinite loop within a single Phase C pass. This typically means a C-Event is not consuming the entity or resource it checked in its condition. Verify that `ASSIGN` is present in the effects and that it reduces the queue length (or server availability) so the condition eventually becomes false.
