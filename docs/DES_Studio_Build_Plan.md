@@ -1694,16 +1694,103 @@ npm run build
 
 ---
 
-## Sprint 46 Candidates
+---
 
-The following items are candidates for Sprint 46. None are committed until a sprint plan document is written.
+### Sprint 47 — Toast Notification System ✅
 
-| Candidate | Rationale |
-|---|---|
-| loopConfig and balkCondition engine wiring | UI fields exist (Sprint 42) but the engine does not yet evaluate loopConfig.maxLoops or balkCondition predicates — modellers can enter values but they have no effect |
-| AI comparison mode with goal gaps | Side-by-side AI analysis of two saved runs showing which goals each run satisfies and what changed |
-| Prompt caching (Anthropic cache headers on stable prompt segments) | System prompt and model digest are stable across suggestions in one session; cache_control headers would reduce latency and cost |
-| Per-replication entity anomaly aggregation | EntitySummaryTable currently shows anomalies from the last replication only; aggregate across all replications for more statistically reliable anomaly detection |
+**Goal:** Replace ad-hoc alert()/console patterns with a consistent toast notification system.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F47.1 — ToastContext + portal | ✅ | `src/ui/shared/ToastContext.jsx` — React context + `createPortal` bottom-right stack |
+| F47.2 — Variants | ✅ | info / success / error / warning; auto-dismiss 4s; max 3 visible; `role="status"` / `aria-live="polite"` |
+| F47.3 — Wrapped in App | ✅ | `<ToastProvider>` wraps app root in `App.jsx` |
+
+---
+
+### Sprint 48 — Skeleton Loading & Keyboard Shortcuts ✅
+
+**Goal:** Add skeleton loading states and a keyboard shortcuts reference modal.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F48.1 — SkeletonPanel | ✅ | `src/ui/shared/SkeletonPanel.jsx` — CSS `@keyframes des-pulse` via injected `<style>` tag; staggered row delay |
+| F48.2 — Visual Designer Suspense | ✅ | `<Suspense fallback={<SkeletonPanel rows={5}/>}>` wraps lazy VisualDesignerPanel |
+| F48.3 — KeyboardShortcutsModal | ✅ | `src/ui/shared/KeyboardShortcutsModal.jsx` — global `?` keydown in App.jsx; skips INPUT/TEXTAREA/SELECT |
+
+---
+
+### Sprint 49 — Starter Guide & Bulk History Selection ✅
+
+**Goal:** Persist starter guide dismissal state; add bulk run history selection.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F49.1 — Starter guide localStorage | ✅ | `des_starter_${modelId}` key; auto-hidden when entities or runs exist; `reopenStarterGuide()` function |
+| F49.2 — Bulk history selection | ✅ | `historySelected` Set state; select-all checkbox; per-row checkbox; bulk archive/export action bar |
+
+---
+
+### Sprint 50 — Toast Integration ✅
+
+**Goal:** Wire toast system into all save, export, and AI rate-limit paths.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F50.1 — ModelDetail save/export toasts | ✅ | `save()`, `saveGeneratedModel()`, `exportRunHistoryJson/Csv` all fire toasts; `saveStatus` state removed |
+| F50.2 — CsvImportModal toast | ✅ | `handleApply` fires `toast.success` on successful CSV import |
+| F50.3 — AiAssistantPanel rate-limit toast | ✅ | `/rate.?limit|429/i` regex in `onError` handlers; `toast.warning` surfaced |
+
+---
+
+### Sprint 51 — DistPicker Redesign ✅
+
+**Goal:** Redesign the Distribution Picker with family grouping, inline validation, and sparkline preview.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F51.1 — DistHelp metadata | ✅ | `src/ui/shared/DistHelp.js` — DIST_GROUPS, DIST_HELP, getDistGroup(), validateDistParams() |
+| F51.2 — DistSparkline | ✅ | `src/ui/shared/DistSparkline.jsx` — 120×40 SVG; shape functions for Exponential/Uniform/Fixed/Normal/Triangular/Erlang |
+| F51.3 — DistPicker family segmented buttons | ✅ | Three family groups (Parametric / Time-varying / From data); ? toggle for help card; blur validation; "Preview ▾" toggle |
+
+---
+
+### Sprint 52 — Responsive Design & Layout Robustness ✅
+
+**Goal:** Replace all manual `window.innerWidth` resize listeners with a shared `useViewport()` hook; add compact and mobile layouts.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F52.1 — useViewport hook | ✅ | `src/ui/shared/hooks.js` — `ResizeObserver` on `document.documentElement`; `BP = { mobile: 720, compact: 1024 }` |
+| F52.2 — "More ▾" compact tab bar | ✅ | Access/History/Validate tabs hidden behind dropdown at 720–1024px in ModelDetail |
+| F52.3 — ExecutePanel column stacking | ✅ | Root flex `flexDirection: isCompact ? "column" : "row"` |
+| F52.4 — AdminPanel mobile layout | ✅ | Tab buttons wrap full-width; form grids single-column at `narrowLayout` |
+
+---
+
+### Sprint 53 — God Component Decomposition ✅
+
+**Goal:** Extract self-contained auth forms and run history tab from their parent god components.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F53.1 — AuthShell extracted | ✅ | `src/ui/AuthShell.jsx` — all auth state and supabase auth calls; App.jsx passes only `isRecoverySession` |
+| F53.2 — ModelHistoryTab extracted | ✅ | `src/ui/ModelHistoryTab.jsx` — history tab state (search, selected, label-edit) + export/archive functions |
+| F53.3 — ModelDetail cleanup | ✅ | ~220 lines removed from ModelDetail; 4 orphaned `setSaveStatus` calls removed; db import trimmed |
 
 ---
 
