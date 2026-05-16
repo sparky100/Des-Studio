@@ -1,0 +1,256 @@
+// ui/ModelLibrary.jsx — Model library: My Models / Templates / Public / Community tabs
+import { useState, useRef } from "react";
+import { C, FONT, SHADOW, RADIUS, Z } from "./shared/tokens.js";
+import { Btn, Empty } from "./shared/components.jsx";
+import { ModelCard, NewModelModal } from "./ModelDetail.jsx";
+import { TEMPLATES } from "../engine/templates.js";
+
+const PATTERNS_GUIDE = [
+  { id: "p1", title: "Single-Queue Service (M/M/c)", macros: ["ARRIVE", "ASSIGN", "COMPLETE"],
+    summary: "A pool of identical servers draws from one shared queue. Covers call centres, tellers, compute hosts.",
+    snippet: "ARRIVE(Customer, Queue)\nASSIGN(Queue, Server)\nCOMPLETE()",
+    templates: ["mm1", "call-center", "bank-branch", "data-center", "port-berth"] },
+  { id: "p2", title: "Multi-Stage Sequential Routing", macros: ["ARRIVE", "ASSIGN", "RELEASE", "COMPLETE"],
+    summary: "Customers move through two or more stages in sequence.",
+    snippet: "ARRIVE(Customer, StageA)\nASSIGN(StageA, ServerA)\nRELEASE(ServerA, StageB)\nASSIGN(StageB, ServerB)\nCOMPLETE()",
+    templates: ["er-triage", "outpatient-clinic", "fast-food", "construction", "ward-admission", "airport"] },
+  { id: "p3", title: "Batching and Assembly", macros: ["ARRIVE", "BATCH", "ASSIGN", "COMPLETE"],
+    summary: "Individual items accumulate until N are present, then merge into one batch entity.",
+    snippet: "ARRIVE(Item, Items)\nBATCH(Items, N)\nASSIGN(Items, Worker)\nCOMPLETE()",
+    templates: ["factory", "warehouse"] },
+  { id: "p4", title: "Reneging and Abandonment", macros: ["ARRIVE", "RENEGE", "ASSIGN", "COMPLETE"],
+    summary: "Customers waiting beyond their patience time self-remove.",
+    snippet: "ARRIVE(Customer, Queue)\n  ↳ schedule RENEGE timer  isRenege:true\nRENEGE(ctx)\nASSIGN(Queue, Server)\nCOMPLETE()",
+    templates: ["call-center"] },
+  { id: "p5", title: "Finite Capacity and Balking", macros: ["ARRIVE"],
+    summary: "Set a capacity on the queue. ARRIVE silently discards customers when the queue is full.",
+    snippet: "Queue: WaitingArea  capacity=20\nARRIVE(Customer, WaitingArea)  ← balks if full",
+    templates: ["airport", "ward-admission", "retail-checkout"] },
+  { id: "p6", title: "Priority Queue", macros: ["ARRIVE", "ASSIGN", "COMPLETE"],
+    summary: "Set discipline=PRIORITY on the queue and add a numeric priority attribute. Lower number = higher urgency.",
+    snippet: "EntityType: Customer  attrDefs: [priority dist=Uniform(1,5)]\nQueue: Queue  discipline=PRIORITY\nASSIGN(Queue, Server)",
+    templates: ["er-triage", "bank-branch", "priority-ed-balking"] },
+  { id: "p7", title: "Server Failures and Repair", macros: ["FAIL", "REPAIR"],
+    summary: "Set mtbfDist and mttrDist on a server entity type.",
+    snippet: "EntityType: Machine  mtbfDist=Exponential{mean:120}  mttrDist=Exponential{mean:20}",
+    templates: ["machine-shop-failures"] },
+  { id: "p8", title: "Cost Tracking", macros: ["COST"],
+    summary: "Add COST(amount) to any B-event effect. Costs accumulate in totalCost.",
+    snippet: 'B-event: Call Handled  effect: ["COMPLETE()", "COST(5)"]\nGoal: totalCost < 500',
+    templates: ["cost-call-centre"] },
+];
+
+const PatternsGuidePanel = ({ onClose }) => (
+  <div role="dialog" aria-modal="true" aria-labelledby="patterns-guide-title" style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 480, maxWidth: "95vw", background: C.surface, borderLeft: `1px solid ${C.border}`, zIndex: Z.modal, display: "flex", flexDirection: "column", boxShadow: SHADOW.panel }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+      <div>
+        <div id="patterns-guide-title" style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Modelling Patterns</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>6 reusable patterns for DES Studio models</div>
+      </div>
+      <button type="button" aria-label="Close patterns guide" onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", lineHeight: 1 }}>✕</button>
+    </div>
+    <div style={{ overflowY: "auto", flex: 1, padding: "12px 18px", display: "flex", flexDirection: "column", gap: 14 }}>
+      {PATTERNS_GUIDE.map((p, i) => (
+        <div key={p.id} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.accent, background: C.accent + "22", borderRadius: 10, padding: "2px 7px", flexShrink: 0 }}>P{i + 1}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>{p.title}</div>
+          </div>
+          <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>{p.summary}</div>
+          <pre style={{ fontSize: 9, color: C.green, background: C.bg, borderRadius: 4, padding: "8px 10px", overflowX: "auto", margin: "0 0 8px", lineHeight: 1.6, fontFamily: "'JetBrains Mono',monospace" }}>{p.snippet}</pre>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 9, color: C.muted, marginRight: 2 }}>macros:</span>
+            {p.macros.map(m => <span key={m} style={{ fontSize: 9, color: C.accent, background: C.accent + "18", borderRadius: 3, padding: "1px 5px", fontFamily: "monospace" }}>{m}</span>)}
+          </div>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
+            <span style={{ fontSize: 9, color: C.muted, marginRight: 2 }}>templates:</span>
+            {p.templates.map(t => <span key={t} style={{ fontSize: 9, color: C.muted, background: C.border + "66", borderRadius: 3, padding: "1px 5px" }}>{t}</span>)}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const FirstRunPanel = ({ onCreateBlank, onBrowseTemplates }) => (
+  <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+    <div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>Start your first model</div>
+      <div style={{ fontSize: 12, color: C.muted }}>Create a model from scratch or start from one of the built-in templates.</div>
+    </div>
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      <Btn variant="ghost" onClick={onBrowseTemplates}>Use a Template</Btn>
+      <Btn variant="primary" onClick={onCreateBlank}>Create a Model</Btn>
+    </div>
+  </div>
+);
+
+export function ModelLibrary({
+  myModels, pubModels, communityModels,
+  profiles, currentUserId,
+  importStatus, runStatsError, actionError, error,
+  onOpenModel, onDeleteModel, onStartTemplate,
+  onCreateNewModel,
+  onImportFile,
+  onPasteJsonImport,
+  tab, onTabChange,
+}) {
+  const setTab = onTabChange;
+  const importFileRef = useRef(null);
+  const [showNew, setShowNew] = useState(false);
+  const [tmplSearch, setTmplSearch] = useState("");
+  const [tmplDomain, setTmplDomain] = useState("All");
+  const [showPatternsGuide, setShowPatternsGuide] = useState(false);
+  const [showPasteJson, setShowPasteJson] = useState(false);
+  const [pasteJsonText, setPasteJsonText] = useState("");
+
+  const DOMAIN_COLORS = { Academic: "#7c6fcd", Healthcare: "#3b9e78", "Service Systems": "#c0813a", Manufacturing: "#3a82c0", Logistics: "#9e3b7a", Technology: "#3a9ec0" };
+  const allDomains = ["All", ...Array.from(new Set(TEMPLATES.map(t => t.domain)))];
+
+  return (
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: C.text, marginBottom: 4 }}>Model Library</h1>
+          <p style={{ fontSize: 12, color: C.muted }}>Build and share discrete-event simulation models.</p>
+        </div>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <input ref={importFileRef} aria-label="Import model file" type="file" accept=".json,application/json" style={{ display: "none" }} onChange={onImportFile} />
+          <Btn variant="ghost" onClick={() => importFileRef.current?.click()}>Import File</Btn>
+          <Btn variant="ghost" onClick={() => { setPasteJsonText(""); setShowPasteJson(true); }}>Paste JSON</Btn>
+          <Btn variant="primary" onClick={() => setShowNew(true)}>+ New Model</Btn>
+        </div>
+      </div>
+
+      {importStatus && (
+        <div style={{ background: importStatus.state === "error" ? C.red + "18" : importStatus.state === "warning" ? C.amber + "18" : importStatus.state === "success" ? C.green + "18" : C.surface, border: `1px solid ${importStatus.state === "error" ? C.red + "44" : importStatus.state === "warning" ? C.amber + "44" : importStatus.state === "success" ? C.green + "44" : C.border}`, borderRadius: 6, color: importStatus.state === "error" ? C.red : importStatus.state === "warning" ? C.amber : importStatus.state === "success" ? C.green : C.muted, fontSize: 12, fontFamily: FONT, marginBottom: 16, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <div>{importStatus.message}</div>
+          {(importStatus.items || []).map((item, i) => <div key={i} style={{ color: C.muted }}>{item}</div>)}
+        </div>
+      )}
+      {runStatsError && (
+        <div style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, color: C.amber, fontSize: 12, fontFamily: FONT, marginBottom: 16, padding: "10px 12px" }}>
+          Run counts unavailable: {runStatsError}
+        </div>
+      )}
+      {actionError && (
+        <div role="alert" style={{ background: C.red + "18", border: `1px solid ${C.red}44`, borderRadius: 6, color: C.red, fontSize: 12, fontFamily: FONT, marginBottom: 16, padding: "10px 12px" }}>
+          {actionError}
+        </div>
+      )}
+      {error && (
+        <div role="alert" style={{ background: C.red + "18", border: `1px solid ${C.red}44`, borderRadius: 6, color: C.red, fontSize: 12, fontFamily: FONT, marginBottom: 16, padding: "10px 12px" }}>
+          {error}
+        </div>
+      )}
+
+      <div role="tablist" aria-label="Model library sections" style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 24 }}>
+        {[
+          { id: "my", label: `My Models (${myModels.length})` },
+          { id: "templates", label: `Templates (${TEMPLATES.length})` },
+          { id: "public", label: `Public Library (${pubModels.length})` },
+          { id: "community", label: `Community (${communityModels.length})` },
+        ].map(t => (
+          <button key={t.id} type="button" role="tab" aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            style={{ background: "none", border: "none", borderBottom: tab === t.id ? `2px solid ${C.accent}` : "2px solid transparent", color: tab === t.id ? C.accent : C.muted, fontFamily: FONT, fontSize: 12, padding: "10px 18px", cursor: "pointer", fontWeight: tab === t.id ? 700 : 400 }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "templates" && (() => {
+        const q = tmplSearch.trim().toLowerCase();
+        const visible = TEMPLATES.filter(t => {
+          if (tmplDomain !== "All" && t.domain !== tmplDomain) return false;
+          if (q && !t.name.toLowerCase().includes(q) && !t.description.toLowerCase().includes(q) && !(t.templateMeta?.scenarioType || "").toLowerCase().includes(q)) return false;
+          return true;
+        });
+        return (
+          <div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+              <input type="search" placeholder="Search templates…" value={tmplSearch} onChange={e => setTmplSearch(e.target.value)} style={{ flex: "1 1 160px", minWidth: 120, padding: "5px 10px", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, outline: "none" }} />
+              <button type="button" onClick={() => setShowPatternsGuide(true)} style={{ padding: "5px 12px", borderRadius: 4, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontFamily: FONT, fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }} onMouseEnter={e => e.currentTarget.style.color = C.accent} onMouseLeave={e => e.currentTarget.style.color = C.muted}>Patterns Guide</button>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {allDomains.map(d => (
+                  <button key={d} type="button" onClick={() => setTmplDomain(d)} style={{ padding: "4px 10px", borderRadius: 12, border: `1px solid ${tmplDomain === d ? (DOMAIN_COLORS[d] || C.accent) : C.border}`, background: tmplDomain === d ? (DOMAIN_COLORS[d] || C.accent) + "22" : "transparent", color: tmplDomain === d ? (DOMAIN_COLORS[d] || C.accent) : C.muted, fontFamily: FONT, fontSize: 11, cursor: "pointer", fontWeight: tmplDomain === d ? 700 : 400 }}>{d}</button>
+                ))}
+              </div>
+            </div>
+            {visible.length === 0
+              ? <div style={{ color: C.muted, fontSize: 12, padding: "24px 0", textAlign: "center" }}>No templates match your search.</div>
+              : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 10 }}>
+                {visible.map(t => {
+                  const dc = DOMAIN_COLORS[t.domain] || C.accent;
+                  return (
+                    <div key={t.id} role="button" tabIndex={0} aria-label={`Try ${t.name}`}
+                      onClick={() => onStartTemplate(t)} onKeyDown={e => { if (e.key === "Enter") onStartTemplate(t); }}
+                      style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, cursor: "pointer", display: "flex", flexDirection: "column", gap: 6 }}
+                      onMouseEnter={e => e.currentTarget.style.borderColor = dc + "88"} onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 4 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: C.text, lineHeight: 1.3 }}>{t.name}</div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: dc, background: dc + "22", borderRadius: 8, padding: "2px 6px", whiteSpace: "nowrap", flexShrink: 0 }}>{t.domain}</div>
+                      </div>
+                      {t.templateMeta?.scenarioType && <div style={{ fontSize: 10, color: C.accent, fontWeight: 600 }}>{t.templateMeta.scenarioType}</div>}
+                      <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{t.description}</div>
+                      {t.templateMeta?.keyMacros?.length > 0 && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                          {t.templateMeta.keyMacros.map(m => <span key={m} style={{ fontSize: 9, color: C.muted, background: C.border + "66", borderRadius: 3, padding: "1px 5px", fontFamily: "monospace" }}>{m}</span>)}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 9, color: dc, fontWeight: 600, marginTop: "auto" }}>▶ Start from template</div>
+                    </div>
+                  );
+                })}
+              </div>
+            }
+          </div>
+        );
+      })()}
+
+      {tab === "my" && (myModels.length === 0
+        ? <FirstRunPanel onCreateBlank={() => setShowNew(true)} onBrowseTemplates={() => setTab("templates")} />
+        : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
+          {myModels.map(m => <ModelCard key={m.id} model={m} onOpen={() => onOpenModel(m)} onDelete={onDeleteModel} currentUserId={currentUserId} profiles={profiles} />)}
+        </div>)}
+      {tab === "public" && (pubModels.length === 0
+        ? <Empty icon="🌐" msg="No public models available." />
+        : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
+          {pubModels.map(m => <ModelCard key={m.id} model={m} onOpen={() => onOpenModel(m)} onDelete={onDeleteModel} currentUserId={currentUserId} profiles={profiles} />)}
+        </div>)}
+      {tab === "community" && (communityModels.length === 0
+        ? <Empty icon="🌐" msg="No community models shared yet." />
+        : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
+          {communityModels.map(m => <ModelCard key={m.id} model={m} onOpen={() => onOpenModel(m)} onDelete={onDeleteModel} currentUserId={currentUserId} profiles={profiles} />)}
+        </div>)}
+
+      {showNew && (
+        <NewModelModal onClose={() => setShowNew(false)} onUseTemplate={() => setTab("templates")} onCreate={async (name, desc) => { await onCreateNewModel(name, desc); setShowNew(false); }} />
+      )}
+      {showPatternsGuide && <PatternsGuidePanel onClose={() => setShowPatternsGuide(false)} />}
+      {showPasteJson && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000aa", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
+          <div role="dialog" aria-modal="true" aria-labelledby="paste-json-title" style={{ background: C.panel, padding: 24, borderRadius: 10, width: 560, maxWidth: "95vw", display: "flex", flexDirection: "column", gap: 16 }}>
+            <h2 id="paste-json-title" style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>Import Model from JSON</h2>
+            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Paste a DES Studio model JSON object below. The model will be validated before saving.</p>
+            <textarea aria-label="Model JSON" value={pasteJsonText} onChange={e => setPasteJsonText(e.target.value)} placeholder={'{\n  "name": "My Model",\n  "entityTypes": [...],\n  ...\n}'} spellCheck={false} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, height: 260, outline: "none", padding: "8px 10px", resize: "vertical", width: "100%", boxSizing: "border-box" }} />
+            {importStatus && importStatus.state !== "loading" && (
+              <div style={{ background: importStatus.state === "error" ? C.red + "18" : importStatus.state === "warning" ? C.amber + "18" : C.green + "18", border: `1px solid ${importStatus.state === "error" ? C.red + "44" : importStatus.state === "warning" ? C.amber + "44" : C.green + "44"}`, borderRadius: 5, color: importStatus.state === "error" ? C.red : importStatus.state === "warning" ? C.amber : C.green, fontSize: 12, fontFamily: FONT, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
+                <div>{importStatus.message}</div>
+                {(importStatus.items || []).map((item, i) => <div key={i} style={{ color: C.muted }}>{item}</div>)}
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+              <Btn variant="ghost" onClick={() => { setShowPasteJson(false); setPasteJsonText(""); }}>Cancel</Btn>
+              <Btn variant="primary" disabled={!pasteJsonText.trim()} onClick={() => {
+                onPasteJsonImport(pasteJsonText, () => { setShowPasteJson(false); setPasteJsonText(""); });
+              }}>
+                {importStatus?.state === "loading" ? "Importing…" : "Import Model"}
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

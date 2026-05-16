@@ -1815,6 +1815,31 @@ npm run build
 
 ---
 
+### Sprint 55a — God Component Decomposition (Completion) ✅
+
+**Goal:** Complete the 10 extractions planned in Sprint 53 but not delivered (only AuthShell and ModelHistoryTab were extracted). Extract 7 high-value components from ModelDetail.jsx, App.jsx, and execute/index.jsx.
+
+**Status:** ✅ Complete
+
+| Feature | Status | Description |
+|---|---|---|
+| F55a.1 — ModelHealthPanel | ✅ | `src/ui/ModelHealthPanel.jsx` (116 lines) extracted from ModelDetail inline fn |
+| F55a.2 — ModelDetailHeader | ✅ | `src/ui/ModelDetailHeader.jsx` (43 lines) top header with undo/redo/save |
+| F55a.3 — SaveBanner | ✅ | `src/ui/SaveBanner.jsx` (27 lines) dirty-state unsaved-changes banner |
+| F55a.4 — ModelTabBar | ✅ | `src/ui/ModelTabBar.jsx` (150 lines) two-level mode + contextual sub-tab bar |
+| F55a.5 — AppNavBar | ✅ | `src/ui/AppNavBar.jsx` (40 lines) top navigation bar |
+| F55a.6 — ModelLibrary | ✅ | `src/ui/ModelLibrary.jsx` (256 lines) full library view with tabs, modals, PatternsGuidePanel |
+| F55a.7 — ExperimentControls | ✅ | `src/ui/execute/ExperimentControls.jsx` (221 lines) warm-up / replications / seed / termination form |
+
+**Line count reductions:**
+- `ModelDetail.jsx`: 1,246 → 965 lines (−22%)
+- `App.jsx`: 757 → 504 lines (−33%)
+- `execute/index.jsx`: 2,474 → 2,293 lines (−7%)
+
+**Limitation noted:** execute/index.jsx target of ≤ 300 lines is not achievable — ~100 tightly coupled state variables. Only the setup form was safely extractable.
+
+---
+
 *End of build plan. Update after each sprint.*
 *The most important rule: read the existing file before changing it.*
 *Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec — never add a free-text escape hatch.*
