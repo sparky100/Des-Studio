@@ -191,17 +191,63 @@ export function buildSensitivityPrompt(modelName = DEFAULT_MODEL_NAME, experimen
   };
 }
 
+export function buildGoalGaps(model = {}, aggregateStats = {}) {
+  const goals = model.goals || [];
+  if (!goals.length) return [];
+  return goals.map(g => {
+    const stat = aggregateStats[g.metric];
+    const current = stat?.mean ?? null;
+    if (current === null) return { metric: g.metric, current: null, target: g.target, gap: null, met: false };
+    const met = g.operator === '<'  ? current < g.target
+              : g.operator === '<=' ? current <= g.target
+              : g.operator === '>'  ? current > g.target
+              : g.operator === '>=' ? current >= g.target
+              : current === g.target;
+    const gap = g.operator === '<' || g.operator === '<=' ? current - g.target : g.target - current;
+    return { metric: g.metric, label: g.label || g.metric, current: finiteOrNull(current), target: g.target, gap: finiteOrNull(gap), met };
+  });
+}
+
 export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results = {}) {
-  const system = "You are an expert simulation analyst. Given a model and its run results, suggest specific structural changes to improve performance. Be concise: 150-200 words. Recommend concrete numeric changes (e.g. 'increase capacity from 2 to 3', 'add a server'). You have per-queue wait percentile data (p50, p90, p95, p99), per-resource utilisation and idle count, and per-queue blocking/balking counters. Use these to pinpoint the bottleneck precisely.";
-  const entityTypes = (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count }));
-  const queues = (model.queues || []).map(q => ({ name: q.name, discipline: q.discipline, capacity: q.capacity, customerType: q.customerType }));
+  const system = [
+    "You are an expert simulation analyst. Analyse the model and run results using this 6-step chain-of-thought:",
+    "1. Binding constraint — identify the single KPI furthest from its goal (or the worst bottleneck if no goals).",
+    "2. Cause — explain the mechanism (utilisation, queue discipline, capacity, arrival rate, etc.).",
+    "3. Proposed change — state a concrete, numeric model change (entity count, queue capacity, or state variable value).",
+    "4. Predicted effect — estimate the new KPI value after the change.",
+    "5. Goal impact — state whether each goal would be MET or MISSED after the change.",
+    "6. Ranking — if multiple changes are possible, rank them by expected goal impact.",
+    "",
+    "Output your response as a JSON block wrapped in ```json ... ``` fences with this schema:",
+    '{ "analysis": "<narrative string>", "suggestions": [ { "rank": 1, "constraint": "<KPI = value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|medium|low>" } ] }',
+    "",
+    "Use type 'manual' for structural changes that cannot be expressed as a single numeric field update.",
+    "Include the full narrative in the top-level 'analysis' field.",
+    "You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation, failure model, and per-queue blocking/balking data.",
+  ].join("\n");
+
+  const entityTypes = (model.entityTypes || []).map(e => ({
+    name: e.name,
+    role: e.role,
+    count: e.count ?? null,
+    failureModel: e.failureModel ?? null,
+  }));
+  const queues = (model.queues || []).map(q => ({
+    name: q.name,
+    discipline: q.discipline,
+    capacity: q.capacity ?? null,
+    customerType: q.customerType ?? null,
+  }));
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
       goals: goalsToPrompt(model),
+      goalGaps: goalGaps.length ? goalGaps : undefined,
       entityTypes,
       queues,
+      stateVariables: (model.stateVariables || []).map(v => ({ name: v.name, initialValue: v.initialValue })),
       flowSummary: queues
         .filter(q => q.customerType)
         .map(q => `${q.customerType} entities wait in queue '${q.name}'`)
@@ -211,20 +257,64 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     kpis: buildKpis(model, results),
     waitDist: results.waitDist || {},
     perQueue: results.perQueue || {},
+    aggregateStats: results.aggregateStats || {},
   };
 
-  const suggestionGoals = model.goals?.length
-    ? " Performance goals were defined for this model — your recommendations should prioritise changes that help meet those goals."
-    : "";
   return {
     kind: "suggestion",
     messages: makeMessages(
       system,
       payload,
-      "Based on the KPI data, identify the primary bottleneck and recommend a specific model change. Consider per-queue wait percentiles (p50, p90, p95), per-resource utilisation, and blocking/balking counters. State the expected impact (e.g. 'mean wait would drop from 8.2 to ~4.5'). If multiple changes are needed, prioritise the single most impactful one." + suggestionGoals
+      "Apply the 6-step chain-of-thought. Identify the binding constraint from goalGaps (if present) or KPI data. Propose up to 3 ranked suggestions. Output only the JSON block."
     ),
-    max_tokens: 450,
+    max_tokens: 800,
   };
+}
+
+export function parseSuggestionResponse(text = "") {
+  const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
+  const rawJson = fenceMatch ? fenceMatch[1].trim() : text.trim();
+  try {
+    const parsed = JSON.parse(rawJson);
+    const analysis = typeof parsed.analysis === "string" ? parsed.analysis : "";
+    const suggestions = Array.isArray(parsed.suggestions)
+      ? parsed.suggestions.filter(s => s && typeof s === "object" && typeof s.rank === "number" && s.change && typeof s.change.type === "string")
+      : [];
+    return { analysis, suggestions };
+  } catch {
+    return { analysis: text, suggestions: [] };
+  }
+}
+
+export function applySuggestionPatch(model, change) {
+  const clone = JSON.parse(JSON.stringify(model));
+  if (!change || !change.type) return clone;
+
+  if (change.type === "entityTypeCount") {
+    const entities = clone.entityTypes || [];
+    const found = entities.find(e => e.name === change.target || e.id === change.target);
+    if (!found) return clone;
+    found.count = change.to;
+    return clone;
+  }
+
+  if (change.type === "queueCapacity") {
+    const queues = clone.queues || [];
+    const found = queues.find(q => q.name === change.target || q.id === change.target);
+    if (!found) return clone;
+    found.capacity = change.to;
+    return clone;
+  }
+
+  if (change.type === "stateVariable") {
+    const vars = clone.stateVariables || [];
+    const found = vars.find(v => v.name === change.target || v.id === change.target);
+    if (!found) return clone;
+    found.initialValue = change.to;
+    return clone;
+  }
+
+  return clone;
 }
 
 export function promptWordEstimate(prompt) {
