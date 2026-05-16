@@ -4,6 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 const ExecuteCanvas = lazy(() => import("./ExecuteCanvas.jsx").then(m => ({ default: m.ExecuteCanvas })));
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox } from "../shared/components.jsx";
+import { useViewport } from "../shared/hooks.js";
 import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { buildEngine } from "../../engine/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
@@ -56,6 +57,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [terminationMode, setTerminationMode] = useState(() => experimentDefaults.terminationMode === "condition" ? "condition" : "time");
   const [terminationCondition, setTerminationCondition] = useState(() => experimentDefaults.terminationCondition || null);
   const [replications, setReplications] = useState(() => intDefault(experimentDefaults.replications, 1));
+  const { isCompact } = useViewport();
   const [runLabel, setRunLabel] = useState("");
   const [executeSection, setExecuteSection] = useState("run");
   const [showRunSetup, setShowRunSetup] = useState(false);
@@ -839,7 +841,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   }, [qrToken, baseUrl]);
 
   return (
-    <div style={{ display: "flex", alignItems: "stretch", gap: 14 }}>
+    <div style={{ display: "flex", flexDirection: isCompact ? "column" : "row", alignItems: "stretch", gap: 14 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1, minWidth: 0 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[

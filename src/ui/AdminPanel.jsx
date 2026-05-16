@@ -1,7 +1,8 @@
 // ui/AdminPanel.jsx — Platform administration (admin role only)
 import { useState, useEffect, useCallback, Fragment } from "react";
 import { C, FONT } from "./shared/tokens.js";
-import { Btn, Tag, SH, InfoBox } from "./shared/components.jsx";
+import { Btn, Tag, SH, InfoBox, SectionPanel } from "./shared/components.jsx";
+import { useViewport } from "./shared/hooks.js";
 import { getPlatformConfig, setPlatformConfig, fetchAllUsers, updateUserRole,
          suspendUser, unsuspendUser, logAdminAction, fetchAuditLog } from "../db/models.js";
 
@@ -18,6 +19,8 @@ const LLM_MODELS = {
 };
 
 function AdminPanel({ userId, isAdmin, onClose }) {
+  const { isMobile, isCompact } = useViewport();
+  const narrowLayout = isMobile || isCompact;
   const [tab, setTab] = useState("llm");
   const [llmConfig, setLlmConfig] = useState(null);
   const [limits, setLimits] = useState(null);
@@ -171,13 +174,13 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       </div>
 
       {/* Tabs */}
-      <div role="tablist" style={{ display: "flex", gap: 2, background: C.surface, borderRadius: 6, padding: 2, width: "fit-content" }}>
+      <div role="tablist" style={{ display: "flex", flexWrap: isMobile ? "wrap" : "nowrap", gap: 2, background: C.surface, borderRadius: 6, padding: 2, width: isMobile ? "100%" : "fit-content" }}>
         {TABS.map(t => (
           <button key={t.id} role="tab" aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
             style={{ background: tab === t.id ? C.panel : "transparent", border: "none", borderRadius: 4,
               color: tab === t.id ? C.text : C.muted, fontFamily: FONT, fontSize: 11, fontWeight: 700,
-              padding: "7px 16px", cursor: "pointer" }}>
+              padding: "7px 16px", cursor: "pointer", flex: isMobile ? "1 1 auto" : "none", textAlign: "center" }}>
             {t.label}
           </button>
         ))}
@@ -205,7 +208,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                 Configure the AI provider used for all AI analysis features (narrative, suggestions, queries, model building).
                 Changes take effect immediately on the next AI request.
               </InfoBox>
-              <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 12, alignItems: "center" }}>
+              <div style={{ display: "grid", gridTemplateColumns: narrowLayout ? "1fr" : "180px 1fr", gap: narrowLayout ? 8 : 12, alignItems: narrowLayout ? "stretch" : "center" }}>
                 <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Provider</span>
                 <select value={provider} onChange={e => { setProvider(e.target.value); setModel(LLM_MODELS[e.target.value]?.[0] || ""); }}
                   style={{ ...inp({ color: C.accent }), width: 240 }}>
@@ -258,7 +261,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
               <InfoBox color={C.amber}>
                 Set maximum usage limits per user. Current enforcement is informational (UI-level; hard limits require edge function updates).
               </InfoBox>
-              <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 12, alignItems: "center" }}>
+              <div style={{ display: "grid", gridTemplateColumns: narrowLayout ? "1fr" : "200px 1fr", gap: narrowLayout ? 8 : 12, alignItems: narrowLayout ? "stretch" : "center" }}>
                 {[
                   { l: "Max models per user", v: maxModels, s: setMaxModels },
                   { l: "Max runs per model", v: maxRuns, s: setMaxRuns },

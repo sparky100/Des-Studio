@@ -4,6 +4,7 @@ import pkg from '../../package.json';
 import { C, FONT, RADIUS, SPACE, SHADOW, Z, alpha } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
+import { useViewport } from "./shared/hooks.js";
 import { SkeletonPanel } from "./shared/SkeletonPanel.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
@@ -238,13 +239,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
     try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
   });
-  const [viewportWidth,setViewportWidth]=useState(() => typeof window === "undefined" ? 1024 : window.innerWidth);
-  useEffect(()=>{
-    if(typeof window === "undefined") return;
-    const onResize=()=>setViewportWidth(window.innerWidth);
-    window.addEventListener("resize",onResize);
-    return ()=>window.removeEventListener("resize",onResize);
-  },[]);
+  const { width: viewportWidth, isMobile: _vpMobile, isCompact: _vpCompact } = useViewport();
+  const [showMoreTabs,setShowMoreTabs]=useState(false);
 
   const handleAnalyseRun=useCallback((row)=>{setAnalyseRun(row);setTab("execute");},[]);
   const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname.replace(/\/+$/, "") : "";
@@ -682,6 +678,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
   ];
   const isMobileLayout = viewportWidth < 720;
+  const isCompactLayout = viewportWidth >= 720 && viewportWidth < 1024;
   const DISPLAY_MODES = isMobileLayout
       ? [
         {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
@@ -852,36 +849,73 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           );
         })}
       </div>
-      {visibleSelectableTabs.length > 1 && (
-        <div style={{display:"flex",alignItems:"stretch",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,minWidth:0}}>
-          <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:12,flex:1,minWidth:0,overflowX:"auto"}}>
-            {visibleTabs.map(t=>t.disabled?(
-              <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>
-            ):(
-              (() => {
-                const accessibleLabel = t.id === "ai" ? "AI Designer" : t.label;
-                return (
-              <button key={t.id} type="button" role="tab" aria-selected={tab===t.id} aria-label={`${accessibleLabel}${tabIssueLabel(t.id) ? `, ${tabIssueLabel(t.id)}` : ""}`} onClick={()=>setTab(t.id)} style={{background:"none",border:"none",whiteSpace:"nowrap",
+      {visibleSelectableTabs.length > 1 && (()=>{
+        const COMPACT_HIDDEN=["access","history","validate"];
+        const primaryTabs=isCompactLayout?visibleTabs.filter(t=>!COMPACT_HIDDEN.includes(t.id)):visibleTabs;
+        const moreTabs=isCompactLayout?visibleTabs.filter(t=>!t.disabled&&COMPACT_HIDDEN.includes(t.id)):[];
+        const activeInMore=moreTabs.some(t=>t.id===tab);
+        const renderTab=(t)=>{
+          if(t.disabled) return <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>;
+          const accessibleLabel=t.id==="ai"?"AI Designer":t.label;
+          return (
+            <button key={t.id} type="button" role="tab" aria-selected={tab===t.id}
+              aria-label={`${accessibleLabel}${tabIssueLabel(t.id)?`, ${tabIssueLabel(t.id)}`:""}`}
+              onClick={()=>{setTab(t.id);setShowMoreTabs(false);}}
+              style={{background:"none",border:"none",whiteSpace:"nowrap",
                 borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",
-                color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400,display:"inline-flex",alignItems:"center",gap:6}}>
-                <span>{t.label}</span>
-                {tabIssueCounts[t.id]?.errors > 0 && (
-                  <span aria-hidden="true" title={tabIssueTooltip(t.id)} style={{background:C.errorBg,border:`1px solid ${C.danger}66`,borderRadius:10,color:C.error,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
-                    {tabIssueCounts[t.id].errors}
-                  </span>
-                )}
-                {!tabIssueCounts[t.id]?.errors && tabIssueCounts[t.id]?.warnings > 0 && (
-                  <span aria-hidden="true" title={tabIssueTooltip(t.id)} style={{background:C.warmup,border:`1px solid ${C.amber}66`,borderRadius:10,color:C.warnBg,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
-                    {tabIssueCounts[t.id].warnings}
-                  </span>
-                )}
-              </button>
-                );
-              })()
-            ))}
+                color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",
+                cursor:"pointer",fontWeight:tab===t.id?700:400,display:"inline-flex",alignItems:"center",gap:6}}>
+              <span>{t.label}</span>
+              {tabIssueCounts[t.id]?.errors>0&&(
+                <span aria-hidden="true" title={tabIssueTooltip(t.id)} style={{background:C.errorBg,border:`1px solid ${C.danger}66`,borderRadius:10,color:C.error,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
+                  {tabIssueCounts[t.id].errors}
+                </span>
+              )}
+              {!tabIssueCounts[t.id]?.errors&&tabIssueCounts[t.id]?.warnings>0&&(
+                <span aria-hidden="true" title={tabIssueTooltip(t.id)} style={{background:C.warmup,border:`1px solid ${C.amber}66`,borderRadius:10,color:C.warnBg,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
+                  {tabIssueCounts[t.id].warnings}
+                </span>
+              )}
+            </button>
+          );
+        };
+        return (
+          <div style={{display:"flex",alignItems:"stretch",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,minWidth:0}}>
+            <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:12,flex:1,minWidth:0,overflowX:"auto"}}>
+              {primaryTabs.map(renderTab)}
+              {moreTabs.length>0&&(
+                <div style={{position:"relative"}}>
+                  <button type="button"
+                    aria-expanded={showMoreTabs}
+                    aria-haspopup="true"
+                    onClick={()=>setShowMoreTabs(v=>!v)}
+                    style={{background:"none",border:"none",whiteSpace:"nowrap",
+                      borderBottom:activeInMore?`2px solid ${C.accent}`:"2px solid transparent",
+                      color:activeInMore?C.accent:C.muted,fontFamily:FONT,fontSize:12,
+                      padding:"10px 16px",cursor:"pointer",fontWeight:activeInMore?700:400}}>
+                    More ▾
+                  </button>
+                  {showMoreTabs&&(
+                    <div role="listbox" style={{position:"absolute",top:"100%",right:0,
+                      background:C.panel,border:`1px solid ${C.border}`,borderRadius:RADIUS.md,
+                      zIndex:Z.dropdown,minWidth:140,boxShadow:"0 4px 12px rgba(0,0,0,0.3)",padding:4}}>
+                      {moreTabs.map(t=>(
+                        <button key={t.id} type="button" role="option" aria-selected={tab===t.id}
+                          onClick={()=>{setTab(t.id);setShowMoreTabs(false);}}
+                          style={{display:"block",width:"100%",textAlign:"left",background:tab===t.id?alpha(C.accent,0.1):"transparent",
+                            border:"none",borderRadius:RADIUS.sm,color:tab===t.id?C.accent:C.text,
+                            fontFamily:FONT,fontSize:12,padding:"8px 12px",cursor:"pointer"}}>
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
         {canEdit&&dirty&&(
           <div role="status" style={{
