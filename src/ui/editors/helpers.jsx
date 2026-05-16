@@ -313,7 +313,7 @@ const EffectPicker = ({effects, options, onChange}) => {
               maxWidth:260,overflow:'hidden'}}>
               <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}
                 title={display}>{display}</span>
-              <button onClick={()=>remove(j)}
+              <button onClick={()=>remove(j)} aria-label={`Remove effect ${j+1}`}
                 style={{background:'none',border:'none',color:cfg.color,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,flexShrink:0}}>✕</button>
             </span>
           );

@@ -1148,7 +1148,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                     placeholder="value"
                     style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "5px 6px", outline: "none" }}
                   />
-                  <Btn small variant="ghost" onClick={() => setExpFormOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
+                  <Btn small variant="ghost" ariaLabel={`Remove override ${idx+1}`} onClick={() => setExpFormOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
                 </div>
               ))}
             </div>
@@ -1530,13 +1530,13 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                       <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
                         <thead>
                           <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                            <th style={{ padding: "6px 8px" }}>{sweepSelectedParam?.label || "Value"}</th>
-                            <th style={{ padding: "6px 8px" }}>Served</th>
-                            <th style={{ padding: "6px 8px" }}>Avg wait</th>
-                            <th style={{ padding: "6px 8px" }}>Avg service</th>
-                            <th style={{ padding: "6px 8px" }}>Avg sojourn</th>
-                            <th style={{ padding: "6px 8px" }}>Reneged</th>
-                            <th style={{ padding: "6px 8px" }}>Reps</th>
+                            <th scope="col" style={{ padding: "6px 8px" }}>{sweepSelectedParam?.label || "Value"}</th>
+                            <th scope="col" style={{ padding: "6px 8px" }}>Served</th>
+                            <th scope="col" style={{ padding: "6px 8px" }}>Avg wait</th>
+                            <th scope="col" style={{ padding: "6px 8px" }}>Avg service</th>
+                            <th scope="col" style={{ padding: "6px 8px" }}>Avg sojourn</th>
+                            <th scope="col" style={{ padding: "6px 8px" }}>Reneged</th>
+                            <th scope="col" style={{ padding: "6px 8px" }}>Reps</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1669,12 +1669,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                         <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
                           <thead>
                             <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                              <th style={{ padding: "6px 8px" }}>KPI</th>
-                              <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.a}</th>
-                              <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.b}</th>
-                              <th style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
-                              <th style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
-                              <th style={{ padding: "6px 8px" }}>Significant?</th>
+                              <th scope="col" style={{ padding: "6px 8px" }}>KPI</th>
+                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.a}</th>
+                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.b}</th>
+                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
+                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
+                              <th scope="col" style={{ padding: "6px 8px" }}>Significant?</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1763,12 +1763,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                         <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
                           <thead>
                             <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                              <th style={{ padding: "6px 8px" }}>KPI</th>
-                              <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.a}</th>
-                              <th style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.b}</th>
-                              <th style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
-                              <th style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
-                              <th style={{ padding: "6px 8px" }}>Significant?</th>
+                              <th scope="col" style={{ padding: "6px 8px" }}>KPI</th>
+                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.a}</th>
+                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.b}</th>
+                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
+                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
+                              <th scope="col" style={{ padding: "6px 8px" }}>Significant?</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2038,14 +2038,14 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
                   <thead>
                     <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                      <th style={{ padding: 8 }}>Rep #</th>
-                      <th style={{ padding: 8 }}>Seed</th>
-                      <th style={{ padding: 8 }}>Served</th>
-                      <th style={{ padding: 8 }}>Reneged</th>
-                      <th style={{ padding: 8 }}>Avg wait</th>
-                      <th style={{ padding: 8 }}>Avg service</th>
-                      <th style={{ padding: 8 }}>Avg sojourn</th>
-                      <th style={{ padding: 8 }}>Status</th>
+                      <th scope="col" style={{ padding: 8 }}>Rep #</th>
+                      <th scope="col" style={{ padding: 8 }}>Seed</th>
+                      <th scope="col" style={{ padding: 8 }}>Served</th>
+                      <th scope="col" style={{ padding: 8 }}>Reneged</th>
+                      <th scope="col" style={{ padding: 8 }}>Avg wait</th>
+                      <th scope="col" style={{ padding: 8 }}>Avg service</th>
+                      <th scope="col" style={{ padding: 8 }}>Avg sojourn</th>
+                      <th scope="col" style={{ padding: 8 }}>Status</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2122,13 +2122,13 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                   <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
                     <thead>
                       <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                        <th style={{ padding: 8 }}>Metric</th>
-                        <th style={{ padding: 8 }}>Mean</th>
-                        <th style={{ padding: 8 }}>Lower 95%</th>
-                        <th style={{ padding: 8 }}>Upper 95%</th>
-                        <th style={{ padding: 8 }}>Half-width</th>
-                        <th style={{ padding: 8 }}>Rel. precision %</th>
-                        <th style={{ padding: 8 }}>n</th>
+                        <th scope="col" style={{ padding: 8 }}>Metric</th>
+                        <th scope="col" style={{ padding: 8 }}>Mean</th>
+                        <th scope="col" style={{ padding: 8 }}>Lower 95%</th>
+                        <th scope="col" style={{ padding: 8 }}>Upper 95%</th>
+                        <th scope="col" style={{ padding: 8 }}>Half-width</th>
+                        <th scope="col" style={{ padding: 8 }}>Rel. precision %</th>
+                        <th scope="col" style={{ padding: 8 }}>n</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2232,12 +2232,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
               <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
                 <thead>
                   <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                    <th style={{ padding: "6px 8px" }}>KPI</th>
-                    <th style={{ padding: "6px 8px", textAlign: "right" }}>{runCompareResult.labels?.a}</th>
-                    <th style={{ padding: "6px 8px", textAlign: "right" }}>{runCompareResult.labels?.b}</th>
-                    <th style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
-                    <th style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
-                    <th style={{ padding: "6px 8px" }}>Significant?</th>
+                    <th scope="col" style={{ padding: "6px 8px" }}>KPI</th>
+                    <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{runCompareResult.labels?.a}</th>
+                    <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{runCompareResult.labels?.b}</th>
+                    <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
+                    <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
+                    <th scope="col" style={{ padding: "6px 8px" }}>Significant?</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2360,7 +2360,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
             style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, width: 520, maxWidth: "95vw", maxHeight: "90vh", overflowY: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2 id="share-modal-title" style={{ fontSize: 16, fontWeight: 700, color: C.text, fontFamily: FONT }}>Share Results</h2>
-              <button type="button" onClick={() => { setShowShareModal(false); setQrToken(null); }}
+              <button type="button" aria-label="Close share dialog" onClick={() => { setShowShareModal(false); setQrToken(null); }}
                 style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", fontFamily: FONT, padding: "0 4px" }}>✕</button>
             </div>
 

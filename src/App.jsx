@@ -10,7 +10,7 @@ import { fetchModels, fetchProfiles,
          setVisibility, setAccess, forkModel,
          fetchRunStatsForModels }         from "./db/models.js";
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
-import { C, FONT, GOOGLE_FONT_URL }         from "./ui/shared/tokens.js";
+import { C, FONT, GOOGLE_FONT_URL, SHADOW, RADIUS, Z } from "./ui/shared/tokens.js";
 import { Btn, Empty, ErrorBoundary }        from "./ui/shared/components.jsx";
 import { extractImportedModelPayload }      from "./ui/shared/utils.js";
 import { ModelCard, ModelDetail,
@@ -122,13 +122,13 @@ const PATTERNS_GUIDE = [
 ];
 
 const PatternsGuidePanel=({onClose})=>(
-  <div style={{position:'fixed',top:0,right:0,bottom:0,width:480,maxWidth:'95vw',background:C.surface,borderLeft:`1px solid ${C.border}`,zIndex:1100,display:'flex',flexDirection:'column',boxShadow:'-8px 0 32px #000a'}}>
+  <div role="dialog" aria-modal="true" aria-labelledby="patterns-guide-title" style={{position:'fixed',top:0,right:0,bottom:0,width:480,maxWidth:'95vw',background:C.surface,borderLeft:`1px solid ${C.border}`,zIndex:Z.modal,display:'flex',flexDirection:'column',boxShadow:SHADOW.panel}}>
     <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 18px',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
       <div>
-        <div style={{fontSize:13,fontWeight:700,color:C.text}}>Modelling Patterns</div>
-        <div style={{fontSize:10,color:C.muted,marginTop:2}}>6 reusable patterns for DES Studio models</div>
+        <div id="patterns-guide-title" style={{fontSize:13,fontWeight:700,color:C.text}}>Modelling Patterns</div>
+        <div style={{fontSize:11,color:C.muted,marginTop:2}}>6 reusable patterns for DES Studio models</div>
       </div>
-      <button type="button" onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:18,cursor:'pointer',lineHeight:1}}>✕</button>
+      <button type="button" aria-label="Close patterns guide" onClick={onClose} style={{background:'none',border:'none',color:C.muted,fontSize:18,cursor:'pointer',lineHeight:1}}>✕</button>
     </div>
     <div style={{overflowY:'auto',flex:1,padding:'12px 18px',display:'flex',flexDirection:'column',gap:14}}>
       {PATTERNS_GUIDE.map((p,i)=>(
@@ -855,7 +855,7 @@ export default function App(){
       )}
       {showPatternsGuide&&<PatternsGuidePanel onClose={()=>setShowPatternsGuide(false)}/>}
       {showPasteJson && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#000000aa',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:C.overlay,display:'flex',alignItems:'center',justifyContent:'center',zIndex:Z.modal}}>
           <div role="dialog" aria-modal="true" aria-labelledby="paste-json-title" style={{background:C.panel,padding:24,borderRadius:10,width:560,maxWidth:'95vw',display:'flex',flexDirection:'column',gap:16}}>
             <h2 id="paste-json-title" style={{fontSize:16,fontWeight:700,color:C.text,margin:0}}>Import Model from JSON</h2>
             <p style={{fontSize:12,color:C.muted,margin:0}}>Paste a DES Studio model JSON object below. The model will be validated before saving.</p>
@@ -883,7 +883,7 @@ export default function App(){
         </div>
       )}
       {showForkConfirm && modelToFork && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#000000aa',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:C.overlay,display:'flex',alignItems:'center',justifyContent:'center',zIndex:Z.modal}}>
           <div role="dialog" aria-modal="true" aria-labelledby="fork-public-model-title" style={{background:C.panel,padding:24,borderRadius:10,width:400,maxWidth:'90vw',display:'flex',flexDirection:'column',gap:20}}>
             <h2 id="fork-public-model-title" style={{fontSize:18,fontWeight:700,color:C.text}}>Run Public Model</h2>
             <p style={{fontSize:13,color:C.muted}}>To run "{modelToFork.name}", a private copy will be created in your library. You will own this copy and its run history.</p>

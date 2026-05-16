@@ -1,6 +1,6 @@
 // ui/shared/components.jsx — Reusable micro-components
 import React, { Component, useEffect, useId, useState, useRef } from "react";
-import { C, FONT } from "./tokens.js";
+import { C, FONT, SPACE, RADIUS, TYPO, alpha } from "./tokens.js";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
 
 class ErrorBoundary extends Component {
@@ -31,8 +31,8 @@ class ErrorBoundary extends Component {
 
     return (
       <div role="alert" style={{
-        background: C.red + "12",
-        border: `1px solid ${C.red}44`,
+        background: alpha(C.red, 0.07),
+        border: `1px solid ${alpha(C.red, 0.27)}`,
         borderRadius: 8,
         padding: 14,
         color: C.text,
@@ -61,7 +61,7 @@ class ErrorBoundary extends Component {
 }
 
 const Tag=React.memo(({label,color=C.muted})=>(
-  <span style={{background:color+"18",border:`1px solid ${color}44`,color,borderRadius:3,padding:"2px 7px",fontSize:10,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",fontFamily:FONT}}>{label}</span>
+  <span style={{background:color+"18",border:`1px solid ${color}44`,color,borderRadius:3,padding:"2px 7px",fontSize:11,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",fontFamily:FONT}}>{label}</span>
 ));
 const PhaseTag=React.memo(({phase})=>{
   const cfg={A:{color:C.phaseA,label:"Phase A"},B:{color:C.phaseB,label:"Phase B"},
@@ -73,21 +73,38 @@ const PhaseTag=React.memo(({phase})=>{
 const Avatar=({u,size=28})=>(
   <div style={{width:size,height:size,borderRadius:"50%",background:u.color+"22",border:`1.5px solid ${u.color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.38,fontWeight:700,color:u.color,fontFamily:FONT,flexShrink:0}}>{u.initials}</div>
 );
+/**
+ * Btn — primary action button.
+ * Variants: "primary" (accent fill), "ghost" (subtle surface), "danger" (red tint),
+ *           "amber" (warning tint), "success" (green tint — use sparingly for confirmation states).
+ */
 const Btn=({children,onClick,variant="ghost",small,disabled,full,style={},ariaLabel,title,type="button"})=>{
-  const v={primary:{bg:C.accent,fg:"#080c10",br:C.accent},ghost:{bg:"#ffffff08",fg:C.text,br:C.border},
-    danger:{bg:C.red+"18",fg:C.red,br:C.red+"44"},success:{bg:C.green+"18",fg:C.green,br:C.green+"44"},
-    amber:{bg:C.amber+"18",fg:C.amber,br:C.amber+"44"}}[variant]||{bg:"#ffffff08",fg:C.text,br:C.border};
-  return <button type={type} onClick={onClick} disabled={disabled} aria-label={ariaLabel} title={title} style={{background:v.bg,color:v.fg,border:`1px solid ${v.br}`,borderRadius:5,padding:small?"4px 10px":"7px 14px",fontSize:small?11:12,fontWeight:600,fontFamily:FONT,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.45:1,display:"inline-flex",alignItems:"center",gap:6,width:full?"100%":undefined,justifyContent:full?"center":undefined,transition:"opacity .15s",flexShrink:0,...style}}>{children}</button>;
+  const v={
+    primary:{bg:C.accent,            fg:"#080c10",br:C.accent},
+    ghost:  {bg:C.surfaceHover,      fg:C.text,   br:C.border},
+    danger: {bg:alpha(C.red,0.09),   fg:C.red,    br:alpha(C.red,0.27)},
+    success:{bg:alpha(C.green,0.09), fg:C.green,  br:alpha(C.green,0.27)},
+    amber:  {bg:alpha(C.amber,0.09), fg:C.amber,  br:alpha(C.amber,0.27)},
+  }[variant]||{bg:C.surfaceHover,fg:C.text,br:C.border};
+  return <button type={type} onClick={onClick} disabled={disabled} aria-label={ariaLabel} title={title}
+    style={{background:v.bg,color:v.fg,border:`1px solid ${v.br}`,borderRadius:RADIUS.md,
+      padding:small?`${SPACE.xs}px ${SPACE.sm+2}px`:`${SPACE.sm-1}px ${SPACE.md+2}px`,
+      fontSize:small?11:12,fontWeight:600,fontFamily:FONT,cursor:disabled?"not-allowed":"pointer",
+      opacity:disabled?0.45:1,display:"inline-flex",alignItems:"center",gap:SPACE.sm-2,
+      width:full?"100%":undefined,justifyContent:full?"center":undefined,
+      transition:"opacity 120ms ease",flexShrink:0,...style}}>{children}</button>;
 };
 const Field=({label,value,onChange,multiline,rows=2,placeholder="",autoFocus=false,inputStyle={}})=>{
   const generatedId=useId();
   const id=`field-${generatedId}`;
+  const inputBase={background:C.bg,border:`1px solid ${C.border}`,borderRadius:RADIUS.sm,color:C.text,
+    fontFamily:FONT,fontSize:12,padding:`${SPACE.sm}px ${SPACE.sm+2}px`,outline:"none"};
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:5}}>
-      {label&&<label htmlFor={id} style={{fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.muted,textTransform:"uppercase",fontFamily:FONT}}>{label}</label>}
+    <div style={{display:"flex",flexDirection:"column",gap:SPACE.xs+1}}>
+      {label&&<label htmlFor={id} style={{...TYPO.label,color:C.muted,fontFamily:FONT,letterSpacing:"1.5px"}}>{label}</label>}
       {multiline
-        ?<textarea id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} autoFocus={autoFocus} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",resize:"vertical",outline:"none",lineHeight:1.6,...inputStyle}}/>
-        :<input id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",outline:"none",width:"100%",boxSizing:"border-box",...inputStyle}}/>}
+        ?<textarea id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} rows={rows} placeholder={placeholder} autoFocus={autoFocus} style={{...inputBase,resize:"vertical",lineHeight:1.6,...inputStyle}}/>
+        :<input id={id} value={value||""} onChange={e=>onChange?.(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} style={{...inputBase,width:"100%",boxSizing:"border-box",...inputStyle}}/>}
     </div>
   );
 };
@@ -140,17 +157,19 @@ const CommitInput=({
   );
 };
 const SH=({label,color=C.muted,children})=>(
-  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${C.border}`,paddingBottom:8,marginBottom:12}}>
-    <span style={{fontSize:10,fontWeight:700,letterSpacing:1.8,textTransform:"uppercase",color,fontFamily:FONT}}>{label}</span>
+  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${C.border}`,paddingBottom:SPACE.sm,marginBottom:SPACE.md}}>
+    <span style={{...TYPO.label,letterSpacing:"1.8px",color,fontFamily:FONT}}>{label}</span>
     {children}
   </div>
 );
 const InfoBox=({color,children})=>(
-  <div style={{background:color+"0f",border:`1px solid ${color}33`,borderRadius:6,padding:"10px 14px",fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.8}}>{children}</div>
+  <div style={{background:alpha(color,0.06),border:`1px solid ${alpha(color,0.2)}`,borderRadius:RADIUS.md,padding:`${SPACE.sm+2}px ${SPACE.md+2}px`,fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.8}}>{children}</div>
 );
-const Empty=({icon,msg})=>(
-  <div style={{textAlign:"center",padding:"24px 16px",color:C.muted,fontFamily:FONT,fontSize:12}}>
-    <div style={{fontSize:24,marginBottom:8}}>{icon}</div>{msg}
+const Empty=({icon,msg,action})=>(
+  <div style={{textAlign:"center",padding:"24px 16px",color:C.muted,fontFamily:FONT,fontSize:12,display:"flex",flexDirection:"column",alignItems:"center",gap:SPACE.sm}}>
+    <div style={{fontSize:24}}>{icon}</div>
+    <div>{msg}</div>
+    {action&&<Btn small variant="ghost" onClick={action.onClick}>{action.label}</Btn>}
   </div>
 );
 
@@ -281,10 +300,10 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
           <table style={{borderCollapse:"collapse",width:"100%",fontFamily:FONT}}>
             <thead>
               <tr>
-                <th style={thSt}>#</th>
-                <th style={thSt}>Time</th>
-                {numAttrDefs.map(a=><th key={a.name} style={thSt}>{a.name}</th>)}
-                <th style={thSt}/>
+                <th scope="col" style={thSt}>#</th>
+                <th scope="col" style={thSt}>Time</th>
+                {numAttrDefs.map(a=><th key={a.name} scope="col" style={thSt}>{a.name}</th>)}
+                <th scope="col" style={thSt}/>
               </tr>
             </thead>
             <tbody>
@@ -302,7 +321,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
                     </td>
                   ))}
                   <td style={tdSt}>
-                    <button onClick={()=>removeRow(i)} style={{background:"transparent",border:"none",
+                    <button onClick={()=>removeRow(i)} aria-label={`Remove arrival row ${i+1}`} style={{background:"transparent",border:"none",
                       color:C.muted,cursor:"pointer",fontSize:12,padding:"0 4px"}}>×</button>
                   </td>
                 </tr>
@@ -487,26 +506,26 @@ const isActiveStatus = s => s && s !== "off" && s !== "0" && s !== "none";
 const SectionPanel = ({label, status, color=C.muted, children, defaultOpen=false}) => {
   const [open, setOpen] = useState(() => defaultOpen || isActiveStatus(status));
   return (
-    <div style={{background:C.surface,borderRadius:5,border:`1px solid ${C.border}`}}>
+    <div style={{background:C.surface,borderRadius:RADIUS.md,border:`1px solid ${C.border}`}}>
       <button onClick={()=>setOpen(o=>!o)}
         style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
-          padding:"8px 12px",background:"transparent",border:"none",cursor:"pointer",borderRadius:5}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:10,color,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,textTransform:"uppercase"}}>{label}</span>
+          padding:`${SPACE.sm}px ${SPACE.md}px`,background:"transparent",border:"none",cursor:"pointer",borderRadius:RADIUS.md}}>
+        <div style={{display:"flex",alignItems:"center",gap:SPACE.sm}}>
+          <span style={{...TYPO.label,color,fontFamily:FONT}}>{label}</span>
           {status!=null&&(
-            <span style={{fontSize:10,fontFamily:FONT,
+            <span style={{...TYPO.caption,fontFamily:FONT,
               color:isActiveStatus(status)?color:C.muted,
-              background:(isActiveStatus(status)?color:C.muted)+"18",
-              border:`1px solid ${(isActiveStatus(status)?color:C.muted)}44`,
-              borderRadius:4,padding:"1px 6px",whiteSpace:"nowrap"}}>
+              background:alpha(isActiveStatus(status)?color:C.muted,0.09),
+              border:`1px solid ${alpha(isActiveStatus(status)?color:C.muted,0.27)}`,
+              borderRadius:RADIUS.sm,padding:"1px 6px",whiteSpace:"nowrap"}}>
               {status}
             </span>
           )}
         </div>
-        <span style={{fontSize:10,color:C.muted,fontFamily:FONT,marginLeft:8}}>{open?"▾":"▸"}</span>
+        <span style={{fontSize:11,color:C.muted,fontFamily:FONT,marginLeft:SPACE.sm}}>{open?"▾":"▸"}</span>
       </button>
       {open&&(
-        <div style={{padding:"0 12px 12px",display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{padding:`0 ${SPACE.md}px ${SPACE.md}px`,display:"flex",flexDirection:"column",gap:SPACE.sm}}>
           {children}
         </div>
       )}

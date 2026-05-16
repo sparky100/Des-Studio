@@ -23,7 +23,7 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
       <thead>
         <tr>
           {["Metric", "Before", "After", "Goal", "Met?"].map(h => (
-            <th key={h} style={{ textAlign: "left", color: C.muted, padding: "2px 4px", borderBottom: `1px solid ${C.border}` }}>{h}</th>
+            <th key={h} scope="col" style={{ textAlign: "left", color: C.muted, padding: "2px 4px", borderBottom: `1px solid ${C.border}` }}>{h}</th>
           ))}
         </tr>
       </thead>
@@ -98,7 +98,14 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, ver
       >
         {running ? "Running..." : "Apply & Re-run"}
       </Btn>
-      {verifyResult && (
+      {running && (
+        <div style={{ marginTop: 8, padding: "10px 12px", background: C.surface, borderRadius: 6, border: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic", animation: "pulse 1.5s ease-in-out infinite" }}>
+            Verifying…
+          </div>
+        </div>
+      )}
+      {!running && verifyResult && (
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BEFORE / AFTER</div>
           <BeforeAfterTable
@@ -435,7 +442,7 @@ export const AiAssistantPanel = ({
         </div>
       )}
 
-      <div ref={responseAreaRef} style={{
+      <div ref={responseAreaRef} aria-live="polite" aria-label="AI analysis response" style={{
         flex: 1,
         background: C.bg,
         border: `1px solid ${C.border}`,

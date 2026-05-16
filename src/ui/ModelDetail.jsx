@@ -1,7 +1,7 @@
 // ui/ModelDetail.jsx — ModelDetail, ModelCard, NewModelModal
 import { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import pkg from '../../package.json';
-import { C, FONT } from "./shared/tokens.js";
+import { C, FONT, RADIUS, SPACE, SHADOW, Z, alpha } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
@@ -217,6 +217,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [dirty,setDirty]=useState(false);
   const [saveStatus,setSaveStatus]=useState(null);
   const [saving,setSaving]=useState(false);
+  const [discardConfirm,setDiscardConfirm]=useState(false);
   const [past,setPast]=useState([]);    // undo stack — model snapshots, capped at 20
   const [future,setFuture]=useState([]); // redo stack
   const [historyRows,setHistoryRows]=useState([]);
@@ -231,7 +232,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [analyseRun,setAnalyseRun]=useState(null);
   const [latestResults,setLatestResults]=useState(null);
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
-  const [showStarterGuide,setShowStarterGuide]=useState(() => !!overrides.showStarterGuide);
+  const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
+    try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
+  });
   const [viewportWidth,setViewportWidth]=useState(() => typeof window === "undefined" ? 1024 : window.innerWidth);
   useEffect(()=>{
     if(typeof window === "undefined") return;
@@ -262,9 +265,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     }
   }, [modelData?.stats, modelData?.statsLoading, modelData?.statsError]);
 
-  useEffect(() => {
-    setShowStarterGuide(!!overrides.showStarterGuide && canEdit);
-  }, [overrides.showStarterGuide, canEdit]);
+  const starterGuideAutoHidden = (model?.entityTypes?.length > 0) || (Number.isFinite(model?.stats?.runs) ? model.stats.runs > 0 : false);
+  const showStarterGuide = canEdit && !starterGuideDismissed && !starterGuideAutoHidden;
+  const dismissStarterGuide = () => {
+    try { localStorage.setItem(`des_starter_${modelId}`, "1"); } catch {}
+    setStarterGuideDismissed(true);
+  };
+  const reopenStarterGuide = () => {
+    try { localStorage.removeItem(`des_starter_${modelId}`); } catch {}
+    setStarterGuideDismissed(false);
+  };
 
   const setField=(f,v)=>{
     if (valuesEqual(model?.[f], v)) return;
@@ -343,13 +353,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   };
 
   // Ref keeps keyboard handler current without re-registering on every render
-  const _ur=useRef({undo,redo});
-  _ur.current={undo,redo};
+  const _ur=useRef({undo,redo,save:null});
+  _ur.current={undo,redo,save};
   useEffect(()=>{
     const onKey=(e)=>{
       if(!(e.ctrlKey||e.metaKey))return;
       if(e.key==='z'&&!e.shiftKey){e.preventDefault();_ur.current.undo();}
       if((e.key==='z'&&e.shiftKey)||e.key==='y'){e.preventDefault();_ur.current.redo();}
+      if(e.key==='s'){e.preventDefault();_ur.current.save?.();}
     };
     document.addEventListener('keydown',onKey);
     return()=>document.removeEventListener('keydown',onKey);
@@ -504,7 +515,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     const isGettingStarted = isStarterBlank;
     const isExecuteTab = tab === "execute";
     const statusColor = isGettingStarted ? C.accent : hasBlockers ? C.red : hasWarnings ? C.amber : C.green;
-    const statusBg = isGettingStarted ? C.accent + "14" : hasBlockers ? C.errorBg : hasWarnings ? C.warmup : C.green + "14";
+    const statusBg = isGettingStarted ? alpha(C.accent, 0.08) : hasBlockers ? C.errorBg : hasWarnings ? C.warmup : alpha(C.green, 0.08);
     const statusBorder = isGettingStarted ? C.accent : hasBlockers ? C.danger : hasWarnings ? C.amber : C.green;
     const statusTitle = isGettingStarted
       ? "Getting started"
@@ -698,6 +709,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     if (counts.warnings) parts.push(`${counts.warnings} warning${counts.warnings === 1 ? "" : "s"}`);
     return parts.join(", ");
   };
+  const tabIssueTooltip = tabId => {
+    const errs  = validation.errors.filter(e => (e.tab || "overview") === tabId).slice(0, 2);
+    const warns = validation.warnings.filter(w => (w.tab || "overview") === tabId).slice(0, errs.length < 2 ? 2 - errs.length : 0);
+    return [...errs.map(e => `Error: ${e.message}`), ...warns.map(w => `Warning: ${w.message}`)].join(" | ");
+  };
   const authoringShellMode = !isMobileLayout && ["design"].includes(activeMode.id)
     ? activeMode
     : null;
@@ -840,12 +856,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",cursor:"pointer",fontWeight:tab===t.id?700:400,display:"inline-flex",alignItems:"center",gap:6}}>
                 <span>{t.label}</span>
                 {tabIssueCounts[t.id]?.errors > 0 && (
-                  <span aria-hidden="true" style={{background:C.errorBg,border:`1px solid ${C.danger}66`,borderRadius:10,color:C.error,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
+                  <span aria-hidden="true" title={tabIssueTooltip(t.id)} style={{background:C.errorBg,border:`1px solid ${C.danger}66`,borderRadius:10,color:C.error,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
                     {tabIssueCounts[t.id].errors}
                   </span>
                 )}
                 {!tabIssueCounts[t.id]?.errors && tabIssueCounts[t.id]?.warnings > 0 && (
-                  <span aria-hidden="true" style={{background:C.warmup,border:`1px solid ${C.amber}66`,borderRadius:10,color:C.warnBg,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
+                  <span aria-hidden="true" title={tabIssueTooltip(t.id)} style={{background:C.warmup,border:`1px solid ${C.amber}66`,borderRadius:10,color:C.warnBg,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
                     {tabIssueCounts[t.id].warnings}
                   </span>
                 )}
@@ -876,7 +892,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             <span>Unsaved changes in this model.</span>
             <div style={{display:"flex",gap:6}}>
               <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save Changes"}</Btn>
-              <Btn small variant="ghost" onClick={discard} disabled={saving}>Discard Changes</Btn>
+              {discardConfirm
+                ? <>
+                    <Btn small variant="danger" onClick={()=>{setDiscardConfirm(false);discard();}} disabled={saving}>Confirm discard</Btn>
+                    <Btn small variant="ghost" onClick={()=>setDiscardConfirm(false)} disabled={saving}>Cancel</Btn>
+                  </>
+                : <Btn small variant="ghost" onClick={()=>setDiscardConfirm(true)} disabled={saving}>Discard Changes</Btn>
+              }
             </div>
           </div>
         )}
@@ -912,6 +934,37 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         )}
         {tab==="overview"&&(
           renderAuthoringShell(<div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
+            {canEdit && showStarterGuide && (
+              <div style={{background:`${C.accent}0d`,border:`1px solid ${alpha(C.accent,0.3)}`,borderRadius:RADIUS.md,padding:16,display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.text,fontFamily:FONT,marginBottom:4}}>Get started building your model</div>
+                    <div style={{fontSize:12,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
+                      Pick the path that feels most natural. You can switch between them at any point.
+                    </div>
+                  </div>
+                  <Btn small variant="ghost" onClick={dismissStarterGuide} ariaLabel="Dismiss getting started guide">✕</Btn>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:10}}>
+                  {[
+                    {title:"Design",body:"Sketch the process map first, then refine the generated structure.",action:"Open Design",onClick:()=>{setTab("visual");dismissStarterGuide();},primary:true},
+                    {title:"AI Designer",body:"Describe the system in plain language and let the assistant draft the model.",action:"Open AI Designer",onClick:()=>{setTab("ai");dismissStarterGuide();}},
+                    {title:"Use a Template",body:"Start from a proven template and copy it into your own model workspace.",action:"Browse Templates",onClick:()=>{dismissStarterGuide();overrides.onExitToTemplates?.();}},
+                  ].map(option=>(
+                    <div key={option.title} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:RADIUS.sm,padding:12,display:"flex",flexDirection:"column",gap:8}}>
+                      <div style={{fontSize:12,fontWeight:700,color:C.text,fontFamily:FONT}}>{option.title}</div>
+                      <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.6,flex:1}}>{option.body}</div>
+                      <Btn small variant={option.primary?"primary":"ghost"} onClick={option.onClick}>{option.action}</Btn>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {canEdit && !showStarterGuide && (
+              <div style={{display:"flex",justifyContent:"flex-end"}}>
+                <Btn small variant="ghost" onClick={reopenStarterGuide}>Show getting started guide</Btn>
+              </div>
+            )}
             <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
             <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
@@ -1128,7 +1181,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 <table style={{width:"100%",borderCollapse:"collapse",fontFamily:FONT,fontSize:11}}>
                   <thead>
                     <tr>{["Date / Time","Label","Served","Reneged","Avg Wait","Summary","Reshare","Actions"].map(h=>(
-                      <th key={h} style={{textAlign:"left",padding:"6px 12px",color:C.muted,borderBottom:`1px solid ${C.border}`,fontSize:10,letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
+                      <th key={h} scope="col" style={{textAlign:"left",padding:"6px 12px",color:C.muted,borderBottom:`1px solid ${C.border}`,fontSize:11,letterSpacing:1,fontWeight:700,whiteSpace:"nowrap"}}>{h}</th>
                     ))}</tr>
                   </thead>
                   <tbody>
@@ -1284,50 +1337,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         )}
         </ErrorBoundary>
       </div>
-      {showStarterGuide && isStarterBlank && canEdit && (
-        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"#000000aa",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:20}}>
-          <div role="dialog" aria-modal="true" aria-labelledby="starter-guide-title" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,width:"min(640px, 100%)",padding:22,display:"flex",flexDirection:"column",gap:18,boxShadow:"0 18px 48px rgba(0,0,0,0.35)"}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-              <div>
-                <div id="starter-guide-title" style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:FONT,marginBottom:6}}>Get started building your model</div>
-                <div style={{fontSize:12,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
-                  Pick the path that feels most natural. You can switch between them at any point as the model takes shape.
-                </div>
-              </div>
-              <Btn small variant="ghost" onClick={()=>setShowStarterGuide(false)}>Close</Btn>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(170px, 1fr))",gap:12}}>
-              {[
-                {
-                  title:"Design",
-                  body:"Sketch the process map first, then refine the generated structure.",
-                  action:"Open Design",
-                  onClick:()=>{setTab("visual");setShowStarterGuide(false);},
-                  primary:true,
-                },
-                {
-                  title:"AI Designer",
-                  body:"Describe the system in plain language and let the assistant draft the model.",
-                  action:"Open AI Designer",
-                  onClick:()=>{setTab("ai");setShowStarterGuide(false);},
-                },
-                {
-                  title:"Use a Template",
-                  body:"Start from a proven template and copy it into your own model workspace.",
-                  action:"Browse Templates",
-                  onClick:()=>{setShowStarterGuide(false);overrides.onExitToTemplates?.();},
-                },
-              ].map(option=>(
-                <div key={option.title} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:14,display:"flex",flexDirection:"column",gap:10}}>
-                  <div style={{fontSize:13,fontWeight:700,color:C.text,fontFamily:FONT}}>{option.title}</div>
-                  <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.6,flex:1}}>{option.body}</div>
-                  <Btn variant={option.primary ? "primary" : "ghost"} onClick={option.onClick}>{option.action}</Btn>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -1384,7 +1393,7 @@ const NewModelModal=({onClose,onCreate,onUseTemplate})=>{
   const [saving,setSaving]=useState(false);
   const create=async()=>{if(!name.trim())return;setSaving(true);try{await onCreate(name.trim(),desc.trim());}finally{setSaving(false);}onClose();};
   return (
-    <div style={{position:"fixed",inset:0,background:"#000000cc",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>
+    <div style={{position:"fixed",inset:0,background:C.overlay,display:"flex",alignItems:"center",justifyContent:"center",zIndex:Z.modal}}>
       <div role="dialog" aria-modal="true" aria-labelledby="new-model-title" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:28,width:420,fontFamily:FONT,display:"flex",flexDirection:"column",gap:14}}>
         <div id="new-model-title" style={{fontSize:15,fontWeight:700,color:C.text}}>New DES Model</div>
         <Field label="Name" value={name} onChange={setName} placeholder="e.g. Queue with Reneging" autoFocus/>

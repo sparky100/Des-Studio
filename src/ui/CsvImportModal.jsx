@@ -1,6 +1,6 @@
 // ui/CsvImportModal.jsx — Import entity attributes from a CSV file
 import { useState, useRef, useCallback } from "react";
-import { C, FONT } from "./shared/tokens.js";
+import { C, FONT, Z } from "./shared/tokens.js";
 import { Btn } from "./shared/components.jsx";
 import { csvToEntityType } from "../engine/distribution-fitting.js";
 
@@ -59,9 +59,9 @@ export function CsvImportModal({ onClose, onApply }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#000000cc", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-      <div role="dialog" aria-modal="true" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 24, width: 540, maxWidth: "90vw", display: "flex", flexDirection: "column", gap: 16, fontFamily: FONT }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Import Entity Type from CSV</div>
+    <div style={{ position: "fixed", inset: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="csv-modal-title" style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 24, width: 540, maxWidth: "90vw", display: "flex", flexDirection: "column", gap: 16, fontFamily: FONT }}>
+        <div id="csv-modal-title" style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Import Entity Type from CSV</div>
 
         {step === "upload" && (
           <>
@@ -107,9 +107,9 @@ export function CsvImportModal({ onClose, onApply }) {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
                 <thead>
                   <tr style={{ background: C.surface }}>
-                    <th style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, borderBottom: `1px solid ${C.border}` }}>Column</th>
-                    <th style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, borderBottom: `1px solid ${C.border}` }}>Type</th>
-                    <th style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, borderBottom: `1px solid ${C.border}` }}>Suggested Distribution</th>
+                    <th scope="col" style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, borderBottom: `1px solid ${C.border}` }}>Column</th>
+                    <th scope="col" style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, borderBottom: `1px solid ${C.border}` }}>Type</th>
+                    <th scope="col" style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, borderBottom: `1px solid ${C.border}` }}>Suggested Distribution</th>
                   </tr>
                 </thead>
                 <tbody>

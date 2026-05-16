@@ -292,7 +292,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                       {["User", "Role", "Status", "Actions"].map(h => (
-                        <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 10, letterSpacing: 1 }}>{h}</th>
+                        <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -345,7 +345,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                       {["Time", "Action", "Target", "Detail"].map(h => (
-                        <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 10, letterSpacing: 1 }}>{h}</th>
+                        <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
