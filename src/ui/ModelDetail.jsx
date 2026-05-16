@@ -1,7 +1,7 @@
 // ui/ModelDetail.jsx — ModelDetail, ModelCard, NewModelModal
 import { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import pkg from '../../package.json';
-import { C, FONT, RADIUS, SPACE, SHADOW, Z, alpha } from "./shared/tokens.js";
+import { C, FONT, RADIUS, Z, alpha } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { useViewport } from "./shared/hooks.js";
@@ -18,6 +18,10 @@ import { ModelHistoryTab } from "./ModelHistoryTab.jsx";
 const VisualDesignerPanel = lazy(() =>
   import("./visual-designer/VisualDesignerPanel.jsx").then(m => ({ default: m.VisualDesignerPanel }))
 );
+import { ModelHealthPanel }  from "./ModelHealthPanel.jsx";
+import { ModelDetailHeader } from "./ModelDetailHeader.jsx";
+import { ModelTabBar }       from "./ModelTabBar.jsx";
+import { SaveBanner }        from "./SaveBanner.jsx";
 import { fetchRunHistory, listShareLinks } from "../db/models.js";
 import { validateModel }                    from "../engine/validation.js";
 import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
@@ -479,137 +483,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     );
   };
 
-  const ModelHealthPanel = () => {
-    const blockers = healthValidation.errors || [];
-    const warnings = healthValidation.warnings || [];
-    const issues = [...blockers, ...warnings].slice(0, 5);
-    const hasBlockers = blockers.length > 0;
-    const hasWarnings = warnings.length > 0;
-    const isGettingStarted = isStarterBlank;
-    const isExecuteTab = tab === "execute";
-    const statusColor = isGettingStarted ? C.accent : hasBlockers ? C.red : hasWarnings ? C.amber : C.green;
-    const statusBg = isGettingStarted ? alpha(C.accent, 0.08) : hasBlockers ? C.errorBg : hasWarnings ? C.warmup : alpha(C.green, 0.08);
-    const statusBorder = isGettingStarted ? C.accent : hasBlockers ? C.danger : hasWarnings ? C.amber : C.green;
-    const statusTitle = isGettingStarted
-      ? "Getting started"
-      : hasBlockers
-      ? `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}`
-      : hasWarnings
-        ? `Ready with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
-        : "Ready to run";
-    const completedRuns = Number.isFinite(model.stats?.runs) ? model.stats.runs : 0;
-    const actionHint = isGettingStarted
-      ? "Choose a build path below to start defining your model."
-      : hasBlockers
-      ? "Resolve the listed issues first."
-      : isExecuteTab
-        ? "Use the controls below to run this scenario or review recent runs."
-      : latestResults
-        ? "Review the latest run or run another scenario."
-        : completedRuns > 0
-          ? "Pick a saved run or start a fresh execution."
-          : "Run this model to generate results.";
-
-    return (
-      <section
-        aria-label="Model health"
-        style={{
-          background: C.panel,
-          border: `1px solid ${C.border}`,
-          borderRadius: 8,
-          padding: 12,
-          marginBottom: 14,
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{display:"flex",alignItems:"flex-start",gap:10,minWidth:0,flex:"1 1 280px",flexWrap:"wrap"}}>
-          <div style={{
-            background: statusBg,
-            border: `1px solid ${statusBorder}66`,
-            borderRadius: 6,
-            padding: "6px 9px",
-            color: statusColor,
-            fontFamily: FONT,
-            fontSize: 11,
-            fontWeight: 700,
-            whiteSpace: "nowrap",
-          }}>
-            {statusTitle}
-          </div>
-          <div style={{minWidth:0,flex:"1 1 220px"}}>
-            <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.4,fontWeight:700,marginBottom:4}}>MODEL HEALTH</div>
-            <div style={{fontSize:12,color:C.text,fontFamily:FONT,lineHeight:1.5}}>
-              {hasBlockers
-                ? "Fix blocking validation issues before running this model."
-                : isGettingStarted
-                  ? "Start with a template, the visual designer, AI designer, or forms to build the first runnable version."
-                : hasWarnings
-                  ? "The model can run, but review the warnings before trusting outputs."
-                  : "No blocking validation issues found."}
-            </div>
-          </div>
-        </div>
-        {issues.length > 0 && (
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end",flex:"1 1 320px",minWidth:0}}>
-            {issues.map((issue, index) => {
-              const targetTab = issue.tab || "overview";
-              const tabLabel = MODEL_HEALTH_TAB_LABELS[targetTab] || "Overview";
-              const isError = blockers.includes(issue);
-              return (
-                <button
-                  key={`${issue.code}-${index}-${targetTab}`}
-                  type="button"
-                  onClick={() => setTab(targetTab)}
-                  title={issue.message}
-                  style={{
-                    background: isError ? C.errorBg : C.warmup,
-                    border: `1px solid ${isError ? C.danger : C.amber}66`,
-                    borderRadius: 6,
-                    color: isError ? C.error : C.warnBg,
-                    cursor: "pointer",
-                    fontFamily: FONT,
-                    fontSize: 11,
-                    fontWeight: 700,
-                    padding: "7px 9px",
-                    maxWidth: "100%",
-                    flex: "1 1 240px",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  [{issue.code}] {tabLabel}: {issue.message}
-                </button>
-              );
-            })}
-          </div>
-        )}
-        <div style={{
-          borderTop: `1px solid ${C.border}`,
-          paddingTop: 10,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 10,
-          flex: "1 1 100%",
-          flexWrap: "wrap",
-        }}>
-          <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>
-            {actionHint}
-          </div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {!isGettingStarted && !hasBlockers && !isExecuteTab && <Btn small variant="primary" onClick={()=>setTab("execute")}>Open Execute</Btn>}
-            {!isGettingStarted && !hasBlockers && latestResults && <Btn small variant="ghost" onClick={()=>setTab("results")}>Open Analysis</Btn>}
-            {!isGettingStarted && !hasBlockers && completedRuns > 0 && <Btn small variant="ghost" onClick={()=>setTab("history")}>Run History</Btn>}
-          </div>
-        </div>
-      </section>
-    );
-  };
 
   const TABS=[
     {id:"overview",label:"Overview"},
@@ -675,19 +548,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     }
     return counts;
   }, [validation]);
-  const tabIssueLabel = tabId => {
-    const counts = tabIssueCounts[tabId];
-    if (!counts) return "";
-    const parts = [];
-    if (counts.errors) parts.push(`${counts.errors} error${counts.errors === 1 ? "" : "s"}`);
-    if (counts.warnings) parts.push(`${counts.warnings} warning${counts.warnings === 1 ? "" : "s"}`);
-    return parts.join(", ");
-  };
-  const tabIssueTooltip = tabId => {
-    const errs  = validation.errors.filter(e => (e.tab || "overview") === tabId).slice(0, 2);
-    const warns = validation.warnings.filter(w => (w.tab || "overview") === tabId).slice(0, errs.length < 2 ? 2 - errs.length : 0);
-    return [...errs.map(e => `Error: ${e.message}`), ...warns.map(w => `Warning: ${w.message}`)].join(" | ");
-  };
   const authoringShellMode = !isMobileLayout && ["design"].includes(activeMode.id)
     ? activeMode
     : null;
@@ -747,163 +607,22 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const runCountValue = model.statsLoading || model.statsError ? "—" : model.stats?.runs ?? 0;
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100dvh",minHeight:"100vh",background:C.bg}}>
-      <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 20px",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,flexWrap:"wrap"}}>
-        <Btn small variant="ghost" onClick={handleBack}>← Back</Btn>
-        <div style={{flex:"1 1 220px",minWidth:0,fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{model.name}</div>
-        <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
-        <Tag label={`v${pkg.version}`} color={C.purple}/>
-        {canEdit&&<Btn small variant="ghost" onClick={undo} disabled={!past.length} title="Undo the last model edit (Ctrl+Z)" ariaLabel="Undo last model edit">↩ Undo</Btn>}
-        {canEdit&&<Btn small variant="ghost" onClick={redo} disabled={!future.length} title="Redo the last undone model edit (Ctrl+Shift+Z)" ariaLabel="Redo last model edit">↪ Redo</Btn>}
-        {canEdit&&dirty&&(
-          <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save"}</Btn>
-            <Btn small variant="ghost" onClick={discard} disabled={saving}>Discard</Btn>
-          </div>
-        )}
-      </div>
-      <div aria-label={isMobileLayout ? "Mobile model workflow" : "Model workflow modes"} style={{display:"flex",alignItems:"stretch",gap:8,padding:"8px 20px",borderBottom:`1px solid ${C.border}`,background:C.bg,overflowX:"auto",flexShrink:0}}>
-        {DISPLAY_MODES.map(mode=>{
-          const selected = activeMode.id === mode.id;
-          const modeCounts = mode.tabs.reduce((acc, tabId) => {
-            const counts = tabIssueCounts[tabId] || {};
-            return { errors: acc.errors + (counts.errors || 0), warnings: acc.warnings + (counts.warnings || 0) };
-          }, { errors: 0, warnings: 0 });
-          return (
-            <button
-              key={mode.id}
-              type="button"
-              aria-pressed={selected}
-              onClick={()=>setTab(mode.primaryTab)}
-              style={{
-                background:selected?C.panel:C.surface,
-                border:`1px solid ${selected?C.accent:C.border}`,
-                borderRadius:6,
-                color:selected?C.accent:C.text,
-                cursor:"pointer",
-                display:"inline-flex",
-                alignItems:"center",
-                gap:6,
-                flexShrink:0,
-                fontFamily:FONT,
-                fontSize:11,
-                fontWeight:700,
-                padding:"7px 10px",
-                whiteSpace:"nowrap",
-              }}
-            >
-              <span>{mode.label}</span>
-              {modeCounts.errors > 0 && (
-                <span aria-hidden="true" style={{background:C.errorBg,border:`1px solid ${C.danger}66`,borderRadius:10,color:C.error,fontSize:9,padding:"1px 5px"}}>
-                  {modeCounts.errors}
-                </span>
-              )}
-              {!modeCounts.errors && modeCounts.warnings > 0 && (
-                <span aria-hidden="true" style={{background:C.warmup,border:`1px solid ${C.amber}66`,borderRadius:10,color:C.warnBg,fontSize:9,padding:"1px 5px"}}>
-                  {modeCounts.warnings}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-      {visibleSelectableTabs.length > 1 && (()=>{
-        const COMPACT_HIDDEN=["access","history","validate"];
-        const primaryTabs=isCompactLayout?visibleTabs.filter(t=>!COMPACT_HIDDEN.includes(t.id)):visibleTabs;
-        const moreTabs=isCompactLayout?visibleTabs.filter(t=>!t.disabled&&COMPACT_HIDDEN.includes(t.id)):[];
-        const activeInMore=moreTabs.some(t=>t.id===tab);
-        const renderTab=(t)=>{
-          if(t.disabled) return <div key={t.id} style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700,padding:"10px 8px",whiteSpace:"nowrap",userSelect:"none",opacity:0.5}}>{t.label}</div>;
-          const accessibleLabel=t.id==="ai"?"AI Designer":t.label;
-          return (
-            <button key={t.id} type="button" role="tab" aria-selected={tab===t.id}
-              aria-label={`${accessibleLabel}${tabIssueLabel(t.id)?`, ${tabIssueLabel(t.id)}`:""}`}
-              onClick={()=>{setTab(t.id);setShowMoreTabs(false);}}
-              style={{background:"none",border:"none",whiteSpace:"nowrap",
-                borderBottom:tab===t.id?`2px solid ${C.accent}`:"2px solid transparent",
-                color:tab===t.id?C.accent:C.muted,fontFamily:FONT,fontSize:12,padding:"10px 16px",
-                cursor:"pointer",fontWeight:tab===t.id?700:400,display:"inline-flex",alignItems:"center",gap:6}}>
-              <span>{t.label}</span>
-              {tabIssueCounts[t.id]?.errors>0&&(
-                <span aria-hidden="true" title={tabIssueTooltip(t.id)} style={{background:C.errorBg,border:`1px solid ${C.danger}66`,borderRadius:10,color:C.error,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
-                  {tabIssueCounts[t.id].errors}
-                </span>
-              )}
-              {!tabIssueCounts[t.id]?.errors&&tabIssueCounts[t.id]?.warnings>0&&(
-                <span aria-hidden="true" title={tabIssueTooltip(t.id)} style={{background:C.warmup,border:`1px solid ${C.amber}66`,borderRadius:10,color:C.warnBg,fontSize:9,fontWeight:700,padding:"1px 5px"}}>
-                  {tabIssueCounts[t.id].warnings}
-                </span>
-              )}
-            </button>
-          );
-        };
-        return (
-          <div style={{display:"flex",alignItems:"stretch",borderBottom:`1px solid ${C.border}`,background:C.surface,flexShrink:0,minWidth:0}}>
-            <div role="tablist" aria-label="Model sections" style={{display:"flex",paddingLeft:12,flex:1,minWidth:0,overflowX:"auto"}}>
-              {primaryTabs.map(renderTab)}
-              {moreTabs.length>0&&(
-                <div style={{position:"relative"}}>
-                  <button type="button"
-                    aria-expanded={showMoreTabs}
-                    aria-haspopup="true"
-                    onClick={()=>setShowMoreTabs(v=>!v)}
-                    style={{background:"none",border:"none",whiteSpace:"nowrap",
-                      borderBottom:activeInMore?`2px solid ${C.accent}`:"2px solid transparent",
-                      color:activeInMore?C.accent:C.muted,fontFamily:FONT,fontSize:12,
-                      padding:"10px 16px",cursor:"pointer",fontWeight:activeInMore?700:400}}>
-                    More ▾
-                  </button>
-                  {showMoreTabs&&(
-                    <div role="listbox" style={{position:"absolute",top:"100%",right:0,
-                      background:C.panel,border:`1px solid ${C.border}`,borderRadius:RADIUS.md,
-                      zIndex:Z.dropdown,minWidth:140,boxShadow:"0 4px 12px rgba(0,0,0,0.3)",padding:4}}>
-                      {moreTabs.map(t=>(
-                        <button key={t.id} type="button" role="option" aria-selected={tab===t.id}
-                          onClick={()=>{setTab(t.id);setShowMoreTabs(false);}}
-                          style={{display:"block",width:"100%",textAlign:"left",background:tab===t.id?alpha(C.accent,0.1):"transparent",
-                            border:"none",borderRadius:RADIUS.sm,color:tab===t.id?C.accent:C.text,
-                            fontFamily:FONT,fontSize:12,padding:"8px 12px",cursor:"pointer"}}>
-                          {t.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
+      <ModelDetailHeader
+        model={model} canEdit={canEdit} dirty={dirty} saving={saving}
+        past={past} future={future}
+        onBack={handleBack} onUndo={undo} onRedo={redo} onSave={save} onDiscard={discard}
+      />
+      <ModelTabBar
+        tab={tab} setTab={setTab}
+        DISPLAY_MODES={DISPLAY_MODES} activeMode={activeMode}
+        visibleSelectableTabs={visibleSelectableTabs}
+        validation={validation} tabIssueCounts={tabIssueCounts}
+        isCompactLayout={isCompactLayout}
+        showMoreTabs={showMoreTabs} setShowMoreTabs={setShowMoreTabs}
+      />
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
-        {canEdit&&dirty&&(
-          <div role="status" style={{
-            background:C.amber+"18",
-            border:`1px solid ${C.amber}66`,
-            borderRadius:6,
-            padding:"10px 12px",
-            marginBottom:14,
-            display:"flex",
-            alignItems:"center",
-            justifyContent:"space-between",
-            gap:12,
-            flexWrap:"wrap",
-            color:C.text,
-            fontFamily:FONT,
-            fontSize:12,
-          }}>
-            <span>Unsaved changes in this model.</span>
-            <div style={{display:"flex",gap:6}}>
-              <Btn small variant="primary" onClick={save} disabled={saving}>{saving?"Saving...":"Save Changes"}</Btn>
-              {discardConfirm
-                ? <>
-                    <Btn small variant="danger" onClick={()=>{setDiscardConfirm(false);discard();}} disabled={saving}>Confirm discard</Btn>
-                    <Btn small variant="ghost" onClick={()=>setDiscardConfirm(false)} disabled={saving}>Cancel</Btn>
-                  </>
-                : <Btn small variant="ghost" onClick={()=>setDiscardConfirm(true)} disabled={saving}>Discard Changes</Btn>
-              }
-            </div>
-          </div>
-        )}
-        {tab==="overview" && <ModelHealthPanel/>}
+        <SaveBanner canEdit={canEdit} dirty={dirty} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
+        {tab==="overview" && <ModelHealthPanel model={model} validation={healthValidation} isStarterBlank={isStarterBlank} tab={tab} setTab={setTab} latestResults={latestResults}/>}
         <ErrorBoundary
           key={tab}
           title="Model panel crashed"
