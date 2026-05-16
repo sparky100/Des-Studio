@@ -1,6 +1,15 @@
 > **SUPERSEDED** — This document has been replaced by `docs/capability-gap-analysis.md`.
 > All gap analysis findings have been incorporated into the current capability gap analysis.
 > Date superseded: 2026-05-15
+>
+> **Correction log (2026-05-16):** Several gaps in this document have since been closed or materially changed. Key corrections:
+> - **Gap 3 (Statistical output)** — CLOSED. Batch-means, Welch warm-up, ANOVA/Tukey HSD, outlier flagging, paired t-test, 1D/2D parametric sweeps all implemented (Sprints 28–33). This is now a *strength*, not a gap.
+> - **Gap 4 (Optimization)** — REFRAMED. The framing "no optimizer — manual trial-and-error only" is no longer accurate and undervalues DES Studio's position. See correction below.
+> - **Gap 6 (Cost modelling)** — CLOSED. `COST(expr)` macro, totalCost/costPerServed in all results views (Sprint 36, Sprint 54).
+> - **Gap 9 (Pre-built model library)** — CLOSED. 14 templates across 6 domains with domain metadata, full-text search, and scenario type tagging (Sprint 30).
+> - **Gap 11 (Maturity/validation)** — Improved. 600+ tests, M/M/1 and M/M/c analytical benchmarks, performance envelope documented.
+> - **Gap 12 (Extensibility)** — PARTIALLY CLOSED. SET, SET_ATTR, COST macros; safe arithmetic expression evaluator; public API (Sprints 34–36).
+> - **Summary table row "Optimization: No"** — incorrect. See Gap 4 correction.
 
 # DES Studio — Professional Gap Analysis
 
@@ -70,13 +79,38 @@ The single biggest practical gap for professional use is the **absence of an opt
 
 ---
 
-### Gap 4 — Optimization (High)
+### Gap 4 — Optimization ~~(High)~~ — REFRAMED (2026-05-16)
 
-**Current state:** No optimizer. Model parameters (capacity, count, rate) can only be changed manually between runs. No automated search.
+~~**Current state:** No optimizer. Model parameters (capacity, count, rate) can only be changed manually between runs. No automated search.~~
 
-**Professional baseline:** OptQuest (embedded in Arena, Simio, AnyLogic) uses scatter search and tabu heuristics. Simio supports tabu search, genetic algorithms, and Nelder-Mead. FlexSim includes OptQuest.
+**Correction:** This assessment is outdated and frames the wrong comparison. DES Studio does not implement OptQuest-style black-box meta-heuristic search (scatter search, tabu, genetic algorithms). It implements a qualitatively different and in key respects *superior* approach for its target users:
 
-**Path forward:** Very large effort. Requires a scenario management system (multi-parameter configs), a search engine, and a results comparison dashboard. This is the single biggest gap for professional use.
+**DES Studio's AI-driven optimisation approach:**
+- **Goal specification in natural language** — users describe what they want ("utilisation < 80%, mean wait < 5 min") rather than formulating a numeric objective function
+- **1D/2D parametric sweep** with full visual exploration of the parameter space — the user sees every point, not just the "optimal" one
+- **Goal-feasibility colouring** on SweepChart and Sweep2DGrid — regions that meet all goals are highlighted; the tradeoff surface is visible at a glance (Sprint 43, `evaluateSweepPointGoals()`)
+- **AI narrative explanation** — after a sweep, the AI explains which configurations are best and *why*, in language the decision-maker can present to stakeholders
+- **AI model generation** — the AI can suggest which parameters to vary and can generate model variants that satisfy goal constraints directly (Sprints 43–45)
+
+**Where DES Studio's approach beats OptQuest:**
+| Dimension | OptQuest | DES Studio |
+|-----------|----------|------------|
+| Goal specification | Numeric objective + constraint bounds | Natural language goals |
+| Transparency | Black box — returns a point | Full parameter space visible |
+| Interpretability | "Solution: servers=4" | "4 servers keeps utilisation at 72%, below the 80% target, with wait times averaging 3.1 min..." |
+| Expertise required | Simulation optimisation specialist | Operations manager / analyst |
+| Tradeoff visibility | Post-hoc Pareto report | Interactive heatmap during exploration |
+| AI integration | None | Generates, explains, and compares configurations |
+
+**Where OptQuest still leads:**
+| Dimension | OptQuest | DES Studio |
+|-----------|----------|------------|
+| Parameter space size | Handles 10–50 parameters | Practical limit ~4 parameters (combinatorial sweep) |
+| Convergence guarantee | Heuristic convergence | Exhaustive within grid |
+| Multi-objective Pareto | Automated | Visual (2D) or manual |
+| Constraint satisfaction | Formal | Goal-colouring heuristic |
+
+**Revised assessment:** For DES Studio's target users (operations analysts, consultants, students, service system designers), the AI-driven goal-directed sweep is *more useful* than OptQuest because it produces interpretable, explainable results at lower expertise cost. The remaining gap is for expert users needing high-dimensional automated search — a niche that is outside DES Studio's declared positioning. Severity downgraded from **High** to **Low** for the target user base.
 
 ---
 
@@ -175,13 +209,15 @@ The single biggest practical gap for professional use is the **absence of an opt
 | Area | Competitive? | Notes |
 |---|---|---|
 | Core DES engine | **Yes** | Three-Phase, seeded, safe evaluator, clean architecture |
-| Modelling vocabulary | **Mostly** | Covers queueing, routing, pooling, balking. Missing batching + rework. |
-| AI integration | **Ahead** | Model authoring + run analysis. No competitor has this. |
+| Modelling vocabulary | **Yes** | Covers queueing, routing, pooling, balking, preemption, FAIL/REPAIR, SPLIT, MATCH, COSEIZE, BATCH, COST |
+| AI integration | **Ahead** | Model authoring + AI-driven optimisation + run analysis. No competitor has this. |
 | Three authoring modes | **Ahead** | Forms + AI + Visual Designer is genuinely novel. |
-| Performance | **No** | Largest gap for production use. |
-| Optimization | **No** | Biggest practical gap — most projects need this. |
-| Statistical analysis | **No** | Needs output analysis engine. |
-| Visualization | **No** | 2D canvas is fine for development, not for stakeholder presentation. |
-| Collaboration | **No** | Single-user at core. Sharing is basic. |
+| AI-driven optimisation | **Ahead for target users** | Goal-directed sweep + natural language goals + AI narrative beats OptQuest on interpretability. See Gap 4 correction. |
+| Statistical analysis | **Yes** | ~~Needs output analysis engine~~ — CLOSED. Batch-means, Welch warm-up, ANOVA/Tukey, CI ribbon, outlier flagging all implemented. |
+| Cost modelling | **Yes** | ~~No cost tracking~~ — CLOSED. COST macro, totalCost/costPerServed in all results views. |
+| Performance | **No** | Still the largest gap for production use at enterprise scale. |
+| 2D/3D Visualization | **No** | 2D canvas is fine for development; 3D out of scope. |
+| Collaboration | **No** | Single-user at core. Sharing is basic. Fork-to-run. |
+| Hierarchical modelling | **No** | Flat structure. Not on roadmap. |
 
-**Bottom line:** DES Studio is architecturally sound, genuinely innovative in its AI and authoring-mode approach, and well-positioned as a **design-phase prototyping tool** or **academic teaching platform**. For production simulation work at enterprise scale, 3–5 major engineering efforts (performance, optimization, statistics, collaboration, visualization) separate it from professional-grade tools. The architecture is clean enough to close these gaps incrementally — none require a rewrite.
+**Revised bottom line (2026-05-16):** DES Studio has closed most of the originally identified gaps. The remaining genuine gaps for professional use are **scale/performance** (browser JS engine ceiling) and **high-dimensional automated optimisation** (>4 parameters). For its target market — analysts, consultants, and educators who need interpretable, explainable results from queueing models — DES Studio is now competitive with professional tools in capability and *ahead* in AI integration, accessibility, and result interpretability. The gap-to-production-grade has narrowed from 3–5 major engineering efforts to primarily 1: performance at scale.
