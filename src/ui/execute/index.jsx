@@ -624,6 +624,32 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     return [...savedRuns, ...currentReplications];
   }, [savedRunHistory, replicationResults]);
 
+  const runWithPatch = useCallback((patchedModel) => {
+    return new Promise((resolve) => {
+      const completedPayloads = [];
+      runReplications({
+        model: patchedModel,
+        replications,
+        baseSeed: seed,
+        warmupPeriod,
+        maxSimTime: terminationMode === 'time' ? maxSimTime : null,
+        terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+        collectTimeSeries: false,
+        onReplicationComplete: payload => {
+          completedPayloads[payload.replicationIndex] = payload;
+        },
+        onComplete: payloads => {
+          const valid = payloads.filter(Boolean);
+          resolve({
+            aggregateStats: summarizeReplicationResults(valid, CI_METRICS),
+            summary: valid[0]?.result?.summary || {},
+          });
+        },
+        onError: () => resolve(null),
+      });
+    });
+  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
+
   const exportResultsJson = useCallback(() => {
     const payload = buildResultsExportPayload({
       model,
@@ -2317,6 +2343,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           comparisonLoading={runHistoryStatus === "loading"}
           comparisonError={runHistoryError}
           onClose={() => setAiPanelOpen(false)}
+          onRunWithPatch={runWithPatch}
           onSaveInsights={async (insights) => {
             if (!latestRunId) return;
             try { await saveAiInsights(latestRunId, insights); } catch {}

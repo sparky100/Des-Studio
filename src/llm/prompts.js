@@ -243,7 +243,7 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     aggregateStats: results.aggregateStats || {},
   };
 
-  const goalGaps = buildGoalGaps(model, results);
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
   const goalsInstr = goalGaps?.length
     ? ` Performance goals were set. For each goal use this format: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])". Cite exact numbers from the goalGaps data.`
     : "";
@@ -314,19 +314,14 @@ const GOAL_STAT_KEY = {
   totalCost:  "summary.totalCost",
 };
 
-function buildGoalGaps(model = {}, results = {}) {
+export function buildGoalGaps(model = {}, aggregateStats = {}) {
   const goals = model.goals || [];
   if (!goals.length) return null;
-  const summary = getSummary(results);
-  const agg = results.aggregateStats || {};
   return goals.filter(g => g.metric && g.target).map(g => {
-    const statKey = GOAL_STAT_KEY[g.metric];
-    const current = statKey
-      ? finiteOrNull(agg[statKey]?.mean ?? summary[g.metric])
-      : finiteOrNull(summary[g.metric]);
+    const current = finiteOrNull(aggregateStats[g.metric]?.mean);
     const target = parseFloat(g.target);
     const op = g.operator || "<";
-    let met = null;
+    let met = false;
     if (current != null) {
       if (op === "<")  met = current < target;
       else if (op === "<=") met = current <= target;
@@ -379,7 +374,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "model event structure (B-event/C-event digest with routing types, loop guards, balking modes, arrival streams),",
     "state variables, cost metrics, WIP (Little's Law), container levels, entity anomaly counts,",
     "and when set, performance goals with their current gaps.",
-    "You MUST follow the 6-step framework and output schema described in the instruction.",
+    "You MUST follow the 6-step chain-of-thought framework: binding constraint → cause → specific change → predicted effect → goal impact → ranking.",
     "Never give vague advice like 'consider increasing capacity' — always name the exact parameter and specific value.",
     "When the model has a failure/repair model on a resource, factor availability into capacity calculations.",
     "When a loop guard is present, consider whether the loop count limit is causing premature exits.",
@@ -403,7 +398,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
   }));
 
   const kpis = buildKpis(model, results);
-  const goalGaps = buildGoalGaps(model, results);
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
 
   // CI data from aggregateStats (replications)
   const agg = results.aggregateStats || {};
@@ -431,6 +426,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
       description: model.description || "",
       entityTypes,
       queues,
+      stateVariables: (model.stateVariables || []).map(v => ({ name: v.name, initialValue: v.initialValue })),
       flowSummary: queues
         .filter(q => q.customerType)
         .map(q => `${q.customerType} entities wait in queue '${q.name}'`)
@@ -438,10 +434,10 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
       ...(bEvents ? { bEvents } : {}),
       ...(cEvents ? { cEvents } : {}),
       ...(stateVariables.length ? { stateVariables } : {}),
+      ...(goalGaps?.length ? { goalGaps } : {}),
     },
     experiment: extractExperiment(experimentConfig),
     kpis,
-    goalGaps: goalGaps?.length ? goalGaps : undefined,
     confidenceIntervals: confidenceIntervals.length ? confidenceIntervals : undefined,
     waitDist: results.waitDist || {},
     perQueue: results.perQueue || {},
@@ -465,13 +461,9 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "5. GOAL IMPACT: For each suggestion, state which goals would be met, which remain missed, which are unaffected.",
     "6. RANKING: If multiple suggestions, rank by expected impact on the binding constraint and explain the trade-off.",
     "",
-    "OUTPUT FORMAT — use this exact schema for each suggestion:",
-    "Suggestion N — [parameter or change]",
-    "  Current: [exact value with units/context]",
-    "  Proposed: [specific value or range]",
-    "  Predicted effect: [metric] [direction] from [current] to ~[predicted range]",
-    "  Goal impact: [goal label] → met / still missed / unaffected",
-    "  Confidence: high / moderate / low — [one-line reason citing CIs or queueing regime]",
+    "OUTPUT FORMAT — output a single JSON block wrapped in ```json ... ``` fences with this schema:",
+    '{ "analysis": "<narrative>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|moderate|low>" } ] }',
+    "Use type 'manual' for structural changes that cannot be expressed as a single numeric field update.",
     "",
     goalInstruction,
     highLoadWarning,
@@ -482,6 +474,52 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     messages: makeMessages(system, payload, instruction),
     max_tokens: 800,
   };
+}
+
+export function parseSuggestionResponse(text = "") {
+  const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
+  const rawJson = fenceMatch ? fenceMatch[1].trim() : text.trim();
+  try {
+    const parsed = JSON.parse(rawJson);
+    const analysis = typeof parsed.analysis === "string" ? parsed.analysis : "";
+    const suggestions = Array.isArray(parsed.suggestions)
+      ? parsed.suggestions.filter(s => s && typeof s === "object" && typeof s.rank === "number" && s.change && typeof s.change.type === "string")
+      : [];
+    return { analysis, suggestions };
+  } catch {
+    return { analysis: text, suggestions: [] };
+  }
+}
+
+export function applySuggestionPatch(model, change) {
+  const clone = JSON.parse(JSON.stringify(model));
+  if (!change || !change.type) return clone;
+
+  if (change.type === "entityTypeCount") {
+    const entities = clone.entityTypes || [];
+    const found = entities.find(e => e.name === change.target || e.id === change.target);
+    if (!found) return clone;
+    found.count = change.to;
+    return clone;
+  }
+
+  if (change.type === "queueCapacity") {
+    const queues = clone.queues || [];
+    const found = queues.find(q => q.name === change.target || q.id === change.target);
+    if (!found) return clone;
+    found.capacity = change.to;
+    return clone;
+  }
+
+  if (change.type === "stateVariable") {
+    const vars = clone.stateVariables || [];
+    const found = vars.find(v => v.name === change.target || v.id === change.target);
+    if (!found) return clone;
+    found.initialValue = change.to;
+    return clone;
+  }
+
+  return clone;
 }
 
 export function promptWordEstimate(prompt) {
