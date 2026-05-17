@@ -424,7 +424,7 @@ export const MACROS = [
         msgs.push(`#${cust.id} done [sojourn ${cust.sojournTime.toFixed(2)} t, ${cust.stages.length} stage(s)]`);
       }
       if (srv) {
-        releaseServerClaim(cust, srv);
+        releaseServerClaim(cust, srv, clock);
         msgs.push(`Server #${srv.id} → idle`);
         const retired = retireIdleExcessServers(ctx, srv.type);
         if (retired > 0) {
@@ -441,7 +441,7 @@ export const MACROS = [
         (e.status === "busy" || e.status === "serving")
       );
       for (const auxSrv of auxiliaryBusy) {
-        releaseServerClaim(null, auxSrv);
+        releaseServerClaim(null, auxSrv, clock);
         msgs.push(`Server #${auxSrv.id} (${auxSrv.type}) → idle (COSEIZE release)`);
       }
     },
@@ -474,7 +474,7 @@ export const MACROS = [
         cust.lastStageStart = clock;
         markEntityWaiting(cust, clock, targetQueue || cust.lastQueue || cust.queue);
         delete cust.serviceStart;
-        releaseServerClaim(cust, srv);
+        releaseServerClaim(cust, srv, clock);
         const retired = retireIdleExcessServers(ctx, srv.type);
         msgs.push(`#${cust.id} released → waiting [queue: ${cust.queue}, stage ${cust.stages.length} done, srv #${srv.id} idle]`);
         if (retired > 0) {
@@ -761,7 +761,7 @@ export const MACROS = [
       const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
       cust._remainingService = remainingService;
 
-      releaseServerClaim(cust, srv);
+      releaseServerClaim(cust, srv, clock);
       clearWaitingState(cust);
       markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
 
@@ -805,7 +805,7 @@ export const MACROS = [
             const scheduledDuration = srv._scheduledDuration || 0;
             const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
             cust._remainingService = remainingService;
-            releaseServerClaim(cust, srv);
+            releaseServerClaim(cust, srv, clock);
             clearWaitingState(cust);
             markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
             msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
@@ -950,6 +950,7 @@ export const MACROS = [
       for (let i = 1; i < serverEntries.length; i++) {
         const [sType, srv] = serverEntries[i];
         srv.status = "busy";
+        srv._busyStart = clock;
         srv.currentCustId = cust.id;
         srv.resourceClaim = {
           customerId: cust.id,
