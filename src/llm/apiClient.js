@@ -155,4 +155,27 @@ export async function callModelBuilder(systemPrompt, messages = [], onComplete, 
   }
 }
 
+export async function callLLMOnce(prompt) {
+  const sessionResponse = await supabase.auth.getSession();
+  const accessToken = sessionResponse?.data?.session?.access_token;
+  const response = await fetch(getProxyUrl(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify(buildLlmRequest({
+      kind: prompt.kind,
+      messages: prompt.messages,
+      maxTokens: prompt.max_tokens || 450,
+      stream: false,
+      responseFormat: "text",
+    })),
+  });
+  if (!response.ok) throw new Error(`LLM proxy returned ${response.status}`);
+  const payload = await response.json();
+  if (Array.isArray(payload?.content)) return payload.content.map(p => p?.text || "").join("");
+  return payload?.content || payload?.text || payload?.completion || String(payload || "");
+}
+
 export { DEFAULT_MODEL };

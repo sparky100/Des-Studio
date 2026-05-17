@@ -350,3 +350,20 @@ export function graphLayoutFromDerivedGraph(derivedGraph = {}) {
     viewport: derivedGraph.viewport || { x: 0, y: 0, zoom: 1 },
   };
 }
+
+export async function exportCanvasToPng() {
+  try {
+    const el = document.querySelector('.react-flow__renderer');
+    if (!el) return null;
+    const html2canvas = (await import('html2canvas')).default;
+    const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2 });
+    return canvas.toDataURL('image/png');
+  } catch (err) {
+    console.warn('[DES Studio] Canvas export failed:', err);
+    return null;
+  }
+}
+
+export async function getModelImageDataUrl() {
+  return exportCanvasToPng();
+}
