@@ -26,6 +26,7 @@ import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogr
 import { LogViewer } from "./LogViewer.jsx";
 import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 import { ExperimentControls } from "./ExperimentControls.jsx";
+import { generateReport } from '../../reports/index.js';
 
 const numberDefault = (value, fallback) => {
   const n = Number(value);
@@ -101,6 +102,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [expFormDesc, setExpFormDesc] = useState("");
   const [expFormOverrides, setExpFormOverrides] = useState([]);
   const [expFormSaving, setExpFormSaving] = useState(false);
+  const [reportGenerating, setReportGenerating] = useState(false);
 
   const sweepRunnerRef = useRef(null);
   const runSeedRef = useRef(seed);
@@ -682,6 +684,39 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       "text/csv;charset=utf-8"
     );
   }, [results, replicationResults, aggregateStats, exportConfig, resultFilenameBase]);
+
+  const assembleRunMeta = (runId) => {
+    const rec = savedRunHistory.find(r => r.id === runId);
+    return {
+      runId: rec?.id || runId || 'unknown',
+      runLabel: rec?.run_label || runLabel || `${model.name || 'Model'} — ${new Date().toLocaleDateString()}`,
+      engineVersion: rec?.engine_version || '1.0',
+      seed: rec?.seed ?? seed ?? 'unknown',
+      prnAlgorithm: 'mulberry32',
+      runTimestamp: rec?.run_at || new Date().toISOString(),
+    };
+  };
+
+  const handleExportReport = useCallback(async () => {
+    if (!results) return;
+    setReportGenerating(true);
+    try {
+      const meta = assembleRunMeta(latestRunId);
+      const blob = await generateReport(model, results, exportConfig, meta);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = `${(model.name || 'Model').replace(/[/\\:*?"<>|]/g, '-')} — ${meta.runLabel.replace(/[/\\:*?"<>|]/g, '-')} — Report.docx`;
+      a.href = url;
+      a.download = safeName;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      console.error('Report generation failed:', err);
+      setSaveStatus({ state: 'error', message: 'Report generation failed. Please try again.' });
+    } finally {
+      setReportGenerating(false);
+    }
+  }, [results, latestRunId, model, exportConfig, runLabel, seed, savedRunHistory]);
 
   const loadShareLinks = useCallback(async () => {
     if (!modelId) return;
@@ -1644,6 +1679,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         <Btn variant={view === "entities" ? "primary" : "ghost"} onClick={() => setView("entities")} disabled={!results?.entitySummary?.length}>Entities</Btn>
         <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results</Btn>
         <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
+        <Btn variant="ghost" onClick={handleExportReport} disabled={!canExportResults || reportGenerating} title={!canExportResults ? "Run the simulation first to export a report." : ""}>{reportGenerating ? "Generating report…" : "Export Report"}</Btn>
         <Btn variant="ghost" onClick={() => { setShowShareModal(true); loadShareLinks(); }} disabled={!canShare}>Share</Btn>
         <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)}>AI Insights</Btn>
         <Btn variant="ghost" onClick={toggleAnimation} title="Toggle entity token animation">

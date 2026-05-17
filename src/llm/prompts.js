@@ -603,3 +603,96 @@ export function buildCiResults(aggregateStats = {}) {
       n: stat.n,
     }));
 }
+
+export function buildModelDescriptionPrompt(model = {}) {
+  const hasCost = [
+    ...(model.bEvents || []),
+    ...(model.cEvents || []),
+  ].some(ev => {
+    const effects = Array.isArray(ev.effect) ? ev.effect : [ev.effect || ''];
+    return effects.some(e => String(e).includes('COST('));
+  });
+  const hasShifts = (model.entityTypes || []).some(
+    et => et.role === 'server' && Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0
+  );
+  const hasContainers = Array.isArray(model.containerTypes) && model.containerTypes.length > 0;
+  const hasFailures = (model.entityTypes || []).some(et => et.role === 'server' && et.mtbfDist);
+  const hasPriority = (model.queues || []).some(q => q.discipline && q.discipline !== 'FIFO');
+
+  const context = {
+    name: model.name || DEFAULT_MODEL_NAME,
+    description: model.description || '',
+    entityTypes: (model.entityTypes || []).map(et => ({
+      name: et.name,
+      role: et.role,
+      ...(et.role === 'server' ? { count: et.count } : {}),
+    })),
+    queues: (model.queues || []).map(q => ({ name: q.name, discipline: q.discipline || 'FIFO' })),
+    bEvents: (model.bEvents || []).map(ev => ev.name),
+    cEvents: (model.cEvents || []).map(ev => ev.name),
+    goals: (model.goals || []).filter(g => g.label || g.metric).map(g => ({ label: g.label || g.metric, target: g.target })),
+    features: { hasCost, hasShifts, hasContainers, hasFailures, hasPriority },
+  };
+
+  const system = [
+    "You are writing a plain-English description of a discrete-event simulation model for inclusion in a professional client report.",
+    "Your audience is a non-technical reader — a manager or board member, not a simulation practitioner.",
+    "Write 120–180 words.",
+    "Describe what real-world system this model represents (inferred from names and structure).",
+    "Explain what flows through the system, where waiting occurs, and what the key capacity constraints are.",
+    "If notable features are present (priority queuing, server failures, shift patterns, cost tracking), mention them in plain language.",
+    "Do NOT interpret results. Do NOT use technical terms like B-event, C-event, macro, ARRIVE, COMPLETE, ASSIGN, Phase A, Phase B, Phase C, FEL, or DES.",
+    "Tone: professional, clear, suitable for a board-level client report.",
+  ].join(" ");
+
+  return {
+    kind: "model-description",
+    messages: makeMessages(system, context, "Write the model description now."),
+    max_tokens: 400,
+  };
+}
+
+export function buildReportRecommendationsPrompt(model = {}, results = {}) {
+  const summary = getSummary(results);
+  const system = [
+    "You are a queueing systems expert producing a structured recommendations section for a simulation analysis report.",
+    "Produce exactly 3 recommendations based on the data provided. If fewer than 3 meaningful recommendations exist, produce fewer — do not pad with weak suggestions.",
+    "Respond with a fenced ```json block containing ONLY a JSON array and nothing else.",
+    "Each element must have: priority (integer 1-3), headline (max 10 words, imperative), finding (1-2 sentences with specific numbers), action (1-2 sentences, concrete and specific), expectedImpact (1 sentence), confidence (HIGH | MEDIUM | LOW).",
+    "confidence is HIGH when supported by replicated CI data, MEDIUM for single-run results, LOW when inferred.",
+  ].join(" ");
+
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  const entityAnomalies = extractEntityAnomalies(results);
+  const queues = extractQueues(model, results);
+  const resources = extractResources(model, summary);
+
+  const payload = {
+    model: { name: model.name || DEFAULT_MODEL_NAME, goals: goalsToPrompt(model) },
+    kpis: { avgWait: finiteOrNull(summary.avgWait), avgSvc: finiteOrNull(summary.avgSvc), served: finiteOrNull(summary.served), reneged: finiteOrNull(summary.reneged), avgWIP: finiteOrNull(summary.avgWIP) },
+    queues,
+    resources,
+    aggregateStats: results.aggregateStats || {},
+    ...(goalGaps ? { goalGaps } : {}),
+    ...(entityAnomalies ? { entityAnomalies } : {}),
+  };
+
+  return {
+    kind: "report-recommendations",
+    messages: makeMessages(system, payload, "Produce the recommendations JSON array now."),
+    max_tokens: 700,
+  };
+}
+
+export function parseReportRecommendations(text) {
+  try {
+    const raw = String(text || "").trim();
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const jsonStr = fenced ? fenced[1].trim() : raw;
+    const parsed = JSON.parse(jsonStr);
+    if (Array.isArray(parsed)) return parsed;
+    return [];
+  } catch {
+    return [];
+  }
+}
