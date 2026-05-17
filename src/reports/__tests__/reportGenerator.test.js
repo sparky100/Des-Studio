@@ -1,20 +1,11 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 
-// Mock LLM client
 vi.mock('../../llm/apiClient.js', () => ({
   callLLMOnce: vi.fn(),
 }));
 
-// Mock canvas export
-vi.mock('../../ui/visual-designer/graph.js', () => ({
-  getModelImageDataUrl: vi.fn(),
-}));
-
 import { generateReport } from '../reportGenerator.js';
 import { callLLMOnce } from '../../llm/apiClient.js';
-import { getModelImageDataUrl } from '../../ui/visual-designer/graph.js';
-
-const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 const minimalModel = {
   name: 'Test Clinic',
@@ -64,58 +55,71 @@ describe('generateReport', () => {
     vi.clearAllMocks();
   });
 
-  test('returns a Blob with correct MIME type and non-zero size', async () => {
+  test('returns a non-empty markdown string', async () => {
     callLLMOnce.mockResolvedValue('Test description for the model.');
-    getModelImageDataUrl.mockResolvedValue(null);
 
-    const blob = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
-    expect(blob).toBeInstanceOf(Blob);
-    expect(blob.type).toBe(DOCX_MIME);
-    expect(blob.size).toBeGreaterThan(0);
+    expect(typeof md).toBe('string');
+    expect(md.length).toBeGreaterThan(0);
   });
 
-  test('still returns a Blob when callLLMOnce throws (graceful fallback)', async () => {
-    callLLMOnce.mockRejectedValue(new Error('LLM unavailable'));
-    getModelImageDataUrl.mockResolvedValue(null);
-
-    const blob = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
-
-    expect(blob).toBeInstanceOf(Blob);
-    expect(blob.type).toBe(DOCX_MIME);
-    expect(blob.size).toBeGreaterThan(0);
-  });
-
-  test('still returns a Blob when getModelImageDataUrl throws', async () => {
+  test('includes expected section headings', async () => {
     callLLMOnce.mockResolvedValue('A model description.');
-    getModelImageDataUrl.mockRejectedValue(new Error('Canvas unavailable'));
 
-    const blob = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
-    expect(blob).toBeInstanceOf(Blob);
-    expect(blob.type).toBe(DOCX_MIME);
-    expect(blob.size).toBeGreaterThan(0);
+    expect(md).toContain('# Test Clinic — Analysis Report');
+    expect(md).toContain('## Executive Summary');
+    expect(md).toContain('## Model Description');
+    expect(md).toContain('## Experiment Configuration');
+    expect(md).toContain('## Simulation Results');
+    expect(md).toContain('## Recommendations');
+    expect(md).toContain('## Appendix');
   });
 
-  test('works with minimal/empty model and results', async () => {
+  test('still returns markdown when callLLMOnce throws (graceful fallback)', async () => {
+    callLLMOnce.mockRejectedValue(new Error('LLM unavailable'));
+
+    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+
+    expect(typeof md).toBe('string');
+    expect(md).toContain('## Executive Summary');
+  });
+
+  test('works with empty model and results', async () => {
     callLLMOnce.mockResolvedValue('');
-    getModelImageDataUrl.mockResolvedValue(null);
 
-    const blob = await generateReport({}, {}, {}, {});
+    const md = await generateReport({}, {}, {}, {});
 
-    expect(blob).toBeInstanceOf(Blob);
-    expect(blob.type).toBe(DOCX_MIME);
-    expect(blob.size).toBeGreaterThan(0);
+    expect(typeof md).toBe('string');
+    expect(md.length).toBeGreaterThan(0);
   });
 
-  test('includes image section when valid data URL is returned', async () => {
-    const fakeDataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
-    callLLMOnce.mockResolvedValue('Description with image.');
-    getModelImageDataUrl.mockResolvedValue(fakeDataUrl);
+  test('includes run metadata in the output', async () => {
+    callLLMOnce.mockResolvedValue('');
 
-    const blob = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
-    expect(blob).toBeInstanceOf(Blob);
-    expect(blob.size).toBeGreaterThan(0);
+    expect(md).toContain('Test Run 1');
+    expect(md).toContain('run-001');
+  });
+
+  test('includes KPI values from results', async () => {
+    callLLMOnce.mockResolvedValue('');
+
+    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+
+    expect(md).toContain('195');  // served
+    expect(md).toContain('3.20'); // avgWait
+  });
+
+  test('includes entity types in appendix', async () => {
+    callLLMOnce.mockResolvedValue('');
+
+    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+
+    expect(md).toContain('Patient');
+    expect(md).toContain('Doctor');
   });
 });
