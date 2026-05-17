@@ -6,7 +6,8 @@ import { C, FONT } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox } from "../shared/components.jsx";
 import { useViewport } from "../shared/hooks.js";
 import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
-import { buildEngine } from "../../engine/index.js";
+import { buildEngine, prefetchForRun } from "../../engine/index.js";
+import { AdapterRegistry } from "../../engine/adapters/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
@@ -422,6 +423,16 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setLog([{ phase: "INIT", time: 0, message: `Run started  (seed: ${runSeed})` }]);
     setMode("running");
 
+    const liveDataMode = model?.experimentDefaults?.liveDataMode;
+    const hasSources = (model?.dataSources || []).length > 0;
+    const registry = (liveDataMode && hasSources)
+      ? new AdapterRegistry(model.dataSources || [])
+      : null;
+
+    if (registry) {
+      try { await prefetchForRun(model, registry); } catch { /* non-fatal — fallback values used */ }
+    }
+
     const engine = buildEngine(
       model,
       runSeed,
@@ -429,9 +440,13 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       maxTimeForRun,
       stopConditionForRun,
       5000, 500,
-      collectTimeSeries
+      collectTimeSeries,
+      registry || undefined
     );
     const result = engine.runAll();
+
+    const liveParamValues = registry ? registry.getResolvedValues() : null;
+    registry?.dispose();
 
     setCurrentSnap(result.snap);
     setResults(result);
@@ -446,6 +461,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
 
     try {
       const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun };
+      if (liveParamValues && Object.keys(liveParamValues).length > 0) {
+        config.liveParamValues = liveParamValues;
+      }
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
       const runId = await save;
       if (runId) setLatestRunId(runId);

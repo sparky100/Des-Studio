@@ -715,6 +715,88 @@ const COST_CALL_CENTRE = {
   queues: [{ id: "q_calls", name: "Queue", customerType: "Call", capacity: "20", discipline: "FIFO" }],
 };
 
+// ── Live Data (Sprint 62) ─────────────────────────────────────────────────────
+
+const MM1_LIVE_ARRIVALS = {
+  name: "M/M/1 with Live Arrivals",
+  description: "Single-server queue where the arrival rate is fetched from a live REST endpoint before each run. Demonstrates the calibrated_batch live data pattern.",
+  domain: "Academic",
+  tags: ["live-data", "calibrated-batch", "mm1"],
+  templateMeta: {
+    scenarioType: "Live data — calibrated_batch",
+    keyMacros: ["ARRIVE", "ASSIGN", "COMPLETE"],
+    paramGuide: "Arrival mean driven by live REST source (fallback 1.111). Service mean 1.0. Replace the placeholder URL before running.",
+    limitations: "Mock REST endpoint placeholder — replace with real URL. Single server only.",
+  },
+  entityTypes: [
+    { id: "et_cust", name: "Customer", role: "customer", count: 0, attrDefs: [] },
+    { id: "et_srv",  name: "Server",   role: "server",   count: 1, attrDefs: [] },
+  ],
+  stateVariables: [],
+  dataSources: [
+    { id: "ds_live_arrivals", label: "Ops API", type: "rest", url: "https://your-ops-api.example.com/stats", refreshSecs: 300 },
+  ],
+  bEvents: [
+    { id: "b_arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Customer, Customer)",
+      schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "1.111" },
+        paramSource: { sourceId: "ds_live_arrivals", field: "mean_interarrival", targetParam: "mean", fallback: "1.111" } }] },
+    { id: "b_complete", name: "Complete", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+  ],
+  cEvents: [{
+    id: "c_seize", name: "Seize", priority: 1,
+    condition: "queue(Customer).length > 0 AND idle(Server).count > 0",
+    effect: "ASSIGN(Customer, Server)",
+    cSchedules: [{ eventId: "b_complete", dist: "Exponential", distParams: { mean: "1" },
+      paramSource: { sourceId: "ds_live_arrivals", field: "mean_service", targetParam: "mean", fallback: "1" },
+      useEntityCtx: true }],
+  }],
+  queues: [{ id: "q_cust", name: "Customer", customerType: "Customer", capacity: "", discipline: "FIFO" }],
+  experimentDefaults: { liveDataMode: "calibrated_batch", warmupPeriod: 50, maxSimTime: 500, replications: 5 },
+};
+
+const AE_TRIAGE_LOOKAHEAD = {
+  name: "A&E Triage — Predictive Lookahead",
+  description: "A&E triage model that injects the current live queue state before running forward 60 minutes. Demonstrates the lookahead live data pattern.",
+  domain: "Healthcare",
+  tags: ["live-data", "lookahead", "ae", "healthcare"],
+  templateMeta: {
+    scenarioType: "Live data — lookahead",
+    keyMacros: ["ARRIVE", "ASSIGN", "RELEASE", "COMPLETE"],
+    paramGuide: "Patient arrival mean 8 min. Triage Uniform(5,15) min. Treatment Exponential mean 25 min. 2 triage nurses, 3 doctors. Replace snapshot URL before running.",
+    limitations: "Snapshot endpoint placeholder — replace with real system URL. Single triage priority level.",
+  },
+  entityTypes: [
+    { id: "et_patient",       name: "Patient",      role: "customer", count: 0, attrDefs: [] },
+    { id: "et_triage_nurse",  name: "Triage Nurse", role: "server",   count: 2, attrDefs: [] },
+    { id: "et_doctor",        name: "Doctor",       role: "server",   count: 3, attrDefs: [] },
+  ],
+  stateVariables: [],
+  dataSources: [
+    { id: "ds_ae_snapshot", label: "A&E Live State", type: "snapshot", url: "https://your-ae-system.example.com/api/snapshot" },
+  ],
+  bEvents: [
+    { id: "b_arrive",           name: "Patient Arrival",  scheduledTime: "0",    effect: "ARRIVE(Patient, Triage)",
+      schedules: [{ eventId: "b_arrive", dist: "Exponential", distParams: { mean: "8" } }] },
+    { id: "b_triage_done",      name: "Triage Done",      scheduledTime: "9999", effect: "RELEASE(Triage Nurse, Treatment)", schedules: [] },
+    { id: "b_treatment_done",   name: "Treatment Done",   scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+  ],
+  cEvents: [
+    { id: "c_triage", name: "Start Triage", priority: 1,
+      condition: "queue(Triage).length > 0 AND idle(Triage Nurse).count > 0",
+      effect: "ASSIGN(Triage, Triage Nurse)",
+      cSchedules: [{ eventId: "b_triage_done", dist: "Uniform", distParams: { min: "5", max: "15" }, useEntityCtx: true }] },
+    { id: "c_treat", name: "Start Treatment", priority: 2,
+      condition: "queue(Treatment).length > 0 AND idle(Doctor).count > 0",
+      effect: "ASSIGN(Treatment, Doctor)",
+      cSchedules: [{ eventId: "b_treatment_done", dist: "Exponential", distParams: { mean: "25" }, useEntityCtx: true }] },
+  ],
+  queues: [
+    { id: "q_triage",    name: "Triage",    customerType: "Patient", capacity: "", discipline: "FIFO" },
+    { id: "q_treatment", name: "Treatment", customerType: "Patient", capacity: "", discipline: "FIFO" },
+  ],
+  experimentDefaults: { liveDataMode: "lookahead", maxSimTime: 60, replications: 1, snapshotSourceId: "ds_ae_snapshot" },
+};
+
 export const TEMPLATES = [
   // Academic
   { id: "mm1",             ...MM1 },
@@ -742,4 +824,7 @@ export const TEMPLATES = [
   { id: "machine-shop-failures",  ...MACHINE_SHOP_FAILURES },
   { id: "priority-ed-balking",    ...PRIORITY_ED_BALKING },
   { id: "cost-call-centre",       ...COST_CALL_CENTRE },
+  // Live data (Sprint 62)
+  { id: "mm1-live-arrivals",    ...MM1_LIVE_ARRIVALS },
+  { id: "ae-triage-lookahead",  ...AE_TRIAGE_LOOKAHEAD },
 ];

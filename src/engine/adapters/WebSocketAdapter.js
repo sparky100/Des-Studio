@@ -7,6 +7,8 @@
 // Dependency injection: pass _wsFactory as the second option to override the
 // global WebSocket constructor in tests (Node/jsdom environments).
 
+import { AdapterFetchError } from './RestAdapter.js';
+
 /**
  * @param {object} obj  Nested object
  * @param {string} path Dot-notation field path, e.g. "data.mean_rate"
@@ -39,12 +41,12 @@ export class WebSocketAdapter {
   async prefetch() {
     const WSClass = this._wsFactory || (typeof WebSocket !== 'undefined' ? WebSocket : null);
     if (!WSClass) {
-      throw new Error('WebSocket not available in this environment');
+      throw new AdapterFetchError('WebSocket not available in this environment');
     }
 
     const url = this._source.url;
     if (!url) {
-      throw new Error(`WebSocketAdapter: dataSource "${this._source.id}" has no url`);
+      throw new AdapterFetchError(`WebSocketAdapter: dataSource "${this._source.id}" has no url`);
     }
 
     return new Promise((resolve, reject) => {
@@ -94,7 +96,7 @@ export class WebSocketAdapter {
       };
 
       this._ws.onerror = (err) => {
-        settle(() => reject(new Error(`WebSocketAdapter: connection error for "${this._source.id}"`)));
+        settle(() => reject(new AdapterFetchError(`WebSocketAdapter: connection error for "${this._source.id}"`)));
       };
 
       this._ws.onclose = () => {

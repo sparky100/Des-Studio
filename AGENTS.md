@@ -1,12 +1,12 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-17 | Reflects: Sprint 61 -- Predictive Lookahead and State Injection complete.*
+*Last updated: 2026-05-17 | Reflects: Sprint 62 — Hardening, Templates, and Docs complete. Real-time data integration programme (Sprints 57/59–62) COMPLETE.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Latest plan: `docs/reviews/sprint-61-plan.md`
-- Latest closure report: `docs/reviews/sprint-61-closure.md`
+- Latest plan: `docs/reviews/sprint-62-plan.md`
+- Latest closure report: `docs/reviews/sprint-62-closure.md`
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
@@ -59,8 +59,10 @@ project root
 │   │   ├── conditions.js            ← Condition evaluator (currently uses new Function — MUST BE REPLACED)
 │   │   ├── macros.js                ← ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE
 │   │   └── adapters/                ← Real-time data adapter layer (Sprint 57+)
-│   │       ├── index.js             ← AdapterRegistry + nullRegistry (default, zero-cost pass-through)
-│   │       ├── RestAdapter.js       ← Poll-based REST with TTL cache and 3× retry
+│   │       ├── index.js             ← AdapterRegistry + nullRegistry + AdapterFetchError export
+│   │       ├── RestAdapter.js       ← Poll-based REST with TTL cache, 3× exponential backoff retry, AdapterFetchError
+│   │       ├── WebSocketAdapter.js  ← WebSocket with 10s timeout, throws AdapterFetchError on failure
+│   │       ├── SnapshotAdapter.js   ← SystemSnapshot fetch/validate, same retry/error contract as RestAdapter
 │   │       ├── mockAdapter.js       ← Deterministic test stub (ships with production code, zero overhead)
 │   │       └── types.js             ← JSDoc: DataSource, ParamSource, SystemSnapshot
 │   ├── ui/

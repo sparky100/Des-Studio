@@ -1,5 +1,7 @@
 // engine/adapters/SnapshotAdapter.js — Fetch and validate a SystemSnapshot from a REST endpoint
 
+import { AdapterFetchError } from './RestAdapter.js';
+
 function resolveEnvSecret(secret, envSecrets = {}) {
   if (!secret) return secret;
   const m = secret.match(/^\{\{env\.(.+?)\}\}$/);
@@ -51,6 +53,41 @@ function validateSnapshot(snapshot) {
   return snapshot;
 }
 
+async function fetchSnapshotWithRetry(url, headers, maxAttempts = 3) {
+  let lastErr;
+  let delay = 2000;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, { headers, signal: AbortSignal.timeout(10000) });
+      if (res.status >= 400 && res.status < 500) {
+        throw new AdapterFetchError(`SnapshotAdapter: HTTP ${res.status} (client error) from ${url}`, res.status);
+      }
+      if (!res.ok) {
+        throw new AdapterFetchError(`SnapshotAdapter: HTTP ${res.status} from ${url}`, res.status);
+      }
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new AdapterFetchError('Malformed JSON response', null);
+      }
+      return data;
+    } catch (err) {
+      if (err instanceof AdapterFetchError && err.status !== null && err.status >= 400 && err.status < 500) {
+        throw err;
+      }
+      if (err instanceof AdapterFetchError && err.message === 'Malformed JSON response') {
+        throw err;
+      }
+      lastErr = err;
+      if (attempt < maxAttempts - 1) await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+  if (lastErr instanceof AdapterFetchError) throw lastErr;
+  throw new AdapterFetchError(lastErr?.message || 'Network error', null);
+}
+
 /**
  * Fetches and parses a SystemSnapshot from a REST endpoint.
  * Validates the snapshot schema; throws SnapshotValidationError if invalid.
@@ -69,14 +106,7 @@ export class SnapshotAdapter {
   }
 
   async prefetch() {
-    const res = await fetch(this._url, {
-      headers: this._buildHeaders(),
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok) {
-      throw new Error(`SnapshotAdapter: HTTP ${res.status} from ${this._url}`);
-    }
-    const data = await res.json();
+    const data = await fetchSnapshotWithRetry(this._url, this._buildHeaders());
     this._snapshot = validateSnapshot(data);
   }
 

@@ -1,8 +1,10 @@
 // engine/adapters/index.js — AdapterRegistry: resolves parameter values from data sources
 
-import { RestAdapter }      from './RestAdapter.js';
-import { WebSocketAdapter } from './WebSocketAdapter.js';
-import { SnapshotAdapter }  from './SnapshotAdapter.js';
+import { RestAdapter, AdapterFetchError } from './RestAdapter.js';
+import { WebSocketAdapter }               from './WebSocketAdapter.js';
+import { SnapshotAdapter }                from './SnapshotAdapter.js';
+
+export { AdapterFetchError };
 
 /**
  * Transparent no-op registry used by default when no live sources are configured.
@@ -24,9 +26,10 @@ export const nullRegistry = {
  */
 export class AdapterRegistry {
   constructor(dataSources = [], envSecrets = {}) {
-    this._sources   = Object.fromEntries((dataSources || []).map(ds => [ds.id, ds]));
-    this._envSecrets = envSecrets;
-    this._adapters  = {};
+    this._sources        = Object.fromEntries((dataSources || []).map(ds => [ds.id, ds]));
+    this._envSecrets     = envSecrets;
+    this._adapters       = {};
+    this._resolvedValues = {};
   }
 
   _resolveSecret(secret) {
@@ -113,6 +116,8 @@ export class AdapterRegistry {
         return distParams;
       }
 
+      const resolvedNum = Number.isFinite(Number(rawValue)) ? Number(rawValue) : rawValue;
+      this._resolvedValues[`${paramSource.sourceId}.${paramSource.field}`] = resolvedNum;
       return { ...distParams, [targetKey]: String(rawValue) };
     } catch {
       if (paramSource.fallback != null) {
@@ -124,6 +129,15 @@ export class AdapterRegistry {
       }
       return distParams;
     }
+  }
+
+  /**
+   * Returns a map of { [sourceId.field]: resolvedValue } for all live parameter
+   * values resolved during this registry's lifetime.
+   * @returns {Record<string, number | string>}
+   */
+  getResolvedValues() {
+    return { ...this._resolvedValues };
   }
 
   /**
@@ -193,5 +207,6 @@ export class AdapterRegistry {
       adapter.dispose?.();
     }
     this._adapters = {};
+    this._resolvedValues = {};
   }
 }

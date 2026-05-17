@@ -900,6 +900,85 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   );
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// LIBRARY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function hasLiveDataBindings(model) {
+  if (!model?.dataSources?.length) return false;
+  const hasBinding = (events, schedKey) =>
+    (events || []).some(ev =>
+      (ev[schedKey] || []).some(s => s.paramSource?.sourceId)
+    );
+  return hasBinding(model.bEvents, 'schedules') || hasBinding(model.cEvents, 'cSchedules');
+}
+
+const ModelCard=({model,onOpen,onDelete,profiles=[],currentUserId})=>{
+  const owner=(profiles||[]).find(p=>p.id===model.owner_id)||null;
+  const fmtDate=iso=>{ try{ return new Date(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){return '';} };
+  const hasRenege=(model.bEvents||[]).some(ev=>(ev.schedules||[]).some(s=>s.isRenege));
+  const isLive=hasLiveDataBindings(model);
+  const runCount=model.stats?.runs;
+  const isOwner=model.owner_id===currentUserId;
+  const openFromKeyboard=e=>{
+    if(e.key==="Enter"||e.key===" "){
+      e.preventDefault();
+      onOpen?.();
+    }
+  };
+  return (
+    <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={openFromKeyboard} aria-label={`Open model ${model.name}`} style={{background:C.panel,border:`1px solid ${C.border}`,borderLeft:`3px solid ${model.visibility==="public"?C.green:C.accent}`,borderRadius:8,padding:16,cursor:"pointer",display:"flex",flexDirection:"column",gap:10,textAlign:"left",color:"inherit",width:"100%"}}
+      onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
+      onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+        <div style={{fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT,lineHeight:1.3}}>{model.name}</div>
+        <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap"}}>
+          <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
+          {hasRenege&&<Tag label="reneging" color={C.reneged}/>}
+          {isLive&&<span style={{background:alpha(C.green,0.15),border:`1px solid ${alpha(C.green,0.4)}`,color:C.green,borderRadius:4,padding:'1px 6px',fontSize:10,fontFamily:FONT,fontWeight:700,letterSpacing:'0.05em'}}>LIVE</span>}
+          {isOwner&&onDelete&&<Btn small variant="danger" onClick={e=>{e.stopPropagation();onDelete(model);}}>Delete</Btn>}
+        </div>
+      </div>
+      <div style={{fontSize:12,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>{model.description}</div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <Tag label={`${(model.entityTypes||[]).length} types`} color={C.server}/>
+        <Tag label={`${(model.bEvents||[]).length} B-events`} color={C.bEvent}/>
+        <Tag label={`${(model.cEvents||[]).length} C-events`} color={C.cEvent}/>
+        {model.statsLoading&&<Tag label="— runs" color={C.muted}/>}
+        {!model.statsLoading&&model.statsError&&<Tag label="runs —" color={C.muted}/>}
+        {!model.statsLoading&&!model.statsError&&Number.isFinite(runCount)&&runCount>0&&<Tag label={`${runCount} runs`} color={C.green}/>}
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{display:"flex",alignItems:"center",gap:7}}>
+          {owner&&<Avatar u={owner} size={22}/>}
+          <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>{owner?.full_name}</span>
+        </div>
+        <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>{fmtDate(model.updatedAt)}</span>
+      </div>
+    </div>
+  );
+};
+
+const NewModelModal=({onClose,onCreate,onUseTemplate})=>{
+  const [name,setName]=useState(""); const [desc,setDesc]=useState("");
+  const [saving,setSaving]=useState(false);
+  const create=async()=>{if(!name.trim())return;setSaving(true);try{await onCreate(name.trim(),desc.trim());}finally{setSaving(false);}onClose();};
+  return (
+    <div style={{position:"fixed",inset:0,background:C.overlay,display:"flex",alignItems:"center",justifyContent:"center",zIndex:Z.modal}}>
+      <div role="dialog" aria-modal="true" aria-labelledby="new-model-title" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:28,width:420,fontFamily:FONT,display:"flex",flexDirection:"column",gap:14}}>
+        <div id="new-model-title" style={{fontSize:15,fontWeight:700,color:C.text}}>New DES Model</div>
+        <Field label="Name" value={name} onChange={setName} placeholder="e.g. Queue with Reneging" autoFocus/>
+        <Field label="Description" value={desc} onChange={setDesc} multiline rows={3}/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+          <Btn variant="ghost" onClick={onClose} full>Cancel</Btn>
+          <Btn variant="ghost" onClick={()=>{onClose();onUseTemplate?.();}} full>Use a Template</Btn>
+          <Btn variant="primary" onClick={create} disabled={!name.trim()||saving} full>{saving?"Saving...":"Create"}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── App ──────────────────────────────────────────────────────
 
 export {
