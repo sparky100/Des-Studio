@@ -720,10 +720,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setReportGenerating(true);
     try {
       const meta = assembleRunMeta(latestRunId);
-      const blob = await generateReport(model, results, exportConfig, meta);
+      const markdown = await generateReport(model, results, exportConfig, meta);
+      const blob = new Blob([markdown], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const safeName = `${(model.name || 'Model').replace(/[/\\:*?"<>|]/g, '-')} — ${meta.runLabel.replace(/[/\\:*?"<>|]/g, '-')} — Report.docx`;
+      const safeName = `${(model.name || 'Model').replace(/[/\\:*?"<>|]/g, '-')} — ${meta.runLabel.replace(/[/\\:*?"<>|]/g, '-')} — Report.md`;
       a.href = url;
       a.download = safeName;
       a.click();
