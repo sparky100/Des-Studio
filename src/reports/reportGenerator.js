@@ -793,10 +793,7 @@ export async function generateReport(model = {}, results = {}, experimentConfig 
     ],
   });
 
-  const buffer = await Packer.toBuffer(doc);
-  return new Blob([buffer], {
-    type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  });
+  return Packer.toBlob(doc);
 }
 
 export { sanitizeFilename, formatDate };
