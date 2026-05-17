@@ -20,7 +20,20 @@ export function ExperimentControls({
   model,
   onDetectWarmup,
   persistExperimentDefaults,
+  liveDataMode,
+  onLiveDataModeChange,
 }) {
+  // hasLiveBindings: model has dataSources AND at least one B/C-event has a paramSource binding
+  const hasLiveBindings = (() => {
+    if (!model?.dataSources?.length) return false;
+    const bBindings = (model.bEvents || []).some(ev =>
+      (ev.schedules || []).some(s => s.paramSource?.sourceId)
+    );
+    const cBindings = (model.cEvents || []).some(ev =>
+      (ev.cSchedules || []).some(cs => cs.paramSource?.sourceId)
+    );
+    return bBindings || cBindings;
+  })();
   return (
     <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
       <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -113,21 +126,49 @@ export function ExperimentControls({
               })()}
             </div>
 
+            {hasLiveBindings && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>LIVE DATA MODE</span>
+                <select
+                  aria-label="Live data mode"
+                  value={liveDataMode || ""}
+                  onChange={e => onLiveDataModeChange?.(e.target.value || null)}
+                  style={{ background: C.surface, border: `1px solid ${C.border}`,
+                    borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12,
+                    padding: "6px 8px", outline: "none", cursor: "pointer" }}
+                >
+                  <option value="">Static (no live data)</option>
+                  <option value="calibrated_batch">Calibrated Batch</option>
+                  <option value="rolling">Rolling (single run)</option>
+                </select>
+              </div>
+            )}
+
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>REPLICATIONS</span>
               <input
                 aria-label="Replication count"
                 type="number"
                 value={replications}
+                disabled={liveDataMode === "rolling"}
                 onChange={e => {
                   const value = parseInt(e.target.value, 10) || 0;
                   setReplications(value);
                   persistExperimentDefaults({ replications: value });
                 }}
+                title={liveDataMode === "rolling" ? "Rolling mode always uses a single run" : undefined}
                 style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`,
-                  borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
-                  padding: "6px 8px", outline: "none" }}
+                  borderRadius: 4, color: liveDataMode === "rolling" ? C.muted : C.amber,
+                  fontFamily: FONT, fontSize: 12,
+                  padding: "6px 8px", outline: "none",
+                  opacity: liveDataMode === "rolling" ? 0.45 : 1,
+                  cursor: liveDataMode === "rolling" ? "not-allowed" : "auto" }}
               />
+              {liveDataMode === "rolling" && (
+                <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                  Rolling mode: 1 run only
+                </span>
+              )}
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

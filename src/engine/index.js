@@ -25,7 +25,12 @@ export { DISTRIBUTIONS, sample, sampleAttrs };
  * @param {import('./adapters/index.js').AdapterRegistry | typeof import('./adapters/index.js').nullRegistry} registry
  */
 export async function prefetchForRun(model, registry) {
-  if (model?.experimentDefaults?.liveDataMode === 'calibrated_batch') {
+  const mode = model?.experimentDefaults?.liveDataMode;
+  if (mode === 'calibrated_batch') {
+    await registry.prefetchAll();
+  }
+  // rolling: WebSocketAdapter.prefetch() waits for first message, keeps connection open
+  if (mode === 'rolling') {
     await registry.prefetchAll();
   }
 }
@@ -786,9 +791,93 @@ const cycleLog = [];
     };
   }
 
+  // ── runAllAsync(): async FEL loop for rolling mode ───────────────────────
+  // Uses registry.resolveAsync() at each B/C sample site.
+  // The existing step() / runAll() functions are unchanged.
+  // onStep(snap, cycleLog) is called after each step (optional, for UI progress).
+  async function runAllAsync(onStep = null) {
+    let c = 0;
+
+    // Initial termination check
+    if (terminationCondition) {
+      const h = makeHelpers(entities, runtimeModel);
+      if (evalCondition(terminationCondition, h, state, clock)) {
+        _terminationConditionMet = true;
+        log.push(makeTraceEntry('END', { message: 'Termination condition met at start' }));
+      }
+    }
+
+    while (fel.length > 0 && c < maxCycles && !_terminationConditionMet) {
+      c++;
+      // Use synchronous step but re-resolve any paramSource fields asynchronously
+      // before the step runs, by pre-fetching the async values into the registry.
+      // Since resolveAsync() updates the adapter's in-memory cache (or delegates to
+      // getLatest()), and the engine's synchronous resolve() calls getLatest() from
+      // the same cache, calling resolveAsync() first ensures fresh values are present.
+      const dueTime = fel[0]?.scheduledTime;
+      if (dueTime !== undefined) {
+        await _asyncResolveDue(dueTime);
+      }
+
+      const r = step({ captureSnap: onStep != null });
+      if (onStep) onStep(r.snap, r.cycleLog);
+      if (r.done) break;
+    }
+
+    if (!_terminationConditionMet && c >= maxCycles) {
+      log.push(makeTraceEntry('END', { message: `Cycle limit reached (${maxCycles}) -- simulation halted` }));
+    } else if (fel.length === 0 && !_terminationConditionMet) {
+      log.push(makeTraceEntry('END', { message: 'FEL empty -- simulation complete' }));
+    }
+
+    return {
+      finalTime: clock,
+      log,
+      snap:            snap(clock),
+      summary:         getSummary(),
+      phaseCTruncated: _phaseCTruncated,
+      warnings:        warnings.slice(),
+      entitySummary:   entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
+      timeSeries:      _timeSeries ?? undefined,
+      waitDist:        computeWaitDist(entities),
+      perQueue:        Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
+    };
+  }
+
+  // Pre-resolve all paramSource fields that are due at the given clock time.
+  // This populates the adapter cache so that synchronous resolve() calls in step()
+  // return the latest async values.
+  async function _asyncResolveDue(_dueTime) {
+    // Collect all paramSource references that might be sampled this step
+    const sources = [];
+    for (const bev of runtimeModel.bEvents || []) {
+      for (const sched of bev.schedules || []) {
+        if (sched.paramSource) sources.push(sched.paramSource);
+      }
+    }
+    for (const cev of runtimeModel.cEvents || []) {
+      for (const cs of cev.cSchedules || []) {
+        if (cs.paramSource) sources.push(cs.paramSource);
+      }
+    }
+    // Call resolveAsync for each unique source — this refreshes the adapter cache
+    const seen = new Set();
+    for (const ps of sources) {
+      const key = `${ps.sourceId}:${ps.field}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      try {
+        await registry.resolveAsync({}, ps);
+      } catch {
+        // non-fatal
+      }
+    }
+  }
+
   return {
     step,
     runAll,
+    runAllAsync,
     getSnap:         () => snap(clock),
     getFelSize:      () => fel.length,
     getSummary,

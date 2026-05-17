@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.9.0 (Sprints 1–59)
+Version: 1.10.0 (Sprints 1-60)
 
 ---
 
@@ -18,6 +18,7 @@ Version: 1.9.0 (Sprints 1–59)
 | v1.7.0 | 57 | Real-time adapter layer — live data source binding for distribution parameters |
 | v1.8.0 | 58 | Report generation — Export a professional Word (.docx) report from any completed run |
 | v1.9.0 | 59 | Calibrated Batch mode end-to-end: Data Source Manager UI, parameter binding toggles in B/C-event editors, `prefetchForRun()` engine helper, live preview chips |
+| v1.10.0 | 60 | Rolling mode: WebSocket adapter, async FEL loop, run mode selector (Static/Calibrated Batch/Rolling), LiveRunBanner component |
 
 ---
 
@@ -678,13 +679,36 @@ Once a data source is configured, open a **B-Event** or **C-Event** and expand a
 
 > **Calibrated** means: live values are fetched once at run start and used consistently. Replications within the same run see identical parameter values. To refresh to new live values, start a new run.
 
+### Running in Rolling mode
+
+**Rolling mode** provides continuously refreshed parameter values during a single simulation run. Unlike Calibrated Batch (which freezes values at run start), Rolling mode re-reads the latest value from the data source at each scheduling point in the FEL loop.
+
+**When to use Rolling mode:**
+- You want the simulation to respond to real-world conditions changing during the run
+- You are running a single-step or real-time shadow model alongside live operations
+- Your data source is a WebSocket stream (e.g., a live queue-depth feed or sensor reading)
+
+**Setting up a WebSocket data source:**
+1. In the **Data Sources** tab, add a source with type `websocket` and a `ws://` or `wss://` URL.
+2. The engine connects when the run starts and waits up to 10 seconds for the first message before proceeding.
+3. The connection stays open for the duration of the run.
+
+**Running in Rolling mode:**
+1. In the **Execute** panel, open **Experiment Settings** (only visible when the model has live-bound parameters).
+2. Set **Live Data Mode** to **Rolling (single run)**.
+3. The Replications input is automatically disabled -- Rolling always runs a single simulation.
+4. Click **Run** -- a **LIVE** banner appears showing the current value from each data source and the time since the last update.
+
+> **Rolling vs Calibrated Batch:** Calibrated Batch gives reproducible results (same value for every step). Rolling gives a live shadow of current conditions but is not reproducible -- re-running at a different time produces different results.
+
 ### Troubleshooting live data
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| "Connected — no numeric field returned" | API returned a non-numeric value at the field path | Verify the field path and confirm the API returns a number |
-| Fallback value used despite source configured | Credential placeholder not resolved — session value missing | Re-enter the credential value in the Data Sources tab |
+| "Connected -- no numeric field returned" | API returned a non-numeric value at the field path | Verify the field path and confirm the API returns a number |
+| Fallback value used despite source configured | Credential placeholder not resolved -- session value missing | Re-enter the credential value in the Data Sources tab |
 | Parameters not changing between static and live run | `paramSource` binding saved without a source selected | Re-open the binding and select the data source from the dropdown |
+| Rolling run starts with "Waiting for data..." | WebSocket connected but no message received within 10 s | Check the WS endpoint is broadcasting; the run starts with null values if first message times out |
 
 ---
 
