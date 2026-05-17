@@ -13,6 +13,8 @@
 |---------|------|--------|---------|
 | v1.0 | 2026-05-16 | Sprint 45 | Initial specification — Sprint 45 baseline covering engine, data model, macros, AI analysis, UI workspace, validation, and non-functional requirements |
 | v1.1 | 2026-05-17 | Sprint 55a | Added parseSuggestionResponse / applySuggestionPatch to Section 6; DistHelp / DistSparkline to Section 7.2; WCAG 2.1 AA compliance to Section 8.6; updated test count to 1248 |
+| v1.2 | 2026-05-17 | Sprint 57 | Real-time adapter layer — RestAdapter, AdapterRegistry, nullRegistry, paramSource schema extension |
+| v1.3 | 2026-05-17 | Sprint 58 | Report generation — `generateReport()`, LLM prompt builders, html2canvas canvas capture, Execute panel Export Report button |
 
 ---
 
@@ -71,6 +73,47 @@ AI analysis is provided by `src/llm/prompts.js`, which builds structured prompt 
 - `buildSensitivityPrompt` — replication CI uncertainty analysis (150-200 words, max_tokens 450)
 - `buildComparisonPrompt` — two-run side-by-side comparison (200-250 words, max_tokens 550)
 - `buildResultsQueryPrompt` — conversational Q&A against run results
+
+Two additional prompt builders support the report generation workflow (§2.6):
+- `buildModelDescriptionPrompt` — plain-English model narrative for non-technical readers (max_tokens 400)
+- `buildReportRecommendationsPrompt` — JSON array of structured recommendations (max_tokens 700)
+
+The non-streaming helper `callLLMOnce(prompt)` is used for report generation (report content does not need streaming).
+
+### 2.5 Real-Time Adapter Layer (Sprint 57+)
+
+The adapter layer allows live values from external REST sources to be substituted into distribution parameters at runtime. Key components:
+
+- **`src/engine/adapters/types.js`** — JSDoc type definitions for `DataSource`, `ParamSource`, `SystemSnapshot`
+- **`src/engine/adapters/RestAdapter.js`** — Poll-based REST with TTL cache, 3× retry with exponential backoff (2s, 4s, 8s), dot-notation field extraction
+- **`src/engine/adapters/index.js`** — `nullRegistry` (zero-cost pass-through, default) and `AdapterRegistry` class
+- **`buildEngine()` signature** — accepts optional `registry` parameter (9th argument, defaults to `nullRegistry`)
+
+Live values are fetched via `prefetchAll()` before a run (`calibrated_batch` mode), keeping the FEL loop synchronous.
+
+### 2.6 Report Generation (Sprint 58)
+
+The report generation module produces professional Word documents (`.docx`) from completed simulation runs.
+
+**Entry point:** `src/reports/reportGenerator.js` → `generateReport(model, results, experimentConfig, runMeta)`  
+**Returns:** `Blob` with MIME type `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+
+**Report sections:**
+1. Cover (model name, run label, date, engine version)
+2. Executive Summary (top KPIs, primary recommendation headline)
+3. Model Description (LLM-generated plain-English narrative)
+4. Experiment Configuration (seed, warmup, duration, replications, termination mode)
+5. Model Diagram (React Flow canvas capture via `html2canvas`, or placeholder)
+6. Simulation Results (summary stats, per-queue wait percentiles P50/P90/P95/P99, resource utilisation, goal gaps, CI intervals)
+7. Recommendations (3 LLM-generated structured blocks: headline, finding, action, expected impact, confidence)
+8. Appendix (entity types, queues, B-events, C-events, state variables)
+
+**Key design decisions:**
+- `Promise.allSettled` wraps both LLM calls and canvas capture — report always completes even if LLM or canvas fails
+- `html2canvas` is dynamically imported to avoid SSR/test environment crashes
+- All generation is client-side — no PII leaves the browser
+- Filename pattern: `<ModelName> — <RunLabel> — Report.docx`
+- `docx` v9 API notes: hex colours without `#` prefix; `PageNumberElement` (not `PageNumber` constructor); `ImageRun` requires `type: 'png'`
 
 ---
 

@@ -26,7 +26,7 @@ import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogr
 import { LogViewer } from "./LogViewer.jsx";
 import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 import { ExperimentControls } from "./ExperimentControls.jsx";
-import { generateReport } from '../reports/index.js';
+import { generateReport } from '../../reports/index.js';
 
 const numberDefault = (value, fallback) => {
   const n = Number(value);

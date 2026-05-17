@@ -15,6 +15,8 @@ Version: 1.6.0 (Sprints 1–55a)
 | v1.4.0 | 43–44 | AI Insights panel (Interpret Results, Suggest Improvements, Sensitivity Analysis, Ask a Question, Compare Runs), Execution Insights |
 | v1.5.0 | 45 | AI prompt grounding — results and model context injected into all AI analysis calls for higher-quality suggestions |
 | v1.6.0 | 46–55a | AI Apply & Re-run, Paste JSON import, accessibility (WCAG 2.1 AA), design token system, UX polish (keyboard shortcuts, toasts, DistPicker redesign), responsive layout, cost summary in Results view, god component refactoring |
+| v1.7.0 | 57 | Real-time adapter layer — live data source binding for distribution parameters |
+| v1.8.0 | 58 | Report generation — Export a professional Word (.docx) report from any completed run |
 
 ---
 
@@ -595,6 +597,25 @@ The event log can also be exported as CSV from the Log view.
 ### 11.3 Export model as JSON
 
 From the Model Detail view click **Export Model**. DES Studio downloads the model definition as a `.json` file. This file can be imported into any DES Studio instance via **Import** in the Model Library.
+
+### 11.4 Export a simulation report (Word document)
+
+After running a simulation, click **Export Report** in the Execute panel toolbar (next to "Export Results CSV").
+
+DES Studio generates a multi-section Word document (`.docx`) containing:
+
+1. **Cover page** — model name, run label, date, engine version
+2. **Executive Summary** — headline KPIs and the primary AI recommendation
+3. **Model Description** — AI-generated plain-English description of what the model represents (written for non-technical readers)
+4. **Experiment Configuration** — full run parameters (seed, warmup period, run duration, replications, termination mode)
+5. **Model Diagram** — a screenshot of the Visual Designer canvas
+6. **Simulation Results** — summary statistics, per-queue wait-time percentiles (P50/P90/P95/P99), resource utilisation table, performance goal assessment, and confidence intervals (for multi-replication runs)
+7. **Recommendations** — up to three AI-generated structured recommendations (finding → action → expected impact)
+8. **Appendix** — full model specification (entity types, queues, events, state variables)
+
+**The report file is generated entirely in your browser — no simulation data is sent to any server during report generation.** The AI narrative and recommendations are fetched from the same LLM proxy used by the AI Insights panel; if the LLM is unavailable the report is still generated without the narrative sections.
+
+The file is saved as `<Model Name> — <Run Label> — Report.docx` and can be opened in Microsoft Word, LibreOffice, or Google Docs.
 
 ---
 

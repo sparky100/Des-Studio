@@ -1,11 +1,11 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-16 | Reflects: Sprint 55a — God Component Decomposition complete.*
+*Last updated: 2026-05-17 | Reflects: Sprint 58 — Report Generation complete.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Latest closure report: `docs/reviews/sprint-55a-closure.md`
+- Latest closure report: `docs/reviews/sprint-58-closure.md`
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
@@ -33,6 +33,8 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 | Test runner | Vitest | 1.6.0 | Engine layer only. Node environment. |
 | Canvas / DAG | `@xyflow/react` | — | ADR-010. Visual Designer authoring canvas and Execute live flow view, both lazy-loaded. `model_json.graph` drives layout. |
 | Animation | SVG `<animateMotion>` | — | Entity token animation on execute canvas edges. Toggle in `user_settings`. |
+| Report export | `docx` | 9.6.1 | Client-side Word document generation. Used only in `src/reports/reportGenerator.js`. |
+| Canvas capture | `html2canvas` | 1.4.1 | React Flow canvas → PNG for report image section. Dynamically imported. |
 
 **Do not introduce new dependencies without flagging them first.** The dependency list is intentionally minimal.
 
@@ -71,6 +73,9 @@ project root
 │   │       └── DistSparkline.jsx    ← 120×40 SVG sparkline previews for distributions
 │   │   ├── AuthShell.jsx            ← Self-contained auth forms (sign-in, sign-up, password recovery)
 │   │   └── ModelHistoryTab.jsx      ← Run history tab extracted from ModelDetail
+│   ├── reports/
+│   │   ├── reportGenerator.js       ← 7-section .docx generator (docx v9, LLM narrative, html2canvas)
+│   │   └── index.js                 ← Barrel: re-exports generateReport
 │   ├── db/
 │   │   ├── models.js                ← Supabase CRUD wrappers
 │   │   └── supabase.js              ← Client singleton

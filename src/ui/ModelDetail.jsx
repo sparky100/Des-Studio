@@ -225,6 +225,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [tab,setTab]=useState(initialTab||"overview");
   const [dirty,setDirty]=useState(false);
   const [saving,setSaving]=useState(false);
+  const [saveError,setSaveError]=useState(null);
   const [discardConfirm,setDiscardConfirm]=useState(false);
   const [past,setPast]=useState([]);    // undo stack — model snapshots, capped at 20
   const [future,setFuture]=useState([]); // redo stack
@@ -363,6 +364,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
 
   const save=async()=>{
     setSaving(true);
+    setSaveError(null);
     try{
       await overrides.onSave?.(model);
       setDirty(false);
@@ -370,7 +372,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
       await onRefresh?.();
     }catch(error){
       setDirty(true);
-      toast.error(error?.message || "Save failed");
+      const msg = error?.message || "Save failed";
+      setSaveError(msg);
+      toast.error(msg);
     }finally{
       setSaving(false);
     }
@@ -622,6 +626,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
       />
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
         <SaveBanner canEdit={canEdit} dirty={dirty} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
+        {saveError&&<div role="alert" style={{background:C.errorBg,border:`1px solid ${C.danger}`,borderRadius:6,padding:'8px 12px',color:C.error,fontFamily:FONT,fontSize:12,marginBottom:8}}>{saveError}</div>}
         {tab==="overview" && <ModelHealthPanel model={model} validation={healthValidation} isStarterBlank={isStarterBlank} tab={tab} setTab={setTab} latestResults={latestResults}/>}
         <ErrorBoundary
           key={tab}
