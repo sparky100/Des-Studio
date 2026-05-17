@@ -12,6 +12,7 @@ import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionNa
 import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting }   from "./entities.js";
 import { evalCondition }                        from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
+import { nullRegistry }                        from "./adapters/index.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
@@ -118,7 +119,7 @@ function makeFailureEvents(model, rng) {
   return events;
 }
 
-export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500, collectTimeSeries = false) {
+export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500, collectTimeSeries = false, registry = nullRegistry) {
   const runtimeModel = modelWithShiftInitialCapacity(model);
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
   const rng = mulberry32(seed);
@@ -312,6 +313,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     incQueueMetric,
     incEventCount,
     _arbitration,
+    registry,
   });
 
   // ── step(): one Phase A → B → C cycle ────────────────────────────────────

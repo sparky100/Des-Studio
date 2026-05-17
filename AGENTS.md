@@ -56,7 +56,12 @@ project root
 │   │   ├── entities.js              ← Entity pool, queue discipline, waitingOf()
 │   │   ├── distributions.js         ← Sampler functions
 │   │   ├── conditions.js            ← Condition evaluator (currently uses new Function — MUST BE REPLACED)
-│   │   └── macros.js                ← ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE
+│   │   ├── macros.js                ← ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE
+│   │   └── adapters/                ← Real-time data adapter layer (Sprint 57+)
+│   │       ├── index.js             ← AdapterRegistry + nullRegistry (default, zero-cost pass-through)
+│   │       ├── RestAdapter.js       ← Poll-based REST with TTL cache and 3× retry
+│   │       ├── mockAdapter.js       ← Deterministic test stub (ships with production code, zero overhead)
+│   │       └── types.js             ← JSDoc: DataSource, ParamSource, SystemSnapshot
 │   ├── ui/
 │   │   ├── editors/                 ← EntityTypeEditor, BEventEditor, CEventEditor, QueueEditor
 │   │   │   └── index.jsx

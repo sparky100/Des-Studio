@@ -264,7 +264,10 @@ export function fireBEvent(ev, ctx) {
     const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);
     if (!tmpl) continue;
     const schedCtx = { clock, state: ctx.state, schedKey: sched.eventId };
-    const delay = Math.max(0, sample(sched.dist || "Fixed", sched.distParams || {}, ctx.rng, null, schedCtx));
+    const resolvedBParams = ctx.registry
+      ? ctx.registry.resolve(sched.distParams || {}, sched.paramSource)
+      : (sched.distParams || {});
+    const delay = Math.max(0, sample(sched.dist || "Fixed", resolvedBParams, ctx.rng, null, schedCtx));
     // Carry per-arrival row attrs from schedule rows[] (S40.2)
     const rowAttrs = ctx.state?.[`__schedRowAttrs_${sched.eventId}`] ?? null;
     let renegeTarget;
@@ -334,7 +337,10 @@ export function fireCEvent(ev, ctx) {
         delete cust._remainingService;
         msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [remaining service]`);
       } else {
-        delay = Math.max(0, sample(cs.dist || "Fixed", cs.distParams || {}, ctx.rng, null, { clock }));
+        const resolvedCParams = ctx.registry
+          ? ctx.registry.resolve(cs.distParams || {}, cs.paramSource)
+          : (cs.distParams || {});
+        delay = Math.max(0, sample(cs.dist || "Fixed", resolvedCParams, ctx.rng, null, { clock }));
         msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${cs.dist}(${delay.toFixed(3)})]`);
       }
     }
