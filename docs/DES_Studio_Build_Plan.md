@@ -1840,6 +1840,35 @@ npm run build
 
 ---
 
+---
+
+### Sprint 57 — Real-Time Adapter Layer Foundation ✅
+
+**Goal:** Engine-layer foundation for live data integration: adapter subsystem, `paramSource` schema, `buildEngine()` registry parameter, `resolve()` at FEL sample sites. No UI changes.
+
+**Status:** ✅ Complete — branch `sprint-57`
+
+---
+
+### Sprint 59 — Calibrated Batch Mode (End to End) ✅
+
+**Goal:** Complete the calibrated_batch run mode end-to-end: Data Source Manager UI, parameter binding toggles in B/C-event editors, `prefetchForRun()` engine helper, credential slot in sessionStorage.
+
+**Status:** ✅ Complete — branch `sprint-59`
+
+| Feature | Status | Description |
+|---|---|---|
+| F59.1 — `AdapterRegistry.prefetchAll()` | ✅ | Implemented in Sprint 57; verified/tested in Sprint 59 |
+| F59.2 — `prefetchForRun()` | ✅ | `src/engine/index.js` — async helper, no-op unless `liveDataMode === 'calibrated_batch'` |
+| F59.3 — Data Source Manager | ✅ | `src/ui/editors/DataSourceManager.jsx` — add/edit/delete dataSources[], test connection |
+| F59.4 — Credential slot | ✅ | `{{env.VAR}}` placeholder in model; actual value stored only in sessionStorage |
+| F59.5 — Parameter binding in BEventEditor | ✅ | Static/Live toggle per schedule distParam |
+| F59.6 — Parameter binding in CEventEditor | ✅ | Same pattern for cSchedule distParams |
+| F59.7 — Live preview chip | ✅ | Green "Live: N" badge shown when source is selected and has a value |
+| F59.8 — Vitest tests | ✅ | `tests/engine/calibrated-batch.test.js` — 7 tests, all passing |
+
+---
+
 *End of build plan. Update after each sprint.*
 *The most important rule: read the existing file before changing it.*
 *Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec — never add a free-text escape hatch.*

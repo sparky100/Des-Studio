@@ -1,8 +1,93 @@
-import { C, FONT } from "../shared/tokens.js";
+import { C, FONT, alpha, RADIUS, SPACE } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[]})=>{
+function LiveParamRow({ paramSource, distParams, dataSources, onToggle, onUpdate, liveValue }) {
+  const isLive = !!paramSource?.sourceId;
+  if (!dataSources || dataSources.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: SPACE.sm }}>
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{
+            background: isLive ? alpha(C.accent, 0.15) : "transparent",
+            border: `1px solid ${isLive ? C.accent : C.border}`,
+            borderRadius: RADIUS.sm,
+            color: isLive ? C.accent : C.muted,
+            fontFamily: FONT,
+            fontSize: 10,
+            fontWeight: 700,
+            padding: "2px 8px",
+            cursor: "pointer",
+            letterSpacing: "0.8px",
+          }}
+        >
+          {isLive ? "LIVE" : "STATIC"}
+        </button>
+        {isLive && liveValue != null && (
+          <span style={{
+            background: alpha(C.green, 0.12),
+            border: `1px solid ${alpha(C.green, 0.3)}`,
+            borderRadius: RADIUS.sm,
+            color: C.green,
+            fontFamily: FONT,
+            fontSize: 10,
+            padding: "2px 7px",
+            fontWeight: 700,
+          }}>
+            Live: {liveValue}
+          </span>
+        )}
+      </div>
+      {isLive && (
+        <div style={{ display: "flex", gap: SPACE.sm, flexWrap: "wrap", paddingLeft: 4 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Source</span>
+            <select
+              value={paramSource.sourceId || ""}
+              onChange={e => onUpdate({ ...paramSource, sourceId: e.target.value })}
+              style={{ background: C.bg, border: `1px solid ${C.accent}55`, borderRadius: RADIUS.sm, color: C.accent, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }}
+            >
+              <option value="">— select source —</option>
+              {dataSources.map(ds => <option key={ds.id} value={ds.id}>{ds.label || ds.id}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Field path</span>
+            <input
+              value={paramSource.field || ""}
+              onChange={e => onUpdate({ ...paramSource, field: e.target.value })}
+              placeholder="e.g. mean_interarrival_mins"
+              style={{ width: 160, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Fallback</span>
+            <input
+              value={paramSource.fallback || ""}
+              onChange={e => onUpdate({ ...paramSource, fallback: e.target.value })}
+              placeholder={Object.values(distParams || {})[0] || ""}
+              style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Target param</span>
+            <input
+              value={paramSource.targetParam || ""}
+              onChange={e => onUpdate({ ...paramSource, targetParam: e.target.value })}
+              placeholder={Object.keys(distParams || {})[0] || "value"}
+              style={{ width: 90, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],dataSources=[]})=>{
   const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:[],schedules:[],description:""}]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
   const commitName=(i,v)=>{
@@ -294,6 +379,14 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                   </div>
                   <DistPicker value={{dist:s.dist,distParams:s.distParams}} onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams})} compact
                     attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}/>
+                  <LiveParamRow
+                    paramSource={s.paramSource}
+                    distParams={s.distParams}
+                    dataSources={dataSources}
+                    onToggle={()=>updS(i,j,{paramSource:s.paramSource?.sourceId?undefined:{sourceId:"",field:"",fallback:""}})}
+                    onUpdate={ps=>updS(i,j,{paramSource:ps})}
+                    liveValue={null}
+                  />
                   <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:s.isRenege?C.reneged:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
                     <input type="checkbox" checked={!!s.isRenege} onChange={e=>updS(i,j,{isRenege:e.target.checked})} style={{accentColor:C.reneged}}/>
                     Reneging timer

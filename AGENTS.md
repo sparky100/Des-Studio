@@ -1,11 +1,12 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-17 | Reflects: Sprint 58 — Report Generation complete.*
+*Last updated: 2026-05-17 | Reflects: Sprint 59 — Calibrated Batch Mode End-to-End complete.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Latest closure report: `docs/reviews/sprint-58-closure.md`
+- Latest plan: `docs/reviews/sprint-59-plan.md`
+- Latest closure report: `docs/reviews/sprint-59-closure.md`
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 

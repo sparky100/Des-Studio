@@ -1,11 +1,82 @@
 import { useState, useRef } from "react";
-import { C, FONT, normTypeName } from "../shared/tokens.js";
+import { C, FONT, normTypeName, alpha, RADIUS, SPACE } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { ConditionBuilder, buildConditionStr } from "./ConditionBuilder.jsx";
 import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 import { DropField, assignOptions, displayEventName } from "./helpers.jsx";
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[]})=>{
+function LiveParamRowC({ paramSource, distParams, dataSources, onToggle, onUpdate }) {
+  const isLive = !!paramSource?.sourceId;
+  if (!dataSources || dataSources.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: SPACE.sm }}>
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{
+            background: isLive ? alpha(C.accent, 0.15) : "transparent",
+            border: `1px solid ${isLive ? C.accent : C.border}`,
+            borderRadius: RADIUS.sm,
+            color: isLive ? C.accent : C.muted,
+            fontFamily: FONT,
+            fontSize: 10,
+            fontWeight: 700,
+            padding: "2px 8px",
+            cursor: "pointer",
+            letterSpacing: "0.8px",
+          }}
+        >
+          {isLive ? "LIVE" : "STATIC"}
+        </button>
+      </div>
+      {isLive && (
+        <div style={{ display: "flex", gap: SPACE.sm, flexWrap: "wrap", paddingLeft: 4 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Source</span>
+            <select
+              value={paramSource.sourceId || ""}
+              onChange={e => onUpdate({ ...paramSource, sourceId: e.target.value })}
+              style={{ background: C.bg, border: `1px solid ${C.accent}55`, borderRadius: RADIUS.sm, color: C.accent, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }}
+            >
+              <option value="">— select source —</option>
+              {dataSources.map(ds => <option key={ds.id} value={ds.id}>{ds.label || ds.id}</option>)}
+            </select>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Field path</span>
+            <input
+              value={paramSource.field || ""}
+              onChange={e => onUpdate({ ...paramSource, field: e.target.value })}
+              placeholder="e.g. mean_service_mins"
+              style={{ width: 160, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Fallback</span>
+            <input
+              value={paramSource.fallback || ""}
+              onChange={e => onUpdate({ ...paramSource, fallback: e.target.value })}
+              placeholder={Object.values(distParams || {})[0] || ""}
+              style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Target param</span>
+            <input
+              value={paramSource.targetParam || ""}
+              onChange={e => onUpdate({ ...paramSource, targetParam: e.target.value })}
+              placeholder={Object.keys(distParams || {})[0] || "value"}
+              style={{ width: 90, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.text, fontFamily: FONT, fontSize: 11, padding: "3px 6px", outline: "none" }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], dataSources=[]})=>{
   // A C-event has:
   //   name, condition  — as before
   //   effect           — only ASSIGN macro(s), no SCHEDULE needed here
@@ -185,6 +256,13 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                     <DistPicker value={{dist:s.dist||"ServerAttr",distParams:s.distParams||{attr:"serviceTime"}}}
                       onChange={v=>updSched(i,j,{dist:v.dist,distParams:v.distParams})} compact/>
                   </div>
+                  <LiveParamRowC
+                    paramSource={s.paramSource}
+                    distParams={s.distParams}
+                    dataSources={dataSources}
+                    onToggle={()=>updSched(i,j,{paramSource:s.paramSource?.sourceId?undefined:{sourceId:"",field:"",fallback:""}})}
+                    onUpdate={ps=>updSched(i,j,{paramSource:ps})}
+                  />
 
                   {/* Row 3: Entity context checkbox */}
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
