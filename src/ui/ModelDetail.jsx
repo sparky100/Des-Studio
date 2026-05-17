@@ -350,7 +350,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
 
   // Ref keeps keyboard handler current without re-registering on every render
   const _ur=useRef({undo,redo,save:null});
-  _ur.current={undo,redo,save};
   useEffect(()=>{
     const onKey=(e)=>{
       if(!(e.ctrlKey||e.metaKey))return;
@@ -376,6 +375,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
       setSaving(false);
     }
   };
+  _ur.current={undo,redo,save};
 
   const discard=()=>{
     if (!modelData) return;
