@@ -381,6 +381,11 @@ const cycleLog = [];
         log.push(_trace("WARMUP", { message: msg }));
         state.__served = 0;
         state.__reneged = 0;
+        for (const srv of entities.filter(e => e.role === 'server')) {
+          srv._busyTime = 0;
+          if (srv.status === 'busy') srv._busyStart = clock;
+          else delete srv._busyStart;
+        }
         for (const sv of runtimeModel.stateVariables || []) {
           if (sv.resetOnWarmup) {
             try   { state[sv.name] = JSON.parse(sv.initialValue); }
@@ -420,7 +425,7 @@ const cycleLog = [];
               const scheduledDuration = srv._scheduledDuration || 0;
               const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart || clock)));
               cust._remainingService = remainingService;
-              releaseServerClaim(cust, srv);
+              releaseServerClaim(cust, srv, clock);
               clearWaitingState(cust);
               markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
             }
@@ -719,16 +724,24 @@ const cycleLog = [];
       ? Math.max(...sojournSamples)
       : null;
 
+    const elapsed = clock - _statsResetTime;
     const perResource = {};
     for (const srv of servers) {
-      if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyCount: 0, idleCount: 0 };
+      if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyTimeSum: 0 };
       perResource[srv.type].total++;
-      if (srv.status === "busy" || srv.status === "serving") perResource[srv.type].busyCount++;
-      else perResource[srv.type].idleCount++;
+      // Flush any ongoing busy period up to now
+      const busyTime = (srv._busyTime || 0) + (
+        srv.status === "busy" && srv._busyStart != null
+          ? Math.max(0, clock - srv._busyStart)
+          : 0
+      );
+      perResource[srv.type].busyTimeSum += busyTime;
     }
     for (const type of Object.keys(perResource)) {
       const r = perResource[type];
-      r.utilisation = r.total > 0 ? +(r.busyCount / r.total).toFixed(4) : 0;
+      const denominator = elapsed * r.total;
+      r.utilisation = denominator > 0 ? +(r.busyTimeSum / denominator).toFixed(4) : 0;
+      delete r.busyTimeSum;
     }
 
     const totalCost   = state.__totalCost || 0;
@@ -736,7 +749,6 @@ const cycleLog = [];
 
     // Container level summary (G21)
     const containerLevels = {};
-    const elapsed = clock - _statsResetTime;
     for (const ct of runtimeModel.containerTypes || []) {
       const level = state[`__container_${ct.id}`] ?? 0;
       const integral = state[`__containerIntegral_${ct.id}`] ?? 0;

@@ -271,3 +271,71 @@ describe('two-stage model (TriageNurse + Doctor)', () => {
     expect(r1.summary.served).toBeGreaterThan(0);
   });
 });
+
+// ── Time-averaged utilisation ─────────────────────────────────────────────────
+describe('time-averaged server utilisation', () => {
+  // Deterministic model: arrivals at t=0,10,20,... each served in exactly 5 time units.
+  // Server is busy for 5 out of every 10 time units → expected utilisation ≈ 0.5
+  const deterministicModel = {
+    entityTypes: [
+      { id: 'et1', name: 'Customer', role: 'customer', count: '', attrDefs: [] },
+      {
+        id: 'et2', name: 'Server', role: 'server', count: '1',
+        attrDefs: [{ id: 'a1', name: 'serviceTime', dist: 'Fixed', distParams: { value: '5' } }],
+      },
+    ],
+    stateVariables: [],
+    bEvents: [
+      {
+        id: 'b1', name: 'Customer Arrives', scheduledTime: '0',
+        effect: 'ARRIVE(Customer)',
+        schedules: [{ eventId: 'b1', dist: 'Fixed', distParams: { value: '10' }, isRenege: false }],
+      },
+      { id: 'b2', name: 'Service Complete', scheduledTime: '999', effect: 'COMPLETE()', schedules: [] },
+    ],
+    cEvents: [
+      {
+        id: 'c1', name: 'Start Service',
+        condition: 'queue(Customer).length > 0 AND idle(Server).count > 0',
+        effect: 'ASSIGN(Customer, Server)',
+        cSchedules: [{ id: 'cs1', eventId: 'b2', dist: 'ServerAttr', distParams: { attr: 'serviceTime' }, useEntityCtx: true }],
+      },
+    ],
+  };
+
+  test('perResource utilisation is between 0 and 1', () => {
+    const result = buildEngine(deterministicModel, 1, 0, 100).runAll();
+    const util = result.summary.perResource?.['Server']?.utilisation;
+    expect(util).toBeGreaterThan(0);
+    expect(util).toBeLessThanOrEqual(1);
+  });
+
+  test('perResource utilisation approximates busy-time / elapsed for deterministic model', () => {
+    // Arrivals every 10, service = 5 → 50% utilisation
+    const result = buildEngine(deterministicModel, 1, 0, 100).runAll();
+    const util = result.summary.perResource?.['Server']?.utilisation;
+    expect(util).toBeGreaterThan(0.4);
+    expect(util).toBeLessThan(0.6);
+  });
+
+  test('perResource utilisation is 0 when server never used', () => {
+    const idleModel = {
+      ...deterministicModel,
+      bEvents: [],
+      cEvents: [],
+    };
+    const result = buildEngine(idleModel, 1, 0, 50).runAll();
+    const pr = result.summary.perResource;
+    if (pr?.['Server']) {
+      expect(pr['Server'].utilisation).toBe(0);
+    }
+  });
+
+  test('warmup reset zeroes accumulated busy time', () => {
+    // Run with 20-unit warmup; utilisation should only reflect post-warmup activity
+    const result = buildEngine(deterministicModel, 1, 20, 120).runAll();
+    const util = result.summary.perResource?.['Server']?.utilisation;
+    expect(util).toBeGreaterThan(0.4);
+    expect(util).toBeLessThan(0.6);
+  });
+});

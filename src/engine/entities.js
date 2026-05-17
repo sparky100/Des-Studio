@@ -200,13 +200,14 @@ export function claimServerForEntity(customer, server, clock) {
   delete customer.queue;
 
   server.status = "busy";
+  server._busyStart = clock;
   server.currentCustId = customer.id;
   server.resourceClaim = claim;
 
   return true;
 }
 
-export function releaseServerClaim(customer, server) {
+export function releaseServerClaim(customer, server, clock) {
   if (!customer && !server) return false;
 
   if (customer) {
@@ -216,7 +217,13 @@ export function releaseServerClaim(customer, server) {
   if (server) {
     delete server.currentCustId;
     delete server.resourceClaim;
-    if (server.status === "busy") server.status = "idle";
+    if (server.status === "busy") {
+      if (server._busyStart != null && clock != null) {
+        server._busyTime = (server._busyTime || 0) + Math.max(0, clock - server._busyStart);
+      }
+      delete server._busyStart;
+      server.status = "idle";
+    }
   }
 
   return true;
