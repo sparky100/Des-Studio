@@ -1,8 +1,8 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.1.0
+**Version:** 1.4.0
 **Date:** 2026-05-17
-**Sprint baseline:** Sprint 55a
+**Sprint baseline:** Sprint 59
 **Status:** Living document — updated at end of each sprint
 
 ---
@@ -15,6 +15,7 @@
 | v1.1 | 2026-05-17 | Sprint 55a | Added parseSuggestionResponse / applySuggestionPatch to Section 6; DistHelp / DistSparkline to Section 7.2; WCAG 2.1 AA compliance to Section 8.6; updated test count to 1248 |
 | v1.2 | 2026-05-17 | Sprint 57 | Real-time adapter layer — RestAdapter, AdapterRegistry, nullRegistry, paramSource schema extension |
 | v1.3 | 2026-05-17 | Sprint 58 | Report generation — `generateReport()`, LLM prompt builders, html2canvas canvas capture, Execute panel Export Report button |
+| v1.4 | 2026-05-17 | Sprint 59 | Calibrated Batch mode: `prefetchForRun()`, `AdapterRegistry.prefetchAll()`, `dataSources[]` model field, Data Source Manager UI, parameter binding toggles in BEventEditor/CEventEditor |
 
 ---
 
@@ -114,6 +115,76 @@ The report generation module produces professional Word documents (`.docx`) from
 - All generation is client-side — no PII leaves the browser
 - Filename pattern: `<ModelName> — <RunLabel> — Report.docx`
 - `docx` v9 API notes: hex colours without `#` prefix; `PageNumberElement` (not `PageNumber` constructor); `ImageRun` requires `type: 'png'`
+
+### 2.7 Calibrated Batch Mode (Sprint 59)
+
+`resolve()` is synchronous. In `calibrated_batch` mode values are pre-fetched via `registry.prefetchAll()` before the run starts, then frozen for the entire run. Async resolution (`runAllAsync`) is introduced in Sprint 60+ for rolling mode.
+
+**`paramSource` schema field** (optional on every `schedule` and `cSchedule`):
+
+```json
+{
+  "sourceId": "ds_arrivals",
+  "field": "mean_interarrival_mins",
+  "targetParam": "mean",
+  "fallback": "1.5"
+}
+```
+
+**`dataSources[]` model field** (top-level, persisted in `model_json` JSONB column, no schema migration required):
+
+```json
+{
+  "dataSources": [
+    {
+      "id": "ds_arrivals",
+      "label": "Live Arrival Feed",
+      "type": "rest",
+      "url": "https://ops.example.com/api/stats",
+      "authHeader": "Authorization",
+      "authSecret": "{{env.LIVE_FEED_TOKEN}}",
+      "refreshSecs": 300
+    }
+  ]
+}
+```
+
+**`liveDataMode` field** (in `experimentDefaults`):
+
+```json
+"liveDataMode": "calibrated_batch" | null
+```
+
+`null` (or absent) = static behaviour unchanged.
+
+**Calibrated batch run flow:**
+
+1. Caller invokes `await prefetchForRun(model, registry)` — a no-op unless `liveDataMode === 'calibrated_batch'`
+2. `prefetchForRun` calls `registry.prefetchAll()` which calls `adapter.prefetch()` in parallel for all registered data sources
+3. `buildEngine(model, seed, ..., registry)` is called synchronously — `resolve()` now returns live values throughout the entire FEL loop
+4. Values are frozen at fetch time; replications all use the same snapshot (calibrated = stable within a run)
+
+**Credential security:** `authSecret` values use `{{env.VAR}}` placeholders in the model JSON. Actual credential values are stored only in `sessionStorage` and resolved at runtime by `AdapterRegistry._resolveSecret()`. They are never persisted to Supabase.
+
+**`prefetchForRun()` export** (from `src/engine/index.js`):
+
+```js
+export async function prefetchForRun(model, registry) {
+  if (model?.experimentDefaults?.liveDataMode === 'calibrated_batch') {
+    await registry.prefetchAll();
+  }
+}
+```
+
+**UI components (Sprint 59):**
+
+| File | Role |
+|---|---|
+| `src/ui/editors/DataSourceManager.jsx` | Add/edit/delete `dataSources[]` entries; credential slot stored in sessionStorage only |
+| `src/ui/editors/BEventEditor.jsx` | Static/Live toggle per schedule distParam; source dropdown, field path, fallback inputs |
+| `src/ui/editors/CEventEditor.jsx` | Same pattern for cSchedule distParams |
+
+**Backwards compatibility:** All existing `buildEngine()` callers continue to work without change. Models without `paramSource` fields run identically to before. The `nullRegistry` default adds zero overhead — it returns the same object reference.
 
 ---
 

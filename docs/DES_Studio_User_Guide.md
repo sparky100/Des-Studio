@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.6.0 (Sprints 1–55a)
+Version: 1.9.0 (Sprints 1–59)
 
 ---
 
@@ -17,6 +17,7 @@ Version: 1.6.0 (Sprints 1–55a)
 | v1.6.0 | 46–55a | AI Apply & Re-run, Paste JSON import, accessibility (WCAG 2.1 AA), design token system, UX polish (keyboard shortcuts, toasts, DistPicker redesign), responsive layout, cost summary in Results view, god component refactoring |
 | v1.7.0 | 57 | Real-time adapter layer — live data source binding for distribution parameters |
 | v1.8.0 | 58 | Report generation — Export a professional Word (.docx) report from any completed run |
+| v1.9.0 | 59 | Calibrated Batch mode end-to-end: Data Source Manager UI, parameter binding toggles in B/C-event editors, `prefetchForRun()` engine helper, live preview chips |
 
 ---
 
@@ -637,7 +638,57 @@ The following patterns cover the most frequently modelled scenarios. Each is ava
 
 ---
 
-## 13. Troubleshooting
+## 13. Connecting Live Data Sources
+
+DES Studio supports a **Calibrated Batch** run mode that fetches live parameter values from external REST APIs before a run starts. All parameter values are frozen at fetch time and used consistently throughout every replication — giving you calibrated, reproducible results grounded in real operating data.
+
+### Setting up a data source
+
+1. Open the **Data Sources** tab (inside the Design mode tabs).
+2. Click **+ Add Source**.
+3. Fill in the fields:
+   - **Label** — a human-readable name (e.g. "Live Arrival Feed").
+   - **ID** — auto-generated from the label (e.g. `ds_arrivals`). This is the ID you reference in parameter bindings.
+   - **URL** — the endpoint that returns a JSON object with your parameter values.
+   - **Auth Header / Auth Secret** — optional. Enter the header name (e.g. `Authorization`) and a placeholder like `{{env.LIVE_FEED_TOKEN}}` for the secret.
+4. Click **Test Connection** to verify the endpoint is reachable.
+
+### Storing credentials securely
+
+Credentials are **never stored in the model JSON or sent to Supabase**. Instead:
+
+1. In the data source form, set `authSecret` to a placeholder like `{{env.LIVE_FEED_TOKEN}}`.
+2. A **Credential value** input appears below — enter the actual token there.
+3. The value is saved only in your browser's `sessionStorage` for the current session and resolved at run time by the engine.
+
+### Binding a parameter to a live field
+
+Once a data source is configured, open a **B-Event** or **C-Event** and expand a schedule's distribution settings:
+
+1. Click the **STATIC** toggle next to a distribution parameter — it switches to **LIVE**.
+2. Select the data source from the dropdown.
+3. Enter the **field path** — a dot-notation path into the API response JSON (e.g. `mean_interarrival_mins` or `stats.arrivals.mean`).
+4. Set a **fallback** value — used if the API is unreachable or the field is missing.
+
+### Running in Calibrated Batch mode
+
+1. In the **Execute** panel, open **Experiment Settings**.
+2. Set **Live Data Mode** to `calibrated_batch`.
+3. Click **Run** — the engine fetches all data sources in parallel before starting the simulation, then freezes those values for all replications.
+
+> **Calibrated** means: live values are fetched once at run start and used consistently. Replications within the same run see identical parameter values. To refresh to new live values, start a new run.
+
+### Troubleshooting live data
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| "Connected — no numeric field returned" | API returned a non-numeric value at the field path | Verify the field path and confirm the API returns a number |
+| Fallback value used despite source configured | Credential placeholder not resolved — session value missing | Re-enter the credential value in the Data Sources tab |
+| Parameters not changing between static and live run | `paramSource` binding saved without a source selected | Re-open the binding and select the data source from the dropdown |
+
+---
+
+## 14. Troubleshooting
 
 ### Model validation errors
 

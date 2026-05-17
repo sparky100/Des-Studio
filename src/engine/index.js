@@ -16,6 +16,20 @@ import { nullRegistry }                        from "./adapters/index.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
+/**
+ * Call before buildEngine() when model.experimentDefaults.liveDataMode === 'calibrated_batch'.
+ * Pre-fetches all data sources so registry.resolve() can operate synchronously during the run.
+ * Safe to call unconditionally — a no-op when liveDataMode is absent or null.
+ *
+ * @param {{ experimentDefaults?: { liveDataMode?: string } }} model
+ * @param {import('./adapters/index.js').AdapterRegistry | typeof import('./adapters/index.js').nullRegistry} registry
+ */
+export async function prefetchForRun(model, registry) {
+  if (model?.experimentDefaults?.liveDataMode === 'calibrated_batch') {
+    await registry.prefetchAll();
+  }
+}
+
 function getValidShiftSchedule(entityType) {
   if (!Array.isArray(entityType.shiftSchedule) || entityType.shiftSchedule.length === 0) return [];
   return entityType.shiftSchedule

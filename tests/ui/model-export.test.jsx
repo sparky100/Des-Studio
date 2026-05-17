@@ -69,6 +69,7 @@ describe('model JSON export', () => {
           bEvents: [],
           cEvents: [],
           queues: [],
+          dataSources: [],
         },
       })
     );

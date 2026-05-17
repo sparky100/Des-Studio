@@ -7,6 +7,7 @@ import { useToast } from "./shared/ToastContext.jsx";
 import { useViewport } from "./shared/hooks.js";
 import { SkeletonPanel } from "./shared/SkeletonPanel.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
+import { DataSourceManager } from "./editors/DataSourceManager.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
 import { GoalsEditor } from "./editors/GoalsEditor.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
@@ -26,7 +27,7 @@ import { fetchRunHistory, listShareLinks } from "../db/models.js";
 import { validateModel }                    from "../engine/validation.js";
 import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "dataSources"];
 
 function slugifyModelName(name = "") {
   return (name || "untitled")
@@ -177,6 +178,7 @@ const MODEL_HEALTH_TAB_LABELS = {
   bevents: "B-Events",
   cevents: "C-Events",
   state: "Model Data",
+  datasources: "Data Sources",
   execute: "Execute",
   results: "Analysis",
   history: "History",
@@ -218,6 +220,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
       queues:        modelData.queues         || [],
       graph:         modelData.graph          || null,
       experimentDefaults: modelData.experimentDefaults || {},
+      dataSources:   modelData.dataSources    || [],
       access:        modelData.access         || {},
     };
   });
@@ -303,6 +306,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     experimentDefaults: nextModel.experimentDefaults && typeof nextModel.experimentDefaults === "object" && !Array.isArray(nextModel.experimentDefaults)
       ? nextModel.experimentDefaults
       : (current.experimentDefaults || {}),
+    dataSources: Array.isArray(nextModel.dataSources) ? nextModel.dataSources : (current.dataSources || []),
   });
   const applyGeneratedModel=(nextModel)=>{
     const merged=mergeGeneratedModel(model,nextModel);
@@ -392,6 +396,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
       queues:        modelData.queues         || [],
       graph:         modelData.graph          || null,
       experimentDefaults: modelData.experimentDefaults || {},
+      dataSources:   modelData.dataSources    || [],
       access:        modelData.access         || {},
     });
     setDirty(false);
@@ -497,6 +502,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     {id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},
     {id:"state",label:"Model Data"},
+    {id:"datasources",label:"Data Sources"},
     {id:"validate",label:"Model Health"},
     {id:"execute",label:"Execute"},
     {id:"results",label:"Analysis"},
@@ -506,7 +512,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const selectableTabs = TABS.filter(t => !t.disabled);
   const NAV_MODES=[
     {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
-    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
+    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","datasources","validate"]},
     {id:"execute",label:"Execute",primaryTab:"execute",tabs:["execute"]},
     {id:"results",label:"Analysis",primaryTab:"results",tabs:["results","history"]},
     ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
@@ -516,7 +522,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const DISPLAY_MODES = isMobileLayout
       ? [
         {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
-        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
+        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","datasources","validate"]},
         {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
         {id:"results",label:"Analysis",primaryTab:"results",tabs:["results","history"]},
       ]
@@ -524,7 +530,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
   const contextualTabs = useMemo(() => {
     if (activeMode?.id === "overview") return ["overview"];
-    if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "state", "validate"];
+    if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "state", "datasources", "validate"];
     if (activeMode?.id === "execute") return ["execute"];
     if (activeMode?.id === "results") return ["results", "history"];
     if (activeMode?.id === "access") return ["access"];
@@ -718,8 +724,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           </div>)
         )}
         {tab==="state"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="state"/><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>)}
-        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>)}
-        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
+        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>)}
+        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
+        {tab==="datasources"&&renderAuthoringShell(<div style={{maxWidth:900}}><DataSourceManager dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} readOnly={!canEdit}/></div>)}
         {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
           const oldQueues = model.queues || [];
           let updated = { ...model, queues: newQueues };
