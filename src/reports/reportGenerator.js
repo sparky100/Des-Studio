@@ -160,7 +160,7 @@ function buildResults(model, results) {
   const servers = (model.entityTypes || []).filter(e => e.role === 'server');
   if (servers.length) {
     const resourceStats = summary.perResource || summary.resourceUtilisation || {};
-    lines.push('### Resource Utilisation', '');
+    lines.push('### Resource Utilisation _(end-of-run snapshot)_', '');
     const rows = servers.map(s => {
       const pr = typeof resourceStats === 'object' ? resourceStats[s.name] : null;
       const util = pr?.utilisation ?? summary.utilisation;
