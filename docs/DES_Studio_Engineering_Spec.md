@@ -1,8 +1,8 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.5.0
+**Version:** 1.6.0
 **Date:** 2026-05-17
-**Sprint baseline:** Sprint 60
+**Sprint baseline:** Sprint 61
 **Status:** Living document -- updated at end of each sprint
 
 ---
@@ -17,6 +17,7 @@
 | v1.3 | 2026-05-17 | Sprint 58 | Report generation — `generateReport()`, LLM prompt builders, html2canvas canvas capture, Execute panel Export Report button |
 | v1.4 | 2026-05-17 | Sprint 59 | Calibrated Batch mode: `prefetchForRun()`, `AdapterRegistry.prefetchAll()`, `dataSources[]` model field, Data Source Manager UI, parameter binding toggles in BEventEditor/CEventEditor |
 | v1.5 | 2026-05-17 | Sprint 60 | Rolling mode: `WebSocketAdapter`, `resolveAsync()`, `runAllAsync()`, run mode selector in ExperimentControls, `LiveRunBanner` component |
+| v1.6 | 2026-05-17 | Sprint 61 | Lookahead / state injection: `SnapshotAdapter`, `SnapshotValidationError`, `engine.injectState()`, `prefetchForRun()` lookahead mode, ExperimentControls snapshot source selector and lookahead horizon label |
 
 ---
 
@@ -253,6 +254,91 @@ When Rolling is selected, the Replications input is disabled (rolling is always 
 **LiveRunBanner component:**
 
 `src/ui/execute/LiveRunBanner.jsx` -- displays a pulsing green LIVE indicator and per-source value/time-since-last-fetch chips during a rolling run.
+
+---
+
+### 2.7 Lookahead / State Injection (Sprint 61)
+
+Lookahead mode enables the engine to begin a simulation run from a live system state rather than an empty queue. This is useful for predictive analysis: "given the current queue lengths and in-service entities, what will happen over the next N minutes?"
+
+**Key components added:**
+
+| File | Role |
+|---|---|
+| `adapters/SnapshotAdapter.js` | Fetch and validate a `SystemSnapshot` from a REST endpoint; expose `getSnapshot()` |
+| `adapters/index.js` | `AdapterRegistry._getAdapter()` handles `type === 'snapshot'`; `AdapterRegistry.getSnapshot(sourceId)` added |
+| `src/engine/index.js` | `engine.injectState(snapshot)` added; `prefetchForRun()` extended for `lookahead` mode |
+
+**`SnapshotAdapter` contract:**
+
+```js
+const adapter = new SnapshotAdapter(dataSource, envSecrets?);
+await adapter.prefetch();          // fetch URL, validate schema, store in this._snapshot
+const snap = adapter.getSnapshot(); // returns SystemSnapshot or null
+adapter.dispose();                  // clears cached snapshot
+```
+
+`prefetch()` throws `SnapshotValidationError` (name: `'SnapshotValidationError'`) if the response JSON is missing required fields. Network errors are re-thrown as-is.
+
+**`SystemSnapshot` schema:**
+
+```js
+{
+  clock: number,           // real-world time offset (minutes) — metadata only
+  entities: [
+    {
+      type: string,        // must match an entity type name in the model
+      id: string,
+      attrs: {},
+      location: "queue" | "server",
+      queueId?: string     // required when location === "queue"
+    }
+  ],
+  queues: {
+    [queueId: string]: { waiting: number, serving: number }
+  }
+}
+```
+
+Validation rules enforced by `SnapshotAdapter.prefetch()`:
+- `clock` must be a finite number
+- `entities` must be an array (may be empty)
+- `queues` must be a non-null, non-array object (may be empty `{}`)
+- Each entity must have `type` (string), `id` (string), `location` (`"queue"` or `"server"`)
+- Entity with `location === "queue"` must have `queueId` (string)
+
+**`engine.injectState(snapshot)` contract:**
+
+```js
+const injected = engine.injectState(snapshot);
+// Returns: number of customer entities injected
+```
+
+- Removes all existing customer entities from the pool (server entities are preserved)
+- Creates a customer entity record for each entry in `snapshot.entities`; `location === "queue"` entities get `status: "waiting"` and `queue = queueId`; `location === "server"` entities get `status: "serving"`
+- Sets `_warmupComplete = true` (warm-up is skipped) and prunes the WARMUP FEL entry
+- Resets `clock` to 0 (simulation clock, not the wall-clock offset)
+- Does NOT add B-events to the FEL — arrivals still come from scheduled B-events
+
+**Lookahead run flow:**
+
+1. Set `model.experimentDefaults.liveDataMode = 'lookahead'`
+2. Add a data source with `type: 'snapshot'` to `model.dataSources`
+3. Call `await prefetchForRun(model, registry, engineRef)` — fetches snapshot, calls `engineRef.injectState(snapshot)` if `engineRef` is provided
+4. Call `engine.runAll()` or `engine.runAllAsync()` — simulation starts with pre-loaded entities, no warm-up phase
+
+**`liveDataMode` values (expanded):**
+
+```json
+"liveDataMode": "calibrated_batch" | "rolling" | "lookahead" | null
+```
+
+**ExperimentControls UI additions (Sprint 61):**
+
+- `"Lookahead (state injection)"` option added to the Live data mode dropdown
+- When `liveDataMode === 'lookahead'`: a **Snapshot source** dropdown appears (filters `dataSources` to `type === 'snapshot'`); selection updates `model.experimentDefaults.snapshotSourceId`
+- When `liveDataMode === 'lookahead'` and `terminationMode === 'time'`: the run duration label changes to **"LOOKAHEAD HORIZON (MINUTES)"**
+- Replications input is disabled (locked to 1) in both rolling and lookahead modes
 
 ---
 

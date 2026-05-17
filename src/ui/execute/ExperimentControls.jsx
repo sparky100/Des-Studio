@@ -22,6 +22,8 @@ export function ExperimentControls({
   persistExperimentDefaults,
   liveDataMode,
   onLiveDataModeChange,
+  snapshotSourceId,
+  onSnapshotSourceChange,
 }) {
   // hasLiveBindings: model has dataSources AND at least one B/C-event has a paramSource binding
   const hasLiveBindings = (() => {
@@ -34,6 +36,10 @@ export function ExperimentControls({
     );
     return bBindings || cBindings;
   })();
+
+  const snapshotSources = (model?.dataSources || []).filter(ds => ds.type === 'snapshot');
+  const isLookahead = liveDataMode === 'lookahead';
+  const isLockedToOneRun = liveDataMode === 'rolling' || isLookahead;
   return (
     <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
       <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -140,6 +146,30 @@ export function ExperimentControls({
                   <option value="">Static (no live data)</option>
                   <option value="calibrated_batch">Calibrated Batch</option>
                   <option value="rolling">Rolling (single run)</option>
+                  <option value="lookahead">Lookahead (state injection)</option>
+                </select>
+              </div>
+            )}
+
+            {isLookahead && snapshotSources.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SNAPSHOT SOURCE</span>
+                <select
+                  aria-label="Snapshot source"
+                  value={snapshotSourceId || ""}
+                  onChange={e => {
+                    const value = e.target.value || null;
+                    onSnapshotSourceChange?.(value);
+                    persistExperimentDefaults({ snapshotSourceId: value });
+                  }}
+                  style={{ background: C.surface, border: `1px solid ${C.border}`,
+                    borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12,
+                    padding: "6px 8px", outline: "none", cursor: "pointer" }}
+                >
+                  <option value="">— select source —</option>
+                  {snapshotSources.map(ds => (
+                    <option key={ds.id} value={ds.id}>{ds.label || ds.id}</option>
+                  ))}
                 </select>
               </div>
             )}
@@ -150,23 +180,28 @@ export function ExperimentControls({
                 aria-label="Replication count"
                 type="number"
                 value={replications}
-                disabled={liveDataMode === "rolling"}
+                disabled={isLockedToOneRun}
                 onChange={e => {
                   const value = parseInt(e.target.value, 10) || 0;
                   setReplications(value);
                   persistExperimentDefaults({ replications: value });
                 }}
-                title={liveDataMode === "rolling" ? "Rolling mode always uses a single run" : undefined}
+                title={isLockedToOneRun ? "This mode always uses a single run" : undefined}
                 style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`,
-                  borderRadius: 4, color: liveDataMode === "rolling" ? C.muted : C.amber,
+                  borderRadius: 4, color: isLockedToOneRun ? C.muted : C.amber,
                   fontFamily: FONT, fontSize: 12,
                   padding: "6px 8px", outline: "none",
-                  opacity: liveDataMode === "rolling" ? 0.45 : 1,
-                  cursor: liveDataMode === "rolling" ? "not-allowed" : "auto" }}
+                  opacity: isLockedToOneRun ? 0.45 : 1,
+                  cursor: isLockedToOneRun ? "not-allowed" : "auto" }}
               />
               {liveDataMode === "rolling" && (
                 <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
                   Rolling mode: 1 run only
+                </span>
+              )}
+              {isLookahead && (
+                <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                  Lookahead mode: 1 run only
                 </span>
               )}
             </div>
@@ -222,9 +257,11 @@ export function ExperimentControls({
 
             {terminationMode === "time" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN DURATION</span>
+                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+                  {isLookahead ? "LOOKAHEAD HORIZON (MINUTES)" : "RUN DURATION"}
+                </span>
                 <input
-                  aria-label="Run duration"
+                  aria-label={isLookahead ? "Lookahead horizon (minutes)" : "Run duration"}
                   type="number"
                   value={maxSimTime}
                   onChange={e => {

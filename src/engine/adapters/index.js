@@ -2,6 +2,7 @@
 
 import { RestAdapter }      from './RestAdapter.js';
 import { WebSocketAdapter } from './WebSocketAdapter.js';
+import { SnapshotAdapter }  from './SnapshotAdapter.js';
 
 /**
  * Transparent no-op registry used by default when no live sources are configured.
@@ -45,6 +46,8 @@ export class AdapterRegistry {
       this._adapters[source.id] = new RestAdapter(resolved);
     } else if (resolved.type === 'websocket') {
       this._adapters[source.id] = new WebSocketAdapter(resolved, this._wsOptions || {});
+    } else if (resolved.type === 'snapshot') {
+      this._adapters[source.id] = new SnapshotAdapter(resolved, this._envSecrets);
     } else if (resolved.type === 'mock') {
       throw new Error(`No mock registered for source "${source.id}" — call registerMock() before use`);
     } else {
@@ -172,6 +175,17 @@ export class AdapterRegistry {
       }
       return distParams;
     }
+  }
+
+  /**
+   * Returns the cached SystemSnapshot from a SnapshotAdapter, or null if not available.
+   * @param {string} sourceId
+   * @returns {object | null}
+   */
+  getSnapshot(sourceId) {
+    const adapter = this._adapters[sourceId];
+    if (!adapter || typeof adapter.getSnapshot !== 'function') return null;
+    return adapter.getSnapshot();
   }
 
   dispose() {

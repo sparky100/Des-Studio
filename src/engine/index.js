@@ -13,6 +13,7 @@ import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingStat
 import { evalCondition }                        from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
 import { nullRegistry }                        from "./adapters/index.js";
+import { SnapshotAdapter }                     from "./adapters/SnapshotAdapter.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
 
@@ -24,13 +25,28 @@ export { DISTRIBUTIONS, sample, sampleAttrs };
  * @param {{ experimentDefaults?: { liveDataMode?: string } }} model
  * @param {import('./adapters/index.js').AdapterRegistry | typeof import('./adapters/index.js').nullRegistry} registry
  */
-export async function prefetchForRun(model, registry) {
+export async function prefetchForRun(model, registry, engineRef = null) {
   const mode = model?.experimentDefaults?.liveDataMode;
   if (mode === 'calibrated_batch') {
     await registry.prefetchAll();
   }
   // rolling: WebSocketAdapter.prefetch() waits for first message, keeps connection open
   if (mode === 'rolling') {
+    await registry.prefetchAll();
+  }
+  if (mode === 'lookahead') {
+    const snapshotSource = (model?.dataSources || []).find(ds => ds.type === 'snapshot');
+    if (snapshotSource) {
+      const adapter = new SnapshotAdapter(snapshotSource);
+      await adapter.prefetch();
+      const snapshot = adapter.getSnapshot();
+      if (snapshot && engineRef && typeof engineRef.injectState === 'function') {
+        engineRef.injectState(snapshot);
+      } else if (snapshot && typeof registry.getSnapshot === 'function') {
+        // Store on registry's internal adapter map via registerMock-equivalent approach
+        registry.registerMock?.(snapshotSource.id, adapter);
+      }
+    }
     await registry.prefetchAll();
   }
 }
@@ -874,10 +890,55 @@ const cycleLog = [];
     }
   }
 
+  /**
+   * Populate entity store from a SystemSnapshot; skip warm-up; reset clock to 0.
+   * Does NOT add B-events to the FEL — arrivals still come from scheduled B-events.
+   * Can be called before any steps.
+   *
+   * @param {object} snapshot  — validated SystemSnapshot (clock, entities[], queues{})
+   * @returns {number}         — number of customer entities injected
+   */
+  function injectState(snapshot) {
+    // Remove all existing customer entities (preserve server entities)
+    entities = entities.filter(e => e.role === 'server');
+
+    let injected = 0;
+    for (const se of snapshot.entities || []) {
+      const e = {
+        id:          nextId(),
+        type:        se.type,
+        role:        'customer',
+        status:      se.location === 'queue' ? 'waiting' : 'serving',
+        attrs:       se.attrs ? { ...se.attrs } : {},
+        arrivalTime: 0,
+        stages:      [],
+        lastStageStart: null,
+        loopCount:   0,
+      };
+      if (se.location === 'queue') {
+        e.queue = se.queueId;
+        e.waitingSince = 0;
+        e.waitingFor = { kind: 'queue', queueName: se.queueId, enteredAt: 0 };
+      }
+      entities.push(e);
+      injected++;
+    }
+
+    // Mark warm-up as already complete and prune the WARMUP FEL entry
+    _warmupComplete = true;
+    fel = fel.filter(ev => ev.type !== 'WARMUP');
+
+    // Reset simulation clock to 0 (not the wall-clock offset from the snapshot)
+    clock = 0;
+
+    return injected;
+  }
+
   return {
     step,
     runAll,
     runAllAsync,
+    injectState,
     getSnap:         () => snap(clock),
     getFelSize:      () => fel.length,
     getSummary,
