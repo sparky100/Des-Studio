@@ -1869,6 +1869,25 @@ npm run build
 
 ---
 
+### Sprint 60 -- Rolling Mode and WebSocket Adapter
+
+**Goal:** Extend the real-time data integration layer to support rolling (continuously refreshed) parameter values via WebSocket, with an async FEL loop and a run mode selector in the Execute panel.
+
+**Status:** Complete -- branch `sprint-60`
+
+| Feature | Status | Description |
+|---|---|---|
+| F60.1 -- `WebSocketAdapter` | Done | `src/engine/adapters/WebSocketAdapter.js` -- connect, first-message wait (10 s timeout), getLatest(), dispose(), DI via _wsFactory |
+| F60.2 -- `AdapterRegistry.resolveAsync()` | Done | Added to `src/engine/adapters/index.js`; also added to nullRegistry |
+| F60.3 -- `runAllAsync()` | Done | Added to engine closure in `src/engine/index.js`; pre-resolves paramSource fields before each step |
+| F60.4 -- `prefetchForRun()` rolling support | Done | Extended to call `prefetchAll()` for rolling mode as well as calibrated_batch |
+| F60.5 -- ExperimentControls run mode selector | Done | `src/ui/execute/ExperimentControls.jsx` -- hasLiveBindings guard, dropdown, disabled replications for rolling |
+| F60.6 -- `LiveRunBanner` | Done | `src/ui/execute/LiveRunBanner.jsx` -- pulsing LIVE indicator, per-source value + time chips, 1-second tick |
+| F60.7 -- WebSocket adapter tests (8) | Done | `src/engine/adapters/__tests__/websocket.test.js` |
+| F60.8 -- Rolling mode tests (7) | Done | `tests/engine/rolling-mode.test.js` |
+
+---
+
 *End of build plan. Update after each sprint.*
 *The most important rule: read the existing file before changing it.*
-*Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec — never add a free-text escape hatch.*
+*Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec -- never add a free-text escape hatch.*

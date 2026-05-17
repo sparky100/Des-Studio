@@ -1,15 +1,17 @@
 // engine/adapters/index.js — AdapterRegistry: resolves parameter values from data sources
 
-import { RestAdapter } from './RestAdapter.js';
+import { RestAdapter }      from './RestAdapter.js';
+import { WebSocketAdapter } from './WebSocketAdapter.js';
 
 /**
  * Transparent no-op registry used by default when no live sources are configured.
  * Ensures engine callers never need to null-check the registry.
  */
 export const nullRegistry = {
-  resolve(distParams, _paramSource) { return distParams; },
-  async prefetchAll()               { },
-  dispose()                         { },
+  resolve(distParams, _paramSource)             { return distParams; },
+  async resolveAsync(distParams, _paramSource)  { return distParams; },
+  async prefetchAll()                           { },
+  dispose()                                     { },
 };
 
 /**
@@ -41,6 +43,8 @@ export class AdapterRegistry {
 
     if (resolved.type === 'rest') {
       this._adapters[source.id] = new RestAdapter(resolved);
+    } else if (resolved.type === 'websocket') {
+      this._adapters[source.id] = new WebSocketAdapter(resolved, this._wsOptions || {});
     } else if (resolved.type === 'mock') {
       throw new Error(`No mock registered for source "${source.id}" — call registerMock() before use`);
     } else {
@@ -100,6 +104,57 @@ export class AdapterRegistry {
 
       if (rawValue == null) {
         // Adapter not yet fetched or field missing — use fallback if provided
+        if (paramSource.fallback != null) {
+          return { ...distParams, [targetKey]: String(paramSource.fallback) };
+        }
+        return distParams;
+      }
+
+      return { ...distParams, [targetKey]: String(rawValue) };
+    } catch {
+      if (paramSource.fallback != null) {
+        const targetKey =
+          paramSource.targetParam ||
+          (distParams && Object.keys(distParams)[0]) ||
+          'value';
+        return { ...distParams, [targetKey]: String(paramSource.fallback) };
+      }
+      return distParams;
+    }
+  }
+
+  /**
+   * Async variant of resolve(). If the adapter exposes a getValue() method, awaits
+   * it; otherwise falls back to getLatest(). Used by runAllAsync() in rolling mode
+   * so that each sample site can wait for a fresh value if the adapter needs it.
+   *
+   * @param {Record<string, string>} distParams
+   * @param {import('./types.js').ParamSource | undefined} paramSource
+   * @returns {Promise<Record<string, string>>}
+   */
+  async resolveAsync(distParams, paramSource) {
+    if (!paramSource || !paramSource.sourceId) return distParams;
+
+    const source = this._sources[paramSource.sourceId];
+    if (!source) return distParams;
+
+    try {
+      const adapter = this._getAdapter(source);
+
+      // If adapter has an async getValue, await it; otherwise use synchronous getLatest
+      let rawValue;
+      if (typeof adapter.getValue === 'function') {
+        rawValue = await adapter.getValue(paramSource.field);
+      } else {
+        rawValue = adapter.getLatest(paramSource.field);
+      }
+
+      const targetKey =
+        paramSource.targetParam ||
+        (distParams && Object.keys(distParams)[0]) ||
+        'value';
+
+      if (rawValue == null) {
         if (paramSource.fallback != null) {
           return { ...distParams, [targetKey]: String(paramSource.fallback) };
         }

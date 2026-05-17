@@ -1,9 +1,9 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.4.0
+**Version:** 1.5.0
 **Date:** 2026-05-17
-**Sprint baseline:** Sprint 59
-**Status:** Living document — updated at end of each sprint
+**Sprint baseline:** Sprint 60
+**Status:** Living document -- updated at end of each sprint
 
 ---
 
@@ -16,6 +16,7 @@
 | v1.2 | 2026-05-17 | Sprint 57 | Real-time adapter layer — RestAdapter, AdapterRegistry, nullRegistry, paramSource schema extension |
 | v1.3 | 2026-05-17 | Sprint 58 | Report generation — `generateReport()`, LLM prompt builders, html2canvas canvas capture, Execute panel Export Report button |
 | v1.4 | 2026-05-17 | Sprint 59 | Calibrated Batch mode: `prefetchForRun()`, `AdapterRegistry.prefetchAll()`, `dataSources[]` model field, Data Source Manager UI, parameter binding toggles in BEventEditor/CEventEditor |
+| v1.5 | 2026-05-17 | Sprint 60 | Rolling mode: `WebSocketAdapter`, `resolveAsync()`, `runAllAsync()`, run mode selector in ExperimentControls, `LiveRunBanner` component |
 
 ---
 
@@ -184,7 +185,74 @@ export async function prefetchForRun(model, registry) {
 | `src/ui/editors/BEventEditor.jsx` | Static/Live toggle per schedule distParam; source dropdown, field path, fallback inputs |
 | `src/ui/editors/CEventEditor.jsx` | Same pattern for cSchedule distParams |
 
-**Backwards compatibility:** All existing `buildEngine()` callers continue to work without change. Models without `paramSource` fields run identically to before. The `nullRegistry` default adds zero overhead — it returns the same object reference.
+**Backwards compatibility:** All existing `buildEngine()` callers continue to work without change. Models without `paramSource` fields run identically to before. The `nullRegistry` default adds zero overhead -- it returns the same object reference.
+
+---
+
+### 2.6 Rolling Mode and WebSocket Adapter (Sprint 60)
+
+Rolling mode provides **continuously refreshed** parameter values during a single simulation run. At each FEL scheduling point the engine fetches the latest value from the adapter rather than using a pre-fetched snapshot.
+
+**Key components added:**
+
+| File | Role |
+|---|---|
+| `adapters/WebSocketAdapter.js` | Connect to WS endpoint; wait up to 10 s for first message; expose `getLatest(field)` synchronously |
+| `adapters/index.js` | `AdapterRegistry.resolveAsync(distParams, paramSource)` -- async variant of `resolve()`; `nullRegistry.resolveAsync` added |
+
+**WebSocketAdapter contract:**
+
+```js
+const adapter = new WebSocketAdapter(dataSource, { _wsFactory });
+await adapter.prefetch();           // connects + waits for first message
+const v = adapter.getLatest('mean_rate');  // returns latest value (null before first message)
+adapter.dispose();                  // closes the connection
+```
+
+`_wsFactory` is an optional dependency-injection hook for testing in Node.js/jsdom environments. If no `_wsFactory` is provided and `WebSocket` is not available globally, `prefetch()` throws: `"WebSocket not available in this environment"`.
+
+**`resolveAsync()` on AdapterRegistry:**
+
+```js
+const resolved = await registry.resolveAsync(distParams, paramSource);
+```
+
+Same contract as `resolve()` but async. If the adapter exposes a `getValue(field)` method, it is awaited; otherwise falls back to `getLatest(field)`. Used by `runAllAsync()` to pre-populate the adapter cache before each `step()`.
+
+**`runAllAsync()` on the engine object:**
+
+```js
+const engine = buildEngine(model, seed, ..., registry);
+const result = await engine.runAllAsync(onStep);
+```
+
+Drives the same A->B->C loop as `runAll()`, but before each `step()` calls `_asyncResolveDue()` to pre-resolve all `paramSource` fields via `registry.resolveAsync()`. The synchronous `step()` then calls `registry.resolve()` which reads from the already-refreshed adapter cache.
+
+`onStep(snap, cycleLog)` is an optional callback called after each step (used by the UI for live progress updates).
+
+**Rolling run flow:**
+
+1. Set `model.experimentDefaults.liveDataMode = 'rolling'`
+2. Caller calls `await prefetchForRun(model, registry)` -- calls `prefetchAll()` which connects WebSocket and waits for first message
+3. Call `await engine.runAllAsync(onStep)` -- runs FEL loop, refreshing adapter cache before each step
+4. Registry stays open; WebSocket connection persists for the run duration
+5. Call `registry.dispose()` after the run to close the connection
+
+**`liveDataMode` values (expanded):**
+
+```json
+"liveDataMode": "calibrated_batch" | "rolling" | null
+```
+
+**ExperimentControls UI additions (Sprint 60):**
+
+A **Live data mode** dropdown appears when the model has `dataSources.length > 0` AND at least one B/C-event schedule has a `paramSource.sourceId` binding (`hasLiveBindings`). Options: Static (no live data), Calibrated Batch, Rolling (single run).
+
+When Rolling is selected, the Replications input is disabled (rolling is always 1 run).
+
+**LiveRunBanner component:**
+
+`src/ui/execute/LiveRunBanner.jsx` -- displays a pulsing green LIVE indicator and per-source value/time-since-last-fetch chips during a rolling run.
 
 ---
 
