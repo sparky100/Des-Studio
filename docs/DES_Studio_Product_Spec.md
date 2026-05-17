@@ -1,7 +1,7 @@
 # DES Studio — Product Specification
-**Version:** 1.0.0
-**Date:** 2026-05-16
-**Sprint baseline:** Sprint 45
+**Version:** 1.1.0
+**Date:** 2026-05-17
+**Sprint baseline:** Sprint 55a
 **Status:** Living document — reviewed and updated at end of each sprint
 
 ---
@@ -11,6 +11,7 @@
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
 | v1.0.0 | 2026-05-16 | Sprint 45 | Initial product specification |
+| v1.1.0 | 2026-05-17 | Sprint 55a | Added COSEIZE macro; updated limitations (loopConfig/balkCondition status); AI Apply & Re-run; keyboard shortcuts; cost summary in Results view; distribution picker redesign; responsive layout; sprint 46–55a roadmap closure |
 
 ---
 
@@ -134,6 +135,7 @@ Effect macros are the action vocabulary of DES Studio. They appear in the Effect
 | BATCH | Collects N individual entities from a queue into a single batch entity for group processing |
 | UNBATCH | Restores the original individual entities from a completed batch back into a target queue |
 | MATCH | Pairs one entity from each of two queues into a single batch — models kitting and assembly operations where two components must meet |
+| COSEIZE | Atomically claims one entity from a queue and one idle server of each listed type simultaneously; if any type has no idle server the entire attempt fails cleanly with no partial seizure — models operations that require multiple resource types at once (for example, a patient who needs both a doctor and an examination room) |
 
 #### State Manipulation
 
@@ -251,11 +253,9 @@ Templates 15, 16, and 17 were added at Sprint 45 to demonstrate capabilities int
 
 ## 6. Limitations and Known Constraints
 
-DES Studio is a mature and widely capable tool, but the following limitations apply as of Sprint 45.
+DES Studio is a mature and widely capable tool, but the following limitations apply as of Sprint 55a.
 
 **No entity conveyors or transporters.** Material-handling systems that model the physical movement of entities between locations — conveyor belts, automated guided vehicles, fork-lift routing — are not natively supported. These require continuous spatial modelling that is outside the discrete-event entity-flow paradigm the current engine implements.
-
-**loopConfig and balkCondition are partially wired.** Both the Loop Guard (loopConfig) and queue-level conditional balking (balkCondition) are fully exposed in the model editor and are included in the model definition. Engine evaluation of these expressions is partially implemented as of Sprint 45; complete wiring is planned for Sprint 46.
 
 **No real-time collaboration.** DES Studio is a single-user tool per model session. Two users editing the same model simultaneously will overwrite each other's changes. There is no presence indicator, conflict resolution, or live cursors. This is a known gap that would require a separate collaboration infrastructure layer.
 
@@ -263,13 +263,34 @@ DES Studio is a mature and widely capable tool, but the following limitations ap
 
 **AI Insights require a configured LLM API key.** The five AI Insights capabilities (Interpret Results, Suggest Improvements, Sensitivity Analysis, Ask a Question, Compare Runs) depend on a large language model provider configured by the platform administrator. DES Studio deployments without a configured API key will show the AI Insights panel but will be unable to generate responses. Self-hosted deployments require an Anthropic or OpenAI API key set in the platform admin panel.
 
+**AI Apply & Re-run supports numeric field patches only.** The Apply & Re-run feature can automatically apply suggestions that change numeric fields (server count, queue capacity, state variable values). Suggestions requiring structural model changes — adding a new queue, changing routing topology, adding a new event — are presented as manual instructions; the Apply button is disabled for these.
+
 ---
 
-## 7. Roadmap (Sprint 46 Candidates)
+## 7. Delivered Since Sprint 45
 
-The following capabilities are the leading candidates for Sprint 46, based on open gaps and user feedback at the close of Sprint 45.
+Sprints 46 through 55a are complete. The following user-visible capabilities were added.
 
-- **Engine wiring for loopConfig and balkCondition.** Complete the runtime evaluation of Loop Guard expressions and conditional balking expressions, closing the gap between the fully-exposed UI fields and the partially-wired engine behaviour.
-- **AI comparison mode with goal gap awareness.** Extend the Compare Runs AI capability to receive goal gap data for both selected runs, enabling the AI to characterise not just which run performed better but which run was closer to satisfying the defined feasibility targets.
-- **Prompt caching for reduced AI latency.** Apply prompt caching to the model context and goals portions of AI Insights calls, which are repeated across all five capability types, to reduce API cost and response time for users who run multiple AI analyses in a single session.
-- **Per-replication entity anomaly aggregation.** Extend the Entities view anomaly detection to aggregate across replications, surfacing entity types and attribute combinations that are consistently anomalous across multiple runs rather than just within a single run.
+| Sprint | Capability |
+|--------|-----------|
+| 46 | **AI Apply & Re-run** — structured suggestion cards; "Apply & Re-run" button runs a patched model copy and shows before/after goal compliance without mutating the saved model |
+| 47a | **Paste JSON import** — model JSON can be pasted directly from the clipboard in the library header, alongside the existing file-upload import |
+| 47 | **Accessibility (WCAG 2.1 AA)** — focus-visible outlines, minimum 11 px text, aria-live regions on AI streaming, scope attributes on table headers, aria-labelledby on modals, improved colour contrast |
+| 48 | **Design token system** — unified SPACE, RADIUS, SHADOW, Z-index, TRANS, and TYPO tokens; alpha() utility; consistent across all editor components |
+| 49 | **UX quick wins** — Ctrl+S / Cmd+S save shortcut; two-step discard confirmation; dismissible starter guide card; tab badge tooltips showing first validation message |
+| 50 | **Feedback & notifications** — toast notification system (success/error/warning/info, auto-dismiss, max 3 visible); save banner replaced by toasts; bulk run selection in history (select-all, bulk archive/export); keyboard shortcuts modal (? key) |
+| 51 | **DistPicker redesign** — distribution families (Parametric / Time-varying / From data); sparkline shape preview; inline parameter validation on blur |
+| 52 | **Responsive layout** — "More ▾" tab overflow dropdown at compact widths; Execute panel vertical stacking on narrow viewports; admin panel single-column on mobile |
+| 53 | **Internal refactoring** — AuthShell and ModelHistoryTab extracted; no user-visible change |
+| 54 | **Cost summary in Results view** — total cost, cost per served entity, and served count appear as a dedicated strip in the Analysis view whenever the model uses at least one COST macro |
+| 55a | **Internal refactoring** — ModelHealthPanel, ModelDetailHeader, SaveBanner, ModelTabBar, AppNavBar, ModelLibrary, ExperimentControls extracted; no user-visible change |
+
+## 8. Roadmap (Sprint 56 and Beyond)
+
+Sprint 56 is focused on extracting custom hooks from the ExecutePanel component to reduce its size below 2,000 lines. This is an internal code-quality sprint with no user-visible changes.
+
+Leading candidates for subsequent sprints include:
+
+- **Per-replication entity anomaly aggregation.** Surface entity types and attribute combinations that are consistently anomalous across replications, not just within a single run.
+- **Prompt caching for reduced AI latency.** Apply prompt caching to the static model-context portions of AI Insights calls, reducing cost and response time for users who run multiple AI analyses in a session.
+- **AI comparison mode with full goal gap awareness.** Extend the Compare Runs narrative to receive goal gap data for both selected runs.
