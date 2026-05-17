@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.5.0 (Sprints 1–45)
+Version: 1.6.0 (Sprints 1–55a)
 
 ---
 
@@ -10,10 +10,11 @@ Version: 1.5.0 (Sprints 1–45)
 |---------|---------|---------|
 | v1.0.0 | 1–30 | Core simulation engine, Three-Phase execution, Forms/Tabs editors, Execute panel, replication runner, parametric sweep |
 | v1.1.0 | 31–33 | Preemption (PREEMPT macro), server failures/repair (FAIL/REPAIR), enhanced analytics and run comparison |
-| v1.2.0 | 34–40 | Extended distribution library, entity attribute model, BATCH/SPLIT/MATCH macros, container resource pools, COST macro |
+| v1.2.0 | 34–40 | Extended distribution library, entity attribute model, BATCH/SPLIT/MATCH/UNBATCH macros, container resource pools (FILL/DRAIN), COST macro, COSEIZE macro |
 | v1.3.0 | 41–42 | Visual Designer (drag-and-drop canvas), full UI capability exposure for all model element fields |
 | v1.4.0 | 43–44 | AI Insights panel (Interpret Results, Suggest Improvements, Sensitivity Analysis, Ask a Question, Compare Runs), Execution Insights |
 | v1.5.0 | 45 | AI prompt grounding — results and model context injected into all AI analysis calls for higher-quality suggestions |
+| v1.6.0 | 46–55a | AI Apply & Re-run, Paste JSON import, accessibility (WCAG 2.1 AA), design token system, UX polish (keyboard shortcuts, toasts, DistPicker redesign), responsive layout, cost summary in Results view, god component refactoring |
 
 ---
 
@@ -115,6 +116,8 @@ After sign-in (or on first open), DES Studio shows the Model Library with two ta
 ### Creating a model
 
 Click **New Model** in My Models. Give the model a name and (optionally) a description. DES Studio creates an empty model and opens it in the Model Detail view.
+
+To bring in an existing model definition, use **Import** to upload a `.json` file, or click **Paste JSON** in the library header to paste a model JSON directly from the clipboard. Both routes run the same validation gate before opening the model.
 
 ### Three authoring modes
 
@@ -325,14 +328,18 @@ Effect macros are the action vocabulary of DES Studio. They appear in the Effect
 | ASSIGN | `ASSIGN(serverType, queueName)` | Removes the next entity from the queue, binds it to a free server unit | Start-of-service C-Event |
 | RENEGE | `RENEGE(queueName)` | Removes a waiting entity from a queue after a timeout (reneging) | Modelling impatient customers |
 | BATCH | `BATCH(n, entityType)` | Collects n individual entities of the given type into a single batch entity | Assembly, group boarding, bulk processing |
+| UNBATCH | `UNBATCH(queueName)` | Splits a completed batch back into its constituent individual entities, placing each in the named queue | Post-batch processing where individuals must continue separately |
 | SPLIT | `SPLIT(n)` | Clones the current entity into n copies, each following independent paths | Parallel processing, order splitting |
-| MATCH | `MATCH(batch, entityType)` | Joins an individual entity to an existing batch | Partial assembly, kitting |
+| MATCH | `MATCH(typeA, queueA, typeB, queueB, targetQueue)` | Pairs one entity from queueA with one entity from queueB into a combined batch placed in targetQueue | Kitting and assembly where two components must meet |
+| COSEIZE | `COSEIZE(queueName, serverType1, serverType2, ...)` | Atomically seizes one entity from the queue and one idle server of each listed type; fails cleanly if any type has no idle server | Multi-resource operations requiring simultaneous capture (e.g. patient needs both a doctor and a room) |
 | PREEMPT | `PREEMPT(serverType, custId)` | Interrupts the entity currently in service on the server and replaces it with the higher-priority entity | Emergency/priority override |
 | FAIL | `FAIL(serverType)` | Places the server into a failed (unavailable) state | Random breakdowns |
 | REPAIR | `REPAIR(serverType)` | Restores the server from failed state back to idle | End of repair B-Event |
 | COST | `COST(amount)` | Adds amount to the model's cumulative cost total | Cost-benefit analysis, penalty tracking |
 | SET | `SET(varName, expr)` | Sets a state variable to the value of an expression | Shift changes, counters, flags |
 | SET_ATTR | `SET_ATTR(attrName, expr)` | Sets an attribute on the current entity instance | Recording arrival time, priority, due date |
+| FILL | `FILL(containerName, amount)` | Adds a quantity to the named container (clamped to its capacity) | Inventory replenishment, fuel top-up, stock inflow |
+| DRAIN | `DRAIN(containerName, amount)` | Removes a quantity from the named container; only fires when the current level is sufficient | Inventory consumption, kitting where stock must be available |
 
 Multiple macros can be listed in order in the same Effects field; they execute sequentially when the event fires.
 
@@ -340,7 +347,7 @@ Multiple macros can be listed in order in the same Effects field; they execute s
 
 ## 6. Distributions Reference
 
-Distributions control when events occur or how long they last.
+Distributions control when events occur or how long they last. The distribution picker groups options into three families — **Parametric** (classical statistical distributions with numeric parameters), **Time-varying** (piecewise rate schedules), and **From data** (distributions read from entity attributes). Selecting a family narrows the list to relevant options. A sparkline shape preview appears below the picker when the **Preview** toggle is on, updating reactively as parameters change. Parameter fields validate on blur and show an inline error if a value is out of bounds.
 
 | Distribution | Parameters | Typical use |
 |-------------|------------|-------------|
@@ -393,9 +400,18 @@ After any run click **Save Run** (or it saves automatically). Each saved run sto
 - All result statistics
 - Configuration (replications, end time, seed)
 
-Open **Run History** to list, re-open, or delete saved runs. Select two runs and click **Compare** to view a side-by-side KPI table and charts. The AI **Compare Runs** feature provides a narrative comparison (see Section 9.5).
+Open **Run History** to list, re-open, or delete saved runs. Use the per-row checkboxes (or **Select all**) to select multiple runs for bulk archive or bulk export. Select two runs and click **Compare** to view a side-by-side KPI table and charts. The AI **Compare Runs** feature provides a narrative comparison (see Section 9.5).
 
-### 7.5 Warmup period and Welch detection
+### 7.5 Keyboard shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+S` / `Cmd+S` | Save the current model |
+| `?` | Open the Keyboard Shortcuts reference modal |
+
+Pressing `?` at any time (while focus is outside a text input) opens a modal listing all available shortcuts.
+
+### 7.6 Warmup period and Welch detection
 
 Long-running models may start in an unrealistic empty state. The Analysis view applies **Welch's method** to detect the warmup period automatically: it finds the point in the cumulative mean chart where the running mean stabilises. Statistics reported in the KPI summary exclude data from before the detected warmup cutoff, giving steady-state estimates rather than transient ones.
 
@@ -448,9 +464,10 @@ The Analysis view (ResultsWorkspace) is the primary results dashboard. It contai
 
 | Panel | Contents |
 |-------|----------|
-| KPI summary | Throughput, mean wait, mean time in system, goal status (green/red) |
+| KPI summary | Throughput, mean wait, mean time in system, goal status (green/red border per goal) |
 | Per-queue wait stats | Mean, max, p50, p90, p99 for each queue |
 | Per-resource utilisation | Fraction of time each server type was busy, with a utilisation bar |
+| Cost summary | Total cost, cost per served entity, and served count — shown when the model uses at least one COST macro |
 | Cumulative mean chart | Running mean of the primary KPI over simulation time, with warmup cutoff marked |
 | Replication CI table | When replications are run: mean ± 95% CI for each KPI |
 
@@ -480,7 +497,13 @@ Click **Suggest Improvements** for a structured diagnostic. For each suggestion 
 5. **Goal impact** — whether the change is predicted to bring the model within performance goal thresholds
 6. **Ranking** — suggestions ordered by expected value and confidence
 
-### 9.3 Sensitivity Analysis
+### 9.3 Apply & Re-run (what-if verification)
+
+Each suggestion card from **Suggest Improvements** includes an **Apply & Re-run** button. Clicking it creates a temporary copy of the model with the suggested change applied (for example, increasing server count by one), runs the same replication configuration against that copy, and shows a before/after goal compliance table inline in the panel — without touching your saved model. This lets you verify a suggestion's predicted effect before deciding whether to apply it permanently.
+
+Suggestions that require structural changes the tool cannot auto-apply (for example, adding a new queue) show the button as disabled with a note explaining what to change manually.
+
+### 9.4 Sensitivity Analysis
 
 Click **Sensitivity Analysis** to assess how much uncertainty exists in the results. The output includes:
 
@@ -488,7 +511,7 @@ Click **Sensitivity Analysis** to assess how much uncertainty exists in the resu
 - Parameters where small changes have large KPI effects (high sensitivity)
 - Recommendations on replication count if CIs are wide
 
-### 9.4 Ask a Question
+### 9.5 Ask a Question
 
 Type any question about the model or results in the text box and click **Ask**. Examples:
 
@@ -498,7 +521,7 @@ Type any question about the model or results in the text box and click **Ask**. 
 
 The AI answers using the current model JSON and results as context.
 
-### 9.5 Compare Runs
+### 9.6 Compare Runs
 
 Select two saved runs from the Run History and click **Compare Runs**. The AI produces a narrative comparison covering:
 
@@ -506,7 +529,7 @@ Select two saved runs from the Run History and click **Compare Runs**. The AI pr
 - Whether the difference is statistically meaningful (CI overlap)
 - Interpretation of why results differ (different parameters, different model structure)
 
-### 9.6 Best practices for getting good AI suggestions
+### 9.7 Best practices for getting good AI suggestions
 
 - **Set performance goals first.** Without goals the AI cannot assess feasibility or rank suggestions by goal impact.
 - **Run replications before using AI Insights.** Point estimates from a single run have high variance; the AI's predictions are more reliable when based on CI-validated KPIs.

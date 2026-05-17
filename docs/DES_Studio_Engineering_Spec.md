@@ -1,8 +1,8 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.0.0
-**Date:** 2026-05-16
-**Sprint baseline:** Sprint 45
+**Version:** 1.1.0
+**Date:** 2026-05-17
+**Sprint baseline:** Sprint 55a
 **Status:** Living document — updated at end of each sprint
 
 ---
@@ -12,6 +12,7 @@
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
 | v1.0 | 2026-05-16 | Sprint 45 | Initial specification — Sprint 45 baseline covering engine, data model, macros, AI analysis, UI workspace, validation, and non-functional requirements |
+| v1.1 | 2026-05-17 | Sprint 55a | Added parseSuggestionResponse / applySuggestionPatch to Section 6; DistHelp / DistSparkline to Section 7.2; WCAG 2.1 AA compliance to Section 8.6; updated test count to 1248 |
 
 ---
 
@@ -316,7 +317,29 @@ Compares two named runs side by side in an Option A / Option B frame. Identifies
 
 **max_tokens:** 550
 
-### 6.6 evaluateSweepPointGoals
+### 6.6 parseSuggestionResponse
+
+**Signature:** `parseSuggestionResponse(text) → { analysis: string, suggestions: SuggestionCard[] }`
+
+Extracts structured suggestion output from the LLM response. Looks for a fenced ` ```json ` block containing an array of suggestion cards. If the block is absent or cannot be parsed, falls back to `{ analysis: text, suggestions: [] }` so the UI still renders something useful.
+
+Each `SuggestionCard` returned has: `rank` (integer), `constraint`, `rootCause`, `change` (proposed model change), `effect` (predicted outcome), `goalImpact`, and `target` (optional: `{ field: dotPath, value: number, type: string }` — present only when the change is auto-applicable).
+
+### 6.7 applySuggestionPatch
+
+**Signature:** `applySuggestionPatch(model, change) → model`
+
+Creates a deep clone of `model` (`JSON.parse(JSON.stringify(model))`) and applies the change described by `change.target`. Supported `change.type` values:
+
+| type | field path | effect |
+|------|-----------|--------|
+| `entityTypeCount` | `entityTypes[name].count` | Sets the server count to `change.value` |
+| `queueCapacity` | `queues[name].capacity` | Sets the queue capacity to `change.value` |
+| `stateVariable` | `stateVariables[name].initialValue` | Sets the variable's initial value |
+
+Unknown `change.type` values return the original (unmodified) clone; the function never mutates the input model.
+
+### 6.8 evaluateSweepPointGoals
 
 **Signature:** `evaluateSweepPointGoals(goals, aggregateStats) → {feasible: boolean, gaps: [{metric, met, current, target, operator, label}]}`
 
@@ -324,7 +347,7 @@ Called for each point in a 1D sweep or 2D sweep grid to determine whether the po
 
 `feasible` is `true` only when every goal's `met` field is `true`. If any goal's current value cannot be read from `aggregateStats`, `met` is `null` and `feasible` is `false`.
 
-### 6.7 buildGoalGaps
+### 6.9 buildGoalGaps
 
 **Signature:** `buildGoalGaps(model, results) → GoalGap[] | null`
 
@@ -354,6 +377,8 @@ The primary model authoring interface. Organised as a multi-tab panel:
 **SectionPanel:** A collapsible panel wrapper used consistently across all editor tabs to group related configuration fields.
 
 **Predicate Builder:** A visual condition builder that produces the `condition` object used by C-events and balkCondition. Supports clauses connected by AND/OR; each clause is a token-based expression comparing queue depths, state variables, entity attributes, clock, or numeric literals using comparison operators.
+
+**DistPicker:** The distribution selection component. Distributions are grouped into three families — Parametric (classical distributions with numeric parameters), Time-varying (piecewise arrival rate schedules), and From data (EntityAttr / ServerAttr). The family selector filters the distribution dropdown. `DistHelp.js` (`DIST_GROUPS` and `DIST_HELP` map) provides summary text and per-parameter help for all 11 distribution types. `DistSparkline.jsx` renders an SVG shape preview (120×40 px) for the currently selected distribution; the preview updates reactively as parameters change. Parameters validate on blur with inline error messages using `role="alert"`.
 
 ### 7.3 Execute Panel
 
@@ -412,7 +437,19 @@ Located in the Execute panel's Analysis view. Contains five sub-panels:
 - Supabase Row Level Security (RLS) ensures users can only read/write their own models. Public models are read-only to non-owners.
 - LLM API keys are stored server-side; the frontend calls the LLM through a Supabase Edge Function or a thin proxy, never exposing keys to the browser.
 
-### 8.5 Test Coverage
+### 8.5 Accessibility
+
+DES Studio targets WCAG 2.1 AA compliance. Implemented requirements:
+
+- **Focus visible:** Global `*:focus-visible` rule — 2 px cyan outline, 2 px offset — on all interactive elements.
+- **Minimum text size:** All label, field, and table header text is ≥ 11 px.
+- **Live regions:** AI streaming response container carries `aria-live="polite"` so screen readers announce new content.
+- **Table semantics:** All `<th>` elements carry `scope="col"` or `scope="row"`.
+- **Modal semantics:** All modal dialogs carry `aria-labelledby` pointing to their heading.
+- **Icon-only buttons:** All icon-only buttons carry an `aria-label`.
+- **Colour contrast:** Muted text colour is ≥ 4.5:1 against the panel background.
+
+### 8.6 Test Coverage
 
 - Unit tests use Vitest. All engine functions (phases, macros, conditions, distributions, statistics, validation) have dedicated test files in `src/engine/__tests__/`.
 - UI component tests cover all editor forms, the execute panel views, sweep configuration, and the Visual Designer.
