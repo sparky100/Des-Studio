@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.10.0 (Sprints 1-60)
+Version: 1.11.0 (Sprints 1-61)
 
 ---
 
@@ -19,6 +19,7 @@ Version: 1.10.0 (Sprints 1-60)
 | v1.8.0 | 58 | Report generation — Export a professional Word (.docx) report from any completed run |
 | v1.9.0 | 59 | Calibrated Batch mode end-to-end: Data Source Manager UI, parameter binding toggles in B/C-event editors, `prefetchForRun()` engine helper, live preview chips |
 | v1.10.0 | 60 | Rolling mode: WebSocket adapter, async FEL loop, run mode selector (Static/Calibrated Batch/Rolling), LiveRunBanner component |
+| v1.11.0 | 61 | Predictive lookahead mode: SnapshotAdapter, engine.injectState(), lookahead horizon input, snapshot source selector |
 
 ---
 
@@ -701,6 +702,52 @@ Once a data source is configured, open a **B-Event** or **C-Event** and expand a
 
 > **Rolling vs Calibrated Batch:** Calibrated Batch gives reproducible results (same value for every step). Rolling gives a live shadow of current conditions but is not reproducible -- re-running at a different time produces different results.
 
+### Running in Predictive Lookahead mode
+
+**Lookahead mode** starts the simulation from the actual current state of your system — live queue lengths, entities in service — and projects what will happen over the next N minutes (the **lookahead horizon**). This is the most powerful live-data mode for short-horizon predictions.
+
+**When to use Lookahead mode:**
+- You want to answer "given the current backlog, when will the last customer be served?"
+- You are running a shadow simulation ahead of a shift handover to identify emerging bottlenecks
+- You have a REST endpoint that publishes a real-time snapshot of your operations (queue depths, in-service entities, entity attributes)
+
+**Snapshot data source:**
+
+The snapshot endpoint must return a JSON object with this shape:
+
+```json
+{
+  "clock": 120,
+  "entities": [
+    { "type": "Customer", "id": "c1", "attrs": {}, "location": "queue", "queueId": "MainQueue" },
+    { "type": "Customer", "id": "c2", "attrs": {}, "location": "server" }
+  ],
+  "queues": {
+    "MainQueue": { "waiting": 1, "serving": 1 }
+  }
+}
+```
+
+- `clock` — real-world time offset in minutes (used as metadata; simulation clock resets to 0)
+- `entities` — each entity must have `type` (matching a model entity type name), `id`, `location` (`"queue"` or `"server"`), and `queueId` when `location === "queue"`
+- `queues` — per-queue waiting/serving counts (informational; the engine counts directly from the injected entities)
+
+**Setting up a snapshot data source:**
+1. In the **Data Sources** tab, add a source with type `snapshot` and a REST URL.
+2. The engine fetches this URL once at run start and validates the schema.
+
+**Running in Lookahead mode:**
+1. In the **Execute** panel, open **Experiment Settings**.
+2. Set **Live Data Mode** to **Lookahead (state injection)**.
+3. A **Snapshot source** dropdown appears — select the snapshot data source you configured.
+4. Set the **Lookahead horizon (minutes)** — this replaces the "Run duration" input and defines how far ahead to simulate.
+5. The Replications input is automatically disabled — Lookahead always runs a single simulation.
+6. Click **Run** — the engine fetches the live snapshot, injects the entity state, and begins simulating from t=0 with the pre-loaded queue.
+
+> **Warm-up is automatically skipped** in Lookahead mode. Because the system starts in a realistic state drawn from live data, the warm-up period that removes initial transient bias is not needed.
+
+> **Simulation clock vs wall clock:** The lookahead run always starts at simulation time t=0, regardless of the `clock` value in the snapshot. The horizon you set (e.g. 30 minutes) means "simulate 30 time units forward from the current state."
+
 ### Troubleshooting live data
 
 | Symptom | Likely cause | Fix |
@@ -709,6 +756,8 @@ Once a data source is configured, open a **B-Event** or **C-Event** and expand a
 | Fallback value used despite source configured | Credential placeholder not resolved -- session value missing | Re-enter the credential value in the Data Sources tab |
 | Parameters not changing between static and live run | `paramSource` binding saved without a source selected | Re-open the binding and select the data source from the dropdown |
 | Rolling run starts with "Waiting for data..." | WebSocket connected but no message received within 10 s | Check the WS endpoint is broadcasting; the run starts with null values if first message times out |
+| Lookahead run fails with "SnapshotValidationError" | Snapshot endpoint returned invalid JSON shape | Verify the endpoint returns `clock`, `entities[]`, and `queues{}` at the top level; check each entity has `type`, `id`, `location`, and `queueId` when in queue |
+| Lookahead run starts empty (no pre-loaded entities) | Snapshot source not selected in the Snapshot source dropdown | Select the correct data source from the Snapshot source dropdown in Experiment Settings |
 
 ---
 

@@ -1888,6 +1888,27 @@ npm run build
 
 ---
 
+---
+
+### Sprint 61 — Predictive Lookahead + State Injection ✅
+
+**Goal:** Add a `lookahead` live-data mode that fetches a real-time system snapshot from a REST endpoint, validates it, and injects the entity/queue state into the engine before the run starts. Enables short-horizon predictive simulation grounded in live operational data.
+
+**Status:** ✅ Complete — branch `sprint-61`
+
+| Feature | Status | Description |
+|---|---|---|
+| F61.1 — `SnapshotAdapter` | ✅ | `src/engine/adapters/SnapshotAdapter.js` — fetch, parse, and cache a SystemSnapshot from a REST endpoint |
+| F61.2 — `SystemSnapshot` schema validator | ✅ | `SnapshotValidationError` thrown for missing/invalid fields; validates `clock`, `entities[]`, `queues{}`, entity fields |
+| F61.3 — `engine.injectState(snapshot)` | ✅ | Added to `buildEngine()` return object; seeds entity pool from snapshot; sets `_warmupComplete=true`; resets clock to 0 |
+| F61.4 — `lookahead` mode in `prefetchForRun()` | ✅ | `src/engine/index.js` — finds snapshot data source, creates SnapshotAdapter, calls `engineRef.injectState()` |
+| F61.5 — Snapshot source selector in ExperimentControls | ✅ | `src/ui/execute/ExperimentControls.jsx` — dropdown of `type === 'snapshot'` data sources; visible when `liveDataMode === 'lookahead'` |
+| F61.6 — Lookahead horizon input | ✅ | Label changes to "LOOKAHEAD HORIZON (MINUTES)" when in lookahead mode; replications locked to 1 |
+| F61.7 — Vitest: SnapshotAdapter | ✅ | `src/engine/adapters/__tests__/snapshot.test.js` — 16 tests: fetch/validate/parse, all validation error cases, network error, dispose, getLatest |
+| F61.8 — Vitest: `injectState()` | ✅ | `tests/engine/lookahead.test.js` — 16 tests: entity counts, queue state, warm-up skip, runAll after injection, empty snapshot, prefetchForRun integration |
+
+---
+
 *End of build plan. Update after each sprint.*
 *The most important rule: read the existing file before changing it.*
 *Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec -- never add a free-text escape hatch.*
