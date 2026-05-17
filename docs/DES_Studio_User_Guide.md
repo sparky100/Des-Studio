@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.11.0 (Sprints 1-61)
+Version: 1.12.0 (Sprints 1-62)
 
 ---
 
@@ -20,6 +20,7 @@ Version: 1.11.0 (Sprints 1-61)
 | v1.9.0 | 59 | Calibrated Batch mode end-to-end: Data Source Manager UI, parameter binding toggles in B/C-event editors, `prefetchForRun()` engine helper, live preview chips |
 | v1.10.0 | 60 | Rolling mode: WebSocket adapter, async FEL loop, run mode selector (Static/Calibrated Batch/Rolling), LiveRunBanner component |
 | v1.11.0 | 61 | Predictive lookahead mode: SnapshotAdapter, engine.injectState(), lookahead horizon input, snapshot source selector |
+| v1.12.0 | 62 | Live data badges (LIVE pill on ModelCard and ModelDetailHeader), improved error messages for adapter failures, resolved parameter values recorded in run exports, two live-data templates |
 
 ---
 
@@ -748,16 +749,33 @@ The snapshot endpoint must return a JSON object with this shape:
 
 > **Simulation clock vs wall clock:** The lookahead run always starts at simulation time t=0, regardless of the `clock` value in the snapshot. The horizon you set (e.g. 30 minutes) means "simulate 30 time units forward from the current state."
 
+### Live data badges
+
+Models that have live data bindings show a small green **LIVE** pill in two places:
+
+- **Model Library card** — visible in the My Models, Public, and Community tabs
+- **Model detail header** — visible when a model is open for editing or running
+
+The badge appears only when both conditions are true:
+1. The model has at least one entry in its **Data Sources** list
+2. At least one B-event schedule or C-event cSchedule has a **paramSource** binding pointing to a source
+
+A model with data sources configured but no parameter bindings does **not** show the badge.
+
 ### Troubleshooting live data
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| "Connected -- no numeric field returned" | API returned a non-numeric value at the field path | Verify the field path and confirm the API returns a number |
-| Fallback value used despite source configured | Credential placeholder not resolved -- session value missing | Re-enter the credential value in the Data Sources tab |
+| "Connected — no numeric field returned" | API returned a non-numeric value at the field path | Verify the field path and confirm the API returns a number |
+| Fallback value used despite source configured | Credential placeholder not resolved — session value missing | Re-enter the credential value in the Data Sources tab |
 | Parameters not changing between static and live run | `paramSource` binding saved without a source selected | Re-open the binding and select the data source from the dropdown |
-| Rolling run starts with "Waiting for data..." | WebSocket connected but no message received within 10 s | Check the WS endpoint is broadcasting; the run starts with null values if first message times out |
+| Rolling run starts with "Waiting for data…" | WebSocket connected but no message received within 10 s | Check the WS endpoint is broadcasting; the run starts with null values if first message times out |
 | Lookahead run fails with "SnapshotValidationError" | Snapshot endpoint returned invalid JSON shape | Verify the endpoint returns `clock`, `entities[]`, and `queues{}` at the top level; check each entity has `type`, `id`, `location`, and `queueId` when in queue |
 | Lookahead run starts empty (no pre-loaded entities) | Snapshot source not selected in the Snapshot source dropdown | Select the correct data source from the Snapshot source dropdown in Experiment Settings |
+| "HTTP 4xx (client error)" in the run log | API returned 401/403/404 — credentials missing or endpoint wrong | Check the URL and credential value; 4xx errors are not retried |
+| "HTTP 5xx" in the run log | Server-side error on the data source endpoint | The engine retried 3 times (2s, 4s, 8s gaps); check your API is healthy. Fallback values were used if configured |
+| "Malformed JSON response" | API endpoint returned non-JSON content | Check the endpoint returns `Content-Type: application/json`; verify the URL is correct |
+| LIVE badge missing despite data source configured | No parameter binding uses `paramSource` | Open a B/C-event editor, toggle a distribution parameter to LIVE, and select the source |
 
 ---
 

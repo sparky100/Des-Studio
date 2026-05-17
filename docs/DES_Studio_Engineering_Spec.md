@@ -1,8 +1,8 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.6.0
+**Version:** 1.7.0
 **Date:** 2026-05-17
-**Sprint baseline:** Sprint 61
+**Sprint baseline:** Sprint 62
 **Status:** Living document -- updated at end of each sprint
 
 ---
@@ -18,6 +18,7 @@
 | v1.4 | 2026-05-17 | Sprint 59 | Calibrated Batch mode: `prefetchForRun()`, `AdapterRegistry.prefetchAll()`, `dataSources[]` model field, Data Source Manager UI, parameter binding toggles in BEventEditor/CEventEditor |
 | v1.5 | 2026-05-17 | Sprint 60 | Rolling mode: `WebSocketAdapter`, `resolveAsync()`, `runAllAsync()`, run mode selector in ExperimentControls, `LiveRunBanner` component |
 | v1.6 | 2026-05-17 | Sprint 61 | Lookahead / state injection: `SnapshotAdapter`, `SnapshotValidationError`, `engine.injectState()`, `prefetchForRun()` lookahead mode, ExperimentControls snapshot source selector and lookahead horizon label |
+| v1.7 | 2026-05-17 | Sprint 62 | Hardening: `AdapterFetchError`, exponential backoff retry (2s/4s/8s) in RestAdapter and SnapshotAdapter, WS error wrapping, LIVE badges in ModelDetailHeader and ModelCard, `AdapterRegistry.getResolvedValues()`, `liveParamValues` in run export, two live-data templates |
 
 ---
 
@@ -339,6 +340,87 @@ const injected = engine.injectState(snapshot);
 - When `liveDataMode === 'lookahead'`: a **Snapshot source** dropdown appears (filters `dataSources` to `type === 'snapshot'`); selection updates `model.experimentDefaults.snapshotSourceId`
 - When `liveDataMode === 'lookahead'` and `terminationMode === 'time'`: the run duration label changes to **"LOOKAHEAD HORIZON (MINUTES)"**
 - Replications input is disabled (locked to 1) in both rolling and lookahead modes
+
+### 2.8 Adapter Error Handling and Retry (Sprint 62)
+
+#### AdapterFetchError
+
+All adapter failures are surfaced as a typed `AdapterFetchError`:
+
+```js
+export class AdapterFetchError extends Error {
+  constructor(message, status = null) {
+    super(message);
+    this.name = 'AdapterFetchError';
+    this.status = status;  // HTTP status code, or null for network/WS errors
+  }
+}
+```
+
+Exported from `src/engine/adapters/index.js`.
+
+#### Retry contract (RestAdapter and SnapshotAdapter)
+
+| Failure type | Behaviour |
+|---|---|
+| HTTP 4xx | Throw `AdapterFetchError` immediately — no retry |
+| HTTP 5xx | Retry up to 3 times with 2s, 4s, 8s delays (exponential backoff) |
+| Network timeout (>10s) | Retry up to 3 times with same delays |
+| Network error (no response) | Retry up to 3 times with same delays |
+| Malformed JSON | Throw `AdapterFetchError('Malformed JSON response')` immediately |
+| All retries exhausted | Throw `AdapterFetchError` with the last error message |
+
+The 10-second timeout is enforced via `AbortSignal.timeout(10000)` on each fetch attempt.
+
+#### WebSocketAdapter
+
+`prefetch()` throws `AdapterFetchError` (previously plain `Error`) when:
+- The WebSocket class is unavailable in the current environment
+- The data source has no URL configured
+- The connection encounters an error before the first message
+
+The 10-second resolve-on-timeout behaviour is preserved (rolling mode can start with null values until a message arrives).
+
+#### Unhandled rejection suppression
+
+`RestAdapter._pending` gets an immediate no-op `.catch(() => {})` after creation. This prevents Node.js "unhandled rejection" warnings during the retry delay period while still propagating the final error through `await this._pending`.
+
+#### LIVE data badge
+
+Both `ModelDetailHeader` and `ModelCard` render a green "LIVE" pill when `hasLiveDataBindings(model)` returns true. The condition requires both:
+1. `model.dataSources` is a non-empty array
+2. At least one B-event schedule or C-event cSchedule has a `paramSource.sourceId` binding
+
+```js
+function hasLiveDataBindings(model) {
+  if (!model?.dataSources?.length) return false;
+  const hasBinding = (events, schedKey) =>
+    (events || []).some(ev =>
+      (ev[schedKey] || []).some(s => s.paramSource?.sourceId)
+    );
+  return hasBinding(model.bEvents, 'schedules') || hasBinding(model.cEvents, 'cSchedules');
+}
+```
+
+#### Resolved parameter values in run exports
+
+`AdapterRegistry` tracks resolved values via `getResolvedValues()`:
+- Populated on every `resolve()` call that returns a live value
+- Returns `{ [sourceId.field]: resolvedValue }` — numeric values where possible
+- Cleared on `dispose()`
+
+The execute panel creates a registry for live-mode runs, calls `prefetchForRun()`, passes the registry to `buildEngine()`, and after `runAll()` records `getResolvedValues()` as `liveParamValues` in the run config (only if non-empty).
+
+#### Live-data templates
+
+Two new templates demonstrate the live data patterns:
+
+| ID | Name | Pattern | Data source type |
+|---|---|---|---|
+| `mm1-live-arrivals` | M/M/1 with Live Arrivals | `calibrated_batch` | REST |
+| `ae-triage-lookahead` | A&E Triage — Predictive Lookahead | `lookahead` | snapshot |
+
+Both include placeholder URLs that must be replaced before connecting to a real system.
 
 ---
 

@@ -1,6 +1,7 @@
 // src/engine/adapters/__tests__/snapshot.test.js — SnapshotAdapter unit tests
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SnapshotAdapter, SnapshotValidationError } from '../SnapshotAdapter.js';
+import { AdapterFetchError } from '../RestAdapter.js';
 
 const VALID_SNAPSHOT = {
   clock: 120,
@@ -195,19 +196,26 @@ describe('SnapshotAdapter.prefetch — validation errors', () => {
   });
 });
 
-// ── Test 7: Network error throws (not SnapshotValidationError) ───────────────
+// ── Test 7: Network error throws AdapterFetchError (not SnapshotValidationError) ─
 
 describe('SnapshotAdapter.prefetch — network error', () => {
-  test('re-throws network errors as-is (not SnapshotValidationError)', async () => {
-    const networkError = new TypeError('Failed to fetch');
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(networkError));
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  test('wraps network errors in AdapterFetchError (not SnapshotValidationError)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
     const adapter = new SnapshotAdapter(makeDataSource());
-    await expect(adapter.prefetch()).rejects.toThrow(TypeError);
-    await expect(adapter.prefetch()).rejects.not.toThrow(SnapshotValidationError);
+    const promise = adapter.prefetch();
+    promise.catch(() => {});
+
+    await vi.runAllTimersAsync();
+    const err = await promise.catch(e => e);
+    expect(err).toBeInstanceOf(AdapterFetchError);
+    expect(err).not.toBeInstanceOf(SnapshotValidationError);
   });
 
-  test('throws on non-OK HTTP status (not SnapshotValidationError)', async () => {
+  test('throws AdapterFetchError on non-OK HTTP status', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
       status: 404,
@@ -215,7 +223,13 @@ describe('SnapshotAdapter.prefetch — network error', () => {
     }));
 
     const adapter = new SnapshotAdapter(makeDataSource());
-    await expect(adapter.prefetch()).rejects.toThrow(/404/);
+    const promise = adapter.prefetch();
+    promise.catch(() => {});
+
+    await vi.runAllTimersAsync();
+    const err = await promise.catch(e => e);
+    expect(err).toBeInstanceOf(AdapterFetchError);
+    expect(err).toMatchObject({ status: 404 });
   });
 });
 

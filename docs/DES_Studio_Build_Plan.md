@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.76 | Created: 2026-04-30 | Updated: 2026-05-16 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.77 | Created: 2026-04-30 | Updated: 2026-05-17 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -1906,6 +1906,29 @@ npm run build
 | F61.6 — Lookahead horizon input | ✅ | Label changes to "LOOKAHEAD HORIZON (MINUTES)" when in lookahead mode; replications locked to 1 |
 | F61.7 — Vitest: SnapshotAdapter | ✅ | `src/engine/adapters/__tests__/snapshot.test.js` — 16 tests: fetch/validate/parse, all validation error cases, network error, dispose, getLatest |
 | F61.8 — Vitest: `injectState()` | ✅ | `tests/engine/lookahead.test.js` — 16 tests: entity counts, queue state, warm-up skip, runAll after injection, empty snapshot, prefetchForRun integration |
+
+---
+
+---
+
+### Sprint 62 — Hardening, Templates, and Docs ✅
+
+**Goal:** Harden the adapter layer with typed error handling and exponential backoff retry, surface live data status in the UI, record resolved parameter values in run exports, add two live-data templates. This sprint completes the real-time data integration programme.
+
+**Status:** ✅ Complete — branch `sprint-62`
+
+| Feature | Status | Description |
+|---|---|---|
+| F62.1 — Exponential backoff on RestAdapter | ✅ | 3× retry with 2s/4s/8s delays; 4xx throws immediately |
+| F62.2 — `AdapterFetchError` + wrapping in all adapters | ✅ | Typed error exported from `src/engine/adapters/index.js`; RestAdapter, WebSocketAdapter, SnapshotAdapter |
+| F62.3 — LIVE badge on ModelDetailHeader | ✅ | Green pill when `hasLiveDataBindings(model)` is true |
+| F62.4 — LIVE badge on ModelCard | ✅ | Same badge in ModelCard in the library grid |
+| F62.5 — Resolved param values in run exports | ✅ | `AdapterRegistry.getResolvedValues()` + `liveParamValues` in run config |
+| F62.6 — Template: M/M/1 with Live Arrivals | ✅ | `id: mm1-live-arrivals`, calibrated_batch, REST placeholder |
+| F62.7 — Template: A&E Triage — Predictive Lookahead | ✅ | `id: ae-triage-lookahead`, lookahead mode, snapshot placeholder |
+| F62.8 — Vitest: adapter error paths | ✅ | 14 tests in `error-handling.test.js` — all passing |
+
+**Programme complete:** Real-time data integration (Sprints 57/59–62) is now fully delivered.
 
 ---
 
