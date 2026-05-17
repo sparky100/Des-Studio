@@ -192,6 +192,15 @@ function sanitizeFilename(name) {
   return String(name || 'report').replace(/[/\\:*?"<>|]/g, '-');
 }
 
+function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 function finiteStr(value, decimals = 2) {
   const n = Number(value);
   if (!Number.isFinite(n)) return '—';
@@ -342,7 +351,7 @@ function buildModelImageSection(imageDataUrl) {
   if (imageDataUrl && imageDataUrl.startsWith('data:image/png;base64,')) {
     try {
       const base64 = imageDataUrl.replace('data:image/png;base64,', '');
-      const buf = Buffer.from(base64, 'base64');
+      const buf = base64ToUint8Array(base64);
       const imgRun = new ImageRun({
         data: buf,
         transformation: { width: 580, height: 320 },
