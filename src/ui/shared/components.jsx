@@ -4,6 +4,7 @@ import { C, FONT, SPACE, RADIUS, TYPO, alpha } from "./tokens.js";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
 import { DIST_GROUPS, DIST_HELP, getDistGroup, validateDistParams } from "./DistHelp.js";
 import { DistSparkline } from "./DistSparkline.jsx";
+import { parsePlanCsv } from "./planCsvParser.js";
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -224,10 +225,39 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
   const updDp=(patch)=>onChange({...value,distParams:{...dp,...patch}});
   const [rawText,setRawText]=React.useState(times.join(", "));
   const [rowsMode,setRowsMode]=React.useState(hasRows&&attrDefs.length>0);
+  const [csvPreview,setCsvPreview]=React.useState(null);
+  const fileRef=React.useRef(null);
 
   const commitText=(text)=>{
     const parsed=text.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean).map(Number).filter(n=>Number.isFinite(n));
     updDp({times:parsed,rows:undefined});
+  };
+
+  const onFileChange=(e)=>{
+    const file=e.target.files?.[0];
+    if(!file) return;
+    e.target.value="";
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      const result=parsePlanCsv(ev.target.result);
+      setCsvPreview({fileName:file.name,...result});
+    };
+    reader.readAsText(file);
+  };
+
+  const confirmCsvImport=()=>{
+    if(!csvPreview) return;
+    const {rows,attrHeaders}=csvPreview;
+    if(attrHeaders.length>0){
+      updDp({rows,times:undefined});
+      setRowsMode(true);
+    } else {
+      const flat=rows.map(r=>r.time);
+      setRawText(flat.join(", "));
+      updDp({times:flat,rows:undefined});
+      setRowsMode(false);
+    }
+    setCsvPreview(null);
   };
 
   const toggleRowsMode=(on)=>{
@@ -273,8 +303,9 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
-      {numAttrDefs.length>0&&(
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+      <input ref={fileRef} type="file" accept=".csv" style={{display:"none"}} onChange={onFileChange}/>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+        {numAttrDefs.length>0&&<>
           <span style={labelSt}>Mode:</span>
           <button onClick={()=>toggleRowsMode(false)}
             style={{...inpSt,cursor:"pointer",color:rowsMode?C.muted:C.amber,background:rowsMode?"transparent":C.bg+"99"}}>
@@ -284,6 +315,48 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
             style={{...inpSt,cursor:"pointer",color:rowsMode?C.amber:C.muted,background:rowsMode?C.bg+"99":"transparent"}}>
             Arrival attributes
           </button>
+        </>}
+        <button onClick={()=>fileRef.current?.click()}
+          style={{...inpSt,cursor:"pointer",color:C.cEvent,marginLeft:"auto"}}>
+          ↑ Load from CSV
+        </button>
+      </div>
+      {csvPreview&&(
+        <div style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:5,padding:"8px 10px",display:"flex",flexDirection:"column",gap:6}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontFamily:FONT,fontSize:11,color:C.cEvent,fontWeight:700}}>{csvPreview.fileName}</span>
+            <button onClick={()=>setCsvPreview(null)} aria-label="Dismiss CSV preview" style={{background:"transparent",border:"none",color:C.muted,cursor:"pointer",fontSize:13,lineHeight:1}}>✕</button>
+          </div>
+          <div style={{fontSize:10,color:C.muted,fontFamily:FONT}}>
+            {csvPreview.rows.length} arrival{csvPreview.rows.length!==1?"s":""} parsed
+            {csvPreview.attrHeaders.length>0&&` · columns: time, ${csvPreview.attrHeaders.join(", ")}`}
+            {csvPreview.skipped>0&&<span style={{color:C.amber}}> · {csvPreview.skipped} row{csvPreview.skipped!==1?"s":""} skipped (non-numeric time)</span>}
+          </div>
+          {csvPreview.rows.length>0&&(
+            <div style={{overflowX:"auto"}}>
+              <table style={{borderCollapse:"collapse",fontFamily:FONT,fontSize:10}}>
+                <thead>
+                  <tr>
+                    <th style={{...thSt,color:C.cEvent}}>time</th>
+                    {csvPreview.attrHeaders.map(h=><th key={h} style={{...thSt,color:C.cEvent}}>{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {csvPreview.rows.slice(0,5).map((row,i)=>(
+                    <tr key={i}>
+                      <td style={{...tdSt,color:C.amber,fontFamily:FONT,fontSize:10}}>{row.time}</td>
+                      {csvPreview.attrHeaders.map(h=><td key={h} style={{...tdSt,color:C.text,fontFamily:FONT,fontSize:10}}>{row.attrs[h]??""}</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {csvPreview.rows.length>5&&<div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic",marginTop:2}}>…and {csvPreview.rows.length-5} more</div>}
+            </div>
+          )}
+          {csvPreview.rows.length>0
+            ? <button onClick={confirmCsvImport} style={{...inpSt,cursor:"pointer",color:C.green,alignSelf:"flex-start"}}>✓ Import {csvPreview.rows.length} arrival{csvPreview.rows.length!==1?"s":""}</button>
+            : <div style={{fontSize:11,color:C.amber,fontFamily:FONT}}>No valid rows found — check the file has a numeric time column.</div>
+          }
         </div>
       )}
       {!rowsMode&&(
@@ -297,14 +370,19 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
           <div style={{...labelSt,marginTop:2}}>{times.length} planned arrival{times.length!==1?"s":""}</div>
         </div>
       )}
-      {rowsMode&&(
+      {rowsMode&&(()=>{
+        // Show columns from attrDefs if defined, otherwise infer from data
+        const attrNames=numAttrDefs.length>0
+          ?numAttrDefs.map(a=>a.name)
+          :[...new Set((dp.rows||[]).flatMap(r=>Object.keys(r.attrs||{})))];
+        return(
         <div style={{overflowX:"auto"}}>
           <table style={{borderCollapse:"collapse",width:"100%",fontFamily:FONT}}>
             <thead>
               <tr>
                 <th scope="col" style={thSt}>#</th>
                 <th scope="col" style={thSt}>Time</th>
-                {numAttrDefs.map(a=><th key={a.name} scope="col" style={thSt}>{a.name}</th>)}
+                {attrNames.map(n=><th key={n} scope="col" style={thSt}>{n}</th>)}
                 <th scope="col" style={thSt}/>
               </tr>
             </thead>
@@ -316,10 +394,10 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
                     <input type="number" value={row.time??""} style={{...inpSt,width:70}}
                       onChange={e=>updateRow(i,"time",e.target.value)}/>
                   </td>
-                  {numAttrDefs.map(a=>(
-                    <td key={a.name} style={tdSt}>
-                      <input type="number" value={row.attrs?.[a.name]??""} style={{...inpSt,width:70}}
-                        onChange={e=>updateRowAttr(i,a.name,e.target.value)}/>
+                  {attrNames.map(n=>(
+                    <td key={n} style={tdSt}>
+                      <input type="number" value={row.attrs?.[n]??""} style={{...inpSt,width:70}}
+                        onChange={e=>updateRowAttr(i,n,e.target.value)}/>
                     </td>
                   ))}
                   <td style={tdSt}>
@@ -333,7 +411,8 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
           <button onClick={addRow} style={{...inpSt,cursor:"pointer",marginTop:4,color:C.green}}>+ Add row</button>
           <div style={{...labelSt,marginTop:4}}>{(dp.rows||[]).length} planned arrival{(dp.rows||[]).length!==1?"s":""}</div>
         </div>
-      )}
+        );
+      })()}
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
         <span style={labelSt}>Jitter:</span>
         <select value={jitterDist} style={selSt}
