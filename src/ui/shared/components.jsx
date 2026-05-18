@@ -241,11 +241,18 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
     e.target.value="";
     const isXlsx=/\.(xlsx|xls|ods)$/i.test(file.name);
     const reader=new FileReader();
+    reader.onerror=()=>setCsvPreview({fileName:file.name,rows:[],attrHeaders:[],skipped:0,error:`Could not read file: ${reader.error?.message||'unknown error'}`});
     reader.onload=(ev)=>{
-      const result=isXlsx
-        ? parseXlsx(ev.target.result)
-        : parsePlanCsv(ev.target.result);
-      setCsvPreview({fileName:file.name,...result});
+      try {
+        const result=isXlsx
+          ? parseXlsx(ev.target.result)
+          : parsePlanCsv(ev.target.result);
+        if(result.error) console.error('[DES Studio] Plan import error:', result.error);
+        setCsvPreview({fileName:file.name,...result});
+      } catch(err) {
+        console.error('[DES Studio] Plan import exception:', err);
+        setCsvPreview({fileName:file.name,rows:[],attrHeaders:[],skipped:0,error:String(err)});
+      }
     };
     if(isXlsx) reader.readAsArrayBuffer(file);
     else reader.readAsText(file);
@@ -368,9 +375,12 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
               {csvPreview.rows.length>5&&<div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic",marginTop:2}}>…and {csvPreview.rows.length-5} more</div>}
             </div>
           )}
+          {csvPreview.error&&(
+            <div style={{fontSize:11,color:C.red,fontFamily:FONT,wordBreak:"break-all"}}>⚠ {csvPreview.error}</div>
+          )}
           {csvPreview.rows.length>0
             ? <button onClick={confirmCsvImport} style={{...inpSt,cursor:"pointer",color:C.green,alignSelf:"flex-start"}}>✓ Import {csvPreview.rows.length} arrival{csvPreview.rows.length!==1?"s":""}</button>
-            : <div style={{fontSize:11,color:C.amber,fontFamily:FONT}}>No valid rows found — check the file has a numeric time column.</div>
+            : !csvPreview.error&&<div style={{fontSize:11,color:C.amber,fontFamily:FONT}}>No valid rows found — check the file has a numeric time column.</div>
           }
         </div>
       )}
