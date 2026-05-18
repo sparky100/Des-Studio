@@ -1,6 +1,7 @@
 // engine/adapters/index.js — AdapterRegistry: resolves parameter values from data sources
 
 import { RestAdapter } from './RestAdapter.js';
+import { ScheduleFeedAdapter } from './ScheduleFeedAdapter.js';
 
 /**
  * Transparent no-op registry used by default when no live sources are configured.
@@ -41,6 +42,8 @@ export class AdapterRegistry {
 
     if (resolved.type === 'rest') {
       this._adapters[source.id] = new RestAdapter(resolved);
+    } else if (resolved.type === 'scheduleFeed') {
+      this._adapters[source.id] = new ScheduleFeedAdapter(resolved);
     } else if (resolved.type === 'mock') {
       throw new Error(`No mock registered for source "${source.id}" — call registerMock() before use`);
     } else {
@@ -117,6 +120,51 @@ export class AdapterRegistry {
       }
       return distParams;
     }
+  }
+
+  /**
+   * Fetch all scheduleFeed sources and inject rows[] into the corresponding
+   * B-event schedules in the model. Returns a new model object — does not
+   * mutate the original. Call before engine.run().
+   *
+   * @param {object} model  Full model object with dataSources[] and bEvents[]
+   * @returns {Promise<object>}  model with rows[] populated on targeted B-events
+   */
+  async prefetchScheduleFeeds(model) {
+    const feedSources = Object.values(this._sources).filter(s => s.type === 'scheduleFeed');
+    if (!feedSources.length) return model;
+
+    const epoch    = model.epoch ?? '';
+    const timeUnit = model.timeUnit || 'minutes';
+
+    const rowsByBEvent = {};
+    await Promise.all(feedSources.map(async source => {
+      try {
+        const adapter = this._getAdapter(source);
+        await adapter.prefetch(epoch, timeUnit);
+        const rows = adapter.getRows();
+        if (rows && source.targetBEventId) {
+          rowsByBEvent[source.targetBEventId] = [
+            ...(rowsByBEvent[source.targetBEventId] || []),
+            ...rows,
+          ];
+        }
+      } catch {
+        // non-fatal: B-event keeps its existing rows[]
+      }
+    }));
+
+    if (!Object.keys(rowsByBEvent).length) return model;
+
+    const bEvents = (model.bEvents || []).map(be => {
+      const merged = rowsByBEvent[be.id];
+      if (!merged) return be;
+      const combined = [...(be.rows || []), ...merged];
+      combined.sort((a, b) => a.time - b.time);
+      return { ...be, rows: combined };
+    });
+
+    return { ...model, bEvents };
   }
 
   dispose() {

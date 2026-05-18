@@ -6,12 +6,36 @@
  * @typedef {{
  *   id: string,
  *   label: string,
- *   type: 'rest' | 'websocket' | 'stateSnapshot' | 'mock',
+ *   type: 'rest' | 'websocket' | 'stateSnapshot' | 'scheduleFeed' | 'mock',
  *   url?: string,
  *   authHeader?: string,
  *   authSecret?: string,
  *   refreshSecs?: number,
+ *   entityType?: string,
+ *   targetBEventId?: string,
+ *   timeField?: string,
+ *   attrMap?: Record<string, string>,
  * }} DataSource
+ */
+
+/**
+ * A data source of type "scheduleFeed" that provides a planned-arrival schedule.
+ * Fetched once before the run; rows[] injected into the target B-event.
+ *
+ * entityId is a reserved attribute name — the value becomes the entity's display name.
+ *
+ * @typedef {{
+ *   id: string,
+ *   label?: string,
+ *   type: 'scheduleFeed',
+ *   url: string,
+ *   authHeader?: string,
+ *   authSecret?: string,
+ *   entityType: string,
+ *   targetBEventId: string,
+ *   timeField?: string,
+ *   attrMap?: Record<string, string>,
+ * }} ScheduleSource
  */
 
 /**

@@ -729,11 +729,45 @@ Models can connect distribution parameters to live REST or WebSocket feeds so th
 |---|---|---|
 | `id` | Yes | Unique within the model; referenced by `paramSource.sourceId` |
 | `label` | Yes | Human-readable name shown in the UI |
-| `type` | Yes | `"rest"` \| `"websocket"` \| `"stateSnapshot"` \| `"mock"` |
+| `type` | Yes | `"rest"` \| `"scheduleFeed"` \| `"websocket"` \| `"stateSnapshot"` \| `"mock"` |
 | `url` | Yes | Full HTTPS URL to the endpoint |
 | `authHeader` | No | Header name for authentication (e.g. `"Authorization"`) |
 | `authSecret` | No | `{{env.VAR_NAME}}` placeholder — **never a literal credential**. Actual value is entered by the user in `sessionStorage` at runtime. |
 | `refreshSecs` | No | Cache TTL in seconds for REST sources (default 60, minimum 10) |
+| `entityType` | `scheduleFeed` only | Name of the entity type that will arrive |
+| `targetBEventId` | `scheduleFeed` only | ID of the B-event whose `rows[]` will be populated |
+| `timeField` | `scheduleFeed` only | Dot-notation path in each activity object to the start time (default `"time"`) |
+| `attrMap` | `scheduleFeed` only | Object mapping API field paths to entity attribute names. Use `"entityId"` as the target name to set the entity display name |
+
+### `scheduleFeed` data source
+
+A `scheduleFeed` source fetches a planned-arrival schedule from a REST endpoint and injects it as `rows[]` into the named B-event before the run. The plan provides *what* arrives and *when* (entity attributes); the model provides *how long* service takes (calibrated distributions).
+
+```json
+{
+  "id": "ds_theatre",
+  "label": "Operating Theatre Schedule",
+  "type": "scheduleFeed",
+  "url": "https://his.example.com/api/theatre/today",
+  "authHeader": "Authorization",
+  "authSecret": "{{env.HIS_TOKEN}}",
+  "entityType": "Patient",
+  "targetBEventId": "b_patient_arrives",
+  "timeField": "startTime",
+  "attrMap": {
+    "patientName": "entityId",
+    "surgeryType": "surgery_type",
+    "priority": "priority"
+  }
+}
+```
+
+**Rules:**
+- The API response may be a bare JSON array, `{ "activities": [...] }`, or any object whose first value is an array.
+- Each activity's time field may be a plain number (sim time), an `HH:MM` string, or an ISO 8601 datetime. ISO/HH:MM timestamps require `model.epoch` to be set.
+- `entityId` is a reserved attribute name — when set, its value becomes the entity's display name in the simulation UI.
+- Credential values in `authSecret` must always use `{{env.VAR}}` syntax; actual tokens are entered at session time and are never persisted.
+- Planned durations in the feed are **ignored** — service time is always derived from the model's calibrated distributions.
 
 ### `paramSource` on a schedule or cSchedule
 

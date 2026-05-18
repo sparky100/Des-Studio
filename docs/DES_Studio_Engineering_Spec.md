@@ -17,6 +17,7 @@
 | v1.3 | 2026-05-17 | Sprint 58 | Report generation — `generateReport()`, LLM prompt builders, html2canvas canvas capture, Execute panel Export Report button |
 | v1.4 | 2026-05-18 | Sprint 58+ | Time-averaged server utilisation — `_busyStart`/`_busyTime` tracking in `entities.js`; warmup reset; `getSummary()` formula updated to `busyTime / (elapsed × count)`. Markdown report export replacing docx. CSV import for Schedule distribution — `planCsvParser.js`, `ScheduleEditor` "Load from CSV" button, `distParams.rows[]` schema. |
 | v1.5.0 | 2026-05-18 | Sprint 62 | Real-world clock (epoch field, clockUtils, timestamp CSV import) |
+| v1.6.0 | 2026-05-18 | Sprint 63 | Planned data import — ScheduleFeedAdapter, xlsxParser, DataSourcesEditor UI, entityId convention, prefetchScheduleFeeds() |
 
 ---
 
@@ -131,6 +132,40 @@ The report generation module produces professional Word documents (`.docx`) from
 
 These utilities are used by `planCsvParser.js` (CSV import), the report generator (cover page period line), and the experiment controls UI (start/end wall-clock display).
 
+### 2.8 Planned Data Import (Sprint 63)
+
+Sprint 63 adds two new ways to feed a planned-arrival schedule into a B-event's `rows[]`:
+
+#### `ScheduleFeedAdapter` (`src/engine/adapters/ScheduleFeedAdapter.js`)
+
+Fetches a JSON array of planned activities from a REST endpoint and converts them to the `rows[]` format consumed by B-events.
+
+- **Retry policy:** network failures retry 3× with 2 s / 4 s / 8 s backoff. HTTP error responses (4xx/5xx) are thrown immediately without retrying.
+- **Time parsing:** delegates to `parseTimeInput()` — handles plain numbers (sim time), `HH:MM`, and ISO 8601 datetimes. Requires `model.epoch` for timestamp formats.
+- **Attribute mapping:** `attrMap` maps dot-notation paths in the API response to entity attribute names. Setting `"patientName": "entityId"` names the entity instance.
+- **Response envelope:** accepts bare arrays, `{ activities: [...] }`, or any object whose first value is an array.
+
+#### `AdapterRegistry.prefetchScheduleFeeds(model)` (`src/engine/adapters/index.js`)
+
+New method that finds all `scheduleFeed` data sources, fetches them via `ScheduleFeedAdapter`, and returns a **new model object** with `rows[]` merged and sorted into the targeted B-events. Does not mutate the input model. Call before `engine.run()`.
+
+#### `xlsxParser` (`src/ui/shared/xlsxParser.js`)
+
+Converts an XLSX/XLS/ODS `ArrayBuffer` to the same `{ rows, attrHeaders, skipped, error }` shape as `parsePlanCsv`. Internally converts the sheet to CSV via SheetJS then delegates to `parsePlanCsv`, keeping timestamp/epoch handling in one place.
+
+```js
+parseXlsx(buffer, { epoch, timeUnit, sheetName })
+// → { rows: [{ time, attrs }], attrHeaders, skipped, error? }
+```
+
+#### `entityId` convention
+
+When an entity attribute named `entityId` is set (via `attrMap` or CSV), it becomes the entity's display name in the simulation UI and run results. This is the standard way to import named entities (e.g. named patients from a surgical list).
+
+#### `DataSourcesEditor` component (`src/ui/ModelDetail.jsx`)
+
+Added inline to the Overview tab. Allows modellers to add, configure, and remove data sources without editing JSON. Exposes all `scheduleFeed`-specific fields (entityType, targetBEventId, timeField, attrMap JSON editor) when `type: "scheduleFeed"` is selected.
+
 ---
 
 ## 3. Data Model
@@ -155,6 +190,7 @@ A DES Studio model is a JSON object stored in the `models` table. All fields bel
 | `experimentDefaults` | object | Default execution parameters: `maxSimTime`, `warmupPeriod`, `replications`, `seed`, `terminationMode`, `terminationCondition` |
 | `timeUnit` | string | The label for one simulation time unit (e.g. `"minutes"`, `"hours"`); used in UI display and AI prompts |
 | `epoch` | string (ISO 8601) or null | Optional. When set, maps t=0 to this calendar moment (e.g. `"2026-05-18T08:00:00"`). Drives `simToWall`/`wallToSim` conversions in `src/engine/clockUtils.js`. Shown on the report cover and in experiment controls. Required for CSV planned-arrival files that use real timestamps (HH:MM or full ISO 8601) in the time column rather than numeric offsets. |
+| `dataSources` | DataSource[] | Optional array of external data source definitions. Type `"rest"` binds live values to distribution parameters via `paramSource`. Type `"scheduleFeed"` populates a B-event's `rows[]` from a planned-arrival REST feed. See §2.5 and §2.8. |
 
 ### 3.2 Entity Type Schema
 

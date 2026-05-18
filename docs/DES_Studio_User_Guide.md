@@ -403,6 +403,50 @@ time
 - After import, the editor switches automatically to **Arrival attributes** mode so you can inspect or edit individual rows.
 - Optional **Jitter** (Normal or Uniform) can be added after import to introduce random variation around each planned time.
 
+### 6.1b Importing a planned arrival file from Excel (XLSX)
+
+In addition to CSV, the Schedule editor accepts Excel files (`.xlsx`, `.xls`, `.ods`).
+
+**How to import:**
+
+1. In the B-Event editor, set the schedule distribution to **Schedule**.
+2. Click **↑ Load from CSV** — the file picker accepts `.csv`, `.xlsx`, `.xls`, and `.ods`.
+3. DES Studio reads the first sheet by default. The file is converted internally to CSV format; all the same rules apply (timestamp detection, epoch requirement, attrMap).
+
+**Column format** is identical to CSV (see §6.1). The first row is treated as a header if the first cell is not a number. Time stamps, epoch conversion, and attribute mapping all work the same way.
+
+### 6.1c Importing a schedule from a live REST endpoint (scheduleFeed)
+
+For use cases where the arrival plan is managed in an external system (e.g. an operating theatre booking system, an appointment platform, or an airline gate manifest), DES Studio can fetch the schedule directly before each run.
+
+**Setup:**
+
+1. Open the model **Overview** tab.
+2. Scroll to **Data Sources** and click **+ Add source**.
+3. Set the type to **scheduleFeed** and complete the fields:
+
+| Field | What to enter |
+|-------|--------------|
+| URL | The HTTPS endpoint that returns the JSON schedule |
+| Auth header / secret | e.g. `Authorization` / `{{env.HIS_TOKEN}}` — the token value is entered at session time; it is never stored in the model |
+| Entity type | Name of the entity type that arrives (e.g. `Patient`) |
+| Target B-event ID | The ID of the B-event whose schedule will be populated (e.g. `b_patient_arrives`) |
+| Time field | Dot-notation path to the start-time field in each activity object (default: `time`) |
+| Attribute map | JSON object mapping API field paths to entity attribute names (e.g. `{ "patientName": "entityId", "surgeryType": "surgery_type" }`) |
+
+4. Save the model. When a run is started, DES Studio fetches the feed, converts timestamps using the model epoch, and injects the resulting rows into the target B-event — no manual import step required.
+
+**`entityId` — naming individual entities.** If the attribute map includes `"someField": "entityId"`, the value from the API (e.g. the patient's name) becomes the entity's display name in the simulation UI and run results. This is how you track named individuals through the model.
+
+**What the plan provides vs what the model provides:**
+
+| Source | Provides |
+|--------|----------|
+| Schedule feed | Who arrives, when they arrive, their attributes (e.g. surgery type) |
+| Model distributions | How long service takes (sampled at run time from calibrated distributions conditioned on entity attributes) |
+
+Planned durations from the feed are deliberately ignored — service time is always derived from the model's calibrated distributions. This preserves the simulation's ability to explore "what if we were faster/slower" scenarios independently of the actual plan.
+
 ### 6.2 Model settings — time unit and simulation start time
 
 Two model-level fields in the **Settings** tab control how DES Studio labels and anchors simulation time.
