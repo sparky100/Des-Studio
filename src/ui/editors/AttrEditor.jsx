@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn, DistPicker } from "../shared/components.jsx";
 
@@ -6,6 +7,21 @@ const VALUE_TYPES = [
   { value: "string",  label: "String" },
   { value: "boolean", label: "Boolean" },
 ];
+
+function CommitInput({ value, onCommit, placeholder, style }) {
+  const [local, setLocal] = useState(value);
+  const commit = () => { if (local !== value) onCommit(local); };
+  return (
+    <input
+      value={local}
+      placeholder={placeholder}
+      style={style}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); commit(); e.target.blur(); } }}
+    />
+  );
+}
 
 const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
   const add = () => onChange([...attrs, {
@@ -51,7 +67,7 @@ const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
             display:'flex',flexDirection:'column',gap:6}}>
             {/* Row 1: name + value type + input */}
             <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-              <input value={a.name} onChange={e=>upd(i,{name:e.target.value})}
+              <CommitInput value={a.name} onCommit={v=>upd(i,{name:v})}
                 placeholder="attrName" style={{...inpStyle(C.amber),width:100}}/>
               <select value={vt} onChange={e=>upd(i,{valueType:e.target.value})}
                 style={{...selStyle(C.purple),width:80}}>
@@ -66,7 +82,7 @@ const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
                   </div>
                 </>
               ) : vt === 'string' ? (
-                <input value={a.defaultValue||''} onChange={e=>upd(i,{defaultValue:e.target.value})}
+                <CommitInput value={a.defaultValue||''} onCommit={v=>upd(i,{defaultValue:v})}
                   placeholder="e.g. Gold" style={{...inpStyle(C.green),flex:1,minWidth:100}}/>
               ) : (
                 <select value={a.defaultValue==='true'?'true':'false'} onChange={e=>upd(i,{defaultValue:e.target.value})}
