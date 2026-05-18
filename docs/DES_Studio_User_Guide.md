@@ -400,7 +400,7 @@ The **Schedule** distribution is designed for models where arrivals follow a kno
 **How to import:**
 
 1. In the B-Event editor, set the schedule distribution to **Schedule**.
-2. Click **↑ Load from CSV** (top-right of the Schedule editor panel).
+2. Click **↑ Load plan** (top-right of the Schedule editor panel).
 3. Select a `.csv` file. A preview of the first 5 rows appears immediately — check that columns look correct before confirming.
 4. Click **✓ Import N arrivals** to load the data.
 
@@ -435,7 +435,7 @@ In addition to CSV, the Schedule editor accepts Excel files (`.xlsx`, `.xls`, `.
 **How to import:**
 
 1. In the B-Event editor, set the schedule distribution to **Schedule**.
-2. Click **↑ Load from CSV** — the file picker accepts `.csv`, `.xlsx`, `.xls`, and `.ods`.
+2. Click **↑ Load plan** — the file picker accepts `.csv`, `.xlsx`, `.xls`, and `.ods`.
 3. Select your Excel file. DES Studio reads the first sheet by default and converts it to the same internal format as a CSV import.
 4. A preview of the first 5 rows appears — check that columns look correct before confirming.
 5. Click **✓ Import N arrivals** to load the data.
