@@ -364,9 +364,44 @@ Distributions control when events occur or how long they last. The distribution 
 | Weibull | `scale`, `shape` | Equipment lifetime, failure time-to-event |
 | PERT | `min`, `mode`, `max` | Like Triangular but smoother; good for project activity durations |
 | Poisson | `mean` | Number of arrivals in a fixed interval (not a duration — use carefully) |
-| Schedule | `[(time, rate), ...]` | Time-varying arrival rate defined as a step function |
+| Schedule | `times[]` or `rows[]` | Planned arrivals at absolute clock times; supports per-arrival entity attributes |
 | EntityAttr | `attrName` | Duration drawn from an attribute already set on the entity |
 | ServerAttr | `attrName` | Duration drawn from an attribute on the assigned server entity |
+
+### 6.1 Schedule distribution — importing a planned arrival file
+
+The **Schedule** distribution is designed for models where arrivals follow a known timetable rather than a statistical process (e.g. booked appointments, shift handovers, elective procedure lists). Instead of entering times by hand, you can upload a CSV file directly.
+
+**How to import:**
+
+1. In the B-Event editor, set the schedule distribution to **Schedule**.
+2. Click **↑ Load from CSV** (top-right of the Schedule editor panel).
+3. Select a `.csv` file. A preview of the first 5 rows appears immediately — check that columns look correct before confirming.
+4. Click **✓ Import N arrivals** to load the data.
+
+**CSV format:** The first column must be `time` (absolute simulation clock time, numeric). Additional columns become entity attributes applied to each arriving entity. A header row is detected automatically.
+
+```csv
+time,severity,age
+10,3,45
+25,1,32
+60,2,28
+```
+
+Times-only files work too:
+
+```csv
+time
+10
+25
+60
+```
+
+**Notes:**
+- Rows where the `time` value is not a valid number are skipped; the import shows a count of skipped rows.
+- Column names in the CSV become entity attribute names — match them to the attribute definitions on the entity type if you want them to flow through routing conditions.
+- After import, the editor switches automatically to **Arrival attributes** mode so you can inspect or edit individual rows.
+- Optional **Jitter** (Normal or Uniform) can be added after import to introduce random variation around each planned time.
 
 ---
 
