@@ -486,7 +486,7 @@ export function QueueHistogram({ waitDist }) {
       <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
         WAIT TIME DISTRIBUTIONS (per queue)
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
         {queues.map(([qName, d]) => (
           <QueueHistogramCard key={qName} name={qName} dist={d} />
         ))}
@@ -497,7 +497,7 @@ export function QueueHistogram({ waitDist }) {
 
 function QueueHistogramCard({ name, dist }) {
   const values = Array.isArray(dist.values) && dist.values.length > 0 ? dist.values : null;
-  const W = 200, H = 90, PAD = { top: 8, right: 8, bottom: 20, left: 30 };
+  const W = 280, H = 140, PAD = { top: 10, right: 10, bottom: 24, left: 34 };
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
 
@@ -550,7 +550,7 @@ function QueueHistogramCard({ name, dist }) {
   return (
     <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
       <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, fontWeight: 700, marginBottom: 4 }}>{name}</div>
-      <svg width={W} height={H} style={{ display: "block", overflow: "visible" }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", overflow: "visible" }}>
         {/* Grid lines */}
         {Array.from({ length: 3 }, (_, i) => PAD.top + (plotH / 2) * i).map((y, i) => (
           <line key={i} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke={C.border} strokeWidth={1} opacity={0.1} />
