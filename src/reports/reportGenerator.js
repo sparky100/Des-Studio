@@ -7,6 +7,7 @@ import {
   parseReportRecommendations,
   buildGoalGaps,
 } from '../llm/prompts.js';
+import { simToWall, formatWallTime } from '../engine/clockUtils.js';
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
 
@@ -197,13 +198,21 @@ function htmlTable(headers, rows) {
   return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
-function buildCover(model, runMeta) {
+function buildCover(model, runMeta, experimentConfig) {
+  let periodLine = '';
+  if (model.epoch) {
+    const unit  = model.timeUnit || 'minutes';
+    const start = formatWallTime(simToWall(0, model.epoch, unit));
+    const end   = formatWallTime(simToWall(experimentConfig?.maxSimTime ?? 0, model.epoch, unit));
+    if (start && end) periodLine = `<div><strong>Period:</strong> ${esc(start)} → ${esc(end)}</div>`;
+  }
   return `
   <div class="cover">
     <h1>${esc(model.name || 'Simulation')} — Analysis Report</h1>
     <div class="meta">
       <div><strong>Run:</strong> ${esc(runMeta.runLabel || runMeta.runId || 'Unknown')}</div>
       <div><strong>Date:</strong> ${esc(formatDate(runMeta.runTimestamp))}</div>
+      ${periodLine}
       <div><strong>Engine:</strong> DES Studio v${esc(runMeta.engineVersion || '1.0')}</div>
     </div>
     <span class="badge">Simulation Analysis</span>
@@ -476,7 +485,7 @@ export async function generateReport(model = {}, results = {}, experimentConfig 
 </head>
 <body>
 <div class="report">
-  ${buildCover(model, runMeta)}
+  ${buildCover(model, runMeta, experimentConfig)}
   ${buildModelImage(modelImageDataUrl)}
   ${buildExecutiveSummary(model, results, recommendations)}
   ${buildModelDescription(modelDescription)}

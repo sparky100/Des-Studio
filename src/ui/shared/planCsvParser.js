@@ -1,7 +1,10 @@
 // Parse a planned-arrivals CSV into rows suitable for distParams.rows
-// First column = time (numeric); remaining columns = entity attributes.
+// First column = time (numeric or timestamp); remaining columns = entity attributes.
 // Header row is detected automatically (non-numeric or "time" in col 0).
-export function parsePlanCsv(text) {
+// Options: { epoch, timeUnit } — required when time column contains timestamps.
+import { looksLikeTimestamp, parseTimeInput } from '../../engine/clockUtils.js';
+
+export function parsePlanCsv(text, { epoch, timeUnit } = {}) {
   const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
   if (!lines.length) return { error: 'Empty file', rows: [], attrHeaders: [] };
 
@@ -36,11 +39,32 @@ export function parsePlanCsv(text) {
   }
 
   const attrHeaders = headers.slice(1);
+
+  // Detect if any data row uses timestamps in the time column
+  const timestampDetected = dataLines.some(line => {
+    const cols = splitRow(line);
+    return cols[0] != null && looksLikeTimestamp(cols[0]);
+  });
+
+  if (timestampDetected && (epoch == null || epoch === '')) {
+    return {
+      error: 'Timestamps detected in time column but model has no epoch set. Add a simulation start time in Settings.',
+      rows: [],
+      attrHeaders: [],
+    };
+  }
+
   const rows = []; let skipped = 0;
   for (const line of dataLines) {
     const cols = splitRow(line);
-    const t = Number(cols[0]);
-    if (!Number.isFinite(t)) { skipped++; continue; }
+    const raw0 = cols[0];
+    let t;
+    if (looksLikeTimestamp(raw0)) {
+      t = parseTimeInput(raw0, epoch, timeUnit);
+    } else {
+      t = Number(raw0);
+    }
+    if (t == null || !Number.isFinite(t)) { skipped++; continue; }
     const attrs = {};
     for (let i = 0; i < attrHeaders.length; i++) {
       const raw = cols[i + 1] ?? '';

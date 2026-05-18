@@ -617,5 +617,13 @@ export function validateModel(model) {
   checkContainerRefs(bEvents, 'bevents');
   checkContainerRefs(cEvents, 'cevents');
 
+  // ── V28: epoch must be a valid ISO 8601 datetime when set ─────────────────────
+  if (model.epoch != null && model.epoch !== '') {
+    const d = new Date(model.epoch);
+    if (isNaN(d.getTime())) {
+      err('V28', `Model epoch '${model.epoch}' is not a valid ISO 8601 datetime. Use the Settings tab to correct it.`, 'overview');
+    }
+  }
+
   return { errors, warnings };
 }

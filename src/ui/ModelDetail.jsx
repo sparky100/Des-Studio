@@ -694,6 +694,19 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 <option value="days">Days</option>
               </select>
             </div>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Simulation start (epoch)</label>
+              <input
+                type="datetime-local"
+                value={(model.epoch||"").slice(0,16)}
+                onChange={canEdit?(e=>setField("epoch", e.target.value ? new Date(e.target.value).toISOString() : "")):undefined}
+                disabled={!canEdit}
+                style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:12,padding:"5px 8px",width:220}}
+              />
+              <span style={{fontSize:10,color:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif"}}>
+                Optional. When set, simulation time maps to real calendar dates. Required for CSV timestamp import.
+              </span>
+            </div>
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
               <GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
             </div>
