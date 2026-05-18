@@ -283,7 +283,8 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
     let nextGraph = deriveGraphFromModel(next);
     const newest = [...nextGraph.nodes].reverse().find(node => node.type === type);
     const selectedNode = selectedNodeId ? graph.nodes.find(node => node.id === selectedNodeId) : null;
-    if (selectedNode && newest && selectedNode.id !== newest.id) {
+    const autoLinkTypes = [VISUAL_NODE_TYPES.SOURCE, VISUAL_NODE_TYPES.ACTIVITY];
+    if (selectedNode && newest && selectedNode.id !== newest.id && autoLinkTypes.includes(selectedNode.type)) {
       const validation = validateVisualConnection(nextGraph, selectedNode.id, newest.id);
       if (validation.ok) {
         next = connectVisualNodes(next, nextGraph, selectedNode.id, newest.id).model;
