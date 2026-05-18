@@ -1,5 +1,5 @@
 // ui/execute/BottomPanel.jsx — collapsible tabbed detail area below the Execute canvas
-// Tabs: Step Log | Entities | Charts | Live Metrics
+// Tabs: Step Log | Entity Details | Charts | Live Metrics
 // F9C.8 + F9C.9 + F9C.11 node-filtered log
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
@@ -15,7 +15,7 @@ function formatStatus(status) {
 
 const TABS = [
   { id: "log",       label: "Step Log" },
-  { id: "entities",  label: "Entities" },
+  { id: "entities",  label: "Entity Details" },
   { id: "charts",    label: "Charts" },
   { id: "stagekpis", label: "Live Metrics" },
 ];

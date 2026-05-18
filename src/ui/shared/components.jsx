@@ -5,6 +5,7 @@ import { DISTRIBUTIONS } from "../../engine/distributions.js";
 import { DIST_GROUPS, DIST_HELP, getDistGroup, validateDistParams } from "./DistHelp.js";
 import { DistSparkline } from "./DistSparkline.jsx";
 import { parsePlanCsv } from "./planCsvParser.js";
+import { parseXlsx } from "./xlsxParser.js";
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -237,12 +238,16 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
     const file=e.target.files?.[0];
     if(!file) return;
     e.target.value="";
+    const isXlsx=/\.(xlsx|xls|ods)$/i.test(file.name);
     const reader=new FileReader();
     reader.onload=(ev)=>{
-      const result=parsePlanCsv(ev.target.result);
+      const result=isXlsx
+        ? parseXlsx(ev.target.result)
+        : parsePlanCsv(ev.target.result);
       setCsvPreview({fileName:file.name,...result});
     };
-    reader.readAsText(file);
+    if(isXlsx) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
   };
 
   const confirmCsvImport=()=>{
@@ -303,7 +308,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
-      <input ref={fileRef} type="file" accept=".csv" style={{display:"none"}} onChange={onFileChange}/>
+      <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.ods" style={{display:"none"}} onChange={onFileChange}/>
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
         {numAttrDefs.length>0&&<>
           <span style={labelSt}>Mode:</span>
