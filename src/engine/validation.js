@@ -617,5 +617,21 @@ export function validateModel(model) {
   checkContainerRefs(bEvents, 'bevents');
   checkContainerRefs(cEvents, 'cevents');
 
+  // ── V28: epoch must be a valid ISO 8601 datetime when set ─────────────────────
+  if (model.epoch != null && model.epoch !== '') {
+    const d = new Date(model.epoch);
+    if (isNaN(d.getTime())) {
+      err('V28', `Model epoch '${model.epoch}' is not a valid ISO 8601 datetime. Use the Settings tab to correct it.`, 'overview');
+    }
+  }
+
+  // ── V29: cSchedule list with all `when` entries but no fallback ─────────────
+  for (const ce of (model.cEvents || [])) {
+    const css = ce.cSchedules || [];
+    if (css.length > 0 && css.every(cs => cs.when)) {
+      warn('V29', `C-event '${ce.name || ce.id}' has attribute-conditional cSchedules but no fallback entry (one without a 'when' condition). Entities that don't match any condition will receive no service.`, 'cevents');
+    }
+  }
+
   return { errors, warnings };
 }

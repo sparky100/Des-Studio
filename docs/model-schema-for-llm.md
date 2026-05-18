@@ -48,6 +48,7 @@ The LLM must produce a single JSON object that passes all validation rules in §
 | `description` | string | No | 1–3 sentence summary, used by AI features |
 | `visibility` | `"private"` \| `"public"` | No | Default `"private"` |
 | `timeUnit` | `"seconds"` \| `"minutes"` \| `"hours"` \| `"days"` | No | Defines what one simulation clock unit represents. Default `"minutes"`. Shown in reports and AI narrative. |
+| `epoch` | ISO 8601 datetime string, e.g. `"2026-05-18T08:00:00"` | No | Anchors simulation time zero to a real-world calendar datetime. Absent means abstract simulation time (no wall-clock anchor). When set, enables: (1) simulation time ↔ calendar datetime conversion throughout the engine; (2) automatic parsing of `HH:MM` or ISO datetime values in the `time` column of CSV imports; (3) display of the real-world period in reports and experiment controls. **Required when importing a CSV whose time column contains `HH:MM` or ISO datetime strings.** |
 | `experimentDefaults.liveDataMode` | `null` \| `"calibrated_batch"` \| `"rolling"` \| `"lookahead"` | No | Live-data run mode. `null` = static (default). See §15 for live data. |
 | `dataSources` | array | No | Live data source definitions. See §15. |
 
@@ -229,10 +230,12 @@ Instead of `dist`/`distParams`, a schedule entry can supply an explicit list of 
 }
 ```
 
-- Each `rows[].time` is an absolute simulation clock time.
+- Each `rows[].time` is an absolute simulation clock time. When the model has an `epoch` set, the time column in the source CSV can instead contain `HH:MM` (e.g. `08:30`) or ISO datetime (e.g. `2026-05-18T08:30:00`) strings; the importer converts them to simulation-clock offsets from `epoch` automatically.
 - `rows[].attrs` key names must match `attrDefs[].name` on the arriving entity type.
 - When all scheduled arrivals are exhausted the arrival B-event does not reschedule.
 - `times[]` and `rows[]` are mutually exclusive with `dist`/`distParams` in the same schedule entry.
+
+> **Developer note:** The conversion from `HH:MM` / ISO timestamps to simulation time is handled by `parsePlanCsv(text, { epoch, timeUnit })` in `src/ui/shared/planCsvParser.js`. Pass the model's `epoch` string and `timeUnit` to this function when building integrations that ingest CSV data.
 
 ### Rules
 
@@ -338,6 +341,39 @@ C-events fire whenever their condition becomes true. They represent service star
 - `effect` must use `ASSIGN` for standard service start.
 - `cSchedules[].eventId` must reference a valid B-event `id`.
 - `cSchedules[].useEntityCtx`: always `true` for service completion events (schedules the B-event for the specific entity being served).
+
+### Attribute-conditional `cSchedules` — the `when` field
+
+Each `cSchedule` entry may carry an optional `when` predicate (same JSON format as routing predicates — §6.1). When any entry has `when`, **first-match semantics** apply: the engine evaluates entries in order and schedules the first one whose predicate is satisfied, then stops. An entry without `when` at the end acts as the fallback.
+
+This is the standard pattern for routing service time to the right distribution based on entity attributes imported from a plan:
+
+```json
+"cSchedules": [
+  {
+    "eventId": "b_hip_complete",
+    "dist": "Lognormal",
+    "distParams": { "mean": "120", "sd": "20" },
+    "useEntityCtx": true,
+    "when": { "variable": "Entity.surgery_type", "operator": "==", "value": "hip" }
+  },
+  {
+    "eventId": "b_knee_complete",
+    "dist": "Lognormal",
+    "distParams": { "mean": "90", "sd": "15" },
+    "useEntityCtx": true,
+    "when": { "variable": "Entity.surgery_type", "operator": "==", "value": "knee" }
+  },
+  {
+    "eventId": "b_generic_complete",
+    "dist": "Exponential",
+    "distParams": { "mean": "60" },
+    "useEntityCtx": true
+  }
+]
+```
+
+**V29 warning** is raised if all entries have `when` and there is no fallback — entities not matching any condition would silently receive no service.
 
 ### Effect Macros for C-Events
 
@@ -726,11 +762,73 @@ Models can connect distribution parameters to live REST or WebSocket feeds so th
 |---|---|---|
 | `id` | Yes | Unique within the model; referenced by `paramSource.sourceId` |
 | `label` | Yes | Human-readable name shown in the UI |
-| `type` | Yes | `"rest"` \| `"websocket"` \| `"stateSnapshot"` \| `"mock"` |
+| `type` | Yes | `"rest"` \| `"scheduleFeed"` \| `"actualsStream"` \| `"websocket"` \| `"stateSnapshot"` \| `"mock"` |
 | `url` | Yes | Full HTTPS URL to the endpoint |
 | `authHeader` | No | Header name for authentication (e.g. `"Authorization"`) |
 | `authSecret` | No | `{{env.VAR_NAME}}` placeholder — **never a literal credential**. Actual value is entered by the user in `sessionStorage` at runtime. |
 | `refreshSecs` | No | Cache TTL in seconds for REST sources (default 60, minimum 10) |
+| `entityType` | `scheduleFeed` only | Name of the entity type that will arrive |
+| `targetBEventId` | `scheduleFeed` only | ID of the B-event whose `rows[]` will be populated |
+| `timeField` | `scheduleFeed` only | Dot-notation path in each activity object to the start time (default `"time"`) |
+| `attrMap` | `scheduleFeed` only | Object mapping API field paths to entity attribute names. Use `"entityId"` as the target name to set the entity display name |
+
+### `scheduleFeed` data source
+
+A `scheduleFeed` source fetches a planned-arrival schedule from a REST endpoint and injects it as `rows[]` into the named B-event before the run. The plan provides *what* arrives and *when* (entity attributes); the model provides *how long* service takes (calibrated distributions).
+
+```json
+{
+  "id": "ds_theatre",
+  "label": "Operating Theatre Schedule",
+  "type": "scheduleFeed",
+  "url": "https://his.example.com/api/theatre/today",
+  "authHeader": "Authorization",
+  "authSecret": "{{env.HIS_TOKEN}}",
+  "entityType": "Patient",
+  "targetBEventId": "b_patient_arrives",
+  "timeField": "startTime",
+  "attrMap": {
+    "patientName": "entityId",
+    "surgeryType": "surgery_type",
+    "priority": "priority"
+  }
+}
+```
+
+**Rules:**
+- The API response may be a bare JSON array, `{ "activities": [...] }`, or any object whose first value is an array.
+- Each activity's time field may be a plain number (sim time), an `HH:MM` string, or an ISO 8601 datetime. ISO/HH:MM timestamps require `model.epoch` to be set.
+- `entityId` is a reserved attribute name — when set, its value becomes the entity's display name in the simulation UI.
+- Credential values in `authSecret` must always use `{{env.VAR}}` syntax; actual tokens are entered at session time and are never persisted.
+- Planned durations in the feed are **ignored** — service time is always derived from the model's calibrated distributions.
+
+### `actualsStream` data source
+
+An `actualsStream` source receives actual start-time updates from an external system (e.g. a live theatre management system) and reroutes pre-scheduled FEL entries to their actual times.
+
+```json
+{
+  "id": "ds_actuals",
+  "label": "Theatre Actuals Feed",
+  "type": "actualsStream",
+  "url": "wss://his.example.com/api/theatre/actuals",
+  "authHeader": "Authorization",
+  "authSecret": "{{env.HIS_TOKEN}}"
+}
+```
+
+**Expected WebSocket message formats:**
+```json
+{ "entityId": "Alice",  "actualTime": "2026-05-18T09:05:00" }
+{ "entityId": "Bob",    "actualTime": 65 }
+{ "type": "batch", "updates": [{ "entityId": "...", "actualTime": "..." }] }
+```
+
+`actualTime` may be a plain simulation time number, an `HH:MM` string, or a full ISO 8601 datetime. ISO/HH:MM values require `model.epoch` to be set.
+
+The adapter calls `engine.updateScheduledTime(entityId, newSimTime)` for each update, rescheduling the matching pre-scheduled arrival in the FEL while preserving the original `_plannedTime` on the entity for deviation reporting.
+
+**`getSummary().avgPlanDeviation`**: when entities have both `_plannedTime` (from rows[]) and `arrivalTime` (actual), the engine reports the average deviation (actual minus planned). Positive = late; negative = early; null = no planned data. The report includes a "Plan vs Actual" section when this metric is present.
 
 ### `paramSource` on a schedule or cSchedule
 

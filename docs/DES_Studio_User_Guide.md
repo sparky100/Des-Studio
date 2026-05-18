@@ -274,10 +274,24 @@ C-Events fire when their condition becomes true during Phase C. They are tested 
 | Name | Unique identifier |
 | Condition | Boolean expression (e.g., `WaitingRoom.length > 0 AND GP.idle > 0`) |
 | Effects | Macros executed when the condition is satisfied |
-| cSchedule | Distribution used to schedule a subsequent B-Event when this C-Event fires (e.g., service duration) |
+| cSchedule | Distribution used to schedule a subsequent B-Event when this C-Event fires (e.g., service duration). Multiple cSchedule entries are supported for attribute-conditional routing (see §6.3). |
 | Priority | Order in which C-Events are tested when multiple could fire simultaneously |
 
 C-Events model resource allocation decisions: they connect queues to servers by testing availability and performing ASSIGN.
+
+### 4.4a Attribute-conditional service times
+
+A C-event can carry multiple **cSchedule** entries, each with an optional **When** condition. This allows the service duration distribution to depend on the arriving entity's attributes — for example, routing hip-replacement patients to a different duration distribution than knee-replacement patients.
+
+**How it works:**
+1. In the C-Event editor, open the cSchedule panel and click **+ Add scheduled event**.
+2. Select the B-event that signals completion (e.g. `Hip Complete`).
+3. Enable the **Only fire when entity attribute matches** checkbox and build the condition (e.g. `Entity.surgery_type == hip`).
+4. Add another cSchedule entry for `knee`, and a final entry without a condition as the fallback.
+
+**First-match semantics:** the engine evaluates cSchedule entries in order. The first entry whose condition is satisfied (or that has no condition) is scheduled; all remaining entries are skipped.
+
+**Fallback:** an entry without a condition at the end of the list acts as the default — it fires for any entity that didn't match the earlier conditions. Omitting the fallback triggers a V29 warning (entities that don't match any condition receive no service).
 
 ### 4.5 State Variables
 
@@ -402,6 +416,98 @@ time
 - Column names in the CSV become entity attribute names — match them to the attribute definitions on the entity type if you want them to flow through routing conditions.
 - After import, the editor switches automatically to **Arrival attributes** mode so you can inspect or edit individual rows.
 - Optional **Jitter** (Normal or Uniform) can be added after import to introduce random variation around each planned time.
+
+### 6.1b Importing a planned arrival file from Excel (XLSX)
+
+In addition to CSV, the Schedule editor accepts Excel files (`.xlsx`, `.xls`, `.ods`).
+
+**How to import:**
+
+1. In the B-Event editor, set the schedule distribution to **Schedule**.
+2. Click **↑ Load from CSV** — the file picker accepts `.csv`, `.xlsx`, `.xls`, and `.ods`.
+3. DES Studio reads the first sheet by default. The file is converted internally to CSV format; all the same rules apply (timestamp detection, epoch requirement, attrMap).
+
+**Column format** is identical to CSV (see §6.1). The first row is treated as a header if the first cell is not a number. Time stamps, epoch conversion, and attribute mapping all work the same way.
+
+### 6.1c Importing a schedule from a live REST endpoint (scheduleFeed)
+
+For use cases where the arrival plan is managed in an external system (e.g. an operating theatre booking system, an appointment platform, or an airline gate manifest), DES Studio can fetch the schedule directly before each run.
+
+**Setup:**
+
+1. Open the model **Overview** tab.
+2. Scroll to **Data Sources** and click **+ Add source**.
+3. Set the type to **scheduleFeed** and complete the fields:
+
+| Field | What to enter |
+|-------|--------------|
+| URL | The HTTPS endpoint that returns the JSON schedule |
+| Auth header / secret | e.g. `Authorization` / `{{env.HIS_TOKEN}}` — the token value is entered at session time; it is never stored in the model |
+| Entity type | Name of the entity type that arrives (e.g. `Patient`) |
+| Target B-event ID | The ID of the B-event whose schedule will be populated (e.g. `b_patient_arrives`) |
+| Time field | Dot-notation path to the start-time field in each activity object (default: `time`) |
+| Attribute map | JSON object mapping API field paths to entity attribute names (e.g. `{ "patientName": "entityId", "surgeryType": "surgery_type" }`) |
+
+4. Save the model. When a run is started, DES Studio fetches the feed, converts timestamps using the model epoch, and injects the resulting rows into the target B-event — no manual import step required.
+
+**`entityId` — naming individual entities.** If the attribute map includes `"someField": "entityId"`, the value from the API (e.g. the patient's name) becomes the entity's display name in the simulation UI and run results. This is how you track named individuals through the model.
+
+**What the plan provides vs what the model provides:**
+
+| Source | Provides |
+|--------|----------|
+| Schedule feed | Who arrives, when they arrive, their attributes (e.g. surgery type) |
+| Model distributions | How long service takes (sampled at run time from calibrated distributions conditioned on entity attributes) |
+
+Planned durations from the feed are deliberately ignored — service time is always derived from the model's calibrated distributions. This preserves the simulation's ability to explore "what if we were faster/slower" scenarios independently of the actual plan.
+
+### 6.1d Receiving actual times from a live system (actualsStream)
+
+Once a simulation is running against a pre-loaded schedule, an `actualsStream` data source can push actual start times from the live system and adjust the simulation in real time.
+
+**How it works:**
+1. A WebSocket endpoint (e.g. from your booking or theatre system) sends messages as each procedure actually starts.
+2. DES Studio matches the `entityId` in the message to pre-scheduled FEL entries and reschedules them to the actual time.
+3. When the entity arrives (at the actual time), the system remembers the planned time and records the deviation.
+4. The generated report includes a "Plan vs Actual" section showing average deviation in time units.
+
+**Setup:**
+1. Open the model **Overview** tab, scroll to **Data Sources**, and click **+ Add source**.
+2. Set the type to **actualsStream**.
+3. Enter the WebSocket URL (starting with `wss://`) and optional auth credentials.
+
+**Expected message format:**
+```json
+{ "entityId": "Alice",  "actualTime": "2026-05-18T09:05:00" }
+```
+
+`actualTime` may be a sim-time number, `HH:MM` string, or ISO 8601 datetime (requires epoch to be set).
+
+**Plan vs Actual report section:** when the report is exported after a run that used planned data with actuals, the "Simulation Results" section includes average plan deviation (positive = ran late, negative = ran early).
+
+### 6.2 Model settings — time unit and simulation start time
+
+Two model-level fields in the **Settings** tab control how DES Studio labels and anchors simulation time.
+
+**Time unit** (`timeUnit`): Sets the label for one simulation time unit (e.g. `minutes`, `hours`, `seconds`). The label appears in the UI, in AI analysis text, and in exported reports. It does not affect engine calculations — it is purely a display annotation.
+
+#### Simulation start time (epoch)
+
+The **Simulation start time** field (`epoch`) maps simulation time t=0 to a specific real-world calendar date and time. It is optional, but when set it unlocks several capabilities.
+
+**What it is.** Entering `2026-05-18T08:00:00` means "when the simulation clock reads 0, the real-world time is Monday 18 May 2026, 08:00." From that anchor, DES Studio can convert any simulation time to a wall-clock time and vice versa.
+
+**How to set it.** Open the **Settings** tab for the model. Below the Time unit field, use the date/time picker to set the epoch. The value is stored in the model JSON as an ISO 8601 string (e.g. `"2026-05-18T08:00:00"`).
+
+**What it enables:**
+
+1. **Report cover period line.** The generated report cover page shows the simulated period in plain English: e.g. "Period: Mon 18 May 08:00 → 16:00" (for a 480-minute run starting at 08:00).
+2. **Experiment controls.** The run setup panel displays real-world start and end times alongside the numeric duration, making it easier to confirm the run covers the intended shift or day.
+3. **CSV timestamp import.** When loading a planned-arrival CSV (see §6.1), the `time` column may contain real timestamps — either `HH:MM` format (e.g. `08:30`) or full ISO 8601 (e.g. `2026-05-18T10:45:00`) — instead of numeric simulation-time offsets. DES Studio converts each timestamp to a simulation-time offset using the epoch and time unit. Without an epoch, rows with timestamp-format times are skipped and a warning is shown.
+
+**Notes:**
+- The epoch field is optional. Models without it behave exactly as before — all times are treated as plain numeric offsets and no wall-clock conversion is applied.
+- The epoch is required if you intend to import a CSV where the `time` column contains `HH:MM` or ISO 8601 timestamps rather than numeric values.
 
 ---
 

@@ -4,6 +4,7 @@ import { Tag, Btn } from "../shared/components.jsx";
 import { cumulativeMean } from "../../engine/statistics.js";
 import { WarmupChart, CumulativeMeanChart } from "./SweepViews.jsx";
 import { ConditionBuilder } from "../editors/index.jsx";
+import { simToWall, formatWallTime } from "../../engine/clockUtils.js";
 
 export function ExperimentControls({
   warmupPeriod, setWarmupPeriod,
@@ -35,6 +36,17 @@ export function ExperimentControls({
                 {item}
               </div>
             ))}
+            {model?.epoch && (() => {
+              const epoch = model.epoch;
+              const unit  = model.timeUnit || 'minutes';
+              const start = formatWallTime(simToWall(0, epoch, unit));
+              const end   = formatWallTime(simToWall(maxSimTime, epoch, unit));
+              return start && end ? (
+                <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 999, padding: "5px 10px", color: C.accent, fontFamily: FONT, fontSize: 11 }}>
+                  {start} → {end}
+                </div>
+              ) : null;
+            })()}
           </div>
         </div>
         <Btn small variant="ghost" onClick={() => setShowRunSetup(open => !open)}>

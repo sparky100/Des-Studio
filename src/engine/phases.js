@@ -280,6 +280,7 @@ export function fireBEvent(ev, ctx) {
         continue;
       }
     }
+    const plannedArrivalTime = rowAttrs ? clock + delay : undefined;
     felEntries.push({
       ...tmpl,
       scheduledTime:        clock + delay,
@@ -288,6 +289,7 @@ export function fireBEvent(ev, ctx) {
       _contextCustId:       sched.isRenege ? renegeTarget : effectCtx._lastCustId,
       _contextSrvId:        effectCtx._lastSrvId,
       _scheduleRowAttrs:    rowAttrs || undefined,
+      _plannedArrivalTime:  plannedArrivalTime,
     });
     msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${sched.dist}(${delay.toFixed(3)})]`);
   }
@@ -305,8 +307,33 @@ export function fireCEvent(ev, ctx) {
   const effectStr = Array.isArray(ev.effect) ? ev.effect.filter(Boolean).join(';') : (ev.effect || '');
   const { msgs, felEntries } = applyEffect(effectStr, effectCtx);
 
+  // Resolve attribute-conditional cSchedules.
+  // When ANY entry has a `when` predicate, first-match semantics apply:
+  //   iterate in order, use the first entry whose predicate is true (or that has no `when`),
+  //   skip all remaining entries.
+  // When NO entries have `when`, all entries fire (unchanged legacy behaviour).
+  const allCSchedules = ev.cSchedules || [];
+  const hasAnyWhen = allCSchedules.some(cs => cs.when);
+  let resolvedSchedules;
+  if (!hasAnyWhen) {
+    resolvedSchedules = allCSchedules;
+  } else {
+    const custId0 = effectCtx._lastCustId;
+    const custEntity0 = custId0 ? ctx.entities.find(e => e.id === custId0) : null;
+    const predicateState0 = {
+      currentEntity: custEntity0 ?? null,
+      resources: {},
+      queues: {},
+      ...ctx.state,
+    };
+    const match = allCSchedules.find(cs =>
+      !cs.when || evaluatePredicate(cs.when, predicateState0)
+    );
+    resolvedSchedules = match ? [match] : [];
+  }
+
   // Process structured cSchedules
-  for (const cs of ev.cSchedules || []) {
+  for (const cs of resolvedSchedules) {
     const tmpl = (model.bEvents || []).find(b => b.id === cs.eventId);
     if (!tmpl) { msgs.push(`cSchedule: B-event "${cs.eventId}" not found`); continue; }
 

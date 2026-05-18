@@ -309,6 +309,7 @@ export const MACROS = [
         stages:         [],
         lastStageStart: null,
         loopCount:      0,
+        _plannedTime:   felRef?._plannedArrivalTime ?? undefined,
       };
       markEntityWaiting(ent, clock, queueName);
       entities.push(ent);

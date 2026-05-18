@@ -86,3 +86,46 @@ describe('parsePlanCsv', () => {
     expect(r.attrHeaders).toEqual(['severity', 'age']);
   });
 });
+
+const EPOCH = '2026-05-18T08:00:00';
+
+describe('parsePlanCsv — timestamp time column', () => {
+  test('HH:MM timestamps with epoch convert to sim time', () => {
+    const csv = 'time,type\n08:30,hip\n10:45,knee';
+    const r = parsePlanCsv(csv, { epoch: EPOCH, timeUnit: 'minutes' });
+    expect(r.error).toBeUndefined();
+    expect(r.rows[0].time).toBe(30);
+    expect(r.rows[1].time).toBe(165);
+    expect(r.rows[0].attrs.type).toBe('hip');
+  });
+
+  test('ISO datetime timestamps with epoch convert to sim time', () => {
+    const csv = 'time,type\n2026-05-18T08:30:00,hip\n2026-05-18T10:45:00,knee';
+    const r = parsePlanCsv(csv, { epoch: EPOCH, timeUnit: 'minutes' });
+    expect(r.error).toBeUndefined();
+    expect(r.rows[0].time).toBe(30);
+    expect(r.rows[1].time).toBe(165);
+  });
+
+  test('timestamps without epoch set returns an error', () => {
+    const csv = 'time,type\n08:30,hip';
+    const r = parsePlanCsv(csv);
+    expect(r.error).toBeTruthy();
+    expect(r.error).toMatch(/epoch/i);
+    expect(r.rows).toEqual([]);
+  });
+
+  test('plain numeric time column still works with epoch set', () => {
+    const csv = 'time,type\n30,hip\n165,knee';
+    const r = parsePlanCsv(csv, { epoch: EPOCH, timeUnit: 'minutes' });
+    expect(r.error).toBeUndefined();
+    expect(r.rows[0].time).toBe(30);
+  });
+
+  test('mixed plain numbers are not flagged as timestamps', () => {
+    const csv = '10\n20\n30';
+    const r = parsePlanCsv(csv);
+    expect(r.error).toBeUndefined();
+    expect(r.rows.length).toBe(3);
+  });
+});

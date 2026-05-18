@@ -206,6 +206,155 @@ function valuesEqual(a, b) {
   return false;
 }
 
+// ── Data Sources Editor ──────────────────────────────────────────────────────
+
+const BLANK_SOURCE = () => ({
+  id: `ds_${Date.now()}`,
+  label: '',
+  type: 'rest',
+  url: '',
+  authHeader: '',
+  authSecret: '',
+  entityType: '',
+  targetBEventId: '',
+  timeField: 'time',
+  attrMap: '{}',
+});
+
+function DataSourcesEditor({ sources, onChange, canEdit }) {
+  const [expanded, setExpanded] = useState(null);
+
+  const update = (idx, patch) => {
+    const next = sources.map((s, i) => i === idx ? { ...s, ...patch } : s);
+    onChange(next);
+  };
+
+  const add = () => {
+    const blank = BLANK_SOURCE();
+    onChange([...sources, blank]);
+    setExpanded(sources.length);
+  };
+
+  const remove = (idx) => {
+    const next = sources.filter((_, i) => i !== idx);
+    onChange(next);
+    setExpanded(null);
+  };
+
+  const S = { row: { display:'flex', alignItems:'center', gap:6, padding:'6px 8px', borderRadius:4, background:C.surface, cursor:'pointer', userSelect:'none' },
+               label: { flex:1, fontSize:12, color:C.text, fontFamily:FONT },
+               badge: { fontSize:10, padding:'2px 6px', borderRadius:3, background:C.border, color:C.muted, fontFamily:FONT },
+               field: { display:'flex', flexDirection:'column', gap:3 },
+               fieldLabel: { fontSize:10, fontWeight:600, color:C.muted, letterSpacing:'1.2px', textTransform:'uppercase', fontFamily:FONT },
+               input: { background:C.bg, border:`1px solid ${C.border}`, borderRadius:4, color:C.text, fontFamily:FONT, fontSize:12, padding:'4px 7px' } };
+
+  return (
+    <div style={{display:'flex', flexDirection:'column', gap:8}}>
+      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:2}}>
+        <label style={{fontSize:11, fontWeight:600, color:C.muted, letterSpacing:'1.5px', textTransform:'uppercase', fontFamily:FONT}}>Data Sources</label>
+        {canEdit && <Btn small variant="ghost" onClick={add}>+ Add source</Btn>}
+      </div>
+
+      {sources.length === 0 && (
+        <span style={{fontSize:12, color:C.muted, fontFamily:FONT}}>No external data sources configured.</span>
+      )}
+
+      {sources.map((src, idx) => (
+        <div key={src.id} style={{border:`1px solid ${C.border}`, borderRadius:6, overflow:'hidden'}}>
+          <div style={S.row} onClick={() => setExpanded(expanded === idx ? null : idx)}>
+            <span style={S.label}>{src.label || src.id || `Source ${idx + 1}`}</span>
+            <span style={S.badge}>{src.type}</span>
+            <span style={{fontSize:10, color:C.muted, fontFamily:FONT}}>{expanded === idx ? '▲' : '▼'}</span>
+          </div>
+
+          {expanded === idx && (
+            <div style={{padding:'10px 12px', display:'flex', flexDirection:'column', gap:8, borderTop:`1px solid ${C.border}`}}>
+              <div style={{display:'flex', gap:8}}>
+                <div style={{...S.field, flex:1}}>
+                  <span style={S.fieldLabel}>ID</span>
+                  <input style={S.input} value={src.id} disabled readOnly/>
+                </div>
+                <div style={{...S.field, flex:2}}>
+                  <span style={S.fieldLabel}>Label</span>
+                  <input style={S.input} value={src.label||''} disabled={!canEdit}
+                    onChange={e => update(idx, { label: e.target.value })}/>
+                </div>
+                <div style={{...S.field}}>
+                  <span style={S.fieldLabel}>Type</span>
+                  <select style={S.input} value={src.type} disabled={!canEdit}
+                    onChange={e => update(idx, { type: e.target.value })}>
+                    <option value="rest">rest</option>
+                    <option value="scheduleFeed">scheduleFeed</option>
+                    <option value="actualsStream">actualsStream</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={S.field}>
+                <span style={S.fieldLabel}>URL</span>
+                <input style={{...S.input, width:'100%'}} value={src.url||''} disabled={!canEdit}
+                  onChange={e => update(idx, { url: e.target.value })}/>
+              </div>
+
+              <div style={{display:'flex', gap:8}}>
+                <div style={{...S.field, flex:1}}>
+                  <span style={S.fieldLabel}>Auth header</span>
+                  <input style={S.input} value={src.authHeader||''} disabled={!canEdit} placeholder="e.g. Authorization"
+                    onChange={e => update(idx, { authHeader: e.target.value })}/>
+                </div>
+                <div style={{...S.field, flex:2}}>
+                  <span style={S.fieldLabel}>Auth secret (env placeholder)</span>
+                  <input style={S.input} value={src.authSecret||''} disabled={!canEdit} placeholder="{{env.MY_TOKEN}}"
+                    onChange={e => update(idx, { authSecret: e.target.value })}/>
+                </div>
+              </div>
+
+              {src.type === 'scheduleFeed' && (<>
+                <div style={{display:'flex', gap:8}}>
+                  <div style={{...S.field, flex:1}}>
+                    <span style={S.fieldLabel}>Entity type</span>
+                    <input style={S.input} value={src.entityType||''} disabled={!canEdit}
+                      onChange={e => update(idx, { entityType: e.target.value })}/>
+                  </div>
+                  <div style={{...S.field, flex:1}}>
+                    <span style={S.fieldLabel}>Target B-event ID</span>
+                    <input style={S.input} value={src.targetBEventId||''} disabled={!canEdit}
+                      onChange={e => update(idx, { targetBEventId: e.target.value })}/>
+                  </div>
+                  <div style={{...S.field, flex:1}}>
+                    <span style={S.fieldLabel}>Time field (dot path)</span>
+                    <input style={S.input} value={src.timeField||'time'} disabled={!canEdit}
+                      onChange={e => update(idx, { timeField: e.target.value })}/>
+                  </div>
+                </div>
+                <div style={S.field}>
+                  <span style={S.fieldLabel}>Attribute map (JSON: {'"apiField"'}: {'"attrName"'})</span>
+                  <textarea rows={3}
+                    style={{...S.input, fontFamily:'monospace', fontSize:11, resize:'vertical', width:'100%'}}
+                    value={typeof src.attrMap === 'object' ? JSON.stringify(src.attrMap, null, 2) : (src.attrMap||'{}')}
+                    disabled={!canEdit}
+                    onChange={e => {
+                      try { update(idx, { attrMap: JSON.parse(e.target.value) }); } catch { /* keep raw string while typing */ }
+                    }}/>
+                  <span style={{fontSize:10, color:C.muted, fontFamily:FONT}}>
+                    Maps API response fields to entity attribute names. Use "patientName": "entityId" to set the entity display name.
+                  </span>
+                </div>
+              </>)}
+
+              {canEdit && (
+                <div style={{display:'flex', justifyContent:'flex-end'}}>
+                  <Btn small variant="ghost" onClick={() => remove(idx)} style={{color:'#e55'}}>Remove</Btn>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})=>{
   const [model,setModel]=useState(()=>{
     if(!modelData) return null;
@@ -693,6 +842,22 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 <option value="hours">Hours</option>
                 <option value="days">Days</option>
               </select>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Simulation start (epoch)</label>
+              <input
+                type="datetime-local"
+                value={(model.epoch||"").slice(0,16)}
+                onChange={canEdit?(e=>setField("epoch", e.target.value ? new Date(e.target.value).toISOString() : "")):undefined}
+                disabled={!canEdit}
+                style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:12,padding:"5px 8px",width:220}}
+              />
+              <span style={{fontSize:10,color:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif"}}>
+                Optional. When set, simulation time maps to real calendar dates. Required for CSV timestamp import.
+              </span>
+            </div>
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
+              <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
             </div>
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
               <GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>

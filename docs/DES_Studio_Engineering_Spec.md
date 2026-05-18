@@ -16,6 +16,10 @@
 | v1.2 | 2026-05-17 | Sprint 57 | Real-time adapter layer — RestAdapter, AdapterRegistry, nullRegistry, paramSource schema extension |
 | v1.3 | 2026-05-17 | Sprint 58 | Report generation — `generateReport()`, LLM prompt builders, html2canvas canvas capture, Execute panel Export Report button |
 | v1.4 | 2026-05-18 | Sprint 58+ | Time-averaged server utilisation — `_busyStart`/`_busyTime` tracking in `entities.js`; warmup reset; `getSummary()` formula updated to `busyTime / (elapsed × count)`. Markdown report export replacing docx. CSV import for Schedule distribution — `planCsvParser.js`, `ScheduleEditor` "Load from CSV" button, `distParams.rows[]` schema. |
+| v1.5.0 | 2026-05-18 | Sprint 62 | Real-world clock (epoch field, clockUtils, timestamp CSV import) |
+| v1.6.0 | 2026-05-18 | Sprint 63 | Planned data import — ScheduleFeedAdapter, xlsxParser, DataSourcesEditor UI, entityId convention, prefetchScheduleFeeds() |
+| v1.7.0 | 2026-05-18 | Sprint 64 | Attribute-conditional service times — `when` predicate on cSchedule entries, first-match semantics, V29 validation, CEventEditor UI |
+| v1.8.0 | 2026-05-18 | Sprint 65 | Actuals tracking — `_plannedTime` on entities, `updateScheduledTime()` API, `avgPlanDeviation` in getSummary(), ActualsStreamAdapter, report Plan vs Actual section |
 
 ---
 
@@ -116,6 +120,87 @@ The report generation module produces professional Word documents (`.docx`) from
 - Filename pattern: `<ModelName> — <RunLabel> — Report.docx`
 - `docx` v9 API notes: hex colours without `#` prefix; `PageNumberElement` (not `PageNumber` constructor); `ImageRun` requires `type: 'png'`
 
+### 2.7 Clock Utilities (Sprint 62)
+
+`src/engine/clockUtils.js` provides real-world clock conversion helpers. These functions are stateless pure utilities that accept the model's `epoch` and `timeUnit` fields.
+
+| Export | Signature | Description |
+|--------|-----------|-------------|
+| `simToWall` | `simToWall(t, epoch, timeUnit) → Date` | Converts a simulation time `t` to an absolute `Date` by adding `t` time units to `epoch`. Returns `null` if `epoch` is not set. |
+| `wallToSim` | `wallToSim(dt, epoch, timeUnit) → number` | Converts a `Date` (or ISO string) `dt` back to a simulation time offset relative to `epoch`. Returns `null` if `epoch` is not set. |
+| `formatWallTime` | `formatWallTime(date) → string` | Formats a `Date` as a human-readable locale string for display in the report cover and experiment controls. |
+| `parseTimeInput` | `parseTimeInput(value, epoch, timeUnit) → number` | Parses a time value that may be numeric, HH:MM, or full ISO 8601. When `epoch` is set and the value looks like a timestamp, delegates to `wallToSim` to produce a simulation-time offset; otherwise falls back to `parseFloat`. |
+| `looksLikeTimestamp` | `looksLikeTimestamp(value) → boolean` | Returns `true` when the string matches HH:MM or ISO 8601 patterns, signalling that `parseTimeInput` should interpret it as a calendar time rather than a numeric offset. Used by `planCsvParser.js` to decide whether an `epoch` is required for import. |
+
+These utilities are used by `planCsvParser.js` (CSV import), the report generator (cover page period line), and the experiment controls UI (start/end wall-clock display).
+
+### 2.8 Planned Data Import (Sprint 63)
+
+Sprint 63 adds two new ways to feed a planned-arrival schedule into a B-event's `rows[]`:
+
+#### `ScheduleFeedAdapter` (`src/engine/adapters/ScheduleFeedAdapter.js`)
+
+Fetches a JSON array of planned activities from a REST endpoint and converts them to the `rows[]` format consumed by B-events.
+
+- **Retry policy:** network failures retry 3× with 2 s / 4 s / 8 s backoff. HTTP error responses (4xx/5xx) are thrown immediately without retrying.
+- **Time parsing:** delegates to `parseTimeInput()` — handles plain numbers (sim time), `HH:MM`, and ISO 8601 datetimes. Requires `model.epoch` for timestamp formats.
+- **Attribute mapping:** `attrMap` maps dot-notation paths in the API response to entity attribute names. Setting `"patientName": "entityId"` names the entity instance.
+- **Response envelope:** accepts bare arrays, `{ activities: [...] }`, or any object whose first value is an array.
+
+#### `AdapterRegistry.prefetchScheduleFeeds(model)` (`src/engine/adapters/index.js`)
+
+New method that finds all `scheduleFeed` data sources, fetches them via `ScheduleFeedAdapter`, and returns a **new model object** with `rows[]` merged and sorted into the targeted B-events. Does not mutate the input model. Call before `engine.run()`.
+
+#### `xlsxParser` (`src/ui/shared/xlsxParser.js`)
+
+Converts an XLSX/XLS/ODS `ArrayBuffer` to the same `{ rows, attrHeaders, skipped, error }` shape as `parsePlanCsv`. Internally converts the sheet to CSV via SheetJS then delegates to `parsePlanCsv`, keeping timestamp/epoch handling in one place.
+
+```js
+parseXlsx(buffer, { epoch, timeUnit, sheetName })
+// → { rows: [{ time, attrs }], attrHeaders, skipped, error? }
+```
+
+#### `entityId` convention
+
+When an entity attribute named `entityId` is set (via `attrMap` or CSV), it becomes the entity's display name in the simulation UI and run results. This is the standard way to import named entities (e.g. named patients from a surgical list).
+
+#### `DataSourcesEditor` component (`src/ui/ModelDetail.jsx`)
+
+Added inline to the Overview tab. Allows modellers to add, configure, and remove data sources without editing JSON. Exposes all `scheduleFeed`-specific fields (entityType, targetBEventId, timeField, attrMap JSON editor) when `type: "scheduleFeed"` is selected.
+
+### 2.9 Attribute-Conditional Service Times (Sprint 64)
+
+#### `when` predicate on `cSchedule` entries
+
+Each entry in a C-event's `cSchedules` list may carry an optional `when` predicate (same JSON format as entity routing predicates — Addition 1 §4). When present, it acts as a guard:
+
+**Algorithm:**
+1. If **no** entries have `when` → all entries fire as before (legacy behaviour unchanged)
+2. If **any** entry has `when` → first-match semantics apply:
+   - Evaluate each entry's `when` predicate against the current entity's attributes at the moment the C-event fires
+   - The **first** entry whose predicate is `true` (or that has no `when` — the fallback) is scheduled
+   - All remaining entries are skipped
+
+**Intent:** The plan provides *what* (entity type and attributes like `surgery_type`). The model provides *how long* (calibrated distributions). The `when` predicate connects entity attributes to the right distribution. For example:
+
+```json
+"cSchedules": [
+  { "when": { "variable": "Entity.surgery_type", "operator": "==", "value": "hip" },
+    "dist": "Lognormal", "distParams": { "mean": "120", "sd": "20" }, ... },
+  { "when": { "variable": "Entity.surgery_type", "operator": "==", "value": "knee" },
+    "dist": "Lognormal", "distParams": { "mean": "90",  "sd": "15" }, ... },
+  { "dist": "Exponential", "distParams": { "mean": "60" }, ... }
+]
+```
+
+#### V29 validation
+
+`validateModel` emits a **V29 warning** when all entries in a `cSchedules` list have `when` and no fallback is present. An entity not matching any condition would receive no service — a silent miss that is almost never the intended behaviour.
+
+#### UI
+
+`CEventEditor` shows a checkbox per cSchedule entry to enable the `when` condition. When checked, an `EntityFilterBuilder` widget appears, producing the predicate JSON. Entries without `when` display a "(no condition — this entry is the fallback)" label when other entries in the list are conditional.
+
 ---
 
 ## 3. Data Model
@@ -138,6 +223,9 @@ A DES Studio model is a JSON object stored in the `models` table. All fields bel
 | `containerTypes` | ContainerType[] | Array of container (level resource) definitions |
 | `graph` | object | Visual Designer layout (nodes, edges, viewport) — persisted by `src/ui/visual-designer/graph.js` |
 | `experimentDefaults` | object | Default execution parameters: `maxSimTime`, `warmupPeriod`, `replications`, `seed`, `terminationMode`, `terminationCondition` |
+| `timeUnit` | string | The label for one simulation time unit (e.g. `"minutes"`, `"hours"`); used in UI display and AI prompts |
+| `epoch` | string (ISO 8601) or null | Optional. When set, maps t=0 to this calendar moment (e.g. `"2026-05-18T08:00:00"`). Drives `simToWall`/`wallToSim` conversions in `src/engine/clockUtils.js`. Shown on the report cover and in experiment controls. Required for CSV planned-arrival files that use real timestamps (HH:MM or full ISO 8601) in the time column rather than numeric offsets. |
+| `dataSources` | DataSource[] | Optional array of external data source definitions. Type `"rest"` binds live values to distribution parameters via `paramSource`. Type `"scheduleFeed"` populates a B-event's `rows[]` from a planned-arrival REST feed. See §2.5 and §2.8. |
 
 ### 3.2 Entity Type Schema
 
@@ -536,6 +624,45 @@ DES Studio targets WCAG 2.1 AA compliance. Implemented requirements:
 | V25 | Warning | `RENEGE(TypeName)` silently fails; the correct form is `RENEGE(ctx)` |
 | V26 | Error | Container `id` must be unique and non-empty; `capacity` must be > 0; `initialLevel` must be >= 0 and <= capacity |
 | V27 | Error | FILL/DRAIN macro must reference a declared container ID |
+| V28 | Warning | `epoch` must be a valid ISO 8601 datetime string when set (e.g. `"2026-05-18T08:00:00"`); an invalid value is ignored and real-world clock conversions are disabled |
+| V29 | Warning | A C-event's `cSchedules` list has conditional entries (all with `when`) but no fallback (entry without `when`). Entities not matching any condition will receive no service. |
+
+### 2.10 Actuals Tracking (Sprint 65)
+
+#### `_plannedTime` on entity objects
+
+When an entity is created via the ARRIVE macro from a B-event that used a Schedule (rows[]) distribution, its FEL entry carries `_plannedArrivalTime` (the absolute planned simulation time). At entity-creation time, `entity._plannedTime = felRef._plannedArrivalTime` is set. Entities created from statistical distributions have `_plannedTime = undefined`.
+
+#### `engine.updateScheduledTime(entityId, newSimTime)` (FEL update API)
+
+```js
+engine.updateScheduledTime("Alice", 65)  // → true/false
+```
+
+Finds FEL entries where `_scheduleRowAttrs.entityId === entityId`, preserves the original `_plannedArrivalTime`, and updates `scheduledTime` to `newSimTime`. Re-sorts the FEL. Returns `true` if at least one entry was updated.
+
+When the B-event subsequently fires at the new time, the entity is created with `arrivalTime = newSimTime` and `_plannedTime = original planned time` — enabling plan-vs-actual deviation measurement.
+
+#### `getSummary().avgPlanDeviation`
+
+```js
+{ avgPlanDeviation: 5.0 }  // average deviation in model time units; null when no planned entities
+```
+
+Average of `(entity.arrivalTime - entity._plannedTime)` across all customer entities that have `_plannedTime` set. Positive = late on average; negative = early; null = no planned arrivals.
+
+#### `ActualsStreamAdapter` (`src/engine/adapters/ActualsStreamAdapter.js`)
+
+Receives actual start-time updates from an external system. Supports:
+- WebSocket connection (`connect()`)
+- Direct push (`pushUpdate(entityId, actualTime)`)
+- Pre-connection buffering (updates queued until `attachEngine()` is called)
+
+Message formats accepted: plain sim-time numbers, HH:MM strings, ISO 8601 datetimes (requires `model.epoch`).
+
+#### Report: Plan vs Actual section
+
+`buildResults()` in `reportGenerator.js` includes a "Plan vs Actual" section only when `summary.avgPlanDeviation` is non-null. Shows average deviation and direction (early / on time / late).
 
 ---
 
