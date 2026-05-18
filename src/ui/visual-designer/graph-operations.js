@@ -572,7 +572,12 @@ export function deleteVisualNode(model, node) {
         });
       });
 
-      next.queues = queues.filter(q => q.id !== node.refId);
+      const deletedName = clean(queue.name).toLowerCase();
+      next.queues = queues
+        .filter(q => q.id !== node.refId)
+        .map(q => q.overflowDestination && clean(q.overflowDestination).toLowerCase() === deletedName
+          ? { ...q, overflowDestination: undefined }
+          : q);
       next.cEvents = cEvents.filter(ce => !affectedCIds.has(ce.id));
       next.bEvents = bEvents
         .filter(be => !ownedBIds.has(be.id))
