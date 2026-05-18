@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.6.0 (Sprints 1–55a)
+Version: 1.7.0 (Sprints 1–66)
 
 ---
 
@@ -17,6 +17,8 @@ Version: 1.6.0 (Sprints 1–55a)
 | v1.6.0 | 46–55a | AI Apply & Re-run, Paste JSON import, accessibility (WCAG 2.1 AA), design token system, UX polish (keyboard shortcuts, toasts, DistPicker redesign), responsive layout, cost summary in Results view, god component refactoring |
 | v1.7.0 | 57 | Real-time adapter layer — live data source binding for distribution parameters |
 | v1.8.0 | 58 | Report generation — Export a professional Word (.docx) report from any completed run |
+| v1.9.0 | 62–65 | Real-world clock (epoch), planned data import (CSV/XLSX/scheduleFeed), conditional service times (`when`), actuals tracking (plan vs actual deviation) |
+| v1.10.0 | 66 | Visual Designer badges, Execute Panel UX (Animate/Speed to Setup, Export consolidation, Entity Details rename, Log guard, chart formatting) |
 
 ---
 
@@ -584,6 +586,8 @@ The Log view is a scrollable, searchable event log showing every event that fire
 
 Filter by phase (B-only, C-only, or both) to focus on scheduled vs. conditional activity. Search by entity ID or event name. Export the full log as CSV for external analysis.
 
+> **During execution:** The Log menu button is disabled while a run is in progress. The bottom-panel event log remains visible during execution. The Log view becomes available in the menu again once the run completes.
+
 ### 8.3 Histograms
 
 The Histograms view shows a bar chart of waiting time for each queue in the model. The x-axis is waiting time; the y-axis is frequency. Vertical markers indicate the p50, p90, and p99 percentiles. Use histograms to:
@@ -591,15 +595,15 @@ The Histograms view shows a bar chart of waiting time for each queue in the mode
 - Identify long-tail waiting time distributions
 - Check whether a service meets percentile-based SLAs (e.g., 90% of patients wait under 20 minutes)
 
-### 8.4 Entities view
+### 8.4 Entity Details view
 
-The Entities view is a per-entity lifecycle table. Each row is one entity instance; columns include arrival time, service start time, departure time, time in queue, time in service, and any custom attributes. The table is:
+The Entity Details view is a per-entity lifecycle table. Each row is one entity instance; columns include arrival time, service start time, departure time, time in queue, time in service, and any custom attributes. The table is:
 
 - Sortable by any column
 - Filterable by entity type, time range, or attribute value
 - Equipped with anomaly detection — rows where wait time or time in system is more than 3σ from the mean are highlighted
 
-Use the Entities view to find individual outlier cases and trace why a specific entity experienced an unusually long wait.
+Use the Entity Details view to find individual outlier cases and trace why a specific entity experienced an unusually long wait.
 
 ### 8.5 Analysis view
 
@@ -712,36 +716,56 @@ DES Studio validates connections and highlights invalid ports in red.
 
 Click any node to open the **Node Inspector** panel on the right. The inspector shows all editable fields for that element — the same fields available in the Forms/Tabs editor. Changes take effect immediately and are reflected in both the canvas and the structured editor.
 
-### 10.4 Syncing with editors
+### 10.4 Node badges
+
+Node cards display small badge chips when advanced configuration is present:
+
+| Badge | Appears on | Meaning |
+|-------|------------|---------|
+| `when` (amber) | ACTIVITY nodes | At least one service-time schedule has an attribute-based condition (`when` predicate). Click the badge to open the node inspector and view the conditional routing. |
+| `feed` (cyan) | SOURCE nodes | A live schedule feed (scheduleFeed data source) is configured to inject arrivals into this event before each run. Click the badge to open the node inspector. |
+
+Badges are read-only indicators — they do not modify the model. No badge is shown when no advanced configuration is present.
+
+### 10.5 Syncing with editors
 
 The Visual Designer and the Forms/Tabs editors share a single canonical model JSON. There is no separate "sync" step — the two views are always in sync. You can switch between them at any time without losing changes.
 
+### 10.6 Run configuration (Setup tab)
+
+Controls that affect how a run executes are in the **Setup tab**, not the Execute menu:
+
+| Control | Purpose |
+|---------|---------|
+| **Animate** toggle | Enable/disable live entity animation during the run. Disabling animation speeds up long runs significantly. |
+| **Collect time-series** checkbox | Record per-step metric snapshots during the run (required for cumulative mean charts). Disable for maximum speed on large models. |
+| **Speed** slider | Control animation playback rate (0.5× – 10×) when Animate is enabled. |
+
+These are set before starting a run. They cannot be changed mid-run.
+
 ---
 
-## 11. Sharing and Exporting
+## 11. Exporting
 
-### 11.1 Share link and QR code
+### 11.1 Export results
 
-From the Model Detail view, click **Share**. DES Studio generates a unique shareable URL for the current model (or the current run results snapshot). A QR code is displayed alongside the link. Recipients who open the link can view the model and results in read-only mode without signing in.
+In the Execute panel, click **Export…**. A format selection popover opens:
 
-To revoke a share link, click **Unshare** — the link will stop resolving.
+| Format | Contents |
+|--------|----------|
+| **JSON** | Full results object including all raw statistics, replication data, and confidence intervals. Suitable for programmatic processing or archiving. |
+| **CSV** | KPI summary table, per-queue stats, per-resource utilisation, and the per-entity lifecycle table. Suitable for import into Excel or R. |
+| **HTML** | Standalone report page with charts and tables. Can be opened in any browser without a DES Studio account. |
 
-### 11.2 Export results as JSON or CSV
+Select one or more formats and click **Download**. The event log can also be exported as CSV from the Log view.
 
-In the Analysis view or Run History, click **Export**:
-
-- **CSV**: KPI summary table, per-queue stats, per-resource utilisation, and (optionally) the per-entity lifecycle table. Suitable for import into Excel or R.
-- **JSON**: Full results object including all raw statistics, replication data, and confidence intervals. Suitable for programmatic processing or archiving.
-
-The event log can also be exported as CSV from the Log view.
-
-### 11.3 Export model as JSON
+### 11.2 Export model as JSON
 
 From the Model Detail view click **Export Model**. DES Studio downloads the model definition as a `.json` file. This file can be imported into any DES Studio instance via **Import** in the Model Library.
 
-### 11.4 Export a simulation report (Word document)
+### 11.3 Export a simulation report (Markdown)
 
-After running a simulation, click **Export Report** in the Execute panel toolbar (next to "Export Results CSV").
+After running a simulation, click **Export Report** in the Execute panel toolbar.
 
 DES Studio generates a multi-section Word document (`.docx`) containing:
 

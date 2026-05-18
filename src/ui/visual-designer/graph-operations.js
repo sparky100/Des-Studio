@@ -323,10 +323,13 @@ export function connectVisualNodes(model, graph, from, to) {
         ...(loopConfig ? { loopConfig } : {}),
       }];
     }
-    next.cEvents = updateByRef(next.cEvents, source.refId, event => ({
-      ...event,
-      cSchedules: [{ eventId: completionId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
-    }));
+    next.cEvents = updateByRef(next.cEvents, source.refId, event => {
+      const kept = (event.cSchedules || []).filter(cs => cs.eventId !== completionId);
+      return {
+        ...event,
+        cSchedules: [...kept, { eventId: completionId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+      };
+    });
   }
 
   if (source.type === VISUAL_NODE_TYPES.ACTIVITY && target.type === VISUAL_NODE_TYPES.SINK) {

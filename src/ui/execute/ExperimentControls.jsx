@@ -21,6 +21,9 @@ export function ExperimentControls({
   model,
   onDetectWarmup,
   persistExperimentDefaults,
+  animationEnabled, setAnimationEnabled,
+  collectTimeSeries, setCollectTimeSeries,
+  speedMultiplier, setSpeedMultiplier,
 }) {
   return (
     <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
@@ -226,6 +229,45 @@ export function ExperimentControls({
               />
             </div>
           )}
+
+          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>RUN OPTIONS</span>
+            <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: animationEnabled ? C.accent : C.label, fontFamily: FONT }}
+                title="Show entity tokens moving between nodes during auto-run">
+                <input
+                  type="checkbox"
+                  checked={!!animationEnabled}
+                  onChange={e => setAnimationEnabled?.(e.target.checked)}
+                  style={{ accentColor: C.accent }}
+                />
+                Animate
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: collectTimeSeries ? C.accent : C.label, fontFamily: FONT }}
+                title="Disable to reduce memory on long runs (charts won't have queue depth / utilisation)">
+                <input
+                  type="checkbox"
+                  checked={!!collectTimeSeries}
+                  onChange={e => setCollectTimeSeries?.(e.target.checked)}
+                  style={{ accentColor: C.accent }}
+                />
+                Collect time-series
+              </label>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, whiteSpace: "nowrap" }}>
+                  Speed {(speedMultiplier ?? 1).toFixed(1)}×
+                </span>
+                <input
+                  aria-label="Animation speed multiplier"
+                  type="range"
+                  min={0.5} max={10} step={0.5}
+                  value={speedMultiplier ?? 1}
+                  onChange={e => setSpeedMultiplier?.(parseFloat(e.target.value))}
+                  style={{ width: 80, accentColor: C.accent }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

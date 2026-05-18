@@ -1,6 +1,6 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.4.0
+**Version:** 1.9.0
 **Date:** 2026-05-18
 **Sprint baseline:** Sprint 58+
 **Status:** Living document — updated at end of each sprint
@@ -20,6 +20,7 @@
 | v1.6.0 | 2026-05-18 | Sprint 63 | Planned data import — ScheduleFeedAdapter, xlsxParser, DataSourcesEditor UI, entityId convention, prefetchScheduleFeeds() |
 | v1.7.0 | 2026-05-18 | Sprint 64 | Attribute-conditional service times — `when` predicate on cSchedule entries, first-match semantics, V29 validation, CEventEditor UI |
 | v1.8.0 | 2026-05-18 | Sprint 65 | Actuals tracking — `_plannedTime` on entities, `updateScheduledTime()` API, `avgPlanDeviation` in getSummary(), ActualsStreamAdapter, report Plan vs Actual section |
+| v1.9.0 | 2026-05-18 | Sprint 66 | Visual Designer node badge system; Execute Panel UX — Animate/Collect/Speed to Setup, Export consolidation, Share removal, Log guard, Entity Details rename, Analysis graph formatting |
 
 ---
 
@@ -518,19 +519,31 @@ The primary model authoring interface. Organised as a multi-tab panel:
 
 The Execute panel is the primary result-viewing workspace. It has five views:
 
-- **Live View** — real-time execution animation. The canvas shows entity tokens moving through the model. Per-node entity count overlays update on each engine step. Execution speed is user-configurable.
-- **Log** — `LogViewer`: structured trace log showing every macro firing with phase, time, entity ID, type, and message. Filterable by phase and event type.
-- **Histograms** — `QueueHistogram`: wait-time frequency distributions per queue, displayed as bar charts with Freedman-Diaconis automatic bin sizing.
-- **Entities** — `EntitySummaryTable`: per-entity table showing arrival time, stages, wait time, service time, sojourn time, and final status. Sortable and filterable.
-- **Analysis** — KPI cards (goal-aware: green/red border based on goal met/missed), AI Insights panel (narrative, suggestions, sensitivity, comparison, Q&A), sweep configuration and results (SweepChart 1D, Sweep2DGrid 2D), replication configuration and CI results, ANOVA panel.
+- **Live View** — real-time execution animation. The canvas shows entity tokens moving through the model. Per-node entity count overlays update on each engine step.
+- **Log** — `LogViewer`: structured trace log showing every macro firing with phase, time, entity ID, type, and message. Filterable by phase and event type. The Log menu button is **disabled while a run is active** (grayed out, tooltip "Available after run completes") — the bottom-panel log remains accessible during execution. The button re-enables when the run completes.
+- **Histograms** — `QueueHistogram`: wait-time frequency distributions per queue, displayed as bar charts with Freedman-Diaconis automatic bin sizing. Axis labels include model time units. Charts include titles, light horizontal grid lines, and consistent accent colour.
+- **Entity Details** — `EntitySummaryTable`: per-entity table showing arrival time, stages, wait time, service time, sojourn time, and final status. Sortable and filterable.
+- **Analysis** — KPI cards (goal-aware: green/red border based on goal met/missed), AI Insights panel (narrative, suggestions, sensitivity, comparison, Q&A), sweep configuration and results (SweepChart 1D, Sweep2DGrid 2D), replication configuration and CI results, ANOVA panel. All charts include axis labels with time units, chart titles, grid lines, and consistent accent colour.
+
+**Execute menu controls (Sprint 66):**
+
+The Animate toggle, Collect time-series checkbox, and Speed slider are located in the **Setup tab** (`ExperimentControls.jsx`), not the Execute menu. These configure how a run executes and are set before starting; they are not mid-run controls.
+
+The Execute menu contains: Live View, Log (guarded), Histograms, Entity Details, Analysis, AI Insights, and Export.
+
+**Export (Sprint 66):** A single **Export…** button replaces the former separate Export JSON / Export CSV / Export HTML buttons. Clicking opens an inline popover with format checkboxes (JSON, CSV, HTML) and a Download button. Multiple formats may be selected simultaneously.
 
 **Sweep execution:** The user configures a parameter (any numeric field in the model JSON, selected by dot-path), a range, and step count. `src/engine/sweep-runner.js` runs one set of replications per parameter value. Each point's `aggregateStats` is passed to `evaluateSweepPointGoals()` to determine feasibility colouring.
 
 ### 7.4 Visual Designer
 
-The Visual Designer (`src/ui/visual-designer/`) is a canvas-based DAG editor. Nodes represent entity types and queues. Edges represent flow relationships. The designer reads and writes the `graph` field of the model JSON. Changes in the Visual Designer are reflected in the Forms/Tabs editors and vice versa (bidirectional sync via the shared model state).
+The Visual Designer (`src/ui/visual-designer/`) is a canvas-based DAG editor. Nodes represent sources, queues, activities, and sinks. Edges represent flow relationships derived from the canonical model. The designer reads and writes the `graph` field of the model JSON. Changes in the Visual Designer are reflected in the Forms/Tabs editors and vice versa (bidirectional sync via the shared model state).
 
-Node types: EntityTypeNode (circle), QueueNode (rectangle), EventNode (diamond). Connections are drawn as directed arrows. The palette allows dragging new nodes onto the canvas. Clicking a node opens the corresponding editor form in an inspector panel.
+Node types: SOURCE (green), QUEUE (cyan), ACTIVITY (purple), SINK (red). Connections are drawn as directed arrows. The palette allows dragging new nodes onto the canvas or using the toolbar to add and auto-link a node to the currently selected SOURCE or ACTIVITY. Clicking a node opens the node inspector panel.
+
+**Auto-link behaviour:** When a node is added while a SOURCE or ACTIVITY is selected, the new node is auto-connected. Auto-linking is suppressed when a QUEUE or SINK is selected — overflow connections must be made deliberately via drag.
+
+**Node badge system (Sprint 66):** Visual Designer node cards display small read-only badge chips when advanced configuration is present (see §2.11). Badges are derived from the model; they are never stored in `model.graph`. Clicking a badge selects the node and opens the node inspector.
 
 ### 7.5 AI Insights Panel
 
@@ -663,6 +676,19 @@ Message formats accepted: plain sim-time numbers, HH:MM strings, ISO 8601 dateti
 #### Report: Plan vs Actual section
 
 `buildResults()` in `reportGenerator.js` includes a "Plan vs Actual" section only when `summary.avgPlanDeviation` is non-null. Shows average deviation and direction (early / on time / late).
+
+### 2.11 Visual Designer Badge System (Sprint 66)
+
+`deriveGraphFromModel(model)` in `src/ui/visual-designer/graph.js` populates a `badges: string[]` field on each visual node. Badges are read-only indicators; they never modify the model.
+
+| Badge key | Node type | Trigger |
+|-----------|-----------|---------|
+| `"conditional"` | ACTIVITY | `cEvent.cSchedules.some(cs => cs.when)` — at least one cSchedule has a `when` predicate (attribute-conditional service time from Sprint 64) |
+| `"feed"` | SOURCE | `model.dataSources` contains a `scheduleFeed` source where `source.targetBEventId === bEvent.id` |
+
+`DesNode` in `FlowDiagramReactFlow.jsx` renders badge chips beneath the node sublabel. Badge click calls `onNodeSelect(node.id)`, opening the node inspector (which shows the full element config). No new external callbacks are required.
+
+Badges are purely derived state — they are never stored in `model.graph` or any persisted field.
 
 ---
 

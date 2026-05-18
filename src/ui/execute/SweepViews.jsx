@@ -206,11 +206,11 @@ export function WarmupChart({ series, truncationPoint, width = 320, height = 100
   );
 
   return (
-    <div style={{ background: C.bg, borderRadius: 4, border: `1px solid ${C.border}`, padding: 6, overflow: "hidden" }}>
+    <div style={{ background: C.bg, borderRadius: 4, border: `1px solid ${C.border}`, padding: 12, overflow: "hidden" }}>
       <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
         {yTicks.map((tick, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} />
+            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} opacity={0.1} />
             <text x={PAD.left - 4} y={yScale(tick) + 2} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace">
               {tick.toFixed(1)}
             </text>
@@ -256,17 +256,17 @@ export function CumulativeMeanChart({ points, warmupPeriod, width = 320, height 
   );
 
   return (
-    <div style={{ background: C.bg, borderRadius: 4, border: `1px solid ${C.border}`, padding: 6, overflow: "hidden" }}>
+    <div style={{ background: C.bg, borderRadius: 4, border: `1px solid ${C.border}`, padding: 12, overflow: "hidden" }}>
       <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
         {yTicks.map((tick, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} />
+            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} opacity={0.1} />
             <text x={PAD.left - 4} y={yScale(tick) + 2} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace">
               {tick.toFixed(2)}
             </text>
           </g>
         ))}
-        <path d={linePath} fill="none" stroke={C.green} strokeWidth={1.5} />
+        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={1.5} />
         <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={8} fontFamily="monospace">
           Observations
         </text>
@@ -399,7 +399,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
 // G15 — Live queue-depth time-plot chart
 const QUEUE_COLORS = [C.accent, C.amber, C.green, C.purple, C.reneged, "#06b6d4", "#f472b6", "#a78bfa"];
 
-export function QueueDepthTimePlot({ timeSeries, queues, width = 400, height = 140 }) {
+export function QueueDepthTimePlot({ timeSeries, queues, timeUnit, width = 400, height = 140 }) {
   if (!timeSeries || timeSeries.length < 2) {
     return (
       <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, padding: 12, textAlign: "center", background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
@@ -429,11 +429,14 @@ export function QueueDepthTimePlot({ timeSeries, queues, width = 400, height = 1
   const yTicks = Array.from({ length: 4 }, (_, i) => Math.round((i / 3) * maxDepth));
 
   return (
-    <div style={{ background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 10, overflow: "hidden" }}>
+    <div style={{ background: C.bg, borderRadius: 6, border: `1px solid ${C.border}`, padding: 12, overflow: "hidden" }}>
+      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
+        QUEUE DEPTH OVER TIME
+      </div>
       <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
         {yTicks.map((tick, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={width - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} />
+            <line x1={PAD.left} y1={yScale(tick)} x2={width - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} opacity={0.1} />
             <text x={PAD.left - 4} y={yScale(tick) + 3} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace">
               {tick}
             </text>
@@ -454,7 +457,7 @@ export function QueueDepthTimePlot({ timeSeries, queues, width = 400, height = 1
           );
         })}
         <text x={width / 2} y={height - 2} textAnchor="middle" fill={C.muted} fontSize={8} fontFamily="monospace">
-          Simulation time
+          {timeUnit ? `Time (${timeUnit})` : "Simulation time"}
         </text>
         <text x={PAD.left - 2} y={PAD.top + 4} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace" transform={`rotate(-90, ${PAD.left - 14}, ${height / 2})`}>
           Queue depth
@@ -545,16 +548,20 @@ function QueueHistogramCard({ name, dist }) {
   ].filter(Boolean);
 
   return (
-    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10 }}>
-      <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, fontWeight: 700, marginBottom: 4 }}>{name}</div>
+    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+      <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, fontWeight: 700, marginBottom: 4 }}>{name}</div>
       <svg width={W} height={H} style={{ display: "block", overflow: "visible" }}>
+        {/* Grid lines */}
+        {Array.from({ length: 3 }, (_, i) => PAD.top + (plotH / 2) * i).map((y, i) => (
+          <line key={i} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke={C.border} strokeWidth={1} opacity={0.1} />
+        ))}
         {/* Bars */}
         {bins.map((b, i) => {
           const bx = xScale(b.x);
           const bw = Math.max(1, xScale(b.xEnd) - bx - 1);
           const by = yScale(b.count);
           const bh = plotH - (by - PAD.top);
-          return <rect key={i} x={bx} y={by} width={bw} height={bh} fill={C.cEvent + "66"} stroke={C.cEvent + "99"} strokeWidth={0.5} />;
+          return <rect key={i} x={bx} y={by} width={bw} height={bh} fill={C.accent + "66"} stroke={C.accent + "99"} strokeWidth={0.5} />;
         })}
         {/* Percentile lines */}
         {pMarkers.map(m => {

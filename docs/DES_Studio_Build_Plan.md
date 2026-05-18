@@ -1840,6 +1840,24 @@ npm run build
 
 ---
 
+### Sprint 66 — Visual Designer Badges + Execute Panel UX ⬜
+
+**Goal:** Make advanced model configuration visible in the Visual Designer via read-only node badges (Option B). Streamline the Execute Panel menu by moving run-configuration controls to Setup, consolidating exports, removing Share, guarding the Log button during runs, renaming the Entities tab, and improving Analysis chart formatting.
+
+**Status:** Planned
+
+| Feature | Status | Description |
+|---|---|---|
+| F66.1 — Node badge system | ⬜ | `when` badge (amber) on ACTIVITY nodes with conditional cSchedules; `feed` badge (cyan) on SOURCE nodes with scheduleFeed data sources |
+| F66.2 — Animate/Collect/Speed to Setup | ⬜ | Move three run-configuration controls to Setup tab (`ExperimentControls.jsx`) |
+| F66.3 — Export consolidation | ⬜ | Single Export… button with format-selection popover |
+| F66.4 — Remove Share Model | ⬜ | Delete Share button, state, and modal |
+| F66.5 — Log guard | ⬜ | Disable Log menu button during active run; re-enable post-run |
+| F66.6 — Entity Details rename | ⬜ | Rename "Entities" tab → "Entity Details" |
+| F66.7 — Analysis graph formatting | ⬜ | Axis labels, chart titles, grid lines, consistent colour, padding |
+
+---
+
 *End of build plan. Update after each sprint.*
 *The most important rule: read the existing file before changing it.*
 *Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec — never add a free-text escape hatch.*

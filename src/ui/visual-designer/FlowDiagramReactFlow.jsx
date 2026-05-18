@@ -89,6 +89,27 @@ function DesNode({ data, selected }) {
       {!!data.sublabel && (
         <div style={{ color: C.muted, fontSize: 9, lineHeight: 1.35 }}>{data.sublabel}</div>
       )}
+      {!!data.badges?.length && (
+        <div style={{ display: "flex", gap: 3, flexWrap: "wrap", marginTop: 2 }}>
+          {data.badges.map(badge => (
+            <span
+              key={badge}
+              style={{
+                background: badge === "when" ? `${C.amber}22` : `${C.accent}22`,
+                border: `1px solid ${badge === "when" ? C.amber : C.accent}`,
+                borderRadius: 999,
+                color: badge === "when" ? C.amber : C.accent,
+                fontSize: 8,
+                fontWeight: 700,
+                padding: "1px 5px",
+                letterSpacing: 0.5,
+              }}
+            >
+              {badge}
+            </span>
+          ))}
+        </div>
+      )}
       {hasSource && (
         <Handle
           type="source"

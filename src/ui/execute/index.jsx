@@ -129,6 +129,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [qrToken, setQrToken] = useState(null);
   const qrRef = useRef(null);
   const [latestRunId, setLatestRunId] = useState(null);
+  const [showExportPopover, setShowExportPopover] = useState(false);
+  const [exportFormats, setExportFormats] = useState({ json: true, csv: false, html: false });
   const effectiveAutoSpeed = useMemo(
     () => Math.max(40, Math.round(400 / speedMultiplier)),
     [speedMultiplier]
@@ -919,6 +921,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           model={model}
           onDetectWarmup={handleDetectWarmup}
           persistExperimentDefaults={persistExperimentDefaults}
+          animationEnabled={animationEnabled} setAnimationEnabled={setAnimationEnabled}
+          collectTimeSeries={collectTimeSeries} setCollectTimeSeries={setCollectTimeSeries}
+          speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}
         />
       )}
 
@@ -1677,37 +1682,64 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
         <Btn variant={view === "visual" ? "primary" : "ghost"} onClick={() => setView("visual")}>Live View</Btn>
         <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Analysis</Btn>
-        <Btn variant={view === "log" ? "primary" : "ghost"} onClick={() => setView("log")}>Log</Btn>
+        <Btn
+          variant={view === "log" ? "primary" : "ghost"}
+          onClick={() => setView("log")}
+          disabled={autoRunning || mode === "running"}
+          title={autoRunning || mode === "running" ? "Log is available after the run completes" : undefined}
+          style={autoRunning || mode === "running" ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
+        >Log</Btn>
         <Btn variant={view === "histograms" ? "primary" : "ghost"} onClick={() => setView("histograms")} disabled={!results?.waitDist}>Histograms</Btn>
-        <Btn variant={view === "entities" ? "primary" : "ghost"} onClick={() => setView("entities")} disabled={!results?.entitySummary?.length}>Entities</Btn>
-        <Btn variant="ghost" onClick={exportResultsJson} disabled={!canExportResults}>Export Results</Btn>
-        <Btn variant="ghost" onClick={exportResultsCsv} disabled={!canExportResults}>Export Results CSV</Btn>
-        <Btn variant="ghost" onClick={handleExportReport} disabled={!canExportResults || reportGenerating} title={!canExportResults ? "Run the simulation first to export a report." : ""}>{reportGenerating ? "Generating report…" : "Export Report"}</Btn>
-        <Btn variant="ghost" onClick={() => { setShowShareModal(true); loadShareLinks(); }} disabled={!canShare}>Share</Btn>
-        <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)}>AI Insights</Btn>
-        <Btn variant="ghost" onClick={toggleAnimation} title="Toggle entity token animation">
-          {animationEnabled ? "● Animate" : "○ Animate"}
-        </Btn>
-        <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer", fontSize: 11, color: collectTimeSeries ? C.accent : C.label, fontFamily: FONT }}
-          title="Disable to reduce memory on long runs (charts won't have queue depth / utilisation)">
-          <input type="checkbox" checked={collectTimeSeries} onChange={e => setCollectTimeSeries(e.target.checked)} style={{ accentColor: C.accent }}/>
-          Collect time-series
-        </label>
-        {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
-        <div style={{ flex: 1, minWidth: 12 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, whiteSpace: "nowrap" }}>
-            Speed {speedMultiplier.toFixed(1)}×
-          </span>
-          <input
-            aria-label="Animation speed multiplier"
-            type="range"
-            min={0.5} max={10} step={0.5}
-            value={speedMultiplier}
-            onChange={e => setSpeedMultiplier(parseFloat(e.target.value))}
-            style={{ width: 80, accentColor: C.accent }}
-          />
+        <Btn variant={view === "entities" ? "primary" : "ghost"} onClick={() => setView("entities")} disabled={!results?.entitySummary?.length}>Entity Details</Btn>
+        <div style={{ position: "relative" }}>
+          {showExportPopover && (
+            <div
+              style={{ position: "fixed", inset: 0, zIndex: 99 }}
+              onClick={() => setShowExportPopover(false)}
+            />
+          )}
+          <Btn variant="ghost" onClick={() => setShowExportPopover(v => !v)} disabled={!canExportResults}>Export…</Btn>
+          {showExportPopover && (
+            <div style={{
+              position: "absolute",
+              top: "calc(100% + 4px)",
+              left: 0,
+              zIndex: 100,
+              background: C.cardBg,
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              padding: 12,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              minWidth: 170,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+            }}>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>FORMAT</span>
+              {[["json", "JSON Results"], ["csv", "CSV Results"], ["html", "HTML Report"]].map(([key, label]) => (
+                <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
+                  <input
+                    type="checkbox"
+                    checked={!!exportFormats[key]}
+                    onChange={e => setExportFormats(f => ({ ...f, [key]: e.target.checked }))}
+                    style={{ accentColor: C.accent }}
+                  />
+                  {label}
+                </label>
+              ))}
+              <Btn variant="primary" small onClick={() => {
+                if (exportFormats.json) exportResultsJson();
+                if (exportFormats.csv) exportResultsCsv();
+                if (exportFormats.html) handleExportReport();
+                setShowExportPopover(false);
+              }} disabled={!Object.values(exportFormats).some(Boolean) || reportGenerating}>
+                {reportGenerating ? "Generating…" : "Download"}
+              </Btn>
+            </div>
+          )}
         </div>
+        <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)}>AI Insights</Btn>
+        {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
       </div>
 
       {executeSection === "run" && (
