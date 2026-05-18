@@ -22,6 +22,7 @@ The LLM must produce a single JSON object that passes all validation rules in §
   "name": "string (required)",
   "description": "string (optional, 1–3 sentences)",
   "visibility": "private",
+  "timeUnit": "minutes",
   "entityTypes": [],
   "stateVariables": [],
   "queues": [],
@@ -32,10 +33,23 @@ The LLM must produce a single JSON object that passes all validation rules in §
   "experimentDefaults": {
     "maxSimTime": 500,
     "warmupPeriod": 0,
-    "replications": 5
-  }
+    "replications": 5,
+    "liveDataMode": null
+  },
+  "dataSources": []
 }
 ```
+
+### Top-level field reference
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Human-readable model name |
+| `description` | string | No | 1–3 sentence summary, used by AI features |
+| `visibility` | `"private"` \| `"public"` | No | Default `"private"` |
+| `timeUnit` | `"seconds"` \| `"minutes"` \| `"hours"` \| `"days"` | No | Defines what one simulation clock unit represents. Default `"minutes"`. Shown in reports and AI narrative. |
+| `experimentDefaults.liveDataMode` | `null` \| `"calibrated_batch"` \| `"rolling"` \| `"lookahead"` | No | Live-data run mode. `null` = static (default). See §15 for live data. |
+| `dataSources` | array | No | Live data source definitions. See §15. |
 
 ---
 
@@ -189,11 +203,42 @@ B-events are scheduled future occurrences — arrivals and service completions.
 }
 ```
 
+### Alternative schedule shape: planned arrivals
+
+Instead of `dist`/`distParams`, a schedule entry can supply an explicit list of pre-determined arrival times. Use this when you have historical or planned data rather than a statistical distribution.
+
+**Times-only (equal-spaced or irregular):**
+
+```json
+{
+  "eventId": "b_arrive",
+  "times": [10, 25, 40, 60, 85]
+}
+```
+
+**Times with per-arrival entity attributes (imported from CSV):**
+
+```json
+{
+  "eventId": "b_arrive",
+  "rows": [
+    { "time": 10, "attrs": { "severity": 3, "age": 45 } },
+    { "time": 25, "attrs": { "severity": 1, "age": 32 } },
+    { "time": 60, "attrs": { "severity": 2, "age": 28 } }
+  ]
+}
+```
+
+- Each `rows[].time` is an absolute simulation clock time.
+- `rows[].attrs` key names must match `attrDefs[].name` on the arriving entity type.
+- When all scheduled arrivals are exhausted the arrival B-event does not reschedule.
+- `times[]` and `rows[]` are mutually exclusive with `dist`/`distParams` in the same schedule entry.
+
 ### Rules
 
 - `id` must be unique across all B-events.
 - `scheduledTime`: use `"0"` for arrival generators (they reschedule themselves). Use `"9999"` for completion/release events (scheduled by the engine at service start).
-- `schedules`: for recurring B-events (arrivals), include one entry with `eventId` matching this event's own `id` and a distribution. Leave as `[]` for completion events.
+- `schedules`: for recurring B-events (arrivals), include one entry with `eventId` matching this event's own `id` and either a distribution or a `times[]`/`rows[]` list. Leave as `[]` for completion events.
 - `schedules[].eventId` must reference a valid B-event `id`.
 
 ### Effect Macros for B-Events
@@ -654,3 +699,81 @@ The endpoint applies the same structural validation as the UI import pipeline. T
 V1 (entity names), V2 (attribute names), V4 (PRIORITY discipline), V8 (arrival/sink), V9 (queue condition refs), V19 (server count), V20 (queue capacity), V21 (balk probability).
 
 Full distribution-parameter validation (V5, V11–V13) and shift-schedule validation (V14–V15) are enforced by the engine at run time. The API focuses on structural correctness sufficient to save a model safely.
+
+---
+
+## 15. Live Data Sources (Optional — Sprint 58+)
+
+Models can connect distribution parameters to live REST or WebSocket feeds so that arrival rates, service times, or resource counts are fetched from real systems before or during a run.
+
+### `dataSources[]` (top-level)
+
+```json
+"dataSources": [
+  {
+    "id": "ds_arrivals",
+    "label": "Live Arrival Feed",
+    "type": "rest",
+    "url": "https://ops.example.com/sim-feed",
+    "authHeader": "Authorization",
+    "authSecret": "{{env.OPS_TOKEN}}",
+    "refreshSecs": 60
+  }
+]
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `id` | Yes | Unique within the model; referenced by `paramSource.sourceId` |
+| `label` | Yes | Human-readable name shown in the UI |
+| `type` | Yes | `"rest"` \| `"websocket"` \| `"stateSnapshot"` \| `"mock"` |
+| `url` | Yes | Full HTTPS URL to the endpoint |
+| `authHeader` | No | Header name for authentication (e.g. `"Authorization"`) |
+| `authSecret` | No | `{{env.VAR_NAME}}` placeholder — **never a literal credential**. Actual value is entered by the user in `sessionStorage` at runtime. |
+| `refreshSecs` | No | Cache TTL in seconds for REST sources (default 60, minimum 10) |
+
+### `paramSource` on a schedule or cSchedule
+
+Bind a specific distribution parameter to a field from a live source:
+
+```json
+{
+  "dist": "Exponential",
+  "distParams": { "mean": "1.5" },
+  "paramSource": {
+    "sourceId": "ds_arrivals",
+    "field": "mean_interarrival_mins",
+    "targetParam": "mean",
+    "fallback": "1.5"
+  }
+}
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `sourceId` | Yes | Must match a `dataSources[].id` |
+| `field` | Yes | Dot-notation path into the API JSON response (e.g. `mean` or `arrivals.mean`) |
+| `targetParam` | No | Which key in `distParams` to replace; defaults to the first key |
+| `fallback` | No | Value to use if the source is unavailable; if absent, the static `distParams` value is preserved |
+
+### `experimentDefaults.liveDataMode`
+
+```json
+"experimentDefaults": {
+  "maxSimTime": 500,
+  "warmupPeriod": 50,
+  "replications": 10,
+  "liveDataMode": "calibrated_batch"
+}
+```
+
+| Value | Behaviour |
+|---|---|
+| `null` or absent | Static run — no live data (default) |
+| `"calibrated_batch"` | Fetch all live values once before the run; all replications use the frozen values |
+| `"rolling"` | Re-sample parameters on each FEL event; replications locked to 1 (Sprint 59+) |
+| `"lookahead"` | Inject live system snapshot; skip warm-up; simulate forward N minutes (Sprint 60+) |
+
+> **Security note:** `authSecret` fields must always contain `{{env.VAR}}` placeholders, never literal tokens or passwords. The actual credential is entered by the user in the browser at session time and is never stored in the database or included in model exports.
+
+For full integration guidance see `docs/DES_Studio_RealTime_Integration_Guide.md`.
