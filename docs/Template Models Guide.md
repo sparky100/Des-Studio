@@ -13,6 +13,7 @@ Each template teaches a different modelling concept — from a single queue thro
 | v1.0 | Initial release | Core templates: M/M/1, Call Center, ER Triage, Fast Food, Factory, Airport, Construction, Data Center, Outpatient, Warehouse, Ward Bed, Bank Branch, Retail, Port Berth |
 | v1.1 | Sprint 42 | Loop Guard added to `loopConfig` on entity types; `balkCondition` expression field added to queues. ER Triage updated to use `balkCondition`. |
 | v1.2 | Sprint 45 | Three new templates added: Machine Shop with Failures (FAIL/REPAIR macros, MTBF/MTTR), Priority Emergency Department with Triage Escalation (balkCondition, loopConfig Loop Guard, SET_ATTR), Cost-Optimised Call Centre (COST macro, totalCost goal, AI sweep feasibility). |
+| v1.3 | Sprints 62-66 | Appointment Clinic added: showcases Schedule distribution with per-arrival `rows[]` attributes, real-world clock (epoch/timeUnit), attribute-conditional routing at RELEASE, and `cSchedule.when` service-time branching. |
 
 ---
 
@@ -333,6 +334,51 @@ When you run the model, the **goal-aware KPI cards** immediately show whether `a
 **State variables:** `totalCost`, `abandonedCalls`, `escalatedToSenior`, `escalatedToSpecialist`
 
 **Key metric:** Cost per satisfied call = totalCost / (departures − abandonedCalls). Use the Parametric Sweep in Goal Feasibility mode to find the staffing mix that minimises this ratio.
+
+---
+
+## 18. Appointment Clinic (NEW — v1.3)
+
+**Concept:** Demonstrates Schedule distribution with per-arrival attributes, real-world clock, attribute-conditional routing at RELEASE, and `cSchedule.when` service-time branching — all four major features from Sprints 62-66 working together.
+
+A GP morning clinic runs 15 pre-scheduled patient appointments at 15-minute intervals from 08:00 to 11:30. Unlike the Outpatient Clinic template (which uses random exponential arrivals), every patient in this model arrives at a known planned time. Each appointment carries two attributes baked into the schedule: `severity` (1 = acute, 2 = semi-urgent, 3 = routine) and `type` (Urgent or Routine). 2 clinicians serve all stages.
+
+**Patient flow:**
+1. Patients arrive at the Appointments queue at their scheduled time, carrying severity and type from the schedule rows.
+2. A clinician performs a brief assessment (Fixed 5 min).
+3. On assessment completion, conditional routing fires:
+   - `severity ≤ 2` → Urgent Care queue
+   - `severity = 3` → Standard Care queue
+4. Urgent Care service time uses `cSchedule.when` branching:
+   - `severity == 1` → Fixed 8 min (acute)
+   - default → Fixed 15 min (semi-urgent)
+5. Standard Care → Exponential mean 25 min.
+
+**Real-world clock:** The model sets `epoch: "2026-05-19T08:00:00"` and `timeUnit: "minutes"`. Simulation time 0 = 08:00, time 15 = 08:15, etc. All times in the event log and Entity Details tab display as wall-clock timestamps.
+
+**Schedule with rows[]:** The arrival B-Event uses a `Schedule` distribution with `rows[]` instead of `times[]`. Each row carries both a `time` and an `attrs` object — the `severity` and `type` values are automatically applied to the arriving patient entity, overriding the default sampled values. You can replace the built-in rows by importing `sample-appointment-schedule.csv` via the **↑ Load plan** button on the Schedule distribution.
+
+**What to watch:** Observe the event log — arrival times display as wall-clock times (08:00, 08:15, …). In the Entity Details tab, each patient shows their severity and type attributes. Check the queue flow: severity-1 and severity-2 patients route to Urgent Care, severity-3 to Standard Care. Severity-1 patients complete in ~8 min, severity-2 in ~15 min, severity-3 patients vary (Exponential).
+
+Try modifying the schedule rows to add a no-show (remove a row) or a late arrival (change a time value) to see how the Schedule distribution handles gaps and out-of-order arrivals.
+
+**Entity types:** Patient (arriving, with `severity` and `type` attributes), Clinician (2)
+
+**Macros used:**
+- `ARRIVE(Patient, Appointments)` — Schedule distribution with `rows[]`, epoch 2026-05-19T08:00
+- `ASSIGN(Appointments, Clinician)` — begins 5-minute assessment
+- `RELEASE(Clinician, Standard Care)` — frees clinician; conditional routing overrides destination
+- `ASSIGN(Urgent Care, Clinician)` — begins urgent care; `cSchedule.when` selects service time
+- `ASSIGN(Standard Care, Clinician)` — begins standard care; Exponential mean 25 min
+- `COMPLETE()` — patient departs
+
+**Key features demonstrated:**
+- `distParams.rows[]` — per-arrival attribute injection from schedule
+- `epoch` + `timeUnit` — wall-clock time display throughout the UI
+- `bEvent.routing` — attribute-conditional routing at RELEASE (first-match semantics)
+- `cSchedule.when` — attribute-conditional service time branching (first-match semantics)
+
+**Companion file:** `sample-appointment-schedule.csv` in the repository root contains the same 15 rows (time, severity, type) and can be imported via **↑ Load plan** to experiment with the CSV import workflow.
 
 ---
 
