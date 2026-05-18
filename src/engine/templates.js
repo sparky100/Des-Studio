@@ -715,6 +715,84 @@ const COST_CALL_CENTRE = {
   queues: [{ id: "q_calls", name: "Queue", customerType: "Call", capacity: "20", discipline: "FIFO" }],
 };
 
+// ── Capability showcases (Sprints 62-66) ─────────────────────────────────────
+
+const APPOINTMENT_CLINIC = {
+  name: "Appointment Clinic",
+  description: "GP morning clinic with 15 pre-scheduled patient appointments from 08:00–11:30. Showcases: Schedule distribution with per-arrival attributes (severity, type), real-world clock (epoch 2026-05-19 08:00), attribute-conditional routing (severity ≤ 2 → Urgent Care, severity 3 → Standard Care), and cSchedule.when predicates (severity 1: Fixed 8 min, severity 2: Fixed 15 min, severity 3: Exponential mean 25 min).",
+  domain: "Healthcare",
+  epoch: "2026-05-19T08:00:00.000Z",
+  timeUnit: "minutes",
+  templateMeta: {
+    scenarioType: "Scheduled arrivals with attribute-conditional routing and service-time branching",
+    keyMacros: ["ARRIVE", "ASSIGN", "RELEASE", "COMPLETE"],
+    paramGuide: "15 appointments at 15-min intervals 08:00–11:30. Assessment Fixed 5 min. Urgent sev-1: Fixed 8 min, Urgent sev-2: Fixed 15 min. Standard sev-3: Exponential mean 25 min. 2 clinicians.",
+    limitations: "No walk-in patients, no no-shows, no appointment rescheduling. Schedule is exhausted after 15 arrivals.",
+  },
+  entityTypes: [
+    { id: "et_patient", name: "Patient", role: "customer", count: 0, attrDefs: [
+      { id: "a_severity", name: "severity", valueType: "number", dist: "Uniform", distParams: { min: "1", max: "3" } },
+      { id: "a_type",     name: "type",     valueType: "string", defaultValue: "Routine" },
+    ]},
+    { id: "et_clinician", name: "Clinician", role: "server", count: 2, attrDefs: [] },
+  ],
+  stateVariables: [],
+  bEvents: [
+    { id: "b_arrive", name: "Patient Arrives", scheduledTime: "0",
+      effect: "ARRIVE(Patient, Appointments)",
+      schedules: [{ eventId: "b_arrive", dist: "Schedule", distParams: {
+        rows: [
+          { time: 0,   attrs: { severity: 3, type: "Routine" } },
+          { time: 15,  attrs: { severity: 1, type: "Urgent"  } },
+          { time: 30,  attrs: { severity: 2, type: "Routine" } },
+          { time: 45,  attrs: { severity: 3, type: "Routine" } },
+          { time: 60,  attrs: { severity: 1, type: "Urgent"  } },
+          { time: 75,  attrs: { severity: 2, type: "Routine" } },
+          { time: 90,  attrs: { severity: 3, type: "Routine" } },
+          { time: 105, attrs: { severity: 1, type: "Urgent"  } },
+          { time: 120, attrs: { severity: 2, type: "Routine" } },
+          { time: 135, attrs: { severity: 3, type: "Routine" } },
+          { time: 150, attrs: { severity: 1, type: "Urgent"  } },
+          { time: 165, attrs: { severity: 2, type: "Routine" } },
+          { time: 180, attrs: { severity: 3, type: "Routine" } },
+          { time: 195, attrs: { severity: 1, type: "Urgent"  } },
+          { time: 210, attrs: { severity: 2, type: "Routine" } },
+        ],
+      }}]},
+    { id: "b_assess_done", name: "Assessment Done", scheduledTime: "9999",
+      effect: "RELEASE(Clinician, Standard Care)",
+      routing: [
+        { condition: { variable: "Entity.severity", operator: "<=", value: 2 }, queueName: "Urgent Care" },
+      ],
+      defaultQueueName: "Standard Care",
+      schedules: [] },
+    { id: "b_urgent_done",   name: "Urgent Care Complete",   scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+    { id: "b_standard_done", name: "Standard Care Complete", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+  ],
+  cEvents: [
+    { id: "c_assess", name: "Start Assessment", priority: 1,
+      condition: "queue(Appointments).length > 0 AND idle(Clinician).count > 0",
+      effect: "ASSIGN(Appointments, Clinician)",
+      cSchedules: [{ eventId: "b_assess_done", dist: "Fixed", distParams: { value: "5" }, useEntityCtx: true }] },
+    { id: "c_urgent", name: "Start Urgent Care", priority: 2,
+      condition: "queue(Urgent Care).length > 0 AND idle(Clinician).count > 0",
+      effect: "ASSIGN(Urgent Care, Clinician)",
+      cSchedules: [
+        { eventId: "b_urgent_done", dist: "Fixed", distParams: { value: "8"  }, when: { variable: "Entity.severity", operator: "==", value: 1 }, useEntityCtx: true },
+        { eventId: "b_urgent_done", dist: "Fixed", distParams: { value: "15" }, useEntityCtx: true },
+      ] },
+    { id: "c_standard", name: "Start Standard Care", priority: 3,
+      condition: "queue(Standard Care).length > 0 AND idle(Clinician).count > 0",
+      effect: "ASSIGN(Standard Care, Clinician)",
+      cSchedules: [{ eventId: "b_standard_done", dist: "Exponential", distParams: { mean: "25" }, useEntityCtx: true }] },
+  ],
+  queues: [
+    { id: "q_appts",    name: "Appointments",  customerType: "Patient", capacity: "", discipline: "FIFO" },
+    { id: "q_urgent",   name: "Urgent Care",   customerType: "Patient", capacity: "", discipline: "FIFO" },
+    { id: "q_standard", name: "Standard Care", customerType: "Patient", capacity: "", discipline: "FIFO" },
+  ],
+};
+
 export const TEMPLATES = [
   // Academic
   { id: "mm1",             ...MM1 },
@@ -723,6 +801,7 @@ export const TEMPLATES = [
   { id: "outpatient-clinic", ...OUTPATIENT_CLINIC },
   { id: "ward-admission",  ...WARD_ADMISSION },
   { id: "surgical-suite",  ...SURGICAL_SUITE },
+  { id: "appointment-clinic", ...APPOINTMENT_CLINIC },
   // Service Systems
   { id: "call-center",     ...CALL_CENTER },
   { id: "fast-food",       ...FAST_FOOD },
