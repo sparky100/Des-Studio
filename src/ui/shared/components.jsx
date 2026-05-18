@@ -225,7 +225,8 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
   const jitterParams=dp.jitterParams||{};
   const updDp=(patch)=>onChange({...value,distParams:{...dp,...patch}});
   const [rawText,setRawText]=React.useState(times.join(", "));
-  const [rowsMode,setRowsMode]=React.useState(hasRows&&attrDefs.length>0);
+  const [rowsMode,setRowsMode]=React.useState(hasRows);
+  const [importNotice,setImportNotice]=React.useState(null);
   const [csvPreview,setCsvPreview]=React.useState(null);
   const fileRef=React.useRef(null);
 
@@ -256,11 +257,13 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
     if(attrHeaders.length>0){
       updDp({rows,times:undefined});
       setRowsMode(true);
+      setImportNotice(`✓ ${rows.length} arrival${rows.length!==1?"s":""} imported with ${attrHeaders.length} attribute${attrHeaders.length!==1?"s":""} — save the model to keep this data.`);
     } else {
       const flat=rows.map(r=>r.time);
       setRawText(flat.join(", "));
       updDp({times:flat,rows:undefined});
       setRowsMode(false);
+      setImportNotice(`✓ ${flat.length} arrival time${flat.length!==1?"s":""} imported — save the model to keep this data.`);
     }
     setCsvPreview(null);
   };
@@ -305,12 +308,14 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
   const tdSt={padding:"2px 4px"};
 
   const numAttrDefs=attrDefs.filter(a=>a.name);
+  const inferredAttrNames=[...new Set((dp.rows||[]).flatMap(r=>Object.keys(r.attrs||{})))];
+  const hasAttrData=numAttrDefs.length>0||inferredAttrNames.length>0;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:8,background:C.surface,border:`1px solid ${C.cEvent}33`,borderRadius:6,padding:10}}>
       <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.ods" style={{display:"none"}} onChange={onFileChange}/>
       <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-        {numAttrDefs.length>0&&<>
+        {hasAttrData&&<>
           <span style={labelSt}>Mode:</span>
           <button onClick={()=>toggleRowsMode(false)}
             style={{...inpSt,cursor:"pointer",color:rowsMode?C.muted:C.amber,background:rowsMode?"transparent":C.bg+"99"}}>
@@ -326,6 +331,11 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
           ↑ Load from CSV
         </button>
       </div>
+      {importNotice&&(
+        <div style={{fontSize:10,color:C.green,fontFamily:FONT,background:`${C.green}11`,border:`1px solid ${C.green}44`,borderRadius:4,padding:"5px 8px"}}>
+          {importNotice}
+        </div>
+      )}
       {csvPreview&&(
         <div style={{background:C.bg,border:`1px solid ${C.cEvent}55`,borderRadius:5,padding:"8px 10px",display:"flex",flexDirection:"column",gap:6}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -376,10 +386,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
         </div>
       )}
       {rowsMode&&(()=>{
-        // Show columns from attrDefs if defined, otherwise infer from data
-        const attrNames=numAttrDefs.length>0
-          ?numAttrDefs.map(a=>a.name)
-          :[...new Set((dp.rows||[]).flatMap(r=>Object.keys(r.attrs||{})))];
+        const attrNames=numAttrDefs.length>0?numAttrDefs.map(a=>a.name):inferredAttrNames;
         return(
         <div style={{overflowX:"auto"}}>
           <table style={{borderCollapse:"collapse",width:"100%",fontFamily:FONT}}>
