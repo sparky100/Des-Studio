@@ -18,6 +18,7 @@
 | v1.4 | 2026-05-18 | Sprint 58+ | Time-averaged server utilisation — `_busyStart`/`_busyTime` tracking in `entities.js`; warmup reset; `getSummary()` formula updated to `busyTime / (elapsed × count)`. Markdown report export replacing docx. CSV import for Schedule distribution — `planCsvParser.js`, `ScheduleEditor` "Load from CSV" button, `distParams.rows[]` schema. |
 | v1.5.0 | 2026-05-18 | Sprint 62 | Real-world clock (epoch field, clockUtils, timestamp CSV import) |
 | v1.6.0 | 2026-05-18 | Sprint 63 | Planned data import — ScheduleFeedAdapter, xlsxParser, DataSourcesEditor UI, entityId convention, prefetchScheduleFeeds() |
+| v1.7.0 | 2026-05-18 | Sprint 64 | Attribute-conditional service times — `when` predicate on cSchedule entries, first-match semantics, V29 validation, CEventEditor UI |
 
 ---
 
@@ -165,6 +166,39 @@ When an entity attribute named `entityId` is set (via `attrMap` or CSV), it beco
 #### `DataSourcesEditor` component (`src/ui/ModelDetail.jsx`)
 
 Added inline to the Overview tab. Allows modellers to add, configure, and remove data sources without editing JSON. Exposes all `scheduleFeed`-specific fields (entityType, targetBEventId, timeField, attrMap JSON editor) when `type: "scheduleFeed"` is selected.
+
+### 2.9 Attribute-Conditional Service Times (Sprint 64)
+
+#### `when` predicate on `cSchedule` entries
+
+Each entry in a C-event's `cSchedules` list may carry an optional `when` predicate (same JSON format as entity routing predicates — Addition 1 §4). When present, it acts as a guard:
+
+**Algorithm:**
+1. If **no** entries have `when` → all entries fire as before (legacy behaviour unchanged)
+2. If **any** entry has `when` → first-match semantics apply:
+   - Evaluate each entry's `when` predicate against the current entity's attributes at the moment the C-event fires
+   - The **first** entry whose predicate is `true` (or that has no `when` — the fallback) is scheduled
+   - All remaining entries are skipped
+
+**Intent:** The plan provides *what* (entity type and attributes like `surgery_type`). The model provides *how long* (calibrated distributions). The `when` predicate connects entity attributes to the right distribution. For example:
+
+```json
+"cSchedules": [
+  { "when": { "variable": "Entity.surgery_type", "operator": "==", "value": "hip" },
+    "dist": "Lognormal", "distParams": { "mean": "120", "sd": "20" }, ... },
+  { "when": { "variable": "Entity.surgery_type", "operator": "==", "value": "knee" },
+    "dist": "Lognormal", "distParams": { "mean": "90",  "sd": "15" }, ... },
+  { "dist": "Exponential", "distParams": { "mean": "60" }, ... }
+]
+```
+
+#### V29 validation
+
+`validateModel` emits a **V29 warning** when all entries in a `cSchedules` list have `when` and no fallback is present. An entity not matching any condition would receive no service — a silent miss that is almost never the intended behaviour.
+
+#### UI
+
+`CEventEditor` shows a checkbox per cSchedule entry to enable the `when` condition. When checked, an `EntityFilterBuilder` widget appears, producing the predicate JSON. Entries without `when` display a "(no condition — this entry is the fallback)" label when other entries in the list are conditional.
 
 ---
 
@@ -590,6 +624,7 @@ DES Studio targets WCAG 2.1 AA compliance. Implemented requirements:
 | V26 | Error | Container `id` must be unique and non-empty; `capacity` must be > 0; `initialLevel` must be >= 0 and <= capacity |
 | V27 | Error | FILL/DRAIN macro must reference a declared container ID |
 | V28 | Warning | `epoch` must be a valid ISO 8601 datetime string when set (e.g. `"2026-05-18T08:00:00"`); an invalid value is ignored and real-world clock conversions are disabled |
+| V29 | Warning | A C-event's `cSchedules` list has conditional entries (all with `when`) but no fallback (entry without `when`). Entities not matching any condition will receive no service. |
 
 ---
 

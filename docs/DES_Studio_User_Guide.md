@@ -274,10 +274,24 @@ C-Events fire when their condition becomes true during Phase C. They are tested 
 | Name | Unique identifier |
 | Condition | Boolean expression (e.g., `WaitingRoom.length > 0 AND GP.idle > 0`) |
 | Effects | Macros executed when the condition is satisfied |
-| cSchedule | Distribution used to schedule a subsequent B-Event when this C-Event fires (e.g., service duration) |
+| cSchedule | Distribution used to schedule a subsequent B-Event when this C-Event fires (e.g., service duration). Multiple cSchedule entries are supported for attribute-conditional routing (see §6.3). |
 | Priority | Order in which C-Events are tested when multiple could fire simultaneously |
 
 C-Events model resource allocation decisions: they connect queues to servers by testing availability and performing ASSIGN.
+
+### 4.4a Attribute-conditional service times
+
+A C-event can carry multiple **cSchedule** entries, each with an optional **When** condition. This allows the service duration distribution to depend on the arriving entity's attributes — for example, routing hip-replacement patients to a different duration distribution than knee-replacement patients.
+
+**How it works:**
+1. In the C-Event editor, open the cSchedule panel and click **+ Add scheduled event**.
+2. Select the B-event that signals completion (e.g. `Hip Complete`).
+3. Enable the **Only fire when entity attribute matches** checkbox and build the condition (e.g. `Entity.surgery_type == hip`).
+4. Add another cSchedule entry for `knee`, and a final entry without a condition as the fallback.
+
+**First-match semantics:** the engine evaluates cSchedule entries in order. The first entry whose condition is satisfied (or that has no condition) is scheduled; all remaining entries are skipped.
+
+**Fallback:** an entry without a condition at the end of the list acts as the default — it fires for any entity that didn't match the earlier conditions. Omitting the fallback triggers a V29 warning (entities that don't match any condition receive no service).
 
 ### 4.5 State Variables
 

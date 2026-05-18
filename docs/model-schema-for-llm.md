@@ -342,6 +342,39 @@ C-events fire whenever their condition becomes true. They represent service star
 - `cSchedules[].eventId` must reference a valid B-event `id`.
 - `cSchedules[].useEntityCtx`: always `true` for service completion events (schedules the B-event for the specific entity being served).
 
+### Attribute-conditional `cSchedules` — the `when` field
+
+Each `cSchedule` entry may carry an optional `when` predicate (same JSON format as routing predicates — §6.1). When any entry has `when`, **first-match semantics** apply: the engine evaluates entries in order and schedules the first one whose predicate is satisfied, then stops. An entry without `when` at the end acts as the fallback.
+
+This is the standard pattern for routing service time to the right distribution based on entity attributes imported from a plan:
+
+```json
+"cSchedules": [
+  {
+    "eventId": "b_hip_complete",
+    "dist": "Lognormal",
+    "distParams": { "mean": "120", "sd": "20" },
+    "useEntityCtx": true,
+    "when": { "variable": "Entity.surgery_type", "operator": "==", "value": "hip" }
+  },
+  {
+    "eventId": "b_knee_complete",
+    "dist": "Lognormal",
+    "distParams": { "mean": "90", "sd": "15" },
+    "useEntityCtx": true,
+    "when": { "variable": "Entity.surgery_type", "operator": "==", "value": "knee" }
+  },
+  {
+    "eventId": "b_generic_complete",
+    "dist": "Exponential",
+    "distParams": { "mean": "60" },
+    "useEntityCtx": true
+  }
+]
+```
+
+**V29 warning** is raised if all entries have `when` and there is no fallback — entities not matching any condition would silently receive no service.
+
 ### Effect Macros for C-Events
 
 | Macro | Syntax | Meaning |

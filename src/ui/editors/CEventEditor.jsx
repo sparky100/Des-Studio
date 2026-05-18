@@ -200,6 +200,29 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                     </span>
                   </div>
 
+                  {/* Row 4: Conditional (when) */}
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",
+                      fontFamily:FONT,fontSize:11,color:s.when?C.amber:C.muted}}>
+                      <input type="checkbox" checked={!!s.when}
+                        onChange={e=>updSched(i,j,{when:e.target.checked?{variable:"Entity.surgery_type",operator:"==",value:""}:null})}
+                        style={{accentColor:C.amber}}/>
+                      Only fire when entity attribute matches (first-match wins across all entries)
+                    </label>
+                    {s.when&&(
+                      <EntityFilterBuilder
+                        predicate={s.when}
+                        entityTypes={entityTypes}
+                        onChange={p=>updSched(i,j,{when:p||null})}
+                        label="When"/>
+                    )}
+                    {!s.when&&(ev.cSchedules||[]).some(x=>x.when)&&(
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
+                        (no condition — this entry is the fallback)
+                      </span>
+                    )}
+                  </div>
+
                   {/* Preview of what will be scheduled */}
                   {s.eventId&&(
                     <div style={{background:C.panel,borderRadius:4,padding:"6px 10px",
