@@ -115,7 +115,7 @@ After sign-in (or on first open), DES Studio shows the Model Library with two ta
 | Tab | Contents |
 |-----|----------|
 | My Models | Models you own or that have been shared with you. Create blank, import JSON, open, or delete. |
-| Templates | Pre-built read-only models. Clicking a template creates a private copy and opens it immediately. |
+| Templates | Pre-built read-only models. Clicking a template creates a private copy and opens it immediately. See the [Template Models Guide](Template%20Models%20Guide.md) for a full catalogue with model walkthroughs. |
 
 ### Creating a model
 
