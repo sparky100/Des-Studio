@@ -122,6 +122,7 @@ export function deriveGraphFromModel(model = {}) {
   const bEvents = model.bEvents || [];
   const cEvents = model.cEvents || [];
   const queues = model.queues || [];
+  const dataSources = model.dataSources || [];
   const graph = model.graph || {};
   const nodes = [];
   const edges = [];
@@ -171,12 +172,14 @@ export function deriveGraphFromModel(model = {}) {
       const queueName = call.args[1] || customerType;
       const id = nodeId(VISUAL_NODE_TYPES.SOURCE, `${event.id || event.name}-${index}`);
       const targetQueueId = queueNodeByName.get(norm(queueName));
+      const hasFeed = dataSources.some(ds => ds.type === "scheduleFeed" && ds.targetBEventId === event.id);
       nodes.push({
         id,
         type: VISUAL_NODE_TYPES.SOURCE,
         refId: event.id || null,
         label: event.name || `${customerType} Arrival`,
         sublabel: `Adds ${customerType} to ${queueName}`,
+        badges: hasFeed ? ["feed"] : [],
       });
       if (targetQueueId) {
         edges.push({ id: edgeId(id, targetQueueId), from: id, to: targetQueueId, source: "arrival" });
@@ -207,12 +210,14 @@ export function deriveGraphFromModel(model = {}) {
     ];
     const uniqueQueueRefs = [...new Set(queueRefs.map(clean).filter(Boolean))];
 
+    const hasWhen = (event.cSchedules || []).some(cs => cs.when);
     nodes.push({
       id,
       type: VISUAL_NODE_TYPES.ACTIVITY,
       refId: event.id || null,
       label: event.name || "Activity",
       sublabel: `Priority ${event.priority || 1}`,
+      badges: hasWhen ? ["when"] : [],
     });
 
     uniqueQueueRefs.forEach(queueName => {

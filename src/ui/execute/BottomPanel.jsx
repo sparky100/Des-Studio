@@ -777,7 +777,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
         >
           {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
-          {activeTab === "charts"    && <QueueDepthTimePlot timeSeries={timeSeries} queues={model.queues} />}
+          {activeTab === "charts"    && <QueueDepthTimePlot timeSeries={timeSeries} queues={model.queues} timeUnit={model.timeUnit} />}
           {activeTab === "stagekpis" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <EventCountsTable snap={snap} model={model} />
