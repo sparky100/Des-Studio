@@ -760,7 +760,7 @@ const APPOINTMENT_CLINIC = {
         ],
       }}]},
     { id: "b_assess_done", name: "Assessment Done", scheduledTime: "9999",
-      effect: "RELEASE(Clinician, Standard Care)",
+      effect: "RELEASE(Clinician)",
       routing: [
         { condition: { variable: "Entity.severity", operator: "<=", value: 2 }, queueName: "Urgent Care" },
       ],
