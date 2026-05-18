@@ -27,6 +27,7 @@ import { LogViewer } from "./LogViewer.jsx";
 import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 import { ExperimentControls } from "./ExperimentControls.jsx";
 import { generateReport } from '../../reports/index.js';
+import { getModelImageDataUrl } from '../visual-designer/graph.js';
 
 const numberDefault = (value, fallback) => {
   const n = Number(value);
@@ -702,11 +703,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setReportGenerating(true);
     try {
       const meta = assembleRunMeta(latestRunId);
-      const markdown = await generateReport(model, results, exportConfig, meta);
-      const blob = new Blob([markdown], { type: 'text/markdown' });
+      const modelImageDataUrl = await getModelImageDataUrl().catch(() => null);
+      const html = await generateReport(model, results, exportConfig, meta, modelImageDataUrl);
+      const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const safeName = `${(model.name || 'Model').replace(/[/\\:*?"<>|]/g, '-')} — ${meta.runLabel.replace(/[/\\:*?"<>|]/g, '-')} — Report.md`;
+      const safeName = `${(model.name || 'Model').replace(/[/\\:*?"<>|]/g, '-')} — ${meta.runLabel.replace(/[/\\:*?"<>|]/g, '-')} — Report.html`;
       a.href = url;
       a.download = safeName;
       a.click();

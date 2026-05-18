@@ -1,6 +1,6 @@
 # DES Studio — Engine Public API Reference
 
-**Version:** 1.0 (Sprint 36)
+**Version:** 1.2 (Sprint 58+)
 **Entry point:** `src/engine/public-api.js`
 
 The public API is the stable, documented surface for embedding and extending the DES Studio simulation engine. Internal modules (`phases.js`, `macros.js`, `entities.js`, `conditions.js`) are not part of this surface and may change without notice.
@@ -44,7 +44,7 @@ runReplications({
 
 ---
 
-## `buildEngine(model, seed, warmupPeriod, maxSimTime, terminationCondition, maxCycles, maxCPasses, collectTimeSeries)`
+## `buildEngine(model, seed, warmupPeriod, maxSimTime, terminationCondition, maxCycles, maxCPasses, collectTimeSeries, registry)`
 
 Builds and returns a simulation engine instance.
 
@@ -60,6 +60,7 @@ Builds and returns a simulation engine instance.
 | `maxCycles` | `number` | `5000` | Maximum Phase A/B/C cycles before forced termination |
 | `maxCPasses` | `number` | `500` | Maximum Phase C scans per cycle before truncation |
 | `collectTimeSeries` | `boolean` | `false` | Whether to collect per-step entity snapshots (expensive for large models) |
+| `registry` | `AdapterRegistry \| nullRegistry` | `nullRegistry` | Live-data adapter registry (Sprint 57+). Pass `nullRegistry` (default) for static runs. See [Live-data registry](#live-data-registry-sprint-57) below. |
 
 ### Returns: engine instance
 
@@ -104,7 +105,12 @@ Builds and returns a simulation engine instance.
   avgWIP:        number,           // Time-average WIP = ∫ WIP dt / post-warmup elapsed
   totalCost:     number,           // Accumulated COST() macro total (0 if unused)
   costPerServed: number | null,    // totalCost / served (null if served = 0)
-  perResource:   Object | undefined, // Per-server-type utilisation summary
+  perResource:   Object | undefined,
+  // Per-server-type time-averaged utilisation (post-warmup).
+  // Key = entity type name. Value shape:
+  //   { total: number,        — count of server instances of this type
+  //     utilisation: number } — busyTime / (elapsed × total), range [0,1]
+  // Absent when no server entity types are defined.
   warmupPeriod:  number,
   excludedCount: number,           // Entities removed at warmup boundary
   phaseCTruncated: boolean,
@@ -326,3 +332,135 @@ rng(); // → number in [0, 1)
 - Clock: `clock`
 - Operators: `+`, `-`, `*`, `/`, `()`
 - Functions: `min(a,b)`, `max(a,b)`, `abs(a)`, `round(a)`, `floor(a)`, `ceil(a)`
+
+---
+
+## Live-data registry (Sprint 57+)
+
+The `registry` parameter connects `buildEngine` to real-time data sources. It is entirely optional — omit it (or pass `nullRegistry`) for standard static runs.
+
+```javascript
+import { buildEngine }      from './src/engine/public-api.js';
+import { AdapterRegistry }  from './src/engine/adapters/index.js';
+import { RestAdapter }      from './src/engine/adapters/RestAdapter.js';
+
+const registry = new AdapterRegistry(model.dataSources || [], envSecrets);
+await registry.prefetchAll();          // fetch all sources before run
+
+const engine = buildEngine(
+  model, seed, warmupPeriod, maxSimTime,
+  null, 5000, 500, false,
+  registry,                            // 9th argument
+);
+const result = engine.runAll();
+registry.dispose();
+```
+
+### `new AdapterRegistry(dataSources, envSecrets)`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `dataSources` | `DataSource[]` | Array from `model.dataSources`; each entry has `id`, `type`, `url`, `authHeader`, `authSecret`, `refreshSecs` |
+| `envSecrets` | `Record<string, string>` | Map of `{{env.VAR}}` placeholder names to resolved credential values (from `sessionStorage`) |
+
+| Method | Description |
+|--------|-------------|
+| `async prefetchAll()` | Fetch all REST sources before the run; non-fatal on individual failure |
+| `resolve(distParams, paramSource)` | Synchronously return `distParams` with any live value merged in; used per FEL event |
+| `registerMock(sourceId, adapter)` | Inject a test adapter for a source (testing only) |
+| `dispose()` | Release timers and connections |
+
+### `nullRegistry`
+
+A zero-cost singleton that passes all `distParams` through unchanged. Equivalent to having no live data configured.
+
+```javascript
+import { nullRegistry } from './src/engine/adapters/index.js';
+// nullRegistry.resolve(params, source) === params  (always)
+```
+
+### `paramSource` schema
+
+Attach to any `schedules[]` or `cSchedules[]` entry to bind a parameter to a live field:
+
+```json
+{
+  "dist": "Exponential",
+  "distParams": { "mean": "1.5" },
+  "paramSource": {
+    "sourceId": "ds_feed",
+    "field": "mean_interarrival_mins",
+    "targetParam": "mean",
+    "fallback": "1.5"
+  }
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `sourceId` | Yes | Must match a `dataSources[].id` |
+| `field` | Yes | Dot-notation path into the source JSON (e.g. `arrivals.mean`) |
+| `targetParam` | No | Key in `distParams` to replace; defaults to first key |
+| `fallback` | No | Used when the source is unavailable; defaults to the static `distParams` value |
+
+---
+
+## Supabase Edge Functions
+
+DES Studio exposes two Supabase Edge Functions. Both require the `SUPABASE_URL` and `SUPABASE_ANON_KEY` environment variables to be configured in the deployment.
+
+### `POST /functions/v1/import-model`
+
+Import and validate a model JSON from an external system.
+
+**Auth:** Bearer JWT (Supabase user token).
+
+**Request body:**
+
+```json
+{
+  "model": { /* full model JSON */ },
+  "name": "Optional name override"
+}
+```
+
+**Success response (201):**
+
+```json
+{ "ok": true, "modelId": "<uuid>", "warnings": [] }
+```
+
+**Error responses:**
+
+| Status | Cause |
+|--------|-------|
+| 400 | Malformed request body or missing `model` field |
+| 401 | Missing or invalid JWT |
+| 422 | Model fails validation — response body lists validation errors |
+| 500 | Database write failure |
+
+**Validation codes checked:** V1 (unique entity names), V2 (unique attr names), V4 (PRIORITY queue has priority attr), V8 (arrival source/sink exist), V9 (queue refs valid), V19 (server count ≥ 1), V20 (queue capacity ≥ 1), V21 (balk probability 0–1).
+
+### `POST /functions/v1/llm-proxy`
+
+Proxy for LLM inference (AI Insights, report generation, model builder). **Internal use only** — called by the DES Studio UI. Not intended for direct external consumption.
+
+**Auth:** Optional Bearer token (rate-limiting is IP-based regardless).
+
+**Rate limit:** 25 requests / hour per IP (configurable via `LLM_RATE_LIMIT` environment variable).
+
+**Request body:**
+
+```json
+{
+  "kind": "narrative | comparison | sensitivity | suggestion | query | model_builder",
+  "messages": [{ "role": "user", "content": "..." }],
+  "maxTokens": 450,
+  "stream": true,
+  "responseFormat": "text"
+}
+```
+
+**Streaming response:** Server-sent events (SSE) when `stream: true`; plain JSON when `stream: false`.
+
+**Status 429** is returned when the rate limit is exceeded.

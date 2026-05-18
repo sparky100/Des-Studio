@@ -55,71 +55,146 @@ describe('generateReport', () => {
     vi.clearAllMocks();
   });
 
-  test('returns a non-empty markdown string', async () => {
+  test('returns a non-empty HTML string', async () => {
     callLLMOnce.mockResolvedValue('Test description for the model.');
 
-    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
-    expect(typeof md).toBe('string');
-    expect(md.length).toBeGreaterThan(0);
+    expect(typeof html).toBe('string');
+    expect(html.length).toBeGreaterThan(0);
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('<html');
+    expect(html).toContain('</html>');
   });
 
   test('includes expected section headings', async () => {
     callLLMOnce.mockResolvedValue('A model description.');
 
-    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
-    expect(md).toContain('# Test Clinic — Analysis Report');
-    expect(md).toContain('## Executive Summary');
-    expect(md).toContain('## Model Description');
-    expect(md).toContain('## Experiment Configuration');
-    expect(md).toContain('## Simulation Results');
-    expect(md).toContain('## Recommendations');
-    expect(md).toContain('## Appendix');
+    expect(html).toContain('Test Clinic');
+    expect(html).toContain('Executive Summary');
+    expect(html).toContain('Model Description');
+    expect(html).toContain('Experiment Configuration');
+    expect(html).toContain('Simulation Results');
+    expect(html).toContain('Recommendations');
+    expect(html).toContain('Appendix');
   });
 
-  test('still returns markdown when callLLMOnce throws (graceful fallback)', async () => {
+  test('still returns HTML when callLLMOnce throws (graceful fallback)', async () => {
     callLLMOnce.mockRejectedValue(new Error('LLM unavailable'));
 
-    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
-    expect(typeof md).toBe('string');
-    expect(md).toContain('## Executive Summary');
+    expect(typeof html).toBe('string');
+    expect(html).toContain('Executive Summary');
+    expect(html).toContain('<!DOCTYPE html>');
   });
 
   test('works with empty model and results', async () => {
     callLLMOnce.mockResolvedValue('');
 
-    const md = await generateReport({}, {}, {}, {});
+    const html = await generateReport({}, {}, {}, {});
 
-    expect(typeof md).toBe('string');
-    expect(md.length).toBeGreaterThan(0);
+    expect(typeof html).toBe('string');
+    expect(html.length).toBeGreaterThan(0);
+    expect(html).toContain('<!DOCTYPE html>');
   });
 
   test('includes run metadata in the output', async () => {
     callLLMOnce.mockResolvedValue('');
 
-    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
-    expect(md).toContain('Test Run 1');
-    expect(md).toContain('run-001');
+    expect(html).toContain('Test Run 1');
+    expect(html).toContain('run-001');
   });
 
   test('includes KPI values from results', async () => {
     callLLMOnce.mockResolvedValue('');
 
-    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
-    expect(md).toContain('195');  // served
-    expect(md).toContain('3.20'); // avgWait
+    expect(html).toContain('195');  // served
+    expect(html).toContain('3.20'); // avgWait
   });
 
   test('includes entity types in appendix', async () => {
     callLLMOnce.mockResolvedValue('');
 
-    const md = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
-    expect(md).toContain('Patient');
-    expect(md).toContain('Doctor');
+    expect(html).toContain('Patient');
+    expect(html).toContain('Doctor');
+  });
+
+  test('includes model diagram when imageDataUrl provided', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const fakeImg = 'data:image/png;base64,ABC123';
+
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta, fakeImg);
+
+    expect(html).toContain('Model Diagram');
+    expect(html).toContain(fakeImg);
+  });
+
+  test('omits model diagram section when no imageDataUrl', async () => {
+    callLLMOnce.mockResolvedValue('');
+
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta, null);
+
+    expect(html).not.toContain('Model Diagram');
+  });
+
+  test('includes SVG charts for journey breakdown when wait and service data present', async () => {
+    callLLMOnce.mockResolvedValue('');
+
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+
+    expect(html).toContain('<svg');
+    expect(html).toContain('Journey Time Breakdown');
+  });
+
+  test('includes resource utilisation chart when perResource data present', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithUtil = {
+      ...minimalResults,
+      summary: {
+        ...minimalResults.summary,
+        perResource: {
+          Doctor: { total: 2, utilisation: 0.72 },
+        },
+      },
+    };
+
+    const html = await generateReport(minimalModel, resultsWithUtil, experimentConfig, runMeta);
+
+    expect(html).toContain('Resource Utilisation');
+    expect(html).toContain('Doctor');
+    expect(html).toContain('72.0%');
+  });
+
+  test('includes queue wait chart when waitDist data present', async () => {
+    callLLMOnce.mockResolvedValue('');
+    const resultsWithWait = {
+      ...minimalResults,
+      waitDist: {
+        'Waiting Room': { n: 50, mean: 3.2, p50: 2.8, p90: 6.1, p95: 7.4, p99: 9.0 },
+      },
+    };
+
+    const html = await generateReport(minimalModel, resultsWithWait, experimentConfig, runMeta);
+
+    expect(html).toContain('Queue Wait-Time Distribution');
+    expect(html).toContain('Waiting Room');
+  });
+
+  test('title element contains model name', async () => {
+    callLLMOnce.mockResolvedValue('');
+
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+
+    expect(html).toContain('<title>');
+    expect(html).toContain('Test Clinic');
   });
 });
