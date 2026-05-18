@@ -75,10 +75,10 @@ describe('generateReport', () => {
     expect(html).toContain('Test Clinic');
     expect(html).toContain('Executive Summary');
     expect(html).toContain('Model Description');
-    expect(html).toContain('Experiment Configuration');
     expect(html).toContain('Simulation Results');
     expect(html).toContain('Recommendations');
     expect(html).toContain('Appendix');
+    expect(html).not.toContain('Experiment Configuration');
   });
 
   test('still returns HTML when callLLMOnce throws (graceful fallback)', async () => {
@@ -107,7 +107,6 @@ describe('generateReport', () => {
     const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
     expect(html).toContain('Test Run 1');
-    expect(html).toContain('run-001');
   });
 
   test('includes KPI values from results', async () => {
@@ -116,7 +115,7 @@ describe('generateReport', () => {
     const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
     expect(html).toContain('195');  // served
-    expect(html).toContain('3.20'); // avgWait
+    expect(html).toContain('3.2'); // avgWait (1 dp)
   });
 
   test('includes entity types in appendix', async () => {
@@ -171,7 +170,7 @@ describe('generateReport', () => {
 
     expect(html).toContain('Resource Utilisation');
     expect(html).toContain('Doctor');
-    expect(html).toContain('72.0%');
+    expect(html).toContain('72%');
   });
 
   test('includes queue wait chart when waitDist data present', async () => {

@@ -25,9 +25,14 @@ function sanitizeFilename(name) {
   return String(name || 'report').replace(/[/\\:*?"<>|]/g, '-');
 }
 
-function fin(value, decimals = 2) {
+function fin(value, decimals = 1) {
   const n = Number(value);
   return Number.isFinite(n) ? n.toFixed(decimals) : null;
+}
+
+function timeVal(value, unit) {
+  const s = fin(value, 1);
+  return s !== null ? `${s} ${unit}` : null;
 }
 
 function getSummary(results = {}) {
@@ -113,17 +118,17 @@ function horizBarChart({ items, title, width = 480 }) {
   </svg>`;
 }
 
-function journeyBreakdownChart({ avgWait, avgSvc, width = 480 }) {
+function journeyBreakdownChart({ avgWait, avgSvc, unit = 'minutes', width = 480 }) {
   const wait = Number.isFinite(Number(avgWait)) ? Math.max(0, Number(avgWait)) : 0;
   const svc  = Number.isFinite(Number(avgSvc))  ? Math.max(0, Number(avgSvc))  : 0;
   if (wait + svc === 0) return '';
-  const m = { top: 32, right: 64, bottom: 16, left: 110 };
+  const m = { top: 32, right: 80, bottom: 16, left: 110 };
   const height = m.top + m.bottom + 2 * 30;
   const cW = width - m.left - m.right;
   const total = wait + svc;
   const rows = [
-    { label: 'Avg wait',    val: wait, color: '#2563eb' },
-    { label: 'Avg service', val: svc,  color: '#16a34a' },
+    { label: `Avg wait (${unit})`,    val: wait, color: '#2563eb' },
+    { label: `Avg service (${unit})`, val: svc,  color: '#16a34a' },
   ];
   let bars = '';
   rows.forEach((r, i) => {
@@ -131,7 +136,7 @@ function journeyBreakdownChart({ avgWait, avgSvc, width = 480 }) {
     bars += `<rect x="${m.left}" y="${y + 3}" width="${cW}" height="20" fill="#f3f4f6" rx="3"/>`;
     if (r.val > 0) bars += `<rect x="${m.left}" y="${y + 3}" width="${((r.val / total) * cW).toFixed(1)}" height="20" fill="${r.color}" rx="3" opacity="0.85"/>`;
     bars += `<text x="${m.left - 6}" y="${y + 17}" text-anchor="end" font-size="11" fill="#374151" font-family="sans-serif">${esc(r.label)}</text>`;
-    bars += `<text x="${m.left + cW + 8}" y="${y + 17}" font-size="11" font-weight="600" fill="${r.color}" font-family="sans-serif">${r.val.toFixed(2)}</text>`;
+    bars += `<text x="${m.left + cW + 8}" y="${y + 17}" font-size="11" font-weight="600" fill="${r.color}" font-family="sans-serif">${r.val.toFixed(1)}</text>`;
   });
   return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
     <text x="${width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#111827" font-family="sans-serif">Journey Time Breakdown</text>
@@ -219,14 +224,15 @@ function buildModelImage(modelImageDataUrl) {
 
 function buildExecutiveSummary(model, results, recommendations) {
   const summary = getSummary(results);
+  const unit = model.timeUnit || 'minutes';
 
   const kpis = [
-    { lbl: 'Entities served',       val: fin(summary.served, 0) },
-    { lbl: 'Reneged',               val: fin(summary.reneged, 0) },
-    { lbl: 'Avg wait time',         val: fin(summary.avgWait) },
-    { lbl: 'Avg service time',      val: fin(summary.avgSvc) },
-    { lbl: 'Avg sojourn time',      val: fin(summary.avgSojourn) },
-    { lbl: "Avg WIP (Little's L)",  val: fin(summary.avgWIP) },
+    { lbl: 'Entities served',           val: fin(summary.served, 0) },
+    { lbl: 'Reneged / abandoned',       val: fin(summary.reneged, 0) },
+    { lbl: `Avg wait time (${unit})`,   val: fin(summary.avgWait, 1) },
+    { lbl: `Avg service time (${unit})`,val: fin(summary.avgSvc, 1) },
+    { lbl: `Avg total time (${unit})`,  val: fin(summary.avgSojourn, 1) },
+    { lbl: "Avg WIP",                   val: fin(summary.avgWIP, 1) },
   ].filter(k => k.val !== null);
 
   const kpiHtml = kpis.length ? `<div class="kpi-grid">${
@@ -285,22 +291,23 @@ function buildResults(model, results) {
   const summary  = getSummary(results);
   const waitDist = results.waitDist || {};
   const aggStats = results.aggregateStats || {};
+  const unit     = model.timeUnit || 'minutes';
 
   // Summary stats — only post-warmup, time-averaged or per-entity values
   const metricRows = [
-    ['Entities completed service',             fin(summary.served, 0)],
-    ['Entities reneged (abandoned)',           fin(summary.reneged, 0)],
-    ['Average waiting time',                  fin(summary.avgWait)],
-    ['Average service time',                  fin(summary.avgSvc)],
-    ['Average sojourn time (wait + service)',  fin(summary.avgSojourn)],
-    ['Maximum sojourn time',                  fin(summary.maxSojourn)],
-    ["Average WIP — Little's L",         fin(summary.avgWIP)],
-    ['Total cost',                            fin(summary.totalCost)],
-    ['Cost per entity served',                fin(summary.costPerServed)],
+    [`Entities completed service`,                              fin(summary.served, 0)],
+    [`Entities reneged (abandoned)`,                           fin(summary.reneged, 0)],
+    [`Average waiting time (${unit})`,                         fin(summary.avgWait, 1)],
+    [`Average service time (${unit})`,                         fin(summary.avgSvc, 1)],
+    [`Average total time in system — wait + service (${unit})`,fin(summary.avgSojourn, 1)],
+    [`Longest time in system (${unit})`,                       fin(summary.maxSojourn, 1)],
+    [`Average number in system (WIP)`,                         fin(summary.avgWIP, 1)],
+    [`Total cost`,                                             fin(summary.totalCost, 1)],
+    [`Cost per entity served`,                                 fin(summary.costPerServed, 1)],
   ].filter(r => r[1] !== null);
 
   // Journey breakdown chart
-  const journeyChart = journeyBreakdownChart({ avgWait: summary.avgWait, avgSvc: summary.avgSvc });
+  const journeyChart = journeyBreakdownChart({ avgWait: summary.avgWait, avgSvc: summary.avgSvc, unit });
 
   // Queue wait-time chart + table
   const queueNames = Object.keys(waitDist);
@@ -317,15 +324,23 @@ function buildResults(model, results) {
       waitChartHtml = `<div class="chart-wrap">${groupedBarChart({
         groups,
         series: metricLabels.map(l => ({ label: l })),
-        title:  'Queue Wait-Time Distribution (time units)',
+        title:  `Queue Wait-Time Distribution (${unit})`,
       })}</div>`;
     }
 
     const tableRows = queueNames.map(q => {
       const w = waitDist[q] || {};
-      return [q, fin(w.n, 0), fin(w.mean), fin(w.p50), fin(w.p90), fin(w.p95), fin(w.p99)].map(v => v ?? '—');
+      return [q, fin(w.n, 0), fin(w.mean, 1), fin(w.p50, 1), fin(w.p90, 1), fin(w.p95, 1), fin(w.p99, 1)].map(v => v ?? '—');
     });
-    waitTableHtml = htmlTable(['Queue', 'N', 'Mean wait', 'P50', 'P90', 'P95', 'P99'], tableRows);
+    const percentileNote = `<p class="note">
+      <strong>Reading the wait-time columns:</strong>
+      <strong>Mean</strong> = average wait across all arrivals.
+      <strong>P50</strong> (median) = half of people waited less than this, half waited more.
+      <strong>P90</strong> = 9 out of 10 people waited less than this; only 1 in 10 waited longer.
+      <strong>P95</strong> = 19 out of 20 people waited less than this.
+      All values in ${unit}.
+    </p>`;
+    waitTableHtml = percentileNote + htmlTable([`Queue`, `Count`, `Mean wait`, `P50`, `P90`, `P95`, `P99`], tableRows);
   }
 
   // Resource utilisation chart + table (time-averaged, post-warmup)
@@ -335,14 +350,14 @@ function buildResults(model, results) {
   if (resourceTypes.length) {
     utilChartHtml = `<div class="chart-wrap">${horizBarChart({
       items: resourceTypes.map(t => ({ label: t, value: perResource[t].utilisation ?? 0 })),
-      title: 'Resource Utilisation — time-averaged, post-warmup',
+      title: 'Resource Utilisation',
     })}</div>`;
     const utilRows = resourceTypes.map(t => {
       const r = perResource[t];
-      const pct = Number.isFinite(r.utilisation) ? `${(r.utilisation * 100).toFixed(1)}%` : '—';
+      const pct = Number.isFinite(r.utilisation) ? `${Math.round(r.utilisation * 100)}%` : '—';
       return [t, String(r.total ?? '—'), pct];
     });
-    utilTableHtml = `<p class="note">Utilisation = total server busy-time ÷ (elapsed post-warmup time × server count). Green &lt;75%, amber 75–90%, red &gt;90%.</p>
+    utilTableHtml = `<p class="note">Percentage of time each resource was busy (averaged across the run, excluding warm-up). Green &lt;75%, amber 75–90%, red &gt;90%.</p>
     ${htmlTable(['Resource type', 'Count', 'Utilisation'], utilRows)}`;
   }
 
@@ -366,7 +381,7 @@ function buildResults(model, results) {
   if (ciKeys.length) {
     const ciRows = ciKeys.map(k => {
       const s = aggStats[k];
-      return [k, fin(s.mean) ?? '—', fin(s.lower) ?? '—', fin(s.upper) ?? '—', String(s.n || '—')];
+      return [k, fin(s.mean, 1) ?? '—', fin(s.lower, 1) ?? '—', fin(s.upper, 1) ?? '—', String(s.n || '—')];
     });
     ciHtml = `<h3>Replication Confidence Intervals (95%)</h3>${htmlTable(['Metric', 'Mean', 'CI Lower', 'CI Upper', 'N'], ciRows)}`;
   }
@@ -465,7 +480,6 @@ export async function generateReport(model = {}, results = {}, experimentConfig 
   ${buildModelImage(modelImageDataUrl)}
   ${buildExecutiveSummary(model, results, recommendations)}
   ${buildModelDescription(modelDescription)}
-  ${buildExperimentConfig(experimentConfig, runMeta)}
   ${buildResults(model, results)}
   ${buildRecommendations(recommendations)}
   ${buildAppendix(model)}

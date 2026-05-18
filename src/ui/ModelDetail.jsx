@@ -680,6 +680,20 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             )}
             <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
             <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Time unit</label>
+              <select
+                value={model.timeUnit||"minutes"}
+                onChange={canEdit?(e=>setField("timeUnit",e.target.value)):undefined}
+                disabled={!canEdit}
+                style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:12,padding:"5px 8px",width:160}}
+              >
+                <option value="seconds">Seconds</option>
+                <option value="minutes">Minutes</option>
+                <option value="hours">Hours</option>
+                <option value="days">Days</option>
+              </select>
+            </div>
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
               <GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
             </div>
