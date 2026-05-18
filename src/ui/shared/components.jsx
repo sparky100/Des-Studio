@@ -328,7 +328,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
         </>}
         <button onClick={()=>fileRef.current?.click()}
           style={{...inpSt,cursor:"pointer",color:C.cEvent,marginLeft:"auto"}}>
-          ↑ Load from CSV
+          ↑ Load plan
         </button>
       </div>
       {importNotice&&(
