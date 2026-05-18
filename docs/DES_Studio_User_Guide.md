@@ -461,6 +461,30 @@ For use cases where the arrival plan is managed in an external system (e.g. an o
 
 Planned durations from the feed are deliberately ignored — service time is always derived from the model's calibrated distributions. This preserves the simulation's ability to explore "what if we were faster/slower" scenarios independently of the actual plan.
 
+### 6.1d Receiving actual times from a live system (actualsStream)
+
+Once a simulation is running against a pre-loaded schedule, an `actualsStream` data source can push actual start times from the live system and adjust the simulation in real time.
+
+**How it works:**
+1. A WebSocket endpoint (e.g. from your booking or theatre system) sends messages as each procedure actually starts.
+2. DES Studio matches the `entityId` in the message to pre-scheduled FEL entries and reschedules them to the actual time.
+3. When the entity arrives (at the actual time), the system remembers the planned time and records the deviation.
+4. The generated report includes a "Plan vs Actual" section showing average deviation in time units.
+
+**Setup:**
+1. Open the model **Overview** tab, scroll to **Data Sources**, and click **+ Add source**.
+2. Set the type to **actualsStream**.
+3. Enter the WebSocket URL (starting with `wss://`) and optional auth credentials.
+
+**Expected message format:**
+```json
+{ "entityId": "Alice",  "actualTime": "2026-05-18T09:05:00" }
+```
+
+`actualTime` may be a sim-time number, `HH:MM` string, or ISO 8601 datetime (requires epoch to be set).
+
+**Plan vs Actual report section:** when the report is exported after a run that used planned data with actuals, the "Simulation Results" section includes average plan deviation (positive = ran late, negative = ran early).
+
 ### 6.2 Model settings — time unit and simulation start time
 
 Two model-level fields in the **Settings** tab control how DES Studio labels and anchors simulation time.

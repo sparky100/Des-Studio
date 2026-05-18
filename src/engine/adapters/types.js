@@ -6,7 +6,7 @@
  * @typedef {{
  *   id: string,
  *   label: string,
- *   type: 'rest' | 'websocket' | 'stateSnapshot' | 'scheduleFeed' | 'mock',
+ *   type: 'rest' | 'websocket' | 'stateSnapshot' | 'scheduleFeed' | 'actualsStream' | 'mock',
  *   url?: string,
  *   authHeader?: string,
  *   authSecret?: string,

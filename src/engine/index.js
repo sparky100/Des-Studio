@@ -763,6 +763,12 @@ const cycleLog = [];
       };
     }
 
+    // Plan deviation: average of (arrivalTime - _plannedTime) for planned entities
+    const plannedEntities = customers.filter(e => e._plannedTime != null && e.arrivalTime != null);
+    const avgPlanDeviation = plannedEntities.length
+      ? +(plannedEntities.reduce((s, e) => s + (e.arrivalTime - e._plannedTime), 0) / plannedEntities.length).toFixed(4)
+      : null;
+
     return {
       total:             customers.length,
       served:            served.length,
@@ -774,6 +780,7 @@ const cycleLog = [];
       avgWIP:            (clock - _statsResetTime) > 0 ? +(_wipIntegral / (clock - _statsResetTime)).toFixed(4) : 0,
       totalCost:         +totalCost.toFixed(4),
       costPerServed,
+      avgPlanDeviation,
       perResource:       Object.keys(perResource).length ? perResource : undefined,
       containerLevels:   Object.keys(containerLevels).length ? containerLevels : undefined,
       warmupPeriod,
@@ -784,15 +791,40 @@ const cycleLog = [];
     };
   }
 
+  /**
+   * Reschedule a planned-arrival FEL entry to a new simulation time.
+   * Matches FEL entries by entityId in _scheduleRowAttrs (planned arrivals) or
+   * by _contextCustId (service completion events for a named entity).
+   * Returns true if at least one entry was updated.
+   *
+   * @param {string} entityId  Value of the entity's entityId attribute
+   * @param {number} newSimTime  New scheduled time in simulation units
+   */
+  function updateScheduledTime(entityId, newSimTime) {
+    if (!entityId || !Number.isFinite(newSimTime)) return false;
+    let updated = false;
+    for (const entry of fel) {
+      const scheduledEntityId = entry._scheduleRowAttrs?.entityId;
+      if (scheduledEntityId === entityId) {
+        entry._plannedArrivalTime = entry._plannedArrivalTime ?? entry.scheduledTime;
+        entry.scheduledTime = newSimTime;
+        updated = true;
+      }
+    }
+    if (updated) fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
+    return updated;
+  }
+
   return {
     step,
     runAll,
-    getSnap:         () => snap(clock),
-    getFelSize:      () => fel.length,
+    getSnap:              () => snap(clock),
+    getFelSize:           () => fel.length,
     getSummary,
-    getTimeSeries:   () => _timeSeries ?? undefined,
-    getWaitDist:     () => computeWaitDist(entities),
-    getEntitySummary: () => entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
+    getTimeSeries:        () => _timeSeries ?? undefined,
+    getWaitDist:          () => computeWaitDist(entities),
+    getEntitySummary:     () => entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
+    updateScheduledTime,
   };
 }
 

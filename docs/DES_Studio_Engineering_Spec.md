@@ -19,6 +19,7 @@
 | v1.5.0 | 2026-05-18 | Sprint 62 | Real-world clock (epoch field, clockUtils, timestamp CSV import) |
 | v1.6.0 | 2026-05-18 | Sprint 63 | Planned data import — ScheduleFeedAdapter, xlsxParser, DataSourcesEditor UI, entityId convention, prefetchScheduleFeeds() |
 | v1.7.0 | 2026-05-18 | Sprint 64 | Attribute-conditional service times — `when` predicate on cSchedule entries, first-match semantics, V29 validation, CEventEditor UI |
+| v1.8.0 | 2026-05-18 | Sprint 65 | Actuals tracking — `_plannedTime` on entities, `updateScheduledTime()` API, `avgPlanDeviation` in getSummary(), ActualsStreamAdapter, report Plan vs Actual section |
 
 ---
 
@@ -625,6 +626,43 @@ DES Studio targets WCAG 2.1 AA compliance. Implemented requirements:
 | V27 | Error | FILL/DRAIN macro must reference a declared container ID |
 | V28 | Warning | `epoch` must be a valid ISO 8601 datetime string when set (e.g. `"2026-05-18T08:00:00"`); an invalid value is ignored and real-world clock conversions are disabled |
 | V29 | Warning | A C-event's `cSchedules` list has conditional entries (all with `when`) but no fallback (entry without `when`). Entities not matching any condition will receive no service. |
+
+### 2.10 Actuals Tracking (Sprint 65)
+
+#### `_plannedTime` on entity objects
+
+When an entity is created via the ARRIVE macro from a B-event that used a Schedule (rows[]) distribution, its FEL entry carries `_plannedArrivalTime` (the absolute planned simulation time). At entity-creation time, `entity._plannedTime = felRef._plannedArrivalTime` is set. Entities created from statistical distributions have `_plannedTime = undefined`.
+
+#### `engine.updateScheduledTime(entityId, newSimTime)` (FEL update API)
+
+```js
+engine.updateScheduledTime("Alice", 65)  // → true/false
+```
+
+Finds FEL entries where `_scheduleRowAttrs.entityId === entityId`, preserves the original `_plannedArrivalTime`, and updates `scheduledTime` to `newSimTime`. Re-sorts the FEL. Returns `true` if at least one entry was updated.
+
+When the B-event subsequently fires at the new time, the entity is created with `arrivalTime = newSimTime` and `_plannedTime = original planned time` — enabling plan-vs-actual deviation measurement.
+
+#### `getSummary().avgPlanDeviation`
+
+```js
+{ avgPlanDeviation: 5.0 }  // average deviation in model time units; null when no planned entities
+```
+
+Average of `(entity.arrivalTime - entity._plannedTime)` across all customer entities that have `_plannedTime` set. Positive = late on average; negative = early; null = no planned arrivals.
+
+#### `ActualsStreamAdapter` (`src/engine/adapters/ActualsStreamAdapter.js`)
+
+Receives actual start-time updates from an external system. Supports:
+- WebSocket connection (`connect()`)
+- Direct push (`pushUpdate(entityId, actualTime)`)
+- Pre-connection buffering (updates queued until `attachEngine()` is called)
+
+Message formats accepted: plain sim-time numbers, HH:MM strings, ISO 8601 datetimes (requires `model.epoch`).
+
+#### Report: Plan vs Actual section
+
+`buildResults()` in `reportGenerator.js` includes a "Plan vs Actual" section only when `summary.avgPlanDeviation` is non-null. Shows average deviation and direction (early / on time / late).
 
 ---
 

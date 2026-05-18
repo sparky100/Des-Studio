@@ -280,6 +280,7 @@ export function fireBEvent(ev, ctx) {
         continue;
       }
     }
+    const plannedArrivalTime = rowAttrs ? clock + delay : undefined;
     felEntries.push({
       ...tmpl,
       scheduledTime:        clock + delay,
@@ -288,6 +289,7 @@ export function fireBEvent(ev, ctx) {
       _contextCustId:       sched.isRenege ? renegeTarget : effectCtx._lastCustId,
       _contextSrvId:        effectCtx._lastSrvId,
       _scheduleRowAttrs:    rowAttrs || undefined,
+      _plannedArrivalTime:  plannedArrivalTime,
     });
     msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${sched.dist}(${delay.toFixed(3)})]`);
   }

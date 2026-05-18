@@ -285,6 +285,7 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
                     onChange={e => update(idx, { type: e.target.value })}>
                     <option value="rest">rest</option>
                     <option value="scheduleFeed">scheduleFeed</option>
+                    <option value="actualsStream">actualsStream</option>
                   </select>
                 </div>
               </div>

@@ -395,6 +395,19 @@ function buildResults(model, results) {
     ciHtml = `<h3>Replication Confidence Intervals (95%)</h3>${htmlTable(['Metric', 'Mean', 'CI Lower', 'CI Upper', 'N'], ciRows)}`;
   }
 
+  // Plan vs Actual — only shown when avgPlanDeviation is non-null
+  let planVsActualHtml = '';
+  if (summary.avgPlanDeviation != null) {
+    const sign = summary.avgPlanDeviation >= 0 ? '+' : '';
+    const direction = summary.avgPlanDeviation > 0 ? 'late' : summary.avgPlanDeviation < 0 ? 'early' : 'on time';
+    planVsActualHtml = `<h3>Plan vs Actual</h3>
+    <p class="note">This model was run against a pre-loaded planned schedule. The values below compare planned arrival times (from the schedule feed or CSV) to actual simulation times.</p>
+    ${htmlTable(['Metric', 'Value'], [
+      [`Average plan deviation (${unit})`, `${sign}${fin(summary.avgPlanDeviation, 1)}`],
+      [`Direction`, direction],
+    ])}`;
+  }
+
   return `
   <section>
     <h2>Simulation Results</h2>
@@ -402,6 +415,7 @@ function buildResults(model, results) {
     ${journeyChart ? `<div class="chart-wrap">${journeyChart}</div>` : ''}
     ${waitChartHtml || waitTableHtml ? `<h3>Queue wait-time distributions</h3>${waitChartHtml}${waitTableHtml}` : ''}
     ${utilChartHtml || utilTableHtml ? `<h3>Resource utilisation</h3>${utilChartHtml}${utilTableHtml}` : ''}
+    ${planVsActualHtml}
     ${goalHtml}
     ${ciHtml}
   </section>`;

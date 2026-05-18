@@ -762,7 +762,7 @@ Models can connect distribution parameters to live REST or WebSocket feeds so th
 |---|---|---|
 | `id` | Yes | Unique within the model; referenced by `paramSource.sourceId` |
 | `label` | Yes | Human-readable name shown in the UI |
-| `type` | Yes | `"rest"` \| `"scheduleFeed"` \| `"websocket"` \| `"stateSnapshot"` \| `"mock"` |
+| `type` | Yes | `"rest"` \| `"scheduleFeed"` \| `"actualsStream"` \| `"websocket"` \| `"stateSnapshot"` \| `"mock"` |
 | `url` | Yes | Full HTTPS URL to the endpoint |
 | `authHeader` | No | Header name for authentication (e.g. `"Authorization"`) |
 | `authSecret` | No | `{{env.VAR_NAME}}` placeholder — **never a literal credential**. Actual value is entered by the user in `sessionStorage` at runtime. |
@@ -801,6 +801,34 @@ A `scheduleFeed` source fetches a planned-arrival schedule from a REST endpoint 
 - `entityId` is a reserved attribute name — when set, its value becomes the entity's display name in the simulation UI.
 - Credential values in `authSecret` must always use `{{env.VAR}}` syntax; actual tokens are entered at session time and are never persisted.
 - Planned durations in the feed are **ignored** — service time is always derived from the model's calibrated distributions.
+
+### `actualsStream` data source
+
+An `actualsStream` source receives actual start-time updates from an external system (e.g. a live theatre management system) and reroutes pre-scheduled FEL entries to their actual times.
+
+```json
+{
+  "id": "ds_actuals",
+  "label": "Theatre Actuals Feed",
+  "type": "actualsStream",
+  "url": "wss://his.example.com/api/theatre/actuals",
+  "authHeader": "Authorization",
+  "authSecret": "{{env.HIS_TOKEN}}"
+}
+```
+
+**Expected WebSocket message formats:**
+```json
+{ "entityId": "Alice",  "actualTime": "2026-05-18T09:05:00" }
+{ "entityId": "Bob",    "actualTime": 65 }
+{ "type": "batch", "updates": [{ "entityId": "...", "actualTime": "..." }] }
+```
+
+`actualTime` may be a plain simulation time number, an `HH:MM` string, or a full ISO 8601 datetime. ISO/HH:MM values require `model.epoch` to be set.
+
+The adapter calls `engine.updateScheduledTime(entityId, newSimTime)` for each update, rescheduling the matching pre-scheduled arrival in the FEL while preserving the original `_plannedTime` on the entity for deviation reporting.
+
+**`getSummary().avgPlanDeviation`**: when entities have both `_plannedTime` (from rows[]) and `arrivalTime` (actual), the engine reports the average deviation (actual minus planned). Positive = late; negative = early; null = no planned data. The report includes a "Plan vs Actual" section when this metric is present.
 
 ### `paramSource` on a schedule or cSchedule
 
