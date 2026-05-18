@@ -16,6 +16,7 @@
 | v1.2 | 2026-05-17 | Sprint 57 | Real-time adapter layer — RestAdapter, AdapterRegistry, nullRegistry, paramSource schema extension |
 | v1.3 | 2026-05-17 | Sprint 58 | Report generation — `generateReport()`, LLM prompt builders, html2canvas canvas capture, Execute panel Export Report button |
 | v1.4 | 2026-05-18 | Sprint 58+ | Time-averaged server utilisation — `_busyStart`/`_busyTime` tracking in `entities.js`; warmup reset; `getSummary()` formula updated to `busyTime / (elapsed × count)`. Markdown report export replacing docx. CSV import for Schedule distribution — `planCsvParser.js`, `ScheduleEditor` "Load from CSV" button, `distParams.rows[]` schema. |
+| v1.5.0 | 2026-05-18 | Sprint 62 | Real-world clock (epoch field, clockUtils, timestamp CSV import) |
 
 ---
 
@@ -116,6 +117,20 @@ The report generation module produces professional Word documents (`.docx`) from
 - Filename pattern: `<ModelName> — <RunLabel> — Report.docx`
 - `docx` v9 API notes: hex colours without `#` prefix; `PageNumberElement` (not `PageNumber` constructor); `ImageRun` requires `type: 'png'`
 
+### 2.7 Clock Utilities (Sprint 62)
+
+`src/engine/clockUtils.js` provides real-world clock conversion helpers. These functions are stateless pure utilities that accept the model's `epoch` and `timeUnit` fields.
+
+| Export | Signature | Description |
+|--------|-----------|-------------|
+| `simToWall` | `simToWall(t, epoch, timeUnit) → Date` | Converts a simulation time `t` to an absolute `Date` by adding `t` time units to `epoch`. Returns `null` if `epoch` is not set. |
+| `wallToSim` | `wallToSim(dt, epoch, timeUnit) → number` | Converts a `Date` (or ISO string) `dt` back to a simulation time offset relative to `epoch`. Returns `null` if `epoch` is not set. |
+| `formatWallTime` | `formatWallTime(date) → string` | Formats a `Date` as a human-readable locale string for display in the report cover and experiment controls. |
+| `parseTimeInput` | `parseTimeInput(value, epoch, timeUnit) → number` | Parses a time value that may be numeric, HH:MM, or full ISO 8601. When `epoch` is set and the value looks like a timestamp, delegates to `wallToSim` to produce a simulation-time offset; otherwise falls back to `parseFloat`. |
+| `looksLikeTimestamp` | `looksLikeTimestamp(value) → boolean` | Returns `true` when the string matches HH:MM or ISO 8601 patterns, signalling that `parseTimeInput` should interpret it as a calendar time rather than a numeric offset. Used by `planCsvParser.js` to decide whether an `epoch` is required for import. |
+
+These utilities are used by `planCsvParser.js` (CSV import), the report generator (cover page period line), and the experiment controls UI (start/end wall-clock display).
+
 ---
 
 ## 3. Data Model
@@ -138,6 +153,8 @@ A DES Studio model is a JSON object stored in the `models` table. All fields bel
 | `containerTypes` | ContainerType[] | Array of container (level resource) definitions |
 | `graph` | object | Visual Designer layout (nodes, edges, viewport) — persisted by `src/ui/visual-designer/graph.js` |
 | `experimentDefaults` | object | Default execution parameters: `maxSimTime`, `warmupPeriod`, `replications`, `seed`, `terminationMode`, `terminationCondition` |
+| `timeUnit` | string | The label for one simulation time unit (e.g. `"minutes"`, `"hours"`); used in UI display and AI prompts |
+| `epoch` | string (ISO 8601) or null | Optional. When set, maps t=0 to this calendar moment (e.g. `"2026-05-18T08:00:00"`). Drives `simToWall`/`wallToSim` conversions in `src/engine/clockUtils.js`. Shown on the report cover and in experiment controls. Required for CSV planned-arrival files that use real timestamps (HH:MM or full ISO 8601) in the time column rather than numeric offsets. |
 
 ### 3.2 Entity Type Schema
 
@@ -536,6 +553,7 @@ DES Studio targets WCAG 2.1 AA compliance. Implemented requirements:
 | V25 | Warning | `RENEGE(TypeName)` silently fails; the correct form is `RENEGE(ctx)` |
 | V26 | Error | Container `id` must be unique and non-empty; `capacity` must be > 0; `initialLevel` must be >= 0 and <= capacity |
 | V27 | Error | FILL/DRAIN macro must reference a declared container ID |
+| V28 | Warning | `epoch` must be a valid ISO 8601 datetime string when set (e.g. `"2026-05-18T08:00:00"`); an invalid value is ignored and real-world clock conversions are disabled |
 
 ---
 

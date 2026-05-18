@@ -48,6 +48,7 @@ The LLM must produce a single JSON object that passes all validation rules in §
 | `description` | string | No | 1–3 sentence summary, used by AI features |
 | `visibility` | `"private"` \| `"public"` | No | Default `"private"` |
 | `timeUnit` | `"seconds"` \| `"minutes"` \| `"hours"` \| `"days"` | No | Defines what one simulation clock unit represents. Default `"minutes"`. Shown in reports and AI narrative. |
+| `epoch` | ISO 8601 datetime string, e.g. `"2026-05-18T08:00:00"` | No | Anchors simulation time zero to a real-world calendar datetime. Absent means abstract simulation time (no wall-clock anchor). When set, enables: (1) simulation time ↔ calendar datetime conversion throughout the engine; (2) automatic parsing of `HH:MM` or ISO datetime values in the `time` column of CSV imports; (3) display of the real-world period in reports and experiment controls. **Required when importing a CSV whose time column contains `HH:MM` or ISO datetime strings.** |
 | `experimentDefaults.liveDataMode` | `null` \| `"calibrated_batch"` \| `"rolling"` \| `"lookahead"` | No | Live-data run mode. `null` = static (default). See §15 for live data. |
 | `dataSources` | array | No | Live data source definitions. See §15. |
 
@@ -229,10 +230,12 @@ Instead of `dist`/`distParams`, a schedule entry can supply an explicit list of 
 }
 ```
 
-- Each `rows[].time` is an absolute simulation clock time.
+- Each `rows[].time` is an absolute simulation clock time. When the model has an `epoch` set, the time column in the source CSV can instead contain `HH:MM` (e.g. `08:30`) or ISO datetime (e.g. `2026-05-18T08:30:00`) strings; the importer converts them to simulation-clock offsets from `epoch` automatically.
 - `rows[].attrs` key names must match `attrDefs[].name` on the arriving entity type.
 - When all scheduled arrivals are exhausted the arrival B-event does not reschedule.
 - `times[]` and `rows[]` are mutually exclusive with `dist`/`distParams` in the same schedule entry.
+
+> **Developer note:** The conversion from `HH:MM` / ISO timestamps to simulation time is handled by `parsePlanCsv(text, { epoch, timeUnit })` in `src/ui/shared/planCsvParser.js`. Pass the model's `epoch` string and `timeUnit` to this function when building integrations that ingest CSV data.
 
 ### Rules
 

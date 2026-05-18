@@ -403,6 +403,30 @@ time
 - After import, the editor switches automatically to **Arrival attributes** mode so you can inspect or edit individual rows.
 - Optional **Jitter** (Normal or Uniform) can be added after import to introduce random variation around each planned time.
 
+### 6.2 Model settings — time unit and simulation start time
+
+Two model-level fields in the **Settings** tab control how DES Studio labels and anchors simulation time.
+
+**Time unit** (`timeUnit`): Sets the label for one simulation time unit (e.g. `minutes`, `hours`, `seconds`). The label appears in the UI, in AI analysis text, and in exported reports. It does not affect engine calculations — it is purely a display annotation.
+
+#### Simulation start time (epoch)
+
+The **Simulation start time** field (`epoch`) maps simulation time t=0 to a specific real-world calendar date and time. It is optional, but when set it unlocks several capabilities.
+
+**What it is.** Entering `2026-05-18T08:00:00` means "when the simulation clock reads 0, the real-world time is Monday 18 May 2026, 08:00." From that anchor, DES Studio can convert any simulation time to a wall-clock time and vice versa.
+
+**How to set it.** Open the **Settings** tab for the model. Below the Time unit field, use the date/time picker to set the epoch. The value is stored in the model JSON as an ISO 8601 string (e.g. `"2026-05-18T08:00:00"`).
+
+**What it enables:**
+
+1. **Report cover period line.** The generated report cover page shows the simulated period in plain English: e.g. "Period: Mon 18 May 08:00 → 16:00" (for a 480-minute run starting at 08:00).
+2. **Experiment controls.** The run setup panel displays real-world start and end times alongside the numeric duration, making it easier to confirm the run covers the intended shift or day.
+3. **CSV timestamp import.** When loading a planned-arrival CSV (see §6.1), the `time` column may contain real timestamps — either `HH:MM` format (e.g. `08:30`) or full ISO 8601 (e.g. `2026-05-18T10:45:00`) — instead of numeric simulation-time offsets. DES Studio converts each timestamp to a simulation-time offset using the epoch and time unit. Without an epoch, rows with timestamp-format times are skipped and a warning is shown.
+
+**Notes:**
+- The epoch field is optional. Models without it behave exactly as before — all times are treated as plain numeric offsets and no wall-clock conversion is applied.
+- The epoch is required if you intend to import a CSV where the `time` column contains `HH:MM` or ISO 8601 timestamps rather than numeric values.
+
 ---
 
 ## 7. Running Experiments
