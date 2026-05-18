@@ -1,6 +1,6 @@
-// Tests for graph-operations fixes: cSchedules append and auto-link guard
+// Tests for graph-operations fixes: cSchedules append, auto-link guard, deleteVisualNode overflow cleanup
 import { describe, test, expect } from 'vitest';
-import { connectVisualNodes, addVisualNode } from '../graph-operations.js';
+import { connectVisualNodes, addVisualNode, deleteVisualNode } from '../graph-operations.js';
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from '../graph.js';
 
 // Model with Triage activity already routing to Queue 2.
@@ -138,5 +138,60 @@ describe('addVisualNode — auto-link guard', () => {
     const newQueue = next.queues[next.queues.length - 1];
 
     expect(newQueue.overflowDestination).toBeUndefined();
+  });
+});
+
+describe('deleteVisualNode — overflow cleanup', () => {
+  test('deleting a queue clears overflowDestination on any queue that pointed to it', () => {
+    // Set up: Queue 1 overflows to Queue 3 (simulates the state left by the old auto-link bug)
+    const model = makeModel();
+    model.queues = model.queues.map(q =>
+      q.id === 'queue-1' ? { ...q, overflowDestination: 'Queue 3' } : q
+    );
+    const graph = deriveGraphFromModel(model);
+    const queue3Node = graph.nodes.find(n => n.id === 'queue:queue-3');
+
+    const next = deleteVisualNode(model, queue3Node);
+
+    const q1 = next.queues.find(q => q.id === 'queue-1');
+    expect(q1.overflowDestination).toBeUndefined();
+    expect(next.queues.find(q => q.id === 'queue-3')).toBeUndefined();
+  });
+
+  test('deleting a queue does not affect overflowDestination pointing to a different queue', () => {
+    // Queue 1 overflows to Queue 2 — deleting Queue 3 should leave Queue 1 untouched
+    const model = makeModel();
+    model.queues = model.queues.map(q =>
+      q.id === 'queue-1' ? { ...q, overflowDestination: 'Queue 2' } : q
+    );
+    const graph = deriveGraphFromModel(model);
+    const queue3Node = graph.nodes.find(n => n.id === 'queue:queue-3');
+
+    const next = deleteVisualNode(model, queue3Node);
+
+    const q1 = next.queues.find(q => q.id === 'queue-1');
+    expect(q1.overflowDestination).toBe('Queue 2');
+  });
+
+  test('after deleting the overflow target queue and re-adding a same-named queue, no overflow edge is derived', () => {
+    // Simulates the full reproduce scenario: old bug left overflow, queue deleted (with fix),
+    // new same-named queue added — overflow must NOT reappear.
+    const model = makeModel();
+    model.queues = model.queues.map(q =>
+      q.id === 'queue-1' ? { ...q, overflowDestination: 'Queue 3' } : q
+    );
+    const graph = deriveGraphFromModel(model);
+    const queue3Node = graph.nodes.find(n => n.id === 'queue:queue-3');
+
+    // Delete Queue 3 (cleanup should clear overflowDestination)
+    const afterDelete = deleteVisualNode(model, queue3Node);
+    expect(afterDelete.queues.find(q => q.id === 'queue-1').overflowDestination).toBeUndefined();
+
+    // Add a new queue (will be named Queue 3 again since only 2 queues remain)
+    const afterAdd = addVisualNode(afterDelete, VISUAL_NODE_TYPES.QUEUE);
+    const derivedGraph = deriveGraphFromModel(afterAdd);
+
+    const overflowEdges = derivedGraph.edges.filter(e => e.source === 'overflow');
+    expect(overflowEdges).toHaveLength(0);
   });
 });
