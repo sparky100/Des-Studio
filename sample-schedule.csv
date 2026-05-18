@@ -1,0 +1,16 @@
+time,severity,age,type
+10,3,45,Routine
+25,1,32,Urgent
+40,2,28,Routine
+55,3,61,Routine
+70,1,54,Urgent
+85,2,39,Routine
+100,3,72,Routine
+115,1,48,Urgent
+130,2,33,Routine
+145,3,57,Routine
+160,1,65,Urgent
+175,2,41,Routine
+190,3,29,Routine
+205,1,53,Urgent
+220,2,68,Routine
