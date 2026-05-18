@@ -367,20 +367,29 @@ Multiple macros can be listed in order in the same Effects field; they execute s
 
 Distributions control when events occur or how long they last. The distribution picker groups options into three families — **Parametric** (classical statistical distributions with numeric parameters), **Time-varying** (piecewise rate schedules), and **From data** (distributions read from entity attributes). Selecting a family narrows the list to relevant options. A sparkline shape preview appears below the picker when the **Preview** toggle is on, updating reactively as parameters change. Parameter fields validate on blur and show an inline error if a value is out of bounds.
 
+**Parametric** — classical distributions with numeric parameters:
+
 | Distribution | Parameters | Typical use |
 |-------------|------------|-------------|
+| Fixed | `value` | Deterministic fixed duration (removes variability) |
 | Exponential | `mean` | Memoryless inter-arrival and service times (M/M/c baseline) |
-| Normal | `mean`, `stdDev` | Service times when empirical data is approximately bell-shaped |
 | Uniform | `min`, `max` | Service times with known lower and upper bounds, no preference |
+| Normal | `mean`, `stdDev` | Service times when empirical data is approximately bell-shaped |
 | Triangular | `min`, `mode`, `max` | Service time estimates when only three-point estimates are available |
 | Erlang | `k`, `mean` | Sum of k exponential phases; more regular than Exponential |
-| Constant | `value` | Deterministic fixed duration (use sparingly; removes variability) |
-| Deterministic | `value` | Synonym for Constant |
-| LogNormal | `mean`, `stdDev` | Right-skewed service times; common in healthcare and IT |
-| Weibull | `scale`, `shape` | Equipment lifetime, failure time-to-event |
-| PERT | `min`, `mode`, `max` | Like Triangular but smoother; good for project activity durations |
-| Poisson | `mean` | Number of arrivals in a fixed interval (not a duration — use carefully) |
+
+**Time-varying** — rate or schedule driven:
+
+| Distribution | Parameters | Typical use |
+|-------------|------------|-------------|
+| Piecewise | `segments[]` | Arrival rates that change at defined time breakpoints |
 | Schedule | `times[]` or `rows[]` | Planned arrivals at absolute clock times; supports per-arrival entity attributes |
+
+**From data** — durations drawn from entity or server attributes:
+
+| Distribution | Parameters | Typical use |
+|-------------|------------|-------------|
+| Empirical | `values[]` | Sample-driven distribution; draws from an uploaded dataset |
 | EntityAttr | `attrName` | Duration drawn from an attribute already set on the entity |
 | ServerAttr | `attrName` | Duration drawn from an attribute on the assigned server entity |
 
@@ -427,9 +436,11 @@ In addition to CSV, the Schedule editor accepts Excel files (`.xlsx`, `.xls`, `.
 
 1. In the B-Event editor, set the schedule distribution to **Schedule**.
 2. Click **↑ Load from CSV** — the file picker accepts `.csv`, `.xlsx`, `.xls`, and `.ods`.
-3. DES Studio reads the first sheet by default. The file is converted internally to CSV format; all the same rules apply (timestamp detection, epoch requirement, attrMap).
+3. Select your Excel file. DES Studio reads the first sheet by default and converts it to the same internal format as a CSV import.
+4. A preview of the first 5 rows appears — check that columns look correct before confirming.
+5. Click **✓ Import N arrivals** to load the data.
 
-**Column format** is identical to CSV (see §6.1). The first row is treated as a header if the first cell is not a number. Time stamps, epoch conversion, and attribute mapping all work the same way.
+**Column format** is identical to CSV (see §6.1): the first column must be `time`, and any additional columns become entity attributes. The first row is treated as a header if the first cell is not a number.
 
 ### 6.1c Importing a schedule from a live REST endpoint (scheduleFeed)
 
