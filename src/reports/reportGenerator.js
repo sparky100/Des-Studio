@@ -1,4 +1,4 @@
-// reports/reportGenerator.js — Markdown report generator for DES Studio simulation reports
+// reports/reportGenerator.js — Self-contained HTML report generator
 
 import { callLLMOnce } from '../llm/apiClient.js';
 import {
@@ -8,280 +8,438 @@ import {
   buildGoalGaps,
 } from '../llm/prompts.js';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Utilities ──────────────────────────────────────────────────────────────────
+
+function esc(str) {
+  return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 function formatDate(iso) {
   try {
     const d = new Date(iso || Date.now());
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
-  } catch {
-    return String(iso || '');
-  }
+  } catch { return String(iso || ''); }
 }
 
 function sanitizeFilename(name) {
   return String(name || 'report').replace(/[/\\:*?"<>|]/g, '-');
 }
 
-function finiteStr(value, decimals = 2) {
+function fin(value, decimals = 2) {
   const n = Number(value);
-  if (!Number.isFinite(n)) return '—';
-  return n.toFixed(decimals);
-}
-
-function mdTable(headers, rows) {
-  if (!rows.length) return '_No data available._\n';
-  const head = `| ${headers.join(' | ')} |`;
-  const divider = `| ${headers.map(() => '---').join(' | ')} |`;
-  const body = rows
-    .map(r => `| ${r.map(c => String(c ?? '—').replace(/\|/g, '\\|')).join(' | ')} |`)
-    .join('\n');
-  return [head, divider, body].join('\n') + '\n';
+  return Number.isFinite(n) ? n.toFixed(decimals) : null;
 }
 
 function getSummary(results = {}) {
   return results.summary || results.results?.summary || {};
 }
 
-// ── Section builders ──────────────────────────────────────────────────────────
+// ── SVG Charts ─────────────────────────────────────────────────────────────────
+
+const CHART_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed'];
+
+function groupedBarChart({ groups, series, title, width = 580, height = 260 }) {
+  if (!groups.length || !series.length) return '';
+  const m = { top: 32, right: 16, bottom: 72, left: 52 };
+  const cW = width - m.left - m.right;
+  const cH = height - m.top - m.bottom;
+  const maxVal = Math.max(1, ...groups.flatMap(g => g.values.map(v => (Number.isFinite(v) ? v : 0))));
+  const scale = cH / maxVal;
+  const groupW = cW / Math.max(groups.length, 1);
+  const barW = Math.max(4, Math.min(28, (groupW * 0.85) / series.length - 3));
+
+  let bars = '', xlabels = '', yAxis = '', legend = '';
+
+  groups.forEach((g, gi) => {
+    const gx = m.left + gi * groupW + (groupW - series.length * (barW + 3)) / 2;
+    series.forEach((s, si) => {
+      const val = g.values[si];
+      if (!Number.isFinite(val)) return;
+      const bh = Math.max(0, val * scale);
+      const bx = (gx + si * (barW + 3)).toFixed(1);
+      const by = (m.top + cH - bh).toFixed(1);
+      bars += `<rect x="${bx}" y="${by}" width="${barW}" height="${bh.toFixed(1)}" fill="${CHART_COLORS[si % CHART_COLORS.length]}" rx="2" opacity="0.88"/>`;
+      if (bh > 14) bars += `<text x="${(Number(bx) + barW / 2).toFixed(1)}" y="${(Number(by) - 3).toFixed(1)}" text-anchor="middle" font-size="9" fill="#374151" font-family="sans-serif">${val.toFixed(1)}</text>`;
+    });
+    const lx = (m.left + gi * groupW + groupW / 2).toFixed(1);
+    const lbl = g.label.length > 14 ? g.label.slice(0, 13) + '…' : g.label;
+    xlabels += `<text x="${lx}" y="${(m.top + cH + 15).toFixed(1)}" text-anchor="middle" font-size="10" fill="#6b7280" font-family="sans-serif">${esc(lbl)}</text>`;
+  });
+
+  for (let i = 0; i <= 5; i++) {
+    const v = maxVal * i / 5;
+    const ty = (m.top + cH - v * scale).toFixed(1);
+    yAxis += `<line x1="${m.left - 4}" y1="${ty}" x2="${(m.left + cW).toFixed(1)}" y2="${ty}" stroke="${i === 0 ? '#9ca3af' : '#e5e7eb'}" stroke-width="1"/>`;
+    yAxis += `<text x="${(m.left - 7).toFixed(1)}" y="${(Number(ty) + 4).toFixed(1)}" text-anchor="end" font-size="9" fill="#9ca3af" font-family="sans-serif">${v.toFixed(1)}</text>`;
+  }
+
+  series.forEach((s, si) => {
+    const lx = m.left + si * 90;
+    const ly = height - 14;
+    legend += `<rect x="${lx}" y="${ly - 9}" width="10" height="10" fill="${CHART_COLORS[si % CHART_COLORS.length]}" rx="2" opacity="0.88"/>`;
+    legend += `<text x="${lx + 14}" y="${ly}" font-size="10" fill="#6b7280" font-family="sans-serif">${esc(s.label)}</text>`;
+  });
+
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <text x="${width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#111827" font-family="sans-serif">${esc(title)}</text>
+    ${yAxis}
+    <line x1="${m.left}" y1="${m.top}" x2="${m.left}" y2="${m.top + cH}" stroke="#9ca3af" stroke-width="1.5"/>
+    ${bars}${xlabels}${legend}
+  </svg>`;
+}
+
+function horizBarChart({ items, title, width = 480 }) {
+  if (!items.length) return '';
+  const m = { top: 32, right: 64, bottom: 16, left: 110 };
+  const rowH = 30;
+  const height = m.top + m.bottom + items.length * rowH;
+  const cW = width - m.left - m.right;
+  let bars = '';
+
+  items.forEach((item, i) => {
+    const y = m.top + i * rowH;
+    const pct = Math.min(1, Math.max(0, Number(item.value) || 0));
+    const color = pct >= 0.9 ? '#dc2626' : pct >= 0.75 ? '#d97706' : '#16a34a';
+    bars += `<rect x="${m.left}" y="${y + 3}" width="${cW}" height="20" fill="#f3f4f6" rx="3"/>`;
+    if (pct > 0.002) bars += `<rect x="${m.left}" y="${y + 3}" width="${(pct * cW).toFixed(1)}" height="20" fill="${color}" rx="3" opacity="0.85"/>`;
+    const lbl = item.label.length > 16 ? item.label.slice(0, 15) + '…' : item.label;
+    bars += `<text x="${m.left - 6}" y="${y + 17}" text-anchor="end" font-size="11" fill="#374151" font-family="sans-serif">${esc(lbl)}</text>`;
+    bars += `<text x="${m.left + cW + 8}" y="${y + 17}" font-size="11" font-weight="600" fill="${color}" font-family="sans-serif">${(pct * 100).toFixed(1)}%</text>`;
+  });
+
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <text x="${width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#111827" font-family="sans-serif">${esc(title)}</text>
+    ${bars}
+  </svg>`;
+}
+
+function journeyBreakdownChart({ avgWait, avgSvc, width = 480 }) {
+  const wait = Number.isFinite(Number(avgWait)) ? Math.max(0, Number(avgWait)) : 0;
+  const svc  = Number.isFinite(Number(avgSvc))  ? Math.max(0, Number(avgSvc))  : 0;
+  if (wait + svc === 0) return '';
+  const m = { top: 32, right: 64, bottom: 16, left: 110 };
+  const height = m.top + m.bottom + 2 * 30;
+  const cW = width - m.left - m.right;
+  const total = wait + svc;
+  const rows = [
+    { label: 'Avg wait',    val: wait, color: '#2563eb' },
+    { label: 'Avg service', val: svc,  color: '#16a34a' },
+  ];
+  let bars = '';
+  rows.forEach((r, i) => {
+    const y = m.top + i * 30;
+    bars += `<rect x="${m.left}" y="${y + 3}" width="${cW}" height="20" fill="#f3f4f6" rx="3"/>`;
+    if (r.val > 0) bars += `<rect x="${m.left}" y="${y + 3}" width="${((r.val / total) * cW).toFixed(1)}" height="20" fill="${r.color}" rx="3" opacity="0.85"/>`;
+    bars += `<text x="${m.left - 6}" y="${y + 17}" text-anchor="end" font-size="11" fill="#374151" font-family="sans-serif">${esc(r.label)}</text>`;
+    bars += `<text x="${m.left + cW + 8}" y="${y + 17}" font-size="11" font-weight="600" fill="${r.color}" font-family="sans-serif">${r.val.toFixed(2)}</text>`;
+  });
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <text x="${width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#111827" font-family="sans-serif">Journey Time Breakdown</text>
+    ${bars}
+  </svg>`;
+}
+
+// ── CSS ────────────────────────────────────────────────────────────────────────
+
+const CSS = `
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;color:#1f2937;background:#f8fafc;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .report{max-width:880px;margin:0 auto;padding:32px 24px;background:#fff}
+  .cover{background:#1e3a5f;color:#fff;padding:40px 48px;border-radius:8px;margin-bottom:32px}
+  .cover h1{font-size:22px;font-weight:700;margin-bottom:14px;line-height:1.35}
+  .cover .meta{font-size:12px;opacity:0.75;line-height:2.2}
+  .cover .badge{display:inline-block;background:rgba(255,255,255,0.15);border-radius:4px;padding:2px 10px;font-size:11px;margin-top:10px}
+  section{margin-bottom:32px}
+  h2{font-size:15px;font-weight:700;color:#1e3a5f;border-bottom:2px solid #0e7490;padding-bottom:6px;margin-bottom:16px}
+  h3{font-size:12px;font-weight:600;color:#374151;margin:16px 0 8px;text-transform:uppercase;letter-spacing:0.04em}
+  .desc{background:#f8fafc;border-left:4px solid #0e7490;padding:12px 16px;font-style:italic;color:#374151;border-radius:0 6px 6px 0;margin-bottom:20px;line-height:1.6}
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+  .kpi{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:12px 16px}
+  .kpi .lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px}
+  .kpi .val{font-size:20px;font-weight:700;color:#1e3a5f}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}
+  thead th{background:#f1f5f9;color:#374151;font-weight:600;text-align:left;padding:8px 12px;border-bottom:2px solid #e2e8f0}
+  tbody td{padding:7px 12px;border-bottom:1px solid #f1f5f9}
+  tbody tr:last-child td{border-bottom:none}
+  .rec{border:1px solid #e2e8f0;border-radius:6px;padding:14px 16px;margin-bottom:12px}
+  .rec-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .rec-num{background:#1e3a5f;color:#fff;border-radius:50%;width:20px;height:20px;font-size:11px;font-weight:700;text-align:center;line-height:20px;flex-shrink:0}
+  .rec-hl{font-weight:600;color:#111827;font-size:13px}
+  .rec-conf{display:inline-block;background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;border-radius:4px;font-size:10px;padding:1px 6px}
+  .rec-body{font-size:12px;color:#4b5563;line-height:1.6}
+  .rec-body div{margin-top:4px}
+  .chart-wrap{margin:16px 0;overflow-x:auto}
+  .chart-wrap svg{max-width:100%}
+  .model-img{text-align:center;margin:0 0 24px}
+  .model-img img{max-width:100%;border:1px solid #e2e8f0;border-radius:6px}
+  .model-img-cap{font-size:11px;color:#94a3b8;margin-top:6px}
+  .note{font-size:11px;color:#6b7280;font-style:italic;margin:4px 0 12px}
+  .footer{margin-top:48px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:10px;color:#94a3b8;text-align:center}
+  @media print{
+    body{background:#fff}
+    .report{max-width:none;padding:0}
+    .cover{border-radius:0;page-break-after:always}
+    section{page-break-inside:avoid}
+  }
+`;
+
+// ── HTML section builders ──────────────────────────────────────────────────────
+
+function htmlTable(headers, rows) {
+  if (!rows.length) return '<p class="note">No data available.</p>';
+  const head = headers.map(h => `<th>${esc(h)}</th>`).join('');
+  const body = rows.map(r => `<tr>${r.map(c => `<td>${esc(String(c ?? '—'))}</td>`).join('')}</tr>`).join('');
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
 
 function buildCover(model, runMeta) {
-  return [
-    `# ${model.name || 'Simulation'} — Analysis Report`,
-    '',
-    `**Run:** ${runMeta.runLabel || runMeta.runId || 'Unknown'}  `,
-    `**Date:** ${formatDate(runMeta.runTimestamp)}  `,
-    `**Generated by:** DES Studio · Engine v${runMeta.engineVersion || '1.0'}`,
-    '',
-    '---',
-    '',
-  ].join('\n');
+  return `
+  <div class="cover">
+    <h1>${esc(model.name || 'Simulation')} — Analysis Report</h1>
+    <div class="meta">
+      <div><strong>Run:</strong> ${esc(runMeta.runLabel || runMeta.runId || 'Unknown')}</div>
+      <div><strong>Date:</strong> ${esc(formatDate(runMeta.runTimestamp))}</div>
+      <div><strong>Engine:</strong> DES Studio v${esc(runMeta.engineVersion || '1.0')}</div>
+    </div>
+    <span class="badge">Simulation Analysis</span>
+  </div>`;
+}
+
+function buildModelImage(modelImageDataUrl) {
+  if (!modelImageDataUrl) return '';
+  return `
+  <section>
+    <h2>Model Diagram</h2>
+    <div class="model-img">
+      <img src="${modelImageDataUrl}" alt="Model diagram"/>
+      <div class="model-img-cap">Visual Designer snapshot captured at report time</div>
+    </div>
+  </section>`;
 }
 
 function buildExecutiveSummary(model, results, recommendations) {
   const summary = getSummary(results);
-  const lines = [
-    '## Executive Summary',
-    '',
-    `> ${model.description || `Discrete-event simulation of the ${model.name || 'system'}.`}`,
-    '',
-  ];
 
-  const kpiRows = [
-    ['Entities served',      finiteStr(summary.served, 0)],
-    ['Average waiting time', finiteStr(summary.avgWait)],
-    ['Average service time', finiteStr(summary.avgSvc)],
-    ['Average sojourn time', finiteStr(summary.avgSojourn)],
-    ['Average WIP',          finiteStr(summary.avgWIP)],
-    ['Reneged',              finiteStr(summary.reneged, 0)],
-  ].filter(r => r[1] !== '—');
+  const kpis = [
+    { lbl: 'Entities served',       val: fin(summary.served, 0) },
+    { lbl: 'Reneged',               val: fin(summary.reneged, 0) },
+    { lbl: 'Avg wait time',         val: fin(summary.avgWait) },
+    { lbl: 'Avg service time',      val: fin(summary.avgSvc) },
+    { lbl: 'Avg sojourn time',      val: fin(summary.avgSojourn) },
+    { lbl: "Avg WIP (Little's L)",  val: fin(summary.avgWIP) },
+  ].filter(k => k.val !== null);
 
-  if (kpiRows.length) {
-    lines.push('### Key Performance Indicators', '');
-    lines.push(mdTable(['Metric', 'Value'], kpiRows));
-  }
+  const kpiHtml = kpis.length ? `<div class="kpi-grid">${
+    kpis.map(k => `<div class="kpi"><div class="lbl">${esc(k.lbl)}</div><div class="val">${esc(k.val)}</div></div>`).join('')
+  }</div>` : '';
 
   const top = Array.isArray(recommendations) && recommendations.length
-    ? (recommendations.find(r => r.priority === 1) || recommendations[0])
-    : null;
-  if (top?.headline) {
-    lines.push('### Primary Recommendation', '');
-    lines.push(`**${top.headline}**`, '');
-    if (top.finding) lines.push(top.finding, '');
-  }
+    ? (recommendations.find(r => r.priority === 1) || recommendations[0]) : null;
 
-  lines.push('---', '');
-  return lines.join('\n');
+  const recHtml = top?.headline ? `
+    <h3>Primary recommendation</h3>
+    <div class="rec">
+      <div class="rec-head"><span class="rec-num">1</span><span class="rec-hl">${esc(top.headline)}</span></div>
+      ${top.finding ? `<div class="rec-body">${esc(top.finding)}</div>` : ''}
+    </div>` : '';
+
+  return `
+  <section>
+    <h2>Executive Summary</h2>
+    ${model.description ? `<div class="desc">${esc(model.description)}</div>` : ''}
+    ${kpiHtml}
+    ${recHtml}
+  </section>`;
 }
 
 function buildModelDescription(descriptionText) {
-  return [
-    '## Model Description',
-    '',
-    descriptionText || '_No model description available._',
-    '',
-    '---',
-    '',
-  ].join('\n');
+  if (!descriptionText) return '';
+  return `
+  <section>
+    <h2>Model Description</h2>
+    <div class="desc">${esc(descriptionText)}</div>
+  </section>`;
 }
 
 function buildExperimentConfig(experimentConfig, runMeta) {
   const rows = [
-    ['Run ID',           runMeta.runId || '—'],
-    ['Run label',        runMeta.runLabel || '—'],
-    ['Run date',         formatDate(runMeta.runTimestamp)],
-    ['Engine version',   runMeta.engineVersion || '1.0'],
-    ['PRN algorithm',    runMeta.prnAlgorithm || 'mulberry32'],
-    ['Random seed',      String(runMeta.seed ?? '—')],
-    ['Warm-up period',   String(experimentConfig.warmupPeriod ?? experimentConfig.warmup ?? 0)],
-    ['Run duration',     String(experimentConfig.maxSimTime ?? experimentConfig.runDuration ?? '—')],
-    ['Replications',     String(experimentConfig.replications ?? 1)],
-    ['Termination mode', experimentConfig.terminationMode || 'time'],
+    ['Run label',      runMeta.runLabel || '—'],
+    ['Run ID',         runMeta.runId   || '—'],
+    ['Run date',       formatDate(runMeta.runTimestamp)],
+    ['Random seed',    String(runMeta.seed ?? '—')],
+    ['PRN algorithm',  runMeta.prnAlgorithm || 'mulberry32'],
+    ['Engine version', runMeta.engineVersion || '1.0'],
+    ['Warm-up period', String(experimentConfig.warmupPeriod ?? experimentConfig.warmup ?? 0)],
+    ['Run duration',   String(experimentConfig.maxSimTime ?? experimentConfig.runDuration ?? '—')],
+    ['Replications',   String(experimentConfig.replications ?? 1)],
+    ['Termination',    experimentConfig.terminationMode || 'time'],
   ];
-  return [
-    '## Experiment Configuration',
-    '',
-    mdTable(['Parameter', 'Value'], rows),
-    '---',
-    '',
-  ].join('\n');
+  return `
+  <section>
+    <h2>Experiment Configuration</h2>
+    ${htmlTable(['Parameter', 'Value'], rows)}
+  </section>`;
 }
 
 function buildResults(model, results) {
-  const summary = getSummary(results);
-  const lines = ['## Simulation Results', ''];
-
-  lines.push('### Summary Statistics', '');
-  const summaryRows = [
-    ['Total entities created',   finiteStr(summary.total, 0)],
-    ['Entities served',          finiteStr(summary.served, 0)],
-    ['Entities reneged',         finiteStr(summary.reneged, 0)],
-    ['Average waiting time',     finiteStr(summary.avgWait)],
-    ['Average service time',     finiteStr(summary.avgSvc)],
-    ['Average sojourn time',     finiteStr(summary.avgSojourn)],
-    ['Maximum sojourn time',     finiteStr(summary.maxSojourn)],
-    ["Average WIP (Little's L)", finiteStr(summary.avgWIP)],
-  ].filter(r => r[1] !== '—');
-  if (summary.totalCost != null) summaryRows.push(['Total cost', finiteStr(summary.totalCost)]);
-  if (summary.costPerServed != null) summaryRows.push(['Cost per entity served', finiteStr(summary.costPerServed)]);
-  lines.push(mdTable(['Metric', 'Value'], summaryRows));
-
+  const summary  = getSummary(results);
   const waitDist = results.waitDist || {};
+  const aggStats = results.aggregateStats || {};
+
+  // Summary stats — only post-warmup, time-averaged or per-entity values
+  const metricRows = [
+    ['Entities completed service',             fin(summary.served, 0)],
+    ['Entities reneged (abandoned)',           fin(summary.reneged, 0)],
+    ['Average waiting time',                  fin(summary.avgWait)],
+    ['Average service time',                  fin(summary.avgSvc)],
+    ['Average sojourn time (wait + service)',  fin(summary.avgSojourn)],
+    ['Maximum sojourn time',                  fin(summary.maxSojourn)],
+    ["Average WIP — Little's L",         fin(summary.avgWIP)],
+    ['Total cost',                            fin(summary.totalCost)],
+    ['Cost per entity served',                fin(summary.costPerServed)],
+  ].filter(r => r[1] !== null);
+
+  // Journey breakdown chart
+  const journeyChart = journeyBreakdownChart({ avgWait: summary.avgWait, avgSvc: summary.avgSvc });
+
+  // Queue wait-time chart + table
   const queueNames = Object.keys(waitDist);
+  let waitChartHtml = '', waitTableHtml = '';
   if (queueNames.length) {
-    lines.push('### Queue Wait-Time Distribution', '');
-    const rows = queueNames.map(q => {
+    const metricKeys   = ['mean', 'p50', 'p90', 'p95'];
+    const metricLabels = ['Mean', 'P50', 'P90', 'P95'];
+    const groups = queueNames.map(q => ({
+      label:  q,
+      values: metricKeys.map(m => { const v = Number(waitDist[q]?.[m]); return Number.isFinite(v) ? v : NaN; }),
+    })).filter(g => g.values.some(v => Number.isFinite(v)));
+
+    if (groups.length) {
+      waitChartHtml = `<div class="chart-wrap">${groupedBarChart({
+        groups,
+        series: metricLabels.map(l => ({ label: l })),
+        title:  'Queue Wait-Time Distribution (time units)',
+      })}</div>`;
+    }
+
+    const tableRows = queueNames.map(q => {
       const w = waitDist[q] || {};
-      return [q, finiteStr(w.n, 0), finiteStr(w.mean), finiteStr(w.p50), finiteStr(w.p90), finiteStr(w.p95), finiteStr(w.p99)];
+      return [q, fin(w.n, 0), fin(w.mean), fin(w.p50), fin(w.p90), fin(w.p95), fin(w.p99)].map(v => v ?? '—');
     });
-    lines.push(mdTable(['Queue', 'N', 'Mean wait', 'P50', 'P90', 'P95', 'P99'], rows));
+    waitTableHtml = htmlTable(['Queue', 'N', 'Mean wait', 'P50', 'P90', 'P95', 'P99'], tableRows);
   }
 
-  const servers = (model.entityTypes || []).filter(e => e.role === 'server');
-  if (servers.length) {
-    const resourceStats = summary.perResource || summary.resourceUtilisation || {};
-    lines.push('### Resource Utilisation _(end-of-run snapshot)_', '');
-    const rows = servers.map(s => {
-      const pr = typeof resourceStats === 'object' ? resourceStats[s.name] : null;
-      const util = pr?.utilisation ?? summary.utilisation;
-      const utilStr = Number.isFinite(Number(util)) ? `${(Number(util) * 100).toFixed(1)}%` : '—';
-      return [s.name, String(s.count ?? '—'), utilStr, finiteStr(pr?.busyCount, 0), finiteStr(pr?.idleCount, 0)];
+  // Resource utilisation chart + table (time-averaged, post-warmup)
+  const perResource = summary.perResource || {};
+  const resourceTypes = Object.keys(perResource);
+  let utilChartHtml = '', utilTableHtml = '';
+  if (resourceTypes.length) {
+    utilChartHtml = `<div class="chart-wrap">${horizBarChart({
+      items: resourceTypes.map(t => ({ label: t, value: perResource[t].utilisation ?? 0 })),
+      title: 'Resource Utilisation — time-averaged, post-warmup',
+    })}</div>`;
+    const utilRows = resourceTypes.map(t => {
+      const r = perResource[t];
+      const pct = Number.isFinite(r.utilisation) ? `${(r.utilisation * 100).toFixed(1)}%` : '—';
+      return [t, String(r.total ?? '—'), pct];
     });
-    lines.push(mdTable(['Resource', 'Count', 'Utilisation', 'Busy', 'Idle'], rows));
+    utilTableHtml = `<p class="note">Utilisation = total server busy-time ÷ (elapsed post-warmup time × server count). Green &lt;75%, amber 75–90%, red &gt;90%.</p>
+    ${htmlTable(['Resource type', 'Count', 'Utilisation'], utilRows)}`;
   }
 
+  // Goal assessment
   const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  let goalHtml = '';
   if (Array.isArray(goalGaps) && goalGaps.length) {
-    lines.push('### Performance Goal Assessment', '');
-    const rows = goalGaps.map(g => [
+    const goalRows = goalGaps.map(g => [
       g.label || g.metric,
       `${g.operator} ${g.target}`,
-      g.current != null ? finiteStr(g.current) : '—',
+      g.current != null ? (fin(g.current) ?? '—') : '—',
       g.met ? '✅ MET' : '❌ MISSED',
-      g.gap != null ? finiteStr(g.gap) : '—',
+      g.gap    != null ? (fin(g.gap) ?? '—')     : '—',
     ]);
-    lines.push(mdTable(['Goal', 'Target', 'Current', 'Status', 'Gap'], rows));
+    goalHtml = `<h3>Performance Goal Assessment</h3>${htmlTable(['Goal', 'Target', 'Current', 'Status', 'Gap'], goalRows)}`;
   }
 
-  const aggStats = results.aggregateStats || {};
+  // Confidence intervals (multi-replication only)
   const ciKeys = Object.keys(aggStats).filter(k => aggStats[k]?.n >= 2);
+  let ciHtml = '';
   if (ciKeys.length) {
-    lines.push('### Replication Confidence Intervals (95%)', '');
-    const rows = ciKeys.map(k => {
+    const ciRows = ciKeys.map(k => {
       const s = aggStats[k];
-      return [k, finiteStr(s.mean), finiteStr(s.lower), finiteStr(s.upper), String(s.n || '—')];
+      return [k, fin(s.mean) ?? '—', fin(s.lower) ?? '—', fin(s.upper) ?? '—', String(s.n || '—')];
     });
-    lines.push(mdTable(['Metric', 'Mean', 'CI Lower', 'CI Upper', 'N'], rows));
+    ciHtml = `<h3>Replication Confidence Intervals (95%)</h3>${htmlTable(['Metric', 'Mean', 'CI Lower', 'CI Upper', 'N'], ciRows)}`;
   }
 
-  lines.push('---', '');
-  return lines.join('\n');
+  return `
+  <section>
+    <h2>Simulation Results</h2>
+    ${metricRows.length ? `<h3>Summary statistics</h3>${htmlTable(['Metric', 'Value'], metricRows)}` : ''}
+    ${journeyChart ? `<div class="chart-wrap">${journeyChart}</div>` : ''}
+    ${waitChartHtml || waitTableHtml ? `<h3>Queue wait-time distributions</h3>${waitChartHtml}${waitTableHtml}` : ''}
+    ${utilChartHtml || utilTableHtml ? `<h3>Resource utilisation</h3>${utilChartHtml}${utilTableHtml}` : ''}
+    ${goalHtml}
+    ${ciHtml}
+  </section>`;
 }
 
 function buildRecommendations(recommendations) {
-  const lines = ['## Recommendations', ''];
-
   if (!Array.isArray(recommendations) || !recommendations.length) {
-    lines.push('_No recommendations could be generated for this run._', '', '---', '');
-    return lines.join('\n');
+    return `<section><h2>Recommendations</h2><p class="note">No recommendations could be generated for this run.</p></section>`;
   }
-
-  recommendations.forEach((rec, idx) => {
-    lines.push(`### ${rec.priority || idx + 1}. ${rec.headline || `Recommendation ${idx + 1}`}`, '');
-    if (rec.confidence) lines.push(`**Confidence:** ${rec.confidence}  `);
-    if (rec.finding) lines.push(`**Finding:** ${rec.finding}  `);
-    if (rec.action) lines.push(`**Recommended Action:** ${rec.action}  `);
-    if (rec.expectedImpact) lines.push(`**Expected Impact:** ${rec.expectedImpact}  `);
-    lines.push('');
-  });
-
-  lines.push('---', '');
-  return lines.join('\n');
+  const items = recommendations.map((rec, idx) => {
+    const num  = rec.priority || idx + 1;
+    const conf = rec.confidence ? `<span class="rec-conf">${esc(rec.confidence)}</span>` : '';
+    let body = '';
+    if (rec.finding)       body += `<div><strong>Finding:</strong> ${esc(rec.finding)}</div>`;
+    if (rec.action)        body += `<div><strong>Action:</strong> ${esc(rec.action)}</div>`;
+    if (rec.expectedImpact) body += `<div><strong>Expected impact:</strong> ${esc(rec.expectedImpact)}</div>`;
+    return `<div class="rec">
+      <div class="rec-head"><span class="rec-num">${num}</span><span class="rec-hl">${esc(rec.headline || `Recommendation ${num}`)}</span>${conf}</div>
+      ${body ? `<div class="rec-body">${body}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<section><h2>Recommendations</h2>${items}</section>`;
 }
 
 function buildAppendix(model) {
-  const lines = ['## Appendix — Model Specification', ''];
-
   const entityTypes = model.entityTypes || [];
+  const queues      = model.queues || [];
+  const bEvents     = model.bEvents || [];
+  const cEvents     = model.cEvents || [];
+  const stateVars   = (model.stateVariables || []).filter(v => v.name);
+  let html = '<section><h2>Appendix — Model Specification</h2>';
+
   if (entityTypes.length) {
-    lines.push('### Entity Types', '');
-    lines.push(mdTable(
-      ['Name', 'Role', 'Count'],
-      entityTypes.map(e => [e.name || '—', e.role || '—', e.role === 'server' ? String(e.count ?? '—') : '—'])
-    ));
+    html += `<h3>Entity types</h3>${htmlTable(['Name', 'Role', 'Count'],
+      entityTypes.map(e => [e.name || '—', e.role || '—', e.role === 'server' ? String(e.count ?? '—') : '—']))}`;
   }
-
-  const queues = model.queues || [];
   if (queues.length) {
-    lines.push('### Queues', '');
-    lines.push(mdTable(
-      ['Name', 'Discipline', 'Capacity', 'Entity type'],
-      queues.map(q => [q.name || '—', q.discipline || 'FIFO', q.capacity != null ? String(q.capacity) : '∞', q.customerType || '—'])
-    ));
+    html += `<h3>Queues</h3>${htmlTable(['Name', 'Discipline', 'Capacity', 'Entity type'],
+      queues.map(q => [q.name || '—', q.discipline || 'FIFO', q.capacity != null ? String(q.capacity) : '∞', q.customerType || '—']))}`;
   }
-
-  const bEvents = model.bEvents || [];
   if (bEvents.length) {
-    lines.push('### Bound Events (B-Events)', '');
-    lines.push(mdTable(
-      ['Name', 'Effect (summary)'],
-      bEvents.map(ev => [
-        ev.name || ev.id || '—',
-        (Array.isArray(ev.effect) ? ev.effect.join('; ') : String(ev.effect || '—')).substring(0, 120),
-      ])
-    ));
+    html += `<h3>B-Events (Bound events)</h3>${htmlTable(['Name', 'Fires at', 'Effect'],
+      bEvents.map(ev => [ev.name || ev.id || '—', String(ev.scheduledTime ?? '—'),
+        (Array.isArray(ev.effect) ? ev.effect.join('; ') : String(ev.effect || '—')).substring(0, 100)]))}`;
   }
-
-  const cEvents = model.cEvents || [];
   if (cEvents.length) {
-    lines.push('### Conditional Events (C-Events)', '');
-    lines.push(mdTable(
-      ['Name', 'Priority', 'Effect (summary)'],
-      cEvents.map(ev => [
-        ev.name || ev.id || '—',
-        String(ev.priority ?? 1),
-        (Array.isArray(ev.effect) ? ev.effect.join('; ') : String(ev.effect || '—')).substring(0, 120),
-      ])
-    ));
+    html += `<h3>C-Events (Conditional events)</h3>${htmlTable(['Name', 'Priority', 'Effect'],
+      cEvents.map(ev => [ev.name || ev.id || '—', String(ev.priority ?? 1),
+        (Array.isArray(ev.effect) ? ev.effect.join('; ') : String(ev.effect || '—')).substring(0, 100)]))}`;
   }
-
-  const stateVars = (model.stateVariables || []).filter(v => v.name);
   if (stateVars.length) {
-    lines.push('### State Variables', '');
-    lines.push(mdTable(
-      ['Name', 'Initial value'],
-      stateVars.map(v => [v.name, String(v.initialValue ?? '0')])
-    ));
+    html += `<h3>State variables</h3>${htmlTable(['Name', 'Initial value'],
+      stateVars.map(v => [v.name, String(v.initialValue ?? '0')]))}`;
   }
-
-  return lines.join('\n');
+  return html + '</section>';
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// ── Main export ────────────────────────────────────────────────────────────────
 
-export async function generateReport(model = {}, results = {}, experimentConfig = {}, runMeta = {}) {
+export async function generateReport(model = {}, results = {}, experimentConfig = {}, runMeta = {}, modelImageDataUrl = null) {
   let modelDescription = model.description || '';
-  let recommendations = [];
+  let recommendations  = [];
 
   const [descResult, recsResult] = await Promise.allSettled([
     callLLMOnce(buildModelDescriptionPrompt(model)).catch(() => model.description || ''),
@@ -289,17 +447,32 @@ export async function generateReport(model = {}, results = {}, experimentConfig 
   ]);
 
   if (descResult.status === 'fulfilled') modelDescription = descResult.value || model.description || '';
-  if (recsResult.status === 'fulfilled') recommendations = parseReportRecommendations(recsResult.value);
+  if (recsResult.status === 'fulfilled') recommendations  = parseReportRecommendations(recsResult.value);
 
-  return [
-    buildCover(model, runMeta),
-    buildExecutiveSummary(model, results, recommendations),
-    buildModelDescription(modelDescription),
-    buildExperimentConfig(experimentConfig, runMeta),
-    buildResults(model, results),
-    buildRecommendations(recommendations),
-    buildAppendix(model),
-  ].join('\n');
+  const title = esc(`${model.name || 'Simulation'} — Analysis Report`);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<style>${CSS}</style>
+</head>
+<body>
+<div class="report">
+  ${buildCover(model, runMeta)}
+  ${buildModelImage(modelImageDataUrl)}
+  ${buildExecutiveSummary(model, results, recommendations)}
+  ${buildModelDescription(modelDescription)}
+  ${buildExperimentConfig(experimentConfig, runMeta)}
+  ${buildResults(model, results)}
+  ${buildRecommendations(recommendations)}
+  ${buildAppendix(model)}
+  <div class="footer">Generated by DES Studio · ${esc(formatDate(new Date().toISOString()))}</div>
+</div>
+</body>
+</html>`;
 }
 
 export { sanitizeFilename, formatDate };
