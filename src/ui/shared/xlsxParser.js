@@ -16,7 +16,7 @@ import { parsePlanCsv } from './planCsvParser.js';
 export function parseXlsx(buffer, { epoch, timeUnit, sheetName } = {}) {
   let workbook;
   try {
-    workbook = XLSX.read(buffer, { type: 'array' });
+    workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
   } catch (e) {
     return { rows: [], attrHeaders: [], skipped: 0, error: `Could not read file: ${e.message}` };
   }
