@@ -181,7 +181,7 @@ export const DISTRIBUTIONS = {
       const times = rows
         ? rows.map(r => Number(r.time))
         : (Array.isArray(p.times) ? p.times.map(Number) : []);
-      if (!times.length) return 1e9;
+      if (!times.length) { console.warn('[DES Studio] Schedule dist: no times found. distParams:', p); return 1e9; }
 
       const { state, schedKey = "default", clock = 0 } = context;
       const stateKey = `__schedIdx_${schedKey}`;
