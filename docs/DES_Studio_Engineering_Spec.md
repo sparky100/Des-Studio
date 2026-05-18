@@ -1,8 +1,8 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.1.0
-**Date:** 2026-05-17
-**Sprint baseline:** Sprint 55a
+**Version:** 1.4.0
+**Date:** 2026-05-18
+**Sprint baseline:** Sprint 58+
 **Status:** Living document — updated at end of each sprint
 
 ---
@@ -15,6 +15,7 @@
 | v1.1 | 2026-05-17 | Sprint 55a | Added parseSuggestionResponse / applySuggestionPatch to Section 6; DistHelp / DistSparkline to Section 7.2; WCAG 2.1 AA compliance to Section 8.6; updated test count to 1248 |
 | v1.2 | 2026-05-17 | Sprint 57 | Real-time adapter layer — RestAdapter, AdapterRegistry, nullRegistry, paramSource schema extension |
 | v1.3 | 2026-05-17 | Sprint 58 | Report generation — `generateReport()`, LLM prompt builders, html2canvas canvas capture, Execute panel Export Report button |
+| v1.4 | 2026-05-18 | Sprint 58+ | Time-averaged server utilisation — `_busyStart`/`_busyTime` tracking in `entities.js`; warmup reset; `getSummary()` formula updated to `busyTime / (elapsed × count)`. Markdown report export replacing docx. CSV import for Schedule distribution — `planCsvParser.js`, `ScheduleEditor` "Load from CSV" button, `distParams.rows[]` schema. |
 
 ---
 
@@ -178,7 +179,7 @@ B-events (bound events) are pre-scheduled occurrences on the Future Event List. 
 | `name` | string | Display name |
 | `scheduledTime` | number | Initial scheduled time for the event in the FEL |
 | `effect` | string[] | Array of macro call strings, executed in order when the event fires |
-| `schedules` | Schedule[] | Re-scheduling rules: `[{dist, distParams, isRenege}]`; each fires a new instance of this B-event after the sampled inter-event time |
+| `schedules` | Schedule[] | Re-scheduling rules: `[{dist, distParams, isRenege}]`; each fires a new instance of this B-event after the sampled inter-event time. When `dist === "Schedule"`, `distParams` may carry either `times: number[]` (flat absolute clock times) or `rows: [{time: number, attrs: {}}]` (per-arrival times with entity attributes injected at arrival via ARRIVE). |
 | `routing` | RoutingBranch[] | Conditional routing table: `[{condition, queueName}]`; mutually exclusive with `probabilisticRouting` |
 | `probabilisticRouting` | ProbBranch[] | Probabilistic routing: `[{probability, queueName}]`; probabilities must sum to 1.0 +/- 0.001 |
 | `defaultQueueName` | string or null | Fallback queue name when no routing branch matches |
@@ -422,6 +423,8 @@ The primary model authoring interface. Organised as a multi-tab panel:
 **Predicate Builder:** A visual condition builder that produces the `condition` object used by C-events and balkCondition. Supports clauses connected by AND/OR; each clause is a token-based expression comparing queue depths, state variables, entity attributes, clock, or numeric literals using comparison operators.
 
 **DistPicker:** The distribution selection component. Distributions are grouped into three families — Parametric (classical distributions with numeric parameters), Time-varying (piecewise arrival rate schedules), and From data (EntityAttr / ServerAttr). The family selector filters the distribution dropdown. `DistHelp.js` (`DIST_GROUPS` and `DIST_HELP` map) provides summary text and per-parameter help for all 11 distribution types. `DistSparkline.jsx` renders an SVG shape preview (120×40 px) for the currently selected distribution; the preview updates reactively as parameters change. Parameters validate on blur with inline error messages using `role="alert"`.
+
+**ScheduleEditor** (rendered by DistPicker when `dist === "Schedule"`): Provides two manual entry modes (times list textarea; per-row arrival attributes table) and a **CSV import** path. The "↑ Load from CSV" button opens a file picker; the selected file is parsed by `src/ui/shared/planCsvParser.js` (RFC-4180, header auto-detection, numeric/string attr inference). A preview panel shows the first 5 rows, total count, and a skip count for rows with non-numeric time. On confirm, `distParams.rows` is populated with `[{ time: number, attrs: {} }]` objects; if the file contains no attribute columns, `distParams.times` (flat array) is used instead. The rows table derives its column headers from `attrDefs` when defined, or from the keys of the first imported row when not — so CSV-only imports render correctly without requiring entity attribute definitions to be pre-configured.
 
 ### 7.3 Execute Panel
 
