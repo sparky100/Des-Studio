@@ -47,6 +47,19 @@ All 8 benchmarks exist in `tests/engine/benchmarks/benchmarks.test.js`.
 
 ---
 
+## Performance Timing (automated gate)
+
+Test file: `tests/engine/benchmarks/performance.test.js`
+
+| Model | Entity types | Queues | B-events | C-events | maxSimTime | Threshold | Actual | Status |
+|-------|-------------|--------|----------|----------|-----------|-----------|--------|--------|
+| Complex multi-queue | 3 (TypeA, TypeB, Server×4) | 4 | 6 | 4 | 2 000 | < 3 000ms | ≈ 440ms | **PASS** |
+
+The model uses 5 arrival streams at low rate (mean ≈ 15–25 t/arrival) producing ~550 events per run.
+A regression that causes this to exceed 3 000ms indicates an accidental O(n²) loop in a hot path.
+
+---
+
 ## Analytical Benchmarks Legacy Section
 
 The original M/M/1 and M/M/c gates (Benchmarks 1–2) also run via:
