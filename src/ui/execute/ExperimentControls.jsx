@@ -253,19 +253,6 @@ export function ExperimentControls({
                 />
                 Collect time-series
               </label>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, whiteSpace: "nowrap" }}>
-                  Speed {(speedMultiplier ?? 1).toFixed(1)}×
-                </span>
-                <input
-                  aria-label="Animation speed multiplier"
-                  type="range"
-                  min={0.5} max={10} step={0.5}
-                  value={speedMultiplier ?? 1}
-                  onChange={e => setSpeedMultiplier?.(parseFloat(e.target.value))}
-                  style={{ width: 80, accentColor: C.accent }}
-                />
-              </div>
             </div>
           </div>
         </div>
