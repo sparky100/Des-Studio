@@ -829,36 +829,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             )}
             <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
             <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
-            <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Time unit</label>
-              <select
-                value={model.timeUnit||"minutes"}
-                onChange={canEdit?(e=>setField("timeUnit",e.target.value)):undefined}
-                disabled={!canEdit}
-                style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:12,padding:"5px 8px",width:160}}
-              >
-                <option value="seconds">Seconds</option>
-                <option value="minutes">Minutes</option>
-                <option value="hours">Hours</option>
-                <option value="days">Days</option>
-              </select>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Simulation start (epoch)</label>
-              <input
-                type="datetime-local"
-                value={(model.epoch||"").slice(0,16)}
-                onChange={canEdit?(e=>setField("epoch", e.target.value ? new Date(e.target.value).toISOString() : "")):undefined}
-                disabled={!canEdit}
-                style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:12,padding:"5px 8px",width:220}}
-              />
-              <span style={{fontSize:10,color:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif"}}>
-                Optional. When set, simulation time maps to real calendar dates. Required for CSV timestamp import.
-              </span>
-            </div>
-            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
-              <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
-            </div>
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
               <GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
             </div>
@@ -896,7 +866,44 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             )}
           </div>)
         )}
-        {tab==="state"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="state"/><StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/></div>)}
+        {tab==="state"&&renderAuthoringShell(
+          <div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
+            <TabErrors tabId="state"/>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Time unit</label>
+              <select
+                value={model.timeUnit||"minutes"}
+                onChange={canEdit?(e=>setField("timeUnit",e.target.value)):undefined}
+                disabled={!canEdit}
+                style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:12,padding:"5px 8px",width:160}}
+              >
+                <option value="seconds">Seconds</option>
+                <option value="minutes">Minutes</option>
+                <option value="hours">Hours</option>
+                <option value="days">Days</option>
+              </select>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Simulation start (epoch)</label>
+              <input
+                type="datetime-local"
+                value={(model.epoch||"").slice(0,16)}
+                onChange={canEdit?(e=>setField("epoch", e.target.value ? new Date(e.target.value).toISOString() : "")):undefined}
+                disabled={!canEdit}
+                style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:12,padding:"5px 8px",width:220}}
+              />
+              <span style={{fontSize:10,color:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif"}}>
+                Optional. When set, simulation time maps to real calendar dates. Required for CSV timestamp import.
+              </span>
+            </div>
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
+              <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
+            </div>
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
+              <StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/>
+            </div>
+          </div>
+        )}
         {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}}/></div>)}
         {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
         {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
