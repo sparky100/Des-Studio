@@ -1702,7 +1702,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           title={autoRunning || mode === "running" ? "Log is available after the run completes" : undefined}
           style={autoRunning || mode === "running" ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
         >Log</Btn>
-        <Btn variant={view === "histograms" ? "primary" : "ghost"} onClick={() => setView("histograms")} disabled={!liveWaitDist && !results?.waitDist}>Histograms{liveWaitDist && !results ? " ●" : ""}</Btn>
+        <Btn variant={view === "histograms" ? "primary" : "ghost"} onClick={() => setView("histograms")} disabled={!results?.waitDist}>Histograms</Btn>
         <Btn variant={view === "entities" ? "primary" : "ghost"} onClick={() => setView("entities")} disabled={!results?.entitySummary?.length}>Entity Details</Btn>
         <div style={{ position: "relative" }}>
           {showExportPopover && (
@@ -2205,6 +2205,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                 onEntitySelect={setSelectedEntityId}
                 onNodeSelect={setSelectedNodeLabel}
                 timeSeries={results?.timeSeries}
+                waitDist={liveWaitDist ?? results?.waitDist}
               />
             </>
           );
@@ -2217,14 +2218,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       )}
 
       {view === "histograms" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {liveWaitDist && !results && (
-            <div style={{ fontSize: 10, color: C.green, fontFamily: FONT, fontWeight: 700, letterSpacing: 1.2 }}>
-              ● LIVE — updating as simulation runs
-            </div>
-          )}
-          <QueueHistogram waitDist={results?.waitDist ?? liveWaitDist} />
-        </div>
+        <QueueHistogram waitDist={results?.waitDist} />
       )}
 
       {view === "entities" && (
