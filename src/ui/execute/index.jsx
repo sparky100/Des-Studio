@@ -11,6 +11,7 @@ import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
 import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment } from "../../db/models.js";
+import { buildRunRecord } from "../../db/runRecord.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
@@ -55,6 +56,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [replicationResults, setReplicationResults] = useState([]);
   const [aggregateStats, setAggregateStats] = useState({});
   const [seed, setSeed] = useState(() => Math.floor(mulberry32(Date.now())() * 1e9));
+  const [resolvedSeed, setResolvedSeed] = useState(null);
   const [warmupPeriod, setWarmupPeriod] = useState(() => numberDefault(experimentDefaults.warmupPeriod, 0));
   const [warmupDetection, setWarmupDetection] = useState(null);
   const [maxSimTime, setMaxSimTime] = useState(() => numberDefault(experimentDefaults.maxSimTime, 500));
@@ -196,6 +198,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     if (hasErrors) return;
     setExecuteSection("run");
     runSeedRef.current = seed;
+    setResolvedSeed(seed);
     engineRef.current = buildEngine(
       model,
       seed,
@@ -268,7 +271,15 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       if (modelId) {
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
-        const config = { seed: runSeedRef.current, runLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null };
+        const stepSeed = runSeedRef.current;
+        const runRecord = buildRunRecord(model, fullResult, {
+          maxSimTime: terminationMode === 'time' ? maxSimTime : null,
+          warmupPeriod,
+          replications: 1,
+          terminationMode,
+          terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+        }, stepSeed);
+        const config = { seed: stepSeed, runLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null, runRecord };
         const save = userId ? saveSimulationRun(modelId, userId, fullResult, config) : saveLocalRun(modelId, fullResult, config);
         save
           .then((runId) => {
@@ -283,7 +294,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           });
       }
     }
-  }, [userId, modelId, runLabel, warmupPeriod, maxSimTime, terminationMode, stopAuto, onRunSaved, onResultsReady]);
+  }, [userId, modelId, model, runLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved, onResultsReady]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -324,6 +335,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setExecuteSection("run");
 
     const runSeed = seed;
+    setResolvedSeed(runSeed);
     const maxTimeForRun = terminationMode === 'time' ? maxSimTime : null;
     const stopConditionForRun = terminationMode === 'condition' ? terminationCondition : null;
 
@@ -384,6 +396,13 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
             setSaveStatus({ state: 'saving', message: 'Saving replication batch...' });
 
             try {
+              const batchRunRecord = buildRunRecord(model, batchResult, {
+                maxSimTime: maxTimeForRun,
+                warmupPeriod,
+                replications,
+                terminationMode,
+                terminationCondition: stopConditionForRun,
+              }, runSeed);
               const batchConfig = {
                 seed: runSeed, runLabel, replications, warmupPeriod, maxTime: maxTimeForRun, batchId,
                 aggregateStats: stats,
@@ -391,6 +410,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                   replicationIndex: payload.replicationIndex, seed: payload.seed,
                   summary: payload.result?.summary || {}, finalTime: payload.result?.finalTime,
                 })),
+                runRecord: batchRunRecord,
               };
               if (userId) {
                 const runId = await saveSimulationRun(modelId, userId, batchResult, batchConfig);
@@ -461,7 +481,14 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing simulation history to database..." }]);
 
     try {
-      const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun };
+      const singleRunRecord = buildRunRecord(model, result, {
+        maxSimTime: maxTimeForRun,
+        warmupPeriod,
+        replications: 1,
+        terminationMode,
+        terminationCondition: stopConditionForRun,
+      }, runSeed);
+      const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun, runRecord: singleRunRecord };
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
       const runId = await save;
       if (runId) setLatestRunId(runId);
@@ -1841,6 +1868,12 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           fontSize: 12, fontFamily: FONT,
         }}>
           {saveStatus.message}
+        </div>
+      )}
+
+      {resolvedSeed !== null && (
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+          Seed: {resolvedSeed}
         </div>
       )}
 

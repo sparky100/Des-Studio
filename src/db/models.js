@@ -352,6 +352,12 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
   if (runLabel) {
     resultsJson.runLabel = runLabel;
   }
+  if (config.runRecord) {
+    resultsJson._model_snapshot  = config.runRecord.model_snapshot;
+    resultsJson._engine_version  = config.runRecord.engine_version;
+    resultsJson._prng_algorithm  = config.runRecord.prng_algorithm;
+    resultsJson._base_seed       = config.runRecord.base_seed;
+  }
 
   const { data, error } = await supabase.from("simulation_runs").insert({
     model_id:            modelId,
