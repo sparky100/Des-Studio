@@ -38,7 +38,7 @@ export function buildQueueDepthSeries(results = {}, model = {}) {
         ? "queue"
         : "type-fallback",
       sourceLabel: timeSeries.some(entry => entry?.byQueue?.[queueName])
-        ? "Queue-specific runtime counts"
+        ? "Queue measurements taken during the run"
         : `Fallback from ${fallbackType} waiting counts`,
     };
   });
@@ -58,7 +58,7 @@ export function buildServerUtilizationSeries(results = {}, model = {}) {
         t: finiteNumber(entry?.t),
         value: finiteNumber(entry?.byType?.[server.name]?.busy) / capacity,
       })),
-      sourceLabel: `Busy ${server.name} resources divided by capacity ${capacity}`,
+      sourceLabel: `Busy ${server.name} resources measured during the run, divided by capacity ${capacity}`,
     };
   });
 }
@@ -76,7 +76,7 @@ export function buildWaitDistributions(results = {}) {
       p95: finiteNumber(dist.p95),
       p99: finiteNumber(dist.p99),
       values: [...dist.values].map(v => finiteNumber(v)).sort((a, b) => a - b),
-      sourceLabel: `${finiteNumber(dist.n, dist.values.length)} completed waits from engine waitDist`,
+      sourceLabel: `${finiteNumber(dist.n, dist.values.length)} waiting times from completed customers`,
     }));
 }
 
@@ -88,27 +88,27 @@ export function buildChartSections(results = {}, model = {}) {
   return [
     {
       id: "queue-depth",
-      title: "Queue Depth Over Time",
-      question: "Where are queues forming?",
-      method: "Counts waiting entities after each Three-Phase cycle stabilises.",
+      title: "How queue size changed over time",
+      question: "Where do queues build up?",
+      method: "Shows how many entities were waiting as the run progressed.",
       emptyMessage: "Run with Detailed output enabled to see queue depth over time.",
       series: queueDepthSeries,
       maxValue: Math.max(0, ...queueDepthSeries.map(maxPointValue)),
     },
     {
       id: "server-utilization",
-      title: "Server Utilisation Over Time",
-      question: "Are resources under- or over-utilised?",
-      method: "Normalises busy resource counts by each server pool capacity.",
+      title: "How busy each resource was over time",
+      question: "How busy are resources?",
+      method: "Shows the share of each resource pool that was busy over time.",
       emptyMessage: "Add a server/resource type and run with Detailed output enabled to see utilisation.",
       series: serverUtilizationSeries,
       maxValue: Math.max(0, ...serverUtilizationSeries.map(maxPointValue)),
     },
     {
       id: "wait-distribution",
-      title: "Wait Time Distribution",
-      question: "How variable is customer waiting time?",
-      method: "Uses completed entity waits grouped by queue, with percentile markers.",
+      title: "How waiting times were spread out",
+      question: "How spread out are waiting times?",
+      method: "Shows the range of completed waiting times, with percentile markers.",
       emptyMessage: "Complete at least two customer waits to see wait-time distributions.",
       distributions: waitDistributions,
       maxValue: Math.max(0, ...waitDistributions.map(d => finiteNumber(d.p99))),

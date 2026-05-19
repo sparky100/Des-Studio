@@ -742,7 +742,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
             onClick={onOpenResults}
             style={toolBtnStyle}
           >
-            Open Analysis
+            Open Results
           </button>
         )}
         <button

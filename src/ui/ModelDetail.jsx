@@ -177,9 +177,9 @@ const MODEL_HEALTH_TAB_LABELS = {
   bevents: "B-Events",
   cevents: "C-Events",
   state: "Model Data",
-  execute: "Execute",
-  results: "Analysis",
-  history: "History",
+  execute: "Run",
+  results: "Results",
+  history: "Run History",
   validate: "Model Health",
 };
 
@@ -256,7 +256,7 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
       </div>
 
       {sources.length === 0 && (
-        <span style={{fontSize:12, color:C.muted, fontFamily:FONT}}>No external data sources configured.</span>
+        <span style={{fontSize:12, color:C.muted, fontFamily:FONT}}>No external data is connected yet.</span>
       )}
 
       {sources.map((src, idx) => (
@@ -317,18 +317,18 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
                       onChange={e => update(idx, { entityType: e.target.value })}/>
                   </div>
                   <div style={{...S.field, flex:1}}>
-                    <span style={S.fieldLabel}>Target B-event ID</span>
+                    <span style={S.fieldLabel}>Arrival event to populate</span>
                     <input style={S.input} value={src.targetBEventId||''} disabled={!canEdit}
                       onChange={e => update(idx, { targetBEventId: e.target.value })}/>
                   </div>
                   <div style={{...S.field, flex:1}}>
-                    <span style={S.fieldLabel}>Time field (dot path)</span>
+                    <span style={S.fieldLabel}>Time field in the incoming data</span>
                     <input style={S.input} value={src.timeField||'time'} disabled={!canEdit}
                       onChange={e => update(idx, { timeField: e.target.value })}/>
                   </div>
                 </div>
                 <div style={S.field}>
-                  <span style={S.fieldLabel}>Attribute map (JSON: {'"apiField"'}: {'"attrName"'})</span>
+                  <span style={S.fieldLabel}>Match incoming fields to model fields</span>
                   <textarea rows={3}
                     style={{...S.input, fontFamily:'monospace', fontSize:11, resize:'vertical', width:'100%'}}
                     value={typeof src.attrMap === 'object' ? JSON.stringify(src.attrMap, null, 2) : (src.attrMap||'{}')}
@@ -337,7 +337,7 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
                       try { update(idx, { attrMap: JSON.parse(e.target.value) }); } catch { /* keep raw string while typing */ }
                     }}/>
                   <span style={{fontSize:10, color:C.muted, fontFamily:FONT}}>
-                    Maps API response fields to entity attribute names. Use "patientName": "entityId" to set the entity display name.
+                    Map each incoming field to the model field it should fill. Advanced format example: <code>{'{"patientName": "entityId"}'}</code>.
                   </span>
                 </div>
               </>)}
@@ -647,17 +647,17 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     {id:"cevents",label:"C-Events"},
     {id:"state",label:"Model Data"},
     {id:"validate",label:"Model Health"},
-    {id:"execute",label:"Execute"},
-    {id:"results",label:"Analysis"},
-    {id:"history",label:"History"},
+    {id:"execute",label:"Run"},
+    {id:"results",label:"Results"},
+    {id:"history",label:"Run History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
   ];
   const selectableTabs = TABS.filter(t => !t.disabled);
   const NAV_MODES=[
     {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
     {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
-    {id:"execute",label:"Execute",primaryTab:"execute",tabs:["execute"]},
-    {id:"results",label:"Analysis",primaryTab:"results",tabs:["results","history"]},
+    {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
+    {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
     ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
   ];
   const isMobileLayout = viewportWidth < 720;
@@ -667,7 +667,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
         {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
         {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
-        {id:"results",label:"Analysis",primaryTab:"results",tabs:["results","history"]},
+        {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
       ]
     : NAV_MODES;
   const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
@@ -884,7 +884,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
               </select>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Simulation start (epoch)</label>
+              <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Real-world start date and time</label>
               <input
                 type="datetime-local"
                 value={(model.epoch||"").slice(0,16)}
@@ -893,10 +893,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:12,padding:"5px 8px",width:220}}
               />
               <span style={{fontSize:10,color:C.muted,fontFamily:"Inter, Segoe UI, Arial, sans-serif"}}>
-                Optional. When set, simulation time maps to real calendar dates. Required for CSV timestamp import.
+                Optional. Use this if simulation time should map to real calendar dates and times. Required for CSV timestamp import.
               </span>
             </div>
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
+              <div style={{fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.6,marginBottom:8}}>
+                Connect external schedules or live updates to this model.
+              </div>
               <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
             </div>
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
@@ -952,7 +955,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                       onClick={()=>setTab(targetTab)}
                       style={{background:isError?C.errorBg:C.warmup,border:`1px solid ${isError?C.danger:C.amber}66`,borderRadius:6,color:isError?C.error:C.warnBg,cursor:"pointer",fontFamily:FONT,fontSize:11,padding:"9px 11px",textAlign:"left"}}
                     >
-                      [{issue.code}] {tabLabel}: {issue.message}
+                      {tabLabel}: {issue.message} {issue.code ? `· Code ${issue.code}` : ""}
                     </button>
                   );
                 })}
@@ -987,12 +990,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
           <div style={{maxWidth:1200,display:"flex",flexDirection:"column",gap:14}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
               <div>
-                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:4}}>ANALYSIS WORKSPACE</div>
-                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Run charts and diagnostics</div>
+                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:4}}>RESULTS WORKSPACE</div>
+                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Run outcomes, charts, and reliability</div>
               </div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <Btn small variant="ghost" onClick={()=>setTab("execute")}>Open Execute</Btn>
-                <Btn small variant="ghost" onClick={()=>setTab("history")}>Open History</Btn>
+                <Btn small variant="ghost" onClick={()=>setTab("execute")}>Open Run</Btn>
+                <Btn small variant="ghost" onClick={()=>setTab("history")}>Open Run History</Btn>
               </div>
             </div>
             {historyLoading&&<div style={{color:C.muted,fontFamily:FONT,fontSize:12}}>Loading saved runs...</div>}
@@ -1019,7 +1022,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
               <ResultsWorkspace results={latestResults} model={model}/>
             ) : (
               <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
-                Analysis from the latest run will appear here. Run the model from Execute, or select a saved run when history is available.
+                Results from the latest run will appear here. Open Run to generate them, or select a saved run when run history is available.
               </div>
             )}
           </div>

@@ -31,13 +31,18 @@ function formatNumber(value, digits = 2) {
   return rounded.replace(/\.?0+$/, "");
 }
 
+function formatMetricValue(value, digits = 2, suffix = "") {
+  if (!Number.isFinite(Number(value))) return "—";
+  return `${formatNumber(value, digits)}${suffix}`;
+}
+
 const ANALYSIS_METRICS = [
-  { path: "summary.avgWait", label: "Avg wait" },
-  { path: "summary.avgSvc", label: "Avg service" },
-  { path: "summary.avgSojourn", label: "Avg sojourn" },
-  { path: "summary.served", label: "Served" },
+  { path: "summary.avgWait", label: "Average wait" },
+  { path: "summary.avgSvc", label: "Average service time" },
+  { path: "summary.avgSojourn", label: "Average time in system" },
+  { path: "summary.served", label: "Customers served" },
   { path: "summary.totalCost", label: "Total cost" },
-  { path: "summary.costPerServed", label: "Cost / served" },
+  { path: "summary.costPerServed", label: "Cost per served customer" },
 ];
 
 function getPathValue(source, path) {
@@ -102,6 +107,70 @@ function MetricStrip({ items }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function SummaryCardGrid({ results }) {
+  const summary = results?.summary || {};
+  const arrived = Number(summary.arrived ?? summary.totalArrived ?? 0);
+  const served = Number(summary.served ?? 0);
+  const reneged = Number(summary.reneged ?? summary.totalReneged ?? 0);
+  const leftRate = arrived > 0 ? (reneged / arrived) * 100 : null;
+  const cards = [
+    {
+      label: "Average wait",
+      value: formatMetricValue(summary.avgWait),
+      note: Number(summary.avgWait) > 0 ? "Time an entity waited before service." : "No waiting recorded.",
+      color: C.amber,
+    },
+    {
+      label: "Average time in system",
+      value: formatMetricValue(summary.avgSojourn),
+      note: "Total time from arrival to exit.",
+      color: C.accent,
+    },
+    {
+      label: "Customers served",
+      value: formatMetricValue(served, 0),
+      note: served > 0 ? "Completed successfully." : "No completed entities yet.",
+      color: C.served,
+    },
+    {
+      label: "Customers who left before service",
+      value: leftRate == null ? "—" : `${formatNumber(leftRate, 1)}%`,
+      note: reneged > 0 ? `${reneged} left before being served.` : "No customers left early.",
+      color: reneged > 0 ? C.reneged : C.green,
+    },
+  ];
+  if (Number.isFinite(summary.totalCost) && summary.totalCost > 0) {
+    cards.push({
+      label: "Total cost",
+      value: formatMetricValue(summary.totalCost),
+      note: summary.costPerServed != null ? `About ${formatMetricValue(summary.costPerServed)} per served customer.` : "Cost captured for this run.",
+      color: C.purple,
+    });
+  }
+  return (
+    <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+        RESULTS SUMMARY
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+        {cards.map(card => (
+          <div key={card.label} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
+              {card.label.toUpperCase()}
+            </div>
+            <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
+              {card.value}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+              {card.note}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -186,7 +255,7 @@ function SeriesDataPreview({ series }) {
   const td = (label, value, color = C.text) => <td key={label} style={{ padding: "4px 8px", textAlign: "right", color, fontFamily: FONT, fontSize: 10 }}>{value}</td>;
   const filename = `des-studio-chart-${slugify(series.label)}.csv`;
   return (
-    <DataPreviewShell summary={`View chart data (${points.length} points)`} onExport={() => downloadTextFile(buildSeriesCsv(series), filename)}>
+    <DataPreviewShell summary={`See the numbers behind this chart (${points.length} points)`} onExport={() => downloadTextFile(buildSeriesCsv(series), filename)}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 260 }}>
         <thead>
           <tr style={{ borderBottom: `1px solid ${C.border}` }}>{[th("index"), th("time"), th("value")]}</tr>
@@ -214,7 +283,7 @@ function WaitValuesPreview({ dist }) {
   const td = (label, value, color = C.text) => <td key={label} style={{ padding: "4px 8px", textAlign: "right", color, fontFamily: FONT, fontSize: 10 }}>{value}</td>;
   const filename = `des-studio-wait-samples-${slugify(dist.label)}.csv`;
   return (
-    <DataPreviewShell summary={`View wait samples (${values.length} values)`} onExport={() => downloadTextFile(buildWaitValuesCsv(dist), filename)}>
+    <DataPreviewShell summary={`See the waiting times behind this chart (${values.length} values)`} onExport={() => downloadTextFile(buildWaitValuesCsv(dist), filename)}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 220 }}>
         <thead>
           <tr style={{ borderBottom: `1px solid ${C.border}` }}>{[th("rank"), th("wait")]}</tr>
@@ -453,26 +522,41 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
     return (
       <ChartSectionShell section={{
         question: "How reliable are these outputs?",
-        title: "Statistical analysis",
-        method: "Run a replication batch or select a saved batch result to calculate confidence intervals and diagnostics.",
+        title: "How reliable are these results?",
+        method: "Run repeated versions of the same scenario to judge how stable the answer is.",
       }}>
         <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, lineHeight: 1.7 }}>
-          Replication analysis will appear here once the results include multiple replications or warm-up detection data.
+          Reliability guidance will appear here once the results include repeated runs or warm-up data.
         </div>
       </ChartSectionShell>
     );
   }
 
+  const reliabilityVerdict = replications.length < 2
+    ? { title: "Not enough repeated runs yet", note: "Run this scenario more than once to judge how reliable the result is.", color: C.amber }
+    : summaryStats?.avgWait?.isApproxNormal
+      ? { title: "High confidence", note: "The repeated-run results are behaving in a stable way.", color: C.green }
+      : { title: "Use with caution", note: "The repeated-run results are uneven, so it would be safer to run more repeats before making decisions.", color: C.amber };
+
   return (
     <ChartSectionShell section={{
-      question: "How reliable are these outputs?",
-      title: "Statistical analysis",
-      method: "Batch-means confidence intervals and distribution diagnostics from replication outputs.",
+      question: "Can I trust these results yet?",
+      title: "How reliable are these results?",
+      method: "Uses repeated runs and warm-up checks to judge whether the answer looks stable.",
     }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+        <div style={{ background: C.bg, border: `1px solid ${reliabilityVerdict.color}44`, borderRadius: 6, padding: 10 }}>
+          <div style={{ fontSize: 11, color: reliabilityVerdict.color, fontFamily: FONT, fontWeight: 700, marginBottom: 4 }}>
+            {reliabilityVerdict.title}
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
+            {reliabilityVerdict.note}
+          </div>
+        </div>
+
         <div>
           <div style={{ fontSize: 10, color: C.amber, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
-            WARM-UP DETECTION
+            START-UP CHECK
           </div>
           {warmupDetection && warmupDetection.series?.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -492,18 +576,18 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
             </div>
           ) : (
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
-              Warm-up detection has not been recorded for this result.
+              No start-up check was recorded for this result.
             </div>
           )}
         </div>
 
         <div>
           <div style={{ fontSize: 10, color: C.green, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
-            BATCH-MEANS CONFIDENCE INTERVAL
+            ESTIMATED RANGE FOR THE TRUE RESULT
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 8 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 140 }}>
-              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Metric</span>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Result to assess</span>
               <select
                 aria-label="Batch-means metric"
                 value={batchMetric}
@@ -516,20 +600,20 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
               </select>
             </div>
             <Btn small variant="primary" onClick={runBatchMeans} disabled={replications.length < 2}>
-              Compute
+              Assess
             </Btn>
           </div>
           {batchResult ? (
             <div>
               <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.8, marginBottom: 6 }}>
-                Batch-means groups observations into <strong>{batchResult.batchCount}</strong> batches of size <strong>{batchResult.batchSize}</strong>.
+                This estimate groups the repeated-run results into <strong>{batchResult.batchCount}</strong> groups of size <strong>{batchResult.batchSize}</strong>.
               </div>
               <MetricStrip
                 items={[
                   { label: "n", value: batchResult.n },
                   { label: "mean", value: formatNumber(batchResult.mean), color: C.accent },
-                  { label: "CI low", value: formatNumber(batchResult.lower) },
-                  { label: "CI high", value: formatNumber(batchResult.upper) },
+                  { label: "lower bound", value: formatNumber(batchResult.lower) },
+                  { label: "upper bound", value: formatNumber(batchResult.upper) },
                   { label: "lag-1 rho", value: formatNumber(batchResult.lag1Rho), color: C.amber },
                 ]}
               />
@@ -537,8 +621,8 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
           ) : (
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
               {replications.length >= 2
-                ? "Select a metric and compute a confidence interval."
-                : "At least two replication results are needed for batch-means analysis."}
+                ? "Choose a result and assess the likely range."
+                : "Run this scenario more than once to assess how reliable the result is."}
             </div>
           )}
         </div>
@@ -546,7 +630,7 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
         {summaryStats && (
           <div>
             <div style={{ fontSize: 10, color: C.purple, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
-              DISTRIBUTION DIAGNOSTICS (Avg Wait)
+              SHAPE OF REPEATED-RUN RESULTS (AVERAGE WAIT)
             </div>
             <MetricStrip
               items={[
@@ -562,8 +646,8 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
             />
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.8, marginTop: 8 }}>
               {summaryStats.avgWait.isApproxNormal
-                ? "The distribution of replication means is approximately normal."
-                : "The distribution of replication means deviates from normality. Consider more replications before making decisions."}
+                ? "The repeated-run results are behaving in a stable way."
+                : "The repeated-run results are uneven, so it would be safer to run more repeats before making decisions."}
             </div>
           </div>
         )}
@@ -584,13 +668,26 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   if (!chartModel.hasTimeSeries && !hasWaitDistributions && !hasAnalysisInputs) {
     return (
       <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
-        Enable <strong style={{ color: C.accent }}>Detailed output</strong> in the controls bar and run the simulation to see charts.
+        Turn on <strong style={{ color: C.accent }}>Keep chart data during the run</strong> in Run setup, then run the model to see charts.
       </div>
     );
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+      <SummaryCardGrid results={results} />
+
+      {(chartModel.hasTimeSeries || hasWaitDistributions) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+            WHERE ARE THE BOTTLENECKS?
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
+            Use these charts to see where queues build up, how busy resources are, and how uneven waiting times become.
+          </div>
+        </div>
+      )}
+
       {chartModel.hasTimeSeries && queueSection?.series.length > 0 && (
         <ChartSectionShell section={queueSection}>
           <div aria-label="Queue depth chart grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 16, minWidth: 0 }}>
@@ -603,7 +700,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                   yLabel="depth"
                 />
                 <div style={{ fontSize: 9, color: series.source === "type-fallback" ? C.amber : C.muted, fontFamily: FONT }}>
-                  Data: {series.sourceLabel}
+                  Source: {series.sourceLabel}
                 </div>
                 <SeriesDataSummary series={series} valueLabel="depth" />
                 <SeriesDataPreview series={series} />
@@ -625,7 +722,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                   yLabel="utilisation"
                 />
                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>
-                  Data: {series.sourceLabel}
+                  Source: {series.sourceLabel}
                 </div>
                 <SeriesDataSummary series={series} valueLabel="utilisation" />
                 <SeriesDataPreview series={series} />
@@ -643,7 +740,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                 <div style={{ fontSize: 11, color: C.cEvent, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>{dist.label}</div>
                 <WaitHistogram dist={dist} color={C.amber} />
                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginTop: 5 }}>
-                  Data: {dist.sourceLabel}
+                  Source: {dist.sourceLabel}
                 </div>
                 <div style={{ marginTop: 8 }}>
                   <WaitDataSummary dist={dist} />

@@ -59,7 +59,7 @@ export function GoalsEditor({ goals = [], onChange }) {
         results against these targets when generating insights.
       </InfoBox>
       {goals.length === 0 && (
-        <Empty icon="🎯" msg="No performance goals set. Add a goal to enable goal-aware AI analysis."
+        <Empty icon="🎯" msg="No targets set yet. Add a target if you want the tool to judge whether results are good enough."
           action={{ label: "+ Add Goal", onClick: add }} />
       )}
       {goals.map((g, i) => {

@@ -138,11 +138,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     [speedMultiplier]
   );
   const runSetupSummary = useMemo(() => {
-    const modeLabel = terminationMode === "condition" ? "Condition stop" : `Duration ${maxSimTime}`;
+    const modeLabel = terminationMode === "condition" ? "Stops when the rule is met" : `Stops after ${maxSimTime} time units`;
     return [
-      `Warm-up ${warmupPeriod}`,
-      `${replications} repl${replications === 1 ? "" : "s"}`,
-      `Seed ${seed}`,
+      `Ignoring first ${warmupPeriod} time units`,
+      `${replications} run${replications === 1 ? "" : "s"}`,
+      `Random pattern: ${seed}`,
       modeLabel,
     ];
   }, [warmupPeriod, replications, seed, terminationMode, maxSimTime]);
@@ -1707,7 +1707,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         </div>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
         <Btn variant={view === "visual" ? "primary" : "ghost"} onClick={() => setView("visual")}>Live View</Btn>
-        <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Analysis</Btn>
+        <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Results</Btn>
         <Btn
           variant={view === "log" ? "primary" : "ghost"}
           onClick={() => setView("log")}
