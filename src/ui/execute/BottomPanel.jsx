@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, PhaseTag } from "../shared/components.jsx";
-import { QueueDepthTimePlot } from "./SweepViews.jsx";
+import { QueueDepthTimePlot, QueueHistogram } from "./SweepViews.jsx";
 
 const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
@@ -638,7 +638,7 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
 
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
-export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries }) {
+export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries, waitDist }) {
   const [activeTab,  setActiveTab]  = useState("log");
   const [collapsed,  setCollapsed]  = useState(false);
   const [bodyHeight, setBodyHeight] = useState(BOTTOM_PANEL_BODY_HEIGHT);
@@ -777,7 +777,31 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
         >
           {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
-          {activeTab === "charts"    && <QueueDepthTimePlot timeSeries={timeSeries} queues={model.queues} timeUnit={model.timeUnit} />}
+          {activeTab === "charts"    && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {waitDist && Object.keys(waitDist).length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {!hasResults && (
+                    <div style={{ fontSize: 10, color: C.green, fontFamily: FONT, fontWeight: 700, letterSpacing: 1.2 }}>
+                      ● LIVE — wait time distributions updating as simulation runs
+                    </div>
+                  )}
+                  <QueueHistogram waitDist={waitDist} />
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+                  Wait time histograms will appear here once entities complete service.
+                </div>
+              )}
+              {timeSeries ? (
+                <QueueDepthTimePlot timeSeries={timeSeries} queues={model.queues} timeUnit={model.timeUnit} />
+              ) : (
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+                  Queue depth over time: run with "Collect time-series" enabled.
+                </div>
+              )}
+            </div>
+          )}
           {activeTab === "stagekpis" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <EventCountsTable snap={snap} model={model} />
