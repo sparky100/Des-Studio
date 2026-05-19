@@ -1702,7 +1702,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           title={autoRunning || mode === "running" ? "Log is available after the run completes" : undefined}
           style={autoRunning || mode === "running" ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
         >Log</Btn>
-        <Btn variant={view === "histograms" ? "primary" : "ghost"} onClick={() => setView("histograms")} disabled={!results?.waitDist}>Histograms</Btn>
         <Btn variant={view === "entities" ? "primary" : "ghost"} onClick={() => setView("entities")} disabled={!results?.entitySummary?.length}>Entity Details</Btn>
         <div style={{ position: "relative" }}>
           {showExportPopover && (
@@ -2215,10 +2214,6 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
 
       {view === "log" && (
         <LogViewer log={log} currentClock={currentSnap?.clock} />
-      )}
-
-      {view === "histograms" && (
-        <QueueHistogram waitDist={results?.waitDist} />
       )}
 
       {view === "entities" && (
