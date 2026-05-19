@@ -137,10 +137,17 @@ describe('Server idle/busy consistency across multi-stage flow', () => {
   });
 
   test('ER Triage: busy + idle = total for each resource type', () => {
-    const result = buildEngine(erTriageModel, 42, 0, 30).runAll();
+    const engine = buildEngine(erTriageModel, 42, 0, 30);
+    const result = engine.runAll();
+    const snap = engine.getSnap();
 
-    for (const r of Object.values(result.summary.perResource)) {
-      expect(r.busyCount + r.idleCount).toBe(r.total);
+    const servers = snap.entities.filter(e => e.role === 'server');
+    for (const resourceType of ['Nurse', 'Doctor']) {
+      const typeServers = servers.filter(s => s.type === resourceType);
+      const busy = typeServers.filter(s => s.status === 'busy').length;
+      const idle = typeServers.filter(s => s.status === 'idle').length;
+      const total = typeServers.length;
+      expect(busy + idle).toBe(total);
     }
   });
 

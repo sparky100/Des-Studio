@@ -1,7 +1,7 @@
 # DES Studio — Product Specification
-**Version:** 1.1.0
-**Date:** 2026-05-17
-**Sprint baseline:** Sprint 55a
+**Version:** 1.1.1
+**Date:** 2026-05-19
+**Sprint baseline:** Sprint 67 planning
 **Status:** Living document — reviewed and updated at end of each sprint
 
 ---
@@ -12,6 +12,7 @@
 |---------|------|--------|---------|
 | v1.0.0 | 2026-05-16 | Sprint 45 | Initial product specification |
 | v1.1.0 | 2026-05-17 | Sprint 55a | Added COSEIZE macro; updated limitations (loopConfig/balkCondition status); AI Apply & Re-run; keyboard shortcuts; cost summary in Results view; distribution picker redesign; responsive layout; sprint 46–55a roadmap closure |
+| v1.1.1 | 2026-05-19 | Sprint 67 plan | Added plain-English-first UI requirement and Results presentation ordering requirements |
 
 ---
 
@@ -64,6 +65,23 @@ DES Studio provides three authoring modes. All three modes edit the same underly
 **AI Generator.** The "Generate with AI" button accepts a natural-language scenario description and produces a complete starter model: entity types, queues, events, distributions, and suggested performance goals. The AI Generator is best used for bootstrapping — it creates the structural skeleton in seconds, which the modeller then refines in Forms/Tabs or the Visual Designer. The AI Generator also supports results-informed refinement: after a run it can propose model changes based on what the results reveal, using the same structured six-step analysis as Suggest Improvements.
 
 **Visual Designer.** A drag-and-drop canvas showing the model as a flow graph — queues as rectangles, events as rounded rectangles or diamonds, entity types as circles, with arcs connecting them. The Visual Designer is best for reviewing topology, confirming that routing connections are correct, and presenting the model structure to stakeholders. Clicking any node opens an inspector panel with the same editable fields as Forms/Tabs.
+
+### 3.1a Plain-English Interaction Standard
+
+DES Studio is designed for advanced modellers, but user-facing wording must not assume that every user wants simulation jargon as the first layer of explanation.
+
+**Product requirement:** labels, section headings, action buttons, empty states, and results summaries must follow a **plain-English-first** pattern:
+
+1. **Primary wording in everyday language** — describe the purpose of the option or result
+2. **Technical detail as support** — keep domain terms, method names, validation codes, IDs, and raw formats in helper text, tooltips, captions, or expandable advanced sections
+
+Examples:
+- Prefer **Run** over **Execute**
+- Prefer **Results** over **Analysis** when the destination is the results workspace
+- Prefer **Ignore early results** with helper text noting the technical term **warm-up period**
+- Prefer **Real-world start date and time** with helper text noting **epoch**
+
+This requirement applies across authoring, execution, results, and history surfaces.
 
 ---
 
@@ -177,6 +195,23 @@ Effect macros are the action vocabulary of DES Studio. They appear in the Effect
 **Entities.** A per-entity lifecycle table. Each row represents one entity instance; columns include arrival time, service start time, departure time, time spent waiting, and any custom attribute values. The table is sortable and filterable. An anomaly detection layer highlights rows where waiting time or total time in system is more than three standard deviations from the mean, enabling fast identification of individual outlier cases and root-cause investigation.
 
 **Analysis.** The primary results dashboard, built on the ResultsWorkspace. It presents aggregate KPI cards (throughput, mean wait, mean time in system, goal pass/fail status with green or red borders), per-queue wait statistics (mean, maximum, p50, p90, p99), per-resource utilisation bars, a cumulative mean chart with Welch warmup cutoff marked, and — when replications have been run — a replication summary table showing the mean and 95% confidence interval for every KPI.
+
+### 3.5a Results Presentation Principles
+
+The Results workspace must be organized around the modeller's decision-making flow, not the internal analysis pipeline.
+
+**Required presentation order:**
+1. **Results summary** — what happened?
+2. **Reliability / confidence** — can these results be trusted yet?
+3. **Bottlenecks and pressure points** — where are queues, waits, or utilisation problems emerging?
+4. **Detailed charts** — supporting visuals
+5. **Raw data and exports** — numbers behind the charts
+
+**Required wording pattern:**
+- Lead with outcome and consequence before statistical method
+- Use question-led headings where possible (for example, *How reliable are these results?*)
+- Keep advanced analysis terminology available, but secondary to the plain-English explanation
+- Show data provenance as supporting captions rather than as the dominant section heading
 
 ---
 
