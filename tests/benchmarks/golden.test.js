@@ -5,7 +5,7 @@
 // A failure here means the engine's numerical output has shifted — investigate
 // before merging.
 //
-// Tolerance: ±5% of analytical value (same as manual benchmarks).
+// Tolerance: M/M/1 ±2%, M/M/c ±5% of analytical value.
 // Seed: 42 (fixed — changing the seed changes the expected window).
 
 import { describe, expect, test } from 'vitest';
@@ -111,10 +111,10 @@ describe('M/M/1 golden fixture (seed=42, λ=0.9, μ=1.0)', () => {
   const N_SERVED = 500;
   const N_WARMUP = 200;
 
-  test('mean queue wait is within 5% of analytical value (9.0)', () => {
+  test('mean queue wait is within 2% of analytical value (9.0)', () => {
     const meanWait = runUntilServed(mm1Model(), N_SERVED, SEED, N_WARMUP);
     const pctError = Math.abs(meanWait - ANALYTICAL) / ANALYTICAL;
-    expect(pctError).toBeLessThanOrEqual(0.05);
+    expect(pctError).toBeLessThanOrEqual(0.02);
   });
 
   test('mean queue wait is pinned to window 8.0–10.0 (regression lock)', () => {
