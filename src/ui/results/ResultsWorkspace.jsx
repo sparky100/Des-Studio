@@ -5,8 +5,8 @@ import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../eng
 import { buildResultsViewModel } from "./resultsViewModel.js";
 
 const HIST_W = 360;
-const HIST_H = 90;
-const HIST_BINS = 16;
+const HIST_H = 160;
+const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 120;
 const CHART_COLORS = [C.accent, C.bEvent, C.purple, C.green, C.red, C.server];
