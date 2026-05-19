@@ -49,6 +49,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [saveStatus, setSaveStatus] = useState(null);
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
   const [results, setResults] = useState(null);
+  const [liveWaitDist, setLiveWaitDist] = useState(null);
   const [batchStatus, setBatchStatus] = useState("idle");
   const [batchProgress, setBatchProgress] = useState(null);
   const [replicationResults, setReplicationResults] = useState([]);
@@ -109,6 +110,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
   const autoRef = useRef(null);
+  const liveHistThrottleRef = useRef(0);
   const runnerRef = useRef(null);
   const saveInProgressRef = useRef(false);
   const [animationEnabled, setAnimationEnabled] = useState(true);
@@ -209,6 +211,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setSaveStatus(null);
     setPhaseCTruncated(false);
     setResults(null);
+    setLiveWaitDist(null);
+    liveHistThrottleRef.current = 0;
     onResultsReady?.(null);
     setBatchStatus("idle");
     setBatchProgress(null);
@@ -232,8 +236,17 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setLog(prev => [...prev, ...(r.cycleLog || [])]);
     if (r.phaseCTruncated) setPhaseCTruncated(true);
 
+    if (!r.done && engineRef.current) {
+      const now = Date.now();
+      if (now - liveHistThrottleRef.current > 400) {
+        liveHistThrottleRef.current = now;
+        setLiveWaitDist(engineRef.current.getWaitDist?.() || null);
+      }
+    }
+
     if (r.done) {
       setMode("done");
+      setLiveWaitDist(null);
       stopAuto();
       const summary = engineRef.current.getSummary();
       const fullResult = {
@@ -1689,7 +1702,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           title={autoRunning || mode === "running" ? "Log is available after the run completes" : undefined}
           style={autoRunning || mode === "running" ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
         >Log</Btn>
-        <Btn variant={view === "histograms" ? "primary" : "ghost"} onClick={() => setView("histograms")} disabled={!results?.waitDist}>Histograms</Btn>
+        <Btn variant={view === "histograms" ? "primary" : "ghost"} onClick={() => setView("histograms")} disabled={!liveWaitDist && !results?.waitDist}>Histograms{liveWaitDist && !results ? " ●" : ""}</Btn>
         <Btn variant={view === "entities" ? "primary" : "ghost"} onClick={() => setView("entities")} disabled={!results?.entitySummary?.length}>Entity Details</Btn>
         <div style={{ position: "relative" }}>
           {showExportPopover && (
@@ -2204,7 +2217,14 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       )}
 
       {view === "histograms" && (
-        <QueueHistogram waitDist={results?.waitDist} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {liveWaitDist && !results && (
+            <div style={{ fontSize: 10, color: C.green, fontFamily: FONT, fontWeight: 700, letterSpacing: 1.2 }}>
+              ● LIVE — updating as simulation runs
+            </div>
+          )}
+          <QueueHistogram waitDist={results?.waitDist ?? liveWaitDist} />
+        </div>
       )}
 
       {view === "entities" && (
