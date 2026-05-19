@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildRunRecord } from '../../src/db/runRecord.js';
+import { buildRunRecord, compareResults } from '../../src/db/runRecord.js';
 
 describe('buildRunRecord', () => {
   it('model_snapshot is a deep clone independent of the live model', () => {
@@ -39,5 +39,23 @@ describe('buildRunRecord', () => {
     const record = buildRunRecord(model, {}, {}, 0);
     model.queues[0].capacity = 999;
     expect(record.model_snapshot.queues[0].capacity).toBe(5);
+  });
+});
+
+describe('compareResults', () => {
+  const summary = { served: 10, avgWait: 5.0, avgSvc: 2.0, avgSojourn: 7.0, reneged: 0 };
+
+  it('returns true for two identical summaries', () => {
+    expect(compareResults({ summary }, { summary })).toBe(true);
+  });
+
+  it('returns true when summaries differ by less than 0.0001', () => {
+    const slightly = { ...summary, avgWait: 5.00009 };
+    expect(compareResults({ summary: slightly }, { summary })).toBe(true);
+  });
+
+  it('returns false when summaries differ by 0.01 or more', () => {
+    const different = { ...summary, avgWait: 5.01 };
+    expect(compareResults({ summary: different }, { summary })).toBe(false);
   });
 });

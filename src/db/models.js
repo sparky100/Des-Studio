@@ -465,6 +465,31 @@ export async function unarchiveRun(runId, userId) {
   return { ok: true };
 }
 
+export async function getRun(runId) {
+  const { data, error } = await supabase
+    .from('simulation_runs')
+    .select('id, results_json, max_simulation_time, warmup_period, replications, seed, ran_at')
+    .eq('id', runId)
+    .single();
+  if (error) throw error;
+  const rj = data.results_json || {};
+  return {
+    id:             data.id,
+    model_snapshot: rj._model_snapshot  ?? null,
+    base_seed:      rj._base_seed       ?? data.seed ?? null,
+    engine_version: rj._engine_version  ?? null,
+    experiment_config: {
+      maxSimTime:           data.max_simulation_time ?? 500,
+      warmupPeriod:         data.warmup_period       ?? 0,
+      replications:         data.replications        ?? 1,
+      seed:                 rj._base_seed ?? data.seed ?? null,
+      terminationMode:      'time',
+      terminationCondition: null,
+    },
+    summary: rj.summary ?? null,
+  };
+}
+
 export async function deleteSimulationRun(runId, userId) {
   const { error } = await supabase
     .from("simulation_runs")

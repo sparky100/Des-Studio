@@ -11,7 +11,7 @@ import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
 import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment } from "../../db/models.js";
-import { buildRunRecord } from "../../db/runRecord.js";
+import { buildRunRecord, updateRunNarrative } from "../../db/runRecord.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
@@ -57,6 +57,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [aggregateStats, setAggregateStats] = useState({});
   const [seed, setSeed] = useState(() => Math.floor(mulberry32(Date.now())() * 1e9));
   const [resolvedSeed, setResolvedSeed] = useState(null);
+  const [loadedRunSnapshot, setLoadedRunSnapshot] = useState(null);
   const [warmupPeriod, setWarmupPeriod] = useState(() => numberDefault(experimentDefaults.warmupPeriod, 0));
   const [warmupDetection, setWarmupDetection] = useState(null);
   const [maxSimTime, setMaxSimTime] = useState(() => numberDefault(experimentDefaults.maxSimTime, 500));
@@ -199,6 +200,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setExecuteSection("run");
     runSeedRef.current = seed;
     setResolvedSeed(seed);
+    setLoadedRunSnapshot(null);
     engineRef.current = buildEngine(
       model,
       seed,
@@ -336,6 +338,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
 
     const runSeed = seed;
     setResolvedSeed(runSeed);
+    setLoadedRunSnapshot(null);
     const maxTimeForRun = terminationMode === 'time' ? maxSimTime : null;
     const stopConditionForRun = terminationMode === 'condition' ? terminationCondition : null;
 
@@ -636,6 +639,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       setBatchStatus("complete");
       setReplicationResults(resultsJson.replicationResults || []);
     }
+    setLoadedRunSnapshot(resultsJson._model_snapshot ?? null);
     setAiPanelOpen(true);
     onClearAnalyse?.();
   }, [analyseRun, modelId, onClearAnalyse, onResultsReady]);
@@ -644,6 +648,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const partialBatchStatus = batchStatus === "cancelled" || batchStatus === "error";
   const canExportResults = Boolean(results || (partialBatchStatus && replicationResults.length));
   const canOpenResultsView = Boolean(results || replicationResults.length > 0);
+  const isModelModified = useMemo(() =>
+    loadedRunSnapshot !== null &&
+    JSON.stringify(model) !== JSON.stringify(loadedRunSnapshot),
+  [model, loadedRunSnapshot]);
   const exportConfig = useMemo(() => ({
     modelId,
     seed: runSeedRef.current,
@@ -1877,6 +1885,20 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         </div>
       )}
 
+      {isModelModified && (
+        <div style={{
+          background: C.warmup,
+          border: `1px solid ${C.amber}44`,
+          borderRadius: 6,
+          color: C.amber,
+          fontFamily: FONT,
+          fontSize: 12,
+          padding: "10px 12px",
+        }}>
+          ⚠ Model has been modified since this run. Results shown are from the saved run record, not the current model. Run again for updated results.
+        </div>
+      )}
+
       {(batchStatus !== "idle" || replicationResults.length > 0) && (
         <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -2281,6 +2303,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           onSaveInsights={async (insights) => {
             if (!latestRunId) return;
             try { await saveAiInsights(latestRunId, insights); } catch {}
+            if (insights.summary) {
+              try { await updateRunNarrative(latestRunId, insights.summary, null); } catch {}
+            }
           }}
         />
       )}

@@ -1,5 +1,12 @@
 import { supabase } from './supabase.js';
 
+export function compareResults(newResult, storedResult) {
+  const fields = ['served', 'avgWait', 'avgSvc', 'avgSojourn', 'reneged'];
+  return fields.every(f =>
+    Math.abs((newResult.summary[f] || 0) - (storedResult.summary[f] || 0)) < 0.0001
+  );
+}
+
 export const buildRunRecord = (model, results, experimentConfig, resolvedSeed) => {
   // Deep clone at this exact moment — snapshot must never reference the live model.
   // Any subsequent edit to the model must NOT affect this snapshot.
