@@ -10,7 +10,7 @@ import { buildEngine } from "../../engine/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment } from "../../db/models.js";
+import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun } from "../../db/models.js";
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
 import { callLLMOnce } from "../../llm/apiClient.js";
 import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
@@ -789,11 +789,18 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     try {
       const meta = assembleRunMeta(latestRunId);
       const modelImageDataUrl = await getModelImageDataUrl().catch(() => null);
-      const html = await generateReport(model, results, exportConfig, meta, modelImageDataUrl);
+      let reportModel = model;
+      if (latestRunId) {
+        try {
+          const run = await getRun(latestRunId);
+          if (run?.model_snapshot) reportModel = run.model_snapshot;
+        } catch {}
+      }
+      const html = await generateReport(reportModel, results, exportConfig, meta, modelImageDataUrl);
       const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const safeName = `${(model.name || 'Model').replace(/[/\\:*?"<>|]/g, '-')} — ${meta.runLabel.replace(/[/\\:*?"<>|]/g, '-')} — Report.html`;
+      const safeName = `${(reportModel.name || 'Model').replace(/[/\\:*?"<>|]/g, '-')} — ${meta.runLabel.replace(/[/\\:*?"<>|]/g, '-')} — Report.html`;
       a.href = url;
       a.download = safeName;
       a.click();
