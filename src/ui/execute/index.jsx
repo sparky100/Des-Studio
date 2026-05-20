@@ -11,6 +11,9 @@ import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
 import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment } from "../../db/models.js";
+import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
+import { callLLMOnce } from "../../llm/apiClient.js";
+import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
@@ -55,6 +58,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const [replicationResults, setReplicationResults] = useState([]);
   const [aggregateStats, setAggregateStats] = useState({});
   const [seed, setSeed] = useState(() => Math.floor(mulberry32(Date.now())() * 1e9));
+  const [resolvedSeed, setResolvedSeed] = useState(null);
+  const [loadedRunSnapshot, setLoadedRunSnapshot] = useState(null);
   const [warmupPeriod, setWarmupPeriod] = useState(() => numberDefault(experimentDefaults.warmupPeriod, 0));
   const [warmupDetection, setWarmupDetection] = useState(null);
   const [maxSimTime, setMaxSimTime] = useState(() => numberDefault(experimentDefaults.maxSimTime, 500));
@@ -196,6 +201,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     if (hasErrors) return;
     setExecuteSection("run");
     runSeedRef.current = seed;
+    setResolvedSeed(seed);
+    setLoadedRunSnapshot(null);
     engineRef.current = buildEngine(
       model,
       seed,
@@ -268,11 +275,22 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       if (modelId) {
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
-        const config = { seed: runSeedRef.current, runLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null };
+        const stepSeed = runSeedRef.current;
+        const runRecord = buildRunRecord(model, fullResult, {
+          maxSimTime: terminationMode === 'time' ? maxSimTime : null,
+          warmupPeriod,
+          replications: 1,
+          terminationMode,
+          terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+        }, stepSeed);
+        const config = { seed: stepSeed, runLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null, runRecord };
         const save = userId ? saveSimulationRun(modelId, userId, fullResult, config) : saveLocalRun(modelId, fullResult, config);
         save
           .then((runId) => {
-            if (runId) setLatestRunId(runId);
+            if (runId) {
+              setLatestRunId(runId);
+              storeRunNarrative(runId, model, fullResult);
+            }
             setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
             onRunSaved?.();
@@ -283,7 +301,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           });
       }
     }
-  }, [userId, modelId, runLabel, warmupPeriod, maxSimTime, terminationMode, stopAuto, onRunSaved, onResultsReady]);
+  }, [userId, modelId, model, runLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved, onResultsReady]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -324,6 +342,8 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setExecuteSection("run");
 
     const runSeed = seed;
+    setResolvedSeed(runSeed);
+    setLoadedRunSnapshot(null);
     const maxTimeForRun = terminationMode === 'time' ? maxSimTime : null;
     const stopConditionForRun = terminationMode === 'condition' ? terminationCondition : null;
 
@@ -384,6 +404,13 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
             setSaveStatus({ state: 'saving', message: 'Saving replication batch...' });
 
             try {
+              const batchRunRecord = buildRunRecord(model, batchResult, {
+                maxSimTime: maxTimeForRun,
+                warmupPeriod,
+                replications,
+                terminationMode,
+                terminationCondition: stopConditionForRun,
+              }, runSeed);
               const batchConfig = {
                 seed: runSeed, runLabel, replications, warmupPeriod, maxTime: maxTimeForRun, batchId,
                 aggregateStats: stats,
@@ -391,10 +418,14 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                   replicationIndex: payload.replicationIndex, seed: payload.seed,
                   summary: payload.result?.summary || {}, finalTime: payload.result?.finalTime,
                 })),
+                runRecord: batchRunRecord,
               };
               if (userId) {
                 const runId = await saveSimulationRun(modelId, userId, batchResult, batchConfig);
-                if (runId) setLatestRunId(runId);
+                if (runId) {
+                  setLatestRunId(runId);
+                  storeRunNarrative(runId, model, batchResult);
+                }
               } else {
                 saveLocalRun(modelId, batchResult, batchConfig);
               }
@@ -461,10 +492,20 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing simulation history to database..." }]);
 
     try {
-      const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun };
+      const singleRunRecord = buildRunRecord(model, result, {
+        maxSimTime: maxTimeForRun,
+        warmupPeriod,
+        replications: 1,
+        terminationMode,
+        terminationCondition: stopConditionForRun,
+      }, runSeed);
+      const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun, runRecord: singleRunRecord };
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
       const runId = await save;
-      if (runId) setLatestRunId(runId);
+      if (runId) {
+        setLatestRunId(runId);
+        storeRunNarrative(runId, model, result);
+      }
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
       onRunSaved?.();
@@ -481,6 +522,25 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setBatchStatus("cancelling");
     runnerRef.current.cancel();
   }, []);
+
+  // Store LLM-generated narrative and model description in the run record.
+  // Called after a run saves successfully — fire-and-forget, never blocks the UI.
+  const storeRunNarrative = useCallback(async (runId, model, results) => {
+    if (!runId || !userId) return;
+    try {
+      const [narrative, description] = await Promise.allSettled([
+        callLLMOnce(buildNarrativePrompt(model, { warmupPeriod, maxSimTime, replications, terminationMode }, results)).catch(() => null),
+        callLLMOnce(buildModelDescriptionPrompt(model)).catch(() => null),
+      ]);
+      const narrativeText = narrative.status === 'fulfilled' ? narrative.value : null;
+      const descriptionText = description.status === 'fulfilled' ? description.value : null;
+      if (narrativeText || descriptionText) {
+        await updateRunNarrative(runId, narrativeText, descriptionText);
+      }
+    } catch {
+      // Silently ignore — narrative is optional enhancement
+    }
+  }, [userId, warmupPeriod, maxSimTime, replications, terminationMode]);
 
   const toggleAuto = () => {
     if (autoRunning) {
@@ -609,6 +669,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       setBatchStatus("complete");
       setReplicationResults(resultsJson.replicationResults || []);
     }
+    setLoadedRunSnapshot(resultsJson._model_snapshot ?? null);
     setAiPanelOpen(true);
     onClearAnalyse?.();
   }, [analyseRun, modelId, onClearAnalyse, onResultsReady]);
@@ -617,6 +678,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
   const partialBatchStatus = batchStatus === "cancelled" || batchStatus === "error";
   const canExportResults = Boolean(results || (partialBatchStatus && replicationResults.length));
   const canOpenResultsView = Boolean(results || replicationResults.length > 0);
+  const isModelModified = useMemo(() =>
+    loadedRunSnapshot !== null &&
+    JSON.stringify(model) !== JSON.stringify(loadedRunSnapshot),
+  [model, loadedRunSnapshot]);
   const exportConfig = useMemo(() => ({
     modelId,
     seed: runSeedRef.current,
@@ -703,13 +768,16 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
 
   const assembleRunMeta = (runId) => {
     const rec = savedRunHistory.find(r => r.id === runId);
+    const rj = rec?.results_json || {};
     return {
       runId: rec?.id || runId || 'unknown',
       runLabel: rec?.run_label || runLabel || `${model.name || 'Model'} — ${new Date().toLocaleDateString()}`,
-      engineVersion: rec?.engine_version || '1.0',
-      seed: rec?.seed ?? seed ?? 'unknown',
+      engineVersion: rec?.engine_version || rj._engine_version || '1.0',
+      seed: rec?.seed ?? rj._base_seed ?? seed ?? 'unknown',
       prnAlgorithm: 'mulberry32',
       runTimestamp: rec?.run_at || new Date().toISOString(),
+      narrativeText: rj.narrative_text ?? null,
+      modelDescriptionText: rj.model_description_text ?? null,
     };
   };
 
@@ -1857,6 +1925,26 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         </div>
       )}
 
+      {resolvedSeed !== null && (
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+          Seed: {resolvedSeed}
+        </div>
+      )}
+
+      {isModelModified && (
+        <div style={{
+          background: C.warmup,
+          border: `1px solid ${C.amber}44`,
+          borderRadius: 6,
+          color: C.amber,
+          fontFamily: FONT,
+          fontSize: 12,
+          padding: "10px 12px",
+        }}>
+          ⚠ Model has been modified since this run. Results shown are from the saved run record, not the current model. Run again for updated results.
+        </div>
+      )}
+
       {(batchStatus !== "idle" || replicationResults.length > 0) && (
         <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
@@ -2261,6 +2349,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           onSaveInsights={async (insights) => {
             if (!latestRunId) return;
             try { await saveAiInsights(latestRunId, insights); } catch {}
+            if (insights.summary) {
+              try { await updateRunNarrative(latestRunId, insights.summary, null); } catch {}
+            }
           }}
         />
       )}

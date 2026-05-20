@@ -352,6 +352,12 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
   if (runLabel) {
     resultsJson.runLabel = runLabel;
   }
+  if (config.runRecord) {
+    resultsJson._model_snapshot  = config.runRecord.model_snapshot;
+    resultsJson._engine_version  = config.runRecord.engine_version;
+    resultsJson._prng_algorithm  = config.runRecord.prng_algorithm;
+    resultsJson._base_seed       = config.runRecord.base_seed;
+  }
 
   const { data, error } = await supabase.from("simulation_runs").insert({
     model_id:            modelId,
@@ -459,6 +465,31 @@ export async function unarchiveRun(runId, userId) {
   return { ok: true };
 }
 
+export async function getRun(runId) {
+  const { data, error } = await supabase
+    .from('simulation_runs')
+    .select('id, results_json, max_simulation_time, warmup_period, replications, seed, ran_at')
+    .eq('id', runId)
+    .single();
+  if (error) throw error;
+  const rj = data.results_json || {};
+  return {
+    id:             data.id,
+    model_snapshot: rj._model_snapshot  ?? null,
+    base_seed:      rj._base_seed       ?? data.seed ?? null,
+    engine_version: rj._engine_version  ?? null,
+    experiment_config: {
+      maxSimTime:           data.max_simulation_time ?? 500,
+      warmupPeriod:         data.warmup_period       ?? 0,
+      replications:         data.replications        ?? 1,
+      seed:                 rj._base_seed ?? data.seed ?? null,
+      terminationMode:      'time',
+      terminationCondition: null,
+    },
+    summary: rj.summary ?? null,
+  };
+}
+
 export async function deleteSimulationRun(runId, userId) {
   const { error } = await supabase
     .from("simulation_runs")
@@ -559,7 +590,7 @@ export async function getShareLink(token) {
 
   const { data: run, error: runError } = await supabase
     .from("simulation_runs")
-    .select("id, model_id, ran_at, replications, seed, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, max_simulation_time, warmup_period, results_json, ai_insights")
+    .select("id, model_id, ran_at, replications, seed, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, max_simulation_time, warmup_period, results_json, ai_insights, narrative_text, model_description_text")
     .eq("id", link.run_id)
     .single();
   if (runError) throw runError;
@@ -597,6 +628,8 @@ export async function getShareLink(token) {
       warmupPeriod: run.warmup_period,
       resultsJson: run.results_json,
       aiInsights: run.ai_insights || null,
+      narrativeText: run.narrative_text || null,
+      modelDescriptionText: run.model_description_text || null,
     },
     model: {
       name: model.name,

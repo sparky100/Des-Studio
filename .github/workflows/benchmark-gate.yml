@@ -1,0 +1,39 @@
+name: Benchmark Gate
+
+on:
+  push:
+    paths:
+      - 'src/engine/**'
+      - 'tests/engine/benchmarks/**'
+  pull_request:
+    paths:
+      - 'src/engine/**'
+
+jobs:
+  benchmarks:
+    name: Analytical correctness + performance benchmarks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run benchmark suite
+        run: npm run bench
+
+      - name: Verify no Math.random in engine
+        run: |
+          count=$(grep -rn "Math.random" src/engine/ | wc -l)
+          echo "Math.random occurrences in src/engine/: $count"
+          if [ "$count" -gt "0" ]; then
+            echo "FAIL: Math.random found in engine"
+            grep -rn "Math.random" src/engine/
+            exit 1
+          fi
+          echo "PASS: No Math.random in engine"

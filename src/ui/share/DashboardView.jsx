@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getShareLink } from "../../db/models.js";
 import { C, FONT, GOOGLE_FONT_URL } from "../shared/tokens.js";
+import { generateReport } from '../../reports/index.js';
 
 const CHART_W = 360, CHART_H = 80;
 const HIST_W = 360, HIST_H = 60, HIST_BINS = 12;
@@ -211,6 +212,7 @@ export default function DashboardView({ token, onBack }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [reportGenerating, setReportGenerating] = useState(false);
 
   useEffect(() => {
     if (!token) { setError("No share token provided."); setLoading(false); return; }
@@ -220,6 +222,41 @@ export default function DashboardView({ token, onBack }) {
       .then(result => { setData(result); setLoading(false); })
       .catch(err => { setError(err.message || "Failed to load shared results."); setLoading(false); });
   }, [token]);
+
+  const handleExportReport = async () => {
+    if (!data || reportGenerating) return;
+    setReportGenerating(true);
+    try {
+      const { share, run, model } = data;
+      const resultsJson = run.resultsJson || {};
+      const meta = {
+        runId: run.id || 'unknown',
+        runLabel: share.title || model.name || 'Shared Run',
+        engineVersion: '1.0',
+        seed: run.seed ?? 'unknown',
+        prnAlgorithm: 'mulberry32',
+        runTimestamp: run.ranAt || new Date().toISOString(),
+        narrativeText: run.aiInsights?.summary ?? null,
+        modelDescriptionText: model.description ?? null,
+      };
+      const html = await generateReport(model, resultsJson, {
+        maxSimTime: run.maxSimulationTime,
+        warmupPeriod: run.warmupPeriod || 0,
+        replications: run.replications || 1,
+      }, meta, null);
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(model.name || 'Model').replace(/[/\\:*?"<>|]/g, '-')} — Report.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Silently ignore — report generation is optional
+    } finally {
+      setReportGenerating(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -272,12 +309,21 @@ export default function DashboardView({ token, onBack }) {
         <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>DES STUDIO</div>
         <div style={{ fontSize: 11, color: C.muted, borderLeft: `1px solid ${C.border}`, paddingLeft: 16 }}>Shared Results Dashboard</div>
         <div style={{ flex: 1 }} />
+        <button type="button" onClick={handleExportReport} disabled={reportGenerating}
+          style={{ background: "#ffffff08", border: `1px solid ${C.border}`, borderRadius: 5, color: C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px", cursor: reportGenerating ? "wait" : "pointer", fontWeight: 600 }}>
+          {reportGenerating ? 'Generating...' : '📄 Export Report'}
+        </button>
         {onBack && (
           <button type="button" onClick={onBack}
             style={{ background: "#ffffff08", border: `1px solid ${C.border}`, borderRadius: 5, color: C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
             ← Back
           </button>
         )}
+      </div>
+
+      {/* Provenance Strip */}
+      <div style={{ background: '#FFF8E1', borderBottom: `1px solid ${C.border}`, padding: "8px 24px", fontSize: 10, fontFamily: 'monospace', color: '#5D4037' }}>
+        Run ID: {run.id} · Seed: {run.seed} · PRNG: mulberry32 · {new Date(run.ranAt).toLocaleString()}
       </div>
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "28px 24px", display: "flex", flexDirection: "column", gap: 24 }}>
@@ -303,6 +349,14 @@ export default function DashboardView({ token, onBack }) {
               <span style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT }}>● {queueDefs.length} queues</span>
               <span style={{ fontSize: 10, color: C.server, fontFamily: FONT }}>● {serverTypes.length} server types</span>
             </div>
+          </div>
+        )}
+
+        {/* Narrative — pre-stored, no LLM call */}
+        {hasWidget("summary") && run.narrativeText && (
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
+            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>WHAT THIS ANALYSIS SHOWS</div>
+            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{run.narrativeText}</div>
           </div>
         )}
 

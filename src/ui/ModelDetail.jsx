@@ -1033,7 +1033,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             historyLoading={historyLoading} setHistoryLoading={setHistoryLoading}
             historyError={historyError} setHistoryError={setHistoryError}
             historyShowArchived={historyShowArchived} setHistoryShowArchived={setHistoryShowArchived}
-            shareLinksMap={shareLinksMap}
+            shareLinksMap={shareLinksMap} setShareLinksMap={setShareLinksMap}
             modelId={modelId} userId={overrides.userId} model={model} baseUrl={baseUrl}
             onAnalyseRun={handleAnalyseRun}
             onViewResults={row=>{setSelectedResultsRunId(row.id);setLatestResults(row.results_json);setTab("results");}}
