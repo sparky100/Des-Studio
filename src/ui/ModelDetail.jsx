@@ -415,6 +415,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const { width: viewportWidth, isMobile: _vpMobile, isCompact: _vpCompact } = useViewport();
   const [showMoreTabs,setShowMoreTabs]=useState(false);
   const [currentVersion,setCurrentVersion]=useState(null);
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname.replace(/\/+$/, "") : "";
+  const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
+  const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
 
   useEffect(() => {
     let cancelled = false;
@@ -434,9 +437,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   }, [modelId, isOwner]);
 
   const handleAnalyseRun=useCallback((row)=>{setAnalyseRun(row);setTab("execute");},[]);
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname.replace(/\/+$/, "") : "";
-  const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
-  const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
 
   useEffect(() => {
     if (modelData?.stats && modelData.stats.runs !== model?.stats?.runs) {

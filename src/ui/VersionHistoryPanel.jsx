@@ -58,7 +58,7 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersion
     setDeleting(version.id);
     try {
       await deleteVersion(model.id, version.id, userId);
-      const remaining = prev.filter(v => v.id !== version.id);
+      const remaining = versions.filter(v => v.id !== version.id);
       setVersions(remaining);
       onToast?.("success", `Version v${version.version} deleted`);
       if (remaining.length > 0) {
