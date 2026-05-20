@@ -134,7 +134,7 @@ export function ModelHistoryTab({
         false
       );
       const newResult = engine.runAll();
-      const storedResult = { summary: run.summary || {} };
+      const storedResult = { summary: run.results_json?.summary || {} };
       const currentVersion = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ENGINE_VERSION) || '55a';
       if (compareResults(newResult, storedResult)) {
         setReproduceState(prev => ({ ...prev, [rowId]: {
