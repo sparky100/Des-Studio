@@ -113,6 +113,7 @@ export function ModelHistoryTab({
   const [historyEditLabelVal, setHistoryEditLabelVal] = useState("");
   const [reproduceState, setReproduceState] = useState({});
   const [moreMenuId, setMoreMenuId] = useState(null);
+  const [moreMenuPos, setMoreMenuPos] = useState({ top: 0, right: 0 });
 
   const handleReproduce = async (rowId) => {
     setReproduceState(prev => ({ ...prev, [rowId]: { status: 'running', message: '' } }));
@@ -358,7 +359,22 @@ export function ModelHistoryTab({
                       </td>
                       <td style={{ padding: "6px 12px", color: C.served, fontWeight: 700 }}>{row.total_served || 0}</td>
                       <td style={{ padding: "6px 12px", color: row.total_reneged > 0 ? C.reneged : C.muted }}>{row.total_reneged || 0}</td>
-                      <td style={{ padding: "6px 12px", color: C.amber }}>{row.avg_wait_time != null ? row.avg_wait_time.toFixed(2) : "—"}t</td>
+                      <td style={{ padding: "6px 12px", color: C.amber }}>
+                        {row.avg_wait_time != null ? row.avg_wait_time.toFixed(2) : "—"}t
+                        {(() => {
+                          const ci = row.results_json?.aggregateStats?.["summary.avgWait"];
+                          if (!ci || ci.halfWidth == null || ci.mean == null || !Number.isFinite(ci.mean) || ci.mean === 0) return null;
+                          const relHw = (ci.halfWidth / Math.abs(ci.mean)) * 100;
+                          const conf = Math.max(0, Math.min(100, 100 - relHw));
+                          const color = relHw < 10 ? C.green : relHw < 25 ? C.amber : C.red;
+                          return (
+                            <span
+                              title={`${conf.toFixed(0)}% confidence (±${ci.halfWidth.toFixed(2)}, n=${ci.n})`}
+                              style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color, background: `${color}18`, border: `1px solid ${color}44`, borderRadius: 999, padding: "1px 5px" }}
+                            >{conf.toFixed(0)}%</span>
+                          );
+                        })()}
+                      </td>
                       <td style={{ padding: "6px 12px" }}>
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
                           {(row.tags || []).map(tag => (
@@ -404,15 +420,20 @@ export function ModelHistoryTab({
                           >Analyse</button>
                           <div style={{ position: "relative" }}>
                             <button
-                              onClick={(e) => { e.stopPropagation(); setMoreMenuId(moreMenuId === row.id ? null : row.id); }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setMoreMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                                setMoreMenuId(moreMenuId === row.id ? null : row.id);
+                              }}
                               aria-label="More actions"
                               style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border}`, borderRadius: 999, padding: "4px 8px", fontSize: 11, fontFamily: FONT, cursor: "pointer", lineHeight: 1 }}
                               title="More actions"
                             >⋯</button>
                             {moreMenuId === row.id && (
                               <>
-                                <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setMoreMenuId(null)} />
-                                <div style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 180, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 100 }}>
+                                <div style={{ position: "fixed", inset: 0, zIndex: 999 }} onClick={() => setMoreMenuId(null)} />
+                                <div style={{ position: "fixed", top: moreMenuPos.top, right: moreMenuPos.right, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 180, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 1000 }}>
                                   <button
                                     onClick={() => { handleReproduce(row.id); }}
                                     disabled={reproduceState[row.id]?.status === 'running'}
