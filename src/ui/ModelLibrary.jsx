@@ -4,7 +4,7 @@ import { C, FONT, SHADOW, RADIUS, Z } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, Empty } from "./shared/components.jsx";
 import { TEMPLATES } from "../engine/templates.js";
 
-const ModelCard=({model,onOpen,onDelete,profiles=[],currentUserId})=>{
+export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId})=>{
   const owner=(profiles||[]).find(p=>p.id===model.owner_id)||null;
   const fmtDate=iso=>{ try{ return new Date(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){return '';} };
   const hasRenege=(model.bEvents||[]).some(ev=>(ev.schedules||[]).some(s=>s.isRenege));
@@ -25,6 +25,7 @@ const ModelCard=({model,onOpen,onDelete,profiles=[],currentUserId})=>{
         <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap"}}>
           <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
           {hasRenege&&<Tag label="reneging" color={C.reneged}/>}
+          {isOwner&&onCopy&&<Btn small variant="ghost" onClick={e=>{e.stopPropagation();onCopy(model);}}>Copy</Btn>}
           {isOwner&&onDelete&&<Btn small variant="danger" onClick={e=>{e.stopPropagation();onDelete(model);}}>Delete</Btn>}
         </div>
       </div>
@@ -235,7 +236,7 @@ export function ModelLibrary({
   myModels, pubModels, communityModels,
   profiles, currentUserId,
   importStatus, runStatsError, actionError, error,
-  onOpenModel, onDeleteModel, onStartTemplate,
+  onOpenModel, onDeleteModel, onCopyModel, onStartTemplate,
   onCreateNewModel,
   onImportFile,
   onPasteJsonImport,
@@ -351,17 +352,17 @@ export function ModelLibrary({
       {tab === "my" && (myModels.length === 0
         ? <FirstRunPanel onCreateBlank={() => setShowNew(true)} onBrowseTemplates={() => setTab("templates")} />
         : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
-          {myModels.map(m => <ModelCard key={m.id} model={m} onOpen={() => onOpenModel(m)} onDelete={onDeleteModel} currentUserId={currentUserId} profiles={profiles} />)}
+          {myModels.map(m => <ModelCard key={m.id} model={m} onOpen={() => onOpenModel(m)} onDelete={onDeleteModel} onCopy={onCopyModel} currentUserId={currentUserId} profiles={profiles} />)}
         </div>)}
       {tab === "public" && (pubModels.length === 0
         ? <Empty icon="🌐" msg="No public models available." />
         : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
-          {pubModels.map(m => <ModelCard key={m.id} model={m} onOpen={() => onOpenModel(m)} onDelete={onDeleteModel} currentUserId={currentUserId} profiles={profiles} />)}
+          {pubModels.map(m => <ModelCard key={m.id} model={m} onOpen={() => onOpenModel(m)} onDelete={onDeleteModel} onCopy={onCopyModel} currentUserId={currentUserId} profiles={profiles} />)}
         </div>)}
       {tab === "community" && (communityModels.length === 0
         ? <Empty icon="🌐" msg="No community models shared yet." />
         : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
-          {communityModels.map(m => <ModelCard key={m.id} model={m} onOpen={() => onOpenModel(m)} onDelete={onDeleteModel} currentUserId={currentUserId} profiles={profiles} />)}
+          {communityModels.map(m => <ModelCard key={m.id} model={m} onOpen={() => onOpenModel(m)} onDelete={onDeleteModel} onCopy={onCopyModel} currentUserId={currentUserId} profiles={profiles} />)}
         </div>)}
 
       {showNew && (

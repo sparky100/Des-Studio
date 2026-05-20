@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { ModelCard } from '../../src/ui/ModelDetail.jsx';
+import { ModelCard } from '../../src/ui/ModelLibrary.jsx';
 
 const baseModel = {
   id: 'model-1',

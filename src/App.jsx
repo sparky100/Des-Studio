@@ -335,6 +335,20 @@ export default function App(){
     setModels(current=>current.filter(m=>m.id!==model.id));
   },[uid]);
 
+  const handleCopyModel = useCallback(async (model) => {
+    if(!model||!uid)return;
+    setLoading(true);setActionError('');
+    try{
+      const copy=await forkModel(model.id,uid,`Copy of ${model.name}`);
+      await loadData();
+      setOpenId(copy.id);
+    }catch(e){
+      setActionError(e.message);
+    }finally{
+      setLoading(false);
+    }
+  },[uid,loadData]);
+
   if(loading && !session)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:C.muted,fontFamily:FONT,fontSize:13}}>
       <style>{`@import url('${GOOGLE_FONT_URL}');`}</style>
@@ -471,6 +485,7 @@ export default function App(){
         error={error}
         onOpenModel={handleOpenModel}
         onDeleteModel={handleDeleteModel}
+        onCopyModel={handleCopyModel}
         onStartTemplate={handleStartTemplate}
         onCreateNewModel={async (name, desc, modelData) => {
           if (modelData && typeof modelData === 'object') {
