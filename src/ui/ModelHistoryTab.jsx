@@ -290,7 +290,7 @@ export function ModelHistoryTab({
                       }}
                     />
                   </th>
-                  {["Date / Time", "Label", "Runs", "Served", "Reneged", "Avg Wait", "Tags", "Actions"].map(h => (
+                  {["Date / Time", "Label", "Runs", "Avg Served", "Reneged", "Avg Wait", "Tags", "Actions"].map(h => (
                     <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 12px", color: C.muted, borderBottom: `1px solid ${C.border}`, fontSize: 11, letterSpacing: 1, fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -357,7 +357,19 @@ export function ModelHistoryTab({
                           {row.replications ?? 1}
                         </span>
                       </td>
-                      <td style={{ padding: "6px 12px", color: C.served, fontWeight: 700 }}>{row.total_served || 0}</td>
+                      <td style={{ padding: "6px 12px", color: C.served, fontWeight: 700 }}>
+                        {(() => {
+                          const total = row.total_served || 0;
+                          const reps = row.replications || 1;
+                          const avg = reps > 1 ? (total / reps) : total;
+                          const label = reps > 1 ? `${avg.toFixed(1)} avg` : total;
+                          return (
+                            <span title={reps > 1 ? `${total} total across ${reps} replications` : undefined}>
+                              {label}
+                            </span>
+                          );
+                        })()}
+                      </td>
                       <td style={{ padding: "6px 12px", color: row.total_reneged > 0 ? C.reneged : C.muted }}>{row.total_reneged || 0}</td>
                       <td style={{ padding: "6px 12px", color: C.amber }}>
                         {row.avg_wait_time != null ? row.avg_wait_time.toFixed(2) : "—"}t
