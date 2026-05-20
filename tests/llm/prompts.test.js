@@ -4,11 +4,14 @@ import {
   buildCiResults,
   buildComparisonPrompt,
   buildGoalGaps,
+  buildModelDescriptionPrompt,
   buildNarrativePrompt,
+  buildReportRecommendationsPrompt,
   buildResultsQueryPrompt,
   buildSensitivityPrompt,
   buildSuggestionPrompt,
   parseSuggestionResponse,
+  parseReportRecommendations,
   promptWordEstimate,
 } from "../../src/llm/prompts.js";
 
@@ -558,6 +561,124 @@ describe("Sprint 46 — AI apply & verify", () => {
     it("system prompt contains 'binding constraint'", () => {
       const prompt = buildSuggestionPrompt(modelWithGoals, {}, {});
       expect(prompt.messages[0].content).toMatch(/binding constraint/i);
+    });
+  });
+
+  describe("buildModelDescriptionPrompt", () => {
+    it("returns kind 'model-description' with system and user messages", () => {
+      const prompt = buildModelDescriptionPrompt(model);
+      expect(prompt.kind).toBe("model-description");
+      expect(prompt.messages).toHaveLength(2);
+      expect(prompt.messages[0].role).toBe("system");
+      expect(prompt.messages[1].role).toBe("user");
+    });
+
+    it("system prompt instructs plain English for non-technical audience", () => {
+      const prompt = buildModelDescriptionPrompt(model);
+      expect(prompt.messages[0].content).toMatch(/non-technical/i);
+      expect(prompt.messages[0].content).toMatch(/120.{0,5}180 words/i);
+    });
+
+    it("embeds model name, queues, and entity types in the user payload", () => {
+      const prompt = buildModelDescriptionPrompt(model);
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.name).toBe("Clinic");
+      expect(payload.queues[0].name).toBe("Main queue");
+      expect(payload.entityTypes[0].name).toBe("Nurse");
+    });
+
+    it("detects priority discipline feature flag", () => {
+      const priorityModel = {
+        ...model,
+        queues: [{ id: "q1", name: "Priority queue", discipline: "PRIORITY" }],
+      };
+      const prompt = buildModelDescriptionPrompt(priorityModel);
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.features.hasPriority).toBe(true);
+    });
+
+    it("handles empty model without throwing", () => {
+      expect(() => buildModelDescriptionPrompt({})).not.toThrow();
+    });
+  });
+
+  describe("buildReportRecommendationsPrompt", () => {
+    it("returns kind 'report-recommendations' with two messages", () => {
+      const prompt = buildReportRecommendationsPrompt(model, {
+        summary: { avgWait: 9, avgSvc: 3, served: 50, reneged: 2 },
+      });
+      expect(prompt.kind).toBe("report-recommendations");
+      expect(prompt.messages).toHaveLength(2);
+    });
+
+    it("system prompt requests exactly 3 recommendations as JSON array", () => {
+      const prompt = buildReportRecommendationsPrompt(model, {});
+      expect(prompt.messages[0].content).toMatch(/exactly 3 recommendations/i);
+      expect(prompt.messages[0].content).toMatch(/json/i);
+    });
+
+    it("includes queue and resource KPIs in payload", () => {
+      const prompt = buildReportRecommendationsPrompt(
+        { ...model, queues: [{ id: "q1", name: "Main queue", discipline: "FIFO" }] },
+        {
+          summary: { avgWait: 9, avgSvc: 3, served: 50, reneged: 2 },
+          waitDist: { "Main queue": { n: 50, mean: 9, p50: 7, p90: 14, p95: 16, p99: 20 } },
+        }
+      );
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.kpis.avgWait).toBe(9);
+      expect(payload.queues[0].name).toBe("Main queue");
+    });
+
+    it("includes goalGaps when model has goals and aggregateStats provided", () => {
+      const modelWithGoals = {
+        ...model,
+        goals: [{ metric: "avgWait", operator: "<", target: 5, label: "Avg wait < 5" }],
+      };
+      const prompt = buildReportRecommendationsPrompt(modelWithGoals, {
+        aggregateStats: { avgWait: { mean: 9, n: 3, lower: 7, upper: 11 } },
+      });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.goalGaps).toBeDefined();
+    });
+
+    it("handles empty results without throwing", () => {
+      expect(() => buildReportRecommendationsPrompt(model, {})).not.toThrow();
+    });
+  });
+
+  describe("parseReportRecommendations", () => {
+    const validJson = JSON.stringify([
+      { priority: 1, headline: "Add more servers", finding: "Utilisation is 95%.", action: "Increase server count to 3.", expectedImpact: "Reduce wait by 50%.", confidence: "HIGH" },
+      { priority: 2, headline: "Reduce arrival rate", finding: "Peak hours overload.", action: "Stagger arrivals.", expectedImpact: "Reduce reneging by 20%.", confidence: "MEDIUM" },
+    ]);
+
+    it("parses fenced ```json block", () => {
+      const recs = parseReportRecommendations(`\`\`\`json\n${validJson}\n\`\`\``);
+      expect(recs).toHaveLength(2);
+      expect(recs[0].priority).toBe(1);
+      expect(recs[0].headline).toBe("Add more servers");
+      expect(recs[0].confidence).toBe("HIGH");
+    });
+
+    it("parses bare JSON array without fences", () => {
+      const recs = parseReportRecommendations(validJson);
+      expect(recs).toHaveLength(2);
+    });
+
+    it("returns empty array for malformed JSON", () => {
+      const recs = parseReportRecommendations("```json\n{broken\n```");
+      expect(recs).toEqual([]);
+    });
+
+    it("returns empty array for non-array JSON", () => {
+      const recs = parseReportRecommendations('{"not": "an array"}');
+      expect(recs).toEqual([]);
+    });
+
+    it("returns empty array for empty/null input", () => {
+      expect(parseReportRecommendations("")).toEqual([]);
+      expect(parseReportRecommendations(null)).toEqual([]);
     });
   });
 });

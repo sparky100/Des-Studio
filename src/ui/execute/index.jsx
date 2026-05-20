@@ -31,6 +31,8 @@ import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 import { ExperimentControls } from "./ExperimentControls.jsx";
 import { generateReport } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
+import { callLLMOnce } from '../../llm/apiClient.js';
+import { buildNarrativePrompt, buildModelDescriptionPrompt } from '../../llm/prompts.js';
 
 const numberDefault = (value, fallback) => {
   const n = Number(value);
@@ -294,6 +296,17 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
             setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
             onRunSaved?.();
+            if (runId && userId) {
+              const expConfig = { maxSimTime: terminationMode === 'time' ? maxSimTime : null, warmupPeriod, replications: 1 };
+              Promise.all([
+                callLLMOnce(buildNarrativePrompt(model, expConfig, fullResult)).catch(() => null),
+                callLLMOnce(buildModelDescriptionPrompt(model)).catch(() => null),
+              ]).then(([narrativeText, descText]) => {
+                if (narrativeText || descText) {
+                  updateRunNarrative(runId, narrativeText || null, descText || null).catch(() => {});
+                }
+              }).catch(() => {});
+            }
           })
           .catch(e => {
             setSaveStatus({ state: 'error', message: `✗ Save failed: ${e.message}` });
