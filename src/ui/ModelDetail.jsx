@@ -673,6 +673,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     {id:"results",label:"Results"},
     {id:"history",label:"Run History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
+    ...(isOwner?[{id:"versions",label:"Versions"}]:[]),
   ];
   const selectableTabs = TABS.filter(t => !t.disabled);
   const NAV_MODES=[
