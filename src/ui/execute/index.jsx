@@ -41,7 +41,7 @@ const intDefault = (value, fallback) => {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 };
 
-const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, autoRun = false, analyseRun = null, onClearAnalyse, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
+const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId, onRunSaved, onResultsReady, autoRun = false, analyseRun = null, onClearAnalyse, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
@@ -283,7 +283,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           terminationMode,
           terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
         }, stepSeed);
-        const config = { seed: stepSeed, runLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null, runRecord };
+        const config = { seed: stepSeed, runLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null, runRecord, versionId: currentVersionId || null };
         const save = userId ? saveSimulationRun(modelId, userId, fullResult, config) : saveLocalRun(modelId, fullResult, config);
         save
           .then((runId) => {
@@ -419,6 +419,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
                   summary: payload.result?.summary || {}, finalTime: payload.result?.finalTime,
                 })),
                 runRecord: batchRunRecord,
+                versionId: currentVersionId || null,
               };
               if (userId) {
                 const runId = await saveSimulationRun(modelId, userId, batchResult, batchConfig);
@@ -499,7 +500,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         terminationMode,
         terminationCondition: stopConditionForRun,
       }, runSeed);
-      const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun, runRecord: singleRunRecord };
+      const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun, runRecord: singleRunRecord, versionId: currentVersionId || null };
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
       const runId = await save;
       if (runId) {

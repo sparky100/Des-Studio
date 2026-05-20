@@ -415,9 +415,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const { width: viewportWidth, isMobile: _vpMobile, isCompact: _vpCompact } = useViewport();
   const [showMoreTabs,setShowMoreTabs]=useState(false);
   const [currentVersion,setCurrentVersion]=useState(null);
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname.replace(/\/+$/, "") : "";
-  const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
-  const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
+  const [currentVersionId,setCurrentVersionId]=useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -427,6 +425,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         const versions = await listVersions(modelId);
         if (!cancelled && versions.length > 0) {
           setCurrentVersion(versions[0].version);
+          setCurrentVersionId(versions[0].id);
         }
       } catch {
         // versions table may not exist if migration not applied
@@ -1020,6 +1019,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
               model={model}
               modelId={modelId}
               userId={overrides.userId}
+              currentVersion={currentVersion}
+              currentVersionId={currentVersionId}
               onRunSaved={handleRunSaved}
               onResultsReady={setLatestResults}
               autoRun={overrides.autoRun}
@@ -1129,7 +1130,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             userId={overrides.userId}
             isOwner={isOwner}
             onToast={toast}
-            onVersionChange={setCurrentVersion}
+            onVersionChange={(ver, verId) => { setCurrentVersion(ver); setCurrentVersionId(verId); }}
           />
         )}
         </ErrorBoundary>

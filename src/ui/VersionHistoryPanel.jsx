@@ -47,7 +47,7 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersion
       setVersions(prev => [v, ...prev]);
       setShowCreate(false);
       onToast?.("success", `Version v${next} created`);
-      onVersionChange?.(next);
+      onVersionChange?.(next, v.id);
     } catch (e) {
       onToast?.("error", `Failed to create version: ${e.message}`);
     }
@@ -62,9 +62,9 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersion
       setVersions(remaining);
       onToast?.("success", `Version v${version.version} deleted`);
       if (remaining.length > 0) {
-        onVersionChange?.(remaining[0].version);
+        onVersionChange?.(remaining[0].version, remaining[0].id);
       } else {
-        onVersionChange?.(null);
+        onVersionChange?.(null, null);
       }
     } catch (e) {
       onToast?.("error", `Failed to delete version: ${e.message}`);

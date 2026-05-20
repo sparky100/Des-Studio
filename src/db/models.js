@@ -412,7 +412,7 @@ export async function fetchRunHistory(modelId, filters = {}) {
   const { search, tags, archived = false } = filters;
   let query = supabase
     .from("simulation_runs")
-    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, seed, max_simulation_time, results_json, warmup_period, ai_insights, run_label, tags, archived")
+    .select("id, ran_at, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, renege_rate, duration_ms, replications, seed, max_simulation_time, results_json, warmup_period, ai_insights, run_label, tags, archived, version_id, model_versions(version, name)")
     .eq("model_id", modelId)
     .eq("archived", archived)
     .order("ran_at", { ascending: false })

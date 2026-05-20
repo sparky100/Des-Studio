@@ -290,7 +290,7 @@ export function ModelHistoryTab({
                       }}
                     />
                   </th>
-                  {["Date / Time", "Label", "Runs", "Avg Served", "Reneged", "Avg Wait", "Tags", "Actions"].map(h => (
+                  {["Date / Time", "Label", "Version", "Runs", "Avg Served", "Reneged", "Avg Wait", "Tags", "Actions"].map(h => (
                     <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 12px", color: C.muted, borderBottom: `1px solid ${C.border}`, fontSize: 11, letterSpacing: 1, fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -341,6 +341,15 @@ export function ModelHistoryTab({
                             style={{ color: row.run_label ? C.text : C.muted, cursor: "text", fontSize: 12, fontFamily: FONT }}
                             title="Click to edit label"
                           >{row.run_label || "—"}</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+                        {row.model_versions ? (
+                          <span style={{ fontSize: 10, fontWeight: 700, color: C.purple, background: `${C.purple}15`, border: `1px solid ${C.purple}33`, borderRadius: 999, padding: "2px 8px" }}>
+                            V{row.model_versions.version}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 10, color: C.muted }}>—</span>
                         )}
                       </td>
                       <td style={{ padding: "6px 12px", textAlign: "center" }}>
