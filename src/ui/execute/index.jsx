@@ -1012,6 +1012,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
 
       {executeSection === "saved-experiments" && (
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+        <div style={{ padding: "12px 16px 0", fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+          Save named run configurations — warm-up, replications, seed, and parameter overrides — so you can reload and re-run them later. Results are saved to run history when you run.
+        </div>
         {/* Header row */}
         <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${C.border}` }}>
           <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SAVED EXPERIMENTS</span>
@@ -1242,6 +1245,9 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         </div>
         {sweepOpen && (
           <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 12, borderTop: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+              Vary one or two parameters across a range to see how KPIs respond. Each point runs multiple replications for statistical confidence. Results are shown in charts and tables but are not saved to run history.
+            </div>
             {/* Mode toggle */}
             <div style={{ display: "flex", gap: 2, background: C.bg, borderRadius: 5, padding: 2, width: "fit-content" }}>
               <button
@@ -1833,7 +1839,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
             </div>
           )}
         </div>
-        <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)}>AI Insights</Btn>
+        <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)} disabled={executeSection === "experiments"} title={executeSection === "experiments" ? "AI Insights is not available for parametric sweeps" : undefined}>AI Insights</Btn>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
       </div>
 

@@ -30,10 +30,10 @@ export function ExperimentControls({
     <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
       <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: "1 1 420px", minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN SETUP</span>
-            {runLabel.trim() && <Tag label={runLabel.trim()} color={C.accent} />}
-          </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN SETUP</span>
+              {runLabel.trim() && <span style={{ fontSize: 11, color: C.text, fontFamily: FONT, fontWeight: 600 }}>{runLabel.trim()}</span>}
+            </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {runSetupSummary.map(item => (
               <div key={item} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 999, padding: "5px 10px", color: C.muted, fontFamily: FONT, fontSize: 11 }}>
@@ -60,7 +60,20 @@ export function ExperimentControls({
 
       {showRunSetup && (
         <div style={{ borderTop: `1px solid ${C.border}`, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 14, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN NAME</span>
+              <input
+                aria-label="Run label"
+                value={runLabel}
+                onChange={e => setRunLabel(e.target.value)}
+                placeholder="Baseline"
+                style={{ width: 160, background: "transparent", border: `1px solid ${C.border}`,
+                  borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12,
+                  padding: "6px 8px", outline: "none" }}
+              />
+            </div>
+
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>IGNORE EARLY RESULTS</span>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -169,19 +182,6 @@ export function ExperimentControls({
               <div style={helperStyle}>
                 Use the same value to repeat the same random pattern.
               </div>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN NAME</span>
-              <input
-                aria-label="Run label"
-                value={runLabel}
-                onChange={e => setRunLabel(e.target.value)}
-                placeholder="Baseline"
-                style={{ width: 160, background: "transparent", border: `1px solid ${C.border}`,
-                  borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12,
-                  padding: "6px 8px", outline: "none" }}
-              />
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

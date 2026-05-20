@@ -17,43 +17,82 @@ function ConfidenceBadge({ confidence }) {
   );
 }
 
+const KPI_ROWS = [
+  { key: "summary.avgWait", label: "Avg wait" },
+  { key: "summary.avgSvc", label: "Avg service" },
+  { key: "summary.avgSojourn", label: "Avg sojourn" },
+  { key: "summary.served", label: "Served" },
+  { key: "summary.reneged", label: "Reneged" },
+  { key: "summary.totalCost", label: "Total cost" },
+  { key: "summary.costPerServed", label: "Cost per served" },
+];
+
 function BeforeAfterTable({ goals, baselineStats, afterStats }) {
-  if (!goals || !goals.length) return null;
+  const fmt = v => v === null ? "—" : Number.isFinite(v) ? (Number.isInteger(v) ? v.toString() : v.toFixed(2)) : "—";
+  const delta = (before, after) => {
+    if (before === null || after === null) return null;
+    if (!Number.isFinite(before) || !Number.isFinite(after)) return null;
+    if (before === 0) return after === 0 ? "0%" : "∞";
+    const pct = ((after - before) / Math.abs(before)) * 100;
+    return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+  };
+
+  const rows = [];
+  for (const kpi of KPI_ROWS) {
+    const beforeStat = baselineStats?.[kpi.key];
+    const afterStat = afterStats?.[kpi.key];
+    const beforeVal = beforeStat?.mean ?? null;
+    const afterVal = afterStat?.mean ?? null;
+    if (beforeVal === null && afterVal === null) continue;
+    const d = delta(beforeVal, afterVal);
+    const dColor = d === null ? C.muted : d.startsWith("+") ? C.red : C.green;
+    rows.push(
+      <tr key={kpi.key}>
+        <td style={{ color: C.text, padding: "2px 4px" }}>{kpi.label}</td>
+        <td style={{ color: C.muted, padding: "2px 4px" }}>{fmt(beforeVal)}</td>
+        <td style={{ color: C.text, padding: "2px 4px" }}>{fmt(afterVal)}</td>
+        <td style={{ color: dColor, padding: "2px 4px", fontWeight: 600 }}>{d ?? "—"}</td>
+      </tr>
+    );
+  }
+
+  if (goals?.length) {
+    for (const g of goals) {
+      const beforeStat = baselineStats?.[g.metric];
+      const afterStat = afterStats?.[g.metric];
+      const beforeVal = beforeStat?.mean ?? null;
+      const afterVal = afterStat?.mean ?? null;
+      const met = afterVal !== null
+        ? (g.operator === "<"  ? afterVal < g.target
+         : g.operator === "<=" ? afterVal <= g.target
+         : g.operator === ">"  ? afterVal > g.target
+         : g.operator === ">=" ? afterVal >= g.target
+         : afterVal === g.target)
+        : null;
+      const metColor = met === true ? C.green : met === false ? C.red : C.muted;
+      rows.push(
+        <tr key={`goal-${g.metric}`} style={{ borderTop: `1px solid ${C.border}` }}>
+          <td style={{ color: C.text, padding: "2px 4px" }}>{g.label || g.metric}</td>
+          <td style={{ color: C.muted, padding: "2px 4px" }}>{fmt(beforeVal)}</td>
+          <td style={{ color: met === true ? C.green : met === false ? C.red : C.text, padding: "2px 4px" }}>{fmt(afterVal)}</td>
+          <td style={{ color: metColor, padding: "2px 4px", fontWeight: 700 }}>{met === true ? "MET" : met === false ? "MISSED" : "—"}</td>
+        </tr>
+      );
+    }
+  }
+
+  if (!rows.length) return null;
+
   return (
     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 10, fontFamily: FONT, marginTop: 8 }}>
       <thead>
         <tr>
-          {["Metric", "Before", "After", "Goal", "Met?"].map(h => (
+          {["Metric", "Before", "After", "Change"].map(h => (
             <th key={h} scope="col" style={{ textAlign: "left", color: C.muted, padding: "2px 4px", borderBottom: `1px solid ${C.border}` }}>{h}</th>
           ))}
         </tr>
       </thead>
-      <tbody>
-        {goals.map(g => {
-          const beforeStat = baselineStats?.[g.metric];
-          const afterStat = afterStats?.[g.metric];
-          const beforeVal = beforeStat?.mean ?? null;
-          const afterVal = afterStat?.mean ?? null;
-          const met = afterVal !== null
-            ? (g.operator === "<"  ? afterVal < g.target
-             : g.operator === "<=" ? afterVal <= g.target
-             : g.operator === ">"  ? afterVal > g.target
-             : g.operator === ">=" ? afterVal >= g.target
-             : afterVal === g.target)
-            : null;
-          const metColor = met === true ? C.green : met === false ? C.red : C.muted;
-          const fmt = v => v === null ? "—" : Number.isFinite(v) ? v.toFixed(2) : "—";
-          return (
-            <tr key={g.metric}>
-              <td style={{ color: C.text, padding: "2px 4px" }}>{g.label || g.metric}</td>
-              <td style={{ color: C.muted, padding: "2px 4px" }}>{fmt(beforeVal)}</td>
-              <td style={{ color: met === true ? C.green : met === false ? C.red : C.text, padding: "2px 4px" }}>{fmt(afterVal)}</td>
-              <td style={{ color: C.muted, padding: "2px 4px" }}>{g.operator} {g.target}</td>
-              <td style={{ color: metColor, padding: "2px 4px", fontWeight: 700 }}>{met === true ? "Yes" : met === false ? "No" : "—"}</td>
-            </tr>
-          );
-        })}
-      </tbody>
+      <tbody>{rows}</tbody>
     </table>
   );
 }
@@ -63,7 +102,7 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
   const canApply = !isManual && typeof onRunWithPatch === "function";
   const canSave = !isManual && typeof onApplyPatchedModel === "function" && verifyResult;
   const running = verifyStatus === "running";
-  const saving = verifyStatus === "saving";
+  const [runName, setRunName] = useState("");
 
   const changeLabel = isManual
     ? "Manual change required"

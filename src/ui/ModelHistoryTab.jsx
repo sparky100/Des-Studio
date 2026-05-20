@@ -263,7 +263,7 @@ export function ModelHistoryTab({
                       }}
                     />
                   </th>
-                  {["Date / Time", "Label", "Served", "Reneged", "Avg Wait", "Summary", "Reshare", "Actions"].map(h => (
+                  {["Date / Time", "Label", "Runs", "Served", "Reneged", "Avg Wait", "Summary", "Reshare", "Actions"].map(h => (
                     <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 12px", color: C.muted, borderBottom: `1px solid ${C.border}`, fontSize: 11, letterSpacing: 1, fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -315,6 +315,20 @@ export function ModelHistoryTab({
                             title="Click to edit label"
                           >{row.run_label || "—"}</span>
                         )}
+                      </td>
+                      <td style={{ padding: "6px 12px", textAlign: "center" }}>
+                        <span style={{
+                          fontSize: 10,
+                          fontFamily: FONT,
+                          fontWeight: 700,
+                          color: row.replications > 1 ? C.accent : C.muted,
+                          background: row.replications > 1 ? `${C.accent}15` : "transparent",
+                          border: `1px solid ${row.replications > 1 ? `${C.accent}33` : C.border}`,
+                          borderRadius: 999,
+                          padding: "2px 8px",
+                        }}>
+                          {row.replications ?? 1}
+                        </span>
                       </td>
                       <td style={{ padding: "6px 12px", color: C.served, fontWeight: 700 }}>{row.total_served || 0}</td>
                       <td style={{ padding: "6px 12px", color: row.total_reneged > 0 ? C.reneged : C.muted }}>{row.total_reneged || 0}</td>
