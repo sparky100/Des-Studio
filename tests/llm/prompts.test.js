@@ -75,7 +75,7 @@ describe("LLM prompt builders", () => {
     }));
   });
 
-  it("builds a merged explain-results prompt with three sections", () => {
+  it("builds a merged explain-results prompt with narrative and JSON suggestions", () => {
     const ciResults = buildCiResults({
       "summary.avgWait": { n: 5, mean: 8, lower: 6, upper: 10, stdDev: 2 },
     });
@@ -92,10 +92,13 @@ describe("LLM prompt builders", () => {
 
     expect(prompt.kind).toBe("explainResults");
     expect(prompt.messages[0].role).toBe("system");
-    const instruction = prompt.messages[1].content;
-    expect(instruction).toMatch(/What Happened/i);
-    expect(instruction).toMatch(/How Reliable/i);
-    expect(instruction).toMatch(/What to Change/i);
+    const payload = JSON.parse(prompt.messages[1].content);
+    expect(payload.instruction).toMatch(/What Happened/i);
+    expect(payload.instruction).toMatch(/How Reliable/i);
+    expect(payload.instruction).toMatch(/What to Change/i);
+    expect(payload.instruction).toMatch(/"suggestions"/i);
+    expect(payload.instruction).toMatch(/confidence/i);
+    expect(payload.instruction).toMatch(/PART 2/i);
     expect(promptWordEstimate(prompt)).toBeLessThan(2000);
   });
 
@@ -106,6 +109,7 @@ describe("LLM prompt builders", () => {
     const prompt = buildExplainResultsPrompt(model, { replications: 10 }, {}, ciResults);
     const instruction = prompt.messages[1].content;
     expect(instruction).toMatch(/confidence interval/i);
+    expect(instruction).toMatch(/How Reliable/i);
   });
 
   it("explain-results prompt notes low replication count when CI data is sparse", () => {

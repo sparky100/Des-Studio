@@ -536,9 +536,19 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     ? " In the 'How Reliable' section, identify which KPIs have wide confidence intervals and what this means for decision-making."
     : " Note that replication count is low, so confidence intervals may be wide and conclusions less certain.";
 
+  const highLoadWarning = payload.kpis.resources.some(r => r.utilisation != null && r.utilisation > 0.85)
+    ? " NOTE: One or more resources has utilisation above 85% — this is a common cause of queue instability. Factor this into your recommendations."
+    : "";
+
+  const goalInstruction = goalGaps?.length
+    ? ` The model has performance goals. For each suggestion, state which goals would be met, which remain missed, and which are unaffected.`
+    : "";
+
   const instruction = [
-    "Structure your response in three sections:",
+    "Structure your response in two parts:",
     "",
+    "PART 1 — NARRATIVE ANALYSIS (plain text, 200-300 words)",
+    "Write three sections:",
     "## What Happened",
     "Highlight the most significant findings. Flag queues where mean wait exceeds 2x service time as possible overload.",
     "Use per-queue percentiles to distinguish typical from extreme waits.",
@@ -548,16 +558,24 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "Discuss statistical uncertainty, confidence interval width, and which conclusions are robust enough to act on.",
     "",
     "## What to Change",
-    "Provide 1-3 specific, actionable recommendations. For each: name the exact parameter, current value, proposed value, and predicted effect.",
-    "Never give vague advice like 'consider increasing capacity' — always name the exact parameter and specific value.",
+    "Briefly summarise your top 1-3 recommendations in plain English.",
+    "",
+    "PART 2 — STRUCTURED SUGGESTIONS (JSON block)",
+    "After the narrative, output a single JSON block wrapped in ```json ... ``` fences with this schema:",
+    '{ "analysis": "<narrative analysis text>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|moderate|low>" } ] }',
+    "Use type 'manual' for structural changes that cannot be expressed as a single numeric field update.",
+    "Never give vague advice — always name the exact parameter and specific value.",
     "When the model has a failure/repair model, factor availability into capacity calculations.",
     "When state variables are present, they may represent conditions that affect routing or service rates.",
+    "",
+    goalInstruction,
+    highLoadWarning,
   ].join("\n");
 
   return {
     kind: "explainResults",
     messages: makeMessages(system, payload, instruction),
-    max_tokens: 800,
+    max_tokens: 1000,
   };
 }
 

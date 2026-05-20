@@ -171,7 +171,7 @@ export const AiAssistantPanel = ({
     setError("");
     setStatus("loading");
     setActiveKind(kind);
-    if (kind !== "suggestion") {
+    if (kind !== "suggestion" && kind !== "explainResults") {
       setParsedSuggestion(null);
       setVerifyStatus({});
       setVerifyResults({});
@@ -188,7 +188,7 @@ export const AiAssistantPanel = ({
       onComplete: () => {
         abortRef.current = null;
         setStatus("complete");
-        if (kind === "suggestion") {
+        if (kind === "suggestion" || kind === "explainResults") {
           setParsedSuggestion(parseSuggestionResponse(accumulated));
           setResponse("");
         }
@@ -318,7 +318,7 @@ export const AiAssistantPanel = ({
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
 
   const renderContent = () => {
-    if (isStreaming && activeKind === "suggestion") {
+    if (isStreaming && (activeKind === "suggestion" || activeKind === "explainResults")) {
       return (
         <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
           Building suggestions…
