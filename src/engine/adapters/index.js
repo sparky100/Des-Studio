@@ -3,6 +3,7 @@
 import { RestAdapter } from './RestAdapter.js';
 import { ScheduleFeedAdapter } from './ScheduleFeedAdapter.js';
 import { ActualsStreamAdapter } from './ActualsStreamAdapter.js';
+import { OpenSkyAdapter } from './OpenSkyAdapter.js';
 
 /**
  * Transparent no-op registry used by default when no live sources are configured.
@@ -47,6 +48,8 @@ export class AdapterRegistry {
       this._adapters[source.id] = new ScheduleFeedAdapter(resolved);
     } else if (resolved.type === 'actualsStream') {
       this._adapters[source.id] = new ActualsStreamAdapter(resolved);
+    } else if (resolved.type === 'openSky') {
+      this._adapters[source.id] = new OpenSkyAdapter(resolved);
     } else if (resolved.type === 'mock') {
       throw new Error(`No mock registered for source "${source.id}" — call registerMock() before use`);
     } else {

@@ -287,6 +287,7 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
                     <option value="rest">rest</option>
                     <option value="scheduleFeed">scheduleFeed</option>
                     <option value="actualsStream">actualsStream</option>
+                    <option value="openSky">openSky (live aircraft)</option>
                   </select>
                 </div>
               </div>
@@ -340,6 +341,26 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
                   <span style={{fontSize:10, color:C.muted, fontFamily:FONT}}>
                     Map each incoming field to the model field it should fill. Advanced format example: <code>{'{"patientName": "entityId"}'}</code>.
                   </span>
+                </div>
+              </>)}
+
+              {src.type === 'openSky' && (<>
+                <div style={{display:'flex', gap:8}}>
+                  <div style={{...S.field, flex:1}}>
+                    <span style={S.fieldLabel}>Airport ICAO code</span>
+                    <input style={S.input} value={src.airportIcao||'EGLL'} disabled={!canEdit} placeholder="e.g. EGLL, KJFK"
+                      onChange={e => update(idx, { airportIcao: e.target.value.toUpperCase().slice(0, 4) })}/>
+                  </div>
+                  <div style={{...S.field, flex:1}}>
+                    <span style={S.fieldLabel}>Radius (nautical miles)</span>
+                    <input style={S.input} type="number" value={src.radiusNm||50} disabled={!canEdit}
+                      onChange={e => update(idx, { radiusNm: Math.max(5, parseInt(e.target.value) || 50) })}/>
+                  </div>
+                </div>
+                <div style={{fontSize:10, color:C.muted, fontFamily:FONT, lineHeight:1.5}}>
+                  Polls the OpenSky Network API for arriving aircraft near the airport.
+                  No API key required. Detects descending aircraft within the radius and computes inter-arrival times.
+                  Supported airports: EGLL (Heathrow), KJFK, KLAX, KORD, EDDF, RJTT, YSSY, LFPG.
                 </div>
               </>)}
 
