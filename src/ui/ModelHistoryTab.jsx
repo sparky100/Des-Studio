@@ -3,7 +3,7 @@ import { useState } from "react";
 import { C, FONT, alpha } from "./shared/tokens.js";
 import { Btn, Empty } from "./shared/components.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
-import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun } from "../db/models.js";
+import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink } from "../db/models.js";
 import { buildEngine } from "../engine/index.js";
 import { compareResults } from "../db/runRecord.js";
 
@@ -102,7 +102,7 @@ export function ModelHistoryTab({
   historyLoading, setHistoryLoading,
   historyError, setHistoryError,
   historyShowArchived, setHistoryShowArchived,
-  shareLinksMap,
+  shareLinksMap, setShareLinksMap,
   modelId, userId, model, baseUrl,
   onAnalyseRun, onViewResults,
 }) {
@@ -353,9 +353,26 @@ export function ModelHistoryTab({
                       </td>
                       <td style={{ padding: "6px 12px" }}>
                         {shareLinksMap[row.id] ? (
-                          <Btn small variant="ghost" onClick={() => {
-                            navigator.clipboard.writeText(`${baseUrl}/#share/${shareLinksMap[row.id].token}`);
-                          }}>📋 Reshare</Btn>
+                          <div style={{ display: "flex", gap: 4 }}>
+                            <Btn small variant="ghost" onClick={() => {
+                              navigator.clipboard.writeText(`${baseUrl}/#share/${shareLinksMap[row.id].token}`);
+                              toast.success("Link copied to clipboard");
+                            }}>📋 Copy</Btn>
+                            <Btn small variant="ghost" onClick={async () => {
+                              if (!window.confirm("Revoke this share link? Anyone with the link will no longer be able to view these results.")) return;
+                              try {
+                                await revokeShareLink(shareLinksMap[row.id].id, userId);
+                                setShareLinksMap(prev => {
+                                  const next = { ...prev };
+                                  delete next[row.id];
+                                  return next;
+                                });
+                                toast.success("Share link revoked");
+                              } catch {
+                                toast.error("Failed to revoke link");
+                              }
+                            }}>✕ Unshare</Btn>
+                          </div>
                         ) : <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>—</span>}
                       </td>
                       <td style={{ padding: "6px 12px" }}>

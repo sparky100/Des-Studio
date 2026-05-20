@@ -590,7 +590,7 @@ export async function getShareLink(token) {
 
   const { data: run, error: runError } = await supabase
     .from("simulation_runs")
-    .select("id, model_id, ran_at, replications, seed, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, max_simulation_time, warmup_period, results_json, ai_insights")
+    .select("id, model_id, ran_at, replications, seed, total_arrived, total_served, total_reneged, avg_wait_time, avg_service_time, max_simulation_time, warmup_period, results_json, ai_insights, narrative_text, model_description_text")
     .eq("id", link.run_id)
     .single();
   if (runError) throw runError;
@@ -628,6 +628,8 @@ export async function getShareLink(token) {
       warmupPeriod: run.warmup_period,
       resultsJson: run.results_json,
       aiInsights: run.ai_insights || null,
+      narrativeText: run.narrative_text || null,
+      modelDescriptionText: run.model_description_text || null,
     },
     model: {
       name: model.name,

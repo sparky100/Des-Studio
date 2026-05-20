@@ -11,7 +11,9 @@ import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
 import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment } from "../../db/models.js";
-import { buildRunRecord, updateRunNarrative } from "../../db/runRecord.js";
+import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
+import { callLLMOnce } from "../../llm/apiClient.js";
+import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
@@ -285,7 +287,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         const save = userId ? saveSimulationRun(modelId, userId, fullResult, config) : saveLocalRun(modelId, fullResult, config);
         save
           .then((runId) => {
-            if (runId) setLatestRunId(runId);
+            if (runId) {
+              setLatestRunId(runId);
+              storeRunNarrative(runId, model, fullResult);
+            }
             setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
             onRunSaved?.();
@@ -417,7 +422,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
               };
               if (userId) {
                 const runId = await saveSimulationRun(modelId, userId, batchResult, batchConfig);
-                if (runId) setLatestRunId(runId);
+                if (runId) {
+                  setLatestRunId(runId);
+                  storeRunNarrative(runId, model, batchResult);
+                }
               } else {
                 saveLocalRun(modelId, batchResult, batchConfig);
               }
@@ -494,7 +502,10 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
       const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun, runRecord: singleRunRecord };
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
       const runId = await save;
-      if (runId) setLatestRunId(runId);
+      if (runId) {
+        setLatestRunId(runId);
+        storeRunNarrative(runId, model, result);
+      }
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
       onRunSaved?.();
@@ -511,6 +522,25 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     setBatchStatus("cancelling");
     runnerRef.current.cancel();
   }, []);
+
+  // Store LLM-generated narrative and model description in the run record.
+  // Called after a run saves successfully — fire-and-forget, never blocks the UI.
+  const storeRunNarrative = useCallback(async (runId, model, results) => {
+    if (!runId || !userId) return;
+    try {
+      const [narrative, description] = await Promise.allSettled([
+        callLLMOnce(buildNarrativePrompt(model, { warmupPeriod, maxSimTime, replications, terminationMode }, results)).catch(() => null),
+        callLLMOnce(buildModelDescriptionPrompt(model)).catch(() => null),
+      ]);
+      const narrativeText = narrative.status === 'fulfilled' ? narrative.value : null;
+      const descriptionText = description.status === 'fulfilled' ? description.value : null;
+      if (narrativeText || descriptionText) {
+        await updateRunNarrative(runId, narrativeText, descriptionText);
+      }
+    } catch {
+      // Silently ignore — narrative is optional enhancement
+    }
+  }, [userId, warmupPeriod, maxSimTime, replications, terminationMode]);
 
   const toggleAuto = () => {
     if (autoRunning) {
@@ -738,13 +768,16 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
 
   const assembleRunMeta = (runId) => {
     const rec = savedRunHistory.find(r => r.id === runId);
+    const rj = rec?.results_json || {};
     return {
       runId: rec?.id || runId || 'unknown',
       runLabel: rec?.run_label || runLabel || `${model.name || 'Model'} — ${new Date().toLocaleDateString()}`,
-      engineVersion: rec?.engine_version || '1.0',
-      seed: rec?.seed ?? seed ?? 'unknown',
+      engineVersion: rec?.engine_version || rj._engine_version || '1.0',
+      seed: rec?.seed ?? rj._base_seed ?? seed ?? 'unknown',
       prnAlgorithm: 'mulberry32',
       runTimestamp: rec?.run_at || new Date().toISOString(),
+      narrativeText: rj.narrative_text ?? null,
+      modelDescriptionText: rj.model_description_text ?? null,
     };
   };
 

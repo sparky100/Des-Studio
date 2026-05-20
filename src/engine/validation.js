@@ -633,5 +633,48 @@ export function validateModel(model) {
     }
   }
 
+  // ── W-CAP-01: Multi-class resource contention ──────────────────────────────
+  // Two or more C-events SEIZE() the same server type — results may be sensitive
+  // to C-event priority ordering.
+  const serverTypesSeizedByCEvent = new Map();
+  cEvents.forEach(c => {
+    const text = effectText(c.effect);
+    const seizes = [...text.matchAll(/(?:SEIZE|ASSIGN)\s*\(\s*[^,)]+\s*,\s*([^)]+)\)/gi)];
+    seizes.forEach(m => {
+      const serverType = m[1].trim();
+      if (!serverType) return;
+      const key = serverType.toLowerCase();
+      if (!serverTypesSeizedByCEvent.has(key)) {
+        serverTypesSeizedByCEvent.set(key, []);
+      }
+      serverTypesSeizedByCEvent.get(key).push(c.name || c.id);
+    });
+  });
+  for (const [serverType, cEventNames] of serverTypesSeizedByCEvent) {
+    if (cEventNames.length >= 2) {
+      warn('W-CAP-01',
+        `Complex multi-class resource contention detected: ${cEventNames.length} C-events (${cEventNames.join(', ')}) compete for server type '${serverType}'. Results may be sensitive to C-event priority ordering.`,
+        'cevents');
+    }
+  }
+
+  // ── W-CAP-02: Very high arrival rate (suggests continuous flow) ────────────
+  // Any B-Event has a schedule with mean interval < 0.001 time units.
+  bEvents.forEach(b => {
+    (b.schedules || []).forEach((s, j) => {
+      const distName = normalizeDistributionName(s.dist);
+      if (!distName || distName === 'ServerAttr' || distName === 'EntityAttr') return;
+      const p = s.distParams || {};
+      if (distName === 'Exponential') {
+        const mean = parseFloat(p.mean);
+        if (Number.isFinite(mean) && mean < 0.001) {
+          warn('W-CAP-02',
+            `B-Event '${b.name || b.id}' schedule ${j + 1}: Exponential mean interval = ${mean} (< 0.001). DES Studio models discrete individual entities. For continuous flow or aggregate quantities, consider SD Studio.`,
+            'bevents');
+        }
+      }
+    });
+  });
+
   return { errors, warnings };
 }
