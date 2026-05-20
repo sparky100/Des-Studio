@@ -19,6 +19,7 @@ Version: 1.7.0 (Sprints 1–66)
 | v1.8.0 | 58 | Report generation — Export a professional Word (.docx) report from any completed run |
 | v1.9.0 | 62–65 | Real-world clock (epoch), planned data import (CSV/XLSX/scheduleFeed), conditional service times (`when`), actuals tracking (plan vs actual deviation) |
 | v1.10.0 | 66 | Visual Designer badges, Execute Panel UX (Animate/Speed to Setup, Export consolidation, Entity Details rename, Log guard, chart formatting) |
+| v1.11.0 | 67 | AI Assistant simplified — single "Explain Results" button merges narrative, sensitivity, and suggestions; "Run with this change" replaces "Apply & Re-run"; results update automatically after applying a suggestion |
 
 ---
 
@@ -635,41 +636,23 @@ The Analysis view (ResultsWorkspace) is the primary results dashboard. It contai
 
 The AI Insights panel provides five analytical capabilities, all grounded in the current run's results and the model JSON (as of v1.5.0).
 
-### 9.1 Interpret Results (narrative)
+### 9.1 Explain Results
 
-Click **Interpret Results** to receive a plain-English narrative of what the simulation found. The output covers:
+Click **Explain Results** to receive a comprehensive analysis of your simulation results in plain English. The output covers three sections:
 
-- Overall system performance (throughput, average wait)
-- Which queues are longest, which resources are most utilised
-- Whether performance goals are met
-- Notable patterns (e.g., queue oscillation, warmup transient)
+**What Happened** — overall system performance, which queues are longest, which resources are most utilised, whether performance goals are met, and notable patterns.
 
-### 9.2 Suggest Improvements (6-step structured analysis)
+**How Reliable** — confidence interval widths, which conclusions are robust enough to act on, and whether more replications are needed.
 
-Click **Suggest Improvements** for a structured diagnostic. For each suggestion the AI produces:
+**What to Change** — 1-3 specific, actionable recommendations with exact parameter names, current values, proposed values, and predicted effects.
 
-1. **Binding constraint** — the queue, resource, or event limiting system performance
-2. **Root cause** — why the constraint exists (arrival rate vs. capacity mismatch, high variability, etc.)
-3. **Proposed change** — a specific, actionable model change (add a server, change a distribution, add a priority rule)
-4. **Predicted effect** — quantitative estimate of the improvement (e.g., "expected to reduce mean wait by ~30%")
-5. **Goal impact** — whether the change is predicted to bring the model within performance goal thresholds
-6. **Ranking** — suggestions ordered by expected value and confidence
+### 9.2 Apply a Suggested Change
 
-### 9.3 Apply & Re-run (what-if verification)
-
-Each suggestion card from **Suggest Improvements** includes an **Apply & Re-run** button. Clicking it creates a temporary copy of the model with the suggested change applied (for example, increasing server count by one), runs the same replication configuration against that copy, and shows a before/after goal compliance table inline in the panel — without touching your saved model. This lets you verify a suggestion's predicted effect before deciding whether to apply it permanently.
+When the AI suggests a change that can be auto-applied (for example, increasing server count), a **Run with this change** button appears on the suggestion card. Clicking it runs a new simulation with the suggested change applied to a temporary copy of your model, then shows a before/after comparison table inline — without touching your saved model. This lets you verify the effect before deciding whether to apply it permanently.
 
 Suggestions that require structural changes the tool cannot auto-apply (for example, adding a new queue) show the button as disabled with a note explaining what to change manually.
 
-### 9.4 Sensitivity Analysis
-
-Click **Sensitivity Analysis** to assess how much uncertainty exists in the results. The output includes:
-
-- Width of confidence intervals relative to point estimates
-- Parameters where small changes have large KPI effects (high sensitivity)
-- Recommendations on replication count if CIs are wide
-
-### 9.5 Ask a Question
+### 9.3 Ask a Question
 
 Type any question about the model or results in the text box and click **Ask**. Examples:
 
@@ -679,7 +662,7 @@ Type any question about the model or results in the text box and click **Ask**. 
 
 The AI answers using the current model JSON and results as context.
 
-### 9.6 Compare Runs
+### 9.4 Compare Runs
 
 Select two saved runs from the Run History and click **Compare Runs**. The AI produces a narrative comparison covering:
 
@@ -687,7 +670,7 @@ Select two saved runs from the Run History and click **Compare Runs**. The AI pr
 - Whether the difference is statistically meaningful (CI overlap)
 - Interpretation of why results differ (different parameters, different model structure)
 
-### 9.7 Best practices for getting good AI suggestions
+### 9.5 Best practices for getting good AI suggestions
 
 - **Set performance goals first.** Without goals the AI cannot assess feasibility or rank suggestions by goal impact.
 - **Run replications before using AI Insights.** Point estimates from a single run have high variance; the AI's predictions are more reliable when based on CI-validated KPIs.

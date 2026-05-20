@@ -3,6 +3,7 @@ import {
   applySuggestionPatch,
   buildCiResults,
   buildComparisonPrompt,
+  buildExplainResultsPrompt,
   buildGoalGaps,
   buildNarrativePrompt,
   buildResultsQueryPrompt,
@@ -72,6 +73,48 @@ describe("LLM prompt builders", () => {
       ci95Upper: 10,
       n: 5,
     }));
+  });
+
+  it("builds a merged explain-results prompt with three sections", () => {
+    const ciResults = buildCiResults({
+      "summary.avgWait": { n: 5, mean: 8, lower: 6, upper: 10, stdDev: 2 },
+    });
+    const prompt = buildExplainResultsPrompt(
+      model,
+      { warmupPeriod: 10, maxSimTime: 200, replications: 5, seed: 42 },
+      {
+        summary: { total: 20, served: 18, reneged: 2, avgWait: 9, avgSvc: 3, avgSojourn: 12 },
+        waitDist: { "Main queue": { mean: 9, n: 18, p50: 8, p90: 14, p95: 16, p99: 18 } },
+        aggregateStats: { "summary.avgWait": { n: 5, mean: 8, lower: 6, upper: 10 } },
+      },
+      ciResults
+    );
+
+    expect(prompt.kind).toBe("explainResults");
+    expect(prompt.messages[0].role).toBe("system");
+    const instruction = prompt.messages[1].content;
+    expect(instruction).toMatch(/What Happened/i);
+    expect(instruction).toMatch(/How Reliable/i);
+    expect(instruction).toMatch(/What to Change/i);
+    expect(promptWordEstimate(prompt)).toBeLessThan(2000);
+  });
+
+  it("explain-results prompt includes sensitivity guidance when CI data is present", () => {
+    const ciResults = buildCiResults({
+      "summary.avgWait": { n: 10, mean: 8, lower: 6, upper: 10, stdDev: 2 },
+    });
+    const prompt = buildExplainResultsPrompt(model, { replications: 10 }, {}, ciResults);
+    const instruction = prompt.messages[1].content;
+    expect(instruction).toMatch(/confidence interval/i);
+  });
+
+  it("explain-results prompt notes low replication count when CI data is sparse", () => {
+    const ciResults = buildCiResults({
+      "summary.avgWait": { n: 2, mean: 8, lower: 6, upper: 10, stdDev: 2 },
+    });
+    const prompt = buildExplainResultsPrompt(model, { replications: 2 }, {}, ciResults);
+    const instruction = prompt.messages[1].content;
+    expect(instruction).toMatch(/replication count is low/i);
   });
 
   it("builds a suggestion prompt with model structure and KPI data", () => {

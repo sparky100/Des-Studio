@@ -73,12 +73,12 @@ An anonymous mode (no Supabase connection) uses `src/db/local.js` which persists
 
 ### 2.4 LLM Integration
 
-AI analysis is provided by `src/llm/prompts.js`, which builds structured prompt payloads, and `src/llm/apiClient.js`, which handles the API call. The AI Insights panel in the Execute workspace calls five prompt builders:
-- `buildNarrativePrompt` — narrative result interpretation (150-200 words, max_tokens 450)
-- `buildSuggestionPrompt` — 6-step structured improvement recommendations (max_tokens 600)
-- `buildSensitivityPrompt` — replication CI uncertainty analysis (150-200 words, max_tokens 450)
+AI analysis is provided by `src/llm/prompts.js`, which builds structured prompt payloads, and `src/llm/apiClient.js`, which handles the API call. The AI Assistant panel in the Execute workspace calls three prompt builders:
+- `buildExplainResultsPrompt` — comprehensive analysis combining narrative interpretation, sensitivity/uncertainty assessment, and actionable recommendations (300-500 words, max_tokens 800)
 - `buildComparisonPrompt` — two-run side-by-side comparison (200-250 words, max_tokens 550)
 - `buildResultsQueryPrompt` — conversational Q&A against run results
+
+The legacy prompt builders `buildNarrativePrompt`, `buildSensitivityPrompt`, and `buildSuggestionPrompt` remain exported for backward compatibility but are no longer used by the default UI.
 
 Two additional prompt builders support the report generation workflow (§2.6):
 - `buildModelDescriptionPrompt` — plain-English model narrative for non-technical readers (max_tokens 400)
@@ -545,14 +545,14 @@ Node types: SOURCE (green), QUEUE (cyan), ACTIVITY (purple), SINK (red). Connect
 
 **Node badge system (Sprint 66):** Visual Designer node cards display small read-only badge chips when advanced configuration is present (see §2.11). Badges are derived from the model; they are never stored in `model.graph`. Clicking a badge selects the node and opens the node inspector.
 
-### 7.5 AI Insights Panel
+### 7.5 AI Assistant Panel
 
-Located in the Execute panel's Analysis view. Contains five sub-panels:
-- **Narrative** — calls `buildNarrativePrompt`; displays the resulting 150-200 word plain-English interpretation.
-- **Suggestions** — calls `buildSuggestionPrompt`; displays the 6-step structured recommendations.
-- **Sensitivity** — calls `buildSensitivityPrompt`; displays CI uncertainty analysis (available only after replications).
+Located in the Execute panel's Analysis view. Contains three sub-panels:
+- **Explain Results** — calls `buildExplainResultsPrompt`; displays a comprehensive analysis with three sections (What Happened, How Reliable, What to Change). Available after any completed run.
 - **Compare** — calls `buildComparisonPrompt`; the user selects two saved runs to compare.
 - **Ask** — conversational Q&A input; calls `buildResultsQueryPrompt` on each submission.
+
+When the AI returns structured suggestions, each suggestion card includes a **Run with this change** button. Clicking it calls `runWithPatch()` which runs a simulation with the patched model, updates the results state via `setResults()` and `onResultsReady()`, and displays a before/after comparison table inline.
 
 ---
 

@@ -726,15 +726,17 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         },
         onComplete: payloads => {
           const valid = payloads.filter(Boolean);
-          resolve({
-            aggregateStats: summarizeReplicationResults(valid, CI_METRICS),
-            summary: valid[0]?.result?.summary || {},
-          });
+          const aggregateStats = summarizeReplicationResults(valid, CI_METRICS);
+          const summary = valid[0]?.result?.summary || {};
+          const verifyResult = { aggregateStats, summary };
+          setResults(verifyResult);
+          onResultsReady?.(verifyResult);
+          resolve(verifyResult);
         },
         onError: () => resolve(null),
       });
     });
-  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
+  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, onResultsReady]);
 
   const exportResultsJson = useCallback(() => {
     const payload = buildResultsExportPayload({

@@ -667,8 +667,11 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
 
   if (!chartModel.hasTimeSeries && !hasWaitDistributions && !hasAnalysisInputs) {
     return (
-      <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
-        Turn on <strong style={{ color: C.accent }}>Keep chart data during the run</strong> in Run setup, then run the model to see charts.
+      <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+        <SummaryCardGrid results={results} />
+        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
+          Turn on <strong style={{ color: C.accent }}>Keep chart data during the run</strong> in Run setup, then run the model to see charts.
+        </div>
       </div>
     );
   }

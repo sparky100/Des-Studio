@@ -476,6 +476,91 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
   };
 }
 
+export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, results = {}, ciResults = []) {
+  const system = [
+    "You are an expert simulation analyst and queueing systems expert.",
+    "Interpret the following discrete-event simulation results for a non-specialist audience.",
+    "Provide a comprehensive analysis in three sections: What Happened, How Reliable, and What to Change.",
+    "Be concise: 300-500 words total. Use plain English. Technical terms should appear only in helper text or after a plain-English explanation.",
+  ].join(" ");
+
+  const waitDist = results.waitDist || {};
+  const waitDistForPrompt = Object.keys(waitDist).length
+    ? Object.fromEntries(Object.entries(waitDist).map(([q, w]) => [q, { n: w.n, mean: w.mean, p50: w.p50, p90: w.p90, p95: w.p95, p99: w.p99 }]))
+    : undefined;
+  const perQueue = results.perQueue || {};
+  const stateVariables = (model.stateVariables || []).filter(v => v.name).map(v => ({
+    name: v.name, initialValue: v.initialValue ?? null,
+  }));
+
+  const agg = results.aggregateStats || {};
+  const confidenceIntervals = Object.entries(agg)
+    .filter(([, s]) => s && s.n >= 2)
+    .map(([name, s]) => ({
+      metric: name,
+      mean: finiteOrNull(s.mean),
+      ci95Lower: finiteOrNull(s.lower),
+      ci95Upper: finiteOrNull(s.upper),
+      n: s.n,
+      ciWidth: (s.upper != null && s.lower != null) ? +(s.upper - s.lower).toFixed(4) : null,
+    }));
+
+  const payload = {
+    model: {
+      name: model.name || DEFAULT_MODEL_NAME,
+      description: model.description || "",
+      goals: goalsToPrompt(model),
+      ...(stateVariables.length ? { stateVariables } : {}),
+    },
+    experiment: extractExperiment(experimentConfig),
+    kpis: buildKpis(model, results),
+    waitDist: waitDistForPrompt,
+    perQueue: Object.keys(perQueue).length ? perQueue : undefined,
+    aggregateStats: results.aggregateStats || {},
+    confidenceIntervals: confidenceIntervals.length ? confidenceIntervals : undefined,
+  };
+
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  if (goalGaps?.length) payload.goalGaps = goalGaps;
+
+  const goalsInstr = goalGaps?.length
+    ? ` For each performance goal use: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])".`
+    : "";
+
+  const warningsInstr = payload.kpis.warning_phaseCTruncated
+    ? " NOTE: Phase C was truncated — some conditional events may not have fired. Mention this caveat."
+    : "";
+
+  const sensitivityReady = ciResults.some(item => item.n >= 5);
+  const sensitivityInstr = sensitivityReady
+    ? " In the 'How Reliable' section, identify which KPIs have wide confidence intervals and what this means for decision-making."
+    : " Note that replication count is low, so confidence intervals may be wide and conclusions less certain.";
+
+  const instruction = [
+    "Structure your response in three sections:",
+    "",
+    "## What Happened",
+    "Highlight the most significant findings. Flag queues where mean wait exceeds 2x service time as possible overload.",
+    "Use per-queue percentiles to distinguish typical from extreme waits.",
+    "If cost or WIP data is present, comment briefly." + goalsInstr + warningsInstr,
+    "",
+    "## How Reliable" + sensitivityInstr,
+    "Discuss statistical uncertainty, confidence interval width, and which conclusions are robust enough to act on.",
+    "",
+    "## What to Change",
+    "Provide 1-3 specific, actionable recommendations. For each: name the exact parameter, current value, proposed value, and predicted effect.",
+    "Never give vague advice like 'consider increasing capacity' — always name the exact parameter and specific value.",
+    "When the model has a failure/repair model, factor availability into capacity calculations.",
+    "When state variables are present, they may represent conditions that affect routing or service rates.",
+  ].join("\n");
+
+  return {
+    kind: "explainResults",
+    messages: makeMessages(system, payload, instruction),
+    max_tokens: 800,
+  };
+}
+
 export function parseSuggestionResponse(text = "") {
   const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
   const rawJson = fenceMatch ? fenceMatch[1].trim() : text.trim();

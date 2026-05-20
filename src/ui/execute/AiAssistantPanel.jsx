@@ -5,7 +5,7 @@ import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
-import { buildCiResults, buildComparisonPrompt, buildNarrativePrompt, buildResultsQueryPrompt, buildSensitivityPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
+import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
 
 function ConfidenceBadge({ confidence }) {
@@ -97,7 +97,7 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, ver
         onClick={() => onRunWithPatch(suggestion)}
         style={{ width: "100%", justifyContent: "center" }}
       >
-        {running ? "Running..." : "Apply & Re-run"}
+        {running ? "Running simulation…" : "Run with this change"}
       </Btn>
       {running && (
         <div style={{ marginTop: 8, padding: "10px 12px", background: C.surface, borderRadius: 6, border: `1px solid ${C.border}` }}>
@@ -271,10 +271,10 @@ export const AiAssistantPanel = ({
   };
 
   const explainResults = () => {
-    runPrompt(buildNarrativePrompt(model, exportConfig, {
+    runPrompt(buildExplainResultsPrompt(model, exportConfig, {
       ...results,
       aggregateStats,
-    }), "narrative");
+    }, ciResults), "explainResults");
   };
 
   const compareRuns = () => {
@@ -288,17 +288,6 @@ export const AiAssistantPanel = ({
       makeRunPromptPayload("Current completed run", { results, experiment: exportConfig }),
       comparisonPayload
     ), "comparison");
-  };
-
-  const explainSensitivity = () => {
-    runPrompt(buildSensitivityPrompt(model.name, exportConfig, ciResults), "sensitivity");
-  };
-
-  const suggestChanges = () => {
-    runPrompt(buildSuggestionPrompt(model, exportConfig, {
-      ...results,
-      aggregateStats,
-    }), "suggestion");
   };
 
   const handleApplyAndRerun = useCallback(async (suggestion) => {
@@ -434,12 +423,6 @@ export const AiAssistantPanel = ({
             Compare
           </Btn>
         </div>
-        <Btn variant="amber" onClick={explainSensitivity} disabled={!sensitivityReady || isStreaming} style={panelButtonStyle}>
-          Explore sensitivity
-        </Btn>
-        <Btn variant="primary" onClick={suggestChanges} disabled={!results || isStreaming} style={panelButtonStyle}>
-          Suggest model changes
-        </Btn>
       </div>
 
       {status === "error" && (
