@@ -983,6 +983,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
               analyseRun={analyseRun}
               onClearAnalyse={()=>setAnalyseRun(null)}
               onExperimentDefaultsChange={canEdit ? defaults => setField("experimentDefaults", defaults) : null}
+              onApplyPatchedModel={canEdit ? (patchedModel, suggestion) => {
+                setWholeModel(patchedModel);
+                toast.success(`Applied: ${suggestion.change?.target} → ${suggestion.change?.to}`);
+              } : null}
             />
           </ErrorBoundary>
         )}

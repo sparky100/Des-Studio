@@ -41,7 +41,7 @@ const intDefault = (value, fallback) => {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 };
 
-const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, autoRun = false, analyseRun = null, onClearAnalyse, onExperimentDefaultsChange = null }) => {
+const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, autoRun = false, analyseRun = null, onClearAnalyse, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
@@ -2348,6 +2348,7 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
           comparisonError={runHistoryError}
           onClose={() => setAiPanelOpen(false)}
           onRunWithPatch={runWithPatch}
+          onApplyPatchedModel={onApplyPatchedModel}
           onSaveInsights={async (insights) => {
             if (!latestRunId) return;
             try { await saveAiInsights(latestRunId, insights); } catch {}

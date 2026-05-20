@@ -58,14 +58,23 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
   );
 }
 
-function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, verifyStatus, verifyResult }) {
+function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult }) {
   const isManual = suggestion.change?.type === "manual";
   const canApply = !isManual && typeof onRunWithPatch === "function";
+  const canSave = !isManual && typeof onApplyPatchedModel === "function" && verifyResult;
   const running = verifyStatus === "running";
+  const saving = verifyStatus === "saving";
 
   const changeLabel = isManual
     ? "Manual change required"
     : `${suggestion.change?.target} count/capacity/value: ${suggestion.change?.from} -> ${suggestion.change?.to}`;
+
+  const handleSave = () => {
+    if (!canSave) return;
+    const patched = applySuggestionPatch(model, suggestion.change);
+    onApplyPatchedModel(patched, suggestion);
+    setVerifyStatus(prev => ({ ...prev, [suggestion.rank]: "saved" }));
+  };
 
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, marginTop: 8, background: C.surface }}>
@@ -114,6 +123,29 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, ver
             baselineStats={aggregateStats}
             afterStats={verifyResult.aggregateStats}
           />
+          <div style={{ marginTop: 8, padding: "8px 10px", background: `${C.accent}11`, borderRadius: 4, border: `1px solid ${C.accent}33` }}>
+            <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
+              This run used a temporary copy of your model. The results above show what would happen with this change.
+              To make it permanent, save the change to your model.
+            </div>
+          </div>
+          {canSave && verifyStatus !== "saved" && (
+            <Btn
+              small
+              variant="primary"
+              onClick={handleSave}
+              style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
+            >
+              Save this change to model
+            </Btn>
+          )}
+          {verifyStatus === "saved" && (
+            <div style={{ marginTop: 8, padding: "8px 10px", background: `${C.green}15`, borderRadius: 4, border: `1px solid ${C.green}44` }}>
+              <div style={{ fontSize: 11, color: C.green, fontFamily: FONT, fontWeight: 600 }}>
+                Change applied to model. Save the model to persist.
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -131,6 +163,7 @@ export const AiAssistantPanel = ({
   onClose,
   onSaveInsights,
   onRunWithPatch,
+  onApplyPatchedModel,
 }) => {
   const toast = useToast();
   const [response, setResponse] = useState("");
@@ -345,6 +378,7 @@ export const AiAssistantPanel = ({
               model={model}
               aggregateStats={aggregateStats}
               onRunWithPatch={onRunWithPatch ? (sug) => handleApplyAndRerun(sug) : null}
+              onApplyPatchedModel={onApplyPatchedModel}
               verifyStatus={verifyStatus[s.rank]}
               verifyResult={verifyResults[s.rank]}
             />
