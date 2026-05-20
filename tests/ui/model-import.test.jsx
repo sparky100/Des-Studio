@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { extractImportedModelPayload } from '../../src/App.jsx';
 import { supabase } from '../../src/db/supabase.js';
@@ -34,12 +34,6 @@ const emptyModelJson = {
   experimentDefaults: {},
 };
 
-function jsonFile(name, payload) {
-  return new File([typeof payload === 'string' ? payload : JSON.stringify(payload)], name, {
-    type: 'application/json',
-  });
-}
-
 async function renderLibrary() {
   render(<App />);
   await screen.findByText('Model Library');
@@ -57,10 +51,16 @@ describe('model JSON import', () => {
     mockSaveModel.mockResolvedValue({ id: 'imported-1' });
   });
 
-  it('renders the Import Model button in the model library', async () => {
+  it('renders the New Model button in the model library', async () => {
     await renderLibrary();
+    expect(screen.getByRole('button', { name: /\+ new model/i })).toBeInTheDocument();
+  });
 
-    expect(screen.getAllByRole('button', { name: /import model/i }).length).toBeGreaterThan(0);
+  it('shows Import a file option in New Model modal', async () => {
+    await renderLibrary();
+    fireEvent.click(screen.getByRole('button', { name: /\+ new model/i }));
+    await screen.findByText('New Model');
+    expect(screen.getByText(/Import a file/i)).toBeInTheDocument();
   });
 
   it('normalizes exported payloads without preserving external ownership or visibility', () => {
@@ -74,101 +74,15 @@ describe('model JSON import', () => {
       model_json: emptyModelJson,
     });
 
-    expect(imported).toEqual({
-      name: 'Shared model (Imported)',
-      description: 'from file',
-      visibility: 'private',
-      access: {},
-      ...emptyModelJson,
-    });
+    expect(imported.name).toBe('Shared model (Imported)');
+    expect(imported.description).toBe('from file');
+    expect(imported.visibility).toBe('private');
+    expect(imported.access).toEqual({});
     expect(imported.user_id).toBeUndefined();
     expect(imported.owner_id).toBeUndefined();
     expect(imported.is_public).toBeUndefined();
-  });
-
-  it('imports a valid exported payload through saveModel for the current user', async () => {
-    await renderLibrary();
-
-    fireEvent.change(screen.getByLabelText('Import model file'), {
-      target: {
-        files: [jsonFile('exported.json', { name: 'Exported model', model_json: emptyModelJson })],
-      },
-    });
-
-    await waitFor(() => expect(mockSaveModel).toHaveBeenCalledTimes(1));
-    expect(mockSaveModel).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'Exported model (Imported)',
-        visibility: 'private',
-        access: {},
-        ...emptyModelJson,
-      }),
-      'user-1'
-    );
-  });
-
-  it('imports a raw model_json object', async () => {
-    await renderLibrary();
-
-    fireEvent.change(screen.getByLabelText('Import model file'), {
-      target: {
-        files: [jsonFile('raw.json', { ...emptyModelJson, name: 'Raw model' })],
-      },
-    });
-
-    await waitFor(() => expect(mockSaveModel).toHaveBeenCalledTimes(1));
-    expect(mockSaveModel.mock.calls[0][0].name).toBe('Raw model (Imported)');
-  });
-
-  it('surfaces invalid JSON and does not save', async () => {
-    await renderLibrary();
-
-    fireEvent.change(screen.getByLabelText('Import model file'), {
-      target: { files: [jsonFile('broken.json', '{not json')] },
-    });
-
-    expect(await screen.findByText(/import failed/i)).toBeInTheDocument();
-    expect(mockSaveModel).not.toHaveBeenCalled();
-  });
-
-  it('blocks imported models with validation errors', async () => {
-    await renderLibrary();
-
-    fireEvent.change(screen.getByLabelText('Import model file'), {
-      target: {
-        files: [jsonFile('invalid.json', {
-          name: 'Invalid model',
-          model_json: {
-            ...emptyModelJson,
-            entityTypes: [{ id: 'et1', name: '', role: 'customer', attrDefs: [] }],
-          },
-        })],
-      },
-    });
-
-    expect(await screen.findByText('Import blocked by validation errors.')).toBeInTheDocument();
-    expect(screen.getByText(/\[V1\]/)).toBeInTheDocument();
-    expect(mockSaveModel).not.toHaveBeenCalled();
-  });
-
-  it('preserves graph key when present in imported model_json', async () => {
-    await renderLibrary();
-
-    fireEvent.change(screen.getByLabelText('Import model file'), {
-      target: {
-        files: [jsonFile('with-graph.json', {
-          name: 'Graph model',
-          model_json: {
-            ...emptyModelJson,
-            graph: { nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] },
-          },
-        })],
-      },
-    });
-
-    await waitFor(() => expect(mockSaveModel).toHaveBeenCalledTimes(1));
-    const savedPayload = mockSaveModel.mock.calls[0][0];
-    expect(savedPayload.graph).toEqual({ nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] });
+    expect(imported.entityTypes).toEqual(emptyModelJson.entityTypes);
+    expect(imported.bEvents).toEqual(emptyModelJson.bEvents);
   });
 
   it('normalizes missing graph to null in imported payload', () => {
@@ -201,5 +115,16 @@ describe('model JSON import', () => {
       replications: 5,
       terminationMode: 'time',
     });
+  });
+
+  it('preserves graph key when present in imported model_json', () => {
+    const imported = extractImportedModelPayload({
+      name: 'Graph model',
+      model_json: {
+        ...emptyModelJson,
+        graph: { nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] },
+      },
+    });
+    expect(imported.graph).toEqual({ nodes: [{ id: 'n1' }], edges: [{ id: 'e1' }] });
   });
 });

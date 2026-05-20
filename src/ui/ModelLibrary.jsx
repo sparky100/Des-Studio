@@ -48,21 +48,104 @@ const ModelCard=({model,onOpen,onDelete,profiles=[],currentUserId})=>{
   );
 };
 
-const NewModelModal=({onClose,onCreate,onUseTemplate})=>{
+export const NewModelModal=({onClose,onCreate,onUseTemplate,onImportFile,onPasteJson,onUseAi})=>{
   const [name,setName]=useState(""); const [desc,setDesc]=useState("");
   const [saving,setSaving]=useState(false);
-  const create=async()=>{if(!name.trim())return;setSaving(true);try{await onCreate(name.trim(),desc.trim());}finally{setSaving(false);}onClose();};
+  const [mode,setMode]=useState("choose");
+  const [pasteText,setPasteText]=useState("");
+  const [pasteStatus,setPasteStatus]=useState(null);
+  const fileInputRef=useRef(null);
+  const createBlank=async()=>{if(!name.trim())return;setSaving(true);try{await onCreate(name.trim(),desc.trim());}finally{setSaving(false);}onClose();};
+  const triggerImport=()=>{if(!name.trim())return;fileInputRef.current?.click();};
+  const handleFileSelect=(e)=>{
+    const file=e.target.files?.[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      onImportFile?.(reader.result,name.trim(),desc.trim());
+      onClose();
+    };
+    reader.readAsText(file);
+  };
+  const handlePasteSubmit=()=>{
+    if(!pasteText.trim()||!name.trim())return;
+    setPasteStatus({state:"loading",message:"Validating JSON..."});
+    onPasteJson?.(pasteText,name.trim(),desc.trim(),()=>{onClose();});
+  };
+  const useTemplate=()=>{onUseTemplate?.(name.trim(),desc.trim());onClose();};
+  const useAi=()=>{onUseAi?.(name.trim(),desc.trim());onClose();};
+  const inputStyle={width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",outline:"none",boxSizing:"border-box"};
+  const optionBtn={background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"14px 16",cursor:"pointer",display:"flex",flexDirection:"column",gap:4,textAlign:"left",color:"inherit",fontFamily:FONT};
+  if(mode==="paste"){
+    return (
+      <div style={{position:"fixed",inset:0,background:C.overlay,display:"flex",alignItems:"center",justifyContent:"center",zIndex:Z.modal}}>
+        <div role="dialog" aria-modal="true" aria-labelledby="paste-model-title" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:12,padding:28,width:520,maxWidth:"95vw",fontFamily:FONT,display:"flex",flexDirection:"column",gap:16}}>
+          <div id="paste-model-title" style={{fontSize:16,fontWeight:700,color:C.text}}>Paste Model JSON</div>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <label style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700}}>NAME *</label>
+            <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Imported Model" style={inputStyle}/>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <label style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700}}>DESCRIPTION</label>
+            <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Optional" rows={2} style={{...inputStyle,resize:"vertical"}}/>
+          </div>
+          <textarea aria-label="Model JSON" value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder={'{\n  "name": "My Model",\n  "entityTypes": [...],\n  ...\n}'} spellCheck={false} style={{...inputStyle,height:200,resize:"vertical",fontFamily:"'JetBrains Mono',monospace"}}/>
+          {pasteStatus && pasteStatus.state!=="loading" && (
+            <div style={{background:pasteStatus.state==="error"?C.red+"18":C.green+"18",border:`1px solid ${pasteStatus.state==="error"?C.red+"44":C.green+"44"}`,borderRadius:5,color:pasteStatus.state==="error"?C.red:C.green,fontSize:12,fontFamily:FONT,padding:"8px 10px"}}>
+              {pasteStatus.message}
+            </div>
+          )}
+          <div style={{display:"flex",justifyContent:"flex-end",gap:10}}>
+            <Btn variant="ghost" onClick={()=>setMode("choose")}>Back</Btn>
+            <Btn variant="primary" disabled={!pasteText.trim()||!name.trim()||pasteStatus?.state==="loading"} onClick={handlePasteSubmit}>
+              {pasteStatus?.state==="loading"?"Importing…":"Import Model"}
+            </Btn>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{position:"fixed",inset:0,background:C.overlay,display:"flex",alignItems:"center",justifyContent:"center",zIndex:Z.modal}}>
-      <div role="dialog" aria-modal="true" aria-labelledby="new-model-title" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:28,width:420,fontFamily:FONT,display:"flex",flexDirection:"column",gap:14}}>
-        <div id="new-model-title" style={{fontSize:15,fontWeight:700,color:C.text}}>New DES Model</div>
-        <Field label="Name" value={name} onChange={setName} placeholder="e.g. Queue with Reneging" autoFocus/>
-        <Field label="Description" value={desc} onChange={setDesc} multiline rows={3}/>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-          <Btn variant="ghost" onClick={onClose} full>Cancel</Btn>
-          <Btn variant="ghost" onClick={()=>{onClose();onUseTemplate?.();}} full>Use a Template</Btn>
-          <Btn variant="primary" onClick={create} disabled={!name.trim()||saving} full>{saving?"Saving...":"Create"}</Btn>
+      <div role="dialog" aria-modal="true" aria-labelledby="new-model-title" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:12,padding:28,width:520,maxWidth:"95vw",fontFamily:FONT,display:"flex",flexDirection:"column",gap:18,maxHeight:"90vh",overflowY:"auto"}}>
+        <div id="new-model-title" style={{fontSize:16,fontWeight:700,color:C.text}}>New Model</div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <label style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700}}>NAME *</label>
+            <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Queue with Reneging" autoFocus style={inputStyle}/>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <label style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700}}>DESCRIPTION</label>
+            <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Optional — helps AI tailor suggestions" rows={2} style={{...inputStyle,resize:"vertical"}}/>
+          </div>
         </div>
+        <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700}}>START WITH</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <button type="button" onClick={createBlank} disabled={!name.trim()||saving} style={optionBtn}>
+            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Blank model</div>
+            <div style={{fontSize:10,color:C.muted}}>Start from scratch</div>
+          </button>
+          <button type="button" onClick={useTemplate} style={optionBtn}>
+            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Use a template</div>
+            <div style={{fontSize:10,color:C.muted}}>Pick a pre-built scenario</div>
+          </button>
+          <button type="button" onClick={triggerImport} style={optionBtn}>
+            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Import a file</div>
+            <div style={{fontSize:10,color:C.muted}}>Upload a .json model</div>
+          </button>
+          <button type="button" onClick={()=>setMode("paste")} style={optionBtn}>
+            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Paste model</div>
+            <div style={{fontSize:10,color:C.muted}}>Paste JSON from clipboard</div>
+          </button>
+          <button type="button" onClick={useAi} style={{...optionBtn,gridColumn:"1 / -1"}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Use AI</div>
+            <div style={{fontSize:10,color:C.muted}}>Describe your scenario in plain English</div>
+          </button>
+        </div>
+        <div style={{display:"flex",justifyContent:"flex-end"}}>
+          <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        </div>
+        <input ref={fileInputRef} type="file" accept=".json,application/json" style={{display:"none"}} onChange={handleFileSelect}/>
       </div>
     </div>
   );
@@ -159,13 +242,10 @@ export function ModelLibrary({
   tab, onTabChange,
 }) {
   const setTab = onTabChange;
-  const importFileRef = useRef(null);
   const [showNew, setShowNew] = useState(false);
   const [tmplSearch, setTmplSearch] = useState("");
   const [tmplDomain, setTmplDomain] = useState("All");
   const [showPatternsGuide, setShowPatternsGuide] = useState(false);
-  const [showPasteJson, setShowPasteJson] = useState(false);
-  const [pasteJsonText, setPasteJsonText] = useState("");
 
   const DOMAIN_COLORS = { Academic: "#7c6fcd", Healthcare: "#3b9e78", "Service Systems": "#c0813a", Manufacturing: "#3a82c0", Logistics: "#9e3b7a", Technology: "#3a9ec0" };
   const allDomains = ["All", ...Array.from(new Set(TEMPLATES.map(t => t.domain)))];
@@ -178,9 +258,6 @@ export function ModelLibrary({
           <p style={{ fontSize: 12, color: C.muted }}>Build and share discrete-event simulation models.</p>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <input ref={importFileRef} aria-label="Import model file" type="file" accept=".json,application/json" style={{ display: "none" }} onChange={onImportFile} />
-          <Btn variant="ghost" onClick={() => importFileRef.current?.click()}>Import File</Btn>
-          <Btn variant="ghost" onClick={() => { setPasteJsonText(""); setShowPasteJson(true); }}>Paste JSON</Btn>
           <Btn variant="primary" onClick={() => setShowNew(true)}>+ New Model</Btn>
         </div>
       </div>
@@ -288,32 +365,35 @@ export function ModelLibrary({
         </div>)}
 
       {showNew && (
-        <NewModelModal onClose={() => setShowNew(false)} onUseTemplate={() => setTab("templates")} onCreate={async (name, desc) => { await onCreateNewModel(name, desc); setShowNew(false); }} />
+        <NewModelModal
+          onClose={() => setShowNew(false)}
+          onCreate={async (name, desc) => { await onCreateNewModel(name, desc); }}
+          onUseTemplate={(name, desc) => { setTab("templates"); }}
+          onImportFile={(jsonText, name, desc) => {
+            try {
+              const payload = JSON.parse(jsonText);
+              const importedModel = extractImportedModelPayload(payload);
+              if (importedModel) {
+                importedModel.name = name || importedModel.name;
+                importedModel.description = desc || importedModel.description;
+                onCreateNewModel(name || importedModel.name, desc || importedModel.description, importedModel);
+              }
+            } catch (e) {
+              console.error("Import failed:", e);
+            }
+          }}
+          onPasteJson={(pasteText, name, desc, onSuccess) => {
+            onPasteJsonImport(pasteText, onSuccess);
+          }}
+          onUseAi={(name, desc) => {
+            onCreateNewModel(name, desc).then(m => {
+              setShowNew(false);
+              onOpenModel(m);
+            });
+          }}
+        />
       )}
       {showPatternsGuide && <PatternsGuidePanel onClose={() => setShowPatternsGuide(false)} />}
-      {showPasteJson && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000aa", display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
-          <div role="dialog" aria-modal="true" aria-labelledby="paste-json-title" style={{ background: C.panel, padding: 24, borderRadius: 10, width: 560, maxWidth: "95vw", display: "flex", flexDirection: "column", gap: 16 }}>
-            <h2 id="paste-json-title" style={{ fontSize: 16, fontWeight: 700, color: C.text, margin: 0 }}>Import Model from JSON</h2>
-            <p style={{ fontSize: 12, color: C.muted, margin: 0 }}>Paste a DES Studio model JSON object below. The model will be validated before saving.</p>
-            <textarea aria-label="Model JSON" value={pasteJsonText} onChange={e => setPasteJsonText(e.target.value)} placeholder={'{\n  "name": "My Model",\n  "entityTypes": [...],\n  ...\n}'} spellCheck={false} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, height: 260, outline: "none", padding: "8px 10px", resize: "vertical", width: "100%", boxSizing: "border-box" }} />
-            {importStatus && importStatus.state !== "loading" && (
-              <div style={{ background: importStatus.state === "error" ? C.red + "18" : importStatus.state === "warning" ? C.amber + "18" : C.green + "18", border: `1px solid ${importStatus.state === "error" ? C.red + "44" : importStatus.state === "warning" ? C.amber + "44" : C.green + "44"}`, borderRadius: 5, color: importStatus.state === "error" ? C.red : importStatus.state === "warning" ? C.amber : C.green, fontSize: 12, fontFamily: FONT, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
-                <div>{importStatus.message}</div>
-                {(importStatus.items || []).map((item, i) => <div key={i} style={{ color: C.muted }}>{item}</div>)}
-              </div>
-            )}
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-              <Btn variant="ghost" onClick={() => { setShowPasteJson(false); setPasteJsonText(""); }}>Cancel</Btn>
-              <Btn variant="primary" disabled={!pasteJsonText.trim()} onClick={() => {
-                onPasteJsonImport(pasteJsonText, () => { setShowPasteJson(false); setPasteJsonText(""); });
-              }}>
-                {importStatus?.state === "loading" ? "Importing…" : "Import Model"}
-              </Btn>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

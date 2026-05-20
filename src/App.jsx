@@ -472,11 +472,19 @@ export default function App(){
         onOpenModel={handleOpenModel}
         onDeleteModel={handleDeleteModel}
         onStartTemplate={handleStartTemplate}
-        onCreateNewModel={async (name, desc) => {
-          const m = await saveModel({name, description: desc, entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: []}, uid);
-          await loadData();
-          setShowStarterGuideForId(m.id);
-          setOpenId(m.id);
+        onCreateNewModel={async (name, desc, modelData) => {
+          if (modelData && typeof modelData === 'object') {
+            modelData.name = name || modelData.name;
+            modelData.description = desc || modelData.description;
+            const saved = await saveModel(modelData, uid);
+            await loadData();
+            setOpenId(saved.id);
+          } else {
+            const m = await saveModel({name, description: desc, entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: []}, uid);
+            await loadData();
+            setShowStarterGuideForId(m.id);
+            setOpenId(m.id);
+          }
         }}
         onImportFile={handleImportFile}
         onPasteJsonImport={handlePasteJsonImport}
