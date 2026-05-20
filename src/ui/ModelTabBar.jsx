@@ -23,7 +23,7 @@ export function ModelTabBar({
     return [...errs.map(e => `Needs fixing: ${e.message}`), ...warns.map(w => `Worth checking: ${w.message}`)].join(" | ");
   };
 
-  const COMPACT_HIDDEN = ["access", "history", "validate"];
+  const COMPACT_HIDDEN = ["access", "history", "validate", "versions"];
   const primaryTabs = isCompactLayout ? visibleSelectableTabs.filter(t => !COMPACT_HIDDEN.includes(t.id)) : visibleSelectableTabs;
   const moreTabs = isCompactLayout ? visibleSelectableTabs.filter(t => COMPACT_HIDDEN.includes(t.id)) : [];
   const activeInMore = moreTabs.some(t => t.id === tab);

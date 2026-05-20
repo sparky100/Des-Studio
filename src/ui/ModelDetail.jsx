@@ -414,6 +414,24 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   });
   const { width: viewportWidth, isMobile: _vpMobile, isCompact: _vpCompact } = useViewport();
   const [showMoreTabs,setShowMoreTabs]=useState(false);
+  const [currentVersion,setCurrentVersion]=useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadVersion() {
+      try {
+        const { listVersions } = await import("../db/models.js");
+        const versions = await listVersions(modelId);
+        if (!cancelled && versions.length > 0) {
+          setCurrentVersion(versions[0].version);
+        }
+      } catch {
+        // versions table may not exist if migration not applied
+      }
+    }
+    if (isOwner) loadVersion();
+    return () => { cancelled = true; };
+  }, [modelId, isOwner]);
 
   const handleAnalyseRun=useCallback((row)=>{setAnalyseRun(row);setTab("execute");},[]);
   const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname.replace(/\/+$/, "") : "";
@@ -681,7 +699,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
     {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
     {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
-    ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access","versions"]}]:[]),
+    ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
+    ...(isOwner?[{id:"versions",label:"Versions",primaryTab:"versions",tabs:["versions"]}]:[]),
   ];
   const isMobileLayout = viewportWidth < 720;
   const isCompactLayout = viewportWidth >= 720 && viewportWidth < 1024;
@@ -699,7 +718,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "state", "validate"];
     if (activeMode?.id === "execute") return ["execute"];
     if (activeMode?.id === "results") return ["results", "history"];
-    if (activeMode?.id === "access") return ["access", "versions"];
+    if (activeMode?.id === "access") return ["access"];
+    if (activeMode?.id === "versions") return ["versions"];
     return ["overview"];
   }, [activeMode?.id]);
   const hasModelIssues = validation.errors.length > 0 || validation.warnings.length > 0;
@@ -785,7 +805,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     <div style={{display:"flex",flexDirection:"column",height:"100dvh",minHeight:"100vh",background:C.bg}}>
       <ModelDetailHeader
         model={model} canEdit={canEdit} dirty={dirty} saving={saving}
-        past={past} future={future}
+        past={past} future={future} currentVersion={currentVersion}
         onBack={handleBack} onUndo={undo} onRedo={redo} onSave={save} onDiscard={discard}
       />
       <ModelTabBar
@@ -1109,6 +1129,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             userId={overrides.userId}
             isOwner={isOwner}
             onToast={toast}
+            onVersionChange={setCurrentVersion}
           />
         )}
         </ErrorBoundary>

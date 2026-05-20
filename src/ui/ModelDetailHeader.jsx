@@ -1,9 +1,8 @@
 // ui/ModelDetailHeader.jsx — Top header bar for an open model
-import pkg from '../../package.json';
 import { C, FONT } from "./shared/tokens.js";
 import { Tag, Btn } from "./shared/components.jsx";
 
-export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard }) {
+export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, padding: "11px 20px",
@@ -19,7 +18,9 @@ export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future,
         {model.name}
       </div>
       <Tag label={model.visibility} color={model.visibility === "public" ? C.green : C.accent} />
-      <Tag label={`v${pkg.version}`} color={C.purple} />
+      {currentVersion && (
+        <Tag label={`V${currentVersion}`} color={C.purple} />
+      )}
       {canEdit && (
         <Btn small variant="ghost" onClick={onUndo} disabled={!past.length}
           title="Undo the last model edit (Ctrl+Z)" ariaLabel="Undo last model edit">

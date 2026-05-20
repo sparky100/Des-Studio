@@ -10,7 +10,7 @@ const fmtDate = iso => {
   catch { return ''; }
 };
 
-export function VersionHistoryPanel({ model, userId, isOwner, onToast }) {
+export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersionChange }) {
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -47,6 +47,7 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast }) {
       setVersions(prev => [v, ...prev]);
       setShowCreate(false);
       onToast?.("success", `Version v${next} created`);
+      onVersionChange?.(next);
     } catch (e) {
       onToast?.("error", `Failed to create version: ${e.message}`);
     }
@@ -57,8 +58,14 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast }) {
     setDeleting(version.id);
     try {
       await deleteVersion(model.id, version.id, userId);
-      setVersions(prev => prev.filter(v => v.id !== version.id));
+      const remaining = prev.filter(v => v.id !== version.id);
+      setVersions(remaining);
       onToast?.("success", `Version v${version.version} deleted`);
+      if (remaining.length > 0) {
+        onVersionChange?.(remaining[0].version);
+      } else {
+        onVersionChange?.(null);
+      }
     } catch (e) {
       onToast?.("error", `Failed to delete version: ${e.message}`);
     } finally {
