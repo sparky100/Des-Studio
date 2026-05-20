@@ -143,11 +143,11 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
     [speedMultiplier]
   );
   const runSetupSummary = useMemo(() => {
-    const modeLabel = terminationMode === "condition" ? "Condition stop" : `Duration ${maxSimTime}`;
+    const modeLabel = terminationMode === "condition" ? "Stops when the rule is met" : `Stops after ${maxSimTime} time units`;
     return [
-      `Warm-up ${warmupPeriod}`,
-      `${replications} repl${replications === 1 ? "" : "s"}`,
-      `Seed ${seed}`,
+      `Ignoring first ${warmupPeriod} time units`,
+      `${replications} run${replications === 1 ? "" : "s"}`,
+      `Random pattern: ${seed}`,
       modeLabel,
     ];
   }, [warmupPeriod, replications, seed, terminationMode, maxSimTime]);
@@ -1760,9 +1760,22 @@ const ExecutePanel = ({ model, modelId, userId, onRunSaved, onResultsReady, auto
         <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive}>⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
+            {speedMultiplier.toFixed(1)}×
+          </span>
+          <input
+            aria-label="Animation speed multiplier"
+            type="range"
+            min={0.5} max={10} step={0.5}
+            value={speedMultiplier}
+            onChange={e => setSpeedMultiplier(parseFloat(e.target.value))}
+            style={{ width: 72, accentColor: C.accent, cursor: "pointer" }}
+          />
+        </div>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
         <Btn variant={view === "visual" ? "primary" : "ghost"} onClick={() => setView("visual")}>Live View</Btn>
-        <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Analysis</Btn>
+        <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Results</Btn>
         <Btn
           variant={view === "log" ? "primary" : "ghost"}
           onClick={() => setView("log")}

@@ -25,12 +25,13 @@ export function ExperimentControls({
   collectTimeSeries, setCollectTimeSeries,
   speedMultiplier, setSpeedMultiplier,
 }) {
+  const helperStyle = { fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.5, maxWidth: 220 };
   return (
     <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
       <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: "1 1 420px", minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SCENARIO SETUP</span>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN SETUP</span>
             {runLabel.trim() && <Tag label={runLabel.trim()} color={C.accent} />}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -61,7 +62,7 @@ export function ExperimentControls({
         <div style={{ borderTop: `1px solid ${C.border}`, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WARM-UP PERIOD</span>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>IGNORE EARLY RESULTS</span>
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <input
                   aria-label="Warm-up period"
@@ -78,8 +79,11 @@ export function ExperimentControls({
                     padding: "6px 8px", outline: "none" }}
                 />
                 <Btn small variant="ghost" onClick={onDetectWarmup} disabled={replicationResults.length === 0}>
-                  Detect
+                  Suggest a value
                 </Btn>
+              </div>
+              <div style={helperStyle}>
+                Use this when the system needs time to settle before results are representative.
               </div>
               {warmupDetection && warmupDetection.series.length > 0 && (
                 <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -93,7 +97,7 @@ export function ExperimentControls({
                       persistExperimentDefaults({ warmupPeriod: value });
                       setWarmupDetection(null);
                     }}>
-                      Apply t={Math.round(warmupDetection.truncationPoint)}
+                      Use this suggestion
                     </Btn>
                     <Btn small variant="ghost" onClick={() => setWarmupDetection(null)}>Dismiss</Btn>
                   </div>
@@ -120,7 +124,7 @@ export function ExperimentControls({
                 return (
                   <div style={{ marginTop: 8 }}>
                     <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 4 }}>
-                      CUMULATIVE MEAN QUEUE DEPTH (last replication)
+                      HOW QUEUE SIZE SETTLED OVER TIME
                     </div>
                     <CumulativeMeanChart points={cumMean} warmupPeriod={warmupPeriod} />
                   </div>
@@ -129,7 +133,7 @@ export function ExperimentControls({
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>REPLICATIONS</span>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>NUMBER OF RUNS</span>
               <input
                 aria-label="Replication count"
                 type="number"
@@ -143,10 +147,13 @@ export function ExperimentControls({
                   borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
                   padding: "6px 8px", outline: "none" }}
               />
+              <div style={helperStyle}>
+                Run the same scenario several times to reduce random noise.
+              </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SEED</span>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RANDOM STARTING POINT</span>
               <div style={{ display: "flex", gap: 6 }}>
                 <input
                   aria-label="Simulation seed"
@@ -157,12 +164,15 @@ export function ExperimentControls({
                     borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
                     padding: "6px 8px", outline: "none" }}
                 />
-                <Btn small variant="ghost" onClick={() => setSeed(Math.floor(Math.random() * 1e9))}>rand</Btn>
+                <Btn small variant="ghost" onClick={() => setSeed(Math.floor(Math.random() * 1e9))}>Randomise</Btn>
+              </div>
+              <div style={helperStyle}>
+                Use the same value to repeat the same random pattern.
               </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN LABEL</span>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN NAME</span>
               <input
                 aria-label="Run label"
                 value={runLabel}
@@ -175,28 +185,31 @@ export function ExperimentControls({
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>TERMINATION MODE</span>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WHEN SHOULD THE RUN STOP?</span>
               <div style={{ display: "flex", gap: 12, alignItems: "center", height: 32 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
                   <input type="radio" name="terminationMode" checked={terminationMode === "time"} onChange={() => {
                     setTerminationMode("time");
                     persistExperimentDefaults({ terminationMode: "time", maxSimTime, terminationCondition: null });
                   }} />
-                  Time-based
+                  After a fixed duration
                 </label>
                 <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
                   <input type="radio" name="terminationMode" checked={terminationMode === "condition"} onChange={() => {
                     setTerminationMode("condition");
                     persistExperimentDefaults({ terminationMode: "condition", terminationCondition });
                   }} />
-                  Condition-based
+                  When a rule becomes true
                 </label>
+              </div>
+              <div style={helperStyle}>
+                Choose whether the model stops after a set duration or when a business rule is reached.
               </div>
             </div>
 
             {terminationMode === "time" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN DURATION</span>
+                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN FOR</span>
                 <input
                   aria-label="Run duration"
                   type="number"
@@ -210,13 +223,19 @@ export function ExperimentControls({
                     borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
                     padding: "6px 8px", outline: "none" }}
                 />
+                <div style={helperStyle}>
+                  The model stops after this amount of simulated time.
+                </div>
               </div>
             )}
           </div>
 
           {terminationMode === "condition" && (
             <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
-              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 8 }}>STOP CONDITION</span>
+              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 8 }}>STOP WHEN THIS BECOMES TRUE</span>
+              <div style={{ ...helperStyle, marginBottom: 8, maxWidth: "none" }}>
+                Use a rule if the run should stop when a business condition is reached.
+              </div>
               <ConditionBuilder
                 condition={terminationCondition}
                 entityTypes={model.entityTypes}
@@ -231,7 +250,7 @@ export function ExperimentControls({
           )}
 
           <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
-            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>RUN OPTIONS</span>
+            <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 10 }}>EXTRA OPTIONS</span>
             <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: animationEnabled ? C.accent : C.label, fontFamily: FONT }}
                 title="Show entity tokens moving between nodes during auto-run">
@@ -241,7 +260,7 @@ export function ExperimentControls({
                   onChange={e => setAnimationEnabled?.(e.target.checked)}
                   style={{ accentColor: C.accent }}
                 />
-                Animate
+                Show movement during auto-run
               </label>
               <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: collectTimeSeries ? C.accent : C.label, fontFamily: FONT }}
                 title="Disable to reduce memory on long runs (charts won't have queue depth / utilisation)">
@@ -251,21 +270,11 @@ export function ExperimentControls({
                   onChange={e => setCollectTimeSeries?.(e.target.checked)}
                   style={{ accentColor: C.accent }}
                 />
-                Collect time-series
+                Keep chart data during the run
               </label>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, whiteSpace: "nowrap" }}>
-                  Speed {(speedMultiplier ?? 1).toFixed(1)}×
-                </span>
-                <input
-                  aria-label="Animation speed multiplier"
-                  type="range"
-                  min={0.5} max={10} step={0.5}
-                  value={speedMultiplier ?? 1}
-                  onChange={e => setSpeedMultiplier?.(parseFloat(e.target.value))}
-                  style={{ width: 80, accentColor: C.accent }}
-                />
-              </div>
+            </div>
+            <div style={{ ...helperStyle, marginTop: 8, maxWidth: 360 }}>
+              Keep chart data on when you want time-based charts. Turn it off for very long runs if you want to save memory.
             </div>
           </div>
         </div>

@@ -167,7 +167,7 @@ When an entity attribute named `entityId` is set (via `attrMap` or CSV), it beco
 
 #### `DataSourcesEditor` component (`src/ui/ModelDetail.jsx`)
 
-Added inline to the Overview tab. Allows modellers to add, configure, and remove data sources without editing JSON. Exposes all `scheduleFeed`-specific fields (entityType, targetBEventId, timeField, attrMap JSON editor) when `type: "scheduleFeed"` is selected.
+Added inline to the Model Data tab. Allows modellers to add, configure, and remove data sources without editing JSON. Exposes all `scheduleFeed`-specific fields (entityType, targetBEventId, timeField, attrMap JSON editor) when `type: "scheduleFeed"` is selected.
 
 ### 2.9 Attribute-Conditional Service Times (Sprint 64)
 

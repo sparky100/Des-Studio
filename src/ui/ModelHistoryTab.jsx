@@ -197,13 +197,13 @@ export function ModelHistoryTab({
   return (
     <div style={{ maxWidth: 1200 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700, flex: 1, minWidth: 180 }}>RUN HISTORY (LAST 20)</div>
+        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700, flex: 1, minWidth: 180 }}>RECENT RUNS</div>
         <input
           aria-label="Search run history"
           type="text"
           value={historySearch}
           onChange={e => setHistorySearch(e.target.value)}
-          placeholder="Search by label…"
+          placeholder="Search runs…"
           style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "4px 8px", outline: "none", width: 160 }}
         />
         <Btn small variant={historyShowArchived ? "primary" : "ghost"} onClick={() => {
@@ -215,20 +215,20 @@ export function ModelHistoryTab({
             .catch(e => setHistoryError(e.message))
             .finally(() => setHistoryLoading(false));
         }}>{historyShowArchived ? "Hide archived" : "Show archived"}</Btn>
-        <Btn small variant="ghost" onClick={exportRunHistoryJson} disabled={!historyRows.length}>Export History</Btn>
-        <Btn small variant="ghost" onClick={exportRunHistoryCsv} disabled={!historyRows.length}>Export History CSV</Btn>
+        <Btn small variant="ghost" onClick={exportRunHistoryJson} disabled={!historyRows.length}>Export run list</Btn>
+        <Btn small variant="ghost" onClick={exportRunHistoryCsv} disabled={!historyRows.length}>Export run list as CSV</Btn>
       </div>
 
       {historyLoading && <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>Loading...</div>}
       {historyError && <div style={{ color: C.red, fontFamily: FONT, fontSize: 12 }}>{historyError}</div>}
       {!historyLoading && !historyError && historyRows.length === 0 && (
-        <Empty icon="📊" msg="No runs yet. Run the simulation from the Execute tab." />
+        <Empty icon="📊" msg="No runs yet. Open Run to try this model." />
       )}
 
       {historySelected.size > 0 && (
         <div style={{ background: alpha(C.accent, 0.08), border: `1px solid ${alpha(C.accent, 0.3)}`, borderRadius: 6, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
           <span style={{ fontSize: 12, fontFamily: FONT, color: C.text }}>{historySelected.size} run{historySelected.size !== 1 ? "s" : ""} selected</span>
-          <Btn small variant="ghost" onClick={archiveSelected}>Archive selected</Btn>
+          <Btn small variant="ghost" onClick={archiveSelected}>Hide selected runs</Btn>
           <Btn small variant="ghost" onClick={exportSelectedCsv}>Export selected as CSV</Btn>
           <Btn small variant="ghost" onClick={() => setHistorySelected(new Set())}>Clear selection</Btn>
         </div>
@@ -239,9 +239,9 @@ export function ModelHistoryTab({
           <div aria-label="Run history summary" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
             {[
               { label: "Latest run", value: latest.run_label || formatRunDate(latest.ran_at), color: C.accent },
-              { label: "Served", value: latest.total_served || 0, color: C.served },
-              { label: "Renege rate", value: formatPercent(renegeRate), color: reneged > 0 ? C.reneged : C.muted },
-              { label: "Avg wait", value: formatTime(latest.avg_wait_time), color: C.amber },
+              { label: "Customers served", value: latest.total_served || 0, color: C.served },
+              { label: "Left before service", value: formatPercent(renegeRate), color: reneged > 0 ? C.reneged : C.muted },
+              { label: "Average wait", value: formatTime(latest.avg_wait_time), color: C.amber },
             ].map(cell => (
               <div key={cell.label} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: "10px 12px" }}>
                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 4 }}>{cell.label.toUpperCase()}</div>

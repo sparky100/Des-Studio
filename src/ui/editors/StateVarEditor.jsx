@@ -29,7 +29,7 @@ const StateVarEditor=({vars,onChange})=>{
           </div>
           <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:sv.resetOnWarmup?C.amber:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
             <input type="checkbox" checked={!!sv.resetOnWarmup} onChange={e=>upd(i,'resetOnWarmup',e.target.checked)} style={{accentColor:C.amber}}/>
-            Reset to initial value after warm-up period
+            Reset after the start-up period
           </label>
         </div>
       ))}

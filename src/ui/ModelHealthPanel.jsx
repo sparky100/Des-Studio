@@ -16,9 +16,9 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
   const statusTitle = isGettingStarted
     ? "Getting started"
     : hasBlockers
-    ? `${blockers.length} blocker${blockers.length === 1 ? "" : "s"}`
+    ? "Needs fixes before it can run"
     : hasWarnings
-      ? `Ready with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}`
+      ? `Ready to run, but ${warnings.length} thing${warnings.length === 1 ? "" : "s"} ${warnings.length === 1 ? "is" : "are"} worth checking`
       : "Ready to run";
   const completedRuns = Number.isFinite(model.stats?.runs) ? model.stats.runs : 0;
   const actionHint = isGettingStarted
@@ -36,8 +36,8 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
   const MODEL_HEALTH_TAB_LABELS = {
     overview: "Overview", visual: "Design", ai: "AI Designer",
     entities: "Entity Types", queues: "Queues", bevents: "B-Events",
-    cevents: "C-Events", state: "Model Data", execute: "Execute",
-    results: "Analysis", history: "History", validate: "Model Health",
+    cevents: "C-Events", state: "Model Data", execute: "Run",
+    results: "Results", history: "Run History", validate: "Model Health",
   };
 
   return (
@@ -61,12 +61,12 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
           <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.4, fontWeight: 700, marginBottom: 4 }}>MODEL HEALTH</div>
           <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
             {hasBlockers
-              ? "Fix blocking validation issues before running this model."
+              ? "This model needs a few fixes before it can run."
               : isGettingStarted
                 ? "Start with a template, the visual designer, AI designer, or forms to build the first runnable version."
               : hasWarnings
-                ? "The model can run, but review the warnings before trusting outputs."
-                : "No blocking validation issues found."}
+                ? "This model can run, but a few things are worth checking before you rely on the results."
+                : "No major issues were found."}
           </div>
         </div>
       </div>
@@ -91,7 +91,7 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                 }}
               >
-                [{issue.code}] {tabLabel}: {issue.message}
+                {tabLabel}: {issue.message} {issue.code ? `· Code ${issue.code}` : ""}
               </button>
             );
           })}
@@ -106,8 +106,8 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
           {actionHint}
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {!isGettingStarted && !hasBlockers && !isExecuteTab && <Btn small variant="primary" onClick={() => setTab("execute")}>Open Execute</Btn>}
-          {!isGettingStarted && !hasBlockers && latestResults && <Btn small variant="ghost" onClick={() => setTab("results")}>Open Analysis</Btn>}
+          {!isGettingStarted && !hasBlockers && !isExecuteTab && <Btn small variant="primary" onClick={() => setTab("execute")}>Open Run</Btn>}
+          {!isGettingStarted && !hasBlockers && latestResults && <Btn small variant="ghost" onClick={() => setTab("results")}>Open Results</Btn>}
           {!isGettingStarted && !hasBlockers && completedRuns > 0 && <Btn small variant="ghost" onClick={() => setTab("history")}>Run History</Btn>}
         </div>
       </div>

@@ -47,7 +47,7 @@ describe("BottomPanel — F9C.8", () => {
   test("renders live execution tabs including Charts tab", () => {
     render(<BottomPanel log={log} snap={snap} model={model} />);
     expect(screen.getByRole("tab", { name: /step log/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /entities/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /entity details/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /charts/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /live metrics/i })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /analysis/i })).not.toBeInTheDocument();
@@ -74,7 +74,7 @@ describe("BottomPanel — F9C.8", () => {
     const body = screen.getByLabelText(/bottom panel content/i);
     expect(body).toHaveStyle({ height: "320px", minHeight: "320px", overflowY: "auto" });
 
-    fireEvent.click(screen.getByRole("tab", { name: /entities/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /entity details/i }));
     expect(screen.getByLabelText(/bottom panel content/i)).toHaveStyle({ height: "320px" });
   });
 
@@ -151,7 +151,7 @@ describe("BottomPanel — inspector", () => {
   test("entities tab shows the selected entity details in split view", () => {
     render(<BottomPanel log={log} snap={snap} model={model} selectedEntityId={2} />);
 
-    fireEvent.click(screen.getByRole("tab", { name: /entities/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /entity details/i }));
     const entityIds = screen.getAllByText("#2");
     expect(entityIds.length).toBeGreaterThanOrEqual(1);
     const customerTypes = screen.getAllByText("Customer");
@@ -179,7 +179,7 @@ describe("BottomPanel — G15 Charts tab", () => {
   test("Charts tab shows empty state when no time-series data", () => {
     render(<BottomPanel log={log} snap={snap} model={model} timeSeries={null} />);
     fireEvent.click(screen.getByRole("tab", { name: /charts/i }));
-    expect(screen.getByText(/no time-series data/i)).toBeInTheDocument();
+    expect(screen.getByText(/wait time histograms will appear here/i)).toBeInTheDocument();
   });
 
   test("Charts tab shows empty state when time-series has fewer than 2 points", () => {

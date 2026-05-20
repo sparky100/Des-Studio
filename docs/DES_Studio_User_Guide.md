@@ -448,8 +448,8 @@ For use cases where the arrival plan is managed in an external system (e.g. an o
 
 **Setup:**
 
-1. Open the model **Overview** tab.
-2. Scroll to **Data Sources** and click **+ Add source**.
+1. Open the model **Model Data** tab.
+2. In the **Data Sources** section, click **+ Add source**.
 3. Set the type to **scheduleFeed** and complete the fields:
 
 | Field | What to enter |
@@ -485,7 +485,7 @@ Once a simulation is running against a pre-loaded schedule, an `actualsStream` d
 4. The generated report includes a "Plan vs Actual" section showing average deviation in time units.
 
 **Setup:**
-1. Open the model **Overview** tab, scroll to **Data Sources**, and click **+ Add source**.
+1. Open the model **Model Data** tab and, in the **Data Sources** section, click **+ Add source**.
 2. Set the type to **actualsStream**.
 3. Enter the WebSocket URL (starting with `wss://`) and optional auth credentials.
 
@@ -500,7 +500,7 @@ Once a simulation is running against a pre-loaded schedule, an `actualsStream` d
 
 ### 6.2 Model settings — time unit and simulation start time
 
-Two model-level fields in the **Settings** tab control how DES Studio labels and anchors simulation time.
+Two model-level fields in the **Model Data** tab control how DES Studio labels and anchors simulation time.
 
 **Time unit** (`timeUnit`): Sets the label for one simulation time unit (e.g. `minutes`, `hours`, `seconds`). The label appears in the UI, in AI analysis text, and in exported reports. It does not affect engine calculations — it is purely a display annotation.
 
@@ -510,7 +510,7 @@ The **Simulation start time** field (`epoch`) maps simulation time t=0 to a spec
 
 **What it is.** Entering `2026-05-18T08:00:00` means "when the simulation clock reads 0, the real-world time is Monday 18 May 2026, 08:00." From that anchor, DES Studio can convert any simulation time to a wall-clock time and vice versa.
 
-**How to set it.** Open the **Settings** tab for the model. Below the Time unit field, use the date/time picker to set the epoch. The value is stored in the model JSON as an ISO 8601 string (e.g. `"2026-05-18T08:00:00"`).
+**How to set it.** Open the **Model Data** tab for the model. Below the Time unit field, use the date/time picker to set the epoch. The value is stored in the model JSON as an ISO 8601 string (e.g. `"2026-05-18T08:00:00"`).
 
 **What it enables:**
 

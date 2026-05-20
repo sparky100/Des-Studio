@@ -1,11 +1,13 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-17 | Reflects: Sprint 58 — Report Generation complete.*
+*Last updated: 2026-05-19 | Reflects: Sprint 67 planning — Plain-English UX & Results Clarity.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Latest closure report: `docs/reviews/sprint-58-closure.md`
+- Current sprint plan: `docs/reviews/sprint-67-plan.md`
+- Latest closure report: `docs/reviews/sprint-66-closure.md`
+- Planned capability guide: `docs/sprint-67-plain-language-ux-guide.md`
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
@@ -430,11 +432,34 @@ These rules apply to every change made to any component in `src/ui/`:
 ✓  Distribution Picker used wherever a Distribution is required — no ad-hoc inputs
 ✓  Queue discipline dropdown shows only options implemented by the engine
 ✓  C-Event priority is an explicit integer field — never implicit array order
+✓  User-facing labels prefer plain English first; technical terms, IDs, codes, and raw formats are secondary detail
 ✗  No class components
 ✗  No CSS classes — inline style objects only
 ✗  No direct Supabase queries in UI components — use src/db/models.js
 ✗  No engine imports in UI components except buildEngine() in execute/index.jsx
 ```
+
+### 7.11 Plain-English Presentation Rule
+
+DES Studio supports advanced modellers, but user-facing wording must not assume that every user wants engine or statistical jargon as the first layer of explanation.
+
+**Rule:** user-facing presentation follows a two-layer pattern:
+
+1. **Primary label in plain English** — explain the action, result, or decision in ordinary language
+2. **Technical detail as support** — keep domain terms, method names, IDs, validation codes, JSON formats, and raw schema concepts in helper text, tooltips, captions, or expandable advanced sections
+
+Examples:
+- Prefer **Run** over **Execute**
+- Prefer **Results** over **Analysis** when the destination is the results workspace
+- Prefer **Ignore early results** with helper text noting the technical term **warm-up period**
+- Prefer **Real-world start date and time** with helper text noting **epoch**
+- Prefer **Arrival event to populate** over **Target B-event ID**
+
+**Additional presentation requirements:**
+- Group content by user question before technical structure: *What happened? Can I trust this? What should I do next?*
+- Use progressive disclosure for advanced configuration formats such as raw JSON mappings
+- State the user consequence before the internal code or validator rule
+- Results and analysis surfaces should present outcome summaries before method details
 
 ---
 

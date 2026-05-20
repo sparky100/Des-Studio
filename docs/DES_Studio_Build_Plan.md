@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.76 | Created: 2026-04-30 | Updated: 2026-05-16 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.77 | Created: 2026-04-30 | Updated: 2026-05-19 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -119,6 +119,7 @@ flowchart LR
 | Expressiveness and observability | ✅ Complete | Sprint 31: clock token in Condition Builder, WIP time-average metric (Little's Law), live queue-depth time-plot in Execute canvas Charts tab. |
 | Resource reliability and preemption | ✅ Complete | Sprint 32: PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure events. |
 | Advanced scheduling and analytics | ✅ Complete | Sprint 33: SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
+| Plain-English UX and Results clarity | 🔄 Planned | Sprint 67: simplify user-facing language, reorder Results around summary/reliability/bottlenecks, and move technical detail behind progressive disclosure. |
 | Next roadmap shape | 🔄 In progress | Sprint 34+ roadmap to be defined. |
 
 ### Key Issues and Watchpoints
@@ -193,6 +194,49 @@ flowchart LR
 | 1.69 | 2026-05-14 | Sprint 31 completed. Clock token in Condition Builder, WIP time-average metric (Little's Law), live queue-depth time-plot in Execute canvas Charts tab. |
 | 1.70 | 2026-05-14 | Sprint 32 completed. PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure events. |
 | 1.71 | 2026-05-15 | Sprint 33 completed. SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. Documentation cleanup: archived 17 superseded/scratch files. |
+| 1.77 | 2026-05-19 | Sprint 67 planned. Added plain-English UX and Results clarity sprint plan, closure template, capability guide, AGENTS tracking, and product-spec presentation requirements. |
+
+---
+
+## Sprint 67 — Plain-English UX & Results Clarity
+
+**Goal:** Improve clarity, trust, and presentation across the Run, Results, Model Data, and Run History surfaces without removing advanced modelling capability.
+
+**Status:** 🔄 Planned | **Started:** 2026-05-19
+
+**Source documents:**
+- `docs/reviews/sprint-67-plan.md`
+- `docs/sprint-67-plain-language-ux-guide.md`
+
+**Scope guardrails:**
+- Build on the existing working UI. Do not rewrite `ModelDetail`, `ExperimentControls`, `ResultsWorkspace`, or `ModelHistoryTab` from scratch.
+- Keep all advanced modelling and analysis capability accessible; move jargon and raw formats into helper text or progressive disclosure rather than removing them.
+- Change wording, hierarchy, grouping, and disclosure patterns first. Do not introduce new engine features or schema changes in this sprint.
+- Results presentation must lead with outcome and confidence before method detail.
+- No new dependencies unless explicitly reviewed first.
+
+| ID | Feature / refinement | Status | Deliverable |
+|---|---|---|---|
+| F67.1 | Navigation terminology standardization | 🔄 Planned | `Run`, `Results`, and `Run History` used consistently across shell navigation and action buttons. |
+| F67.2 | Model Health plain-English rewrite | 🔄 Planned | Health states and issue chips lead with consequence and next action before technical codes. |
+| F67.3 | Run setup copy and helper-text refresh | 🔄 Planned | Run settings are understandable without prior DES/statistics knowledge. |
+| F67.4 | Results workspace layout re-order | 🔄 Planned | Summary → reliability → bottlenecks → detailed charts → raw data flow. |
+| F67.5 | Results terminology and provenance rewrite | 🔄 Planned | Reliability and provenance language is plain-English-first while preserving technical detail. |
+| F67.6 | Model Data / Data Sources wording simplification | 🔄 Planned | Intent-led field names and advanced disclosure for raw mapping formats. |
+| F67.7 | Run History wording and summary refresh | 🔄 Planned | Outcome-focused labels and summaries. |
+| F67.8 | Editor empty-state and helper-text polish | 🔄 Planned | Targeted copy updates that teach the next action. |
+| F67.9 | Focused UI regression coverage | 🔄 Planned | Tests confirm new labels, headings, and layout structure. |
+
+**Exit gate:**
+- Focused UI tests pass for the touched surfaces.
+- Browser smoke checks confirm consistent wording across desktop and tablet layouts.
+- No advanced capability is removed while simplifying the first-layer explanation.
+- Product-spec and sprint guide documents reflect the new presentation standard.
+
+**Current checkpoint:**
+- Sprint 67 planning documents are in place.
+- Full regression passed on the pre-implementation baseline for this planning branch.
+- Sprint 67 remains planned until the UI and copy changes are implemented and re-verified.
 
 ---
 
@@ -384,6 +428,8 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 31 | Expressiveness & Observability | complete: clock token in Condition Builder, WIP time-average metric, live queue-depth time-plot |
 | Sprint 32 | Resource Reliability & Preemption | complete: PREEMPT, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation |
 | Sprint 33 | Advanced Scheduling & Analytics | complete: SPLIT/COSEIZE/MATCH macros, dynamic BATCH, SPT/EDD/PRIORITY queues, histograms, ANOVA with Tukey HSD |
+| Sprint 66 | Visual Designer Badges + Execute Panel UX | complete: node badges, Execute toolbar consolidation, Results chart formatting improvements |
+| Sprint 67 | Plain-English UX & Results Clarity | planned: wording simplification, Results information hierarchy, progressive disclosure of advanced detail |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 

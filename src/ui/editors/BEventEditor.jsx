@@ -32,7 +32,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         <strong style={{color:C.bEvent}}>Completion</strong> releases the matched resource and either routes the entity onward or marks it complete.{" "}
         Follow-on completion and reneging events are scheduled by another event, so leave them unticked for simulation start.
       </InfoBox>
-      {events.length===0&&<Empty icon="⏰" msg="No B-events."/>}
+      {events.length===0&&<Empty icon="⏰" msg="No timed events yet. Add one to schedule something that happens at a specific time."/>}
       {events.map((ev,i)=>{
         const isTmpl=parseFloat(ev.scheduledTime)>=900;
         const isStart=parseFloat(ev.scheduledTime)===0;
@@ -235,8 +235,8 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                       style={{flex:1,minWidth:200,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
                   </div>
                   <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
-                    Entity skips the queue when this predicate is true at arrival time.
-                    Uses the same expressions as C-event conditions.
+                    Entity skips the queue when this rule is true at arrival time.
+                    Technical detail: this uses the same expression format as C-event conditions.
                   </div>
                 </>)}
               </SectionPanel>

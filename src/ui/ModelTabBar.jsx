@@ -20,7 +20,7 @@ export function ModelTabBar({
   const tabIssueTooltip = tabId => {
     const errs = (validation.errors || []).filter(e => (e.tab || "overview") === tabId).slice(0, 2);
     const warns = (validation.warnings || []).filter(w => (w.tab || "overview") === tabId).slice(0, errs.length < 2 ? 2 - errs.length : 0);
-    return [...errs.map(e => `Error: ${e.message}`), ...warns.map(w => `Warning: ${w.message}`)].join(" | ");
+    return [...errs.map(e => `Needs fixing: ${e.message}`), ...warns.map(w => `Worth checking: ${w.message}`)].join(" | ");
   };
 
   const COMPACT_HIDDEN = ["access", "history", "validate"];
@@ -117,7 +117,7 @@ export function ModelTabBar({
                     color: activeInMore ? C.accent : C.muted, fontFamily: FONT, fontSize: 12,
                     padding: "10px 16px", cursor: "pointer", fontWeight: activeInMore ? 700 : 400,
                   }}>
-                  More ▾
+                  More sections ▾
                 </button>
                 {showMoreTabs && (
                   <div role="listbox" style={{

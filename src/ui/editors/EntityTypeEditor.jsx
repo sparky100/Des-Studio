@@ -46,8 +46,9 @@ const EntityTypeEditor=({types,onChange})=>{
       <InfoBox color={C.server}>
         <strong style={{color:C.server}}>Arriving entity</strong> types are the things that join queues.{" "}
         <strong style={{color:C.server}}>Resource</strong> types are pre-created at t=0 with the given <em>count</em>.{" "}
-        Server <strong>attrs</strong> (e.g. <code>serviceTime=3</code>) are readable in C-event conditions via <code>attr(Type,attrName)</code>{" "}
-        and in SCHEDULE delays via <code>server.attrName</code>.
+        You can use resource properties in rules and timing decisions.{" "}
+        Technical detail: server attributes such as <code>serviceTime=3</code> are available in C-event conditions via <code>attr(Type,attrName)</code>{" "}
+        and in schedule delays via <code>server.attrName</code>.
       </InfoBox>
       {types.length===0&&<Empty icon="👥" msg="No entity types."/>}
       {types.map((et,i)=>(
