@@ -359,7 +359,7 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     resultsJson._base_seed       = config.runRecord.base_seed;
   }
 
-  const { data, error } = await supabase.from("simulation_runs").insert({
+  const runPayload = {
     model_id:            modelId,
     run_by:              userId,
     replications:        config.replications || 1,
@@ -375,8 +375,13 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     results_json:        resultsJson,
     duration_ms:         config.durationMs || null,
     run_label:           runLabel || null,
-    version_id:          config.versionId || null,
-  }).select("id").single();
+  };
+  // Only include version_id when explicitly provided (migration may not be applied yet)
+  if (config.versionId) {
+    runPayload.version_id = config.versionId;
+  }
+
+  const { data, error } = await supabase.from("simulation_runs").insert(runPayload).select("id").single();
   if (error) throw error;
   return data?.id;
 }
