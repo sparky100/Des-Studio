@@ -103,6 +103,7 @@ export function norm(r) {
     owner:          r.owner_id,
     createdAt:      r.created_at,
     updatedAt:      r.updated_at,
+    latestVersion:  r.latest_version || 0,
   };
 }
 
@@ -958,6 +959,13 @@ export async function createVersion(modelId, userId, { version, name, notes, mod
     .select()
     .single();
   if (error) throw error;
+
+  // Update denormalised latest_version on the model
+  await supabase
+    .from("des_models")
+    .update({ latest_version: version })
+    .eq("id", modelId);
+
   return normalizeVersion(data);
 }
 
@@ -1000,6 +1008,20 @@ export async function deleteVersion(modelId, versionId, userId) {
     .eq("id", versionId)
     .eq("model_id", modelId);
   if (error) throw error;
+
+  // Recalculate latest_version after deletion
+  const { data: remaining } = await supabase
+    .from("model_versions")
+    .select("version")
+    .eq("model_id", modelId)
+    .order("version", { ascending: false })
+    .limit(1);
+  const newLatest = remaining && remaining.length > 0 ? remaining[0].version : 0;
+  await supabase
+    .from("des_models")
+    .update({ latest_version: newLatest })
+    .eq("id", modelId);
+
   return { ok: true };
 }
 
