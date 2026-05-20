@@ -3,7 +3,7 @@ import { useState } from "react";
 import { C, FONT, alpha } from "./shared/tokens.js";
 import { Btn, Empty } from "./shared/components.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
-import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink } from "../db/models.js";
+import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink } from "../db/models.js";
 import { buildEngine } from "../engine/index.js";
 import { compareResults } from "../db/runRecord.js";
 
@@ -112,6 +112,7 @@ export function ModelHistoryTab({
   const [historyEditLabelId, setHistoryEditLabelId] = useState(null);
   const [historyEditLabelVal, setHistoryEditLabelVal] = useState("");
   const [reproduceState, setReproduceState] = useState({});
+  const [moreMenuId, setMoreMenuId] = useState(null);
 
   const handleReproduce = async (rowId) => {
     setReproduceState(prev => ({ ...prev, [rowId]: { status: 'running', message: '' } }));
@@ -184,6 +185,25 @@ export function ModelHistoryTab({
     toast.success(`Archived ${ids.length} run${ids.length !== 1 ? "s" : ""}`);
   };
 
+  const unarchiveSelected = async () => {
+    if (!userId) return;
+    const ids = [...historySelected];
+    await Promise.all(ids.map(id => unarchiveRun(id, userId).catch(() => {})));
+    setHistoryRows(prev => prev.map(r => historySelected.has(r.id) ? { ...r, archived: false } : r));
+    setHistorySelected(new Set());
+    toast.success(`Unarchived ${ids.length} run${ids.length !== 1 ? "s" : ""}`);
+  };
+
+  const deleteSelected = async () => {
+    if (!userId) return;
+    if (!confirm(`Delete ${historySelected.size} selected run${historySelected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+    const ids = [...historySelected];
+    await Promise.all(ids.map(id => deleteSimulationRun(id, userId).catch(() => {})));
+    setHistoryRows(prev => prev.filter(r => !historySelected.has(r.id)));
+    setHistorySelected(new Set());
+    toast.success(`Deleted ${ids.length} run${ids.length !== 1 ? "s" : ""}`);
+  };
+
   const latest = historyRows[0];
   const arrived = Number(latest?.total_arrived || 0);
   const reneged = Number(latest?.total_reneged || 0);
@@ -228,8 +248,14 @@ export function ModelHistoryTab({
       {historySelected.size > 0 && (
         <div style={{ background: alpha(C.accent, 0.08), border: `1px solid ${alpha(C.accent, 0.3)}`, borderRadius: 6, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
           <span style={{ fontSize: 12, fontFamily: FONT, color: C.text }}>{historySelected.size} run{historySelected.size !== 1 ? "s" : ""} selected</span>
-          <Btn small variant="ghost" onClick={archiveSelected}>Hide selected runs</Btn>
-          <Btn small variant="ghost" onClick={exportSelectedCsv}>Export selected as CSV</Btn>
+          <Btn small variant="ghost" onClick={exportSelectedCsv}>Export as CSV</Btn>
+          {userId && (
+            <>
+              <Btn small variant="ghost" onClick={archiveSelected}>Archive</Btn>
+              <Btn small variant="ghost" onClick={unarchiveSelected}>Unarchive</Btn>
+              <Btn small variant="ghost" onClick={deleteSelected} style={{ color: C.red }}>Delete</Btn>
+            </>
+          )}
           <Btn small variant="ghost" onClick={() => setHistorySelected(new Set())}>Clear selection</Btn>
         </div>
       )}
@@ -263,7 +289,7 @@ export function ModelHistoryTab({
                       }}
                     />
                   </th>
-                  {["Date / Time", "Label", "Runs", "Served", "Reneged", "Avg Wait", "Summary", "Reshare", "Actions"].map(h => (
+                  {["Date / Time", "Label", "Runs", "Served", "Reneged", "Avg Wait", "Tags", "Actions"].map(h => (
                     <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 12px", color: C.muted, borderBottom: `1px solid ${C.border}`, fontSize: 11, letterSpacing: 1, fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -333,7 +359,6 @@ export function ModelHistoryTab({
                       <td style={{ padding: "6px 12px", color: C.served, fontWeight: 700 }}>{row.total_served || 0}</td>
                       <td style={{ padding: "6px 12px", color: row.total_reneged > 0 ? C.reneged : C.muted }}>{row.total_reneged || 0}</td>
                       <td style={{ padding: "6px 12px", color: C.amber }}>{row.avg_wait_time != null ? row.avg_wait_time.toFixed(2) : "—"}t</td>
-                      <td style={{ padding: "6px 12px", fontSize: 10, color: insight ? C.purple : C.muted, fontFamily: FONT, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={insight || ""}>{insight || "—"}</td>
                       <td style={{ padding: "6px 12px" }}>
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
                           {(row.tags || []).map(tag => (
@@ -365,57 +390,86 @@ export function ModelHistoryTab({
                           />
                         </div>
                       </td>
-                      <td style={{ padding: "6px 12px" }}>
-                        {shareLinksMap[row.id] ? (
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <Btn small variant="ghost" onClick={() => {
-                              navigator.clipboard.writeText(`${baseUrl}/#share/${shareLinksMap[row.id].token}`);
-                              toast.success("Link copied to clipboard");
-                            }}>📋 Copy</Btn>
-                            <Btn small variant="ghost" onClick={async () => {
-                              if (!window.confirm("Revoke this share link? Anyone with the link will no longer be able to view these results.")) return;
-                              try {
-                                await revokeShareLink(shareLinksMap[row.id].id, userId);
-                                setShareLinksMap(prev => {
-                                  const next = { ...prev };
-                                  delete next[row.id];
-                                  return next;
-                                });
-                                toast.success("Share link revoked");
-                              } catch {
-                                toast.error("Failed to revoke link");
-                              }
-                            }}>✕ Unshare</Btn>
+                      <td style={{ padding: "6px 12px", whiteSpace: "nowrap" }}>
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          {hasResultsPayload(row) && (
+                            <button
+                              onClick={() => onViewResults(row)}
+                              style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 999, padding: "4px 12px", fontSize: 11, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}
+                            >View Results</button>
+                          )}
+                          <button
+                            onClick={() => onAnalyseRun(row)}
+                            style={{ background: C.purple + "22", color: C.purple, border: `1px solid ${C.purple}44`, borderRadius: 999, padding: "4px 12px", fontSize: 11, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}
+                          >Analyse</button>
+                          <div style={{ position: "relative" }}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setMoreMenuId(moreMenuId === row.id ? null : row.id); }}
+                              aria-label="More actions"
+                              style={{ background: "transparent", color: C.muted, border: `1px solid ${C.border}`, borderRadius: 999, padding: "4px 8px", fontSize: 11, fontFamily: FONT, cursor: "pointer", lineHeight: 1 }}
+                              title="More actions"
+                            >⋯</button>
+                            {moreMenuId === row.id && (
+                              <>
+                                <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setMoreMenuId(null)} />
+                                <div style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 180, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 100 }}>
+                                  <button
+                                    onClick={() => { handleReproduce(row.id); }}
+                                    disabled={reproduceState[row.id]?.status === 'running'}
+                                    style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
+                                  >{reproduceState[row.id]?.status === 'running' ? 'Running…' : 'Reproduce'}</button>
+                                  {shareLinksMap[row.id] ? (
+                                    <button
+                                      onClick={() => { navigator.clipboard.writeText(`${baseUrl}/#share/${shareLinksMap[row.id].token}`); toast.success("Link copied"); setMoreMenuId(null); }}
+                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
+                                    >📋 Copy share link</button>
+                                  ) : userId && (
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          const link = await createShareLink(row.id, userId);
+                                          setShareLinksMap(prev => ({ ...prev, [row.id]: link }));
+                                          toast.success("Share link created");
+                                        } catch { toast.error("Failed to create share link"); }
+                                        setMoreMenuId(null);
+                                      }}
+                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
+                                    >Share</button>
+                                  )}
+                                  {shareLinksMap[row.id] && userId && (
+                                    <button
+                                      onClick={async () => {
+                                        if (!window.confirm("Revoke this share link?")) return;
+                                        try { await revokeShareLink(shareLinksMap[row.id].id, userId); setShareLinksMap(prev => { const next = { ...prev }; delete next[row.id]; return next; }); toast.success("Share link revoked"); } catch { toast.error("Failed to revoke"); }
+                                        setMoreMenuId(null);
+                                      }}
+                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.red, cursor: "pointer", borderRadius: 4 }}
+                                    >✕ Unshare</button>
+                                  )}
+                                  {userId && (
+                                    <button
+                                      onClick={async () => {
+                                        if (row.archived) { await unarchiveRun(row.id, userId).catch(() => {}); setHistoryRows(prev => prev.map(r => r.id === row.id ? { ...r, archived: false } : r)); }
+                                        else { await archiveRun(row.id, userId).catch(() => {}); if (!historyShowArchived) setHistoryRows(prev => prev.filter(r => r.id !== row.id)); else setHistoryRows(prev => prev.map(r => r.id === row.id ? { ...r, archived: true } : r)); }
+                                        setMoreMenuId(null);
+                                      }}
+                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4, borderTop: `1px solid ${C.border}` }}
+                                    >{row.archived ? "Unarchive" : "Archive"}</button>
+                                  )}
+                                  {userId && (
+                                    <button
+                                      onClick={async () => {
+                                        if (!confirm("Delete this run? This cannot be undone.")) return;
+                                        await deleteSimulationRun(row.id, userId).catch(() => {});
+                                        setHistoryRows(prev => prev.filter(r => r.id !== row.id));
+                                      }}
+                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.red, cursor: "pointer", borderRadius: 4 }}
+                                    >Delete</button>
+                                  )}
+                                </div>
+                              </>
+                            )}
                           </div>
-                        ) : <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>—</span>}
-                      </td>
-                      <td style={{ padding: "6px 12px" }}>
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {hasResultsPayload(row) && <Btn small variant="ghost" onClick={() => onViewResults(row)}>View Results</Btn>}
-                          <Btn small variant="ghost" onClick={() => onAnalyseRun(row)}>Analyse</Btn>
-                          <Btn
-                            small
-                            variant="ghost"
-                            onClick={() => handleReproduce(row.id)}
-                            disabled={reproduceState[row.id]?.status === 'running'}
-                          >
-                            {reproduceState[row.id]?.status === 'running' ? 'Running…' : 'Reproduce'}
-                          </Btn>
-                          {userId && <Btn small variant="ghost" onClick={async () => {
-                            if (row.archived) {
-                              await unarchiveRun(row.id, userId).catch(() => {});
-                              setHistoryRows(prev => prev.map(r => r.id === row.id ? { ...r, archived: false } : r));
-                            } else {
-                              await archiveRun(row.id, userId).catch(() => {});
-                              if (!historyShowArchived) setHistoryRows(prev => prev.filter(r => r.id !== row.id));
-                              else setHistoryRows(prev => prev.map(r => r.id === row.id ? { ...r, archived: true } : r));
-                            }
-                          }}>{row.archived ? "Unarchive" : "Archive"}</Btn>}
-                          {userId && <Btn small variant="ghost" onClick={async () => {
-                            if (!confirm("Delete this run? This cannot be undone.")) return;
-                            await deleteSimulationRun(row.id, userId).catch(() => {});
-                            setHistoryRows(prev => prev.filter(r => r.id !== row.id));
-                          }}>Delete</Btn>}
                         </div>
                         {reproduceState[row.id] && reproduceState[row.id].status !== 'running' && (
                           <div

@@ -114,6 +114,15 @@ function getLabelSpan(container, text) {
   return Array.from(spans).find(s => s.textContent === text);
 }
 
+// Helper: open the "More" dropdown for a row and return the menu
+async function openMoreMenu() {
+  const moreBtn = screen.getByRole('button', { name: 'More actions' });
+  fireEvent.click(moreBtn);
+  await waitFor(() => {
+    expect(screen.getByText(/Reproduce/i)).toBeInTheDocument();
+  });
+}
+
 describe('ModelHistoryTab — Run History UI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -235,7 +244,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     const setHistoryRows = vi.fn();
     renderTab({ historyRows: [baseRow], setHistoryRows });
     fireEvent.click(screen.getByLabelText('Select run Baseline'));
-    fireEvent.click(screen.getByRole('button', { name: 'Hide selected runs' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(mockArchiveRun).toHaveBeenCalledWith('run-1', 'u1'));
   });
 
@@ -307,20 +316,20 @@ describe('ModelHistoryTab — Run History UI', () => {
 
   // ── Share links ────────────────────────────────────────────────────────
 
-  it('shows copy and unshare buttons when share link exists', () => {
+  it('shows copy and unshare buttons when share link exists', async () => {
     renderTab({
       historyRows: [baseRow],
       shareLinksMap: { 'run-1': { id: 'link-1', token: 'abc123' } },
     });
-    expect(screen.getByRole('button', { name: /📋 Copy/i })).toBeInTheDocument();
+    await openMoreMenu();
+    expect(screen.getByRole('button', { name: /📋 Copy share link/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /✕ Unshare/i })).toBeInTheDocument();
   });
 
-  it('shows dash in Reshare column when no share link exists', () => {
+  it('shows dash in Reshare column when no share link exists', async () => {
     renderTab({ historyRows: [baseRow], shareLinksMap: {} });
-    // The Reshare column shows "—" as a span; there are multiple "—" on page
-    // so just verify the share link buttons are absent
-    expect(screen.queryByRole('button', { name: /📋 Copy/i })).not.toBeInTheDocument();
+    await openMoreMenu();
+    expect(screen.queryByRole('button', { name: /📋 Copy share link/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /✕ Unshare/i })).not.toBeInTheDocument();
   });
 
@@ -333,6 +342,7 @@ describe('ModelHistoryTab — Run History UI', () => {
       shareLinksMap: { 'run-1': { id: 'link-1', token: 'abc123' } },
       setShareLinksMap,
     });
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: /✕ Unshare/i }));
     await waitFor(() => expect(mockRevokeShareLink).toHaveBeenCalledWith('link-1', 'u1'));
   });
@@ -368,6 +378,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     mockArchiveRun.mockResolvedValue({ ok: true });
     const setHistoryRows = vi.fn();
     renderTab({ historyRows: [baseRow], setHistoryRows, historyShowArchived: false });
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(mockArchiveRun).toHaveBeenCalledWith('run-1', 'u1'));
   });
@@ -377,6 +388,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     const setHistoryRows = vi.fn();
     const archivedRow = makeRow({ archived: true });
     renderTab({ historyRows: [archivedRow], setHistoryRows, historyShowArchived: true });
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Unarchive' }));
     await waitFor(() => expect(mockUnarchiveRun).toHaveBeenCalledWith('run-1', 'u1'));
   });
@@ -388,6 +400,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     const setHistoryRows = vi.fn();
     window.confirm = vi.fn(() => true);
     renderTab({ historyRows: [baseRow], setHistoryRows });
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(mockDeleteSimulationRun).toHaveBeenCalledWith('run-1', 'u1'));
   });
@@ -395,6 +408,7 @@ describe('ModelHistoryTab — Run History UI', () => {
   it('delete is cancelled when user declines confirmation', async () => {
     window.confirm = vi.fn(() => false);
     renderTab({ historyRows: [baseRow] });
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(mockDeleteSimulationRun).not.toHaveBeenCalled();
   });
@@ -431,6 +445,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     });
 
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
@@ -446,6 +461,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     });
 
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
@@ -462,6 +478,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     });
 
     renderTab({ model: differentCurrentModel });
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() => expect(mockBuildEngine).toHaveBeenCalled());
@@ -485,6 +502,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     });
 
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
@@ -510,6 +528,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     });
 
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
@@ -532,6 +551,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     });
 
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
@@ -542,6 +562,7 @@ describe('ModelHistoryTab — Run History UI', () => {
   it('shows error when no model snapshot is stored', async () => {
     mockGetRun.mockResolvedValue({ ...baseRunRecord, model_snapshot: null });
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
     await waitFor(() =>
       expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/No model snapshot/i)
@@ -551,6 +572,7 @@ describe('ModelHistoryTab — Run History UI', () => {
   it('shows error when reproduce throws an exception', async () => {
     mockGetRun.mockRejectedValue(new Error('Network timeout'));
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
     await waitFor(() =>
       expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/Reproduce error.*Network timeout/i)
@@ -560,24 +582,17 @@ describe('ModelHistoryTab — Run History UI', () => {
   it('disables reproduce button while running', async () => {
     mockGetRun.mockResolvedValue(new Promise(() => {}));
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
     await waitFor(() => {
-      const btn = screen.getByRole('button', { name: 'Running…' });
+      const btn = screen.getByRole('button', { name: /Running/i });
       expect(btn).toBeDisabled();
     });
   });
 
   // ── AI insights display ────────────────────────────────────────────────
-
-  it('shows AI insight summary when present', () => {
-    const rowWithInsight = makeRow({ ai_insights: { summary: 'System is stable' } });
-    renderTab({ historyRows: [rowWithInsight] });
-    expect(screen.getByText('System is stable')).toBeInTheDocument();
-  });
-
-  it('shows dash when no AI insight', () => {
-    renderTab({ historyRows: [makeRow({ ai_insights: null })] });
-  });
+  // AI insights are no longer shown inline in the table; they are accessible
+  // via the Analyse button which opens the AI assistant panel.
 
   // ── Date formatting ────────────────────────────────────────────────────
 
