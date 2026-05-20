@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.7.0 (Sprints 1–66)
+Version: 1.12.0 (Sprints 1–68)
 
 ---
 
@@ -20,6 +20,7 @@ Version: 1.7.0 (Sprints 1–66)
 | v1.9.0 | 62–65 | Real-world clock (epoch), planned data import (CSV/XLSX/scheduleFeed), conditional service times (`when`), actuals tracking (plan vs actual deviation) |
 | v1.10.0 | 66 | Visual Designer badges, Execute Panel UX (Animate/Speed to Setup, Export consolidation, Entity Details rename, Log guard, chart formatting) |
 | v1.11.0 | 67 | AI Assistant simplified — single "Explain Results" button merges narrative, sensitivity, and suggestions; "Run with this change" replaces "Apply & Re-run"; results update automatically after applying a suggestion |
+| v1.12.0 | 68 | Run History redesign — grouped action pills, More menu, replication count badge, average served per replication; Experiments vs Studies clarified; report export uses model snapshot from run record; "Save this change to model" for AI suggestions |
 
 ---
 
@@ -541,25 +542,45 @@ Open **Experiments → Replication Run**. Set the number of replications (typica
 
 Use replications whenever you need statistical rigour. A single run gives one observation; replications give a distribution of outcomes.
 
-### 7.3 Parametric sweep (1D and 2D)
+### 7.3 Saved Experiments
 
-Open **Experiments → Parametric Sweep**.
+Open the **Experiments** tab to save named run configurations — warm-up period, replication count, seed, termination mode, and parameter overrides. Each saved experiment captures your current Execute panel settings so you can quickly reload and re-run them later. When you run a saved experiment, results are saved to run history.
+
+### 7.4 Parametric Studies (1D and 2D)
+
+Open the **Studies** tab.
 
 **1D sweep:** Choose one model parameter (e.g., server count, arrival rate, mean service time), set a range and step size. DES Studio runs the full replication batch at each parameter value and plots KPI vs. parameter.
 
 **2D sweep:** Choose two parameters, each with its own range. DES Studio runs a grid of experiments and renders a heatmap of the chosen KPI. Feasibility colouring applies: cells meeting all performance goals are green; cells that violate at least one goal are red. The best feasible point is annotated with a marker.
 
-### 7.4 Saving and comparing runs
+> **Note:** Study results are shown in charts and tables but are not saved to run history. Use saved Experiments if you need to persist run results.
 
-After any run click **Save Run** (or it saves automatically). Each saved run stores:
+### 7.5 Run History
 
-- Model snapshot (the exact JSON at run time)
-- All result statistics
-- Configuration (replications, end time, seed)
+Open **Run History** to list, re-open, or delete saved runs. The table shows:
 
-Open **Run History** to list, re-open, or delete saved runs. Use the per-row checkboxes (or **Select all**) to select multiple runs for bulk archive or bulk export. Select two runs and click **Compare** to view a side-by-side KPI table and charts. The AI **Compare Runs** feature provides a narrative comparison (see Section 9.5).
+| Column | Content |
+|--------|---------|
+| Date / Time | When the run completed |
+| Label | Click to edit the run name |
+| Runs | Replication count — highlighted when > 1 |
+| Avg Served | Average entities served per replication (total shown in tooltip for multi-replication runs) |
+| Reneged | Entities that left before service |
+| Avg Wait | Mean waiting time with a confidence badge (RAG-coloured percentage based on CI width) |
+| Tags | Click to add or remove tags |
+| Actions | Primary buttons and More menu |
 
-### 7.5 Keyboard shortcuts
+**Row actions:**
+- **View Results** — opens the Results workspace for that run (only when results data exists)
+- **Analyse** — opens the AI assistant with that run's context
+- **⋯ (More)** — dropdown with Reproduce, Share, Archive/Unarchive, and Delete
+
+**Bulk actions:** Select runs using checkboxes (or **Select all**) to archive, unarchive, delete, or export selected runs as CSV.
+
+Select two runs and click **Compare** to view a side-by-side KPI table and charts. The AI **Compare Runs** feature provides a narrative comparison (see Section 9.4).
+
+### 7.6 Keyboard shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -568,7 +589,7 @@ Open **Run History** to list, re-open, or delete saved runs. Use the per-row che
 
 Pressing `?` at any time (while focus is outside a text input) opens a modal listing all available shortcuts.
 
-### 7.6 Warmup period and Welch detection
+### 7.7 Warmup period and Welch detection
 
 Long-running models may start in an unrealistic empty state. The Analysis view applies **Welch's method** to detect the warmup period automatically: it finds the point in the cumulative mean chart where the running mean stabilises. Statistics reported in the KPI summary exclude data from before the detected warmup cutoff, giving steady-state estimates rather than transient ones.
 
@@ -649,6 +670,8 @@ Click **Explain Results** to receive a comprehensive analysis of your simulation
 ### 9.2 Apply a Suggested Change
 
 When the AI suggests a change that can be auto-applied (for example, increasing server count), a **Run with this change** button appears on the suggestion card. Clicking it runs a new simulation with the suggested change applied to a temporary copy of your model, then shows a before/after comparison table inline — without touching your saved model. This lets you verify the effect before deciding whether to apply it permanently.
+
+After the comparison table appears, a **Save this change to model** button lets you make the change permanent. Clicking it applies the suggested parameter change to your current model definition. You must then click **Save** in the model editor to persist the change to the database.
 
 Suggestions that require structural changes the tool cannot auto-apply (for example, adding a new queue) show the button as disabled with a note explaining what to change manually.
 
@@ -771,6 +794,8 @@ DES Studio generates a multi-section Word document (`.docx`) containing:
 6. **Simulation Results** — summary statistics, per-queue wait-time percentiles (P50/P90/P95/P99), resource utilisation table, performance goal assessment, and confidence intervals (for multi-replication runs)
 7. **Recommendations** — up to three AI-generated structured recommendations (finding → action → expected impact)
 8. **Appendix** — full model specification (entity types, queues, events, state variables)
+
+**The report uses the model snapshot stored with the run record**, not the current model definition. This ensures the report accurately describes what was actually simulated, even if the model has been edited since the run.
 
 **The report file is generated entirely in your browser — no simulation data is sent to any server during report generation.** The AI narrative and recommendations are fetched from the same LLM proxy used by the AI Insights panel; if the LLM is unavailable the report is still generated without the narrative sections.
 
