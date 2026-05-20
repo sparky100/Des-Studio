@@ -678,3 +678,93 @@ export function validateModel(model) {
 
   return { errors, warnings };
 }
+
+// ── Structural Change Detection ───────────────────────────────────────────────
+//
+// detectStructuralChanges(oldModel, newModel) returns { isStructural, changes }.
+// Structural changes = topology changes (entity types, events, queues, conditions, graph).
+// Parameter changes = distribution params, server counts, experiment defaults, name/description.
+
+const STRUCTURAL_KEYS = ["entityTypes", "bEvents", "cEvents", "queues", "graph"];
+const PARAMETER_KEYS = ["experimentDefaults", "goals", "name", "description"];
+
+function deepEqual(a, b) {
+  if (a === b) return true;
+  if (a == null || b == null) return a === b;
+  if (typeof a !== typeof b) return false;
+  if (Array.isArray(a)) {
+    if (!Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((v, i) => deepEqual(v, b[i]));
+  }
+  if (typeof a === "object") {
+    const keysA = Object.keys(a).sort();
+    const keysB = Object.keys(b).sort();
+    if (keysA.length !== keysB.length) return false;
+    if (!keysA.every((k, i) => k === keysB[i])) return false;
+    return keysA.every(k => deepEqual(a[k], b[k]));
+  }
+  return false;
+}
+
+function countItems(arr) { return Array.isArray(arr) ? arr.length : 0; }
+
+function diffArrays(oldArr, newArr, idKey = "id") {
+  const oldIds = new Set((oldArr || []).map(x => x[idKey]));
+  const newIds = new Set((newArr || []).map(x => x[idKey]));
+  const added = [...newIds].filter(id => !oldIds.has(id));
+  const removed = [...oldIds].filter(id => !newIds.has(id));
+  const common = [...newIds].filter(id => oldIds.has(id));
+  const modified = common.filter(id => {
+    const oldItem = (oldArr || []).find(x => x[idKey] === id);
+    const newItem = (newArr || []).find(x => x[idKey] === id);
+    return !deepEqual(oldItem, newItem);
+  });
+  return { added, removed, modified };
+}
+
+export function detectStructuralChanges(oldModel, newModel) {
+  const changes = [];
+
+  // Entity types
+  const etDiff = diffArrays(oldModel?.entityTypes, newModel?.entityTypes, "id");
+  if (etDiff.added.length) changes.push(`Entity type(s) added: ${etDiff.added.join(", ")}`);
+  if (etDiff.removed.length) changes.push(`Entity type(s) removed: ${etDiff.removed.join(", ")}`);
+  if (etDiff.modified.length) changes.push(`Entity type(s) modified: ${etDiff.modified.join(", ")}`);
+
+  // B-Events
+  const bDiff = diffArrays(oldModel?.bEvents, newModel?.bEvents, "id");
+  if (bDiff.added.length) changes.push(`B-Event(s) added: ${bDiff.added.join(", ")}`);
+  if (bDiff.removed.length) changes.push(`B-Event(s) removed: ${bDiff.removed.join(", ")}`);
+  if (bDiff.modified.length) changes.push(`B-Event(s) modified: ${bDiff.modified.join(", ")}`);
+
+  // C-Events
+  const cDiff = diffArrays(oldModel?.cEvents, newModel?.cEvents, "id");
+  if (cDiff.added.length) changes.push(`C-Event(s) added: ${cDiff.added.join(", ")}`);
+  if (cDiff.removed.length) changes.push(`C-Event(s) removed: ${cDiff.removed.join(", ")}`);
+  if (cDiff.modified.length) changes.push(`C-Event(s) modified: ${cDiff.modified.join(", ")}`);
+
+  // Queues
+  const qDiff = diffArrays(oldModel?.queues, newModel?.queues, "id");
+  if (qDiff.added.length) changes.push(`Queue(s) added: ${qDiff.added.join(", ")}`);
+  if (qDiff.removed.length) changes.push(`Queue(s) removed: ${qDiff.removed.join(", ")}`);
+  if (qDiff.modified.length) changes.push(`Queue(s) modified: ${qDiff.modified.join(", ")}`);
+
+  // Graph structure
+  const oldGraph = oldModel?.graph;
+  const newGraph = newModel?.graph;
+  if (!deepEqual(oldGraph, newGraph)) {
+    const oldNodeCount = oldGraph?.nodes?.length || 0;
+    const newNodeCount = newGraph?.nodes?.length || 0;
+    const oldEdgeCount = oldGraph?.edges?.length || 0;
+    const newEdgeCount = newGraph?.edges?.length || 0;
+    if (oldNodeCount !== newNodeCount || oldEdgeCount !== newEdgeCount) {
+      changes.push(`Graph structure changed (${oldNodeCount}→${newNodeCount} nodes, ${oldEdgeCount}→${newEdgeCount} edges)`);
+    }
+  }
+
+  return {
+    isStructural: changes.length > 0,
+    changes,
+  };
+}
+

@@ -200,6 +200,7 @@
   },
   "active": "34ab82a74db2ade8",
   "lastOpenFiles": [
+    "decisions/ADR-015-model-versioning.md",
     "reviews/sprint-68-plan.md",
     "readiness-gate-PR5.md",
     "capability-register.md",
@@ -226,7 +227,6 @@
     "reviews/sprint-49-closure.md",
     "reviews/sprint-49-plan.md",
     "reviews/sprint-50-closure.md",
-    "reviews/sprint-50-plan.md",
     "archived",
     "scratch",
     "pre-sprint-assessments",

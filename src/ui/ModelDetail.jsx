@@ -22,6 +22,7 @@ import { ModelHealthPanel }  from "./ModelHealthPanel.jsx";
 import { ModelDetailHeader } from "./ModelDetailHeader.jsx";
 import { ModelTabBar }       from "./ModelTabBar.jsx";
 import { SaveBanner }        from "./SaveBanner.jsx";
+import { VersionHistoryPanel } from "./VersionHistoryPanel.jsx";
 import { fetchRunHistory, listShareLinks } from "../db/models.js";
 import { validateModel }                    from "../engine/validation.js";
 import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
@@ -658,7 +659,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
     {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
     {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
-    ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
+    ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access","versions"]}]:[]),
   ];
   const isMobileLayout = viewportWidth < 720;
   const isCompactLayout = viewportWidth >= 720 && viewportWidth < 1024;
@@ -676,7 +677,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "state", "validate"];
     if (activeMode?.id === "execute") return ["execute"];
     if (activeMode?.id === "results") return ["results", "history"];
-    if (activeMode?.id === "access") return ["access"];
+    if (activeMode?.id === "access") return ["access", "versions"];
     return ["overview"];
   }, [activeMode?.id]);
   const hasModelIssues = validation.errors.length > 0 || validation.warnings.length > 0;
@@ -1079,6 +1080,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             ))}
             </section>
           </div>
+        )}
+        {tab==="versions"&&isOwner&&(
+          <VersionHistoryPanel
+            model={model}
+            userId={overrides.userId}
+            isOwner={isOwner}
+            onToast={toast}
+          />
         )}
         </ErrorBoundary>
       </div>

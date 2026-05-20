@@ -375,6 +375,7 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     results_json:        resultsJson,
     duration_ms:         config.durationMs || null,
     run_label:           runLabel || null,
+    version_id:          config.versionId || null,
   }).select("id").single();
   if (error) throw error;
   return data?.id;
@@ -906,6 +907,93 @@ export async function deleteExperiment(id) {
     .from("experiments")
     .delete()
     .eq("id", id);
+  if (error) throw error;
+  return { ok: true };
+}
+
+// ── Model Versions ────────────────────────────────────────────────────────────
+
+function normalizeVersion(row) {
+  return {
+    id: row.id,
+    modelId: row.model_id,
+    version: row.version,
+    name: row.name,
+    notes: row.notes,
+    modelJson: row.model_json,
+    isStructural: row.is_structural,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
+}
+
+export async function getNextVersion(modelId) {
+  const { data, error } = await supabase
+    .from("model_versions")
+    .select("version")
+    .eq("model_id", modelId)
+    .order("version", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return (data && data.length > 0) ? data[0].version + 1 : 1;
+}
+
+export async function createVersion(modelId, userId, { version, name, notes, modelJson, isStructural }) {
+  const { data, error } = await supabase
+    .from("model_versions")
+    .insert({
+      model_id: modelId,
+      version,
+      name: name || null,
+      notes: notes || null,
+      model_json: modelJson,
+      is_structural: isStructural !== undefined ? isStructural : true,
+      created_by: userId,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return normalizeVersion(data);
+}
+
+export async function listVersions(modelId) {
+  const { data, error } = await supabase
+    .from("model_versions")
+    .select("*")
+    .eq("model_id", modelId)
+    .order("version", { ascending: false });
+  if (error) throw error;
+  return (data || []).map(normalizeVersion);
+}
+
+export async function getVersion(modelId, version) {
+  const { data, error } = await supabase
+    .from("model_versions")
+    .select("*")
+    .eq("model_id", modelId)
+    .eq("version", version)
+    .single();
+  if (error) throw error;
+  if (!data) return null;
+  return normalizeVersion(data);
+}
+
+export async function deleteVersion(modelId, versionId, userId) {
+  const { data: model, error: modelError } = await runDesModelsSelect((selectClause) =>
+    supabase
+      .from("des_models")
+      .select(selectClause)
+      .eq("id", modelId)
+      .single()
+  );
+  if (modelError) throw modelError;
+  if (!model || model.owner_id !== userId) throw new Error("Only the model owner can delete versions.");
+
+  const { error } = await supabase
+    .from("model_versions")
+    .delete()
+    .eq("id", versionId)
+    .eq("model_id", modelId);
   if (error) throw error;
   return { ok: true };
 }

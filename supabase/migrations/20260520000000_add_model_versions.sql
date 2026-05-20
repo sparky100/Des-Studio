@@ -1,5 +1,6 @@
 -- Sprint 68: Model Versioning
 -- Adds model_versions table for explicit milestone tagging
+-- Adds version_id to simulation_runs for optional version reference
 
 CREATE TABLE IF NOT EXISTS model_versions (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -15,6 +16,10 @@ CREATE TABLE IF NOT EXISTS model_versions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_model_versions_model ON model_versions(model_id, version DESC);
+
+-- Add version_id to simulation_runs (nullable, existing runs unaffected)
+ALTER TABLE simulation_runs ADD COLUMN IF NOT EXISTS version_id UUID REFERENCES model_versions(id);
+CREATE INDEX IF NOT EXISTS idx_simulation_runs_version ON simulation_runs(version_id);
 
 -- RLS policies: only model owner can manage versions
 ALTER TABLE model_versions ENABLE ROW LEVEL SECURITY;

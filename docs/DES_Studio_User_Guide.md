@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.12.0 (Sprints 1–68)
+Version: 1.13.0 (Sprints 1–68)
 
 ---
 
@@ -20,6 +20,7 @@ Version: 1.12.0 (Sprints 1–68)
 | v1.9.0 | 62–65 | Real-world clock (epoch), planned data import (CSV/XLSX/scheduleFeed), conditional service times (`when`), actuals tracking (plan vs actual deviation) |
 | v1.10.0 | 66 | Visual Designer badges, Execute Panel UX (Animate/Speed to Setup, Export consolidation, Entity Details rename, Log guard, chart formatting) |
 | v1.11.0 | 67 | AI Assistant simplified — single "Explain Results" button merges narrative, sensitivity, and suggestions; "Run with this change" replaces "Apply & Re-run"; results update automatically after applying a suggestion |
+| v1.13.0 | 68 | Model versioning — explicit milestones, version history panel, create version dialog with notes, structural change detection, run records reference version |
 | v1.12.0 | 68 | Run History redesign — grouped action pills, More menu, replication count badge, average served per replication; Experiments vs Studies clarified; report export uses model snapshot from run record; "Save this change to model" for AI suggestions |
 
 ---

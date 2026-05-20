@@ -119,6 +119,7 @@ flowchart LR
 | Expressiveness and observability | ✅ Complete | Sprint 31: clock token in Condition Builder, WIP time-average metric (Little's Law), live queue-depth time-plot in Execute canvas Charts tab. |
 | Resource reliability and preemption | ✅ Complete | Sprint 32: PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure events. |
 | Advanced scheduling and analytics | ✅ Complete | Sprint 33: SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
+| Model versioning | ✅ Complete | Sprint 68: explicit milestone versioning, `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. |
 | Plain-English UX and Results clarity | 🔄 Planned | Sprint 67: simplify user-facing language, reorder Results around summary/reliability/bottlenecks, and move technical detail behind progressive disclosure. |
 | Next roadmap shape | 🔄 In progress | Sprint 34+ roadmap to be defined. |
 
@@ -195,6 +196,7 @@ flowchart LR
 | 1.70 | 2026-05-14 | Sprint 32 completed. PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure events. |
 | 1.71 | 2026-05-15 | Sprint 33 completed. SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. Documentation cleanup: archived 17 superseded/scratch files. |
 | 1.77 | 2026-05-19 | Sprint 67 planned. Added plain-English UX and Results clarity sprint plan, closure template, capability guide, AGENTS tracking, and product-spec presentation requirements. |
+| 1.78 | 2026-05-20 | Sprint 68 completed. Model versioning as explicit milestones: `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. ADR-015 created. 30 new tests. |
 
 ---
 

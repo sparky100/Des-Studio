@@ -5,9 +5,9 @@
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Current sprint plan: `docs/reviews/sprint-67-plan.md`
-- Latest closure report: `docs/reviews/sprint-66-closure.md`
-- Planned capability guide: `docs/sprint-67-plain-language-ux-guide.md`
+- Current sprint plan: `docs/reviews/sprint-68-plan.md`
+- Latest closure report: `docs/reviews/sprint-67-closure.md`
+- Planned capability guide: `docs/sprint-68-model-versioning-guide.md`
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
@@ -1278,6 +1278,7 @@ This prevents silent architectural drift — the most common way AI-assisted pro
 | ADR-007 | Three authoring modes over one canonical model | Accepted | Sprint 6 planning | §21 |
 | ADR-008 | Platform roles and user settings, with SaaS/LLM follow-ons | Accepted | Sprint 7A | §21 |
 | ADR-009 | Reassess JavaScript-only implementation and TypeScript adoption | Accepted | Sprint 7A | §2, §21 |
+| ADR-015 | Model versioning as explicit milestones | Accepted | Sprint 68 | §21, §23 |
 
 ---
 
@@ -1417,6 +1418,7 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 53 | ✅ Complete | 2026-05-16 | God component decomposition: AuthShell extracted from App.jsx, ModelHistoryTab extracted from ModelDetail.jsx |
 | Sprint 54 | ✅ Complete | 2026-05-16 | Cost modelling visibility: totalCost/costPerServed in CI_METRICS, ANALYSIS_METRICS, ResultsWorkspace tile; per-entity cost in entity.attrs.__cost |
 | Sprint 55a | ✅ Complete | 2026-05-16 | God component decomposition: ModelHealthPanel, ModelDetailHeader, SaveBanner, ModelTabBar from ModelDetail; AppNavBar, ModelLibrary from App; ExperimentControls from execute/index |
+| Sprint 68 | ✅ Complete | 2026-05-20 | Model versioning as explicit milestones: `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version |
 
 ---
 
