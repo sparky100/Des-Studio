@@ -487,6 +487,7 @@ export async function getRun(runId) {
       terminationCondition: null,
     },
     summary: rj.summary ?? null,
+    results_json: rj,
   };
 }
 

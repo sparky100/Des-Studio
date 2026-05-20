@@ -1,6 +1,10 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+vi.mock('../../src/ui/shared/xlsxParser.js', () => ({
+  parseXlsx: vi.fn(),
+}));
+
 const mockGetRun     = vi.hoisted(() => vi.fn());
 const mockBuildEngine = vi.hoisted(() => vi.fn());
 
@@ -52,6 +56,7 @@ const baseRunRecord = {
   engine_version: '55a',
   experiment_config: { maxSimTime: 500, warmupPeriod: 0, replications: 1, terminationMode: 'time', terminationCondition: null },
   summary: storedSummary,
+  results_json: { summary: storedSummary },
 };
 
 function renderTab(overrides = {}) {
@@ -127,5 +132,74 @@ describe('Reproduce Run', () => {
     const [engineModel] = mockBuildEngine.mock.calls[0];
     expect(engineModel).toEqual(snapshot);
     expect(engineModel).not.toEqual(differentCurrentModel);
+  });
+
+  it('reproduces successfully when getRun returns results_json with nested summary', async () => {
+    const runRecordWithResultsJson = {
+      ...baseRunRecord,
+      results_json: {
+        summary: storedSummary,
+        _model_snapshot: snapshot,
+        _base_seed: 42,
+      },
+    };
+    mockGetRun.mockResolvedValue(runRecordWithResultsJson);
+    mockBuildEngine.mockReturnValue({
+      runAll: () => ({ summary: storedSummary }),
+    });
+
+    renderTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/bit-identical/i)
+    );
+  });
+
+  it('reproduces successfully when summary is only available via results_json.summary', async () => {
+    const runRecordWithoutTopSummary = {
+      id: 'run-1',
+      model_snapshot: snapshot,
+      base_seed: 42,
+      engine_version: '55a',
+      experiment_config: { maxSimTime: 500, warmupPeriod: 0, replications: 1, terminationMode: 'time', terminationCondition: null },
+      summary: null,
+      results_json: {
+        summary: storedSummary,
+      },
+    };
+    mockGetRun.mockResolvedValue(runRecordWithoutTopSummary);
+    mockBuildEngine.mockReturnValue({
+      runAll: () => ({ summary: storedSummary }),
+    });
+
+    renderTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/bit-identical/i)
+    );
+  });
+
+  it('fails reproduce when results_json is missing entirely', async () => {
+    const runRecordWithNoResultsJson = {
+      id: 'run-1',
+      model_snapshot: snapshot,
+      base_seed: 42,
+      engine_version: '55a',
+      experiment_config: { maxSimTime: 500, warmupPeriod: 0, replications: 1, terminationMode: 'time', terminationCondition: null },
+      summary: null,
+    };
+    mockGetRun.mockResolvedValue(runRecordWithNoResultsJson);
+    mockBuildEngine.mockReturnValue({
+      runAll: () => ({ summary: storedSummary }),
+    });
+
+    renderTab();
+    fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/Reproduce failed/i)
+    );
   });
 });

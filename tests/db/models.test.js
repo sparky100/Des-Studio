@@ -24,6 +24,7 @@ import {
   getSweep,
   listSweeps,
   deleteSweep,
+  getRun,
 } from '../../src/db/models.js';
 import { supabase } from '../../src/db/supabase.js';
 
@@ -881,6 +882,73 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(supabase.from('sweeps').delete).toHaveBeenCalled();
       expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('id', 'sweep-1');
       expect(supabase.from('sweeps').eq).toHaveBeenCalledWith('run_by', 'user-1');
+    });
+  });
+
+  describe('getRun', () => {
+    beforeEach(() => {
+      supabase.from.mockClear();
+    });
+
+    it('returns results_json so reproduce check can access stored summary', async () => {
+      const storedResultsJson = {
+        summary: { served: 10, avgWait: 5.0, avgSvc: 2.0, avgSojourn: 7.0, reneged: 0 },
+        _model_snapshot: { id: 'm1', name: 'Test', entityTypes: [] },
+        _base_seed: 42,
+        _engine_version: '55a',
+      };
+      supabase.from.mockReturnValue({
+        select: () => ({
+          eq: () => ({
+            single: () => Promise.resolve({
+              data: {
+                id: 'run-1',
+                results_json: storedResultsJson,
+                max_simulation_time: 500,
+                warmup_period: 0,
+                replications: 1,
+                seed: 42,
+                ran_at: '2026-05-01T12:00:00Z',
+              },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const run = await getRun('run-1');
+
+      expect(run.results_json).toEqual(storedResultsJson);
+      expect(run.results_json.summary).toEqual(storedResultsJson.summary);
+      expect(run.summary).toEqual(storedResultsJson.summary);
+      expect(run.model_snapshot).toEqual(storedResultsJson._model_snapshot);
+      expect(run.base_seed).toBe(42);
+    });
+
+    it('returns null results_json when not stored', async () => {
+      supabase.from.mockReturnValue({
+        select: () => ({
+          eq: () => ({
+            single: () => Promise.resolve({
+              data: {
+                id: 'run-2',
+                results_json: null,
+                max_simulation_time: 500,
+                warmup_period: 0,
+                replications: 1,
+                seed: 99,
+                ran_at: '2026-05-01T12:00:00Z',
+              },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const run = await getRun('run-2');
+
+      expect(run.results_json).toEqual({});
+      expect(run.summary).toBeNull();
     });
   });
 });
