@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.13.0 (Sprints 1–68)
+Version: 1.14.0 (Sprints 1–68)
 
 ---
 
