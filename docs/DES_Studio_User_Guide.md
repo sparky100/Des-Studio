@@ -121,9 +121,16 @@ After sign-in (or on first open), DES Studio shows the Model Library with two ta
 
 ### Creating a model
 
-Click **New Model** in My Models. Give the model a name and (optionally) a description. DES Studio creates an empty model and opens it in the Model Detail view.
+There are four ways to create a new model in DES Studio:
 
-To bring in an existing model definition, use **Import** to upload a `.json` file, or click **Paste JSON** in the library header to paste a model JSON directly from the clipboard. Both routes run the same validation gate before opening the model.
+| Method | How | Best for |
+|--------|-----|----------|
+| **New Model** | Click **New Model** in My Models, give it a name and optional description | Starting from scratch |
+| **Import** | Click **Import** to upload a `.json` file | Loading a model saved from another DES Studio instance |
+| **Paste JSON** | Click **Paste JSON** in the library header and paste model JSON from the clipboard | Quickly importing a model shared as text |
+| **Templates** | Click a template in the Templates tab | Starting from a pre-built scenario (creates a private copy) |
+
+All four methods run the same validation gate before opening the model. Import and Paste JSON also create a new model owned by you — they do not overwrite existing models.
 
 ### Three authoring modes
 
