@@ -72,7 +72,10 @@ export const NewModelModal=({onClose,onCreate,onUseTemplate,onImportFile,onPaste
   const handlePasteSubmit=()=>{
     if(!pasteText.trim()||!name.trim())return;
     setPasteStatus({state:"loading",message:"Validating JSON..."});
-    onPasteJson?.(pasteText,name.trim(),desc.trim(),()=>{onClose();});
+    onPasteJson?.(pasteText,name.trim(),desc.trim(),
+      ()=>{onClose();},
+      (msg)=>{setPasteStatus({state:"error",message:msg});}
+    );
   };
   const useTemplate=()=>{onUseTemplate?.(name.trim(),desc.trim());onClose();};
   const useAi=()=>{onUseAi?.(name.trim(),desc.trim());onClose();};
@@ -384,8 +387,8 @@ export function ModelLibrary({
               console.error("Import failed:", e);
             }
           }}
-          onPasteJson={(pasteText, name, desc, onSuccess) => {
-            onPasteJsonImport(pasteText, onSuccess);
+          onPasteJson={(pasteText, name, desc, onSuccess, onError) => {
+            onPasteJsonImport(pasteText, onSuccess, onError);
           }}
           onUseAi={(name, desc) => {
             onCreateNewModel(name, desc).then(m => {
