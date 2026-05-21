@@ -11,6 +11,48 @@ function makeIssue(severity, code, message, nodeId, nodeName) {
   return { severity, code, message, nodeId: nodeId ?? null, nodeName: nodeName ?? null };
 }
 
+// ── Helpers: extract entity info from both old macro format and current effect strings ─
+
+function effectString(bEvent) {
+  return Array.isArray(bEvent.effect)
+    ? bEvent.effect.filter(Boolean).join(';')
+    : (bEvent.effect || '');
+}
+
+function buildArrivedTypes(bEvents) {
+  const types = new Set();
+  for (const bEvent of bEvents) {
+    for (const schedule of bEvent.schedules || []) {
+      if (schedule.macro === "ARRIVE" && schedule.entityTypeName) {
+        types.add(schedule.entityTypeName.trim().toLowerCase());
+      }
+    }
+    for (const m of effectString(bEvent).matchAll(/ARRIVE\s*\(\s*([^,)]+)/gi)) {
+      types.add(m[1].trim().toLowerCase());
+    }
+  }
+  return types;
+}
+
+function buildFedQueues(bEvents) {
+  const queues = new Set();
+  for (const bEvent of bEvents) {
+    for (const schedule of bEvent.schedules || []) {
+      if (schedule.macro === "ARRIVE" && schedule.queueName) {
+        queues.add(schedule.queueName.trim().toLowerCase());
+      }
+    }
+    for (const m of effectString(bEvent).matchAll(/ARRIVE\s*\([^,)]+,\s*([^)]+)/gi)) {
+      queues.add(m[1].trim().toLowerCase());
+    }
+  }
+  return queues;
+}
+
+function hasAnyExitEffect(bEvents) {
+  return bEvents.some(b => /\b(COMPLETE|RENEGE)\s*\(/i.test(effectString(b)));
+}
+
 /**
  * CHK-001: Entity type has no arrival B-event that creates it.
  */
@@ -19,14 +61,7 @@ function chk001(model) {
   const entityTypes = model.entityTypes || [];
   const bEvents = model.bEvents || [];
 
-  const arrivedTypes = new Set();
-  for (const bEvent of bEvents) {
-    for (const schedule of bEvent.schedules || []) {
-      if (schedule.macro === "ARRIVE" && schedule.entityTypeName) {
-        arrivedTypes.add(schedule.entityTypeName.trim().toLowerCase());
-      }
-    }
-  }
+  const arrivedTypes = buildArrivedTypes(bEvents);
 
   for (const et of entityTypes) {
     if (et.role === "server") continue;
@@ -51,14 +86,7 @@ function chk002(model) {
   const bEvents = model.bEvents || [];
   const cEvents = model.cEvents || [];
 
-  const arrivedTypes = new Set();
-  for (const bEvent of bEvents) {
-    for (const schedule of bEvent.schedules || []) {
-      if (schedule.macro === "ARRIVE" && schedule.entityTypeName) {
-        arrivedTypes.add(schedule.entityTypeName.trim().toLowerCase());
-      }
-    }
-  }
+  const arrivedTypes = buildArrivedTypes(bEvents);
 
   const destroyedTypes = new Set();
   for (const bEvent of bEvents) {
@@ -73,6 +101,12 @@ function chk002(model) {
       if (schedule.macro === "SEIZE" && schedule.entityTypeName) {
         destroyedTypes.add(schedule.entityTypeName.trim().toLowerCase());
       }
+    }
+  }
+  // Current format: COMPLETE() / RENEGE(ctx) exit any customer entity
+  if (hasAnyExitEffect(bEvents)) {
+    for (const et of entityTypes) {
+      if (et.role !== "server") destroyedTypes.add((et.name || '').trim().toLowerCase());
     }
   }
 
@@ -198,14 +232,7 @@ function chk006(model) {
   const issues = [];
   const bEvents = model.bEvents || [];
 
-  const fedQueues = new Set();
-  for (const bEvent of bEvents) {
-    for (const schedule of bEvent.schedules || []) {
-      if (schedule.macro === "ARRIVE" && schedule.queueName) {
-        fedQueues.add(schedule.queueName.trim().toLowerCase());
-      }
-    }
-  }
+  const fedQueues = buildFedQueues(bEvents);
 
   for (const cEvent of model.cEvents || []) {
     const name = cEvent.name || cEvent.id || "?";

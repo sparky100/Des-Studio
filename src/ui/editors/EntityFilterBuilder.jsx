@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 
@@ -55,6 +55,13 @@ const EntityFilterBuilder = ({ entityTypes = [], value, onChange }) => {
     );
 
   const [rows, setRows] = useState(() => _predicateToFilterRows(value));
+  const prevValueRef = useRef(value);
+  useEffect(() => {
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setRows(_predicateToFilterRows(value));
+    }
+  }, [value]);
 
   const updateRows = (newRows) => {
     setRows(newRows);

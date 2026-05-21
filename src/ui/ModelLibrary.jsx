@@ -358,17 +358,8 @@ export function ModelLibrary({
           onCreate={async (name, desc) => { await onCreateNewModel(name, desc); }}
           onUseTemplate={(name, desc) => { setTab("templates"); }}
           onImportFile={(jsonText, name, desc) => {
-            try {
-              const payload = JSON.parse(jsonText);
-              const importedModel = extractImportedModelPayload(payload);
-              if (importedModel) {
-                importedModel.name = name || importedModel.name;
-                importedModel.description = desc || importedModel.description;
-                onCreateNewModel(name || importedModel.name, desc || importedModel.description, importedModel);
-              }
-            } catch (e) {
-              console.error("Import failed:", e);
-            }
+            setShowNew(false);
+            onImportFile(jsonText, name, desc);
           }}
           onPasteJson={(pasteText, name, desc, onSuccess, onError) => {
             onPasteJsonImport(pasteText, onSuccess, onError);
