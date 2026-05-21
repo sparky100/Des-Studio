@@ -37,7 +37,7 @@ export function normalizeUserSettings(row = {}) {
   };
 }
 
-const DES_MODELS_SELECT_CURRENT = "id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at";
+const DES_MODELS_SELECT_CURRENT = "id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,model_json,owner_id,created_at,updated_at,latest_version,parent_model_id";
 const DES_MODELS_SELECT_LEGACY = "id,name,description,tags,visibility,access,entity_types,state_variables,b_events,c_events,queues,goals,owner_id,created_at,updated_at";
 const DES_MODELS_SELECT_MINIMAL = "id,name,description,visibility,entity_types,state_variables,b_events,c_events,owner_id,created_at,updated_at";
 const DES_MODELS_SELECTS = [
@@ -104,6 +104,7 @@ export function norm(r) {
     createdAt:      r.created_at,
     updatedAt:      r.updated_at,
     latestVersion:  r.latest_version || 0,
+    parentModelId:  r.parent_model_id || null,
   };
 }
 
@@ -527,7 +528,7 @@ export async function fetchRunStatsForModels(modelIds = [], userId) {
   }, emptyStats);
 }
 
-export async function forkModel(sourceModelId, newUserId, newName = "") {
+export async function forkModel(sourceModelId, newUserId, newName = "", options = {}) {
   // 1. Fetch the original model — must be owned by or accessible to the user
   const { data: sourceModel, error: fetchError } = await runDesModelsSelect((selectClause) =>
     supabase
@@ -548,6 +549,8 @@ export async function forkModel(sourceModelId, newUserId, newName = "") {
     name:           newName || `Fork of ${sourceModel.name}`,
     visibility:     'private', // Forked models are always private
     access:         {},        // Clear access rules
+    parent_model_id: options.parentModelId || null,
+    latest_version: 0,
     created_at:     undefined, // Supabase will set these
     updated_at:     undefined,
   };

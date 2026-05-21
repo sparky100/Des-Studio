@@ -121,7 +121,7 @@ function renderModifiedSummary(item) {
   );
 }
 
-export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onApply, onApplyAndSave, onDiscard, allowDraftApply = false }) {
+export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onApply, onApplyAndSave, onDiscard, allowDraftApply = false, readOnly = false }) {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(SECTION_META.map(section => section.key));
   const [validation, setValidation] = useState(null);
@@ -253,11 +253,16 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
       })}
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-        {!selecting && <Btn variant="ghost" onClick={() => setSelecting(true)} disabled={saving}>Apply Selected</Btn>}
-        {selecting && <Btn variant="ghost" onClick={() => applyModel("selected")} disabled={!selected.length || saving}>Apply Selected</Btn>}
-        {selecting && onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("selected", true)} disabled={!selected.length || saving}>{saving ? "Saving..." : "Apply & Save Selected"}</Btn>}
-        <Btn variant="primary" onClick={() => applyModel("all")} disabled={saving}>Apply All</Btn>
-        {onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("all", true)} disabled={saving}>{saving ? "Saving..." : "Apply & Save All"}</Btn>}
+        {!readOnly && (
+          <>
+            {!selecting && <Btn variant="ghost" onClick={() => setSelecting(true)} disabled={saving}>Apply Selected</Btn>}
+            {selecting && <Btn variant="ghost" onClick={() => applyModel("selected")} disabled={!selected.length || saving}>Apply Selected</Btn>}
+            {selecting && onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("selected", true)} disabled={!selected.length || saving}>{saving ? "Saving..." : "Apply & Save Selected"}</Btn>}
+            <Btn variant="primary" onClick={() => applyModel("all")} disabled={saving}>Apply All</Btn>
+            {onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("all", true)} disabled={saving}>{saving ? "Saving..." : "Apply & Save All"}</Btn>}
+          </>
+        )}
+        <Btn variant="ghost" onClick={onDiscard}>Close</Btn>
       </div>
     </div>
   );

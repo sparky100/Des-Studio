@@ -416,6 +416,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const [showMoreTabs,setShowMoreTabs]=useState(false);
   const [currentVersion,setCurrentVersion]=useState(null);
   const [currentVersionId,setCurrentVersionId]=useState(null);
+  const [showBaselineModal,setShowBaselineModal]=useState(false);
+  const [baselineName,setBaselineName]=useState("");
+  const [baselineSaving,setBaselineSaving]=useState(false);
   const baseUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname.replace(/\/+$/, "") : "";
   const isOwner=overrides.isOwner!==undefined?overrides.isOwner:false;
   const canEdit=overrides.canEdit!==undefined?overrides.canEdit:false;
@@ -439,6 +442,36 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   }, [modelId, isOwner]);
 
   const handleAnalyseRun=useCallback((row)=>{setAnalyseRun(row);setTab("execute");},[]);
+
+  const handleRestoreVersion = (versionModelJson) => {
+    const restored = {
+      ...model,
+      entityTypes:        versionModelJson.entityTypes        || [],
+      stateVariables:     versionModelJson.stateVariables     || [],
+      bEvents:            versionModelJson.bEvents            || [],
+      cEvents:            versionModelJson.cEvents            || [],
+      queues:             versionModelJson.queues             || [],
+      graph:              versionModelJson.graph              ?? null,
+      experimentDefaults: versionModelJson.experimentDefaults || {},
+      goals:              versionModelJson.goals              || [],
+    };
+    setWholeModel(restored);
+  };
+
+  const handleSaveAsBaseline = async () => {
+    if (!overrides.onSaveAsBaseline || !baselineName.trim()) return;
+    setBaselineSaving(true);
+    try {
+      await overrides.onSaveAsBaseline(modelId, baselineName.trim(), modelId);
+      setShowBaselineModal(false);
+      setBaselineName("");
+      toast.success("Scenario baseline created");
+    } catch (e) {
+      toast.error(e?.message || "Could not create baseline");
+    } finally {
+      setBaselineSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (modelData?.stats && modelData.stats.runs !== model?.stats?.runs) {
@@ -872,8 +905,24 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 <Btn small variant="ghost" onClick={reopenStarterGuide}>Show getting started guide</Btn>
               </div>
             )}
+            {model.parentModelId && (
+              <div style={{background:`${C.accent}0d`,border:`1px solid ${alpha(C.accent,0.25)}`,borderRadius:6,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:11,color:C.accent,fontFamily:FONT}}>
+                  Forked from <strong>{overrides.parentModelName||"another model"}</strong>
+                </span>
+              </div>
+            )}
             <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
             <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
+            {canEdit && overrides.onSaveAsBaseline && (
+              <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+                <div>
+                  <div style={{fontSize:12,fontWeight:700,color:C.text,fontFamily:FONT,marginBottom:2}}>Save as scenario baseline</div>
+                  <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>Fork this model under a new name to explore a variant, keeping a link back to this original.</div>
+                </div>
+                <Btn small variant="ghost" onClick={()=>{setBaselineName(`Scenario from ${model.name||"this model"}`);setShowBaselineModal(true);}}>Save as scenario baseline</Btn>
+              </div>
+            )}
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
               <GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
             </div>
@@ -1134,7 +1183,36 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             isOwner={isOwner}
             onToast={toast}
             onVersionChange={(ver, verId) => { setCurrentVersion(ver); setCurrentVersionId(verId); }}
+            currentModel={model}
+            onRestoreVersion={handleRestoreVersion}
           />
+        )}
+        {showBaselineModal&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200,padding:16}}>
+            <div role="dialog" aria-modal="true" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:12,padding:24,width:"min(440px,100%)",fontFamily:FONT,display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{fontSize:15,fontWeight:700,color:C.text}}>Save as scenario baseline</div>
+              <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>
+                Creates a new private model forked from this one, with a link back to the original.
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                <label style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1}}>NAME FOR NEW SCENARIO</label>
+                <input
+                  autoFocus
+                  value={baselineName}
+                  onChange={e=>setBaselineName(e.target.value)}
+                  onKeyDown={e=>{if(e.key==="Enter")handleSaveAsBaseline();if(e.key==="Escape"){setShowBaselineModal(false);setBaselineName("");}}}
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",outline:"none"}}
+                  placeholder="e.g. High-demand scenario"
+                />
+              </div>
+              <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+                <Btn variant="ghost" onClick={()=>{setShowBaselineModal(false);setBaselineName("");}}>Cancel</Btn>
+                <Btn variant="primary" disabled={!baselineName.trim()||baselineSaving} onClick={handleSaveAsBaseline}>
+                  {baselineSaving?"Creating…":"Create"}
+                </Btn>
+              </div>
+            </div>
+          </div>
         )}
         </ErrorBoundary>
       </div>

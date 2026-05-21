@@ -1,13 +1,13 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-19 | Reflects: Sprint 67 planning — Plain-English UX & Results Clarity.*
+*Last updated: 2026-05-21 | Reflects: Sprint 68 — Model Versioning.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
 - Current sprint plan: `docs/reviews/sprint-68-plan.md`
-- Latest closure report: `docs/reviews/sprint-67-closure.md`
-- Planned capability guide: `docs/sprint-68-model-versioning-guide.md`
+- Latest closure report: `docs/reviews/sprint-68-closure.md`
+- Capability guide: `docs/sprint-68-model-versioning-guide.md`
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
@@ -1111,6 +1111,9 @@ Key tables in Supabase. Do not change column names without updating `src/db/mode
 | `models` | `id`, `name`, `user_id`, `model_json`, `is_public`, `created_at` | `model_json` is JSONB — full model stored here |
 | `runs` | `id`, `model_id`, `seed`, `replications`, `max_simulation_time`, `results_json`, `created_at` | Sprint 4 persists one row per replication batch. `batch_id` is stored in `results_json.batch_id` because no committed schema column exists. |
 | `profiles` | `id`, `username`, `avatar_url` | Linked to Supabase Auth `auth.users` |
+| `model_versions` | `id`, `model_id`, `version`, `name`, `notes`, `model_json`, `is_structural`, `created_at`, `created_by` | Owner-only write via RLS. `version` is an auto-incrementing integer per model, not global. Full model snapshot stored as JSONB. |
+| `des_models.latest_version` | Integer column on `des_models`, denormalised for library display | Kept in sync by `createVersion()` and `deleteVersion()`. |
+| `des_models.parent_model_id` | UUID FK to `des_models(id)` ON DELETE SET NULL | Set by "Save as scenario baseline" flow only. Copy operations do NOT set this field. |
 
 **Schema rules:**
 - Never add columns without adding a corresponding entry to the relevant CRUD wrapper in `src/db/models.js`.
