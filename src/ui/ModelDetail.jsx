@@ -1021,7 +1021,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
               <div>
                 <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:4}}>MODEL HEALTH</div>
-                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Readiness, blockers, and warnings</div>
+                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Readiness and blockers</div>
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(150px, 1fr))",gap:10}}>
@@ -1036,9 +1036,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 </div>
               ))}
             </div>
-            {[...(validation.errors||[]),...(validation.warnings||[])].length ? (
+            {[...(validation.errors||[])].length ? (
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {[...(validation.errors||[]),...(validation.warnings||[])].map((issue,index)=>{
+                {[...(validation.errors||[])].map((issue,index)=>{
                   const isError = validation.errors.includes(issue);
                   const targetTab = issue.tab || "overview";
                   const tabLabel = MODEL_HEALTH_TAB_LABELS[targetTab] || "Overview";

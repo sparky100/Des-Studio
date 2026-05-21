@@ -182,20 +182,16 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   }, [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
   const hasErrors = validation.errors.length > 0;
   const hasWarnings = validation.warnings.length > 0;
-  const readinessTagColor = hasErrors ? C.red : hasWarnings ? C.amber : C.green;
-  const readinessTagBg = hasErrors ? C.errorBg : hasWarnings ? C.warmup : `${C.green}18`;
-  const readinessBorder = hasErrors ? C.danger : hasWarnings ? C.amber : `${C.green}66`;
+  const readinessTagColor = hasErrors ? C.red : C.green;
+  const readinessTagBg = hasErrors ? C.errorBg : `${C.green}18`;
+  const readinessBorder = hasErrors ? C.danger : `${C.green}66`;
   const readinessTitle = hasErrors
     ? "Needs attention"
-    : hasWarnings
-      ? "Ready with notes"
-      : "Ready to run";
+    : "Ready to run";
   const readinessSummary = hasErrors
     ? `${validation.errors.length} blocker${validation.errors.length === 1 ? "" : "s"} to resolve before running.`
-    : hasWarnings
-      ? `${validation.warnings.length} warning${validation.warnings.length === 1 ? "" : "s"} worth reviewing before you trust the outputs.`
-      : "No blocking issues found for this scenario.";
-  const readinessIssues = hasErrors ? validation.errors : validation.warnings;
+    : "No blocking issues found for this scenario.";
+  const readinessIssues = validation.errors;
 
   const initEngine = useCallback(() => {
     if (hasErrors) return;
