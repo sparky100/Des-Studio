@@ -245,7 +245,6 @@ const FirstRunPanel = ({ onCreateBlank, onBrowseTemplates }) => (
 export function ModelLibrary({
   myModels, pubModels, communityModels,
   profiles, currentUserId,
-  importStatus, runStatsError, actionError, error,
   onOpenModel, onDeleteModel, onCopyModel, onStartTemplate,
   onCreateNewModel,
   onImportFile,
@@ -272,22 +271,6 @@ export function ModelLibrary({
           <Btn variant="primary" onClick={() => setShowNew(true)}>+ New Model</Btn>
         </div>
       </div>
-
-      {runStatsError && (
-        <div style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, color: C.amber, fontSize: 12, fontFamily: FONT, marginBottom: 16, padding: "10px 12px" }}>
-          Run counts unavailable: {runStatsError}
-        </div>
-      )}
-      {actionError && (
-        <div role="alert" style={{ background: C.red + "18", border: `1px solid ${C.red}44`, borderRadius: 6, color: C.red, fontSize: 12, fontFamily: FONT, marginBottom: 16, padding: "10px 12px" }}>
-          {actionError}
-        </div>
-      )}
-      {error && (
-        <div role="alert" style={{ background: C.red + "18", border: `1px solid ${C.red}44`, borderRadius: 6, color: C.red, fontSize: 12, fontFamily: FONT, marginBottom: 16, padding: "10px 12px" }}>
-          {error}
-        </div>
-      )}
 
       <div role="tablist" aria-label="Model library sections" style={{ display: "flex", borderBottom: `1px solid ${C.border}`, marginBottom: 24 }}>
         {[

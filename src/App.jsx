@@ -496,10 +496,6 @@ export default function App(){
         communityModels={communityModels}
         profiles={profiles}
         currentUserId={uid}
-        importStatus={importStatus}
-        runStatsError={runStatsError}
-        actionError={actionError}
-        error={error}
         onOpenModel={handleOpenModel}
         onDeleteModel={handleDeleteModel}
         onCopyModel={handleCopyModel}
