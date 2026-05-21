@@ -219,49 +219,51 @@ export default function App(){
     setModelToFork(null);
   }, []);
 
-  const handleImportFile = useCallback((event) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file || !uid) return;
+  const handleImportFile = useCallback((jsonText, name, desc) => {
+    if (!uid) return;
 
-    setImportStatus({ state: "loading", message: `Importing ${file.name}...` });
-    const reader = new FileReader();
-    reader.onload = async (loadEvent) => {
-      try {
-        const payload = JSON.parse(loadEvent.target.result);
-        const importedModel = extractImportedModelPayload(payload);
-        const importedValidation = validateModel(importedModel);
+    setImportStatus({ state: "loading", message: `Importing ${name || "model"}...` });
+    try {
+      const payload = JSON.parse(jsonText);
+      const importedModel = extractImportedModelPayload(payload);
+      const importedValidation = validateModel(importedModel);
 
-        if (importedValidation.errors.length > 0) {
-          setImportStatus({
-            state: "error",
-            message: "Import blocked by validation errors.",
-            items: importedValidation.errors.map(e => `[${e.code}] ${e.message}`),
-          });
-          return;
-        }
-
-        const saved = await saveModel(importedModel, uid);
-        await loadData();
-        setImportStatus({
-          state: importedValidation.warnings.length ? "warning" : "success",
-          message: importedValidation.warnings.length
-            ? "Imported with validation warnings."
-            : "Model imported successfully.",
-          items: importedValidation.warnings.map(w => `[${w.code}] ${w.message}`),
-        });
-        setOpenId(saved.id);
-      } catch (e) {
+      if (importedValidation.errors.length > 0) {
         setImportStatus({
           state: "error",
-          message: `Import failed: ${e.message}`,
+          message: "Import blocked by validation errors.",
+          items: importedValidation.errors.map(e => `[${e.code}] ${e.message}`),
         });
+        return;
       }
-    };
-    reader.onerror = () => {
-      setImportStatus({ state: "error", message: "Import failed: could not read the selected file." });
-    };
-    reader.readAsText(file);
+
+      importedModel.name = name || importedModel.name;
+      importedModel.description = desc || importedModel.description;
+
+      saveModel(importedModel, uid)
+        .then(saved => {
+          loadData();
+          setImportStatus({
+            state: importedValidation.warnings.length ? "warning" : "success",
+            message: importedValidation.warnings.length
+              ? "Imported with validation warnings."
+              : "Model imported successfully.",
+            items: importedValidation.warnings.map(w => `[${w.code}] ${w.message}`),
+          });
+          setOpenId(saved.id);
+        })
+        .catch(e => {
+          setImportStatus({
+            state: "error",
+            message: `Import failed: ${e.message}`,
+          });
+        });
+    } catch (e) {
+      setImportStatus({
+        state: "error",
+        message: `Import failed: ${e.message}`,
+      });
+    }
   }, [uid, loadData]);
 
   const handlePasteJsonImport = useCallback(async (text, onSuccess, onError) => {
