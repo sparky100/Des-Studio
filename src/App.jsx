@@ -232,8 +232,8 @@ export default function App(){
       importedModel.description = desc || importedModel.description;
 
       saveModel(importedModel, uid)
-        .then(saved => {
-          loadData();
+        .then(async saved => {
+          await loadData();
           if (importedValidation.errors.length > 0) {
             setImportStatus({
               state: "warning",
