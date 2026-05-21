@@ -228,6 +228,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
   const [rowsMode,setRowsMode]=React.useState(hasRows);
   const [importNotice,setImportNotice]=React.useState(null);
   const [csvPreview,setCsvPreview]=React.useState(null);
+  const [previewExpanded,setPreviewExpanded]=React.useState(false);
   const fileRef=React.useRef(null);
 
   const commitText=(text)=>{
@@ -246,6 +247,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
         ? parseXlsx(ev.target.result)
         : parsePlanCsv(ev.target.result);
       setCsvPreview({fileName:file.name,...result});
+      setPreviewExpanded(false);
     };
     if(isXlsx) reader.readAsArrayBuffer(file);
     else reader.readAsText(file);
@@ -357,7 +359,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
                   </tr>
                 </thead>
                 <tbody>
-                  {csvPreview.rows.slice(0,5).map((row,i)=>(
+                  {(previewExpanded?csvPreview.rows:csvPreview.rows.slice(0,3)).map((row,i)=>(
                     <tr key={i}>
                       <td style={{...tdSt,color:C.amber,fontFamily:FONT,fontSize:10}}>{row.time}</td>
                       {csvPreview.attrHeaders.map(h=><td key={h} style={{...tdSt,color:C.text,fontFamily:FONT,fontSize:10}}>{row.attrs[h]??""}</td>)}
@@ -365,7 +367,12 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
                   ))}
                 </tbody>
               </table>
-              {csvPreview.rows.length>5&&<div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic",marginTop:2}}>…and {csvPreview.rows.length-5} more</div>}
+              {csvPreview.rows.length>3&&(
+                <button onClick={()=>setPreviewExpanded(!previewExpanded)}
+                  style={{...inpSt,cursor:"pointer",color:C.cEvent,marginTop:2,fontSize:10,alignSelf:"flex-start"}}>
+                  {previewExpanded?"▲ Show less":"▼ Show all "+csvPreview.rows.length+" rows"}
+                </button>
+              )}
             </div>
           )}
           {csvPreview.rows.length>0

@@ -68,7 +68,7 @@ export function ModelTabBar({
       <div aria-label={isCompactLayout ? "Mobile model workflow" : "Model workflow modes"} style={{ display: "flex", alignItems: "stretch", gap: 8, padding: "8px 20px", borderBottom: `1px solid ${C.border}`, background: C.bg, overflowX: "auto", flexShrink: 0 }}>
         {DISPLAY_MODES.map(mode => {
           const selected = activeMode.id === mode.id;
-          const modeCounts = mode.tabs.reduce((acc, tabId) => {
+          const modeCounts = mode.tabs.filter(t => t !== "validate").reduce((acc, tabId) => {
             const counts = tabIssueCounts[tabId] || {};
             return { errors: acc.errors + (counts.errors || 0), warnings: acc.warnings + (counts.warnings || 0) };
           }, { errors: 0, warnings: 0 });

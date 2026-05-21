@@ -1,8 +1,9 @@
 // ui/ModelLibrary.jsx — Model library: My Models / Templates / Public / Community tabs
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { C, FONT, SHADOW, RADIUS, Z } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, Empty } from "./shared/components.jsx";
 import { TEMPLATES } from "../engine/templates.js";
+import { validateModel } from "../engine/validation.js";
 
 export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,currentVersion})=>{
   const owner=(profiles||[]).find(p=>p.id===model.owner_id)||null;
@@ -10,6 +11,10 @@ export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,
   const hasRenege=(model.bEvents||[]).some(ev=>(ev.schedules||[]).some(s=>s.isRenege));
   const runCount=model.stats?.runs;
   const isOwner=model.owner_id===currentUserId;
+  const validation = useMemo(() => validateModel(model), [model]);
+  const hasErrors = validation.errors.length > 0;
+  const hasWarnings = validation.warnings.length > 0;
+  const healthColor = hasErrors ? C.red : hasWarnings ? C.amber : C.green;
   const openFromKeyboard=e=>{
     if(e.key==="Enter"||e.key===" "){
       e.preventDefault();
@@ -21,7 +26,10 @@ export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,
       onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
       onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-        <div style={{fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT,lineHeight:1.3}}>{model.name}</div>
+        <div style={{fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT,lineHeight:1.3,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{width:8,height:8,borderRadius:"50%",background:healthColor,flexShrink:0}} title={hasErrors ? `${validation.errors.length} error${validation.errors.length===1?"":"s"}` : hasWarnings ? `${validation.warnings.length} warning${validation.warnings.length===1?"":"s"}` : "No issues"}/>
+          {model.name}
+        </div>
         <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap"}}>
           <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
           {currentVersion > 0 && <Tag label={`V${currentVersion}`} color={C.purple}/>}
@@ -267,12 +275,6 @@ export function ModelLibrary({
         </div>
       </div>
 
-      {importStatus && (
-        <div style={{ background: importStatus.state === "error" ? C.red + "18" : importStatus.state === "warning" ? C.amber + "18" : importStatus.state === "success" ? C.green + "18" : C.surface, border: `1px solid ${importStatus.state === "error" ? C.red + "44" : importStatus.state === "warning" ? C.amber + "44" : importStatus.state === "success" ? C.green + "44" : C.border}`, borderRadius: 6, color: importStatus.state === "error" ? C.red : importStatus.state === "warning" ? C.amber : importStatus.state === "success" ? C.green : C.muted, fontSize: 12, fontFamily: FONT, marginBottom: 16, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-          <div>{importStatus.message}</div>
-          {(importStatus.items || []).map((item, i) => <div key={i} style={{ color: C.muted }}>{item}</div>)}
-        </div>
-      )}
       {runStatsError && (
         <div style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, color: C.amber, fontSize: 12, fontFamily: FONT, marginBottom: 16, padding: "10px 12px" }}>
           Run counts unavailable: {runStatsError}
