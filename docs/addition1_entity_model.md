@@ -2,11 +2,11 @@
 
 > **Foundational Reference:** This document defines the entity model, attribute schema, and original action vocabulary for Sprints 1-3. It remains authoritative for entity class definitions, attribute types, and the core macro patterns.
 >
-> **Extended Macros:** For the complete current macro vocabulary (15 macros including PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, MATCH, SET, SET_ATTR, COST, dynamic BATCH, BATCH, UNBATCH, RELEASE), see `AGENTS.md` Section 5.1.
+> **Extended Macros:** The complete current macro vocabulary (19 macros) is documented in full in Section 5 and Section 11 of this document. AGENTS.md Section 5.1 is partially out of date and defers to this document for the authoritative list.
 >
-> **Queue Disciplines:** For the complete queue discipline set (FIFO, LIFO, PRIORITY, SPT, EDD, PRIORITY(attrName)), see `AGENTS.md` Section 6.
+> **Queue Disciplines:** For the complete queue discipline set (FIFO, LIFO, PRIORITY, SPT, EDD, PRIORITY(attrName)), see Section 12 of this document and `AGENTS.md` Section 6.
 >
-> **Date:** Original 2026-04-30 | Updated 2026-05-15
+> **Date:** Original 2026-04-30 | Updated 2026-05-21
 
 ## 1. Purpose & Scope
 
@@ -345,6 +345,136 @@ When a B-Event with `loopConfig` fires and routes an entity, the engine incremen
 
 ---
 
+### MACRO 8 — RENEGE_OLDEST
+
+| Field | Detail |
+|---|---|
+| **Category** | C-Event action (conditional) |
+| **Purpose** | Removes the oldest entity (per queue discipline) of a given type from its queue. Used to enforce maximum queue length policies by evicting the longest-waiting entity. |
+| **Called by** | C-Event — fires when a queue overflow or timeout policy is triggered. |
+| **Inputs** | `customerType: string` — the entity type to target. The queue is resolved from the entity type's configuration. |
+| **Syntax** | `RENEGE_OLDEST(CustomerType)` |
+| **Preconditions** | At least one entity of the given type must be waiting. If none is found, the macro is a no-op. |
+| **State changes** | 1. Selects the entity from the queue per the queue's configured discipline (FIFO/LIFO/PRIORITY). 2. Removes the entity from the queue. 3. Sets `entity.status = "reneged"` and `entity.renegeTime = T_now`. 4. Increments `state.__reneged` counter. |
+| **Error conditions** | If the type does not match any configured queue, a warning is logged and the macro is a no-op. |
+
+---
+
+### MACRO 9 — FILL
+
+| Field | Detail |
+|---|---|
+| **Category** | B-Event or C-Event action |
+| **Purpose** | Adds a specified amount to a named container's current level. Used for tank-filling, inventory restocking, and buffer-replenishment patterns. |
+| **Called by** | Any B-Event or C-Event effect sequence. |
+| **Inputs** | `containerName: string` — must reference a declared container in `model.containerTypes`. `amount: number` — must be a positive finite number. |
+| **Syntax** | `FILL(ContainerName, amount)` |
+| **Preconditions** | Container must be declared in `containerTypes`. `amount` must be > 0. |
+| **State changes** | 1. Flushes the time-integral (`level × Δt`) before changing level. 2. New level = `min(current + amount, capacity)`. 3. Updates `__containerMin_<id>` and `__containerMax_<id>`. 4. If new level reaches capacity, a `[at capacity]` note is appended to the log. |
+| **Error conditions** | Referencing an undeclared container is a model error (V27). Non-positive amount is logged as an error and the macro is a no-op. |
+
+---
+
+### MACRO 10 — DRAIN
+
+| Field | Detail |
+|---|---|
+| **Category** | B-Event or C-Event action |
+| **Purpose** | Subtracts a specified amount from a named container's current level. Used for consumption, withdrawal, and discharge patterns. |
+| **Called by** | Any B-Event or C-Event effect sequence. |
+| **Inputs** | `containerName: string` — must reference a declared container. `amount: number` — must be a positive finite number. |
+| **Syntax** | `DRAIN(ContainerName, amount)` |
+| **Preconditions** | Container must be declared. `amount` must be > 0. `current level >= amount` — the drain guard prevents the level from going negative. |
+| **State changes** | 1. Flushes the time-integral before changing level. 2. New level = `current − amount`. 3. Updates `__containerMin_<id>` and `__containerMax_<id>`. |
+| **Error conditions** | Referencing an undeclared container is a model error (V27). Non-positive amount is a no-op. Insufficient level (guard failure) is logged as an error and the macro is a no-op — **the drain is not partial**. |
+
+---
+
+### MACRO 11 — SET
+
+| Field | Detail |
+|---|---|
+| **Category** | B-Event or C-Event action |
+| **Purpose** | Assigns a computed value to a user-defined state variable. Supports arithmetic expressions over state variables, entity attributes, and the simulation clock. |
+| **Called by** | Any B-Event or C-Event effect sequence. |
+| **Inputs** | `varName: string` — a user-defined state variable name. `expression: string` — a safe arithmetic expression. |
+| **Syntax** | `SET(varName, expression)` |
+| **Expression support** | `Entity.<attr>`, state variable names, `clock`, arithmetic operators (+−×÷), parentheses, and math functions (`min`, `max`, `abs`, `round`, `floor`, `ceil`). |
+| **Preconditions** | The expression must evaluate to a finite number. |
+| **State changes** | `state[varName] = evaluatedValue`. The change is immediately visible to subsequent C-Event conditions in the same Phase C scan. |
+| **Error conditions** | Non-finite result is logged as an error and the assignment is skipped. Dynamic code execution (`eval`, `new Function`) is never used — the expression is evaluated by the engine's safe evaluator. |
+
+---
+
+### MACRO 12 — SET_ATTR
+
+| Field | Detail |
+|---|---|
+| **Category** | B-Event or C-Event action |
+| **Purpose** | Mutates a named attribute on the context entity. Supports the same arithmetic expressions as SET. Requires an active entity context (must follow ARRIVE, ASSIGN/SEIZE, or COSEIZE). |
+| **Called by** | Any B-Event or C-Event effect sequence where an entity context is active. |
+| **Inputs** | `attrName: string` — the attribute to update. Prefix `Entity.` is optional. `expression: string` — a safe arithmetic expression. |
+| **Syntax** | `SET_ATTR(Entity.attrName, expression)` or `SET_ATTR(attrName, expression)` |
+| **Preconditions** | A context entity must be active. If none, the macro logs an error and is a no-op. |
+| **State changes** | `entity.attrs[attrName] = evaluatedValue`. |
+| **Error conditions** | No context entity: error logged, no-op. Non-finite expression result: error logged, assignment skipped. |
+
+---
+
+### MACRO 13 — COST
+
+| Field | Detail |
+|---|---|
+| **Category** | B-Event or C-Event action |
+| **Purpose** | Accumulates a cost amount to the model-wide `__totalCost` counter and to the context entity's `__cost` attribute. Used to track economic metrics across replications. |
+| **Called by** | Any B-Event or C-Event effect sequence. |
+| **Inputs** | `expression: string` — a safe arithmetic expression evaluating to a finite number. |
+| **Syntax** | `COST(expression)` |
+| **Preconditions** | Expression must evaluate to a finite number. |
+| **State changes** | 1. `state.__totalCost += evaluatedAmount`. 2. If a context entity is active: `entity.attrs.__cost += evaluatedAmount`. |
+| **Error conditions** | Non-finite expression result is logged as an error; no accumulation occurs. |
+
+---
+
+## 5a. Container Types
+
+Containers are continuous-level state objects (tanks, buffers, inventories) that accumulate and deplete over time. They are declared in `model.containerTypes` and manipulated via the FILL and DRAIN macros.
+
+### Container Definition Schema
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | string | Yes | Unique identifier. Case-insensitive. Used in `FILL(id, amount)` and `DRAIN(id, amount)`. |
+| `capacity` | number | No | Maximum level. Must be > 0 when set. Defaults to `Infinity` (unbounded). |
+| `initialLevel` | number | No | Level at simulation start. Must be >= 0 and <= `capacity`. Defaults to 0. |
+
+### Container State Variables (Engine-Maintained)
+
+For every declared container, the engine automatically maintains:
+
+| Variable | Type | Description |
+|---|---|---|
+| `__container_<id>` | number | Current level. Updated by FILL and DRAIN. |
+| `__containerCap_<id>` | number | Maximum capacity (Infinity if uncapped). |
+| `__containerMin_<id>` | number | Minimum level observed since simulation start. |
+| `__containerMax_<id>` | number | Maximum level observed since simulation start. |
+| `__containerIntegral_<id>` | number | Cumulative level × time (used for average level statistics). |
+
+Container levels are accessible in Predicate Builder conditions via user-defined state variable references (the `__container_<id>` key).
+
+### Example Container JSON
+
+```json
+{
+  "containerTypes": [
+    { "id": "raw_tank",      "capacity": 1000, "initialLevel": 500 },
+    { "id": "finished_goods",                  "initialLevel": 0   }
+  ]
+}
+```
+
+---
+
 ## 6. Probability Distributions
 
 All stochastic delays — inter-arrival times, service durations, patience times — are specified using a Distribution object. The engine samples from this distribution using the seeded PRNG assigned to the current replication.
@@ -362,9 +492,13 @@ All stochastic delays — inter-arrival times, service durations, patience times
 | `normal` | `mean: number, stdDev: number` (stdDev > 0) | mean | Use Box-Muller transform. Clamp negative samples to 0 for durations. |
 | `triangular` | `min, mode, max` (min ≤ mode ≤ max) | (min + mode + max) / 3 | Common for expert-estimate durations when data is limited. |
 | `fixed` | `value: number` (value > 0) | value | Deterministic constant. No randomness. Useful for M/D/1 benchmarks. |
-| `lognormal` | `logMean: number, logStdDev: number` | exp(logMean + logStdDev²/2) | For right-skewed service times. Parameters are mean and stddev of the underlying normal. |
+| `lognormal` | `logMean: number, logStdDev: number` | exp(logMean + logStdDev²/2) | **Not yet implemented in the engine.** For right-skewed service times. Parameters are mean and stddev of the underlying normal. |
 | `empirical` | `values: number[]` (non-empty), optional `sourceFile`, `column` | mean(values) | Samples uniformly from list. Values may be entered inline or imported from CSV. |
 | `piecewise` | `periods: { startTime, distribution }[]` | active period mean | Selects the period with the greatest `startTime <= clock`, then delegates sampling to that period's distribution. |
+| `erlang` | `k: integer` (≥ 1), `mean: number` (> 0) | mean | k-phase service process. `Sample = -ln(∏ᵢ₌₁ᵏ Uᵢ) / (k / mean)`. Generalises exponential (k=1). |
+| `serverAttr` | `attr: string` (default: `"serviceTime"`) | attribute value | Reads the named attribute from the matched server entity at service-scheduling time. Allows per-server-instance service time variation. Returns `max(0, value)` or 1 if not found. |
+| `entityAttr` | `attr: string` | attribute value | Reads the named attribute from the arriving customer entity. Resolved at runtime via entity context. Returns the attribute value or 0 if not found. |
+| `schedule` | `times: number[]` or `rows: {time, attrs}[]`, optional `jitterDist`, `jitterParams` | per-plan | Generates arrivals at planned absolute times. `rows[]` supports per-arrival entity attribute overrides (S40.2). Returns `1e9` when the plan is exhausted (no further arrivals). Supports optional Normal or Uniform jitter. |
 
 ### 6.2 Distribution JSON Schema
 
@@ -381,7 +515,31 @@ Parametric distributions:
 
 { "type": "fixed", "value": 8 }
 
-{ "type": "lognormal", "logMean": 2.1, "logStdDev": 0.4 }
+{ "type": "erlang", "k": 3, "mean": 10 }
+
+{ "type": "serverAttr", "attr": "serviceTime" }
+
+{ "type": "entityAttr", "attr": "requestedDuration" }
+```
+
+Schedule distribution — planned absolute times (S40.2):
+
+```json
+{ "type": "schedule", "times": [10, 25, 40, 80] }
+```
+
+Schedule distribution — per-arrival rows with attribute overrides:
+
+```json
+{
+  "type": "schedule",
+  "rows": [
+    { "time": 10, "attrs": { "priority": 1, "type": "urgent" } },
+    { "time": 25, "attrs": { "priority": 3, "type": "standard" } }
+  ],
+  "jitterDist": "Normal",
+  "jitterParams": { "mean": 0, "stddev": 2 }
+}
 ```
 
 Empirical distribution — inline values:
@@ -452,7 +610,7 @@ The engine must validate the complete model before `buildEngine()` proceeds. Any
 | V4 | If queue rule is PRIORITY, the entity class must have a numeric attribute named `priority`. | Blocking | `Queue '{id}' uses PRIORITY discipline but entity class '{class}' has no numeric 'priority' attribute.` |
 | V5 | Every Distribution parameter must be within valid bounds (rate > 0, stdDev > 0, max > min, etc.). | Blocking | `Distribution parameter out of range in {context}: {detail}.` |
 | V6 | No B-Event schedule may reference a non-existent event ID. | Blocking | `Schedule in '{event}' references unknown event ID '{ref}'.` |
-| V7 | Every Activity node must have at least one incoming edge and at least one outgoing edge. Multiple outgoing edges are valid when a routing table or probabilistic routing is configured on the scheduled RELEASE B-Event. | Blocking | `Activity '{id}' has no incoming queue edge.` / `Activity '{id}' has no outgoing route.` |
+| V7 | *(Reserved — not currently implemented in the engine. Activity edge validation is deferred.)* | — | — |
 | V8 | The model must contain at least one Source node and one Sink node. | Blocking | `Model has no Source node.` / `Model has no Sink node.` |
 | V9 | No C-Event condition may reference an undefined variable or attribute. | Blocking | `Condition references unknown variable '{ref}' in C-event '{id}'.` |
 | V10 | No entity attribute name may collide with a built-in state variable prefix (`Resource`, `Queue`). | Blocking | `Attribute name '{name}' conflicts with built-in variable namespace.` |
@@ -465,6 +623,16 @@ The engine must validate the complete model before `buildEngine()` proceeds. Any
 | V17 | B-event `routing` entries: every `queueName` must reference a defined queue; `defaultQueueName` must also be a defined queue; `routing` and a RELEASE literal queue arg are mutually exclusive. | Blocking | `B-Event '{name}' routing entry {n} references unknown queue '{q}'.` |
 | V18 | B-event `probabilisticRouting`: probabilities must sum to 1.0 (±0.001); every `queueName` must reference a defined queue; mutually exclusive with `routing` and a RELEASE literal queue arg. | Blocking | `B-Event '{name}' probabilistic routing probabilities sum to {sum}, must be 1.0.` |
 | V19 | Server entity type `count` must be an integer ≥ 1. | Blocking | `Server type '{name}' count '{val}' must be an integer ≥ 1.` |
+| V20 | Queue `capacity` must be an integer ≥ 1 when set. If `overflowDestination` is set, it must reference a defined queue. | Blocking | `Queue 'X' capacity 'Y' must be an integer >= 1.` / `Queue 'X' overflowDestination 'Y' does not match any defined queue.` |
+| V21 | `balkProbability` on a B-Event must be between 0 and 1 inclusive. | Blocking | `B-Event 'X' balkProbability 'Y' must be between 0 and 1.` |
+| V22 | BATCH `batchSize` must be an integer ≥ 2. The referenced queue must exist. | Blocking | `BATCH batchSize must be integer >= 2.` / `BATCH references unknown queue 'X'.` |
+| V23 | UNBATCH `targetQueue` must reference a defined queue. | Blocking | `UNBATCH references unknown queue 'X'.` |
+| V24 | Loop guard `maxLoopCount` must be an integer ≥ 1. `exitQueueName` must reference a defined queue when set. | Blocking | `Loop guard maxLoopCount must be integer >= 1.` / `Loop guard exitQueueName 'X' does not match any defined queue.` |
+| V25 | `RENEGE(arg)` — the argument must be `ctx`. `RENEGE(TypeName)` silently fails because the type name is not a numeric entity ID. | Warning only | `B-Event 'X' uses RENEGE('Y') which will silently fail. Use RENEGE(ctx) to reference the current entity instead.` |
+| V26 | Every container in `containerTypes` must have a non-empty unique `id`. `capacity` must be > 0 when set. `initialLevel` must be ≥ 0 and ≤ `capacity`. | Blocking | `Container at position N has an empty id.` / `Duplicate container id: 'X'.` / `Container 'X': capacity must be > 0.` / `Container 'X': initialLevel must be >= 0.` / `Container 'X': initialLevel (N) exceeds capacity (M).` |
+| V27 | FILL and DRAIN macros must reference a container declared in `containerTypes`. | Blocking | `B-Event 'X' FILL references undeclared container 'Y'.` / similar for DRAIN and C-Events. |
+| V28 | `model.epoch`, when set, must be a valid ISO 8601 datetime string. | Blocking | `Model epoch 'X' is not a valid ISO 8601 datetime. Use the Settings tab to correct it.` |
+| V29 | A C-event with `cSchedules` entries that all have a `when` condition must also have a fallback entry (one without `when`). Without a fallback, entities that match no condition receive no service. | Warning only | `C-event 'X' has attribute-conditional cSchedules but no fallback entry (one without a 'when' condition). Entities that don't match any condition will receive no service.` |
 
 ---
 
@@ -482,10 +650,12 @@ The following must be added to `CLAUDE.md` before Sprint 1 begins. Copy this sec
 - Entity.priority must be a number attribute for PRIORITY queue discipline (V4)
 - allowedValues is only valid for string valueType
 
-### Action Vocabulary — Closed Set
-- The seven permitted macros are: ARRIVE, SEIZE, COMPLETE, ASSIGN, RENEGE, BATCH, UNBATCH
-- No other macros may be added without updating Addition 1
+### Action Vocabulary — Open Set (as of Sprint 33+)
+- The 13 currently implemented macros are: ARRIVE, SEIZE/ASSIGN, COMPLETE, RENEGE, BATCH, UNBATCH, RENEGE_OLDEST, FILL, DRAIN, SET, SET_ATTR, COST, PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, MATCH
+- SEIZE and ASSIGN are engine synonyms for the resource-claiming action (C-Event phase)
 - BATCH is a C-Event only macro; UNBATCH is a B-Event only macro
+- FILL and DRAIN operate on container levels; containers must be declared in containerTypes
+- SET modifies state variables; SET_ATTR modifies entity attributes; both use safe expression evaluator
 - The 'Custom...' free-text escape hatch is REMOVED — do not recreate it
 - new Function(), eval(), and any dynamic code execution are PROHIBITED
 - All condition logic is serialised as JSON and evaluated by the safe condition evaluator
@@ -494,24 +664,41 @@ The following must be added to `CLAUDE.md` before Sprint 1 begins. Copy this sec
 - FIFO: select entity with smallest arrivalTime
 - LIFO: select entity with largest arrivalTime
 - PRIORITY: select entity with smallest Entity.priority (number); FIFO tiebreaker
-- queueRule is read and enforced by the engine on every SEIZE — not just stored in UI
+- SPT: select entity with smallest service time / processing time; FIFO tiebreaker
+- EDD: select entity with smallest due date; FIFO tiebreaker
+- PRIORITY(attrName): select entity with smallest value of named attribute; FIFO tiebreaker
+- queueRule is read and enforced by the engine on every SEIZE/ASSIGN — not just stored in UI
+
+### Container Types
+- Containers are declared in model.containerTypes with id, capacity (optional), initialLevel (optional)
+- FILL(id, amount) and DRAIN(id, amount) are the only permitted operations on containers
+- DRAIN guards: if level < amount the drain is rejected (no-op with error log) — levels never go negative
+- Container levels are tracked via __container_<id> state variables readable in Predicate Builder conditions
 
 ### Distributions — Open and Extensible
-- The seven distributions in Section 6.1 are currently supported — this is not a closed set
+- The 11 distributions in Section 6.1 are currently supported (lognormal listed but not yet implemented)
 - New distribution types are added via registerDistribution() in distributions.js only
 - No engine, macro, or validation files change when adding a new distribution type
 - All sampling uses the seeded PRNG passed to buildEngine() — never Math.random()
-- Negative duration samples from Normal/Lognormal are clamped to 0 (not an error)
+- Negative duration samples from Normal are clamped to 0 (not an error)
 - Non-positive inter-arrival or patience samples ARE a hard error — halt the engine
 - CSV-imported empirical distributions store the values array in model_json at import time
 - The engine never accesses CSV files at runtime — values array only
+- Schedule distributions use rows[] for per-arrival attribute overrides (S40.2); plan exhaustion returns 1e9
 
 ### Validation Gates (all must run before buildEngine() proceeds)
 - V1–V10 are blocking — run is prevented, error shown inline in editor
-- V11 is a warning — run proceeds with a visible banner
+- V11, V15, V16 are warnings — run proceeds with a visible banner
+- V20 (Queue capacity): must be integer >= 1; overflowDestination must reference a defined queue
+- V21 (balking): balkProbability must be 0–1
 - V22 (BATCH): batchSize must be integer >= 2; queue must exist
 - V23 (UNBATCH): target queue must exist
 - V24 (loop guard): maxLoopCount must be integer >= 1; exitQueueName must exist when set
+- V25 (RENEGE argument): RENEGE(ctx) is correct; RENEGE(TypeName) silently fails — warning
+- V26 (container types): id non-empty and unique; capacity > 0; initialLevel >= 0 and <= capacity
+- V27 (FILL/DRAIN): referenced container must be declared in containerTypes
+- V28 (epoch): model.epoch must be valid ISO 8601 when set
+- V29 (cSchedule fallback): all-conditional cSchedules without a fallback entry — warning
 - Validation errors must identify the specific node/event/attribute by name
 - Console.log is not sufficient — errors must be surfaced in the UI
 
@@ -559,25 +746,33 @@ The following are **explicitly in scope** and should not be treated as out of sc
 - **CSV-imported empirical distributions** — see Section 6.3. Values are extracted at import time and stored in model_json. No runtime file access.
 - **Additional parametric distribution types** — added via the registry pattern in distributions.js. No ADR required unless the sampler interface changes.
 
-## 11. Extended Macro Vocabulary (Post-Sprint 3)
+## 11. Complete Macro Vocabulary (Current)
 
-The original 5 macros (ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE) defined in Sections 7.1-7.5 have been extended. The complete current macro set is documented in `AGENTS.md` Section 5.1:
+The complete macro set implemented in the engine. This is the authoritative list — AGENTS.md Section 5.1 is partially outdated and defers to this section.
 
-| Macro | Sprint | Purpose |
-|---|---|---|
-| ARRIVE | 1 | Creates entity, places in queue, schedules next arrival |
-| ASSIGN | 1 | Seizes resource for entity, schedules completion |
-| COMPLETE | 1 | Releases resource, records stats, routes entity |
-| RELEASE | 1 | Frees resource and routes entity to another queue |
-| RENEGE | 1 | Removes oldest waiting entity from queue |
-| BATCH | 12 | Accumulates N entities into one batch |
-| UNBATCH | 12 | Restores children from parent batch |
-| PREEMPT | 32 | Interrupts busy server; re-queues entity with remaining service |
-| FAIL | 32 | Sets matching servers to failed status |
-| REPAIR | 32 | Restores failed servers to idle |
-| SPLIT | 33 | Creates N-1 clones of context entity |
-| COSEIZE | 33 | Atomically seizes multiple server types simultaneously |
-| MATCH | 33 | Pairs entities from two queues into batch |
+> **Naming note:** SEIZE (documented in Section 5, Macro 2) and ASSIGN (code macro name) are engine synonyms for the resource-claiming action. The validation layer accepts both. Use SEIZE in new model definitions for clarity.
+
+| Macro | Phase | Sprint | Purpose |
+|---|---|---|---|
+| ARRIVE | B-Event | 1 | Creates entity, places in queue, schedules next arrival |
+| SEIZE / ASSIGN | C-Event | 1 | Matches waiting entity to idle server; schedules COMPLETE |
+| COMPLETE | B-Event | 1 | Releases server, records stats, routes entity to next node |
+| RELEASE | B-Event | 1 | Frees server and routes entity to another queue |
+| RENEGE | B-Event | 1 | Removes entity from queue after patience timeout; routes to Sink |
+| BATCH | C-Event | 12 | Accumulates N entities per queue discipline into a parent batch entity |
+| UNBATCH | B-Event | 12 | Restores children from a parent batch to a target queue |
+| PREEMPT | B-Event | 32 | Interrupts busy server; re-queues displaced entity with remaining service time |
+| FAIL | B-Event | 32 | Sets matching servers to failed status |
+| REPAIR | B-Event | 32 | Restores failed servers to idle |
+| SPLIT | C/B-Event | 33 | Creates N-1 clones of the context entity and routes them |
+| COSEIZE | C-Event | 33 | Atomically seizes multiple server types simultaneously |
+| MATCH | C-Event | 33 | Pairs entities from two queues into a batch |
+| RENEGE_OLDEST | C-Event | post-33 | Removes the oldest waiting entity of a given type per queue discipline |
+| FILL | B or C-Event | post-33 | Adds amount to a declared container level (clamped to capacity) |
+| DRAIN | B or C-Event | post-33 | Subtracts amount from a declared container level (guard: level must be ≥ amount) |
+| SET | B or C-Event | post-33 | Assigns a computed arithmetic expression to a user-defined state variable |
+| SET_ATTR | B or C-Event | post-33 | Mutates a named attribute on the context entity using an arithmetic expression |
+| COST | B or C-Event | post-33 | Accumulates a cost amount to `state.__totalCost` and per-entity `__cost` attribute |
 
 ## 12. Extended Queue Disciplines (Post-Sprint 3)
 
