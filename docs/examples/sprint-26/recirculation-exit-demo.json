@@ -25,14 +25,18 @@
       "id": "b-arrival",
       "name": "Arrival",
       "scheduledTime": "0",
-      "effect": "ARRIVE(Job, Rework Queue)",
+      "effect": [
+        "ARRIVE(Job, Rework Queue)"
+      ],
       "schedules": []
     },
     {
       "id": "b-process-done",
       "name": "Process Done",
       "scheduledTime": "9999",
-      "effect": "RELEASE(Worker, Rework Queue)",
+      "effect": [
+        "RELEASE(Worker, Rework Queue)"
+      ],
       "schedules": [],
       "loopConfig": {
         "maxLoopCount": 2,
@@ -46,7 +50,9 @@
       "name": "Start Work",
       "priority": 1,
       "condition": "queue(Rework Queue).length > 0 AND idle(Worker).count > 0",
-      "effect": "ASSIGN(Rework Queue, Worker)",
+      "effect": [
+        "ASSIGN(Rework Queue, Worker)"
+      ],
       "cSchedules": [
         {
           "eventId": "b-process-done",

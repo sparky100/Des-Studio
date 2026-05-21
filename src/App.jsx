@@ -41,7 +41,7 @@ function createSampleMm1Model() {
         id: "b_arrive",
         name: "Arrival",
         scheduledTime: "0",
-        effect: "ARRIVE(Customer)",
+        effect: ["ARRIVE(Customer)"],
         schedules: [
           {
             eventId: "b_arrive",
@@ -54,7 +54,7 @@ function createSampleMm1Model() {
         id: "b_complete",
         name: "Complete",
         scheduledTime: "9999",
-        effect: "COMPLETE()",
+        effect: ["COMPLETE()"],
         schedules: [],
       },
     ],
@@ -63,7 +63,7 @@ function createSampleMm1Model() {
         id: "c_seize",
         name: "Seize",
         condition: "queue(Customer).length > 0 AND idle(Server).count > 0",
-        effect: "ASSIGN(Customer, Server)",
+        effect: ["ASSIGN(Customer, Server)"],
         cSchedules: [
           {
             eventId: "b_complete",

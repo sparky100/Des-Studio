@@ -39,7 +39,9 @@
       "id": "b-arrival",
       "name": "Arrival",
       "scheduledTime": "0",
-      "effect": "ARRIVE(Patient, Intake Queue)",
+      "effect": [
+        "ARRIVE(Patient, Intake Queue)"
+      ],
       "schedules": [
         {
           "eventId": "b-arrival",
@@ -54,14 +56,18 @@
       "id": "b-triage-done",
       "name": "Triage Done",
       "scheduledTime": "9999",
-      "effect": "RELEASE(Nurse, Treatment Queue)",
+      "effect": [
+        "RELEASE(Nurse, Treatment Queue)"
+      ],
       "schedules": []
     },
     {
       "id": "b-treatment-done",
       "name": "Treatment Done",
       "scheduledTime": "9999",
-      "effect": "COMPLETE()",
+      "effect": [
+        "COMPLETE()"
+      ],
       "schedules": []
     }
   ],
@@ -71,7 +77,9 @@
       "name": "Start Triage",
       "priority": 1,
       "condition": "queue(Intake Queue).length > 0 AND idle(Nurse).count > 0",
-      "effect": "ASSIGN(Intake Queue, Nurse)",
+      "effect": [
+        "ASSIGN(Intake Queue, Nurse)"
+      ],
       "cSchedules": [
         {
           "eventId": "b-triage-done",
@@ -88,7 +96,9 @@
       "name": "Start Treatment",
       "priority": 2,
       "condition": "queue(Treatment Queue).length > 0 AND idle(Doctor).count > 0",
-      "effect": "ASSIGN(Treatment Queue, Doctor)",
+      "effect": [
+        "ASSIGN(Treatment Queue, Doctor)"
+      ],
       "cSchedules": [
         {
           "eventId": "b-treatment-done",
