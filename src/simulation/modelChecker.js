@@ -299,6 +299,31 @@ function chk008(model) {
   return issues;
 }
 
+/**
+ * CHK-009: Schedule dist entry has no planned times/rows — will never re-fire.
+ */
+function chk009(model) {
+  const issues = [];
+  for (const bEvent of model.bEvents || []) {
+    const name = bEvent.name || bEvent.id || "?";
+    for (const sched of bEvent.schedules || []) {
+      const dist = (sched.dist || "").trim().toLowerCase();
+      if (dist !== "schedule") continue;
+      const dp = sched.distParams || {};
+      const hasRows = Array.isArray(dp.rows) && dp.rows.length > 0;
+      const hasTimes = Array.isArray(dp.times) && dp.times.length > 0;
+      if (!hasRows && !hasTimes) {
+        issues.push(makeIssue(
+          "error", "CHK-009",
+          `B-event '${name}' has a Schedule distribution with no rows or times — no arrivals will be generated.`,
+          bEvent.id || null, name
+        ));
+      }
+    }
+  }
+  return issues;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function extractQueueRefsFromCondition(condition) {
@@ -341,6 +366,7 @@ export function checkModel(model) {
     ...chk006(model),
     ...chk007(model),
     ...chk008(model),
+    ...chk009(model),
   ];
 
   return all.sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99));
