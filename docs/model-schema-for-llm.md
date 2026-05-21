@@ -150,8 +150,9 @@ Queues are waiting areas for customers.
 - `name` must be unique across all queues. **Queue names are used as references in macros — they must match exactly (case-sensitive).**
 - `customerType` must match the `name` of a customer entity type.
 - `capacity`: `""` means unlimited. An integer ≥ 1 sets a finite buffer.
-- `discipline`: `"FIFO"` (default) or `"PRIORITY"`.
+- `discipline`: `"FIFO"` (default), `"LIFO"`, or `"PRIORITY"`.
   - `PRIORITY` requires the customer entity type to have an attribute named **exactly** `priority` of type `number`. Lower numeric value = higher priority.
+  - `LIFO` selects the most-recently-arrived entity (last in, first out).
 - `overflowDestination` (optional): name of another queue to receive overflow entities when this queue is full.
 
 ---
@@ -168,9 +169,12 @@ Used in B-event schedules, C-event service times, and entity attribute defaults.
 | `Normal`      | `{ "mean": "10", "stddev": "2" }`            | stddev > 0; warn if mean < 2×stddev|
 | `Triangular`  | `{ "min": "2", "mode": "5", "max": "10" }`   | min ≤ mode ≤ max                   |
 | `Erlang`      | `{ "k": "3", "mean": "6" }`                  | k integer ≥ 1; mean > 0            |
-| `Lognormal`   | `{ "logMean": "1.6", "logStdDev": "0.4" }`   | logStdDev > 0                      |
+| `Lognormal`   | `{ "logMean": "1.6", "logStdDev": "0.4" }`   | **Not yet implemented.** logStdDev > 0 |
+| `Empirical`   | `{ "values": [4, 6, 8, 12] }` (or via CSV import) | Non-empty array; samples uniformly |
+| `Piecewise`   | `{ "periods": [{ "startTime": "0", "dist": "Exponential", "distParams": { "mean": "3" } }, ...] }` | First period must start at 0; sorted ascending |
+| `Schedule`    | `{ "times": [10, 25, 40] }` or `{ "rows": [{ "time": 10, "attrs": { ... } }, ...] }` | Planned absolute arrival times; exhausts and stops |
 
-**All parameter values must be strings** (e.g. `"5"`, not `5`).
+**All numeric parameter values must be strings** (e.g. `"5"`, not `5`).
 
 ---
 
@@ -252,10 +256,16 @@ Instead of `dist`/`distParams`, a schedule entry can supply an explicit list of 
 | `RELEASE` | `RELEASE(ServerType, QueueName)` | Releases a server of type `ServerType`, moves served entity to `QueueName`. |
 | `COMPLETE` | `COMPLETE()` | Marks current entity as served. Removes it from the system. |
 | `RENEGE` | `RENEGE(ctx)` | Marks current entity as reneged (abandoned). Always use `ctx` as the argument. |
-| `BATCH` | `BATCH(QueueName, N)` | Batches N entities from `QueueName` into a group. N ≥ 2. |
 | `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch, sends each member to `QueueName`. |
-| `FILL` | `FILL(containerName, amount)` | Adds `amount` to a container's level. |
-| `DRAIN` | `DRAIN(containerName, amount)` | Removes `amount` from a container's level. |
+| `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level. `containerId` must match a declared container `id`. |
+| `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not). |
+| `PREEMPT` | `PREEMPT(ServerType)` | Interrupts in-progress service; displaced entity re-queues with remaining service time. |
+| `FAIL` | `FAIL(ServerType)` | Marks servers of this type as failed; interrupts in-progress service. Pair with a scheduled `REPAIR` B-event. |
+| `REPAIR` | `REPAIR(ServerType)` | Restores failed servers to idle; triggers a C-scan for waiting entities. |
+| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. |
+| `SET` | `SET(varName, expression)` | Sets a state variable to an arithmetic expression. Supports `Entity.attrName`, state variables, `clock`, +−×÷, `min`/`max`/`abs`/`round`/`floor`/`ceil`. |
+| `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to the result of an arithmetic expression. |
+| `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost` and the entity's `__cost` attribute. |
 
 ### Optional: Conditional Routing Table
 
@@ -380,9 +390,12 @@ This is the standard pattern for routing service time to the right distribution 
 | Macro | Syntax | Meaning |
 |-------|--------|---------|
 | `ASSIGN` | `ASSIGN(QueueName, ServerType)` | Seizes a server of `ServerType`, starts serving the front entity from `QueueName`. Schedules `cSchedules` B-events. |
-| `SET` | `SET(variableName, value)` | Sets a state variable to a value. |
-| `FILL` | `FILL(containerName, amount)` | Adds to a container. |
-| `DRAIN` | `DRAIN(containerName, amount)` | Removes from a container. |
+| `BATCH` | `BATCH(QueueName, N)` | Accumulates N entities from `QueueName` into a parent batch entity. N ≥ 2. C-events only. |
+| `COSEIZE` | `COSEIZE(QueueName, Srv1, Srv2, ...)` | Atomically seizes one entity and multiple server types simultaneously. Fails cleanly if any server is unavailable. |
+| `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each queue into a combined batch in `TargetQueue`. |
+| `SET` | `SET(variableName, expression)` | Sets a state variable to an arithmetic expression. |
+| `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to an arithmetic expression. |
+| `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost`. |
 
 ### 6.1 Condition Predicate Syntax
 
@@ -410,12 +423,15 @@ Global variables that can be read and written during simulation.
   "id": "sv_shift_active",
   "name": "shiftActive",
   "valueType": "number",
-  "initialValue": 1
+  "initialValue": 1,
+  "resetOnWarmup": true
 }
 ```
 
 - `name` must be unique.
-- Set via `SET(variableName, expression)` in C-event effects.
+- `valueType`: always `"number"` for user-defined state variables.
+- `resetOnWarmup` (optional, default `true`): if `true`, the variable resets to `initialValue` when the warm-up period ends.
+- Set via `SET(variableName, expression)` in B-event or C-event effects.
 - Read in conditions via `state.variableName`.
 
 ---
@@ -427,16 +443,16 @@ Continuous-level resources (tanks, buffers, stock).
 ```json
 {
   "id": "ct_tank",
-  "name": "Tank",
   "capacity": 1000,
   "initialLevel": 500
 }
 ```
 
-- `id` must be unique.
-- `capacity` must be > 0.
-- `initialLevel` must be ≥ 0 and ≤ `capacity`.
-- Manipulated by `FILL(name, amount)` and `DRAIN(name, amount)`.
+- `id` must be unique and non-empty. Containers have no separate `name` field — the `id` is both the identifier and the macro argument.
+- `capacity` (optional): maximum level, must be > 0 when set. Omit for unbounded.
+- `initialLevel` (optional, default 0): must be ≥ 0 and ≤ `capacity`.
+- Manipulated by `FILL(id, amount)` and `DRAIN(id, amount)` — the first argument must match the container's `id` exactly (case-insensitive).
+- `DRAIN` is a no-op (with error log) if the current level < amount — levels never go negative.
 
 ---
 
@@ -489,8 +505,10 @@ The engine rejects models that violate these rules. All generated models must co
 | V22 | `BATCH` size must be an integer ≥ 2 and queue must exist |
 | V24 | `loopConfig.maxLoopCount` must be integer ≥ 1 |
 | V25 | `RENEGE` must always use `ctx` as its argument — never an entity type name |
-| V26 | Container `id` must be unique; `capacity` > 0; `initialLevel` ≥ 0 and ≤ capacity |
+| V26 | Container `id` must be unique and non-empty; `capacity` > 0 when set; `initialLevel` ≥ 0 and ≤ `capacity` |
 | V27 | `FILL`/`DRAIN` must reference a declared container `id` |
+| V28 | `epoch`, when set, must be a valid ISO 8601 datetime string (e.g. `"2026-05-18T08:00:00"`) |
+| V29 | A C-event whose `cSchedules` entries all have a `when` predicate must also include a fallback entry (one without `when`); otherwise entities matching no condition receive no service (warning) |
 
 ---
 
