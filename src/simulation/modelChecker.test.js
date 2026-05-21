@@ -17,7 +17,7 @@ const wellFormedModel = {
       name: "Arrive",
       scheduledTime: 0,
       schedules: [
-        { macro: "ARRIVE", entityTypeName: "Customer", queueName: "ServiceQueue", dist: "exponential", distParams: { rate: 1 } },
+        { eventId: "arrive1", macro: "ARRIVE", entityTypeName: "Customer", queueName: "ServiceQueue", dist: "exponential", distParams: { rate: 1 } },
       ],
     },
     {
@@ -25,7 +25,7 @@ const wellFormedModel = {
       name: "Complete",
       scheduledTime: 9999,
       schedules: [
-        { macro: "COMPLETE", entityTypeName: "Customer", queueName: "ServiceQueue", dist: "fixed", distParams: { value: 0 } },
+        { eventId: "complete1", macro: "COMPLETE", entityTypeName: "Customer", queueName: "ServiceQueue", dist: "fixed", distParams: { value: 0 } },
       ],
     },
   ],

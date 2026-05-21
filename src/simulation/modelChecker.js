@@ -351,20 +351,58 @@ function getFollowOnId(bEvent) {
 }
 
 /**
- * CHK-010: B-event schedule entry has no eventId — will self-reschedule (backward compat),
- * but should be set explicitly to avoid ambiguity.
+ * CHK-010: B-event schedule entry has no eventId — engine will skip it silently.
  */
 function chk010(model) {
   const issues = [];
   for (const bEvent of model.bEvents || []) {
     const name = bEvent.name || bEvent.id || "?";
     for (const sched of bEvent.schedules || []) {
-      if (!sched.eventId && !sched.isRenege) {
+      if (!sched.eventId) {
         issues.push(makeIssue(
-          "warning", "CHK-010",
-          `B-event '${name}' has a schedule entry with no eventId — set eventId to '${bEvent.id}' to self-reschedule explicitly.`,
+          "error", "CHK-010",
+          `B-event '${name}' has a schedule entry with no eventId — the engine will skip it and the event will never re-fire. Set eventId (e.g. '${bEvent.id}' to self-reschedule).`,
           bEvent.id || null, name
         ));
+      }
+    }
+  }
+  return issues;
+}
+
+/**
+ * CHK-011: B-event balkCondition is a string — must be a predicate object.
+ */
+function chk011(model) {
+  const issues = [];
+  for (const bEvent of model.bEvents || []) {
+    const name = bEvent.name || bEvent.id || "?";
+    if (typeof bEvent.balkCondition === 'string') {
+      issues.push(makeIssue(
+        "error", "CHK-011",
+        `B-event '${name}' has a string balkCondition — must be a predicate object { variable, operator, value }.`,
+        bEvent.id || null, name
+      ));
+    }
+  }
+  return issues;
+}
+
+/**
+ * CHK-012: B-event routing condition is a string — must be a predicate object.
+ */
+function chk012(model) {
+  const issues = [];
+  for (const bEvent of model.bEvents || []) {
+    const name = bEvent.name || bEvent.id || "?";
+    for (const branch of bEvent.routing || []) {
+      if (typeof branch.condition === 'string') {
+        issues.push(makeIssue(
+          "error", "CHK-012",
+          `B-event '${name}' has a string routing condition — must be a predicate object { variable, operator, value }.`,
+          bEvent.id || null, name
+        ));
+        break;
       }
     }
   }
@@ -393,6 +431,8 @@ export function checkModel(model) {
     ...chk008(model),
     ...chk009(model),
     ...chk010(model),
+    ...chk011(model),
+    ...chk012(model),
   ];
 
   return all.sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99));
