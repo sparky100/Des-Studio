@@ -120,14 +120,19 @@ Servers can have time-varying capacity:
 
 ### Optional: Server Failure Model
 
-Servers can have random failures:
+Servers can have random failures (the engine auto-generates FAIL/REPAIR events):
 
 ```json
 "mtbfDist": "Exponential",
-"mtbfDistParams": { "mean": "60" },
-"mttrDist": "Exponential",
-"mttrDistParams": { "mean": "10" }
+"mtbfDistParams": { "mean": "360" },
+"mttrDist": "Triangular",
+"mttrDistParams": { "min": "20", "mode": "45", "max": "90" }
 ```
+
+- All four fields (`mtbfDist`, `mtbfDistParams`, `mttrDist`, `mttrDistParams`) must be set together — partial specification is not valid.
+- `mtbfDist` / `mttrDist`: any distribution name from §4. `Exponential` and `Triangular` are most common.
+- Mean time between failures (`mtbfDist`) should be much larger than mean time to repair (`mttrDist`).
+- No additional B-events or C-events are needed — the engine handles failure scheduling automatically.
 
 ---
 
@@ -247,7 +252,11 @@ Instead of `dist`/`distParams`, a schedule entry can supply an explicit list of 
 - `id` must be unique across all B-events.
 - `scheduledTime`: use `"0"` for arrival generators (they reschedule themselves). Use `"9999"` for completion/release events (scheduled by the engine at service start).
 - `schedules`: for recurring B-events (arrivals), include one entry with `eventId` matching this event's own `id` and either a distribution or a `times[]`/`rows[]` list. Leave as `[]` for completion events.
-- `schedules[].eventId` must reference a valid B-event `id`.
+- `schedules[].eventId` **is required** — must reference a valid B-event `id`. An entry without `eventId` is silently skipped by the engine and the event will never re-fire (CHK-010 error).
+- `schedules[].isRenege` (boolean, optional): when `true`, this schedule entry is an abandonment timer. If the entity is still waiting when this fires, it reneges. Pair with a B-event whose `effect` is `["RENEGE(ctx)"]`. Only one `isRenege` entry per B-event is meaningful.
+- `balkCondition` (optional): a **predicate object** `{ "variable", "operator", "value" }` — tested at arrival time. If true, the entity does not join the queue. Use `"variable": "Queue.<queueName>.length"` to test queue occupancy. **Never a string** (CHK-011 error).
+- `routing[].condition` **must be a predicate object** — never a string (CHK-012 error). See §5 Conditional Routing Table.
+- `defaultQueueName` (optional): fallback queue used when no routing condition matches. Must reference a valid queue name. Required when using `routing` without a guaranteed catch-all condition.
 
 ### Effect Macros for B-Events
 
@@ -367,7 +376,7 @@ C-events fire whenever their condition becomes true. They represent service star
 - `condition`: predicate expression (see §6.1 below).
 - `effect` must use `ASSIGN` for standard service start.
 - `cSchedules[].eventId` must reference a valid B-event `id`.
-- `cSchedules[].useEntityCtx`: always `true` for service completion events (schedules the B-event for the specific entity being served).
+- `cSchedules[].useEntityCtx`: **must be `true`** for service completion events so the engine associates the scheduled B-event with the specific entity being served. Omitting it means the B-event fires with no entity context and `COMPLETE()`/`RELEASE()` will not know which entity to remove.
 
 ### Attribute-conditional `cSchedules` — the `when` field
 
