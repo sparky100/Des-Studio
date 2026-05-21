@@ -286,7 +286,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
   };
 
   const updateRowAttr=(idx,attrName,val)=>{
-    const rows=(dp.rows||[]).map((r,i)=>i===idx?{...r,attrs:{...r.attrs,[attrName]:val===""?undefined:Number(val)}}:r);
+    const rows=(dp.rows||[]).map((r,i)=>i===idx?{...r,attrs:{...r.attrs,[attrName]:val===""?undefined:val}}:r);
     updDp({rows});
   };
 
@@ -387,6 +387,14 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
       )}
       {rowsMode&&(()=>{
         const attrNames=numAttrDefs.length>0?numAttrDefs.map(a=>a.name):inferredAttrNames;
+        // Determine which attributes are numeric (all non-empty values parse as finite numbers)
+        const numericAttrs = new Set();
+        attrNames.forEach(n => {
+          const vals = (dp.rows||[]).map(r => r.attrs?.[n]).filter(v => v !== undefined && v !== '');
+          if (vals.length > 0 && vals.every(v => typeof v === 'number' || Number.isFinite(Number(v)))) {
+            numericAttrs.add(n);
+          }
+        });
         return(
         <div style={{overflowX:"auto"}}>
           <table style={{borderCollapse:"collapse",width:"100%",fontFamily:FONT}}>
@@ -408,7 +416,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
                   </td>
                   {attrNames.map(n=>(
                     <td key={n} style={tdSt}>
-                      <input type="number" value={row.attrs?.[n]??""} style={{...inpSt,width:70}}
+                      <input type={numericAttrs.has(n)?"number":"text"} value={row.attrs?.[n]??""} style={{...inpSt,width:70}}
                         onChange={e=>updateRowAttr(i,n,e.target.value)}/>
                     </td>
                   ))}
