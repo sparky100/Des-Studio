@@ -283,6 +283,10 @@ function chk008(model) {
         usedServers.add(schedule.serverTypeName.trim().toLowerCase());
       }
     }
+    // Old format: ASSIGN(queue, serverType) in effect string
+    for (const m of effectString(cEvent).matchAll(/ASSIGN\s*\([^,)]+,\s*([^)]+)\)/gi)) {
+      usedServers.add(m[1].trim().toLowerCase());
+    }
   }
 
   for (const et of model.entityTypes || []) {
