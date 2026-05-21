@@ -10,7 +10,7 @@
 //   3. No changes needed anywhere else
 
 import { sampleAttrs } from "./distributions.js";
-import { evaluatePredicate } from "./conditions.js";
+import { evaluatePredicate, evalCondition } from "./conditions.js";
 import { claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState, selectWaiting, listWaiting } from "./entities.js";
 
 // ── Safe scalar expression evaluator (replaces new Function in applyScalar) ──
@@ -220,17 +220,18 @@ export const MACROS = [
       // Balk config lives on the B-event (felRef) that fired this ARRIVE.
       const bEvent = felRef;
       if (bEvent) {
-        // Condition-based balking — uses evaluatePredicate (already imported at top)
+        // Condition-based balking — supports both structured predicate and legacy string
         if (bEvent.balkCondition) {
           const qLen = entities.filter(
             e => e.status === "waiting" && e.queue?.trim().toLowerCase() === queueName.trim().toLowerCase()
           ).length;
-          // Build a state object that exposes Queue.<name>.length for the predicate evaluator
           const balkState = {
             ...ctx.state,
             queues: { [queueName]: { length: qLen } },
           };
-          const balks = evaluatePredicate(bEvent.balkCondition, balkState);
+          const balks = typeof bEvent.balkCondition === 'string'
+            ? evalCondition(bEvent.balkCondition, { waitingOf: (t) => entities.filter(e => e.status === 'waiting' && e.type === t), idleOf: () => [], busyOf: () => [] }, balkState, clock)
+            : evaluatePredicate(bEvent.balkCondition, balkState);
           if (balks) {
             incQueueMetric?.(queueName, "balkCount");
             const dest = qDef?.overflowDestination ?? null;

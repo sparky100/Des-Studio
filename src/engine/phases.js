@@ -13,6 +13,18 @@ import { evalCondition, evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
 import { clearWaitingState, markEntityWaiting } from "./entities.js";
 
+// Parse legacy string routing condition "entity.attr op value" → predicate object
+function parseEntityCondition(str) {
+  const m = (str || '').trim().match(/^entity\.(\w+)\s*(==|!=|<=|>=|<|>)\s*(.+)$/i);
+  if (!m) return null;
+  let val = m[3].trim();
+  if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
+  else if (!isNaN(Number(val))) val = Number(val);
+  else if (val === 'true') val = true;
+  else if (val === 'false') val = false;
+  return { variable: `Entity.${m[1]}`, operator: m[2], value: val };
+}
+
 function hasConditionDefinition(condition) {
   if (!condition) return false;
   if (typeof condition === "string") return condition.trim() !== "";
@@ -198,7 +210,11 @@ export function fireBEvent(ev, ctx) {
     if (cust && cust.status === "waiting") {
       let routed;
       for (const branch of routingBranches) {
-        if (branch.condition && evaluatePredicate(branch.condition, { currentEntity: cust })) {
+        if (!branch.condition) continue;
+        const pred = typeof branch.condition === 'string'
+          ? parseEntityCondition(branch.condition)
+          : branch.condition;
+        if (pred && evaluatePredicate(pred, { currentEntity: cust })) {
           routed = branch.queueName;
           break;
         }
@@ -261,15 +277,17 @@ export function fireBEvent(ev, ctx) {
 
   // Process the B-event's own schedules list (next arrival, reneging timer, etc.)
   for (const sched of ev.schedules || []) {
-    const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);
+    // If no eventId, treat as self-reschedule (backward-compat with old format)
+    const schedId = sched.eventId || ev.id;
+    const tmpl = (model.bEvents || []).find(b => b.id === schedId);
     if (!tmpl) continue;
-    const schedCtx = { clock, state: ctx.state, schedKey: sched.eventId };
+    const schedCtx = { clock, state: ctx.state, schedKey: schedId };
     const resolvedBParams = ctx.registry
       ? ctx.registry.resolve(sched.distParams || {}, sched.paramSource)
       : (sched.distParams || {});
     const delay = Math.max(0, sample(sched.dist || "Fixed", resolvedBParams, ctx.rng, null, schedCtx));
     // Carry per-arrival row attrs from schedule rows[] (S40.2)
-    const rowAttrs = ctx.state?.[`__schedRowAttrs_${sched.eventId}`] ?? null;
+    const rowAttrs = ctx.state?.[`__schedRowAttrs_${schedId}`] ?? null;
     let renegeTarget;
     if (sched.isRenege) {
       renegeTarget = effectCtx._lastCustId;

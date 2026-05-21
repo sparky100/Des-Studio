@@ -350,6 +350,27 @@ function getFollowOnId(bEvent) {
   return null;
 }
 
+/**
+ * CHK-010: B-event schedule entry has no eventId — will self-reschedule (backward compat),
+ * but should be set explicitly to avoid ambiguity.
+ */
+function chk010(model) {
+  const issues = [];
+  for (const bEvent of model.bEvents || []) {
+    const name = bEvent.name || bEvent.id || "?";
+    for (const sched of bEvent.schedules || []) {
+      if (!sched.eventId && !sched.isRenege) {
+        issues.push(makeIssue(
+          "warning", "CHK-010",
+          `B-event '${name}' has a schedule entry with no eventId — set eventId to '${bEvent.id}' to self-reschedule explicitly.`,
+          bEvent.id || null, name
+        ));
+      }
+    }
+  }
+  return issues;
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
@@ -371,6 +392,7 @@ export function checkModel(model) {
     ...chk007(model),
     ...chk008(model),
     ...chk009(model),
+    ...chk010(model),
   ];
 
   return all.sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99));
