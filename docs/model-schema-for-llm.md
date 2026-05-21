@@ -169,10 +169,11 @@ Used in B-event schedules, C-event service times, and entity attribute defaults.
 | `Normal`      | `{ "mean": "10", "stddev": "2" }`            | stddev > 0; warn if mean < 2×stddev|
 | `Triangular`  | `{ "min": "2", "mode": "5", "max": "10" }`   | min ≤ mode ≤ max                   |
 | `Erlang`      | `{ "k": "3", "mean": "6" }`                  | k integer ≥ 1; mean > 0            |
-| `Lognormal`   | `{ "logMean": "1.6", "logStdDev": "0.4" }`   | **Not yet implemented.** logStdDev > 0 |
 | `Empirical`   | `{ "values": [4, 6, 8, 12] }` (or via CSV import) | Non-empty array; samples uniformly |
 | `Piecewise`   | `{ "periods": [{ "startTime": "0", "dist": "Exponential", "distParams": { "mean": "3" } }, ...] }` | First period must start at 0; sorted ascending |
 | `Schedule`    | `{ "times": [10, 25, 40] }` or `{ "rows": [{ "time": 10, "attrs": { ... } }, ...] }` | Planned absolute arrival times; exhausts and stops |
+| `ServerAttr`  | `{ "attr": "serviceTime" }`                  | Reads named attribute from matched server entity; returns max(0, value) or 1 if not found |
+| `EntityAttr`  | `{ "attr": "requestedDuration" }`            | Reads named attribute from arriving customer entity; returns value or 0 if not found |
 
 **All numeric parameter values must be strings** (e.g. `"5"`, not `5`).
 
