@@ -82,6 +82,25 @@ async function runDesModelsSelect(buildQuery) {
 }
 
 // ── Row normalisation ─────────────────────────────────────────────────────────
+// Convert top-level rows[]/times[] on a schedule entry to the canonical
+// dist:"Schedule",distParams:{rows/times} format that DistPicker expects.
+function normalizeScheduleEntry(s) {
+  if (!s || (!s.rows && !s.times)) return s;
+  const { rows, times, dist, distParams, ...rest } = s;
+  return {
+    ...rest,
+    dist: dist || "Schedule",
+    distParams: { ...(distParams || {}), ...(rows ? { rows } : { times }) },
+  };
+}
+
+function normalizeBEvents(bEvents) {
+  return (bEvents || []).map(b => ({
+    ...b,
+    schedules: (b.schedules || []).map(normalizeScheduleEntry),
+  }));
+}
+
 export function norm(r) {
   const modelJson = r.model_json || {};
   return {
@@ -93,7 +112,7 @@ export function norm(r) {
     access:         r.access      || {},
     entityTypes:    r.entity_types     || [],
     stateVariables: r.state_variables  || [],
-    bEvents:        r.b_events         || [],
+    bEvents:        normalizeBEvents(r.b_events),
     cEvents:        r.c_events         || [],
     queues:         r.queues           || [],
     graph:          modelJson.graph ?? r.graph ?? null,

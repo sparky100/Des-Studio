@@ -2,6 +2,13 @@
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "goals", "containerTypes"];
 
+// Normalise a B-event schedule entry: top-level rows[]/times[] → dist:"Schedule",distParams:{rows/times}
+function normalizeScheduleEntry(s) {
+  if (!s || (!s.rows && !s.times)) return s;
+  const { rows, times, dist, distParams, ...rest } = s;
+  return { ...rest, dist: dist || "Schedule", distParams: { ...(distParams || {}), ...(rows ? { rows } : { times }) } };
+}
+
 /**
  * Normalise an imported JSON payload (raw model or DB envelope) into a
  * clean model object ready for validateModel() and saveModel().
@@ -34,6 +41,13 @@ export function extractImportedModelPayload(payload) {
   if (source.timeUnit) model.timeUnit = source.timeUnit;
   if (source.epoch)    model.epoch    = source.epoch;
   if (Array.isArray(source.dataSources)) model.dataSources = source.dataSources;
+  // Normalize schedule entries so DistPicker can display top-level rows[]/times[]
+  if (Array.isArray(model.bEvents)) {
+    model.bEvents = model.bEvents.map(b => ({
+      ...b,
+      schedules: (b.schedules || []).map(normalizeScheduleEntry),
+    }));
+  }
   return model;
 }
 
