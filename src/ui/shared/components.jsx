@@ -219,13 +219,23 @@ const PiecewiseEditor=({value,onChange,compact})=>{
 
 const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
   const dp=value?.distParams||{};
-  const hasRows=Array.isArray(dp.rows);
+  const hasRows=Array.isArray(dp.rows)&&dp.rows.length>0;
   const times=hasRows?dp.rows.map(r=>r.time):(Array.isArray(dp.times)?dp.times:[]);
   const jitterDist=dp.jitterDist||"";
   const jitterParams=dp.jitterParams||{};
   const updDp=(patch)=>onChange({...value,distParams:{...dp,...patch}});
   const [rawText,setRawText]=React.useState(times.join(", "));
   const [rowsMode,setRowsMode]=React.useState(hasRows);
+  const prevValueRef=React.useRef(value);
+  useEffect(()=>{
+    if(prevValueRef.current!==value){
+      prevValueRef.current=value;
+      const dp2=value?.distParams||{};
+      const hr=Array.isArray(dp2.rows)&&dp2.rows.length>0;
+      setRowsMode(hr);
+      setRawText(hr?dp2.rows.map(r=>r.time).join(", "):(Array.isArray(dp2.times)?dp2.times:[]).join(", "));
+    }
+  },[value]);
   const [importNotice,setImportNotice]=React.useState(null);
   const [csvPreview,setCsvPreview]=React.useState(null);
   const [previewExpanded,setPreviewExpanded]=React.useState(false);

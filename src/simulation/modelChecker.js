@@ -283,6 +283,10 @@ function chk008(model) {
         usedServers.add(schedule.serverTypeName.trim().toLowerCase());
       }
     }
+    // Old format: ASSIGN(queue, serverType) in effect string
+    for (const m of effectString(cEvent).matchAll(/ASSIGN\s*\([^,)]+,\s*([^)]+)\)/gi)) {
+      usedServers.add(m[1].trim().toLowerCase());
+    }
   }
 
   for (const et of model.entityTypes || []) {
@@ -294,6 +298,31 @@ function chk008(model) {
         `Server '${name}' is never used in any C-event — it will always show 0% utilisation.`,
         et.id || null, name
       ));
+    }
+  }
+  return issues;
+}
+
+/**
+ * CHK-009: Schedule dist entry has no planned times/rows — will never re-fire.
+ */
+function chk009(model) {
+  const issues = [];
+  for (const bEvent of model.bEvents || []) {
+    const name = bEvent.name || bEvent.id || "?";
+    for (const sched of bEvent.schedules || []) {
+      const dist = (sched.dist || "").trim().toLowerCase();
+      if (dist !== "schedule") continue;
+      const dp = sched.distParams || {};
+      const hasRows = Array.isArray(dp.rows) && dp.rows.length > 0;
+      const hasTimes = Array.isArray(dp.times) && dp.times.length > 0;
+      if (!hasRows && !hasTimes) {
+        issues.push(makeIssue(
+          "error", "CHK-009",
+          `B-event '${name}' has a Schedule distribution with no rows or times — no arrivals will be generated.`,
+          bEvent.id || null, name
+        ));
+      }
     }
   }
   return issues;
@@ -321,6 +350,65 @@ function getFollowOnId(bEvent) {
   return null;
 }
 
+/**
+ * CHK-010: B-event schedule entry has no eventId — engine will skip it silently.
+ */
+function chk010(model) {
+  const issues = [];
+  for (const bEvent of model.bEvents || []) {
+    const name = bEvent.name || bEvent.id || "?";
+    for (const sched of bEvent.schedules || []) {
+      if (!sched.eventId) {
+        issues.push(makeIssue(
+          "error", "CHK-010",
+          `B-event '${name}' has a schedule entry with no eventId — the engine will skip it and the event will never re-fire. Set eventId (e.g. '${bEvent.id}' to self-reschedule).`,
+          bEvent.id || null, name
+        ));
+      }
+    }
+  }
+  return issues;
+}
+
+/**
+ * CHK-011: B-event balkCondition is a string — must be a predicate object.
+ */
+function chk011(model) {
+  const issues = [];
+  for (const bEvent of model.bEvents || []) {
+    const name = bEvent.name || bEvent.id || "?";
+    if (typeof bEvent.balkCondition === 'string') {
+      issues.push(makeIssue(
+        "error", "CHK-011",
+        `B-event '${name}' has a string balkCondition — must be a predicate object { variable, operator, value }.`,
+        bEvent.id || null, name
+      ));
+    }
+  }
+  return issues;
+}
+
+/**
+ * CHK-012: B-event routing condition is a string — must be a predicate object.
+ */
+function chk012(model) {
+  const issues = [];
+  for (const bEvent of model.bEvents || []) {
+    const name = bEvent.name || bEvent.id || "?";
+    for (const branch of bEvent.routing || []) {
+      if (typeof branch.condition === 'string') {
+        issues.push(makeIssue(
+          "error", "CHK-012",
+          `B-event '${name}' has a string routing condition — must be a predicate object { variable, operator, value }.`,
+          bEvent.id || null, name
+        ));
+        break;
+      }
+    }
+  }
+  return issues;
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
@@ -341,6 +429,10 @@ export function checkModel(model) {
     ...chk006(model),
     ...chk007(model),
     ...chk008(model),
+    ...chk009(model),
+    ...chk010(model),
+    ...chk011(model),
+    ...chk012(model),
   ];
 
   return all.sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99));

@@ -220,12 +220,11 @@ export const MACROS = [
       // Balk config lives on the B-event (felRef) that fired this ARRIVE.
       const bEvent = felRef;
       if (bEvent) {
-        // Condition-based balking — uses evaluatePredicate (already imported at top)
+        // Condition-based balking
         if (bEvent.balkCondition) {
           const qLen = entities.filter(
             e => e.status === "waiting" && e.queue?.trim().toLowerCase() === queueName.trim().toLowerCase()
           ).length;
-          // Build a state object that exposes Queue.<name>.length for the predicate evaluator
           const balkState = {
             ...ctx.state,
             queues: { [queueName]: { length: qLen } },
