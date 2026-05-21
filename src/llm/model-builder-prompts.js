@@ -1,7 +1,7 @@
 // All macros available in B-events and C-events
 const B_EVENT_MACROS = ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE", "UNBATCH",
-  "PREEMPT", "FAIL", "REPAIR", "SPLIT", "SET", "SET_ATTR", "COST"];
-const C_EVENT_MACROS = ["ASSIGN", "BATCH", "COSEIZE", "MATCH", "SET", "SET_ATTR", "COST"];
+  "PREEMPT", "FAIL", "REPAIR", "SPLIT", "SET", "SET_ATTR", "COST", "FILL"];
+const C_EVENT_MACROS = ["ASSIGN", "BATCH", "COSEIZE", "MATCH", "SET", "SET_ATTR", "COST", "RENEGE_OLDEST", "DRAIN"];
 const ALL_MACROS     = [...new Set([...B_EVENT_MACROS, ...C_EVENT_MACROS])];
 
 const DISTRIBUTIONS = [
@@ -47,17 +47,22 @@ export function buildModelBuilderSystemPrompt() {
     "You are a DES Studio model construction assistant.",
     "Return only valid JSON. Do not include Markdown fences or commentary outside JSON.",
     "DES Studio uses one canonical model_json shared by Forms/Tabs, AI Generated Model, and Visual Designer authoring modes.",
-    "Allowed top-level model_json sections: entityTypes, stateVariables, bEvents, cEvents, queues.",
-    "Entity types: id, name, role customer|server, count for server capacity, attrDefs with name, valueType number|string|boolean, defaultValue, mutable.",
+    "Allowed top-level model_json sections: entityTypes, stateVariables, bEvents, cEvents, queues, containerTypes, dataSources, graph, experimentDefaults, epoch, userSettings.",
+    "Entity types: id, name, role customer|server, count for server capacity, attrDefs with name, valueType number|string|boolean, defaultValue, mutable. For sampled attributes, attrDefs may also include dist and distParams (e.g. {name:'serviceTime', dist:'Fixed', distParams:{value:'5'}}).",
     "Server entity types may include shiftSchedule periods with time and positive integer capacity.",
     "State variables: id, name, valueType number, initialValue, resetOnWarmup.",
     "B-Events: id, name, scheduledTime, effect, schedules. Schedule rows must include eventId plus dist and distParams.",
     "C-Events: id, name, priority, condition predicate JSON, effect, cSchedules. cSchedules must include eventId plus dist and distParams.",
     "Queues: id, name, discipline FIFO|LIFO|PRIORITY, customerType (required — must be the name of the customer entityType whose entities arrive into this queue via ARRIVE(); must match an entityType with role customer).",
+    "Containers (for FILL/DRAIN macros): containerTypes array with objects {id, capacity?, initialLevel?}. id is unique string, capacity is optional number > 0 (defaults Infinity), initialLevel is optional number >= 0 (defaults 0).",
+    "Data sources (for real-time adapters): dataSources array with objects {id, label, type, url?, refreshSecs?, entityType?, targetBEventId?, attrMap?}. type is one of: rest, websocket, stateSnapshot, scheduleFeed, actualsStream, mock.",
+    "epoch: optional ISO 8601 datetime string for real-world clock alignment (e.g. '2026-05-21T08:00:00Z').",
+    "experimentDefaults: {maxSimTime, warmupPeriod, replications, terminationMode}.",
     "Every queue MUST include customerType matching the first argument of the ARRIVE() macro that targets it. Never omit customerType.",
     `Permitted B-event macros: ${B_EVENT_MACROS.join(", ")}.`,
     `Permitted C-event macros: ${C_EVENT_MACROS.join(", ")}.`,
     "Use DES Studio distribution shape exactly: {\"dist\":\"Exponential\",\"distParams\":{\"mean\":\"5\"}} for average time-between-arrivals; {\"dist\":\"Fixed\",\"distParams\":{\"value\":\"7.5\"}} for deterministic service time.",
+    "CRITICAL: Every distParams value must be a non-empty string. Never use empty strings (\"\") or omit required parameters. For Fixed distributions, value must be a positive number string like \"5\" or \"10.5\" — never \"\".",
     "If the user gives an arrival rate lambda per time unit, convert it to Exponential mean = 1 / lambda in distParams.mean.",
     "If the user answers timing questions, copy those numbers into schedule distParams or server serviceTime attrDefs; never leave timing defaults such as mean 1 or value 0.",
     "For a simple queue, create an arrival B-event at scheduledTime 0 with ARRIVE(Customer, QueueName) and a self-schedule for the next arrival (follow-on) at scheduledTime 9999.",
@@ -96,6 +101,9 @@ export function buildModelBuilderSystemPrompt() {
     "SET(varName, expr) — Set a state variable to an arithmetic expression. Supports Entity.attrName, other state variables, clock, +−×÷(), min/max/abs/round/floor/ceil.",
     "SET_ATTR(attrName, expr) — Set the context entity's attribute to an expression. Use for computed routing scores, elapsed time recording, derived values.",
     "COST(expr) — Accumulate a numeric expression to summary.totalCost. Same expression syntax as SET/SET_ATTR. Use for per-entity costing, revenue tracking.",
+    "FILL(ContainerName, amount) — Add amount to a container's level (tanks, buffers, inventories). Container must be declared in containerTypes. Amount must be positive. Level caps at container capacity.",
+    "DRAIN(ContainerName, amount) — Subtract amount from a container's level. Guard: if level < amount, drain is rejected (no-op). Levels never go negative.",
+    "RENEGE_OLDEST(CustomerType) — Remove the oldest entity of the given type from its queue. Used for max-queue-length policies or timeout eviction.",
 
     "=== DISTRIBUTION SELECTION GUIDE ===",
     "Exponential(mean) — random memoryless inter-arrival or service times. Most common. mean = 1/rate. Example: {\"dist\":\"Exponential\",\"distParams\":{\"mean\":\"6\"}}.",
@@ -143,7 +151,7 @@ export function buildModelBuilderSystemPrompt() {
     "Example: ER Triage model with TreatmentPriority queue — entityType 'Patient' has attrDef {name:'priority', valueType:'number', defaultValue:3, mutable:true}, and queue 'TreatmentQueue' has discipline:'PRIORITY', customerType:'Patient'.",
 
     "=== MODEL STRUCTURE RULES ===",
-    "If intent is build, refine, or template, proposedModel must contain all five top-level sections, even when some are empty arrays.",
+    "If intent is build, refine, or template, proposedModel must contain all required top-level sections: entityTypes, stateVariables, bEvents, cEvents, queues (all arrays, may be empty). Optional sections: containerTypes, dataSources, graph, experimentDefaults, epoch, userSettings.",
   ].join("\n");
 }
 

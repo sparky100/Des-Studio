@@ -228,28 +228,27 @@ export default function App(){
       const importedModel = extractImportedModelPayload(payload);
       const importedValidation = validateModel(importedModel);
 
-      if (importedValidation.errors.length > 0) {
-        setImportStatus({
-          state: "error",
-          message: "Import blocked by validation errors.",
-          items: importedValidation.errors.map(e => `[${e.code}] ${e.message}`),
-        });
-        return;
-      }
-
       importedModel.name = name || importedModel.name;
       importedModel.description = desc || importedModel.description;
 
       saveModel(importedModel, uid)
         .then(saved => {
           loadData();
-          setImportStatus({
-            state: importedValidation.warnings.length ? "warning" : "success",
-            message: importedValidation.warnings.length
-              ? "Imported with validation warnings."
-              : "Model imported successfully.",
-            items: importedValidation.warnings.map(w => `[${w.code}] ${w.message}`),
-          });
+          if (importedValidation.errors.length > 0) {
+            setImportStatus({
+              state: "warning",
+              message: "Imported with validation errors — fix them in the editor before running.",
+              items: importedValidation.errors.map(e => `[${e.code}] ${e.message}`),
+            });
+          } else {
+            setImportStatus({
+              state: importedValidation.warnings.length ? "warning" : "success",
+              message: importedValidation.warnings.length
+                ? "Imported with validation warnings."
+                : "Model imported successfully.",
+              items: importedValidation.warnings.map(w => `[${w.code}] ${w.message}`),
+            });
+          }
           setOpenId(saved.id);
         })
         .catch(e => {
@@ -273,25 +272,23 @@ export default function App(){
       const payload = JSON.parse(text);
       const importedModel = extractImportedModelPayload(payload);
       const importedValidation = validateModel(importedModel);
-      if (importedValidation.errors.length > 0) {
-        const errorMsg = "Import blocked by validation errors.";
-        setImportStatus({
-          state: "error",
-          message: errorMsg,
-          items: importedValidation.errors.map(e => `[${e.code}] ${e.message}`),
-        });
-        onError?.(errorMsg);
-        return;
-      }
       const saved = await saveModel(importedModel, uid);
       await loadData();
-      setImportStatus({
-        state: importedValidation.warnings.length ? "warning" : "success",
-        message: importedValidation.warnings.length
-          ? "Imported with validation warnings."
-          : "Model imported successfully.",
-        items: importedValidation.warnings.map(w => `[${w.code}] ${w.message}`),
-      });
+      if (importedValidation.errors.length > 0) {
+        setImportStatus({
+          state: "warning",
+          message: "Imported with validation errors — fix them in the editor before running.",
+          items: importedValidation.errors.map(e => `[${e.code}] ${e.message}`),
+        });
+      } else {
+        setImportStatus({
+          state: importedValidation.warnings.length ? "warning" : "success",
+          message: importedValidation.warnings.length
+            ? "Imported with validation warnings."
+            : "Model imported successfully.",
+          items: importedValidation.warnings.map(w => `[${w.code}] ${w.message}`),
+        });
+      }
       onSuccess?.();
       setOpenId(saved.id);
     } catch (e) {
