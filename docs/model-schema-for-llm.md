@@ -188,7 +188,7 @@ B-events are scheduled future occurrences — arrivals and service completions.
   "id": "b_arrive",
   "name": "Patient Arrives",
   "scheduledTime": "0",
-  "effect": "ARRIVE(Patient, Triage Queue)",
+  "effect": ["ARRIVE(Patient, Triage Queue)"],
   "schedules": [
     {
       "eventId": "b_arrive",
@@ -204,7 +204,7 @@ B-events are scheduled future occurrences — arrivals and service completions.
   "id": "b_triage_done",
   "name": "Triage Complete",
   "scheduledTime": "9999",
-  "effect": "RELEASE(Nurse, Treatment Queue)",
+  "effect": ["RELEASE(Nurse, Treatment Queue)"],
   "schedules": []
 }
 ```
@@ -250,6 +250,10 @@ Instead of `dist`/`distParams`, a schedule entry can supply an explicit list of 
 - `schedules[].eventId` must reference a valid B-event `id`.
 
 ### Effect Macros for B-Events
+
+The `effect` field is **always an array of strings**. Each string is one macro call. Example: `"effect": ["ARRIVE(Patient, Triage Queue)"]`. You may combine multiple macros in the array: `"effect": ["SET(waiting, 1)", "ARRIVE(Patient, Queue)"]`.
+
+> **Note:** The single-string form `"effect": "ARRIVE(...)"` is not supported — always use an array.
 
 | Macro | Syntax | Meaning |
 |-------|--------|---------|
@@ -331,7 +335,7 @@ C-events fire whenever their condition becomes true. They represent service star
   "name": "Start Triage",
   "priority": 1,
   "condition": "queue(Triage Queue).length > 0 AND idle(Nurse).count > 0",
-  "effect": "ASSIGN(Triage Queue, Nurse)",
+  "effect": ["ASSIGN(Triage Queue, Nurse)"],
   "cSchedules": [
     {
       "eventId": "b_triage_done",
@@ -386,6 +390,8 @@ This is the standard pattern for routing service time to the right distribution 
 **V29 warning** is raised if all entries have `when` and there is no fallback — entities not matching any condition would silently receive no service.
 
 ### Effect Macros for C-Events
+
+The `effect` field on C-events is **always an array of strings**, same as B-events. Example: `"effect": ["ASSIGN(Queue, Server)"]`.
 
 | Macro | Syntax | Meaning |
 |-------|--------|---------|
@@ -534,14 +540,14 @@ The engine rejects models that violate these rules. All generated models must co
     { "id": "q_cust", "name": "Customer", "customerType": "Customer", "capacity": "", "discipline": "FIFO" }
   ],
   "bEvents": [
-    { "id": "b_arrive",   "name": "Arrival",   "scheduledTime": "0",    "effect": "ARRIVE(Customer, Customer)",
+    { "id": "b_arrive",   "name": "Arrival",   "scheduledTime": "0",    "effect": ["ARRIVE(Customer, Customer)"],
       "schedules": [{ "eventId": "b_arrive", "dist": "Exponential", "distParams": { "mean": "1.111" } }] },
-    { "id": "b_complete", "name": "Complete",  "scheduledTime": "9999", "effect": "COMPLETE()", "schedules": [] }
+    { "id": "b_complete", "name": "Complete",  "scheduledTime": "9999", "effect": ["COMPLETE()"], "schedules": [] }
   ],
   "cEvents": [
     { "id": "c_seize", "name": "Seize Server", "priority": 1,
       "condition": "queue(Customer).length > 0 AND idle(Server).count > 0",
-      "effect": "ASSIGN(Customer, Server)",
+      "effect": ["ASSIGN(Customer, Server)"],
       "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "1" }, "useEntityCtx": true }] }
   ],
   "stateVariables": [],
@@ -555,9 +561,9 @@ The engine rejects models that violate these rules. All generated models must co
 
 For multi-stage models, use `RELEASE(ServerType, NextQueueName)` at the end of stage 1 to hand the entity to stage 2:
 
-- Stage 1 completion B-event: `"effect": "RELEASE(Nurse, Treatment Queue)"`
-- Stage 2 C-event: `"condition": "queue(Treatment Queue).length > 0 AND idle(Doctor).count > 0"`, `"effect": "ASSIGN(Treatment Queue, Doctor)"`
-- Stage 2 completion B-event: `"effect": "COMPLETE()"`
+- Stage 1 completion B-event: `"effect": ["RELEASE(Nurse, Treatment Queue)"]`
+- Stage 2 C-event: `"condition": "queue(Treatment Queue).length > 0 AND idle(Doctor).count > 0"`, `"effect": ["ASSIGN(Treatment Queue, Doctor)"]`
+- Stage 2 completion B-event: `"effect": ["COMPLETE()"]`
 
 ### Reneging (Abandonment)
 
@@ -574,7 +580,7 @@ Add a renege schedule to the arrival B-event. The renege fires if the entity has
 
 And the renege B-event:
 ```json
-{ "id": "b_renege", "name": "Renege", "scheduledTime": "9999", "effect": "RENEGE(ctx)", "schedules": [] }
+{ "id": "b_renege", "name": "Renege", "scheduledTime": "9999", "effect": ["RENEGE(ctx)"], "schedules": [] }
 ```
 
 ---
@@ -727,14 +733,14 @@ curl -s -X POST \
         { "id": "q_main", "name": "Queue", "customerType": "Customer", "discipline": "FIFO" }
       ],
       "bEvents": [
-        { "id": "b_arrive",   "name": "Arrival",  "scheduledTime": "0",    "effect": "ARRIVE(Customer, Queue)",
+        { "id": "b_arrive",   "name": "Arrival",  "scheduledTime": "0",    "effect": ["ARRIVE(Customer, Queue)"],
           "schedules": [{ "eventId": "b_arrive",   "dist": "Exponential", "distParams": { "mean": "1" } }] },
-        { "id": "b_complete", "name": "Complete",  "scheduledTime": "9999", "effect": "COMPLETE()", "schedules": [] }
+        { "id": "b_complete", "name": "Complete",  "scheduledTime": "9999", "effect": ["COMPLETE()"], "schedules": [] }
       ],
       "cEvents": [
         { "id": "c_seize", "name": "Start Service", "priority": 1,
           "condition": "queue(Queue).length > 0 AND idle(Server).count > 0",
-          "effect": "ASSIGN(Queue, Server)",
+          "effect": ["ASSIGN(Queue, Server)"],
           "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "0.8" }, "useEntityCtx": true }] }
       ],
       "stateVariables": [],

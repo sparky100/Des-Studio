@@ -507,14 +507,16 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
   };
 
   const handleFamilyChange=(fid)=>{
-    setSelectedFamily(fid);
     const group=DIST_GROUPS.find(g=>g.id===fid);
     if(!group)return;
-    // If current dist not in new family, switch to first of that family
     if(!group.dists.includes(v.dist)){
+      const hasScheduleData=v.dist==="Schedule"&&Array.isArray(v.distParams?.rows)&&v.distParams.rows.length>0;
+      const hasPiecewiseData=v.dist==="Piecewise"&&Array.isArray(v.distParams?.periods)&&v.distParams.periods.length>1;
+      if((hasScheduleData||hasPiecewiseData)&&!window.confirm("Changing the distribution family will clear the current schedule data. Continue?"))return;
       const first=group.dists.find(d=>allowPiecewise||d!=="Piecewise")||group.dists[0];
       if(first) handleDistChange(first);
     }
+    setSelectedFamily(fid);
   };
 
   const handleParamChange=(param,val)=>{
