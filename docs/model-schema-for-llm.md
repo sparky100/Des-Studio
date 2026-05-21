@@ -362,15 +362,15 @@ This is the standard pattern for routing service time to the right distribution 
 "cSchedules": [
   {
     "eventId": "b_hip_complete",
-    "dist": "Lognormal",
-    "distParams": { "mean": "120", "sd": "20" },
+    "dist": "Normal",
+    "distParams": { "mean": "120", "stddev": "20" },
     "useEntityCtx": true,
     "when": { "variable": "Entity.surgery_type", "operator": "==", "value": "hip" }
   },
   {
     "eventId": "b_knee_complete",
-    "dist": "Lognormal",
-    "distParams": { "mean": "90", "sd": "15" },
+    "dist": "Normal",
+    "distParams": { "mean": "90", "stddev": "15" },
     "useEntityCtx": true,
     "when": { "variable": "Entity.surgery_type", "operator": "==", "value": "knee" }
   },
@@ -764,6 +764,8 @@ Full distribution-parameter validation (V5, V11–V13) and shift-schedule valida
 ---
 
 ## 15. Live Data Sources (Optional — Sprint 58+)
+
+> **Note:** `dataSources` entries are parsed and stored with the model but are not validated by the engine's pre-run checker (V1–V29). Structural validation — field completeness, URL reachability, auth configuration — is deferred to the live-data integration layer at runtime.
 
 Models can connect distribution parameters to live REST or WebSocket feeds so that arrival rates, service times, or resource counts are fetched from real systems before or during a run.
 
