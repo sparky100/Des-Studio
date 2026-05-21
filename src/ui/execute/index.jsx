@@ -28,6 +28,8 @@ import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResu
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
 import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
+import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
+import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
 import { generateReport } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
@@ -110,6 +112,8 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const [expFormOverrides, setExpFormOverrides] = useState([]);
   const [expFormSaving, setExpFormSaving] = useState(false);
   const [reportGenerating, setReportGenerating] = useState(false);
+  const [modelCheckerIssues, setModelCheckerIssues] = useState(null);
+  const [modelCheckerOpen, setModelCheckerOpen] = useState(false);
 
   const sweepRunnerRef = useRef(null);
   const runSeedRef = useRef(seed);
@@ -335,6 +339,20 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       setSaveStatus({ state: 'error', message: '✗ No model to run' });
       return;
     }
+
+    // F69.2: Run model checker before every run. Block on errors, show warnings.
+    const checkerIssues = checkModel(model);
+    setModelCheckerIssues(checkerIssues);
+    const checkerErrors = checkerIssues.filter(i => i.severity === "error");
+    if (checkerErrors.length > 0) {
+      setModelCheckerOpen(true);
+      setSaveStatus({ state: 'error', message: `✗ ${checkerErrors.length} structural error${checkerErrors.length === 1 ? "" : "s"} must be fixed before running. See Model Check panel.` });
+      return;
+    }
+    if (checkerIssues.length > 0) {
+      setModelCheckerOpen(true);
+    }
+
     setExecuteSection("run");
 
     const runSeed = seed;
@@ -1786,6 +1804,17 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           />
         </div>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
+        <Btn
+          variant="ghost"
+          onClick={() => {
+            const issues = checkModel(model);
+            setModelCheckerIssues(issues);
+            setModelCheckerOpen(true);
+          }}
+          title="Run structural checks on this model"
+        >
+          Check Model
+        </Btn>
         <Btn variant={view === "visual" ? "primary" : "ghost"} onClick={() => setView("visual")}>Live View</Btn>
         <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Results</Btn>
         <Btn
@@ -1796,6 +1825,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           style={autoRunning || mode === "running" ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
         >Log</Btn>
         <Btn variant={view === "entities" ? "primary" : "ghost"} onClick={() => setView("entities")} disabled={!results?.entitySummary?.length}>Entity Details</Btn>
+        <Btn variant={view === "diagnostics" ? "primary" : "ghost"} onClick={() => setView("diagnostics")}>Diagnostics</Btn>
         <div style={{ position: "relative" }}>
           {showExportPopover && (
             <div
@@ -1914,6 +1944,43 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           </div>
         )}
       </div>
+
+      {/* Model Checker panel */}
+      {modelCheckerOpen && modelCheckerIssues !== null && (
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>MODEL CHECK</span>
+            <button
+              onClick={() => setModelCheckerOpen(false)}
+              style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 13 }}
+              aria-label="Close model checker"
+            >✕</button>
+          </div>
+          {modelCheckerIssues.length === 0 ? (
+            <div style={{ fontSize: 12, color: C.green, fontFamily: FONT }}>No structural issues found.</div>
+          ) : (
+            modelCheckerIssues.map((issue, i) => {
+              const color = issue.severity === "error" ? C.red : issue.severity === "warning" ? C.amber : C.accent;
+              const icon = issue.severity === "error" ? "🔴" : issue.severity === "warning" ? "🟡" : "🔵";
+              return (
+                <div
+                  key={i}
+                  style={{ background: C.bg, border: `1px solid ${color}44`, borderRadius: 6, padding: "8px 10px", display: "flex", gap: 8, alignItems: "flex-start" }}
+                >
+                  <span style={{ fontSize: 12, flexShrink: 0, marginTop: 1 }}>{icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, color, fontFamily: FONT, fontWeight: 700, marginBottom: 2 }}>{issue.code}</div>
+                    <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>{issue.message}</div>
+                    {issue.nodeName && (
+                      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>Node: {issue.nodeName}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
 
       {phaseCTruncated && (
         <div style={{ background: C.amber + '18', border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 12 }}>
@@ -2340,6 +2407,16 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
             model={model}
             replicationResults={replicationResults}
             warmupDetection={warmupDetection}
+          />
+        </div>
+      )}
+
+      {view === "diagnostics" && (
+        <div style={{ background: C.logBg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
+          <DiagnosticsTab
+            model={model}
+            results={results}
+            onGoToNode={setSelectedNodeLabel}
           />
         </div>
       )}
