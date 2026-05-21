@@ -9,6 +9,7 @@
 //   const felSz  = engine.getFelSize()    // events in FEL
 
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
+import { buildTraceFromLog } from "../simulation/traceCollector.js";
 import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting }   from "./entities.js";
 import { evalCondition }                        from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
@@ -623,17 +624,23 @@ const cycleLog = [];
       log.push(makeTraceEntry("END", { message: "FEL empty — simulation complete" }));
     }
 
+    const engineSummary = getSummary();
+    const engineSummaryWithDuration = { ...engineSummary, simulatedDuration: clock };
+    const { trace, traceTruncated } = buildTraceFromLog(log, runtimeModel, engineSummaryWithDuration);
+
     return {
       finalTime: clock,
       log,
-      snap:           snap(clock),
-      summary:        getSummary(),
+      snap:            snap(clock),
+      summary:         engineSummary,
       phaseCTruncated: _phaseCTruncated,
-      warnings:       warnings.slice(),
-      entitySummary:  entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
-      timeSeries:     _timeSeries ?? undefined,
-      waitDist:       computeWaitDist(entities),
-      perQueue:       Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
+      warnings:        warnings.slice(),
+      entitySummary:   entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
+      timeSeries:      _timeSeries ?? undefined,
+      waitDist:        computeWaitDist(entities),
+      perQueue:        Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
+      trace,
+      traceTruncated,
     };
   }
 

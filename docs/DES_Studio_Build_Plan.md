@@ -288,6 +288,7 @@ flowchart LR
 | Sprint 31 | ✅ Complete | 2026-05-14 | Expressiveness & Observability. | Focused | N/A | Success | Clock token in Condition Builder, WIP time-average metric (Little's Law), live queue-depth time-plot in Execute canvas Charts tab. |
 | Sprint 32 | ✅ Complete | 2026-05-14 | Resource Reliability & Preemption. | Focused | N/A | Success | PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure. |
 | Sprint 33 | ✅ Complete | 2026-05-14 | Advanced Scheduling & Analytics. | 695 (695) | N/A | Success | SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
+| Sprint 69 | ✅ Complete | 2026-05-21 | AI Model Debugging: trace emission, structural checker, AI diagnosis panel, conversational debugger. | 23 passing (new) | N/A | N/A |
 
 ---
 
@@ -432,8 +433,13 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 33 | Advanced Scheduling & Analytics | complete: SPLIT/COSEIZE/MATCH macros, dynamic BATCH, SPT/EDD/PRIORITY queues, histograms, ANOVA with Tukey HSD |
 | Sprint 66 | Visual Designer Badges + Execute Panel UX | complete: node badges, Execute toolbar consolidation, Results chart formatting improvements |
 | Sprint 67 | Plain-English UX & Results Clarity | planned: wording simplification, Results information hierarchy, progressive disclosure of advanced detail |
+| Sprint 69 | AI Model Debugging | complete: F69.1 structured trace emission from engine, F69.2 pre-run structural model checker (CHK-001–CHK-008), F69.3 post-run AI diagnosis panel (Diagnostics tab, FindingCard list), F69.4 conversational debugging chat with full model+trace context |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
+
+**Future roadmap items (added Sprint 69):**
+- Future: Trace replay/step-through visualiser — playback of recorded trace records in the Execute canvas
+- Future: AI-suggested model fixes — auto-apply from diagnosis findings (one-click patch generation from CRITICAL findings)
 
 ### Modelling Capability Coverage
 

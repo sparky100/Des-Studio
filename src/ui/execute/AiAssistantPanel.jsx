@@ -4,8 +4,8 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
-import { streamNarrative } from "../../llm/apiClient.js";
-import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
+import { streamNarrative, callLLMOnce } from "../../llm/apiClient.js";
+import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
 
 function ConfidenceBadge({ confidence }) {
@@ -191,6 +191,77 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
   );
 }
 
+function FeasibilityBadge({ feasible }) {
+  const color = feasible ? C.green : C.red;
+  const label = feasible ? "Within capacity" : "Requires capacity increase";
+  return (
+    <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 700, color, border: `1px solid ${color}44`, borderRadius: 3, padding: "1px 5px", letterSpacing: 1 }}>
+      {label.toUpperCase()}
+    </span>
+  );
+}
+
+function RefinementCard({ card, model, aggregateStats, onApplyAndRerun, cardStatus, cardResult }) {
+  const running = cardStatus === "running";
+  const hasResult = cardStatus === "done" && cardResult;
+  const hasError = cardStatus === "error";
+  const applyError = cardStatus === "applyError";
+
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, marginTop: 8, background: C.surface }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 700, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 3, padding: "1px 5px" }}>
+          #{card.rank}
+        </span>
+        <FeasibilityBadge feasible={card.feasible} />
+      </div>
+      <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
+        <span style={{ fontWeight: 700 }}>{card.change}</span>
+      </div>
+      <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
+        <span style={{ color: C.muted, fontSize: 10 }}>Rationale: </span>{card.rationale}
+      </div>
+      <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 6 }}>
+        <span style={{ color: C.muted, fontSize: 10 }}>Goal impact: </span>{card.goalImpact}
+      </div>
+      <Btn
+        small
+        variant="primary"
+        disabled={!card.feasible || running || hasResult}
+        onClick={() => onApplyAndRerun(card)}
+        style={{ width: "100%", justifyContent: "center" }}
+      >
+        {running ? "Running…" : hasResult ? "Applied" : "Apply & Re-run"}
+      </Btn>
+      {running && (
+        <div style={{ marginTop: 8, fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+          Running revised schedule…
+        </div>
+      )}
+      {applyError && (
+        <div style={{ marginTop: 8, fontSize: 11, color: C.red, fontFamily: FONT }}>
+          Could not apply — schedule entry not found.
+        </div>
+      )}
+      {hasError && (
+        <div style={{ marginTop: 8, fontSize: 11, color: C.red, fontFamily: FONT }}>
+          Re-run failed — see console for details.
+        </div>
+      )}
+      {hasResult && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BEFORE / AFTER</div>
+          <BeforeAfterTable
+            goals={model?.goals || []}
+            baselineStats={aggregateStats}
+            afterStats={cardResult.aggregateStats}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const AiAssistantPanel = ({
   model,
   results,
@@ -216,6 +287,11 @@ export const AiAssistantPanel = ({
   const [parsedSuggestion, setParsedSuggestion] = useState(null);
   const [verifyStatus, setVerifyStatus] = useState({});
   const [verifyResults, setVerifyResults] = useState({});
+  const [refineStatus, setRefineStatus] = useState("idle");
+  const [refineError, setRefineError] = useState("");
+  const [refineParsed, setRefineParsed] = useState(null);
+  const [refineCardStatus, setRefineCardStatus] = useState({});
+  const [refineCardResults, setRefineCardResults] = useState({});
   const abortRef = useRef(null);
   const responseAreaRef = useRef(null);
   const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
@@ -386,6 +462,52 @@ export const AiAssistantPanel = ({
       runQuery(queryText);
     }
   };
+
+  const canRefinePlan = !!results && (
+    (Array.isArray(model?.schedules) && model.schedules.length > 0) ||
+    (Array.isArray(model?.shiftSchedules) && model.shiftSchedules.length > 0)
+  );
+
+  const handleRefinePlan = useCallback(async () => {
+    setRefineStatus("loading");
+    setRefineError("");
+    setRefineParsed(null);
+    setRefineCardStatus({});
+    setRefineCardResults({});
+    try {
+      const prompt = buildPlanRefinementPrompt(model, exportConfig, { ...results, aggregateStats });
+      const text = await callLLMOnce(prompt);
+      const parsed = parsePlanRefinementResponse(text);
+      setRefineParsed(parsed);
+      setRefineStatus("complete");
+    } catch (err) {
+      setRefineError(err?.message || "Plan refinement unavailable");
+      setRefineStatus("error");
+    }
+  }, [model, exportConfig, results, aggregateStats]);
+
+  const handleRefineApplyAndRerun = useCallback(async (card) => {
+    if (!onRunWithPatch) return;
+    const rank = card.rank;
+    setRefineCardStatus(prev => ({ ...prev, [rank]: "running" }));
+    try {
+      const patchedModel = applySchedulePatch(model, card);
+      const result = await onRunWithPatch(patchedModel);
+      if (result) {
+        setRefineCardResults(prev => ({ ...prev, [rank]: result }));
+        setRefineCardStatus(prev => ({ ...prev, [rank]: "done" }));
+      } else {
+        setRefineCardStatus(prev => ({ ...prev, [rank]: "error" }));
+      }
+    } catch (err) {
+      if (err?.message?.includes("schedule entry not found") || err?.message?.includes("no schedule entry")) {
+        setRefineCardStatus(prev => ({ ...prev, [rank]: "applyError" }));
+      } else {
+        console.error("Refine plan re-run failed:", err);
+        setRefineCardStatus(prev => ({ ...prev, [rank]: "error" }));
+      }
+    }
+  }, [model, onRunWithPatch]);
 
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
 
@@ -568,6 +690,69 @@ export const AiAssistantPanel = ({
             Ask
           </Btn>
         </div>
+      </div>
+
+      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>REFINE PLAN</div>
+        {!canRefinePlan ? (
+          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 }}>
+            Refine Plan is available after running a model that includes a loaded schedule. Load a schedule in the B-Events or Entity editor, then run the model.
+          </div>
+        ) : (
+          <div>
+            <Btn
+              variant="ghost"
+              onClick={handleRefinePlan}
+              disabled={refineStatus === "loading"}
+              style={panelButtonStyle}
+            >
+              {refineStatus === "loading" ? "Analysing schedule constraints…" : "Refine Plan"}
+            </Btn>
+            {refineStatus === "error" && (
+              <div role="alert" style={{ marginTop: 8, background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
+                Plan refinement unavailable — {refineError}
+              </div>
+            )}
+            {refineParsed && (
+              <div style={{ marginTop: 10 }}>
+                {refineParsed.analysis && (
+                  <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, lineHeight: 1.7, marginBottom: 10, whiteSpace: "pre-wrap" }}>
+                    {refineParsed.analysis}
+                  </div>
+                )}
+                {refineParsed.recommendations.length === 0 && (
+                  <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>No schedule recommendations returned.</div>
+                )}
+                {refineParsed.recommendations.map(card => (
+                  <RefinementCard
+                    key={card.rank}
+                    card={card}
+                    model={model}
+                    aggregateStats={aggregateStats}
+                    onApplyAndRerun={handleRefineApplyAndRerun}
+                    cardStatus={refineCardStatus[card.rank]}
+                    cardResult={refineCardResults[card.rank]}
+                  />
+                ))}
+                {refineParsed.infeasibleGoals.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10 }}>
+                      <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>
+                        The following goals cannot be met within current resource constraints:
+                      </div>
+                      {refineParsed.infeasibleGoals.map((g, i) => (
+                        <div key={i} style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
+                          <span style={{ fontWeight: 700 }}>{g.goalLabel}</span>
+                          {g.reason ? ` — ${g.reason}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );

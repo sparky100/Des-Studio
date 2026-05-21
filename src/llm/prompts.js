@@ -694,6 +694,170 @@ export function buildResultsQueryPrompt(question, model = {}, results = {}, conv
   };
 }
 
+// ── Sprint 70 — Constrained Plan Refinement ─────────────────────────────────
+
+function extractScheduleDigest(model = {}) {
+  const entries = [];
+  const schedules = Array.isArray(model.schedules) ? model.schedules : [];
+  const shiftSchedules = Array.isArray(model.shiftSchedules) ? model.shiftSchedules : [];
+  for (const s of schedules) {
+    entries.push({
+      eventId: s.eventId || s.id,
+      startTime: s.startTime ?? s.start ?? null,
+      endTime: s.endTime ?? s.end ?? null,
+      resourceType: s.resourceType || s.entityTypeName || null,
+      count: s.count ?? null,
+      shiftPattern: s.shiftPattern || null,
+    });
+  }
+  for (const s of shiftSchedules) {
+    entries.push({
+      eventId: s.eventId || s.id,
+      startTime: s.startTime ?? s.start ?? null,
+      endTime: s.endTime ?? s.end ?? null,
+      resourceType: s.resourceType || s.entityTypeName || null,
+      count: s.count ?? null,
+      shiftPattern: s.shiftPattern || s.pattern || null,
+    });
+  }
+  return entries;
+}
+
+function extractCapacityEnvelope(model = {}) {
+  const servers = (model.entityTypes || []).filter(e => e.role === "server");
+  return servers.map(s => {
+    const shiftWindows = Array.isArray(s.shiftSchedule) ? s.shiftSchedule : [];
+    return {
+      name: s.name || s.id,
+      totalCount: finiteOrNull(s.count),
+      shiftWindows: shiftWindows.map(w => ({ time: w.time, capacity: w.capacity })),
+    };
+  });
+}
+
+export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, results = {}) {
+  const system = [
+    "You are an expert discrete-event simulation analyst specialising in constrained scheduling.",
+    "The user has run a simulation with a fixed resource plan.",
+    "Your task is to recommend tactical adjustments to the schedule that improve goal attainment without increasing total resource capacity.",
+    "You must not recommend adding servers, increasing staff counts, or any other capacity increase.",
+    "Treat resource counts and shift windows as hard constraints.",
+    "Distinguish clearly between recommendations that are within current capacity and any constraints that make full goal attainment infeasible.",
+  ].join(" ");
+
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  const queues = extractQueues(model, results);
+  const kpiSummary = queues.map(q => ({
+    name: q.name,
+    meanWait: q.meanWait,
+    p90Wait: q.p90,
+    utilisation: null,
+  }));
+
+  const summary = getSummary(results);
+  const resources = extractResources(model, summary);
+  for (const r of resources) {
+    const kq = kpiSummary.find(k => k.name === r.name);
+    if (kq) kq.utilisation = r.utilisation;
+    else kpiSummary.push({ name: r.name, meanWait: null, p90Wait: null, utilisation: r.utilisation });
+  }
+
+  const payload = {
+    model: {
+      name: model.name || DEFAULT_MODEL_NAME,
+      description: model.description || "",
+    },
+    scheduleDigest: extractScheduleDigest(model),
+    capacityEnvelope: extractCapacityEnvelope(model),
+    goalGaps: goalGaps || [],
+    kpiSummary,
+    constraintStatement: "Resource counts and shift windows are fixed. Recommend schedule timing and sequencing changes only.",
+  };
+
+  const outputSchema = JSON.stringify({
+    analysis: "string — 100–150 word plain-English summary of the scheduling situation and what is and is not achievable",
+    recommendations: [
+      {
+        rank: 1,
+        targetScheduleId: "id of the schedule entry to modify",
+        change: "plain-English description of the proposed change",
+        rationale: "why this change closes the goal gap",
+        goalImpact: "which goals are expected to improve and by how much",
+        feasible: true,
+        revisedEntry: { "...": "revised schedule object" },
+      },
+    ],
+    infeasibleGoals: [
+      { goalLabel: "string", reason: "why this goal cannot be met within current capacity" },
+    ],
+  }, null, 2);
+
+  const instruction = `Respond with a fenced \`\`\`json block using this exact schema:\n${outputSchema}`;
+
+  return {
+    kind: "plan-refinement",
+    messages: [
+      { role: "system", content: system },
+      {
+        role: "user",
+        content: truncateWords(JSON.stringify({ ...payload, instruction }, null, 2)),
+      },
+    ],
+    max_tokens: 700,
+  };
+}
+
+export function parsePlanRefinementResponse(text = "") {
+  const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
+  const rawJson = fenceMatch ? fenceMatch[1].trim() : text.trim();
+  try {
+    const parsed = JSON.parse(rawJson);
+    const analysis = typeof parsed.analysis === "string" ? parsed.analysis : "";
+    const recommendations = Array.isArray(parsed.recommendations)
+      ? parsed.recommendations.map(r => ({
+          rank: r.rank,
+          targetScheduleId: r.targetScheduleId,
+          change: r.change,
+          rationale: r.rationale,
+          goalImpact: r.goalImpact,
+          feasible: Boolean(r.feasible),
+          revisedEntry: r.revisedEntry || null,
+        }))
+      : [];
+    const infeasibleGoals = Array.isArray(parsed.infeasibleGoals)
+      ? parsed.infeasibleGoals.map(g => ({ goalLabel: g.goalLabel, reason: g.reason }))
+      : [];
+    return { analysis, recommendations, infeasibleGoals };
+  } catch {
+    return { analysis: text, recommendations: [], infeasibleGoals: [] };
+  }
+}
+
+export function applySchedulePatch(model, card) {
+  const clone = JSON.parse(JSON.stringify(model));
+  if (!card || !card.targetScheduleId) {
+    throw new Error("applySchedulePatch: card.targetScheduleId is required");
+  }
+  const id = card.targetScheduleId;
+
+  const schedules = Array.isArray(clone.schedules) ? clone.schedules : [];
+  const shiftSchedules = Array.isArray(clone.shiftSchedules) ? clone.shiftSchedules : [];
+
+  const schedIdx = schedules.findIndex(s => (s.id || s.eventId) === id);
+  if (schedIdx !== -1) {
+    clone.schedules[schedIdx] = { ...clone.schedules[schedIdx], ...card.revisedEntry };
+    return clone;
+  }
+
+  const shiftIdx = shiftSchedules.findIndex(s => (s.id || s.eventId) === id);
+  if (shiftIdx !== -1) {
+    clone.shiftSchedules[shiftIdx] = { ...clone.shiftSchedules[shiftIdx], ...card.revisedEntry };
+    return clone;
+  }
+
+  throw new Error(`applySchedulePatch: no schedule entry found with id "${id}"`);
+}
+
 export function buildCiResults(aggregateStats = {}) {
   return Object.entries(aggregateStats)
     .filter(([, stat]) => stat && stat.n >= 2)

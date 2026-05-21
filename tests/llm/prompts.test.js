@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   applySuggestionPatch,
+  applySchedulePatch,
   buildCiResults,
   buildComparisonPrompt,
   buildExplainResultsPrompt,
   buildGoalGaps,
   buildNarrativePrompt,
+  buildPlanRefinementPrompt,
   buildResultsQueryPrompt,
   buildSensitivityPrompt,
   buildSuggestionPrompt,
+  parsePlanRefinementResponse,
   parseSuggestionResponse,
   promptWordEstimate,
 } from "../../src/llm/prompts.js";
@@ -606,5 +609,184 @@ describe("Sprint 46 — AI apply & verify", () => {
       const prompt = buildSuggestionPrompt(modelWithGoals, {}, {});
       expect(prompt.messages[0].content).toMatch(/binding constraint/i);
     });
+  });
+});
+
+// ── Sprint 70 — Constrained Plan Refinement ──────────────────────────────────
+
+const scheduleModel = {
+  name: "Clinic with Schedule",
+  description: "A clinic with a loaded shift schedule.",
+  entityTypes: [
+    { id: "e1", name: "Nurse", role: "server", count: 2 },
+  ],
+  queues: [{ id: "q1", name: "Waiting", discipline: "FIFO" }],
+  schedules: [
+    { id: "sched-1", eventId: "sched-1", startTime: 0, endTime: 480, resourceType: "Nurse", count: 2 },
+    { id: "sched-2", eventId: "sched-2", startTime: 480, endTime: 960, resourceType: "Nurse", count: 1 },
+  ],
+  goals: [
+    { metric: "summary.avgWait", operator: "<", target: 5, label: "Avg wait < 5 min" },
+  ],
+};
+
+const scheduleResults = {
+  summary: { total: 50, served: 45, reneged: 5, avgWait: 7.2, avgSvc: 3.0, avgSojourn: 10.2 },
+  aggregateStats: { "summary.avgWait": { mean: 7.2, n: 3 } },
+  waitDist: {},
+};
+
+describe("Sprint 70 — buildPlanRefinementPrompt", () => {
+  it("returns a valid messages array with system and user roles", () => {
+    const prompt = buildPlanRefinementPrompt(scheduleModel, {}, scheduleResults);
+    expect(Array.isArray(prompt.messages)).toBe(true);
+    expect(prompt.messages[0].role).toBe("system");
+    expect(prompt.messages[1].role).toBe("user");
+    expect(prompt.max_tokens).toBe(700);
+  });
+
+  it("user message includes schedule digest when model has schedules", () => {
+    const prompt = buildPlanRefinementPrompt(scheduleModel, {}, scheduleResults);
+    const payload = JSON.parse(prompt.messages[1].content);
+    expect(Array.isArray(payload.scheduleDigest)).toBe(true);
+    expect(payload.scheduleDigest.length).toBe(2);
+    expect(payload.scheduleDigest[0].eventId).toBe("sched-1");
+    expect(payload.scheduleDigest[0].startTime).toBe(0);
+    expect(payload.scheduleDigest[0].endTime).toBe(480);
+  });
+
+  it("user message includes goal gaps when goals are defined", () => {
+    const prompt = buildPlanRefinementPrompt(scheduleModel, {}, scheduleResults);
+    const payload = JSON.parse(prompt.messages[1].content);
+    expect(Array.isArray(payload.goalGaps)).toBe(true);
+    expect(payload.goalGaps.length).toBeGreaterThan(0);
+    expect(payload.goalGaps[0].metric).toBe("summary.avgWait");
+    expect(payload.goalGaps[0].met).toBe(false);
+  });
+
+  it("assembled payload does not exceed 2000 words (truncateWords applied)", () => {
+    const prompt = buildPlanRefinementPrompt(scheduleModel, {}, scheduleResults);
+    const wordCount = prompt.messages[1].content.split(/\s+/).filter(Boolean).length;
+    expect(wordCount).toBeLessThanOrEqual(2000);
+  });
+
+  it("system prompt contains the string 'hard constraints'", () => {
+    const prompt = buildPlanRefinementPrompt(scheduleModel, {}, scheduleResults);
+    expect(prompt.messages[0].content).toMatch(/hard constraints/i);
+  });
+
+  it("works with empty model and results (no crash)", () => {
+    const prompt = buildPlanRefinementPrompt({}, {}, {});
+    expect(Array.isArray(prompt.messages)).toBe(true);
+    expect(prompt.messages[0].role).toBe("system");
+  });
+});
+
+describe("Sprint 70 — parsePlanRefinementResponse", () => {
+  const validJson = JSON.stringify({
+    analysis: "The schedule has a gap during peak hours.",
+    recommendations: [
+      {
+        rank: 1,
+        targetScheduleId: "sched-1",
+        change: "Extend morning shift by 1 hour",
+        rationale: "Reduces queue length at peak",
+        goalImpact: "Avg wait expected to drop from 7.2 to 4.8",
+        feasible: true,
+        revisedEntry: { id: "sched-1", startTime: 0, endTime: 540, count: 2 },
+      },
+    ],
+    infeasibleGoals: [],
+  });
+
+  it("correctly extracts recommendations array from valid fenced JSON block", () => {
+    const text = `\`\`\`json\n${validJson}\n\`\`\``;
+    const result = parsePlanRefinementResponse(text);
+    expect(result.analysis).toBe("The schedule has a gap during peak hours.");
+    expect(result.recommendations).toHaveLength(1);
+    expect(result.recommendations[0].rank).toBe(1);
+    expect(result.recommendations[0].targetScheduleId).toBe("sched-1");
+    expect(result.infeasibleGoals).toHaveLength(0);
+  });
+
+  it("returns graceful fallback when JSON block is absent", () => {
+    const text = "The schedule needs adjustment.";
+    const result = parsePlanRefinementResponse(text);
+    expect(result.analysis).toBe(text);
+    expect(result.recommendations).toHaveLength(0);
+    expect(result.infeasibleGoals).toHaveLength(0);
+  });
+
+  it("returns graceful fallback when JSON is malformed", () => {
+    const text = "```json\n{broken json here\n```";
+    const result = parsePlanRefinementResponse(text);
+    expect(result.analysis).toBeTruthy();
+    expect(result.recommendations).toHaveLength(0);
+    expect(result.infeasibleGoals).toHaveLength(0);
+  });
+
+  it("feasible field is correctly parsed as boolean on each card", () => {
+    const withFeasibility = JSON.stringify({
+      analysis: "Analysis text",
+      recommendations: [
+        { rank: 1, targetScheduleId: "s1", change: "x", rationale: "r", goalImpact: "i", feasible: true, revisedEntry: {} },
+        { rank: 2, targetScheduleId: "s2", change: "y", rationale: "r", goalImpact: "i", feasible: false, revisedEntry: {} },
+      ],
+      infeasibleGoals: [{ goalLabel: "Goal A", reason: "Capacity limit" }],
+    });
+    const result = parsePlanRefinementResponse(`\`\`\`json\n${withFeasibility}\n\`\`\``);
+    expect(typeof result.recommendations[0].feasible).toBe("boolean");
+    expect(result.recommendations[0].feasible).toBe(true);
+    expect(result.recommendations[1].feasible).toBe(false);
+    expect(result.infeasibleGoals[0].goalLabel).toBe("Goal A");
+  });
+});
+
+describe("Sprint 70 — applySchedulePatch", () => {
+  const baseModel = {
+    schedules: [
+      { id: "sched-1", startTime: 0, endTime: 480, count: 2 },
+      { id: "sched-2", startTime: 480, endTime: 960, count: 1 },
+    ],
+    shiftSchedules: [
+      { id: "shift-1", startTime: 0, endTime: 240, count: 3 },
+    ],
+  };
+
+  const card = {
+    targetScheduleId: "sched-1",
+    revisedEntry: { id: "sched-1", startTime: 0, endTime: 540, count: 2 },
+  };
+
+  it("returns a deep clone (patched model !== original model)", () => {
+    const result = applySchedulePatch(baseModel, card);
+    expect(result).not.toBe(baseModel);
+    expect(result.schedules).not.toBe(baseModel.schedules);
+  });
+
+  it("correctly replaces matched schedule entry by id", () => {
+    const result = applySchedulePatch(baseModel, card);
+    expect(result.schedules[0].endTime).toBe(540);
+    expect(result.schedules[1].endTime).toBe(960);
+  });
+
+  it("correctly patches shiftSchedules when id matches there", () => {
+    const shiftCard = {
+      targetScheduleId: "shift-1",
+      revisedEntry: { id: "shift-1", startTime: 0, endTime: 300, count: 3 },
+    };
+    const result = applySchedulePatch(baseModel, shiftCard);
+    expect(result.shiftSchedules[0].endTime).toBe(300);
+  });
+
+  it("throws descriptive error when targetScheduleId is not found", () => {
+    expect(() => applySchedulePatch(baseModel, { targetScheduleId: "nonexistent", revisedEntry: {} }))
+      .toThrow(/nonexistent/);
+  });
+
+  it("does not mutate the input model", () => {
+    const original = JSON.parse(JSON.stringify(baseModel));
+    applySchedulePatch(baseModel, card);
+    expect(baseModel.schedules[0].endTime).toBe(original.schedules[0].endTime);
   });
 });
