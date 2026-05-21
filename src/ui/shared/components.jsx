@@ -226,6 +226,8 @@ const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
   const updDp=(patch)=>onChange({...value,distParams:{...dp,...patch}});
   const [rawText,setRawText]=React.useState(times.join(", "));
   const [rowsMode,setRowsMode]=React.useState(hasRows);
+  const [rowsExpanded,setRowsExpanded]=React.useState(false);
+  const ROWS_PREVIEW=5;
   const prevValueRef=React.useRef(value);
   useEffect(()=>{
     if(prevValueRef.current!==value){
@@ -433,7 +435,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
               </tr>
             </thead>
             <tbody>
-              {(dp.rows||[]).map((row,i)=>(
+              {(rowsExpanded?(dp.rows||[]):(dp.rows||[]).slice(0,ROWS_PREVIEW)).map((row,i)=>(
                 <tr key={i}>
                   <td style={{...tdSt,color:C.muted,fontSize:10,fontFamily:FONT}}>{i+1}</td>
                   <td style={tdSt}>
@@ -454,8 +456,15 @@ const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
               ))}
             </tbody>
           </table>
-          <button onClick={addRow} style={{...inpSt,cursor:"pointer",marginTop:4,color:C.green}}>+ Add row</button>
-          <div style={{...labelSt,marginTop:4}}>{(dp.rows||[]).length} planned arrival{(dp.rows||[]).length!==1?"s":""}</div>
+          {(dp.rows||[]).length>ROWS_PREVIEW&&(
+            <button onClick={()=>setRowsExpanded(e=>!e)} style={{...inpSt,cursor:"pointer",marginTop:4,color:C.cEvent,fontSize:10}}>
+              {rowsExpanded?`▲ Show first ${ROWS_PREVIEW}`:`▼ Show all ${(dp.rows||[]).length} rows`}
+            </button>
+          )}
+          <div style={{display:"flex",gap:8,alignItems:"center",marginTop:4}}>
+            <button onClick={addRow} style={{...inpSt,cursor:"pointer",color:C.green}}>+ Add row</button>
+            <div style={labelSt}>{(dp.rows||[]).length} planned arrival{(dp.rows||[]).length!==1?"s":""}</div>
+          </div>
         </div>
         );
       })()}

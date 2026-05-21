@@ -264,10 +264,14 @@ export function fireBEvent(ev, ctx) {
     const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);
     if (!tmpl) continue;
     const schedCtx = { clock, state: ctx.state, schedKey: sched.eventId };
+    // rows[]/times[] may be top-level on the entry (schema doc format) or inside distParams
+    const topLevelData = sched.rows ? { rows: sched.rows } : sched.times ? { times: sched.times } : null;
+    const baseParams = topLevelData ? { ...topLevelData, ...(sched.distParams || {}) } : (sched.distParams || {});
+    const schedDist = sched.dist || (topLevelData ? "Schedule" : "Fixed");
     const resolvedBParams = ctx.registry
-      ? ctx.registry.resolve(sched.distParams || {}, sched.paramSource)
-      : (sched.distParams || {});
-    const delay = Math.max(0, sample(sched.dist || "Fixed", resolvedBParams, ctx.rng, null, schedCtx));
+      ? ctx.registry.resolve(baseParams, sched.paramSource)
+      : baseParams;
+    const delay = Math.max(0, sample(schedDist, resolvedBParams, ctx.rng, null, schedCtx));
     // Carry per-arrival row attrs from schedule rows[] (S40.2)
     const rowAttrs = ctx.state?.[`__schedRowAttrs_${sched.eventId}`] ?? null;
     let renegeTarget;
