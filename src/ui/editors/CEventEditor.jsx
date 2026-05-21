@@ -211,10 +211,9 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                     </label>
                     {s.when&&(
                       <EntityFilterBuilder
-                        predicate={s.when}
+                        value={s.when}
                         entityTypes={entityTypes}
-                        onChange={p=>updSched(i,j,{when:p||null})}
-                        label="When"/>
+                        onChange={p=>updSched(i,j,{when:p||null})}/>
                     )}
                     {!s.when&&(ev.cSchedules||[]).some(x=>x.when)&&(
                       <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
