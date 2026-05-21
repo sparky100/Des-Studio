@@ -6,6 +6,7 @@ import { useToast } from "./shared/ToastContext.jsx";
 import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink } from "../db/models.js";
 import { buildEngine } from "../engine/index.js";
 import { compareResults } from "../db/runRecord.js";
+import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
 
 function slugifyModelName(name = "") {
   return (name || "untitled")
@@ -112,6 +113,8 @@ export function ModelHistoryTab({
   const [historyEditLabelId, setHistoryEditLabelId] = useState(null);
   const [historyEditLabelVal, setHistoryEditLabelVal] = useState("");
   const [reproduceState, setReproduceState] = useState({});
+  const [snapshotDiffRow, setSnapshotDiffRow] = useState(null);
+  const [snapshotDiffLoading, setSnapshotDiffLoading] = useState(false);
   const [moreMenuId, setMoreMenuId] = useState(null);
   const [moreMenuPos, setMoreMenuPos] = useState({ top: 0, right: 0 });
 
@@ -154,6 +157,23 @@ export function ModelHistoryTab({
         status: 'fail',
         message: `✗ Reproduce error: ${e.message}`,
       } }));
+    }
+  };
+
+  const handleViewDiff = async (rowId) => {
+    setSnapshotDiffLoading(true);
+    setMoreMenuId(null);
+    try {
+      const run = await getRun(rowId);
+      if (!run.model_snapshot) {
+        toast.error("No model snapshot stored for this run.");
+        return;
+      }
+      setSnapshotDiffRow({ rowId, snapshot: run.model_snapshot });
+    } catch (e) {
+      toast.error(`Could not load snapshot: ${e.message}`);
+    } finally {
+      setSnapshotDiffLoading(false);
     }
   };
 
@@ -456,6 +476,11 @@ export function ModelHistoryTab({
                                 <div style={{ position: "fixed", inset: 0, zIndex: 999 }} onClick={() => setMoreMenuId(null)} />
                                 <div style={{ position: "fixed", top: moreMenuPos.top, right: moreMenuPos.right, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 180, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 1000 }}>
                                   <button
+                                    onClick={() => handleViewDiff(row.id)}
+                                    disabled={snapshotDiffLoading}
+                                    style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
+                                  >View model at this run</button>
+                                  <button
                                     onClick={() => { handleReproduce(row.id); }}
                                     disabled={reproduceState[row.id]?.status === 'running'}
                                     style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
@@ -532,6 +557,22 @@ export function ModelHistoryTab({
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      {snapshotDiffRow && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 16 }}>
+          <div style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 12, padding: 20, width: "min(680px, 100%)", maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#e0e0e0", fontFamily: "JetBrains Mono, monospace" }}>Model at this run vs. current</span>
+              <button onClick={() => setSnapshotDiffRow(null)} style={{ background: "transparent", border: "none", color: "#888", fontSize: 18, cursor: "pointer" }}>✕</button>
+            </div>
+            <ModelDiffPreview
+              currentModel={model}
+              proposedModel={snapshotDiffRow.snapshot}
+              onDiscard={() => setSnapshotDiffRow(null)}
+              readOnly
+            />
           </div>
         </div>
       )}

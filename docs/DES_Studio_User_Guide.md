@@ -868,3 +868,21 @@ If entities are disappearing from queues earlier than expected, check:
 ### Phase C truncation warning
 
 If the log shows "Phase C truncated after N iterations", a C-Event condition is remaining true after each firing, causing an infinite loop within a single Phase C pass. This typically means a C-Event is not consuming the entity or resource it checked in its condition. Verify that `ASSIGN` is present in the effects and that it reduces the queue length (or server availability) so the condition eventually becomes false.
+
+## Model Versioning
+
+DES Studio supports first-class model versioning. For a full guide see `docs/sprint-68-model-versioning-guide.md`.
+
+### Named versions
+
+Open a model you own, go to the **Versions** tab, and click **+ Create version**. Each version stores a full snapshot of the model. You can:
+- **Diff** any past version against the current model
+- **Restore** a past version into the editor (marks the model as modified — save manually to persist)
+
+### Scenario baselines
+
+In the **Overview** tab, click **Save as scenario baseline** to fork the model with a provenance link. The new model shows a "Forked from…" badge in its Overview.
+
+### Run snapshot diffs
+
+In **Run History**, click **⋯ → View model at this run** to see how the model differed from its current state at the time of that run.

@@ -4,17 +4,19 @@ import { C, FONT, SHADOW, Z } from "./shared/tokens.js";
 import { Btn, Tag } from "./shared/components.jsx";
 import { listVersions, createVersion, deleteVersion, getNextVersion } from "../db/models.js";
 import { detectStructuralChanges } from "../engine/validation.js";
+import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
 
 const fmtDate = iso => {
   try { return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
   catch { return ''; }
 };
 
-export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersionChange }) {
+export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersionChange, currentModel, onRestoreVersion }) {
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [diffVersion, setDiffVersion] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -107,6 +109,20 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersion
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{fmtDate(v.createdAt)}</span>
+              {currentModel && (
+                <Btn small variant="ghost" onClick={() => setDiffVersion(v)}>
+                  Diff
+                </Btn>
+              )}
+              {isOwner && onRestoreVersion && (
+                <Btn small variant="ghost" onClick={() => {
+                  if (!window.confirm(`Restore model to v${v.version} "${v.name || ''}"?\n\nCurrent unsaved changes will be overwritten. The model will be marked as modified — save manually to persist.`)) return;
+                  onRestoreVersion(v.modelJson);
+                  onToast?.("success", `Restored to v${v.version}`);
+                }}>
+                  Restore
+                </Btn>
+              )}
               {isOwner && (
                 <Btn small variant="ghost" disabled={deleting === v.id} onClick={() => handleDelete(v)}>
                   {deleting === v.id ? "..." : "Delete"}
@@ -127,6 +143,24 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersion
           onClose={() => setShowCreate(false)}
           onCreate={handleCreate}
         />
+      )}
+      {diffVersion && currentModel && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 16 }}>
+          <div style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 12, padding: 20, width: "min(680px, 100%)", maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#e0e0e0", fontFamily: "JetBrains Mono, monospace" }}>
+                v{diffVersion.version} {diffVersion.name ? `— ${diffVersion.name}` : ''} vs. current
+              </span>
+              <button onClick={() => setDiffVersion(null)} style={{ background: "transparent", border: "none", color: "#888", fontSize: 18, cursor: "pointer" }}>✕</button>
+            </div>
+            <ModelDiffPreview
+              currentModel={currentModel}
+              proposedModel={diffVersion.modelJson}
+              onDiscard={() => setDiffVersion(null)}
+              readOnly
+            />
+          </div>
+        </div>
       )}
     </div>
   );

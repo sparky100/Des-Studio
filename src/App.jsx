@@ -349,6 +349,20 @@ export default function App(){
     }
   },[uid,loadData]);
 
+  const handleSaveAsBaseline = useCallback(async (sourceModelId, newName, parentModelId) => {
+    if(!uid)return;
+    setLoading(true);setActionError('');
+    try{
+      const baseline=await forkModel(sourceModelId,uid,newName,{parentModelId});
+      await loadData();
+      setOpenId(baseline.id);
+    }catch(e){
+      setActionError(e.message);
+    }finally{
+      setLoading(false);
+    }
+  },[uid,loadData]);
+
   if(loading && !session)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:C.muted,fontFamily:FONT,fontSize:13}}>
       <style>{`@import url('${GOOGLE_FONT_URL}');`}</style>
@@ -393,6 +407,7 @@ export default function App(){
     const isOwner = model?.owner_id === uid;
     const canEdit = isOwner || model?.access?.[uid] === 'editor';
     const isLocal = !session && model?.id?.startsWith('local_');
+    const parentModel = model?.parentModelId ? models.find(m => m.id === model.parentModelId) : null;
     return(
       <div style={{background:C.bg,minHeight:'100vh'}}>
         <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');@keyframes spin{to{transform:rotate(360deg)}}`}</style>
@@ -419,6 +434,8 @@ export default function App(){
               onSetVisibility: (id, vis) => setVisibility(id, vis, uid),
               onSetAccess: (id, acc) => setAccess(id, acc, uid),
               onFork: session ? confirmFork : undefined,
+              onSaveAsBaseline: session && isOwner ? handleSaveAsBaseline : undefined,
+              parentModelName: parentModel?.name || null,
               onExitToTemplates: () => {
                 setOpenId(null);
                 setLocalModel(null);
