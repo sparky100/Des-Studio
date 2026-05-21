@@ -8,7 +8,6 @@ import { validateModel } from "../engine/validation.js";
 export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,currentVersion})=>{
   const owner=(profiles||[]).find(p=>p.id===model.owner_id)||null;
   const fmtDate=iso=>{ try{ return new Date(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){return '';} };
-  const hasRenege=(model.bEvents||[]).some(ev=>(ev.schedules||[]).some(s=>s.isRenege));
   const runCount=model.stats?.runs;
   const isOwner=model.owner_id===currentUserId;
   const validation = useMemo(() => validateModel(model), [model]);
@@ -33,7 +32,6 @@ export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,
         <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap"}}>
           <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
           {currentVersion > 0 && <Tag label={`V${currentVersion}`} color={C.purple}/>}
-          {hasRenege&&<Tag label="reneging" color={C.reneged}/>}
           {isOwner&&onCopy&&<Btn small variant="ghost" onClick={e=>{e.stopPropagation();onCopy(model);}}>Copy</Btn>}
           {isOwner&&onDelete&&<Btn small variant="danger" onClick={e=>{e.stopPropagation();onDelete(model);}}>Delete</Btn>}
         </div>
