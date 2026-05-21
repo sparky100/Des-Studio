@@ -264,7 +264,7 @@ export default function App(){
     reader.readAsText(file);
   }, [uid, loadData]);
 
-  const handlePasteJsonImport = useCallback(async (text, onSuccess) => {
+  const handlePasteJsonImport = useCallback(async (text, onSuccess, onError) => {
     if (!uid) return;
     setImportStatus({ state: "loading", message: "Validating JSON..." });
     try {
@@ -272,11 +272,13 @@ export default function App(){
       const importedModel = extractImportedModelPayload(payload);
       const importedValidation = validateModel(importedModel);
       if (importedValidation.errors.length > 0) {
+        const errorMsg = "Import blocked by validation errors.";
         setImportStatus({
           state: "error",
-          message: "Import blocked by validation errors.",
+          message: errorMsg,
           items: importedValidation.errors.map(e => `[${e.code}] ${e.message}`),
         });
+        onError?.(errorMsg);
         return;
       }
       const saved = await saveModel(importedModel, uid);
@@ -291,10 +293,9 @@ export default function App(){
       onSuccess?.();
       setOpenId(saved.id);
     } catch (e) {
-      setImportStatus({
-        state: "error",
-        message: e instanceof SyntaxError ? `Invalid JSON: ${e.message}` : `Import failed: ${e.message}`,
-      });
+      const errorMsg = e instanceof SyntaxError ? `Invalid JSON: ${e.message}` : `Import failed: ${e.message}`;
+      setImportStatus({ state: "error", message: errorMsg });
+      onError?.(errorMsg);
     }
   }, [uid, loadData]);
 
