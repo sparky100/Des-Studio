@@ -273,19 +273,28 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 
 ### Optional: Conditional Routing Table
 
-After service, route entities to different queues based on conditions:
+After service, route entities to different queues based on entity attribute conditions. Each `condition` is a **predicate object** — never a string.
 
 ```json
 "routing": [
-  { "condition": "entity.priority < 2", "queueName": "Urgent Queue" },
-  { "condition": "entity.priority >= 2", "queueName": "General Queue" }
+  { "condition": { "variable": "Entity.priority", "operator": "<", "value": 2 }, "queueName": "Urgent Queue" },
+  { "condition": { "variable": "Entity.priority", "operator": ">=", "value": 2 }, "queueName": "General Queue" }
 ],
 "defaultQueueName": "General Queue"
 ```
 
+Predicate object fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `variable` | string | Must use `Entity.<attrName>` to reference an entity attribute |
+| `operator` | string | One of `==`, `!=`, `<`, `>`, `<=`, `>=` |
+| `value` | string \| number \| boolean | The comparison value; must match the attribute's `valueType` |
+
 - `routing` and `probabilisticRouting` are mutually exclusive.
 - `routing` cannot be combined with a queue argument in `RELEASE(Server, Queue)`.
 - `defaultQueueName` must reference a valid queue name.
+- **Do not use a string condition** (e.g. `"entity.priority < 2"`) — the engine only evaluates predicate objects in routing; a string will cause an error.
 
 ### Optional: Probabilistic Routing
 
@@ -305,11 +314,19 @@ After service, route entities to different queues based on conditions:
 "balkProbability": 0.1
 ```
 
-Or condition-based:
+Or condition-based — `balkCondition` is a **predicate object** (never a string):
 
 ```json
-"balkCondition": "queue(Triage Queue).length > 10"
+"balkCondition": { "variable": "Queue.Triage Queue.length", "operator": ">", "value": 10 }
 ```
+
+| Field | Type | Description |
+|---|---|---|
+| `variable` | string | `Queue.<queueName>.length` to test queue occupancy |
+| `operator` | string | One of `==`, `!=`, `<`, `>`, `<=`, `>=` |
+| `value` | number | The threshold to compare against |
+
+- **Do not use a string condition** (e.g. `"queue(X).length > 10"`) — that format is only valid in C-event `condition` fields; a string `balkCondition` will cause a pre-run error (CHK-011).
 
 ### Optional: Loop Guard (Recirculation)
 
@@ -405,7 +422,13 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `RENEGE_OLDEST` | `RENEGE_OLDEST(CustomerType)` | Removes the oldest entity of the given type from its queue. Used for max-queue-length policies or timeout eviction. |
 | `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not). |
 
-### 6.1 Condition Predicate Syntax
+### 6.1 Condition Formats — Two Different Systems
+
+**There are two condition formats in DES Studio. They are NOT interchangeable.**
+
+#### Format A — C-event `condition` string (global state predicate)
+
+Used **only** in `cEvents[].condition`. Written as a string expression.
 
 | Predicate | Meaning |
 |-----------|---------|
@@ -414,11 +437,39 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 | `idle(ServerType).count > 0` | At least one server of type `ServerType` is idle |
 | `busy(ServerType).count > 0` | At least one server of type `ServerType` is busy |
 | `idle(ServerType).count >= N` | At least N servers are idle |
-| `entity.attrName > value` | Entity attribute comparison |
 
-Combine with `AND`, `OR`, `NOT`.
+Combine with `AND`, `OR`, `NOT`. Queue and server names must match exactly (case-sensitive).
 
-**Queue names and server type names in conditions must match exactly (case-sensitive) the names defined in `queues` and `entityTypes`.**
+```json
+"condition": "queue(Triage Queue).length > 0 AND idle(Nurse).count > 0"
+```
+
+> **This string format is valid ONLY for `cEvents[].condition`.** Do not use it anywhere else.
+
+---
+
+#### Format B — Predicate object (entity attribute or queue test)
+
+Used for: `bEvents[].balkCondition`, `bEvents[].routing[].condition`, `cEvents[].cSchedules[].when`.
+
+Always a JSON object — never a string:
+
+```json
+{ "variable": "Entity.priority", "operator": "<", "value": 2 }
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `variable` | string | `Entity.<attrName>` for entity attributes; `Queue.<queueName>.length` for queue length |
+| `operator` | string | `==`, `!=`, `<`, `>`, `<=`, `>=` |
+| `value` | string \| number \| boolean | Comparison value matching the attribute's `valueType` |
+
+Variable name prefixes:
+- `Entity.flight_id` — reads the `flight_id` attribute of the current entity
+- `Entity.route_type` — reads the `route_type` attribute of the current entity
+- `Queue.Arrival Holding Queue.length` — reads the current length of that queue
+
+> **Do not use the string format (Format A) for balkCondition, routing conditions, or when predicates.** The engine calls a different evaluator for these fields; a string value will produce a pre-run error (CHK-011 or CHK-012).
 
 ---
 
