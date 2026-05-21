@@ -94,6 +94,13 @@ const EntityFilterBuilder = ({ entityTypes = [], value, onChange }) => {
   });
 
   if (tokens.length === 0) {
+    if (value) {
+      return (
+        <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, background: C.surface, borderRadius: 4, padding: '6px 10px' }}>
+          Cannot display condition — no customer entity attributes defined. Raw: <code style={{ color: C.text }}>{JSON.stringify(value)}</code>
+        </div>
+      );
+    }
     return (
       <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: 'italic' }}>
         Define customer entity types with attributes to enable entity filtering.
@@ -103,7 +110,12 @@ const EntityFilterBuilder = ({ entityTypes = [], value, onChange }) => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {rows.length === 0 && (
+      {rows.length === 0 && value && (
+        <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, background: C.surface, borderRadius: 4, padding: '6px 10px' }}>
+          Could not parse condition. Raw: <code style={{ color: C.text }}>{JSON.stringify(value)}</code>
+        </div>
+      )}
+      {rows.length === 0 && !value && (
         <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: 'italic' }}>
           No filter — all entities in queue are eligible. Add a clause to restrict.
         </div>
