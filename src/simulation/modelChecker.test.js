@@ -218,6 +218,69 @@ describe("CHK-008 Server defined but never used in C-event", () => {
   });
 });
 
+describe("CHK-009 Schedule dist with no rows or times", () => {
+  test("triggers when a Schedule dist has no rows and no times", () => {
+    const model = {
+      ...wellFormedModel,
+      bEvents: [
+        {
+          id: "arrive1",
+          name: "Arrive",
+          schedules: [{ macro: "ARRIVE", entityTypeName: "Customer", queueName: "Q1", dist: "Schedule", distParams: {} }],
+          effect: ["ARRIVE(Customer, Q1)"],
+        },
+      ],
+    };
+    const issues = checkModel(model);
+    const chk = issues.filter(i => i.code === "CHK-009");
+    expect(chk).toHaveLength(1);
+    expect(chk[0].severity).toBe("error");
+    expect(chk[0].nodeName).toBe("Arrive");
+  });
+
+  test("does not trigger when Schedule dist has rows", () => {
+    const model = {
+      ...wellFormedModel,
+      bEvents: [
+        {
+          id: "arrive1",
+          name: "Arrive",
+          schedules: [{
+            macro: "ARRIVE", entityTypeName: "Customer", queueName: "Q1",
+            dist: "Schedule",
+            distParams: { rows: [{ time: 1, rate: 5 }, { time: 60, rate: 3 }] },
+          }],
+          effect: ["ARRIVE(Customer, Q1)"],
+        },
+      ],
+    };
+    const issues = checkModel(model);
+    const chk = issues.filter(i => i.code === "CHK-009");
+    expect(chk).toHaveLength(0);
+  });
+
+  test("does not trigger when Schedule dist has times array", () => {
+    const model = {
+      ...wellFormedModel,
+      bEvents: [
+        {
+          id: "arrive1",
+          name: "Arrive",
+          schedules: [{
+            macro: "ARRIVE", entityTypeName: "Customer", queueName: "Q1",
+            dist: "Schedule",
+            distParams: { times: [10, 20, 30] },
+          }],
+          effect: ["ARRIVE(Customer, Q1)"],
+        },
+      ],
+    };
+    const issues = checkModel(model);
+    const chk = issues.filter(i => i.code === "CHK-009");
+    expect(chk).toHaveLength(0);
+  });
+});
+
 describe("checkModel well-formed model", () => {
   test("returns no issues for a structurally valid model", () => {
     const issues = checkModel(wellFormedModel);
