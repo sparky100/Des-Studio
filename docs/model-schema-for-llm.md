@@ -259,7 +259,6 @@ Instead of `dist`/`distParams`, a schedule entry can supply an explicit list of 
 | `RENEGE` | `RENEGE(ctx)` | Marks current entity as reneged (abandoned). Always use `ctx` as the argument. |
 | `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch, sends each member to `QueueName`. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level. `containerId` must match a declared container `id`. |
-| `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not). |
 | `PREEMPT` | `PREEMPT(ServerType)` | Interrupts in-progress service; displaced entity re-queues with remaining service time. |
 | `FAIL` | `FAIL(ServerType)` | Marks servers of this type as failed; interrupts in-progress service. Pair with a scheduled `REPAIR` B-event. |
 | `REPAIR` | `REPAIR(ServerType)` | Restores failed servers to idle; triggers a C-scan for waiting entities. |
@@ -397,6 +396,8 @@ This is the standard pattern for routing service time to the right distribution 
 | `SET` | `SET(variableName, expression)` | Sets a state variable to an arithmetic expression. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost`. |
+| `RENEGE_OLDEST` | `RENEGE_OLDEST(CustomerType)` | Removes the oldest entity of the given type from its queue. Used for max-queue-length policies or timeout eviction. |
+| `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not). |
 
 ### 6.1 Condition Predicate Syntax
 
@@ -498,12 +499,17 @@ The engine rejects models that violate these rules. All generated models must co
 | V8 | At least one B-event must have an `ARRIVE()` effect |
 | V9 | Queue names in C-event conditions must match a defined queue |
 | V10 | Attribute names must not start with `Resource` or `Queue` |
+| V12 | Piecewise distribution must start at time 0; periods must be sorted ascending; at least one period required |
+| V13 | Piecewise distribution periods must be sorted ascending by `startTime` |
+| V14 | Server `shiftSchedule` must start at time 0, be sorted ascending, and use positive integer capacities |
+| V15 | Shift times after configured run duration are unreachable (warning) |
 | V17 | `routing` table and `RELEASE(Server, Queue)` in the same effect are mutually exclusive |
 | V18 | `probabilisticRouting` probabilities must sum to 1.0 (±0.001) |
 | V19 | Server `count` must be an integer ≥ 1 |
 | V20 | Queue `capacity`, when set, must be an integer ≥ 1 |
 | V21 | `balkProbability` must be between 0 and 1 |
 | V22 | `BATCH` size must be an integer ≥ 2 and queue must exist |
+| V23 | `UNBATCH` target queue must reference a defined queue |
 | V24 | `loopConfig.maxLoopCount` must be integer ≥ 1 |
 | V25 | `RENEGE` must always use `ctx` as its argument — never an entity type name |
 | V26 | Container `id` must be unique and non-empty; `capacity` > 0 when set; `initialLevel` ≥ 0 and ≤ `capacity` |
