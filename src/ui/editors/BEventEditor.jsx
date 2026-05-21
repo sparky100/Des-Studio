@@ -80,7 +80,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
           const n=[...events];
           const{balkProbability:_p,balkCondition:_c,...rest}=n[i];
           if(mode==="probability") n[i]={...rest,balkProbability:0.1};
-          else if(mode==="condition") n[i]={...rest,balkCondition:""};
+          else if(mode==="condition") n[i]={...rest,balkCondition:{variable:'',operator:'>',value:0}};
           else n[i]={...rest};
           onChange(n);
         };
@@ -229,14 +229,14 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                   <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontSize:11,color:C.muted,fontFamily:FONT,whiteSpace:'nowrap'}}>Balk if:</span>
                     <input aria-label="Balk condition" type="text"
-                      value={ev.balkCondition||''}
-                      onChange={e=>updBalk('balkCondition',e.target.value||null)}
-                      placeholder="e.g. queue(Main).length > 10"
+                      value={typeof ev.balkCondition==='object'&&ev.balkCondition!==null?JSON.stringify(ev.balkCondition):(ev.balkCondition||'')}
+                      onChange={e=>{const v=e.target.value;if(!v){updBalk('balkCondition',null);return;}try{updBalk('balkCondition',JSON.parse(v));}catch{updBalk('balkCondition',v);}}}
+                      placeholder='{"variable":"Queue.Name.length","operator":">","value":10}'
                       style={{flex:1,minWidth:200,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
                   </div>
                   <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
-                    Entity skips the queue when this rule is true at arrival time.
-                    Technical detail: this uses the same expression format as C-event conditions.
+                    Entity skips the queue when this predicate is true at arrival time.
+                    Format: JSON object with variable, operator, and value fields.
                   </div>
                 </>)}
               </SectionPanel>
