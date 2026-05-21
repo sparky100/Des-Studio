@@ -250,8 +250,9 @@ export function deriveGraphFromModel(model = {}) {
           // Conditional routing table (F10.1)
           if (Array.isArray(bEvent.routing) && bEvent.routing.length > 0) {
             bEvent.routing.forEach((branch, branchIdx) => {
-              const condLabel = branch.condition
-                ? `${branch.condition.variable} ${branch.condition.operator} ${branch.condition.value}`
+              const c = branch.condition;
+              const condLabel = (c && c.variable && c.operator && c.value !== undefined)
+                ? `${c.variable} ${c.operator} ${c.value}`
                 : "condition";
               if (!branch.queueName) {
                 // null queueName = exit system → derive edge to synthetic Sink
