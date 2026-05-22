@@ -89,14 +89,7 @@ export const NewModelModal=({onClose,onCreate,onUseTemplate,onImportFile,onPaste
       <div style={{position:"fixed",inset:0,background:C.overlay,display:"flex",alignItems:"center",justifyContent:"center",zIndex:Z.modal}}>
         <div role="dialog" aria-modal="true" aria-labelledby="paste-model-title" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:12,padding:28,width:520,maxWidth:"95vw",fontFamily:FONT,display:"flex",flexDirection:"column",gap:16}}>
           <div id="paste-model-title" style={{fontSize:16,fontWeight:700,color:C.text}}>Paste Model JSON</div>
-          <div style={{display:"flex",flexDirection:"column",gap:4}}>
-            <label style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700}}>NAME *</label>
-            <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Imported Model" style={inputStyle}/>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:4}}>
-            <label style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700}}>DESCRIPTION</label>
-            <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Optional" rows={2} style={{...inputStyle,resize:"vertical"}}/>
-          </div>
+          {name && <div style={{fontSize:11,color:C.muted,fontFamily:FONT}}>Model: <strong style={{color:C.text}}>{name}</strong></div>}
           <textarea aria-label="Model JSON" value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder={'{\n  "name": "My Model",\n  "entityTypes": [...],\n  ...\n}'} spellCheck={false} style={{...inputStyle,height:200,resize:"vertical",fontFamily:"'JetBrains Mono',monospace"}}/>
           {pasteStatus && pasteStatus.state!=="loading" && (
             <div style={{background:pasteStatus.state==="error"?C.red+"18":C.green+"18",border:`1px solid ${pasteStatus.state==="error"?C.red+"44":C.green+"44"}`,borderRadius:5,color:pasteStatus.state==="error"?C.red:C.green,fontSize:12,fontFamily:FONT,padding:"8px 10px"}}>

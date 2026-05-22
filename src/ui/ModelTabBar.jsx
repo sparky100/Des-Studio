@@ -54,7 +54,7 @@ export function ModelTabBar({
           </span>
         )}
         {!tabIssueCounts[t.id]?.errors && tabIssueCounts[t.id]?.warnings > 0 && (
-          <span aria-hidden="true" title={tabIssueTooltip(t.id)} style={{ background: C.warmup, border: `1px solid ${C.amber}66`, borderRadius: 10, color: C.warnBg, fontSize: 9, fontWeight: 700, padding: "1px 5px" }}>
+          <span aria-hidden="true" title={tabIssueTooltip(t.id)} style={{ background: alpha(C.amber, 0.15), border: `1px solid ${alpha(C.amber, 0.4)}`, borderRadius: 10, color: C.amber, fontSize: 9, fontWeight: 700, padding: "1px 5px" }}>
             {tabIssueCounts[t.id].warnings}
           </span>
         )}
@@ -92,7 +92,7 @@ export function ModelTabBar({
                 </span>
               )}
               {!modeCounts.errors && modeCounts.warnings > 0 && (
-                <span aria-hidden="true" style={{ background: C.warmup, border: `1px solid ${C.amber}66`, borderRadius: 10, color: C.warnBg, fontSize: 9, padding: "1px 5px" }}>
+                <span aria-hidden="true" style={{ background: alpha(C.amber, 0.15), border: `1px solid ${alpha(C.amber, 0.4)}`, borderRadius: 10, color: C.amber, fontSize: 9, padding: "1px 5px" }}>
                   {modeCounts.warnings}
                 </span>
               )}

@@ -29,6 +29,34 @@ import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
 
+const AuthoringWorkflowShell = ({ mode, children }) => (
+  <section aria-label={`${mode.label} authoring shell`} style={{ display: "block" }}>
+    <main aria-label={`${mode.label} workspace`} style={{ minWidth: 0 }}>
+      {children}
+    </main>
+  </section>
+);
+
+const TabErrors = ({ tabId, validation }) => {
+  const errs = (validation.errors || []).filter(e => e.tab === tabId);
+  const warns = (validation.warnings || []).filter(w => w.tab === tabId);
+  if (!errs.length && !warns.length) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+      {errs.map((e, i) => (
+        <div key={i} role="alert" style={{ background: alpha(C.red, 0.1), border: `1px solid ${alpha(C.red, 0.4)}`, borderRadius: 6, padding: "8px 12px", color: C.red, fontFamily: FONT, fontSize: 12 }}>
+          [{e.code}] {e.message}
+        </div>
+      ))}
+      {warns.map((w, i) => (
+        <div key={i} style={{ background: alpha(C.amber, 0.1), border: `1px solid ${alpha(C.amber, 0.4)}`, borderRadius: 6, padding: "8px 12px", color: C.amber, fontFamily: FONT, fontSize: 12 }}>
+          [{w.code}] {w.message}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 function slugifyModelName(name = "") {
   return (name || "untitled")
     .toLowerCase()
@@ -689,27 +717,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     setLatestResults(row.results_json);
   };
 
-  const TabErrors = ({ tabId }) => {
-    const errs  = validation.errors.filter(e => e.tab === tabId);
-    const warns = validation.warnings.filter(w => w.tab === tabId);
-    if (!errs.length && !warns.length) return null;
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
-        {errs.map((e, i) => (
-          <div key={i} role="alert" style={{ background: C.errorBg, border: `1px solid ${C.danger}`, borderRadius: 6,
-            padding: '8px 12px', color: C.error, fontFamily: FONT, fontSize: 12 }}>
-            [{e.code}] {e.message}
-          </div>
-        ))}
-        {warns.map((w, i) => (
-          <div key={i} style={{ background: C.warmup, border: `1px solid ${C.amber}`, borderRadius: 6,
-            padding: '8px 12px', color: C.warnBg, fontFamily: FONT, fontSize: 12 }}>
-            [{w.code}] {w.message}
-          </div>
-        ))}
-      </div>
-    );
-  };
 
 
   const TABS=[
@@ -782,20 +789,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
   const authoringShellMode = !isMobileLayout && ["design"].includes(activeMode.id)
     ? activeMode
     : null;
-  const AuthoringWorkflowShell = ({mode, children}) => {
-    return (
-      <section
-        aria-label={`${mode.label} authoring shell`}
-        style={{
-          display: "block",
-        }}
-      >
-        <main aria-label={`${mode.label} workspace`} style={{minWidth:0}}>
-          {children}
-        </main>
-      </section>
-    );
-  };
   const renderAuthoringShell = content => (
     authoringShellMode ? <AuthoringWorkflowShell mode={authoringShellMode}>{content}</AuthoringWorkflowShell> : content
   );
@@ -930,7 +923,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         )}
         {tab==="entities"&&(
           renderAuthoringShell(<div style={{maxWidth:1100,display:"flex",flexDirection:"column",gap:14}}>
-            <TabErrors tabId="entities"/>
+            <TabErrors tabId="entities" validation={validation}/>
             {canEdit&&(
               <div style={{display:"flex",justifyContent:"flex-end"}}>
                 <Btn small variant="ghost" onClick={()=>setShowCsvImport(true)}>Import from CSV</Btn>
@@ -962,7 +955,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         )}
         {tab==="state"&&renderAuthoringShell(
           <div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
-            <TabErrors tabId="state"/>
+            <TabErrors tabId="state" validation={validation}/>
             <div style={{display:"flex",flexDirection:"column",gap:4}}>
               <label style={{fontSize:11,fontWeight:600,color:C.muted,letterSpacing:"1.5px",textTransform:"uppercase"}}>Time unit</label>
               <select
@@ -1001,9 +994,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             </div>
           </div>
         )}
-        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents"/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'}/></div>)}
-        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents"/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
-        {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues"/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
+        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'}/></div>)}
+        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
+        {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues" validation={validation}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
           const oldQueues = model.queues || [];
           let updated = { ...model, queues: newQueues };
           for (let i = 0; i < newQueues.length; i++) {
@@ -1036,27 +1029,24 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 </div>
               ))}
             </div>
-            {[...(validation.errors||[])].length ? (
+            {(validation.errors.length || validation.warnings.length) ? (
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {[...(validation.errors||[])].map((issue,index)=>{
-                  const isError = validation.errors.includes(issue);
-                  const targetTab = issue.tab || "overview";
-                  const tabLabel = MODEL_HEALTH_TAB_LABELS[targetTab] || "Overview";
-                  return (
-                    <button
-                      key={`${issue.code}-${index}`}
-                      type="button"
-                      onClick={()=>setTab(targetTab)}
-                      style={{background:isError?C.errorBg:C.warmup,border:`1px solid ${isError?C.danger:C.amber}66`,borderRadius:6,color:isError?C.error:C.warnBg,cursor:"pointer",fontFamily:FONT,fontSize:11,padding:"9px 11px",textAlign:"left"}}
-                    >
-                      {tabLabel}: {issue.message} {issue.code ? `· Code ${issue.code}` : ""}
-                    </button>
-                  );
-                })}
+                {validation.errors.map((issue,index)=>(
+                  <button key={`err-${issue.code}-${index}`} type="button" onClick={()=>setTab(issue.tab||"overview")}
+                    style={{background:alpha(C.red,0.1),border:`1px solid ${alpha(C.red,0.4)}`,borderRadius:6,color:C.red,cursor:"pointer",fontFamily:FONT,fontSize:11,padding:"9px 11px",textAlign:"left"}}>
+                    {MODEL_HEALTH_TAB_LABELS[issue.tab||"overview"]||"Overview"}: {issue.message}{issue.code?` · Code ${issue.code}`:""}
+                  </button>
+                ))}
+                {validation.warnings.map((issue,index)=>(
+                  <button key={`warn-${issue.code}-${index}`} type="button" onClick={()=>setTab(issue.tab||"overview")}
+                    style={{background:alpha(C.amber,0.1),border:`1px solid ${alpha(C.amber,0.4)}`,borderRadius:6,color:C.amber,cursor:"pointer",fontFamily:FONT,fontSize:11,padding:"9px 11px",textAlign:"left"}}>
+                    {MODEL_HEALTH_TAB_LABELS[issue.tab||"overview"]||"Overview"}: {issue.message}{issue.code?` · Code ${issue.code}`:""}
+                  </button>
+                ))}
               </div>
             ) : (
               <div style={{background:C.panel,border:`1px solid ${C.green}55`,borderRadius:8,padding:16,color:C.green,fontFamily:FONT,fontSize:12}}>
-                No blocking validation issues found.
+                No validation issues found.
               </div>
             )}
           </div>
