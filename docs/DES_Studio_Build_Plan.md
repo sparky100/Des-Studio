@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.77 | Created: 2026-04-30 | Updated: 2026-05-19 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.79 | Created: 2026-04-30 | Updated: 2026-05-22 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -197,6 +197,7 @@ flowchart LR
 | 1.71 | 2026-05-15 | Sprint 33 completed. SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. Documentation cleanup: archived 17 superseded/scratch files. |
 | 1.77 | 2026-05-19 | Sprint 67 planned. Added plain-English UX and Results clarity sprint plan, closure template, capability guide, AGENTS tracking, and product-spec presentation requirements. |
 | 1.78 | 2026-05-20 | Sprint 68 completed. Model versioning as explicit milestones: `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. ADR-015 created. 30 new tests. |
+| 1.79 | 2026-05-22 | Sprint 70 completed. Magic-link model import: `encodeModelToLink`/`decodeModelFromUrl`/`validateLinkModel` utilities, `ImportPreview` component (model summary card, validation status, save/sign-in/copy-JSON flows), hash-route detection and sessionStorage restore in App.jsx. 9 new tests. User Guide §14 and model-schema-for-llm.md encoding recipes added. |
 
 ---
 
@@ -289,6 +290,7 @@ flowchart LR
 | Sprint 32 | ✅ Complete | 2026-05-14 | Resource Reliability & Preemption. | Focused | N/A | Success | PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure. |
 | Sprint 33 | ✅ Complete | 2026-05-14 | Advanced Scheduling & Analytics. | 695 (695) | N/A | Success | SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
 | Sprint 69 | ✅ Complete | 2026-05-21 | AI Model Debugging: trace emission, structural checker, AI diagnosis panel, conversational debugger. | 23 passing (new) | N/A | N/A |
+| Sprint 70 | ✅ Complete | 2026-05-22 | Magic-link model import: URL encode/decode utilities, ImportPreview component, App.jsx hash-route detection, sessionStorage restore after sign-in. | 9 passing (new) | N/A | N/A |
 
 ---
 
@@ -434,6 +436,7 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 66 | Visual Designer Badges + Execute Panel UX | complete: node badges, Execute toolbar consolidation, Results chart formatting improvements |
 | Sprint 67 | Plain-English UX & Results Clarity | planned: wording simplification, Results information hierarchy, progressive disclosure of advanced detail |
 | Sprint 69 | AI Model Debugging | complete: F69.1 structured trace emission from engine, F69.2 pre-run structural model checker (CHK-001–CHK-008), F69.3 post-run AI diagnosis panel (Diagnostics tab, FindingCard list), F69.4 conversational debugging chat with full model+trace context |
+| Sprint 70 | Magic-Link Model Import | complete: `src/utils/importLink.js` (encodeModelToLink / decodeModelFromUrl / validateLinkModel), `src/ui/ImportPreview.jsx` (560px card — model summary, validation status, save/sign-in/copy-JSON flows), App.jsx hash-route detection on mount, sessionStorage restore after SIGNED_IN event, 9 new UI tests, User Guide §14, model-schema-for-llm.md encoding recipes |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
