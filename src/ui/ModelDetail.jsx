@@ -13,6 +13,7 @@ import { ExecutePanel } from "./execute/index.jsx";
 import { CsvImportModal } from "./CsvImportModal.jsx";
 import { ResultsWorkspace } from "./results/ResultsWorkspace.jsx";
 import { ModelHistoryTab } from "./ModelHistoryTab.jsx";
+import { ModelCard, NewModelModal } from "./ModelLibrary.jsx";
 
 // Lazy-loaded so @xyflow/react is not included in the initial bundle.
 const VisualDesignerPanel = lazy(() =>
@@ -518,8 +519,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
     }
   }, [modelData?.stats, modelData?.statsLoading, modelData?.statsError]);
 
+  const allowStarterGuide = overrides.showStarterGuide !== false;
   const starterGuideAutoHidden = (model?.entityTypes?.length > 0) || (Number.isFinite(model?.stats?.runs) ? model.stats.runs > 0 : false);
-  const showStarterGuide = canEdit && !starterGuideDismissed && !starterGuideAutoHidden;
+  const showStarterGuide = canEdit && allowStarterGuide && !starterGuideDismissed && !starterGuideAutoHidden;
   const dismissStarterGuide = () => {
     try { localStorage.setItem(`des_starter_${modelId}`, "1"); } catch {}
     setStarterGuideDismissed(true);
@@ -893,7 +895,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                 </div>
               </div>
             )}
-            {canEdit && !showStarterGuide && (
+            {canEdit && allowStarterGuide && !showStarterGuide && (
               <div style={{display:"flex",justifyContent:"flex-end"}}>
                 <Btn small variant="ghost" onClick={reopenStarterGuide}>Show getting started guide</Btn>
               </div>
@@ -1213,6 +1215,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
 // ── App ──────────────────────────────────────────────────────
 
 export {
+  ModelCard,
+  NewModelModal,
   ModelDetail,
   buildModelExportPayload, buildRunHistoryCsv, buildRunHistoryExportPayload,
   slugifyModelName, modelJsonFromModel,

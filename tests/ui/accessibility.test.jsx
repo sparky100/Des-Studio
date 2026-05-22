@@ -45,11 +45,11 @@ describe('accessibility pass', () => {
   });
 
   it('labels and focuses the new model modal fields', () => {
-    render(<NewModelModal onClose={vi.fn()} onCreate={vi.fn()} />);
+    render(<NewModelModal onClose={vi.fn()} onStartDesign={vi.fn()} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
 
-    expect(screen.getByRole('dialog', { name: /new des model/i })).toBeInTheDocument();
-    expect(screen.getByLabelText('Name')).toHaveFocus();
-    expect(screen.getByLabelText('Description')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /new model/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i)).toHaveFocus();
+    expect(screen.getByPlaceholderText(/Optional/i)).toBeInTheDocument();
   });
 
   it('exposes selected state on model tabs', async () => {
@@ -72,8 +72,8 @@ describe('accessibility pass', () => {
     await user.click(screen.getByRole('button', { name: /^design$/i }));
     expect(screen.getByRole('tab', { name: 'AI Designer' })).toHaveAttribute('aria-selected', 'false');
 
-    await user.click(screen.getByRole('button', { name: /^execute$/i }));
-    expect(screen.getByRole('button', { name: /^execute$/i })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getAllByRole('button', { name: /^run$/i })[0]);
+    expect(screen.getAllByRole('button', { name: /^run$/i })[0]).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('keeps Execute Run All discoverable and disabled with validation errors', () => {
@@ -116,7 +116,7 @@ describe('accessibility pass', () => {
       />
     );
 
-    await screen.findByRole('button', { name: /^execute$/i });
+    await screen.findAllByRole('button', { name: /^run$/i });
     await userEvent.setup().click(screen.getByRole('button', { name: /^setup$/i }));
     await screen.findByRole('button', { name: /edit setup/i });
     expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();

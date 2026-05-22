@@ -104,12 +104,11 @@ export default function App(){
   const [error,setError]=useState('')
   const [showForkConfirm,setShowForkConfirm]=useState(false)
   const [modelToFork,setModelToFork]=useState(null)
-  const [showStarterGuideForId,setShowStarterGuideForId]=useState(null)
+  const [openModelOptions,setOpenModelOptions]=useState({ initialTab: undefined, autoRun: false, showStarterGuide: true })
   const [importStatus,setImportStatus]=useState(null)
   const [runStatsError,setRunStatsError]=useState('')
   const [actionError,setActionError]=useState('')
   const [localModel,setLocalModel]=useState(null)
-  const [isTemplate,setIsTemplate]=useState(false)
   const [isRecoverySession,setIsRecoverySession]=useState(false)
   const [showSettings,setShowSettings]=useState(false)
   const [shareToken,setShareToken]=useState(null)
@@ -215,7 +214,7 @@ export default function App(){
   const signOut=()=>supabase.auth.signOut()
 
   const handleOpenModel = useCallback((model) => {
-    setShowStarterGuideForId(null);
+    setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
     if (model.owner_id !== uid && model.visibility === 'public') {
       setModelToFork(model);
       setShowForkConfirm(true);
@@ -230,6 +229,7 @@ export default function App(){
     try {
       const newModel = await forkModel(modelToFork.id, uid, `Fork of ${modelToFork.name}`);
       await loadData();
+      setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
       setOpenId(newModel.id);
     } catch (e) {
       setError(e.message);
@@ -274,6 +274,7 @@ export default function App(){
               items: importedValidation.warnings.map(w => `[${w.code}] ${w.message}`),
             });
           }
+          setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
           setOpenId(saved.id);
         })
         .catch(e => {
@@ -315,6 +316,7 @@ export default function App(){
         });
       }
       onSuccess?.();
+      setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
       setOpenId(saved.id);
     } catch (e) {
       const errorMsg = e instanceof SyntaxError ? `Invalid JSON: ${e.message}` : `Import failed: ${e.message}`;
@@ -339,7 +341,7 @@ export default function App(){
         queues: template.queues || [],
       }, uid);
       await loadData();
-      setIsTemplate(true);
+      setOpenModelOptions({ initialTab: "execute", autoRun: true, showStarterGuide: false });
       setOpenId(saved.id);
     }catch(e){
       setError(e.message);
@@ -366,6 +368,7 @@ export default function App(){
     try{
       const copy=await forkModel(model.id,uid,`Copy of ${model.name}`);
       await loadData();
+      setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
       setOpenId(copy.id);
     }catch(e){
       setActionError(e.message);
@@ -380,6 +383,7 @@ export default function App(){
     try{
       const baseline=await forkModel(sourceModelId,uid,newName,{parentModelId});
       await loadData();
+      setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
       setOpenId(baseline.id);
     }catch(e){
       setActionError(e.message);
@@ -464,16 +468,24 @@ export default function App(){
         <ErrorBoundary
           title="Model view crashed"
           message="This model could not render. Return to the library and reopen it."
-          onReset={()=>{setOpenId(null);setLocalModel(null);setShowStarterGuideForId(null)}}
+          onReset={()=>{
+            setOpenId(null);
+            setLocalModel(null);
+            setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
+          }}
         >
           <ModelDetail modelId={openId}
             modelData={model}
-            initialTab={isTemplate?"execute":undefined}
-            onBack={()=>{setOpenId(null);setLocalModel(null);setIsTemplate(false);setShowStarterGuideForId(null)}}
+            initialTab={openModelOptions.initialTab}
+            onBack={()=>{
+              setOpenId(null);
+              setLocalModel(null);
+              setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
+            }}
             onRefresh={loadData}
             overrides={{
-              autoRun: isTemplate,
-              showStarterGuide: showStarterGuideForId === openId,
+              autoRun: openModelOptions.autoRun,
+              showStarterGuide: openModelOptions.showStarterGuide,
               isOwner: true, canEdit: true, profiles, userId: isLocal ? null : uid, isAdmin,
               onSave: isLocal
                 ? async (m) => saveLocalModel(m)
@@ -489,8 +501,7 @@ export default function App(){
               onExitToTemplates: () => {
                 setOpenId(null);
                 setLocalModel(null);
-                setIsTemplate(false);
-                setShowStarterGuideForId(null);
+                setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
                 setLibraryTab('templates');
               },
             }}
@@ -553,18 +564,26 @@ export default function App(){
         onDeleteModel={handleDeleteModel}
         onCopyModel={handleCopyModel}
         onStartTemplate={handleStartTemplate}
-        onCreateNewModel={async (name, desc, modelData) => {
+        onCreateNewModel={async (name, desc, modelData, options = {}) => {
+          const nextOptions = {
+            initialTab: options.initialTab,
+            autoRun: options.autoRun === true,
+            showStarterGuide: options.showStarterGuide !== false,
+          };
           if (modelData && typeof modelData === 'object') {
             modelData.name = name || modelData.name;
             modelData.description = desc || modelData.description;
             const saved = await saveModel(modelData, uid);
             await loadData();
+            setOpenModelOptions(nextOptions);
             setOpenId(saved.id);
+            return saved;
           } else {
             const m = await saveModel({name, description: desc, entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: []}, uid);
             await loadData();
-            setShowStarterGuideForId(m.id);
+            setOpenModelOptions(nextOptions);
             setOpenId(m.id);
+            return m;
           }
         }}
         onImportFile={handleImportFile}

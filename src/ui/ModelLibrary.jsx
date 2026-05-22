@@ -53,14 +53,14 @@ export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,
   );
 };
 
-export const NewModelModal=({onClose,onCreate,onUseTemplate,onImportFile,onPasteJson,onUseAi})=>{
+export const NewModelModal=({onClose,onStartDesign,onUseTemplate,onImportFile,onPasteJson,onUseAi})=>{
   const [name,setName]=useState(""); const [desc,setDesc]=useState("");
   const [saving,setSaving]=useState(false);
   const [mode,setMode]=useState("choose");
   const [pasteText,setPasteText]=useState("");
   const [pasteStatus,setPasteStatus]=useState(null);
   const fileInputRef=useRef(null);
-  const createBlank=async()=>{if(!name.trim())return;setSaving(true);try{await onCreate(name.trim(),desc.trim());}finally{setSaving(false);}onClose();};
+  const startDesign=async()=>{if(!name.trim())return;setSaving(true);try{await onStartDesign?.(name.trim(),desc.trim());}finally{setSaving(false);}onClose();};
   const triggerImport=()=>{if(!name.trim())return;fileInputRef.current?.click();};
   const handleFileSelect=(e)=>{
     const file=e.target.files?.[0];
@@ -122,9 +122,9 @@ export const NewModelModal=({onClose,onCreate,onUseTemplate,onImportFile,onPaste
         </div>
         <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700}}>START WITH</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          <button type="button" onClick={createBlank} disabled={!name.trim()||saving} style={optionBtn}>
-            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Blank model</div>
-            <div style={{fontSize:10,color:C.muted}}>Start from scratch</div>
+          <button type="button" onClick={startDesign} disabled={!name.trim()||saving} style={optionBtn}>
+            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Design</div>
+            <div style={{fontSize:10,color:C.muted}}>Start building visually</div>
           </button>
           <button type="button" onClick={useTemplate} style={optionBtn}>
             <div style={{fontSize:12,fontWeight:700,color:C.text}}>Use a template</div>
@@ -345,7 +345,7 @@ export function ModelLibrary({
       {showNew && (
         <NewModelModal
           onClose={() => setShowNew(false)}
-          onCreate={async (name, desc) => { await onCreateNewModel(name, desc); }}
+          onStartDesign={async (name, desc) => { await onCreateNewModel(name, desc, null, { initialTab: "visual", showStarterGuide: false }); }}
           onUseTemplate={(name, desc) => { setTab("templates"); }}
           onImportFile={(jsonText, name, desc) => {
             setShowNew(false);
@@ -355,9 +355,9 @@ export function ModelLibrary({
             onPasteJsonImport(pasteText, onSuccess, onError);
           }}
           onUseAi={(name, desc) => {
-            onCreateNewModel(name, desc).then(m => {
+            onCreateNewModel(name, desc, null, { initialTab: "ai", showStarterGuide: false }).then(m => {
               setShowNew(false);
-              onOpenModel(m);
+              if (m) onOpenModel(m);
             });
           }}
         />

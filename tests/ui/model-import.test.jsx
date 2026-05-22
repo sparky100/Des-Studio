@@ -60,6 +60,7 @@ describe('model JSON import', () => {
     await renderLibrary();
     fireEvent.click(screen.getByRole('button', { name: /\+ new model/i }));
     await screen.findByText('New Model');
+    expect(screen.getByText(/^Design$/i)).toBeInTheDocument();
     expect(screen.getByText(/Import a file/i)).toBeInTheDocument();
   });
 
