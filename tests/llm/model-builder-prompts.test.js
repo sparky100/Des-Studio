@@ -5,185 +5,133 @@ import {
 } from "../../src/llm/model-builder-prompts.js";
 
 describe("model builder prompts", () => {
-  it("includes all original macros in the system prompt", () => {
+  // ─── System prompt structural checks ────────────────────────────────────────
+
+  it("instructs the LLM to ask questions one at a time", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE", "BATCH", "UNBATCH"].forEach(macro => {
-      expect(prompt).toMatch(new RegExp(macro));
-    });
-    expect(prompt).toMatch(/BATCH.*C-Event/i);
-    expect(prompt).toMatch(/UNBATCH.*B-Event/i);
+    expect(prompt).toMatch(/Ask questions one at a time/i);
   });
 
-  it("includes all Sprint 31–37 macros in the system prompt", () => {
+  it("embeds the schema reference document verbatim", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    ["PREEMPT", "FAIL", "REPAIR", "SPLIT", "COSEIZE", "MATCH", "SET", "SET_ATTR", "COST"].forEach(macro => {
+    expect(prompt).toMatch(/SCHEMA REFERENCE/);
+  });
+
+  it("does NOT contain any numeric question cap", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).not.toMatch(/ask at most \d/i);
+    expect(prompt).not.toMatch(/at most \d+ question/i);
+    expect(prompt).not.toMatch(/no more than \d/i);
+  });
+
+  it("does NOT contain Phase A, Phase B, or Phase C labels", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).not.toMatch(/\bPHASE A\b/);
+    expect(prompt).not.toMatch(/\bPHASE B\b/);
+    expect(prompt).not.toMatch(/\bPHASE C\b/);
+  });
+
+  it("contains all five core macro names from the schema", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE"].forEach(macro => {
       expect(prompt).toContain(macro);
     });
   });
 
-  it("constrains the model builder to supported distributions including Schedule", () => {
+  it("lists all four intent values in the response format", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    ["exponential", "uniform", "normal", "triangular", "fixed", "erlang", "empirical", "schedule"].forEach(dist => {
-      expect(prompt).toMatch(new RegExp(dist, "i"));
-    });
+    expect(prompt).toMatch(/clarify/);
+    expect(prompt).toMatch(/confirm/);
+    expect(prompt).toMatch(/\bbuild\b/);
+    expect(prompt).toMatch(/\brefine\b/);
   });
 
-  it("includes a distribution selection guide", () => {
+  it("specifies the suggestions field in the response format", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/distribution selection guide/i);
-    expect(prompt).toMatch(/Exponential.*inter-arrival/i);
-    expect(prompt).toMatch(/Triangular.*best.*likely.*worst/i);
-    expect(prompt).toMatch(/Schedule.*planned arrival/i);
+    expect(prompt).toMatch(/suggestions/);
   });
 
-  it("includes the template catalogue with all 16 template IDs", () => {
+  it("specifies the summary field for confirm intent", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/template catalogue/i);
-    [
-      "mm1", "er-triage", "outpatient-clinic", "ward-admission", "surgical-suite",
-      "call-center", "fast-food", "airport", "bank-branch", "retail-checkout",
-      "factory", "construction", "warehouse", "order-fulfillment",
-      "port-berth", "data-center",
-    ].forEach(id => {
-      expect(prompt).toContain(id);
-    });
+    expect(prompt).toMatch(/summary/);
+    expect(prompt).toMatch(/confirm/);
   });
 
-  it("instructs the LLM to prefer adapting templates over building from scratch", () => {
+  it("instructs questions to be a single string not an array", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/prefer adapting over building from scratch/i);
-    expect(prompt).toMatch(/adapting a template is always preferred/i);
+    expect(prompt).toMatch(/next single question/i);
   });
 
-  it("includes intent:template in the response schema", () => {
+  it("forbids generating JSON before user confirmation", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/intent.*build.*refine.*clarify.*template/i);
-    expect(prompt).toMatch(/templateId/);
+    expect(prompt).toMatch(/Only generate the model JSON after confirmation/i);
   });
 
-  it("tells the model builder to place user timing answers into DES Studio distribution fields", () => {
+  it("instructs the LLM not to invent macros or field names", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/distParams/);
-    expect(prompt).toMatch(/average time-between-arrivals/i);
-    expect(prompt).toMatch(/serviceTime/);
-    expect(prompt).toMatch(/never leave timing defaults/i);
-    expect(prompt).toMatch(/Service Complete B-event/i);
-    expect(prompt).toMatch(/queue size > 0 and idle server count > 0/i);
-    expect(prompt).toMatch(/RELEASE\(ServerType, NextQueueName\)/);
+    expect(prompt).toMatch(/Do not invent macros/i);
   });
 
-  it("declares the required JSON response keys including templateId", () => {
+  it("requires all distParams values to be strings", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/intent/);
-    expect(prompt).toMatch(/questions/);
-    expect(prompt).toMatch(/proposedModel/);
-    expect(prompt).toMatch(/explanation/);
-    expect(prompt).toMatch(/templateId/);
+    expect(prompt).toMatch(/distParams values must be strings/i);
   });
 
-  it("forbids partial JSON when the proposal would be too large", () => {
+  it("embeds the distribution table from the schema", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/Never return partial JSON/i);
-    expect(prompt).toMatch(/too detailed to fit/i);
+    expect(prompt).toMatch(/Exponential/);
+    expect(prompt).toMatch(/Triangular/);
+    expect(prompt).toMatch(/Fixed/);
+    expect(prompt).toMatch(/Uniform/);
   });
 
-  it("mandates COMPLETE() for final-stage completion B-events and RELEASE() only for intermediate routing", () => {
+  it("embeds the validation rules from the schema", () => {
     const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/COMPLETE\(\).*final stage/i);
-    expect(prompt).toMatch(/Never use RELEASE\(\) as the effect of a final-stage/i);
-    expect(prompt).toMatch(/RELEASE\(ServerType, NextQueueName\)/);
+    expect(prompt).toMatch(/V8/);
+    expect(prompt).toMatch(/ARRIVE/);
   });
 
-  it("requires PRIORITY queue discipline when entity has a priority attribute", () => {
-    const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/priority.*attrDef/i);
-    expect(prompt).toMatch(/PRIORITY.*queue discipline/i);
-    expect(prompt).toMatch(/lower numbers.*higher priority/i);
-    expect(prompt).toMatch(/1 = highest/i);
-    expect(prompt).toMatch(/valueType.*number/i);
-  });
+  // ─── buildModelBuilderUserMessage ───────────────────────────────────────────
 
-  it("requires queues to include customerType matching the arriving entity", () => {
-    const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/customerType/);
-    expect(prompt).toMatch(/role customer/i);
-    expect(prompt).toMatch(/required/i);
-    expect(prompt).toMatch(/ARRIVE\(\)/i);
-  });
-
-  it("includes the current model when one exists", () => {
-    const message = buildModelBuilderUserMessage(
-      "Add a second server",
-      { entityTypes: [{ id: "srv", name: "Server", role: "server" }], queues: [], bEvents: [], cEvents: [], stateVariables: [] },
-    );
-    const payload = JSON.parse(message);
-    expect(payload.currentModel.entityTypes[0].name).toBe("Server");
-    expect(payload.requiredResponseKeys).toContain("templateId");
-  });
-
-  it("instructs to follow three-phase discipline when no current model exists", () => {
+  it("returns plain text containing the user request", () => {
     const message = buildModelBuilderUserMessage("Build a call centre", {});
-    const payload = JSON.parse(message);
-    expect(payload.instruction).toMatch(/three-phase/i);
-    expect(payload.instruction).toMatch(/PHASE B/i);
+    expect(message).toContain("Build a call centre");
   });
 
-  it("contains PHASE A as a structural marker in the system prompt", () => {
-    const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/PHASE A/);
-  });
-
-  it("contains PHASE B as a structural marker in the system prompt", () => {
-    const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/PHASE B/);
-  });
-
-  it("contains PHASE C as a structural marker in the system prompt", () => {
-    const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/PHASE C/);
-  });
-
-  it("lists confirm as a valid intent value in the system prompt", () => {
-    const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/intent.*confirm/i);
-  });
-
-  it("does NOT contain a fixed cap on clarifying questions", () => {
-    const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).not.toMatch(/at most 2/i);
-    expect(prompt).not.toMatch(/at most two/i);
-    const message = buildModelBuilderUserMessage("Build a post office", {});
-    const payload = JSON.parse(message);
-    expect(payload.instruction).not.toMatch(/at most 2/i);
-    expect(payload.instruction).not.toMatch(/at most two/i);
-  });
-
-  it("specifies suggestions array in the response format", () => {
-    const prompt = buildModelBuilderSystemPrompt();
-    expect(prompt).toMatch(/suggestions/i);
-    expect(prompt).toMatch(/refinement/i);
-  });
-
-  it("includes simulation results in the payload when results are provided", () => {
-    const results = {
-      queues: [{ name: "Triage", meanWait: 8.2, maxWait: 14.3 }],
-      resources: [{ name: "Nurse", utilisation: 0.98 }],
-      throughput: 42, served: 40, reneged: 2, avgWait: 8.2, avgService: 4.1, avgSojourn: 12.3,
+  it("includes currentModel with the correct label when non-empty", () => {
+    const model = {
+      entityTypes: [{ id: "cust", name: "Customer", role: "customer", attrDefs: [] }],
+      queues: [],
+      bEvents: [],
+      cEvents: [],
+      stateVariables: [],
     };
-    const message = buildModelBuilderUserMessage(
-      "Waits are too long, add a server",
-      { entityTypes: [{ id: "cust", name: "Customer", role: "customer" }], queues: [], bEvents: [], cEvents: [], stateVariables: [] },
-      results
-    );
-    const payload = JSON.parse(message);
-    expect(payload.simulationResults).toEqual(results);
-    expect(payload.instruction).toMatch(/simulation results/i);
-    expect(payload.instruction).toMatch(/bottlenecks/i);
+    const message = buildModelBuilderUserMessage("Add a second server", model);
+    expect(message).toMatch(/Current model \(refine this, do not replace unless asked\)/);
+    expect(message).toContain("Customer");
   });
 
-  it("leaves simulationResults null when no results provided", () => {
-    const message = buildModelBuilderUserMessage("Add a server", { entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] });
-    const payload = JSON.parse(message);
-    expect(payload.simulationResults).toBeNull();
+  it("omits currentModel label when model is empty", () => {
+    const message = buildModelBuilderUserMessage("Build something", {});
+    expect(message).not.toMatch(/Current model/);
+  });
+
+  it("includes simulation results with label when provided", () => {
+    const results = { queues: [{ name: "Triage", meanWait: 8.2 }] };
+    const model = {
+      entityTypes: [{ id: "cust", name: "Customer", role: "customer", attrDefs: [] }],
+      queues: [],
+      bEvents: [],
+      cEvents: [],
+      stateVariables: [],
+    };
+    const message = buildModelBuilderUserMessage("Waits are too long", model, results);
+    expect(message).toMatch(/Simulation results/i);
+    expect(message).toContain("Triage");
+  });
+
+  it("leaves simulation results absent when not provided", () => {
+    const message = buildModelBuilderUserMessage("Build a post office", {});
+    expect(message).not.toMatch(/Simulation results/i);
   });
 });

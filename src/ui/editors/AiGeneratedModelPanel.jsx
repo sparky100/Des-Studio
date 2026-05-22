@@ -508,7 +508,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     if (!response) { setLoading(false); return; }
 
     if (response.intent === "confirm") {
-      const cleanExplanation = stripTrailingQuestion(response.explanation || "");
+      const cleanExplanation = stripTrailingQuestion(response.summary || response.explanation || "");
       setPendingConfirm({ explanation: cleanExplanation, messages });
       setHistory(prev => [...prev, { role: "assistant-confirm", content: cleanExplanation }]);
       setLoading(false);
@@ -551,7 +551,9 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       }
     }
 
-    const questions = Array.isArray(response.questions) ? response.questions.filter(Boolean) : [];
+    const questionText = Array.isArray(response.questions)
+      ? response.questions.filter(Boolean).join("\n")
+      : (typeof response.questions === "string" ? response.questions : "");
     const isRefineOrBuild = response.intent === "build" || response.intent === "refine" || response.intent === "template";
     const newTurns = [];
 
@@ -566,7 +568,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     }
 
     if (response.intent === "clarify") {
-      newTurns.push({ role: "assistant", content: questions.join("\n") });
+      newTurns.push({ role: "assistant", content: questionText });
     } else if (!response.proposedModel) {
       newTurns.push({ role: "assistant", content: response.explanation || "Model proposal received." });
     }
