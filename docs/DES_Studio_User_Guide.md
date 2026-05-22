@@ -145,45 +145,23 @@ Inside the Model Detail view you can build your model three ways — all editing
 | AI Model Generator | "Design with AI" panel | Bootstrapping a model from a natural-language scenario description |
 | Visual Designer | "Visual Designer" tab | Seeing the model as a flow graph; drag-and-drop topology editing |
 
-### 2.X AI Model Generator — three-step conversation flow
+### 2.X AI Model Generator
 
-The AI Model Generator lets you describe a real-world queueing scenario in plain English and receive a complete, validated simulation model. It uses a structured three-step process to ensure the model reflects your intent before any JSON is generated.
+The AI Generator helps you build a simulation model through a guided conversation. It asks questions about your system one at a time, confirms its understanding in plain English before generating anything, then presents the result as a readable summary — not raw JSON — so you can verify it matches your system before applying it.
 
-#### Step 1 — Describe your problem
+#### How to use it
 
-Open the AI Generator tab and type a sentence or two about what you want to simulate. The AI asks targeted clarifying questions **one at a time** — who arrives, how often, how many servers, what stages exist, and what you want to improve. Answer in plain English; no simulation jargon is needed. The AI asks as many questions as it needs to understand the structure of your system before moving on.
+**1. Describe your problem**
 
-#### Step 2 — Confirm the model
+Open the AI Generator tab and type a sentence or two about what you want to simulate. The generator will ask targeted follow-up questions one at a time to understand the structure of your system.
 
-Once the AI has enough information, it summarises its understanding in plain English before generating anything. The confirmation card follows a consistent structure:
+**2. Confirm the model**
 
-- **Arrivals** — who arrives and how often
-- **Flow** — the queue and service stages in order
-- **Queue discipline** — FIFO, Priority, or LIFO at each stage
-- **Goal** — the performance target, if you stated one
+Once the AI has enough information, it will summarise its understanding in plain English — who arrives, how they flow through the system, how many resources are available, and what you are trying to improve. Review this summary and either confirm it or tell the AI what to correct. The model JSON is not generated until you confirm.
 
-Two buttons appear in the confirmation card:
+**3. Review and apply**
 
-- **Looks right — build it** — the AI generates the complete model JSON.
-- **Something's wrong** — the confirmation card is dismissed; describe what needs changing and the conversation continues.
-
-No model JSON is generated until you confirm.
-
-#### Step 3 — Review and apply
-
-The generated model appears in a side-by-side preview panel:
-
-- A **Simulation summary card** describes the model in plain English: who arrives and how often, how they flow through each stage, how many servers are available at each stage, and the experiment settings.
-- The AI's own explanation appears as an italic quote above the summary.
-- A **Show technical changes** toggle reveals the structured diff (added/removed/modified elements by section) for users who want to inspect the detail.
-- **Apply model** applies the full proposal to your editable model as a draft.
-- **Apply & save all** applies and immediately saves, skipping the draft step.
-- **Apply selected** lets you cherry-pick which sections (Entity Classes, B-Events, Queues…) to merge into your existing model.
-- **Refine this** returns focus to the chat input so you can describe a change without discarding the current proposal.
-
-#### Proactive refinement chips
-
-After any build or refine response, the AI suggests 2–3 follow-up refinements as pill-shaped chip buttons (for example: *"Add a second clerk"*, *"Enable reneging after 30 min"*). Clicking a chip sends that text as your next message. Chips disappear when you click one or type and send a message manually.
+The generated model is shown as a plain-English summary covering arrivals, flow, resources, and experiment settings. Click **Apply model** to load it into the editor, or **Refine this** to return to the conversation and make changes. Use the suggestion chips below the summary to explore common improvements such as time-varying arrivals, priority queuing, or customer abandonment.
 
 #### Tips
 

@@ -507,26 +507,28 @@ Pre-computes goal gap data for inclusion in both the narrative and suggestion pr
 }
 ```
 
-- **`intent: "clarify"`** — LLM needs more information before proposing a model. `proposedModel` is null; `questions[]` contains one or more targeted questions.
-- **`intent: "confirm"`** — LLM has enough information and is asking the user to approve the plan before generating the full model JSON. `proposedModel` is null; `explanation` describes what will be built in plain English. No model is generated in this phase.
-- **`intent: "build"` / `"refine"`** — LLM returns a complete `proposedModel` JSON. `explanation` is a plain-English summary. `suggestions[]` (2–3 items) contains proactive refinement ideas to show as chip buttons.
+- **`intent: "clarify"`** — LLM needs more information before proposing a model. `proposedModel` is null; `questions[]` contains one targeted question.
+- **`intent: "confirm"`** — The LLM has gathered enough information to build the model but is requesting user sign-off before generating JSON. `proposedModel` is null. `explanation` contains a plain-English summary of the system as the LLM understands it. `questions` is null.
+- **`intent: "build"` / `"refine"`** — LLM returns a complete `proposedModel` JSON. `explanation` is a plain-English summary. `suggestions[]` contains proactive refinement ideas to show as chip buttons.
 - **`intent: "template"`** — LLM identified a matching pre-built template. `templateId` names the template; `proposedModel` is returned.
-
-#### Three-Phase conversation discipline
-
-The system prompt instructs the LLM to follow a structured three-phase process:
-
-| Phase | Intent | Description |
-|-------|--------|-------------|
-| A — Discover | `clarify` | Ask targeted questions to understand the real system before proposing anything |
-| B — Confirm | `confirm` | Summarise the plan in plain English and wait for user approval |
-| C — Generate | `build` / `refine` | Generate the complete model JSON after the user confirms |
-
-Phase B is mandatory for all new build requests. The LLM must not skip straight from discovery to model generation.
 
 #### `suggestions[]` array
 
-After any `build` or `refine` response, the LLM includes 2–3 brief follow-up refinement ideas in `suggestions[]`. These are rendered as pill-shaped chip buttons in `AiGeneratedModelPanel`. Clicking a chip sends the text as the next user message. Chips are cleared when the user manually types and sends a message or when a new chip is clicked.
+`suggestions: string[] | null` — Present when intent is `"build"` or `"refine"`. An array of up to 3 short refinement question strings that prompt the user to consider common model improvements. Null for all other intent values. Rendered as pill-shaped chip buttons in `AiGeneratedModelPanel`; clicking a chip sends the text as the next user message.
+
+#### Three-phase conversation discipline
+
+The system prompt structures LLM behaviour in three explicit phases. No fixed cap on clarifying questions.
+
+**Phase A — Discovery:** The LLM asks targeted questions one at a time to understand the system structure. No fixed question cap. Each question must be purposeful — targeting information that materially affects model shape.
+
+**Phase B — Confirmation:** When sufficient information has been gathered, the LLM produces a plain-English system summary (`intent: "confirm"`) and waits for user sign-off before generating any model JSON. Phase B is mandatory for all new build requests.
+
+**Phase C — Build:** Triggered by user confirmation. The LLM generates the complete `proposedModel` JSON, a plain-English explanation summary, and a `suggestions` array of 3 refinement prompts.
+
+**Refine mode:** Operates as Phase A/B/C but with the existing model included in context. The LLM refines rather than replaces unless the user explicitly requests a full rebuild. Phase B is optional for simple, unambiguous additions.
+
+**Explain mode:** Unchanged — the LLM returns a plain-English explanation of the selected model element (`intent: "clarify"`, no `proposedModel`).
 
 #### Validation retry loop
 

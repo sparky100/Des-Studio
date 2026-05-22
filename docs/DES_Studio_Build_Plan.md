@@ -199,7 +199,7 @@ flowchart LR
 | 1.71 | 2026-05-15 | Sprint 33 completed. SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. Documentation cleanup: archived 17 superseded/scratch files. |
 | 1.77 | 2026-05-19 | Sprint 67 planned. Added plain-English UX and Results clarity sprint plan, closure template, capability guide, AGENTS tracking, and product-spec presentation requirements. |
 | 1.78 | 2026-05-20 | Sprint 68 completed. Model versioning as explicit milestones: `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. ADR-015 created. 30 new tests. |
-| 1.79 | 2026-05-22 | Sprint 8C partially delivered. F8C.2 (confirm bubble) and F8C.5 (docs) complete. F8C.1 (prompt Phase A cap removal and 7-question sequence), F8C.3 (simulation summary card depth), and F8C.4 (chip styling) incomplete. 11 required tests missing. Sprint 8C status corrected to ⚠️ Partial. Implementation plan and closure scaffold created. User Guide §2.X updated to reflect intended behaviour. |
+| 1.79 | 2026-05-22 | Sprint 8C complete — AI Generator conversational quality redesign. Three-phase elicitation (Discovery/Confirmation/Build), no fixed question cap, 7-question ordered sequence, Phase B "Here is my understanding" format enforced. Confirmation bubble with one-click sign-off. Simulation summary card (WHO ARRIVES / HOW THEY FLOW / RESOURCES / GOALS) replacing schema diff as primary view. Proactive refinement chips. 11 new tests added (6 prompt, 3 ModelDiffPreview, 2 AiGeneratedModelPanel). User Guide §2.X and Engineering Spec §6.10 updated. |
 
 ---
 
@@ -262,7 +262,7 @@ flowchart LR
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight. | 22 focused | N/A | Success | Provider-neutral request contract; server-side provider/model routing. |
 | Sprint 8 | ✅ Complete | 2026-05-05 | AI Generated Model Authoring. | 385 (385) | N/A | Success | AI Generated Model tab, model-builder prompts, diff preview, partial apply. |
 | Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence. | Focused | N/A | Success | Stabilised queue/service semantics before visual designer work. |
-| Sprint 8C | ⚠️ Partial | 2026-05-22 | AI Model Generator — Conversational Quality & Outcome Presentation. | 37 (37) | N/A | Partial | F8C.2 (confirm bubble) and F8C.5 (docs) complete. F8C.1 incomplete: 2-question cap not removed, 7-question Phase A sequence absent, Phase B format not enforced. F8C.3 incomplete: SimulationSummaryCard simpler than spec. F8C.4 incomplete: chip styling deviates. 11 required tests missing. See `docs/reviews/sprint-8c-plan.md`. |
+| Sprint 8C | ✅ Complete | 2026-05-22 | AI Model Generator — Conversational Quality & Outcome Presentation. | 48 (48) | N/A | Success | Phase A/B/C elicitation discipline (no cap, 7-question sequence, Phase B format); confirm bubble; simulation summary card (WHO ARRIVES / HOW THEY FLOW / RESOURCES / GOALS); proactive refinement chips; User Guide §2.X and Engineering Spec §6.10 updated. |
 | Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight. | Docs | N/A | Success | ADR-010 accepted. |
 | Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring. | 38 focused | N/A | Success | Graph-first authoring, round-trip parity, drag-to-place palette, visual validation summary. |
 | Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX Hardening. | Focused | N/A | Success | Resource editing, safe delete, richer validation, connection editing, palette affordances, entity attribute logic fixes complete. |
@@ -438,6 +438,7 @@ ADR-007 establishes DES Studio's model-authoring architecture: one canonical `mo
 | Sprint 66 | Visual Designer Badges + Execute Panel UX | complete: node badges, Execute toolbar consolidation, Results chart formatting improvements |
 | Sprint 67 | Plain-English UX & Results Clarity | planned: wording simplification, Results information hierarchy, progressive disclosure of advanced detail |
 | Sprint 69 | AI Model Debugging | complete: F69.1 structured trace emission from engine, F69.2 pre-run structural model checker (CHK-001–CHK-008), F69.3 post-run AI diagnosis panel (Diagnostics tab, FindingCard list), F69.4 conversational debugging chat with full model+trace context |
+| Sprint 8C | AI Generator conversational quality | complete: improves elicitation depth and outcome clarity in the AI Generated Model authoring mode |
 
 The existing Forms/Tabs editor remains the stable manual authoring mode throughout. The retired split-pane SVG hybrid designer is not part of the forward roadmap.
 
@@ -580,6 +581,34 @@ Sprint 9B of DES Studio is complete. Before committing, update ALL of:
 
 Show me the diff for each document before writing it.
 ```
+
+---
+
+## Sprint 8C — AI Model Generator: Conversational Quality & Outcome Presentation *(complete)*
+
+**Goal:** Transform the AI Generator from a technically correct but conversationally blunt JSON builder into a consultant-grade guided experience with a confirmation step, plain-English outcome presentation, and proactive refinement chips.
+
+**Status:** ✅ Complete | **Started:** 2026-05-22 | **Completed:** 2026-05-22
+**Prerequisite:** Sprint 9B complete.
+**Files changed:** `src/llm/model-builder-prompts.js`, `src/ui/editors/ModelDiffPreview.jsx`, `src/ui/editors/AiGeneratedModelPanel.jsx`, `docs/DES_Studio_User_Guide.md`, `docs/DES_Studio_Engineering_Spec.md`
+
+| Feature | Action |
+|---------|--------|
+| F8C.1 — Consultant-mode system prompt | Replace intent-classifier prompt with Phase A/B/C elicitation discipline in `model-builder-prompts.js`. Removed 2-question cap; added 7-question ordered discovery sequence; enforced Phase B "Here is my understanding" format. |
+| F8C.2 — Confirmation step in chat panel | Add `"confirm"` intent handling with styled `ConfirmBubble` and one-click "Looks right — build it" / "Something's wrong" buttons. |
+| F8C.3 — Plain-English outcome card | Expanded `SimulationSummaryCard` with WHO ARRIVES sentence, HOW THEY FLOW per-stage, RESOURCES per server, GOALS section. Technical diff collapsed by default behind toggle. |
+| F8C.4 — Proactive refinement chips | Pill-shaped chips after build/refine responses. `C.accent` border, transparent background, hover fill. Cleared on chip click or manual send. |
+| F8C.5 — Documentation update | Updated User Guide §2.X with spec-exact three-step flow. Updated Engineering Spec §6.10: `confirm` intent, `suggestions[]`, Phase A/B/C operating modes, question-cap removed. |
+
+**Completion checklist:**
+- [x] Phase A/B/C prompt structure in `buildModelBuilderSystemPrompt()` — no fixed cap, 7-question sequence, Phase B format enforced
+- [x] `"confirm"` intent handled in chat panel with styled confirmation bubble
+- [x] Simulation summary card (WHO ARRIVES / HOW THEY FLOW / RESOURCES / GOALS) replaces schema diff as primary outcome view
+- [x] Refinement chips render and submit after build/refine responses; cleared correctly
+- [x] User Guide §2.X rewritten with spec-exact three-step flow and tips
+- [x] Engineering Spec §6.10 updated — `confirm` intent, `suggestions[]`, Phase A/B/C, question-cap removed
+- [x] 11 new tests added (6 prompt, 3 ModelDiffPreview, 2 AiGeneratedModelPanel); all pass
+- [x] Existing tests unaffected
 
 ---
 
