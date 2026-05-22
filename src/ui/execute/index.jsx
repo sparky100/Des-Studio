@@ -448,8 +448,12 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
               setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved." }]);
               onRunSaved?.();
             } catch (saveError) {
-              setSaveStatus({ state: 'error', message: `✗ Failed to save batch: ${saveError.message}` });
-              setLog(prev => [...prev, { phase: "ERROR", time: batchResult.snap.clock, message: `❌ Database error: ${saveError.message}` }]);
+              const isFkError = saveError.message?.includes('simulation_runs_model_id_fkey') || saveError.code === '23503';
+              const msg = isFkError
+                ? '✗ Save failed: model not yet saved to the database. Save the model first, then re-run.'
+                : `✗ Failed to save batch: ${saveError.message}`;
+              setSaveStatus({ state: 'error', message: msg });
+              setLog(prev => [...prev, { phase: "ERROR", time: batchResult.snap.clock, message: `❌ ${isFkError ? 'Model must be saved before results can be stored.' : `Database error: ${saveError.message}`}` }]);
             }
           } catch (setupError) {
             setBatchStatus("complete");
@@ -516,7 +520,21 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       }, runSeed);
       const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun, runRecord: singleRunRecord, versionId: currentVersionId || null };
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
-      const runId = await save;
+      let runId;
+      try {
+        runId = await save;
+      } catch (saveErr) {
+        const isFkError = saveErr.message?.includes('simulation_runs_model_id_fkey') ||
+                          saveErr.code === '23503';
+        if (isFkError) {
+          saveLocalRun(modelId, result, config);
+          setSaveStatus({ state: 'error', message: '✗ Save failed: model not yet saved to the database. Results kept locally — save the model first.' });
+          setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: "⚠️ Model must be saved before results can be stored in the database." }]);
+          saveInProgressRef.current = false;
+          return;
+        }
+        throw saveErr;
+      }
       if (runId) {
         setLatestRunId(runId);
         storeRunNarrative(runId, model, result);
