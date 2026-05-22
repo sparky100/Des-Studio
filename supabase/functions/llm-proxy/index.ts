@@ -36,7 +36,11 @@ function isRateLimited(key: string, maxPerHour: number) {
 function normalizeMessages(messages: unknown): LlmMessage[] {
   return Array.isArray(messages)
     ? messages.map((message: LlmMessage) => ({
-      role: message?.role === "assistant" || message?.role === "system" ? message.role : "user",
+      role: message?.role === "assistant" || message?.role === "assistant-confirm"
+        ? "assistant"
+        : message?.role === "system"
+          ? "system"
+          : "user",
       content: String(message?.content || ""),
     })).filter(message => message.content.trim())
     : [];
@@ -59,7 +63,7 @@ function normalizeRequest(body: Record<string, unknown>, config: LlmProviderConf
   return {
     version: String(body.version || "2026-05-05"),
     kind: String(body.kind || "narrative"), messages,
-    maxTokens: Math.min(Number(body.maxTokens) || Number(body.max_tokens) || 450, 4000),
+    maxTokens: Math.min(Number(body.maxTokens) || Number(body.max_tokens) || 450, 16000),
     stream: body.stream !== false,
     responseFormat: body.responseFormat === "json" ? "json" : "text",
   };
