@@ -34,6 +34,8 @@ describe("ModelDiffPreview", () => {
 
     render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={onApply} onDiscard={vi.fn()} allowDraftApply />);
 
+    // Expand technical changes to access section checkboxes
+    fireEvent.click(screen.getByText(/show technical changes/i));
     fireEvent.click(screen.getByRole("button", { name: /^apply selected$/i }));
     fireEvent.click(screen.getByLabelText(/apply entity classes/i));
     fireEvent.click(screen.getByLabelText(/apply b-events/i));
@@ -56,7 +58,7 @@ describe("ModelDiffPreview", () => {
 
     render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={onApply} onDiscard={vi.fn()} allowDraftApply />);
 
-    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
 
     expect(screen.getByRole("alert")).toHaveTextContent(/applied as a draft/i);
     expect(onApply).toHaveBeenCalledOnce();
@@ -70,6 +72,9 @@ describe("ModelDiffPreview", () => {
     };
 
     render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={vi.fn()} onDiscard={vi.fn()} />);
+
+    // Expand technical changes to see diff content
+    fireEvent.click(screen.getByText(/show technical changes/i));
 
     expect(screen.getByText("Old Queue")).toBeInTheDocument();
     expect(screen.getByText("discipline")).toBeInTheDocument();
@@ -132,5 +137,84 @@ describe("ModelDiffPreview", () => {
 
     resolveSave();
     await waitFor(() => expect(screen.getByRole("button", { name: /apply & save all/i })).not.toBeDisabled());
+  });
+
+  it("renders simulation summary card with entity and arrival info", () => {
+    const proposed = {
+      entityTypes: [
+        { id: "cust", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "nurse", name: "Nurse", role: "server", count: 2, attrDefs: [] },
+      ],
+      stateVariables: [],
+      bEvents: [{
+        id: "arrive",
+        name: "Patient Arrival",
+        scheduledTime: "0",
+        effect: "ARRIVE(Patient, Waiting)",
+        schedules: [{ eventId: "arrive", dist: "Exponential", distParams: { mean: "8" } }],
+      }],
+      cEvents: [],
+      queues: [{ id: "q", name: "Waiting Room", discipline: "FIFO" }],
+    };
+
+    render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={vi.fn()} onDiscard={vi.fn()} />);
+
+    expect(screen.getByLabelText(/simulation summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/patient.*flowing/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 every 8 time units/i)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting Room/)).toBeInTheDocument();
+    expect(screen.getByText(/2× Nurse/)).toBeInTheDocument();
+  });
+
+  it("renders llmExplanation as italic quote when provided", () => {
+    const proposed = { ...baseModel };
+
+    render(
+      <ModelDiffPreview
+        currentModel={baseModel}
+        proposedModel={proposed}
+        onApply={vi.fn()}
+        onDiscard={vi.fn()}
+        llmExplanation="A simple post office model with two clerks."
+      />
+    );
+
+    expect(screen.getByText(/simple post office model/i)).toBeInTheDocument();
+  });
+
+  it("calls onRefine when Refine this button is clicked", () => {
+    const onRefine = vi.fn();
+    const proposed = { ...baseModel };
+
+    render(
+      <ModelDiffPreview
+        currentModel={baseModel}
+        proposedModel={proposed}
+        onApply={vi.fn()}
+        onDiscard={vi.fn()}
+        onRefine={onRefine}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /refine this/i }));
+    expect(onRefine).toHaveBeenCalledOnce();
+  });
+
+  it("shows technical changes toggle and reveals diff on click", () => {
+    const proposed = {
+      ...baseModel,
+      queues: [{ id: "q2", name: "New Queue", discipline: "FIFO" }],
+    };
+
+    render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={vi.fn()} onDiscard={vi.fn()} />);
+
+    // Technical changes hidden by default
+    expect(screen.queryByText(/sections changed/i)).not.toBeInTheDocument();
+
+    // Click toggle
+    fireEvent.click(screen.getByText(/show technical changes/i));
+
+    // Now diff stats visible
+    expect(screen.getByText(/sections changed/i)).toBeInTheDocument();
   });
 });

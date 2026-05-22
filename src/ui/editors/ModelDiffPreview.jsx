@@ -121,12 +121,102 @@ function renderModifiedSummary(item) {
   );
 }
 
-export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onApply, onApplyAndSave, onDiscard, allowDraftApply = false, readOnly = false }) {
+function deriveSimulationSummary(proposedModel = {}) {
+  const entityTypes = Array.isArray(proposedModel.entityTypes) ? proposedModel.entityTypes : [];
+  const queues = Array.isArray(proposedModel.queues) ? proposedModel.queues : [];
+  const bEvents = Array.isArray(proposedModel.bEvents) ? proposedModel.bEvents : [];
+  const experimentDefaults = proposedModel.experimentDefaults || {};
+
+  const customerType = entityTypes.find(e => e.role === "customer");
+  const serverTypes = entityTypes.filter(e => e.role === "server");
+  const entityName = customerType?.name || "entities";
+
+  // Arrival rate from bEvents with ARRIVE effect
+  let arrivalText = null;
+  const arrivalEvent = bEvents.find(ev => {
+    const eff = Array.isArray(ev.effect) ? ev.effect.join(";") : String(ev.effect || "");
+    return /\bARRIVE\(/i.test(eff);
+  });
+  if (arrivalEvent) {
+    const schedule = Array.isArray(arrivalEvent.schedules) ? arrivalEvent.schedules[0] : null;
+    if (schedule) {
+      const dist = schedule.dist || schedule.type || "";
+      const params = schedule.distParams || {};
+      if (/exponential/i.test(dist) && params.mean) {
+        const mean = parseFloat(params.mean);
+        if (mean > 0) arrivalText = `1 every ${mean} time units (Exponential)`;
+      } else if (/fixed/i.test(dist) && params.value) {
+        arrivalText = `every ${params.value} time units (Fixed)`;
+      } else if (dist) {
+        arrivalText = `${dist} distribution`;
+      }
+    }
+  }
+
+  // Queues summary
+  const queueText = queues.length === 0
+    ? null
+    : queues.length === 1
+      ? `${queues[0].name} (${queues[0].discipline || "FIFO"})`
+      : `${queues.length} queues`;
+
+  // Servers summary
+  const serverText = serverTypes.length === 0
+    ? null
+    : serverTypes.map(s => `${s.count || 1}× ${s.name}`).join(", ");
+
+  // Experiment
+  const duration = experimentDefaults.maxSimTime;
+  const warmup = experimentDefaults.warmupPeriod;
+  const reps = experimentDefaults.replications;
+  const experimentParts = [];
+  if (duration) experimentParts.push(`duration ${duration}`);
+  if (warmup) experimentParts.push(`warmup ${warmup}`);
+  if (reps) experimentParts.push(`${reps} replication${reps === 1 ? "" : "s"}`);
+  const experimentText = experimentParts.length ? experimentParts.join(", ") : null;
+
+  return { entityName, arrivalText, queueText, serverText, experimentText };
+}
+
+function SimulationSummaryCard({ proposedModel }) {
+  const { entityName, arrivalText, queueText, serverText, experimentText } = deriveSimulationSummary(proposedModel);
+  const rows = [
+    arrivalText && { label: "Arrivals", value: arrivalText },
+    queueText && { label: "Queue", value: queueText },
+    serverText && { label: "Servers", value: serverText },
+    experimentText && { label: "Experiment", value: experimentText },
+  ].filter(Boolean);
+
+  if (!rows.length) return null;
+
+  return (
+    <div
+      aria-label="Simulation summary"
+      style={{ background: C.bg, border: `1px solid ${C.accent}44`, borderRadius: 8, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}
+    >
+      <div style={{ color: C.accent, fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>
+        What this model simulates
+      </div>
+      <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, fontWeight: 600, marginBottom: 2 }}>
+        {entityName} flowing through the system
+      </div>
+      {rows.map(({ label, value }) => (
+        <div key={label} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+          <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10, fontWeight: 700, minWidth: 72 }}>{label}</span>
+          <span style={{ color: C.text, fontFamily: FONT, fontSize: 11 }}>{value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onApply, onApplyAndSave, onDiscard, onRefine, allowDraftApply = false, readOnly = false, llmExplanation = null }) {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(SECTION_META.map(section => section.key));
   const [validation, setValidation] = useState(null);
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showTechnical, setShowTechnical] = useState(false);
   const diff = useMemo(() => buildModelDiff(currentModel, proposedModel), [currentModel, proposedModel]);
   const orderedDiff = useMemo(() => {
     return [...diff].sort((a, b) => {
@@ -183,23 +273,13 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
         <Btn small variant="ghost" onClick={onDiscard}>Discard</Btn>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
-        {[
-          { label: "Sections changed", value: summary.changedSections, color: summary.changedSections ? C.accent : C.muted },
-          { label: "Modified", value: summary.modified, color: summary.modified ? C.amber : C.muted },
-          { label: "Added", value: summary.added, color: summary.added ? C.green : C.muted },
-          { label: "Removed", value: summary.removed, color: summary.removed ? C.red : C.muted },
-        ].map(item => (
-          <div key={item.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "9px 10px" }}>
-            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, fontWeight: 700, marginBottom: 4, letterSpacing: 1 }}>
-              {item.label}
-            </div>
-            <div style={{ color: item.color, fontFamily: FONT, fontSize: 18, fontWeight: 700 }}>
-              {item.value}
-            </div>
-          </div>
-        ))}
-      </div>
+      {llmExplanation && (
+        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, fontStyle: "italic", lineHeight: 1.6, borderLeft: `2px solid ${C.accent}44`, paddingLeft: 10 }}>
+          {llmExplanation}
+        </div>
+      )}
+
+      <SimulationSummaryCard proposedModel={proposedModel} />
 
       {validation?.errors?.length > 0 && (
         <div role="alert" style={{ background: C.red + "22", border: `1px solid ${C.red}`, borderRadius: 6, padding: 10, color: C.text, fontFamily: FONT, fontSize: 12 }}>
@@ -218,47 +298,83 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
         </div>
       )}
 
-      {orderedDiff.map(section => {
-        const { added, modified, removed, unchanged } = section.diff;
-        const hasChanges = added.length || modified.length || removed.length;
-        return (
-          <section key={section.key} style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              {selecting && (
-                <input
-                  type="checkbox"
-                  aria-label={`Apply ${section.label}`}
-                  checked={selected.includes(section.key)}
-                  onChange={() => toggleSection(section.key)}
-                />
-              )}
-              <div style={{ color: C.text, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>{section.label}</div>
-              {hasChanges && <Tag label="Changed" color={C.accent} />}
-              {hasChanges && (
-                <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
-                  {[added.length ? `${added.length} added` : "", modified.length ? `${modified.length} modified` : "", removed.length ? `${removed.length} removed` : ""].filter(Boolean).join("  ·  ")}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowTechnical(prev => !prev)}
+          style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontFamily: FONT, fontSize: 11, padding: 0, display: "flex", alignItems: "center", gap: 5 }}
+        >
+          <span style={{ fontSize: 9 }}>{showTechnical ? "▼" : "▶"}</span>
+          Show technical changes
+        </button>
+      </div>
+
+      {showTechnical && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
+            {[
+              { label: "Sections changed", value: summary.changedSections, color: summary.changedSections ? C.accent : C.muted },
+              { label: "Modified", value: summary.modified, color: summary.modified ? C.amber : C.muted },
+              { label: "Added", value: summary.added, color: summary.added ? C.green : C.muted },
+              { label: "Removed", value: summary.removed, color: summary.removed ? C.red : C.muted },
+            ].map(item => (
+              <div key={item.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "9px 10px" }}>
+                <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, fontWeight: 700, marginBottom: 4, letterSpacing: 1 }}>
+                  {item.label}
                 </div>
-              )}
-            </div>
-            <ChangeList title="Added" items={added} color={C.green} renderItem={renderItemSummary} />
-            <ChangeList title="Removed" items={removed} color={C.red} renderItem={renderItemSummary} />
-            <ChangeList title="Modified" items={modified} color={C.amber} renderItem={renderModifiedSummary} />
-            {!hasChanges && (
-              <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", color: C.muted, fontFamily: FONT, fontSize: 10 }}>
-                {unchanged.length} item{unchanged.length === 1 ? "" : "s"} unchanged
+                <div style={{ color: item.color, fontFamily: FONT, fontSize: 18, fontWeight: 700 }}>
+                  {item.value}
+                </div>
               </div>
-            )}
-          </section>
-        );
-      })}
+            ))}
+          </div>
+
+          {orderedDiff.map(section => {
+            const { added, modified, removed, unchanged } = section.diff;
+            const hasChanges = added.length || modified.length || removed.length;
+            return (
+              <section key={section.key} style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  {selecting && (
+                    <input
+                      type="checkbox"
+                      aria-label={`Apply ${section.label}`}
+                      checked={selected.includes(section.key)}
+                      onChange={() => toggleSection(section.key)}
+                    />
+                  )}
+                  <div style={{ color: C.text, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>{section.label}</div>
+                  {hasChanges && <Tag label="Changed" color={C.accent} />}
+                  {hasChanges && (
+                    <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
+                      {[added.length ? `${added.length} added` : "", modified.length ? `${modified.length} modified` : "", removed.length ? `${removed.length} removed` : ""].filter(Boolean).join("  ·  ")}
+                    </div>
+                  )}
+                </div>
+                <ChangeList title="Added" items={added} color={C.green} renderItem={renderItemSummary} />
+                <ChangeList title="Removed" items={removed} color={C.red} renderItem={renderItemSummary} />
+                <ChangeList title="Modified" items={modified} color={C.amber} renderItem={renderModifiedSummary} />
+                {!hasChanges && (
+                  <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", color: C.muted, fontFamily: FONT, fontSize: 10 }}>
+                    {unchanged.length} item{unchanged.length === 1 ? "" : "s"} unchanged
+                  </div>
+                )}
+              </section>
+            );
+          })}
+        </>
+      )}
 
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
         {!readOnly && (
           <>
+            {onRefine && (
+              <Btn variant="ghost" onClick={onRefine} disabled={saving}>Refine this</Btn>
+            )}
             {!selecting && <Btn variant="ghost" onClick={() => setSelecting(true)} disabled={saving}>Apply Selected</Btn>}
             {selecting && <Btn variant="ghost" onClick={() => applyModel("selected")} disabled={!selected.length || saving}>Apply Selected</Btn>}
             {selecting && onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("selected", true)} disabled={!selected.length || saving}>{saving ? "Saving..." : "Apply & Save Selected"}</Btn>}
-            <Btn variant="primary" onClick={() => applyModel("all")} disabled={saving}>Apply All</Btn>
+            <Btn variant="primary" onClick={() => applyModel("all")} disabled={saving}>Apply model</Btn>
             {onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("all", true)} disabled={saving}>{saving ? "Saving..." : "Apply & Save All"}</Btn>}
           </>
         )}

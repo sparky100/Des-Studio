@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { callModelBuilder } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
 import { C, FONT } from "../shared/tokens.js";
@@ -307,6 +307,10 @@ function conditionToLegacyString(condition) {
   return `${variable} ${operator} ${formatConditionValue(condition.value ?? condition.right)}`;
 }
 
+function stripTrailingQuestion(text = "") {
+  return String(text).replace(/[.!]?\s*[\w\s,'-]+(Does this|Is this|Sound right|Shall I|Should I|Would you like|Does that|Can I|May I)[^?]*\?+\s*$/i, "").trim();
+}
+
 function Bubble({ role, content }) {
   const isUser = role === "user";
   const isSystem = role === "system";
@@ -333,15 +337,110 @@ function Bubble({ role, content }) {
   );
 }
 
+function ConfirmBubble({ explanation, onConfirm, onRefute }) {
+  return (
+    <div
+      aria-label="Model confirmation"
+      style={{
+        alignSelf: "flex-start",
+        maxWidth: "85%",
+        background: C.accent + "11",
+        border: `1px solid ${C.accent}`,
+        borderRadius: 8,
+        padding: "12px 14px",
+        color: C.text,
+        fontFamily: FONT,
+        fontSize: 11,
+        lineHeight: 1.7,
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      <div style={{ color: C.accent, fontSize: 10, fontWeight: 700 }}>Ready to build</div>
+      <div style={{ whiteSpace: "pre-wrap" }}>{explanation}</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
+        <button
+          type="button"
+          onClick={onConfirm}
+          style={{
+            background: C.accent,
+            border: "none",
+            borderRadius: 5,
+            color: C.bg,
+            fontFamily: FONT,
+            fontSize: 11,
+            fontWeight: 700,
+            padding: "6px 14px",
+            cursor: "pointer",
+          }}
+        >
+          Looks right — build it
+        </button>
+        <button
+          type="button"
+          onClick={onRefute}
+          style={{
+            background: "none",
+            border: `1px solid ${C.border}`,
+            borderRadius: 5,
+            color: C.muted,
+            fontFamily: FONT,
+            fontSize: 11,
+            padding: "6px 14px",
+            cursor: "pointer",
+          }}
+        >
+          Something&apos;s wrong
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RefinementChips({ suggestions, onChipClick }) {
+  if (!suggestions || !suggestions.length) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingTop: 4 }}>
+      {suggestions.map((suggestion, index) => (
+        <button
+          key={index}
+          type="button"
+          onClick={() => onChipClick(suggestion)}
+          style={{
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: 20,
+            color: C.accent,
+            fontFamily: FONT,
+            fontSize: 10,
+            fontWeight: 600,
+            padding: "5px 12px",
+            cursor: "pointer",
+            transition: "border-color .15s",
+          }}
+        >
+          {suggestion}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveModel }) {
   const [draft, setDraft] = useState("");
   const [history, setHistory] = useState([]);
   const [proposal, setProposal] = useState(null);
+  const [proposalExplanation, setProposalExplanation] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [listening, setListening] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState(null);
+  const [refinementChips, setRefinementChips] = useState([]);
+  const [correctionMode, setCorrectionMode] = useState(false);
   const recognitionRef = useRef(null);
+  const inputAreaRef = useRef(null);
   const systemPrompt = useMemo(() => buildModelBuilderSystemPrompt(), []);
 
   useEffect(() => {
@@ -390,28 +489,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     setError("");
   };
 
-  const send = async () => {
-    const text = draft.trim();
-    if (!text || loading || !canEdit) return;
-    const nextHistory = [...history, { role: "user", content: text }];
-    setHistory(nextHistory);
-    setDraft("");
-    setError("");
-    setNotice("");
-    setLoading(true);
-
-    const messages = [
-      ...nextHistory.slice(-10),
-      {
-        role: "user",
-        content: buildModelBuilderUserMessage(text, model, nextHistory),
-      },
-    ];
-
-    if (nextHistory.filter(turn => turn.role === "assistant").length >= 10) {
-      messages.push({ role: "user", content: "Please now produce a model proposal based on the discussion so far." });
-    }
-
+  const callAndProcess = useCallback(async (messages, userText) => {
     let response;
     try {
       response = await callModelBuilder(systemPrompt, messages, () => {}, err => {
@@ -422,10 +500,18 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       setLoading(false);
       return;
     }
+    const originalSuggestions = response?.suggestions;
 
     if (!response) { setLoading(false); return; }
 
-    // Validation retry loop — up to 3 retries with cumulative error history
+    if (response.intent === "confirm") {
+      const cleanExplanation = stripTrailingQuestion(response.explanation || "");
+      setPendingConfirm({ explanation: cleanExplanation, messages });
+      setHistory(prev => [...prev, { role: "assistant-confirm", content: cleanExplanation }]);
+      setLoading(false);
+      return;
+    }
+
     if (response.proposedModel) {
       let proposal = unwrapProposedModel(response.proposedModel);
       let validation = validateModel(proposal);
@@ -449,7 +535,6 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           proposal = unwrapProposedModel(retryResponse.proposedModel);
           response = retryResponse;
           validation = validateModel(proposal);
-          // Append the assistant's retry response so the next retry has full context
           retryMessages = [...retryMessages, { role: "assistant", content: JSON.stringify(retryResponse) }];
         } else {
           break;
@@ -457,36 +542,104 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       }
 
       setProposal(proposal);
+      setProposalExplanation(response.explanation || null);
       if (validation.errors?.length) {
         setNotice(`This draft still has ${validation.errors.length} model issue(s). Tidy those up in the editors before running.`);
       }
     }
 
     const questions = Array.isArray(response.questions) ? response.questions.filter(Boolean) : [];
-    const content = response.intent === "clarify"
-      ? questions.join("\n")
-      : (response.explanation || "Model proposal received.");
-    const newTurns = [{ role: "assistant", content }];
+    const isRefineOrBuild = response.intent === "build" || response.intent === "refine" || response.intent === "template";
+    const newTurns = [];
 
     if (response.flowDescription && response.intent !== "clarify") {
       const templateNote = response.intent === "template" && response.templateId
         ? `Based on template: ${response.templateId}\n\n`
         : "";
-      newTurns.unshift({
+      newTurns.push({
         role: "system",
         content: `${templateNote}Working draft:\n${response.flowDescription}`,
       });
     }
 
+    if (response.intent === "clarify") {
+      newTurns.push({ role: "assistant", content: questions.join("\n") });
+    } else if (!response.proposedModel) {
+      newTurns.push({ role: "assistant", content: response.explanation || "Model proposal received." });
+    }
+
     setHistory(prev => [...prev, ...newTurns]);
 
-    if (nextHistory.length >= 20) setNotice("Conversation is long - consider starting a new session.");
+    if (isRefineOrBuild) {
+      const chips = Array.isArray(originalSuggestions) ? originalSuggestions.filter(Boolean) : [];
+      setRefinementChips(chips);
+    } else {
+      setRefinementChips([]);
+    }
+
+    if (history.length >= 20) setNotice("Conversation is long — consider starting a new session.");
     setLoading(false);
+  }, [systemPrompt, history.length]);
+
+  const send = async (textOverride) => {
+    const text = (typeof textOverride === "string" ? textOverride : draft).trim();
+    if (!text || loading || !canEdit) return;
+    const nextHistory = [...history, { role: "user", content: text }];
+    setHistory(nextHistory);
+    setDraft("");
+    setError("");
+    setNotice("");
+    setRefinementChips([]);
+    setCorrectionMode(false);
+    setLoading(true);
+
+    const messages = [
+      ...nextHistory.slice(-10),
+      {
+        role: "user",
+        content: buildModelBuilderUserMessage(text, model, nextHistory),
+      },
+    ];
+
+    await callAndProcess(messages, text);
+  };
+
+  const confirmBuild = async () => {
+    if (!pendingConfirm || loading) return;
+    const savedConfirm = pendingConfirm;
+    setPendingConfirm(null);
+    const yesMessage = "yes";
+    const nextHistory = [...history, { role: "user", content: yesMessage }];
+    setHistory(nextHistory);
+    setRefinementChips([]);
+    setLoading(true);
+
+    const messages = [
+      ...savedConfirm.messages,
+      { role: "assistant", content: savedConfirm.explanation },
+      { role: "user", content: buildModelBuilderUserMessage(yesMessage, model, nextHistory) },
+    ];
+
+    await callAndProcess(messages, yesMessage);
+  };
+
+  const refuteConfirm = () => {
+    setPendingConfirm(null);
+    setCorrectionMode(true);
+    setDraft("");
+    setHistory(prev => prev.filter(turn => turn.role !== "assistant-confirm"));
+    setTimeout(() => inputAreaRef.current?.querySelector("textarea")?.focus(), 0);
+  };
+
+  const handleChipClick = (suggestion) => {
+    setRefinementChips([]);
+    send(suggestion);
   };
 
   const applyProposal = (nextModel, validation = { errors: [], warnings: [] }) => {
     onApplyModel?.(nextModel);
     setProposal(null);
+    setProposalExplanation(null);
     const errorText = validation.errors?.length
       ? `Draft applied with ${validation.errors.length} model issue(s). Fix them in the editors before running.`
       : "";
@@ -494,15 +647,23 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     setNotice(errorText || warningText || "Draft applied. Save when you're happy with it.");
     setHistory(prev => [...prev, { role: "system", content: errorText || "Draft applied to the editable model." }]);
   };
+
   const saveProposal = async (nextModel, validation = { errors: [], warnings: [] }) => {
     await onSaveModel?.(nextModel);
     setProposal(null);
+    setProposalExplanation(null);
     const errorText = validation.errors?.length
       ? `Draft saved with ${validation.errors.length} model issue(s). Fix them in the editors before running.`
       : "";
     const warningText = validation.warnings?.length ? validation.warnings.map(w => `[${w.code}] ${w.message}`).join("\n") : "";
     setNotice(errorText || warningText || "Draft applied and saved.");
     setHistory(prev => [...prev, { role: "system", content: errorText || "Draft applied and saved." }]);
+  };
+
+  const handleRefineFromPreview = () => {
+    setProposal(null);
+    setProposalExplanation(null);
+    setTimeout(() => inputAreaRef.current?.querySelector("textarea")?.focus(), 0);
   };
 
   return (
@@ -518,18 +679,33 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           {!history.length && (
             <Empty icon="AI" msg="Start with a plain-language description, or ask for a change to the current model." />
           )}
-          {history.map((turn, index) => <Bubble key={index} role={turn.role} content={turn.content} />)}
+          {history.map((turn, index) => {
+            if (turn.role === "assistant-confirm") {
+              return (
+                <ConfirmBubble
+                  key={index}
+                  explanation={turn.content}
+                  onConfirm={confirmBuild}
+                  onRefute={refuteConfirm}
+                />
+              );
+            }
+            return <Bubble key={index} role={turn.role} content={turn.content} />;
+          })}
+          {refinementChips.length > 0 && (
+            <RefinementChips suggestions={refinementChips} onChipClick={handleChipClick} />
+          )}
           {notice && <Bubble role="system" content={notice} />}
           {error && <div role="alert"><InfoBox color={C.red}>{error}</InfoBox></div>}
         </div>
-        <div style={{ padding: 14, borderTop: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "end" }}>
+        <div ref={inputAreaRef} style={{ padding: 14, borderTop: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "end" }}>
           <Field
             label="Describe or refine"
             value={draft}
             onChange={setDraft}
             multiline
             rows={3}
-            placeholder="e.g. Add another doctor to triage, or build a post office with 2 clerks and a single queue"
+            placeholder={correctionMode ? "Describe what's wrong or what needs changing" : "e.g. Add another doctor to triage, or build a post office with 2 clerks and a single queue"}
           />
           <button
             type="button"
@@ -555,7 +731,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           >
             {listening ? "■ Stop" : "Mic"}
           </button>
-          <Btn variant="primary" onClick={send} disabled={!draft.trim() || loading || !canEdit}>{loading ? "Sending..." : "Send"}</Btn>
+          <Btn variant="primary" onClick={() => send()} disabled={!draft.trim() || loading || !canEdit}>{loading ? "Sending..." : "Send"}</Btn>
         </div>
       </section>
 
@@ -563,9 +739,11 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
         <ModelDiffPreview
           currentModel={model}
           proposedModel={proposal}
+          llmExplanation={proposalExplanation}
           onApply={applyProposal}
           onApplyAndSave={saveProposal}
-          onDiscard={() => setProposal(null)}
+          onDiscard={() => { setProposal(null); setProposalExplanation(null); }}
+          onRefine={handleRefineFromPreview}
           allowDraftApply
         />
       )}

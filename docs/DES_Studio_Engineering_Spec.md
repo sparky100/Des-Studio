@@ -21,6 +21,7 @@
 | v1.7.0 | 2026-05-18 | Sprint 64 | Attribute-conditional service times — `when` predicate on cSchedule entries, first-match semantics, V29 validation, CEventEditor UI |
 | v1.8.0 | 2026-05-18 | Sprint 65 | Actuals tracking — `_plannedTime` on entities, `updateScheduledTime()` API, `avgPlanDeviation` in getSummary(), ActualsStreamAdapter, report Plan vs Actual section |
 | v1.9.0 | 2026-05-18 | Sprint 66 | Visual Designer node badge system; Execute Panel UX — Animate/Collect/Speed to Setup, Export consolidation, Share removal, Log guard, Entity Details rename, Analysis graph formatting |
+| v1.10.0 | 2026-05-22 | Sprint 8C | AI Model Builder specification — three-phase conversation discipline (Discover/Confirm/Generate), `confirm` intent, `suggestions[]` array, validation retry loop, chip UI behaviour. Added §6.10. |
 
 ---
 
@@ -485,6 +486,61 @@ Called for each point in a 1D sweep or 2D sweep grid to determine whether the po
 **Signature:** `buildGoalGaps(model, results) → GoalGap[] | null`
 
 Pre-computes goal gap data for inclusion in both the narrative and suggestion prompts. For each goal, returns: `metric`, `label`, `operator`, `target`, `current` (actual value from `aggregateStats` CI mean or `summary` for single runs), `gap` (`current - target`), and `met` (boolean result of applying the operator).
+
+### 6.10 AI Model Builder (Sprint 8C+)
+
+**Entry point:** `src/llm/model-builder-prompts.js`  
+**Key exports:** `buildModelBuilderSystemPrompt()`, `buildModelBuilderUserMessage()`  
+**Client:** `callModelBuilder(systemPrompt, messages, onStreamChunk, onError)` in `src/llm/apiClient.js` — returns the full response object via `await`; the `onStreamChunk` callback is optional.
+
+#### Response schema
+
+```json
+{
+  "intent": "build | refine | clarify | confirm | template",
+  "templateId": "template-id-or-null",
+  "questions": ["..."] | null,
+  "flowDescription": "...",
+  "proposedModel": { ... } | null,
+  "explanation": "plain English summary",
+  "suggestions": ["optional follow-up refinement action", "..."]
+}
+```
+
+- **`intent: "clarify"`** — LLM needs more information before proposing a model. `proposedModel` is null; `questions[]` contains one or more targeted questions.
+- **`intent: "confirm"`** — LLM has enough information and is asking the user to approve the plan before generating the full model JSON. `proposedModel` is null; `explanation` describes what will be built in plain English. No model is generated in this phase.
+- **`intent: "build"` / `"refine"`** — LLM returns a complete `proposedModel` JSON. `explanation` is a plain-English summary. `suggestions[]` (2–3 items) contains proactive refinement ideas to show as chip buttons.
+- **`intent: "template"`** — LLM identified a matching pre-built template. `templateId` names the template; `proposedModel` is returned.
+
+#### Three-Phase conversation discipline
+
+The system prompt instructs the LLM to follow a structured three-phase process:
+
+| Phase | Intent | Description |
+|-------|--------|-------------|
+| A — Discover | `clarify` | Ask targeted questions to understand the real system before proposing anything |
+| B — Confirm | `confirm` | Summarise the plan in plain English and wait for user approval |
+| C — Generate | `build` / `refine` | Generate the complete model JSON after the user confirms |
+
+Phase B is mandatory for all new build requests. The LLM must not skip straight from discovery to model generation.
+
+#### `suggestions[]` array
+
+After any `build` or `refine` response, the LLM includes 2–3 brief follow-up refinement ideas in `suggestions[]`. These are rendered as pill-shaped chip buttons in `AiGeneratedModelPanel`. Clicking a chip sends the text as the next user message. Chips are cleared when the user manually types and sends a message or when a new chip is clicked.
+
+#### Validation retry loop
+
+`AiGeneratedModelPanel` runs `validateModel(proposal)` on every `proposedModel`. If errors are found, it appends them to the conversation and calls `callModelBuilder` again (up to 3 retries). On success the corrected model replaces the original. The `suggestions[]` from the original (pre-retry) response are preserved and shown to the user regardless of retry count.
+
+#### `AiGeneratedModelPanel` UI behaviour
+
+| State | Trigger | UI |
+|-------|---------|-----|
+| Loading | Any send | Input and Send button disabled |
+| Confirm bubble | `intent: "confirm"` | Styled confirmation card with "Looks right — build it" / "Something's wrong" buttons |
+| Refinement chips | `intent: "build"` or `"refine"` with non-empty `suggestions[]` | Pill buttons below the last message |
+| Correction mode | "Something's wrong" clicked | Placeholder changes to "Describe what's wrong…"; confirmation bubble removed from history |
+| Proposal preview | `proposedModel` returned | `ModelDiffPreview` panel slides in beside the chat |
 
 ---
 

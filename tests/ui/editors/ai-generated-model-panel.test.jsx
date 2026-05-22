@@ -71,7 +71,7 @@ describe("AiGeneratedModelPanel", () => {
     fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A GP practice" } });
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await screen.findByLabelText(/model proposal preview/i);
-    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
 
     expect(handleApply).toHaveBeenCalledOnce();
     expect(handleApply.mock.calls[0][0]).not.toHaveProperty("id");
@@ -144,7 +144,7 @@ describe("AiGeneratedModelPanel", () => {
     fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A post office" } });
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await screen.findByLabelText(/model proposal preview/i);
-    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
 
     expect(handleApply).toHaveBeenCalledOnce();
     expect(handleApply.mock.calls[0][0].cEvents[0].condition)
@@ -199,7 +199,7 @@ describe("AiGeneratedModelPanel", () => {
     fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Post office, arrivals 5 mins, service 7.5 mins" } });
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await screen.findByLabelText(/model proposal preview/i);
-    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
 
     expect(handleApply).toHaveBeenCalledOnce();
     const applied = handleApply.mock.calls[0][0];
@@ -277,7 +277,7 @@ describe("AiGeneratedModelPanel", () => {
     fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A simple queue" } });
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await screen.findByLabelText(/model proposal preview/i);
-    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
 
     const applied = handleApply.mock.calls[0][0];
     expect(applied.bEvents.find(event => event.id === "arrival")).toEqual(expect.objectContaining({
@@ -555,6 +555,164 @@ describe("AiGeneratedModelPanel", () => {
     await waitFor(() => expect(screen.getByText(/based on template.*call-center/i)).toBeInTheDocument());
   });
 
+  describe("F8C.2 — confirmation step", () => {
+    it("renders a styled confirmation bubble when intent is confirm", async () => {
+      const confirmResponse = {
+        intent: "confirm",
+        questions: null,
+        explanation: "I will build a post office with 2 clerks and a single queue.",
+        proposedModel: null,
+      };
+      mockCallModelBuilder.mockResolvedValue(confirmResponse);
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A post office" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByLabelText(/model confirmation/i)).toBeInTheDocument());
+      expect(screen.getByText(/I will build a post office/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /looks right.*build it/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /something.s wrong/i })).toBeInTheDocument();
+    });
+
+    it("auto-sends yes when Looks right — build it is clicked", async () => {
+      let callCount = 0;
+      mockCallModelBuilder.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          return Promise.resolve({ intent: "confirm", explanation: "Ready to build a clinic.", proposedModel: null });
+        }
+        return Promise.resolve({
+          intent: "build",
+          explanation: "Built the clinic.",
+          proposedModel: { ...model },
+        });
+      });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A clinic" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByLabelText(/model confirmation/i)).toBeInTheDocument());
+      fireEvent.click(screen.getByRole("button", { name: /looks right.*build it/i }));
+
+      await waitFor(() => expect(mockCallModelBuilder).toHaveBeenCalledTimes(2));
+      expect(screen.getByLabelText(/model proposal preview/i)).toBeInTheDocument();
+    });
+
+    it("clears confirmation and updates placeholder when Something's wrong is clicked", async () => {
+      mockCallModelBuilder.mockResolvedValue({ intent: "confirm", explanation: "Ready to build.", proposedModel: null });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "A model" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByLabelText(/model confirmation/i)).toBeInTheDocument());
+      fireEvent.click(screen.getByRole("button", { name: /something.s wrong/i }));
+
+      expect(screen.queryByLabelText(/model confirmation/i)).not.toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/describe what.s wrong/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("F8C.4 — proactive refinement chips", () => {
+    it("renders refinement chips after a build response with suggestions", async () => {
+      mockCallModelBuilder.mockResolvedValue({
+        intent: "build",
+        explanation: "Built a model.",
+        proposedModel: { ...model },
+        suggestions: ["Add a second clerk", "Enable reneging after 30 min"],
+      });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Build it" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByText(/Add a second clerk/i)).toBeInTheDocument());
+      expect(screen.getByText(/Enable reneging after 30 min/i)).toBeInTheDocument();
+    });
+
+    it("submits chip text and triggers a second call when a chip is clicked", async () => {
+      // Model with an ARRIVE event avoids the V8 hard-error retry loop (no bEvents = error, one ARRIVE = warning only)
+      const proposedWithArrival = {
+        ...model,
+        bEvents: [{ id: "arrive", name: "Arrival", scheduledTime: "0", effect: "ARRIVE(Customer, Queue1)", schedules: [] }],
+      };
+      let callCount = 0;
+      mockCallModelBuilder.mockImplementation(() => {
+        callCount++;
+        return Promise.resolve({
+          intent: "build",
+          explanation: callCount === 1 ? "Initial model." : "Added second clerk.",
+          proposedModel: proposedWithArrival,
+          suggestions: callCount === 1 ? ["Add a second clerk"] : [],
+        });
+      });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Build it" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByText(/Add a second clerk/i)).toBeInTheDocument());
+      fireEvent.click(screen.getByText(/Add a second clerk/i));
+
+      await waitFor(() => expect(mockCallModelBuilder).toHaveBeenCalledTimes(2));
+    });
+
+    it("clears chips after manual user send", async () => {
+      mockCallModelBuilder.mockResolvedValue({
+        intent: "build",
+        explanation: "Built a model.",
+        proposedModel: { ...model },
+        suggestions: ["Add a second clerk"],
+      });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Build it" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByText(/Add a second clerk/i)).toBeInTheDocument());
+
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Something else" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.queryByText(/Add a second clerk/i)).not.toBeInTheDocument());
+    });
+
+    it("renders no chips after a clarify response", async () => {
+      mockCallModelBuilder.mockResolvedValue({
+        intent: "clarify",
+        questions: ["How many servers do you need?"],
+        proposedModel: null,
+        suggestions: [],
+      });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Build something" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByText(/How many servers/i)).toBeInTheDocument());
+      expect(screen.queryByText(/Add a second/i)).not.toBeInTheDocument();
+    });
+
+    it("renders nothing when suggestions array is empty", async () => {
+      mockCallModelBuilder.mockResolvedValue({
+        intent: "build",
+        explanation: "Built a model.",
+        proposedModel: { ...model },
+        suggestions: [],
+      });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Build" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await screen.findByLabelText(/model proposal preview/i);
+      const chipPattern = /^Add |^Enable |^Try /;
+      expect(screen.queryAllByRole("button").filter(b => chipPattern.test(b.textContent))).toHaveLength(0);
+    });
+  });
+
   it("normalizes Schedule distribution distParams preserving times array and jitterParams", async () => {
     const handleApply = vi.fn();
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
@@ -585,7 +743,7 @@ describe("AiGeneratedModelPanel", () => {
     fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Scheduled arrivals" } });
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await screen.findByLabelText(/model proposal preview/i);
-    fireEvent.click(screen.getByRole("button", { name: /apply all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /apply model/i }));
 
     const applied = handleApply.mock.calls[0][0];
     const sched = applied.bEvents[0].schedules[0];

@@ -79,7 +79,6 @@ export function buildModelBuilderSystemPrompt() {
     "BATCH is only valid in C-Event actions. UNBATCH is only valid in B-Event actions.",
     "Predicates must be structured JSON. Never produce executable code, logic strings requiring eval, or invented operators.",
     "For refine requests, proposedModel must be the complete model after the refinement. The UI computes the diff locally.",
-    "Ask at most two clarifying questions before proposing a model.",
     "If the requested model is too detailed to fit in one complete valid JSON response, return intent clarify and ask for the smallest missing details. Never return partial JSON.",
     "Keep generated model proposals compact: use short IDs, concise names, and only include fields required by DES Studio.",
     "Keep explanation to one short sentence when proposedModel is present.",
@@ -116,12 +115,19 @@ export function buildModelBuilderSystemPrompt() {
     "Piecewise — time-varying rate (e.g. morning rush vs afternoon). Use when arrival rate changes predictably over the day.",
     "Schedule — planned arrival times (appointment schedule, production plan). The B-event's scheduledTime fires the first arrival; times[] holds subsequent absolute times. Example: {\"dist\":\"Schedule\",\"distParams\":{\"times\":[30,60,90,120],\"jitterDist\":\"Normal\",\"jitterParams\":{\"stddev\":\"3\"}}}.",
 
+    "=== THREE-PHASE CONVERSATION DISCIPLINE ===",
+    "Phase A — Discover: Ask targeted questions to understand the real system before proposing any model. Focus on: who arrives and how often, how entities flow through the system, how long each stage takes, resource counts, and what a good outcome looks like. Use intent: clarify. Ask as many turns as genuinely needed — do not rush to JSON.",
+    "Phase B — Confirm: Once you have enough information, describe in plain English what you are about to build — entity types, arrival pattern, queues, service stages, resource counts, and experiment duration. Return intent: confirm with this plain-English summary as explanation. Do NOT generate a proposedModel in this phase. Wait for the user to confirm before proceeding.",
+    "Phase C — Generate: After the user confirms (any affirmative — 'yes', 'looks good', 'build it', 'correct', etc.), generate the complete JSON model. Return intent: build or refine with proposedModel populated.",
+    "Never skip Phase B for any new build request. Always present a plain-English confirmation before generating JSON. For refine requests where the change is obvious, Phase B is optional.",
+    "After any build or refine response, include a suggestions array with 2–3 brief follow-up refinement ideas tailored to the model just produced. Each suggestion must be actionable and specific to that model (e.g. 'Add a second clerk to reduce waiting times', 'Enable reneging for patients waiting more than 30 minutes'). Do not include suggestions after clarify or confirm responses.",
+
     "=== FLOW-FIRST MODEL BUILDING (CRITICAL) ===",
     "Before proposing a model, you MUST first describe the entity flow through the system in flowDescription. This is more important than getting numeric parameters right.",
     "Think step by step: identify every entity type and trace its full path through the system — which queues does it wait in, which server serves it, where does it go after service?",
     "The flow description must explicitly list each entity type followed by its journey: arrives into which queue, which C-event starts its service (ASSIGN to which server), which B-event completes its service, and whether it exits or routes to another queue.",
     "Every queue must correspond to an entity type that waits in it. The customerType field on the queue MUST match the entity type name. If a queue exists, you must be able to state: 'X entities wait in Queue Y'.",
-    "Response schema: {\"intent\":\"build|refine|clarify|template\",\"templateId\":\"template-id-or-null\",\"questions\":[\"...\"]|null,\"flowDescription\":\"Entity flow explanation — required when intent is build, refine, or template\",\"proposedModel\":object|null,\"explanation\":\"plain English summary\"}",
+    "Response schema: {\"intent\":\"build|refine|clarify|confirm|template\",\"templateId\":\"template-id-or-null\",\"questions\":[\"...\"]|null,\"flowDescription\":\"Entity flow explanation — required when intent is build, refine, or template\",\"proposedModel\":object|null,\"explanation\":\"plain English summary\",\"suggestions\":[\"optional follow-up refinement action\",\"...\"]}",
     "The flowDescription field is REQUIRED when intent is build, refine, or template. Do not omit it.",
     "When intent is template, set templateId to the matching template id from the catalogue above.",
     "Example flowDescription: 'Customer entities arrive into MainQueue. StartService C-event (ASSIGN(MainQueue, Clerk)) begins service when queue has waiting customers and a Clerk is idle. It schedules ServiceComplete B-event (COMPLETE()) via cSchedules with the service time distribution. After COMPLETE(), the customer departs the system.'",
@@ -168,6 +174,6 @@ export function buildModelBuilderUserMessage(description, currentModel = {}, con
     simulationResults: results || null,
     userRequest: String(description || ""),
     instruction,
-    requiredResponseKeys: ["intent", "templateId", "questions", "proposedModel", "explanation"],
+    requiredResponseKeys: ["intent", "templateId", "questions", "proposedModel", "explanation", "suggestions"],
   }, null, 2);
 }

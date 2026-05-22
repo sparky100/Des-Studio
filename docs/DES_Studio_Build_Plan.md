@@ -49,7 +49,8 @@ flowchart LR
   S7 --> S8A["Sprint 8A<br/>LLM provider preflight"]
   S8A --> S8["Sprint 8<br/>AI model authoring"]
   S8 --> S8B["Sprint 8B<br/>Model coherence"]
-  S8B --> S9A["Sprint 9A<br/>Visual preflight"]
+  S8B --> S8C["Sprint 8C<br/>AI quality &<br/>outcome presentation"]
+  S8C --> S9A["Sprint 9A<br/>Visual preflight"]
   S9A --> S9["Sprint 9<br/>Visual Designer"]
   S9 --> S9B["Sprint 9B<br/>Visual UX hardening"]
   S9B --> S9C["Sprint 9C<br/>Execute canvas<br/>Live flow view"]
@@ -95,6 +96,7 @@ flowchart LR
 | Dynamic modelling | ✅ Complete | Sprint 7: time-varying arrival rates and resource capacity schedules. |
 | AI model creation | ✅ Complete | Sprint 8A: provider-neutral LLM routing. Sprint 8: natural-language model authoring. Sprint 13: enhanced prompts, validation feedback, results-informed refinement, Suggest Model Changes. |
 | Model definition coherence | ✅ Complete | Sprint 8B: queue/customer/server/service semantics aligned. |
+| AI conversational quality & outcome presentation | ✅ Complete | Sprint 8C: three-phase Discover/Confirm/Generate discipline, confirmation bubble, plain-English simulation summary card, proactive refinement chips, collapsible technical diff. |
 | Visual authoring | ✅ Complete | Sprint 9: graph-first authoring model. Sprint 9B: UX hardening complete. |
 | Execute canvas | ✅ Complete | Sprint 9C: topology-derived live canvas, four live node components, entity token animation, configurable KPI bar, BottomPanel with Stage KPIs. |
 | Modelling expressiveness | ✅ Complete | Sprints 10–12: routing, pooling, time-series, finite queues, balking, entity batching, recirculation. Complete DES vocabulary for healthcare, logistics, and manufacturing. |
@@ -197,6 +199,7 @@ flowchart LR
 | 1.71 | 2026-05-15 | Sprint 33 completed. SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. Documentation cleanup: archived 17 superseded/scratch files. |
 | 1.77 | 2026-05-19 | Sprint 67 planned. Added plain-English UX and Results clarity sprint plan, closure template, capability guide, AGENTS tracking, and product-spec presentation requirements. |
 | 1.78 | 2026-05-20 | Sprint 68 completed. Model versioning as explicit milestones: `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. ADR-015 created. 30 new tests. |
+| 1.79 | 2026-05-22 | Sprint 8C completed. AI Model Generator — three-phase conversation discipline (Discover/Confirm/Generate), `confirm` intent, `suggestions[]` proactive refinement chips, plain-English simulation summary card, collapsible technical diff, `llmExplanation` quote, `onRefine` button. 37 tests passing. Updated flowchart, Roadmap Snapshot, Sprint History. Updated User Guide §2.X and Engineering Spec §6.10. |
 
 ---
 
@@ -259,6 +262,7 @@ flowchart LR
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight. | 22 focused | N/A | Success | Provider-neutral request contract; server-side provider/model routing. |
 | Sprint 8 | ✅ Complete | 2026-05-05 | AI Generated Model Authoring. | 385 (385) | N/A | Success | AI Generated Model tab, model-builder prompts, diff preview, partial apply. |
 | Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence. | Focused | N/A | Success | Stabilised queue/service semantics before visual designer work. |
+| Sprint 8C | ✅ Complete | 2026-05-22 | AI Model Generator — Conversational Quality & Outcome Presentation. | 37 (37) | N/A | Success | Three-phase Discover/Confirm/Generate discipline; `confirm` intent; `suggestions[]` chips; plain-English simulation summary card; collapsible technical diff; `llmExplanation` quote; `onRefine` button. |
 | Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight. | Docs | N/A | Success | ADR-010 accepted. |
 | Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring. | 38 focused | N/A | Success | Graph-first authoring, round-trip parity, drag-to-place palette, visual validation summary. |
 | Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX Hardening. | Focused | N/A | Success | Resource editing, safe delete, richer validation, connection editing, palette affordances, entity attribute logic fixes complete. |

@@ -23,6 +23,7 @@ Version: 1.15.0 (Sprints 1–69)
 | v1.13.0 | 68 | Model versioning — explicit milestones, version history panel, create version dialog with notes, structural change detection, run records reference version |
 | v1.12.0 | 68 | Run History redesign — grouped action pills, More menu, replication count badge, average served per replication; Experiments vs Studies clarified; report export uses model snapshot from run record; "Save this change to model" for AI suggestions |
 | v1.15.0 | 69 | Magic-link model import — encode any model JSON as a URL; opening the link shows a pre-flight preview with validation status, then saves to your library with one click |
+| v1.16.0 | 8C | AI Model Generator three-step flow — Discover/Confirm/Generate conversation discipline, confirmation bubble, plain-English simulation summary card, proactive refinement chips, collapsible technical diff |
 
 ---
 
@@ -141,8 +142,45 @@ Inside the Model Detail view you can build your model three ways — all editing
 | Mode | Access | Best for |
 |------|--------|----------|
 | Forms/Tabs editors | Default view; tabs for each element type | Precise, field-by-field editing of every model element |
-| AI Model Generator | "Generate with AI" button | Bootstrapping a model from a natural-language scenario description |
+| AI Model Generator | "Design with AI" panel | Bootstrapping a model from a natural-language scenario description |
 | Visual Designer | "Visual Designer" tab | Seeing the model as a flow graph; drag-and-drop topology editing |
+
+### 2.X AI Model Generator — three-step conversation flow
+
+The AI Model Generator lets you describe a real-world queueing scenario in plain English and receive a complete, validated simulation model. It uses a structured three-step process to ensure the model reflects your intent before any JSON is generated.
+
+#### Step 1 — Discover
+
+The AI asks targeted clarifying questions about your scenario: who arrives, how often, how many servers, what queues exist, and what you want to measure. Answer in plain English — no simulation jargon needed. The AI will ask as many questions as it needs to understand your system before moving on.
+
+#### Step 2 — Confirm
+
+Once the AI has enough information, it summarises the model it is about to build in plain English (for example: *"I'll model a GP surgery with 2 GPs, a single FIFO waiting room, and patient arrivals every 8 minutes on average."*). A confirmation card appears with two buttons:
+
+- **Looks right — build it** — the AI generates the complete model JSON.
+- **Something's wrong** — the AI discards the plan; describe what needs changing and the conversation continues.
+
+#### Step 3 — Review and apply
+
+The generated model appears in a side-by-side preview panel:
+
+- A **Simulation summary card** describes the model in plain English (entity types, arrival rate, queues, servers).
+- The AI's own explanation appears as an italic quote below the summary.
+- A **Show technical changes** toggle reveals the structured diff (added/removed/modified elements by section) for users who want to inspect the detail.
+- **Apply model** applies the full proposal to your editable model as a draft.
+- **Apply & save all** applies and immediately saves, skipping the draft step.
+- **Apply selected** lets you cherry-pick which sections (Entity Classes, B-Events, Queues…) to merge into your existing model.
+- **Refine this** returns focus to the chat input so you can describe a change without discarding the current proposal.
+
+#### Proactive refinement chips
+
+After any build or refine response, the AI suggests 2–3 follow-up refinements as pill-shaped chip buttons (for example: *"Add a second clerk"*, *"Enable reneging after 30 min"*). Clicking a chip sends that text as your next message. Chips disappear when you click one or type and send a message manually.
+
+#### Tips
+
+- Be specific about numbers: "three nurses" is better than "some nurses".
+- You can refine iteratively: each "Refine this" round preserves the existing model and only changes what you describe.
+- Use **Apply selected** when you want to merge only part of an AI-generated model into a model you have already built manually.
 
 ---
 
