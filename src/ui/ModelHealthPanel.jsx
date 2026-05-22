@@ -70,31 +70,24 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
           </div>
         </div>
       </div>
-      {issues.length > 0 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end", flex: "1 1 320px", minWidth: 0 }}>
-          {issues.map((issue, index) => {
-            const targetTab = issue.tab || "overview";
-            const tabLabel = MODEL_HEALTH_TAB_LABELS[targetTab] || "Overview";
-            const isError = blockers.includes(issue);
-            return (
-              <button
-                key={`${issue.code}-${index}-${targetTab}`}
-                type="button"
-                onClick={() => setTab(targetTab)}
-                title={issue.message}
-                style={{
-                  background: isError ? C.errorBg : C.warmup,
-                  border: `1px solid ${isError ? C.danger : C.amber}66`,
-                  borderRadius: 6, color: isError ? C.error : C.warnBg,
-                  cursor: "pointer", fontFamily: FONT, fontSize: 11, fontWeight: 700,
-                  padding: "7px 9px", maxWidth: "100%", flex: "1 1 240px",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                }}
-              >
-                {tabLabel}: {issue.message} {issue.code ? `· Code ${issue.code}` : ""}
-              </button>
-            );
-          })}
+      {(hasBlockers || hasWarnings) && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {hasBlockers && (
+            <button type="button" onClick={() => setTab("validate")}
+              style={{ background: alpha(C.red, 0.1), border: `1px solid ${alpha(C.red, 0.35)}`, borderRadius: 6, color: C.red, cursor: "pointer", fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "6px 10px", whiteSpace: "nowrap" }}>
+              {blockers.length} error{blockers.length !== 1 ? "s" : ""}
+            </button>
+          )}
+          {hasWarnings && (
+            <button type="button" onClick={() => setTab("validate")}
+              style={{ background: alpha(C.amber, 0.1), border: `1px solid ${alpha(C.amber, 0.35)}`, borderRadius: 6, color: C.amber, cursor: "pointer", fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "6px 10px", whiteSpace: "nowrap" }}>
+              {warnings.length} warning{warnings.length !== 1 ? "s" : ""}
+            </button>
+          )}
+          <button type="button" onClick={() => setTab("validate")}
+            style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 10, padding: "6px 2px", textDecoration: "underline" }}>
+            Model Health →
+          </button>
         </div>
       )}
       <div style={{
