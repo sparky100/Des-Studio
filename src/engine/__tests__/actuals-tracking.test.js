@@ -58,9 +58,9 @@ describe('_plannedTime on entities', () => {
     // At least some should have _plannedTime set
     const withPlan = patients.filter(e => e._plannedTime != null);
     expect(withPlan.length).toBeGreaterThan(0);
-    // Planned times should match the rows[] times
+    // Planned times should match the rows[] times (first is rows[0].time = 10)
     const plannedTimes = withPlan.map(e => e._plannedTime).sort((a, b) => a - b);
-    expect(plannedTimes[0]).toBe(10);
+    expect(plannedTimes[0]).toBeCloseTo(10, 5);
   });
 });
 

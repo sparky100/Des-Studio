@@ -178,15 +178,14 @@ describe('Engine integration: scheduled arrivals with rows[] attributes', () => 
     const arrivalEvents = bEvents.filter(e => e.event.name === 'Scheduled Arrival');
     const completeEvents = bEvents.filter(e => e.event.name === 'Complete');
 
-    // 4 arrivals: 1 initial (t=0) + 3 from rows[] (t=10, t=30, t=60)
-    expect(arrivalEvents.length).toBe(4);
-    expect(arrivalEvents[0].time).toBeCloseTo(0, 1);
-    expect(arrivalEvents[1].time).toBeCloseTo(10, 1);
-    expect(arrivalEvents[2].time).toBeCloseTo(30, 1);
-    expect(arrivalEvents[3].time).toBeCloseTo(60, 1);
+    // 3 arrivals: exactly the 3 from rows[] (no phantom t=0 arrival)
+    expect(arrivalEvents.length).toBe(3);
+    expect(arrivalEvents[0].time).toBeCloseTo(10, 1);
+    expect(arrivalEvents[1].time).toBeCloseTo(30, 1);
+    expect(arrivalEvents[2].time).toBeCloseTo(60, 1);
 
-    // 4 completions (one per served entity)
-    expect(completeEvents.length).toBe(4);
+    // 3 completions (one per served entity)
+    expect(completeEvents.length).toBe(3);
 
     // Log the B-Event sequence for debugging
     console.log('B-Event sequence:');
@@ -195,7 +194,7 @@ describe('Engine integration: scheduled arrivals with rows[] attributes', () => 
     });
   });
 
-  test('creates N+1 arrivals: 1 initial fire at scheduledTime + N from rows[]', () => {
+  test('creates exactly N arrivals from rows[] (no phantom t=0 arrival)', () => {
     const rows = [
       { time: 10, attrs: { flight_id: 'AC001', aircraft_class: 'narrow_body', route_type: 'domestic', priority: 2 } },
       { time: 30, attrs: { flight_id: 'AC002', aircraft_class: 'wide_body', route_type: 'international', priority: 1 } },
@@ -205,18 +204,16 @@ describe('Engine integration: scheduled arrivals with rows[] attributes', () => 
     const engine = buildEngine(makeScheduleRowsModel(rows), 42, 0, 200);
     const { summary, log } = engine.runAll();
 
-    // 1 initial (at t=0) + 3 from rows[] = 4 total arrivals
-    expect(summary.served).toBe(4);
+    // Exactly 3 arrivals — one per rows[] entry, no phantom arrival at t=0
+    expect(summary.served).toBe(3);
 
-    // Verify arrival times: initial at t=0, then rows at t=10, t=30, t=60
     const arriveTimes = log
       .filter(e => e.phase === 'B' && e.event?.name === 'Scheduled Arrival' && !e.skipped)
       .map(e => e.time);
-    expect(arriveTimes.length).toBe(4);
-    expect(arriveTimes[0]).toBeCloseTo(0, 1);   // initial fire
-    expect(arriveTimes[1]).toBeCloseTo(10, 1);  // rows[0]
-    expect(arriveTimes[2]).toBeCloseTo(30, 1);  // rows[1]
-    expect(arriveTimes[3]).toBeCloseTo(60, 1);  // rows[2]
+    expect(arriveTimes.length).toBe(3);
+    expect(arriveTimes[0]).toBeCloseTo(10, 1);  // rows[0]
+    expect(arriveTimes[1]).toBeCloseTo(30, 1);  // rows[1]
+    expect(arriveTimes[2]).toBeCloseTo(60, 1);  // rows[2]
   });
 
   test('per-arrival attributes from rows[] are correctly assigned to entities', () => {
@@ -230,8 +227,8 @@ describe('Engine integration: scheduled arrivals with rows[] attributes', () => 
     const { entitySummary } = engine.runAll();
 
     // entitySummary includes customer entities + pre-created server entities (2 Runways)
-    // 1 initial + 3 from rows + 2 servers = 6 total
-    expect(entitySummary.length).toBe(6);
+    // 3 from rows + 2 servers = 5 total (no phantom t=0 arrival)
+    expect(entitySummary.length).toBe(5);
 
     // Find customer entities by their flight_id attribute (only rows[] entities have flight_id set)
     const ac001 = entitySummary.find(e => e.attrs?.flight_id === 'AC001');
@@ -254,7 +251,7 @@ describe('Engine integration: scheduled arrivals with rows[] attributes', () => 
     expect(ac003.attrs.priority).toBe(3);
   });
 
-  test('initial arrival has default attributes (no row attrs)', () => {
+  test('no phantom entity with default attributes — only row entities exist', () => {
     const rows = [
       { time: 10, attrs: { flight_id: 'AC001', aircraft_class: 'narrow_body' } },
     ];
@@ -262,13 +259,12 @@ describe('Engine integration: scheduled arrivals with rows[] attributes', () => 
     const engine = buildEngine(makeScheduleRowsModel(rows), 42, 0, 50);
     const { entitySummary } = engine.runAll();
 
-    // 1 initial + 1 from rows + 2 servers = 4 total
-    expect(entitySummary.length).toBe(4);
+    // 1 from rows + 2 servers = 3 total (no phantom t=0 entity with default attrs)
+    expect(entitySummary.length).toBe(3);
 
-    // Initial arrival has default attrs (empty flight_id, default aircraft_class)
-    const initial = entitySummary.find(e => e.attrs?.flight_id === '');
-    expect(initial).toBeDefined();
-    expect(initial.attrs.aircraft_class).toBe('narrow_body'); // default from attrDefs
+    // No entity with empty flight_id (phantom is gone)
+    const phantom = entitySummary.find(e => e.role !== 'server' && e.attrs?.flight_id === '');
+    expect(phantom).toBeUndefined();
 
     // Row arrival has row attrs
     const rowEntity = entitySummary.find(e => e.attrs?.flight_id === 'AC001');
@@ -324,9 +320,9 @@ describe('Engine integration: scheduled arrivals with rows[] attributes', () => 
     const engine = buildEngine(makeScheduleRowsModel(rows), 42, 0, 2000);
     const { summary, entitySummary } = engine.runAll();
 
-    // 1 initial + 150 from rows + 2 servers = 153 total in entitySummary
-    expect(summary.served).toBe(151);
-    expect(entitySummary.length).toBe(153);
+    // 150 from rows + 2 servers = 152 total in entitySummary (no phantom t=0 arrival)
+    expect(summary.served).toBe(150);
+    expect(entitySummary.length).toBe(152);
 
     // Verify all flight IDs are present (only rows[] entities have flight_id)
     const flightIds = entitySummary.map(e => e.attrs?.flight_id).filter(Boolean);
@@ -345,8 +341,8 @@ describe('Engine integration: scheduled arrivals with rows[] attributes', () => 
     const engine = buildEngine(makeScheduleRowsModel(rows), 42, 0, 200);
     const { summary } = engine.runAll();
 
-    // All 4 entities (1 initial + 3 from rows) should be served
-    expect(summary.served).toBe(4);
+    // All 3 entities from rows[] should be served (no phantom t=0 entity)
+    expect(summary.served).toBe(3);
 
     // Verify entities were served (the PRIORITY discipline should have been used)
     // The exact order depends on C-event priority and queue discipline
@@ -362,8 +358,8 @@ describe('Engine integration: scheduled arrivals with rows[] attributes', () => 
     const engine = buildEngine(makeScheduleRowsModel(rows), 42, 0, 10000);
     const { summary } = engine.runAll();
 
-    // 1 initial + 2 from rows[] = 3 total
-    expect(summary.served).toBe(3);
+    // exactly 2 from rows[] = 2 total (no phantom t=0 arrival)
+    expect(summary.served).toBe(2);
   });
 });
 
@@ -440,8 +436,8 @@ describe('End-to-end: CSV text → parsePlanCsv → rows[] → engine', () => {
     const engine = buildEngine(model, 42, 0, 200);
     const { summary, entitySummary } = engine.runAll();
 
-    // Step 4: Verify results (1 initial + 4 from rows[] = 5 total)
-    expect(summary.served).toBe(5);
+    // Step 4: Verify results — exactly 4 from rows[], no phantom arrival
+    expect(summary.served).toBe(4);
 
     // Verify each row entity has correct attributes
     const ac001 = entitySummary.find(e => e.attrs?.flight_id === 'AC001');

@@ -225,20 +225,32 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                     </div>
                   )}
                 </>)}
-                {balkMode==="condition"&&(<>
-                  <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-                    <span style={{fontSize:11,color:C.muted,fontFamily:FONT,whiteSpace:'nowrap'}}>Balk if:</span>
-                    <input aria-label="Balk condition" type="text"
-                      value={typeof ev.balkCondition==='object'&&ev.balkCondition!==null?JSON.stringify(ev.balkCondition):(ev.balkCondition||'')}
-                      onChange={e=>{const v=e.target.value;if(!v){updBalk('balkCondition',null);return;}try{updBalk('balkCondition',JSON.parse(v));}catch{updBalk('balkCondition',v);}}}
-                      placeholder='{"variable":"Queue.Name.length","operator":">","value":10}'
-                      style={{flex:1,minWidth:200,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
+                {balkMode==="condition"&&(()=>{
+                  const bc=typeof ev.balkCondition==='object'&&ev.balkCondition!==null?ev.balkCondition:{variable:'',operator:'>',value:0};
+                  const updBc=(patch)=>updBalk('balkCondition',{...bc,...patch});
+                  const balkVars=[
+                    ...queues.map(q=>({label:`Queue.${q.name}.length`,value:`Queue.${q.name}.length`})),
+                    ...stateVariables.filter(sv=>sv.name).map(sv=>({label:sv.name,value:sv.name})),
+                  ];
+                  const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 6px',outline:'none'};
+                  return(<>
+                  <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>IF</span>
+                    <select value={bc.variable||''} onChange={e=>updBc({variable:e.target.value})} style={{...selSt,flex:1,minWidth:140}}>
+                      <option value=''>— variable —</option>
+                      {balkVars.map(v=><option key={v.value} value={v.value}>{v.label}</option>)}
+                    </select>
+                    <select value={bc.operator||'>'} onChange={e=>updBc({operator:e.target.value})} style={{...selSt,width:52}}>
+                      {['==','!=','<','>','<=','>='].map(op=><option key={op} value={op}>{op}</option>)}
+                    </select>
+                    <input type="number" value={bc.value??''} onChange={e=>updBc({value:e.target.value===''?0:Number(e.target.value)})}
+                      style={{width:70,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 6px',outline:'none'}}/>
                   </div>
                   <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
-                    Entity skips the queue when this predicate is true at arrival time.
-                    Format: JSON object with variable, operator, and value fields.
+                    Entity skips the queue on arrival when this condition is true.
                   </div>
-                </>)}
+                  </>);
+                })()}
               </SectionPanel>
             )}
 

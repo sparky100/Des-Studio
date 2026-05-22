@@ -256,7 +256,8 @@ export function validateVisualGraph(graph = {}) {
     if (node.type === VISUAL_NODE_TYPES.ACTIVITY && (outgoing.get(node.id) || 0) === 0) {
       push("warning", node.id, `${node.label} has no completion route.`);
     }
-    if (node.type === VISUAL_NODE_TYPES.SINK && (incoming.get(node.id) || 0) === 0) {
+    if (node.type === VISUAL_NODE_TYPES.SINK && (incoming.get(node.id) || 0) === 0
+        && node.sublabel !== "Reneging exit") {
       push("warning", node.id, `${node.label} has no incoming activity.`);
     }
   });
