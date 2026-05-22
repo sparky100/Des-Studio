@@ -279,10 +279,40 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
 
   let fel = (runtimeModel.bEvents || [])
     .map(ev => {
-      const scheduledTime = parseFloat(ev.scheduledTime);
+      let scheduledTime = parseFloat(ev.scheduledTime);
+      if (!Number.isFinite(scheduledTime)) scheduledTime = 0;
+
+      // For B-events whose self-schedule entry uses rows[]/times[] planned data,
+      // advance the initial FEL entry to the first planned time so there is no
+      // phantom arrival at t=0 with no attributes.
+      let _scheduleRowAttrs = undefined;
+      for (const sched of ev.schedules || []) {
+        if (sched.eventId !== ev.id) continue; // only self-referencing schedule
+        const dp = sched.distParams || {};
+        const rows = sched.rows ? sched.rows : (Array.isArray(dp.rows) ? dp.rows : null);
+        const rawTimes = rows
+          ? rows.map(r => Number(r.time))
+          : (sched.times ? sched.times.map(Number) : (Array.isArray(dp.times) ? dp.times.map(Number) : []));
+        const isScheduleDist = (sched.dist || "") === "Schedule" || rows || sched.times || dp.rows || dp.times;
+        if (isScheduleDist && rawTimes.length > 0 && Number.isFinite(rawTimes[0])) {
+          const schedKey = sched.eventId;
+          // Pre-advance: skip the phantom t=0 firing and start at the first planned time
+          state[`__schedIdx_${schedKey}`] = 1;
+          _scheduleRowAttrs = rows?.[0]?.attrs ?? null;
+          state[`__schedRowAttrs_${schedKey}`] = _scheduleRowAttrs;
+          scheduledTime = rawTimes[0];
+        }
+        break;
+      }
+
       return {
         ...ev,
-        scheduledTime: Number.isFinite(scheduledTime) ? scheduledTime : 0,
+        scheduledTime,
+        ...(_scheduleRowAttrs !== undefined ? {
+          _scheduleRowAttrs,
+          // rows[0] entity is planned for scheduledTime; set so ARRIVE() stores _plannedTime
+          ...(_scheduleRowAttrs !== null ? { _plannedArrivalTime: scheduledTime } : {}),
+        } : {}),
       };
     });
 

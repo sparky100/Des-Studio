@@ -116,52 +116,53 @@ describe('Schedule distribution — engine integration', () => {
     };
   }
 
-  test('exactly N+1 arrivals for N times entries (initial fire + N scheduled)', () => {
-    // 1 initial + 4 scheduled = 5 total arrivals
+  test('exactly N arrivals for N times entries (no phantom t=0 fire)', () => {
+    // 4 entries in times[] → 4 arrivals, first at t=10
     const engine = buildEngine(makeScheduleModel([10, 20, 30, 40]), 1, 0, 200);
     const { summary } = engine.runAll();
-    expect(summary.served).toBe(5);
+    expect(summary.served).toBe(4);
   });
 
   test('no extra arrivals after plan is exhausted', () => {
-    // 1 initial + 1 scheduled = 2 total
+    // 1 entry in times[] → exactly 1 arrival
     const engine = buildEngine(makeScheduleModel([5]), 1, 0, 1000);
     const { summary } = engine.runAll();
-    expect(summary.served).toBe(2);
+    expect(summary.served).toBe(1);
   });
 
   test('arrivals occur at scheduled absolute times', () => {
-    // initial at t=0, then scheduled at t=10 and t=20
+    // times=[10, 20] → arrivals at t=10 and t=20 (no phantom at t=0)
     const engine = buildEngine(makeScheduleModel([10, 20]), 1, 0, 100);
     const { log } = engine.runAll();
     const arriveTimes = log
       .filter(e => e.phase === 'B' && e.event?.name === 'Arrive' && !e.skipped)
       .map(e => e.time);
-    expect(arriveTimes.length).toBe(3);
-    expect(arriveTimes[0]).toBeCloseTo(0,  1);
-    expect(arriveTimes[1]).toBeCloseTo(10, 1);
-    expect(arriveTimes[2]).toBeCloseTo(20, 1);
+    expect(arriveTimes.length).toBe(2);
+    expect(arriveTimes[0]).toBeCloseTo(10, 1);
+    expect(arriveTimes[1]).toBeCloseTo(20, 1);
   });
 
-  test('zero arrivals after plan when maxSimTime is large', () => {
+  test('zero arrivals when times[] is empty (no plan, no phantom)', () => {
     const engine = buildEngine(makeScheduleModel([]), 1, 0, 1000);
     const { summary } = engine.runAll();
-    // Only the initial fire at t=0; no subsequent ones
+    // Empty times[] — phantom fix does not apply, initial fire at t=0
     expect(summary.served).toBe(1);
   });
 
   test('jitter produces arrival times spread around planned times', () => {
+    // Use two entries: times[0] fires as initial FEL (exact), times[1] goes through
+    // sample() and has jitter applied. Check times[1] for variation across seeds.
     const arrivalTimes = [];
     for (let seed = 1; seed <= 20; seed++) {
       resetSeq();
       const engine = buildEngine(
-        makeScheduleModel([10], 'Normal', { stddev: '2' }), seed, 0, 50
+        makeScheduleModel([10, 20], 'Normal', { stddev: '2' }), seed, 0, 50
       );
       const { log } = engine.runAll();
-      // Second arrival (first self-scheduled one) should be near t=10
       const times = log
         .filter(e => e.phase === 'B' && e.event?.name === 'Arrive' && !e.skipped)
         .map(e => e.time);
+      // times[1] is self-scheduled through sample() and carries jitter
       if (times[1] != null) arrivalTimes.push(times[1]);
     }
     expect(arrivalTimes.length).toBeGreaterThan(0);
