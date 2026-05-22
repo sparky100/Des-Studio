@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { C, FONT } from "../shared/tokens.js";
+import { C, FONT, alpha } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../engine/statistics.js";
 import { buildResultsViewModel } from "./resultsViewModel.js";
@@ -304,6 +304,7 @@ function WaitValuesPreview({ dist }) {
 }
 
 function WaitHistogram({ dist, color }) {
+  const [tip, setTip] = useState(null);
   if (!dist || dist.n < 2) return null;
   const vals = dist.values;
   const minV = vals[0];
@@ -318,7 +319,7 @@ function WaitHistogram({ dist, color }) {
   }
   const maxCount = Math.max(...counts, 1);
   const barW = HIST_W / HIST_BINS;
-  const PAD = { top: 14, right: 6, bottom: 16, left: 36 };
+  const PAD = { top: 14, right: 6, bottom: 20, left: 40 };
   const w = HIST_W - PAD.left - PAD.right;
   const h = HIST_H - PAD.top - PAD.bottom;
   const toX = v => PAD.left + ((v - minV) / (maxV - minV)) * w;
@@ -333,25 +334,33 @@ function WaitHistogram({ dist, color }) {
   return (
     <div>
       <svg width={HIST_W} height={HIST_H} aria-label="Wait time histogram"
-        viewBox={`0 0 ${HIST_W} ${HIST_H}`} style={{ display: "block", width: "100%", overflow: "visible" }}>
+        viewBox={`0 0 ${HIST_W} ${HIST_H}`} style={{ display: "block", width: "100%", overflow: "visible" }}
+        onMouseLeave={() => setTip(null)}>
         {yTicks.map((t, i) => {
           const y = PAD.top + h - (t / maxCount) * h;
           return (
             <g key={`${t}-${i}`}>
               <line x1={PAD.left} y1={y} x2={PAD.left + w} y2={y}
-                stroke={C.border} strokeWidth={0.5} strokeDasharray="3,3" />
-              <text x={PAD.left - 4} y={y + 3} textAnchor="end" fontSize={7}
+                stroke={C.chartGrid} strokeWidth={1} />
+              <text x={PAD.left - 4} y={y + 4} textAnchor="end" fontSize={10}
                 fill={C.muted} fontFamily="monospace">{t}</text>
             </g>
           );
         })}
         {counts.map((cnt, i) => {
-          const barH = (cnt / maxCount) * h;
+          const barH = Math.max(cnt > 0 ? 2 : 0, (cnt / maxCount) * h);
+          const bx = barToX(i) + 1;
+          const bw = Math.max(barW - 2, 1);
+          const by = PAD.top + h - barH;
+          const binLo = minV + i * binWidth;
+          const binHi = minV + (i + 1) * binWidth;
           return (
             <rect key={i}
-              x={barToX(i) + 1} y={PAD.top + h - barH}
-              width={Math.max(barW - 2, 1)} height={barH}
-              fill={color} fillOpacity={0.4} rx={1}
+              x={bx} y={by}
+              width={bw} height={barH}
+              fill={alpha(color, 0.85)} rx={4} ry={4}
+              style={{ cursor: "crosshair" }}
+              onMouseEnter={() => setTip({ x: bx + bw / 2, y: by, label: `${binLo.toFixed(1)} – ${binHi.toFixed(1)}`, value: `count: ${cnt}` })}
             />
           );
         })}
@@ -361,13 +370,23 @@ function WaitHistogram({ dist, color }) {
           return (
             <g key={m.label}>
               <line x1={x} y1={PAD.top} x2={x} y2={PAD.top + h}
-                stroke={m.color} strokeWidth={1.5} strokeDasharray="3,2" />
-              <text x={x + 2} y={PAD.top - 2} fontSize={7} fill={m.color} fontFamily="monospace">{m.label}</text>
+                stroke={m.color} strokeWidth={1.5} strokeDasharray="4,3" />
+              <text x={x + 2} y={PAD.top - 2} fontSize={9} fill={m.color} fontFamily="monospace">{m.label}</text>
             </g>
           );
         })}
-        <text x={PAD.left} y={HIST_H - 2} fontSize={7} fill={C.muted} fontFamily="monospace">{Math.round(minV)}</text>
-        <text x={PAD.left + w - 28} y={HIST_H - 2} fontSize={7} fill={C.muted} fontFamily="monospace">{Math.round(maxV)}</text>
+        <text x={PAD.left} y={HIST_H - 4} fontSize={10} fill={C.muted} fontFamily="monospace">{Math.round(minV)}</text>
+        <text x={PAD.left + w - 28} y={HIST_H - 4} fontSize={10} fill={C.muted} fontFamily="monospace">{Math.round(maxV)}</text>
+        {tip && (() => {
+          const TW = 120, TH = 36, TX = Math.min(Math.max(tip.x - TW/2, PAD.left), PAD.left + w - TW), TY = Math.max(tip.y - TH - 6, PAD.top);
+          return (
+            <g style={{ pointerEvents: "none" }}>
+              <rect x={TX} y={TY} width={TW} height={TH} rx={4} fill={C.panel} stroke={C.accent} strokeWidth={1} opacity={0.97} />
+              <text x={TX + TW/2} y={TY + 13} textAnchor="middle" fill={C.muted} fontSize={9} fontFamily={FONT}>{tip.label}</text>
+              <text x={TX + TW/2} y={TY + 27} textAnchor="middle" fill={C.text} fontSize={10} fontFamily={FONT} fontWeight={700}>{tip.value}</text>
+            </g>
+          );
+        })()}
       </svg>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(72px, 1fr))", gap: 6, marginTop: 8 }}>
         {[
@@ -420,12 +439,13 @@ function ChartSectionShell({ section, children }) {
 }
 
 export function MiniLineChart({ title, points, color, yLabel }) {
+  const [tip, setTip] = useState(null);
   if (!points || points.length < 2) return null;
   const maxY = Math.max(...points.map(p => p.value), 1);
   const minY = Math.min(...points.map(p => p.value), 0);
   const maxT = points[points.length - 1].t || 1;
   const minT = points[0].t || 0;
-  const PAD = { top: 14, right: 16, bottom: 24, left: 42 };
+  const PAD = { top: 14, right: 16, bottom: 28, left: 46 };
   const w = CHART_W - PAD.left - PAD.right;
   const h = CHART_H - PAD.top - PAD.bottom;
   const tSpan = Math.max(maxT - minT, 1);
@@ -448,40 +468,50 @@ export function MiniLineChart({ title, points, color, yLabel }) {
         <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{yLabel} · latest {formatNumber(lastPoint.value)} · peak {formatNumber(peakPoint.value)}</span>
       </div>
       <svg width={CHART_W} height={CHART_H} style={{ display: "block", width: "100%", minWidth: 0, minHeight: 110 }}
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`${title} ${yLabel} trend chart`}>
+        viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`${title} ${yLabel} trend chart`}
+        onMouseLeave={() => setTip(null)}>
+        {/* Horizontal grid lines only — no vertical lines */}
         {yTicks.map((t, i) => {
           const y = toY(t);
           return (
             <g key={`${t}-${i}`}>
               <line x1={PAD.left} y1={y} x2={PAD.left + w} y2={y}
-                stroke={C.border} strokeWidth={0.5} strokeDasharray="3,3" />
-              <text x={PAD.left - 4} y={y + 3} textAnchor="end" fontSize={8}
+                stroke={C.chartGrid} strokeWidth={1} />
+              <text x={PAD.left - 4} y={y + 4} textAnchor="end" fontSize={11}
                 fill={C.muted} fontFamily="monospace">{formatNumber(t)}</text>
             </g>
           );
         })}
-        {xTicks.map((t, i) => {
-          const x = toX(t);
-          return (
-            <g key={`x-${t}-${i}`}>
-              <line x1={x} y1={PAD.top} x2={x} y2={PAD.top + h}
-                stroke={C.border} strokeWidth={0.4} strokeDasharray="2,5" />
-              <text x={x} y={CHART_H - 8} textAnchor="middle" fontSize={8}
-                fill={C.muted} fontFamily="monospace">{formatNumber(t)}</text>
-            </g>
-          );
-        })}
-        <line x1={PAD.left} y1={PAD.top + h} x2={PAD.left + w} y2={PAD.top + h} stroke={C.border} strokeWidth={1} />
-        <line x1={PAD.left} y1={PAD.top} x2={PAD.left} y2={PAD.top + h} stroke={C.border} strokeWidth={1} />
-        <polygon points={fillPts} fill={color} fillOpacity={0.1} />
-        <polyline points={linePts} fill="none" stroke={color} strokeWidth="1.5"
+        {/* X axis tick labels (no vertical grid lines) */}
+        {xTicks.map((t, i) => (
+          <text key={`xl-${i}`} x={toX(t)} y={CHART_H - 6} textAnchor="middle" fontSize={11}
+            fill={C.muted} fontFamily="monospace">{formatNumber(t)}</text>
+        ))}
+        <polygon points={fillPts} fill={color} fillOpacity={0.12} />
+        <polyline points={linePts} fill="none" stroke={color} strokeWidth={2.5}
           strokeLinejoin="round" strokeLinecap="round" />
-        <circle cx={toX(lastPoint.t)} cy={toY(lastPoint.value)} r={3} fill={color} stroke={C.bg} strokeWidth={1.5} />
-        <circle cx={toX(peakPoint.t)} cy={toY(peakPoint.value)} r={3} fill={C.amber} stroke={C.bg} strokeWidth={1.5} />
-        <text x={PAD.left + w / 2} y={CHART_H - 1} textAnchor="middle" fontSize={8}
+        {/* Invisible hit targets on each data point for tooltip */}
+        {points.map((p, i) => (
+          <circle key={i} cx={toX(p.t)} cy={toY(p.value)} r={5} fill="transparent"
+            style={{ cursor: "crosshair" }}
+            onMouseEnter={() => setTip({ x: toX(p.t), y: toY(p.value), label: `t = ${formatNumber(p.t)}`, value: `${yLabel}: ${formatNumber(p.value)}` })} />
+        ))}
+        <circle cx={toX(lastPoint.t)} cy={toY(lastPoint.value)} r={3} fill={color} stroke={C.bg} strokeWidth={1.5} style={{ pointerEvents: "none" }} />
+        <circle cx={toX(peakPoint.t)} cy={toY(peakPoint.value)} r={3} fill={C.amber} stroke={C.bg} strokeWidth={1.5} style={{ pointerEvents: "none" }} />
+        <text x={PAD.left + w / 2} y={CHART_H - 1} textAnchor="middle" fontSize={11}
           fill={C.muted} fontFamily="monospace">simulation time</text>
-        <text x={11} y={PAD.top + h / 2} textAnchor="middle" fontSize={8}
+        <text x={11} y={PAD.top + h / 2} textAnchor="middle" fontSize={11}
           fill={C.muted} fontFamily="monospace" transform={`rotate(-90 11 ${PAD.top + h / 2})`}>{yLabel}</text>
+        {tip && (() => {
+          const TW = 130, TH = 36, TX = Math.min(Math.max(tip.x - TW/2, PAD.left), PAD.left + w - TW), TY = Math.max(tip.y - TH - 8, PAD.top);
+          return (
+            <g style={{ pointerEvents: "none" }}>
+              <rect x={TX} y={TY} width={TW} height={TH} rx={4} fill={C.panel} stroke={C.accent} strokeWidth={1} opacity={0.97} />
+              <text x={TX + TW/2} y={TY + 13} textAnchor="middle" fill={C.muted} fontSize={9} fontFamily={FONT}>{tip.label}</text>
+              <text x={TX + TW/2} y={TY + 27} textAnchor="middle" fill={C.text} fontSize={10} fontFamily={FONT} fontWeight={700}>{tip.value}</text>
+            </g>
+          );
+        })()}
       </svg>
       <div aria-label={`${title} chart legend`} style={{ display: "flex", gap: 10, flexWrap: "wrap", fontFamily: FONT, fontSize: 9, color: C.muted }}>
         <span><span aria-hidden="true" style={{ color }}>●</span> latest t={formatNumber(lastPoint.t)}</span>

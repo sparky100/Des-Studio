@@ -1,7 +1,7 @@
 // ui/execute/SweepViews.jsx — SweepChart, WarmupChart, Sweep2DGrid, QueueHistogram, EntitySummaryTable
 
 import { useMemo, useState } from "react";
-import { C, FONT } from "../shared/tokens.js";
+import { C, FONT, alpha, lerpColor } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { fmt, METRIC_LABELS } from "./executeHelpers.js";
 
@@ -33,6 +33,7 @@ function pointIsFeasible(goals, aggregateStats) {
 }
 
 export function SweepChart({ results, metric, paramLabel, goals = [] }) {
+  const [tip, setTip] = useState(null);
   if (!results?.length) return null;
 
   const statPath = metric;
@@ -115,11 +116,12 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
           </span>
         </div>
       )}
-      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}
+        onMouseLeave={() => setTip(null)}>
         {yTicks.map((tick, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} />
-            <text x={PAD.left - 6} y={yScale(tick) + 3} textAnchor="end" fill={C.muted} fontSize={9} fontFamily="monospace">
+            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.chartGrid} strokeWidth={1} />
+            <text x={PAD.left - 6} y={yScale(tick) + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace">
               {tick.toFixed(1)}
             </text>
           </g>
@@ -132,40 +134,53 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
             <g key={gi}>
               <line x1={PAD.left} y1={ty} x2={W - PAD.right} y2={ty}
                 stroke={C.amber} strokeWidth={1.5} strokeDasharray="6,3" />
-              <text x={W - PAD.right + 2} y={ty + 3} fill={C.amber} fontSize={8} fontFamily="monospace">
+              <text x={W - PAD.right + 2} y={ty + 3} fill={C.amber} fontSize={9} fontFamily="monospace">
                 {g.operator}{g.target}
               </text>
             </g>
           );
         })}
-        <path d={ciPolygon} fill={`${C.accent}22`} />
-        <path d={ciUpperPath} fill="none" stroke={`${C.accent}55`} strokeWidth={1} strokeDasharray="4,3" />
+        <path d={ciPolygon} fill={alpha(C.accent, 0.12)} />
+        <path d={ciUpperPath} fill="none" stroke={alpha(C.accent, 0.35)} strokeWidth={1} strokeDasharray="4,3" />
         <path d={vValues.map((v, i) => `${i === 0 ? "M" : "L"}${xScale(v).toFixed(1)},${yScale(vLowers[i]).toFixed(1)}`).join(" ")}
-          fill="none" stroke={`${C.accent}55`} strokeWidth={1} strokeDasharray="4,3" />
-        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={2} />
+          fill="none" stroke={alpha(C.accent, 0.35)} strokeWidth={1} strokeDasharray="4,3" />
+        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={2.5} />
         {/* Data points — coloured by feasibility */}
         {vValues.map((v, i) => {
           const f = feasibility[i];
           const isBest = i === bestIdx;
           const col = !hasGoals ? C.accent : f === true ? C.green : f === false ? C.red : C.muted;
+          const cx = xScale(v), cy = yScale(vMeans[i]);
           return (
-            <g key={i}>
-              <circle cx={xScale(v)} cy={yScale(vMeans[i])} r={isBest ? 5 : 3.5}
+            <g key={i}
+              onMouseEnter={() => setTip({ x: cx, y: cy, label: `${paramLabel || "x"} = ${v}`, value: `${(METRIC_LABELS[metric] || metric).slice(0,14)}: ${vMeans[i]?.toFixed(2)}` })}
+              style={{ cursor: "crosshair" }}>
+              <circle cx={cx} cy={cy} r={isBest ? 5 : 3}
                 fill={col} stroke={C.bg} strokeWidth={1.5} opacity={f === false ? 0.5 : 1} />
               {isBest && (
-                <text x={xScale(v)} y={yScale(vMeans[i]) - 8} textAnchor="middle"
-                  fill={C.green} fontSize={8} fontFamily="monospace" fontWeight="bold">best</text>
+                <text x={cx} y={cy - 9} textAnchor="middle"
+                  fill={C.green} fontSize={9} fontFamily="monospace" fontWeight="bold">best</text>
               )}
             </g>
           );
         })}
-        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={9} fontFamily={FONT}>
+        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={11} fontFamily={FONT}>
           {paramLabel || "Parameter value"}
         </text>
-        <text x={8} y={H / 2} textAnchor="middle" fill={C.muted} fontSize={9} fontFamily={FONT}
+        <text x={8} y={H / 2} textAnchor="middle" fill={C.muted} fontSize={11} fontFamily={FONT}
           transform={`rotate(-90, 8, ${H / 2})`}>
           {METRIC_LABELS[metric] || metric}
         </text>
+        {tip && (() => {
+          const TW = 140, TH = 36, TX = Math.min(Math.max(tip.x - TW/2, PAD.left), W - PAD.right - TW), TY = Math.max(tip.y - TH - 8, PAD.top);
+          return (
+            <g style={{ pointerEvents: "none" }}>
+              <rect x={TX} y={TY} width={TW} height={TH} rx={4} fill={C.panel} stroke={C.accent} strokeWidth={1} opacity={0.97} />
+              <text x={TX + TW/2} y={TY + 13} textAnchor="middle" fill={C.muted} fontSize={9} fontFamily={FONT}>{tip.label}</text>
+              <text x={TX + TW/2} y={TY + 27} textAnchor="middle" fill={C.text} fontSize={10} fontFamily={FONT} fontWeight={700}>{tip.value}</text>
+            </g>
+          );
+        })()}
       </svg>
       {bestIdx != null && (
         <div style={{ fontSize: 10, fontFamily: FONT, color: C.green, marginTop: 4 }}>
@@ -210,18 +225,21 @@ export function WarmupChart({ series, truncationPoint, width = 320, height = 100
       <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
         {yTicks.map((tick, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} opacity={0.1} />
-            <text x={PAD.left - 4} y={yScale(tick) + 2} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace">
+            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.chartGrid} strokeWidth={1} />
+            <text x={PAD.left - 4} y={yScale(tick) + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace">
               {tick.toFixed(1)}
             </text>
           </g>
         ))}
-        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={1.5} />
-        <line x1={kneeX} y1={PAD.top} x2={kneeX} y2={H - PAD.bottom} stroke={C.amber} strokeWidth={1} strokeDasharray="3,2" />
-        <text x={kneeX + 3} y={PAD.top + 8} fill={C.amber} fontSize={8} fontFamily="monospace">
+        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={2.5} />
+        {series.filter((_, i) => i % Math.max(1, Math.floor(series.length / 20)) === 0).map((p, i) => (
+          <circle key={i} cx={xScale(p.t)} cy={yScale(p.value)} r={2.5} fill={C.accent} stroke={C.bg} strokeWidth={1} />
+        ))}
+        <line x1={kneeX} y1={PAD.top} x2={kneeX} y2={H - PAD.bottom} stroke={C.amber} strokeWidth={1.5} strokeDasharray="4,3" />
+        <text x={kneeX + 4} y={PAD.top + 12} fill={C.amber} fontSize={10} fontFamily="monospace">
           knee t={Math.round(truncationPoint)}
         </text>
-        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={8} fontFamily="monospace">
+        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={11} fontFamily="monospace">
           Time
         </text>
       </svg>
@@ -260,17 +278,20 @@ export function CumulativeMeanChart({ points, warmupPeriod, width = 320, height 
       <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
         {yTicks.map((tick, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} opacity={0.1} />
-            <text x={PAD.left - 4} y={yScale(tick) + 2} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace">
+            <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.chartGrid} strokeWidth={1} />
+            <text x={PAD.left - 4} y={yScale(tick) + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace">
               {tick.toFixed(2)}
             </text>
           </g>
         ))}
-        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={1.5} />
-        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={8} fontFamily="monospace">
+        <path d={linePath} fill="none" stroke={C.accent} strokeWidth={2.5} />
+        {points.filter((_, i) => i % Math.max(1, Math.floor(points.length / 20)) === 0).map((p, i) => (
+          <circle key={i} cx={xScale(p.index)} cy={yScale(p.mean)} r={2.5} fill={C.accent} stroke={C.bg} strokeWidth={1} />
+        ))}
+        <text x={W / 2} y={H - 2} textAnchor="middle" fill={C.muted} fontSize={11} fontFamily="monospace">
           Observations
         </text>
-        <text x={PAD.left - 2} y={PAD.top + 4} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace" transform={`rotate(-90, ${PAD.left - 14}, ${H / 2})`}>
+        <text x={PAD.left - 2} y={PAD.top + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace" transform={`rotate(-90, ${PAD.left - 14}, ${H / 2})`}>
           Cum. mean
         </text>
       </svg>
@@ -294,13 +315,9 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
   const colorFor = (mean) => {
     if (!Number.isFinite(mean)) return "transparent";
     const t = (mean - minMean) / meanRange;
-    if (t < 0.5) {
-      const s = t * 2;
-      return `rgb(${Math.round(6 + s * (240 - 6))}, ${Math.round(182 + s * (136 - 182))}, ${Math.round(212 + s * (62 - 212))})`;
-    } else {
-      const s = (t - 0.5) * 2;
-      return `rgb(${Math.round(240 + s * (248 - 240))}, ${Math.round(136 + s * (81 - 136))}, ${Math.round(62 + s * (73 - 62))})`;
-    }
+    return t < 0.5
+      ? lerpColor(C.accent, C.amber, t * 2)
+      : lerpColor(C.amber, C.red, (t - 0.5) * 2);
   };
 
   const hasGoals = goals.length > 0;
@@ -372,7 +389,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
                         position: "relative",
                         transition: "border-color 0.15s",
                       }}
-                      onMouseEnter={e => { if (onCellClick) e.currentTarget.style.borderColor = "#fff"; }}
+                      onMouseEnter={e => { if (onCellClick) e.currentTarget.style.borderColor = C.text; }}
                       onMouseLeave={e => { e.currentTarget.style.borderColor = isBest ? C.green : "transparent"; }}>
                       {feasible === false ? (
                         <span style={{ display: "block", fontSize: 9, opacity: 0.7 }}>✗ {fmt(mean)}</span>
@@ -388,7 +405,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: C.muted, fontFamily: FONT }}>
         <span>Low</span>
-        <div style={{ width: 120, height: 10, background: "linear-gradient(to right, #06b6d4, #f0883e, #f85149)", borderRadius: 2 }} />
+        <div style={{ width: 120, height: 10, background: `linear-gradient(to right, ${C.accent}, ${C.amber}, ${C.red})`, borderRadius: 2 }} />
         <span>High</span>
         <span style={{ marginLeft: 8 }}>{METRIC_LABELS[metric] || metric}</span>
       </div>
@@ -397,7 +414,7 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
 }
 
 // G15 — Live queue-depth time-plot chart
-const QUEUE_COLORS = [C.accent, C.amber, C.green, C.purple, C.reneged, "#06b6d4", "#f472b6", "#a78bfa"];
+const QUEUE_COLORS = [C.accent, C.amber, C.green, C.purple, C.reneged, C.kpiArr, C.pink, C.server];
 
 export function QueueDepthTimePlot({ timeSeries, queues, timeUnit, width = 400, height = 140 }) {
   if (!timeSeries || timeSeries.length < 2) {
@@ -436,8 +453,8 @@ export function QueueDepthTimePlot({ timeSeries, queues, timeUnit, width = 400, 
       <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
         {yTicks.map((tick, i) => (
           <g key={i}>
-            <line x1={PAD.left} y1={yScale(tick)} x2={width - PAD.right} y2={yScale(tick)} stroke={C.border} strokeWidth={1} opacity={0.1} />
-            <text x={PAD.left - 4} y={yScale(tick) + 3} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace">
+            <line x1={PAD.left} y1={yScale(tick)} x2={width - PAD.right} y2={yScale(tick)} stroke={C.chartGrid} strokeWidth={1} />
+            <text x={PAD.left - 4} y={yScale(tick) + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace">
               {tick}
             </text>
           </g>
@@ -452,14 +469,14 @@ export function QueueDepthTimePlot({ timeSeries, queues, timeUnit, width = 400, 
           const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${xScale(p.t).toFixed(1)},${yScale(p.v).toFixed(1)}`).join(" ");
           return (
             <g key={qName}>
-              <path d={linePath} fill="none" stroke={color} strokeWidth={1.5} />
+              <path d={linePath} fill="none" stroke={color} strokeWidth={2.5} />
             </g>
           );
         })}
-        <text x={width / 2} y={height - 2} textAnchor="middle" fill={C.muted} fontSize={8} fontFamily="monospace">
+        <text x={width / 2} y={height - 2} textAnchor="middle" fill={C.muted} fontSize={11} fontFamily="monospace">
           {timeUnit ? `Time (${timeUnit})` : "Simulation time"}
         </text>
-        <text x={PAD.left - 2} y={PAD.top + 4} textAnchor="end" fill={C.muted} fontSize={8} fontFamily="monospace" transform={`rotate(-90, ${PAD.left - 14}, ${height / 2})`}>
+        <text x={PAD.left - 2} y={PAD.top + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace" transform={`rotate(-90, ${PAD.left - 14}, ${height / 2})`}>
           Queue depth
         </text>
       </svg>
@@ -496,6 +513,7 @@ export function QueueHistogram({ waitDist }) {
 }
 
 function QueueHistogramCard({ name, dist }) {
+  const [tip, setTip] = useState(null);
   const values = Array.isArray(dist.values) && dist.values.length > 0 ? dist.values : null;
   const W = 280, H = 140, PAD = { top: 10, right: 10, bottom: 24, left: 34 };
   const plotW = W - PAD.left - PAD.right;
@@ -550,18 +568,26 @@ function QueueHistogramCard({ name, dist }) {
   return (
     <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
       <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, fontWeight: 700, marginBottom: 4 }}>{name}</div>
-      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", overflow: "visible" }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", overflow: "visible" }}
+        onMouseLeave={() => setTip(null)}>
         {/* Grid lines */}
         {Array.from({ length: 3 }, (_, i) => PAD.top + (plotH / 2) * i).map((y, i) => (
-          <line key={i} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke={C.border} strokeWidth={1} opacity={0.1} />
+          <line key={i} x1={PAD.left} y1={y} x2={W - PAD.right} y2={y} stroke={C.chartGrid} strokeWidth={1} />
         ))}
         {/* Bars */}
         {bins.map((b, i) => {
           const bx = xScale(b.x);
-          const bw = Math.max(1, xScale(b.xEnd) - bx - 1);
+          const bw = Math.max(2, xScale(b.xEnd) - bx - 1);
           const by = yScale(b.count);
-          const bh = plotH - (by - PAD.top);
-          return <rect key={i} x={bx} y={by} width={bw} height={bh} fill={C.accent + "66"} stroke={C.accent + "99"} strokeWidth={0.5} />;
+          const bh = Math.max(1, plotH - (by - PAD.top));
+          return (
+            <rect key={i} x={bx} y={by} width={bw} height={bh}
+              rx={4} ry={4}
+              fill={alpha(C.accent, 0.85)} stroke={C.accent} strokeWidth={0.5}
+              style={{ cursor: "crosshair" }}
+              onMouseEnter={() => setTip({ x: bx + bw / 2, y: by, label: `${b.x.toFixed(1)} – ${b.xEnd.toFixed(1)}`, value: `count: ${b.count}` })}
+            />
+          );
         })}
         {/* Percentile lines */}
         {pMarkers.map(m => {
@@ -569,20 +595,30 @@ function QueueHistogramCard({ name, dist }) {
           if (mx < PAD.left || mx > W - PAD.right) return null;
           return (
             <g key={m.label}>
-              <line x1={mx} y1={PAD.top} x2={mx} y2={PAD.top + plotH} stroke={m.color} strokeWidth={1} strokeDasharray="3,2" />
-              <text x={mx + 2} y={PAD.top + 7} fill={m.color} fontSize={7} fontFamily="monospace">{m.label}</text>
+              <line x1={mx} y1={PAD.top} x2={mx} y2={PAD.top + plotH} stroke={m.color} strokeWidth={1.5} strokeDasharray="4,3" />
+              <text x={mx + 2} y={PAD.top + 10} fill={m.color} fontSize={9} fontFamily="monospace">{m.label}</text>
             </g>
           );
         })}
         {/* X axis ticks */}
         {[xMin, (xMin + xMax) / 2, xMax].map((v, i) => (
-          <text key={i} x={xScale(v)} y={H - 4} textAnchor="middle" fill={C.muted} fontSize={7} fontFamily="monospace">
+          <text key={i} x={xScale(v)} y={H - 4} textAnchor="middle" fill={C.muted} fontSize={10} fontFamily="monospace">
             {v.toFixed(1)}
           </text>
         ))}
         {/* Y axis label */}
-        <text x={8} y={H / 2} textAnchor="middle" fill={C.muted} fontSize={7} fontFamily="monospace"
+        <text x={8} y={H / 2} textAnchor="middle" fill={C.muted} fontSize={10} fontFamily="monospace"
           transform={`rotate(-90, 8, ${H / 2})`}>count</text>
+        {tip && (() => {
+          const TW = 110, TH = 36, TX = Math.min(Math.max(tip.x - TW/2, PAD.left), W - PAD.right - TW), TY = Math.max(tip.y - TH - 6, PAD.top);
+          return (
+            <g style={{ pointerEvents: "none" }}>
+              <rect x={TX} y={TY} width={TW} height={TH} rx={4} fill={C.panel} stroke={C.accent} strokeWidth={1} opacity={0.97} />
+              <text x={TX + TW/2} y={TY + 13} textAnchor="middle" fill={C.muted} fontSize={9} fontFamily={FONT}>{tip.label}</text>
+              <text x={TX + TW/2} y={TY + 27} textAnchor="middle" fill={C.text} fontSize={10} fontFamily={FONT} fontWeight={700}>{tip.value}</text>
+            </g>
+          );
+        })()}
       </svg>
       <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginTop: 3, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <span>n={dist.n}</span>

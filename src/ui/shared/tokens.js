@@ -36,6 +36,8 @@ export const C = {
   kpiSvc:  "#10b981",
   overlay:      "rgba(0,0,0,0.67)",
   surfaceHover: "#ffffff0a",
+  chartGrid:    "rgba(255,255,255,0.06)",
+  pink:         "#f472b6",
 };
 
 export const FONT = "'JetBrains Mono','Fira Code',monospace";
@@ -77,6 +79,14 @@ export const TYPO = {
 // alpha(C.amber, 0.1) → "#f0883e1a"
 export const alpha = (hex, opacity) =>
   `${hex}${Math.round(opacity * 255).toString(16).padStart(2, "0")}`;
+
+// Linearly interpolate between two hex colours. t in [0,1].
+export const lerpColor = (hexA, hexB, t) => {
+  const parse = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+  const [r1,g1,b1] = parse(hexA);
+  const [r2,g2,b2] = parse(hexB);
+  return `rgb(${Math.round(r1+t*(r2-r1))},${Math.round(g1+t*(g2-g1))},${Math.round(b1+t*(b2-b1))})`;
+};
 
 // Utility: title-case a string
 export const toTitleCase = s =>
