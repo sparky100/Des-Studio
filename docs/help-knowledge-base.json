@@ -1,0 +1,30 @@
+{
+  "version": "1.0",
+  "generatedAt": "2026-05-22",
+  "sections": {
+    "userGuide": {
+      "gettingStarted": "DES Studio is a browser-based discrete-event simulation (DES) modelling tool. To start: 1) Click '+ New Model' to create from scratch, use a template, or import a file. 2) Define entity types (customers, servers) with attributes. 3) Create queues for waiting lines. 4) Define B-Events (arrivals, completions) and C-Events (service starts). 5) Run the simulation and analyse results.",
+      "entityTypes": "Entity types represent classes of entities in your model (e.g., Customer, Server, Machine). Each entity type has: name, role (customer/server), count (for servers), and optional attributes. Attributes have name, valueType (number/string/boolean), defaultValue, and mutable flag. Mutable attributes can change during simulation.",
+      "queues": "Queues are waiting lines where entities wait for service. Each queue has: name, customerType (which entity type waits here), capacity (optional max), and discipline (FIFO/LIFO/PRIORITY). FIFO = first in first out. LIFO = last in first out. PRIORITY = entities with lower priority number served first.",
+      "bEvents": "B-Events (Bound events) are scheduled events that fire at specific times. They have: name, scheduledTime, effect (macros like ARRIVE, COMPLETE, ASSIGN), and schedules (distributions for re-scheduling). B-Events represent arrivals, service completions, and other time-based occurrences.",
+      "cEvents": "C-Events (Conditional events) fire when their condition is true. They have: name, priority (lower = higher priority), condition (predicate JSON), effect (macros like ASSIGN, BATCH), and cSchedules (distributions for scheduling follow-on B-Events). C-Events represent service starts, batch creation, and other conditional actions.",
+      "distributions": "Distributions model randomness in arrivals and service times. Available: Exponential (memoryless, mean=1/rate), Uniform (min to max), Normal (mean, stddev), Triangular (min, mode, max), Fixed (deterministic value), Erlang (k phases), Empirical (from data), Piecewise (time-varying), Schedule (planned times). All distParams values must be strings.",
+      "runningSimulations": "To run: 1) Validate model (no errors). 2) Set seed (for reproducibility) or randomise. 3) Set max simulation time and warm-up period. 4) Set number of replications (typically 10-30 for confidence intervals). 5) Click Run. Results show queue depths, server utilisation, wait times, and throughput.",
+      "results": "Results include: queue time-series (depth over time), server utilisation (% busy), wait time distribution (histogram), and KPIs (avg wait, max wait, served count, renege count). Confidence intervals show statistical precision. Compare runs to see which scenario performs better.",
+      "tips": "Tips: 1) Start with a template for common scenarios. 2) Use exponential inter-arrivals for random arrivals. 3) Set warm-up period to 10-20% of run time. 4) Run 20+ replications for narrow confidence intervals. 5) Check validation before running. 6) Use PRIORITY discipline only when entity has priority attribute."
+    },
+    "engineeringSpec": {
+      "threePhaseMethod": "DES Studio implements Pidd's Three-Phase Method. Phase A: Advance clock to next event time. Phase B: Fire all B-Events at that time. Phase C: Scan C-Events in priority order, firing any whose condition is true, then restart scan from top. This ensures priority ordering and avoids priority inversion.",
+      "modelSchema": "Model JSON has: entityTypes[], stateVariables[], bEvents[], cEvents[], queues[], graph{}, experimentDefaults{}, epoch (optional), userSettings (optional). All sections are arrays except graph and experimentDefaults. Each section has specific required fields validated before running.",
+      "macros": "B-Event macros: ARRIVE(type,queue), COMPLETE(), ASSIGN(queue,server), RELEASE(server,nextQueue), RENEGE(ctx), UNBATCH(queue), PREEMPT(server), FAIL(server), REPAIR(server), SPLIT(type,N,queue), SET(var,expr), SET_ATTR(attr,expr), COST(expr), FILL(container,amt). C-Event macros: ASSIGN(queue,server), BATCH(queue,N), COSEIZE(queue,srv1,srv2...), MATCH(typeA,queueA,typeB,queueB,target), SET(var,expr), SET_ATTR(attr,expr), COST(expr), RENEGE_OLDEST(type), DRAIN(container,amt).",
+      "distributions": "Distribution schema: {dist:\"Exponential\",distParams:{mean:\"5\"}} or {dist:\"Triangular\",distParams:{min:\"3\",mode:\"7\",max:\"15\"}}. All distParams values must be non-empty strings. For arrivals, Exponential(mean) where mean=1/rate. For service, Fixed(value) for deterministic, Triangular for expert estimates, Exponential for random service.",
+      "validation": "Validation rules: V1: Entity names unique. V2: Attribute names unique within entity. V3: defaultValue matches valueType. V4: PRIORITY queue requires priority attribute. V5: Distribution params valid. V6: No stale B-Event references. V7: Activity nodes have 1 in, 1 out edge. V8: At least one Source and one Sink. V9: No undefined variables in conditions. V10: No namespace collisions (Resource, Queue)."
+    },
+    "llmSchema": {
+      "bEventMacros": ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE", "UNBATCH", "PREEMPT", "FAIL", "REPAIR", "SPLIT", "SET", "SET_ATTR", "COST", "FILL"],
+      "cEventMacros": ["ASSIGN", "BATCH", "COSEIZE", "MATCH", "SET", "SET_ATTR", "COST", "RENEGE_OLDEST", "DRAIN"],
+      "distributions": ["exponential", "uniform", "normal", "triangular", "fixed", "erlang", "empirical", "piecewise", "schedule"],
+      "modelSections": ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "epoch", "userSettings", "containerTypes", "dataSources"]
+    }
+  }
+}

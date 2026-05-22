@@ -14,6 +14,7 @@ import { C, FONT, GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
 import { ToastProvider }                    from "./ui/shared/ToastContext.jsx";
 import { KeyboardShortcutsModal }           from "./ui/shared/KeyboardShortcutsModal.jsx";
+import { HelpAssistant }                    from "./ui/HelpAssistant.jsx";
 import { AuthShell }                        from "./ui/AuthShell.jsx";
 import { AppNavBar }                        from "./ui/AppNavBar.jsx";
 import { ModelLibrary }                     from "./ui/ModelLibrary.jsx";
@@ -114,6 +115,7 @@ export default function App(){
   const [shareToken,setShareToken]=useState(null)
   const [showKeyboardShortcuts,setShowKeyboardShortcuts]=useState(false)
   const [pendingImport,setPendingImport]=useState(null)
+  const [helpOpen,setHelpOpen]=useState(false)
 
 
   useEffect(()=>{
@@ -202,7 +204,7 @@ export default function App(){
     const onKey=e=>{
       if(e.key==='?' && !e.ctrlKey && !e.metaKey && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)){
         e.preventDefault();
-        setShowKeyboardShortcuts(v=>!v);
+        setHelpOpen(v=>!v);
       }
     };
     window.addEventListener('keydown',onKey);
@@ -552,6 +554,7 @@ export default function App(){
         profile={profile}
         isAdmin={isAdmin}
         isAdminActive={showAdmin}
+        onHelpOpen={() => setHelpOpen(true)}
         onSettings={() => setShowSettings(true)}
         onAdmin={() => { setShowAdmin(true); setOpenId(null); }}
         onSignOut={signOut}
@@ -607,6 +610,16 @@ export default function App(){
       )}
       {showKeyboardShortcuts && (
         <KeyboardShortcutsModal onClose={()=>setShowKeyboardShortcuts(false)}/>
+      )}
+      {helpOpen && (
+        <HelpAssistant
+          isOpen={helpOpen}
+          onClose={() => setHelpOpen(false)}
+          currentModel={openId ? (models.find(m => m.id === openId) || localModel) : null}
+          currentTab={libraryTab}
+          currentView={openId ? 'model-detail' : 'library'}
+          validation={null}
+        />
       )}
     </div>
     </ToastProvider>

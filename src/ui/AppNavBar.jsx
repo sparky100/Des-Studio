@@ -1,7 +1,7 @@
 // ui/AppNavBar.jsx — Top navigation bar for the authenticated app shell
 import { C, FONT } from "./shared/tokens.js";
 
-export function AppNavBar({ profile, isAdmin, isAdminActive, onSettings, onAdmin, onSignOut }) {
+export function AppNavBar({ profile, isAdmin, isAdminActive, onHelpOpen, onSettings, onAdmin, onSignOut }) {
   return (
     <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 24px", display: "flex", alignItems: "center", gap: 16, height: 52 }}>
       <div>
@@ -23,6 +23,25 @@ export function AppNavBar({ profile, isAdmin, isAdminActive, onSettings, onAdmin
           <span style={{ fontSize: 12, color: C.muted }}>{profile.full_name}</span>
         </div>
       )}
+      <button
+        type="button"
+        aria-label="Help"
+        title="Help"
+        onClick={onHelpOpen}
+        style={{
+          background: "#ffffff08",
+          border: `1px solid ${C.border}`,
+          borderRadius: 5,
+          color: C.muted,
+          fontFamily: FONT,
+          fontSize: 11,
+          padding: "5px 12px",
+          cursor: "pointer",
+          fontWeight: 600,
+        }}
+      >
+        ?
+      </button>
       <button type="button" onClick={onSettings}
         style={{ background: "#ffffff08", border: `1px solid ${C.border}`, borderRadius: 5, color: C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
         Settings

@@ -1,0 +1,519 @@
+// src/ui/HelpAssistant.jsx
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { C, FONT, Z } from './shared/tokens.js';
+import { Btn, Field, SH } from './shared/components.jsx';
+import { callLLMOnce } from '../llm/apiClient.js';
+import { buildHelpAssistantSystemPrompt, buildHelpUserMessage } from '../llm/help-assistant-prompt.js';
+
+// Simple message bubble for conversation
+function MessageBubble({ role, content }) {
+  const isUser = role === 'user';
+  const isAssistant = role === 'assistant';
+  const isSystem = role === 'system';
+  
+  return (
+    <div style={{
+      background: isUser ? C.accent + '22' : isAssistant ? C.bg : C.surface,
+      border: `1px solid ${isUser ? C.accent + '44' : isAssistant ? C.border : C.border}`,
+      borderLeft: isAssistant ? `3px solid ${C.accent}` : 'none',
+      borderRadius: 8,
+      padding: '10px 12px',
+      color: C.text,
+      fontFamily: FONT,
+      fontSize: 11,
+      lineHeight: 1.6,
+      whiteSpace: 'pre-wrap',
+    }}>
+      {isUser && (
+        <div style={{
+          fontSize: 9,
+          fontWeight: 700,
+          color: C.accent,
+          marginBottom: 4,
+          letterSpacing: 0.5,
+        }}>
+          YOU
+        </div>
+      )}
+      {isAssistant && (
+        <div style={{
+          fontSize: 9,
+          fontWeight: 700,
+          color: C.muted,
+          marginBottom: 4,
+          letterSpacing: 0.5,
+        }}>
+          AI
+        </div>
+      )}
+      <div style={{ color: isSystem ? C.muted : C.text }}>
+        {content}
+      </div>
+    </div>
+  );
+}
+
+// Suggested questions per tab/view
+const SUGGESTED_QUESTIONS = {
+  // Model Library
+  my: [
+    "How do I start a new model from scratch?",
+    "Can I copy a model to create a variant?",
+    "How do I export a model to share it?",
+  ],
+  templates: [
+    "Which template should I use for a call centre?",
+    "How do I use a template as a starting point?",
+    "Can I modify a template after applying it?",
+  ],
+  public: [
+    "How do I run a public model?",
+    "What happens when I fork a public model?",
+    "Can I edit a public model?",
+  ],
+  community: [
+    "How do I share my model with the community?",
+    "What models are available in the gallery?",
+    "Can I download a community model?",
+  ],
+  // Designing tabs
+  visual: [
+    "How do I add a queue between two nodes?",
+    "Why can't I connect these nodes?",
+    "What do the different node colours mean?",
+  ],
+  entities: [
+    "How do I add a priority attribute to my Customer?",
+    "What's the difference between mutable and fixed attributes?",
+    "How do I model patients with different triage levels?",
+  ],
+  queues: [
+    "When should I use PRIORITY instead of FIFO?",
+    "How do I set a maximum queue capacity?",
+    "What happens to customers when the queue is full?",
+  ],
+  bevents: [
+    "How do I model arrivals that happen every 5 minutes?",
+    "What distribution should I use for service times?",
+    "Can I schedule arrivals at specific times of day?",
+  ],
+  cevents: [
+    "How do I make service start only when a server is free?",
+    "What operators can I use in conditions?",
+    "Why isn't my C-Event firing?",
+  ],
+  // Running
+  execute: [
+    "How many replications do I need for reliable results?",
+    "Should I use a warm-up period? How long?",
+    "Why is my queue length exploding?",
+  ],
+  // Analyzing
+  results: [
+    "What does it mean if utilisation is over 100%?",
+    "How do I know if my confidence interval is good?",
+    "Which scenario performed better?",
+  ],
+  history: [
+    "How do I compare results from two different runs?",
+    "Can I export my run history to Excel?",
+    "How do I organise runs into experiments?",
+  ],
+  validate: [
+    "What does 'missing Source node' mean and how do I fix it?",
+    "Why am I getting a Phase C truncation warning?",
+    "How do I fix 'queue customerType does not match entity type'?",
+  ],
+  // Default
+  overview: [
+    "I've never built a DES model before. Where do I start?",
+    "What's the difference between B-Events and C-Events?",
+    "Are there example models I can look at?",
+  ],
+};
+
+function getSuggestedQuestions(currentTab, currentView, validation) {
+  const key = currentTab || 'overview';
+  let questions = SUGGESTED_QUESTIONS[key] || SUGGESTED_QUESTIONS.overview;
+  
+  // If validation errors exist, prioritise help with fixing them
+  if (validation?.errors?.length > 0) {
+    return [
+      "How do I fix validation errors?",
+      ...questions.slice(0, 2),
+    ];
+  }
+  
+  // If validation warnings exist, offer help
+  if (validation?.warnings?.length > 0) {
+    return [
+      "What do validation warnings mean?",
+      ...questions.slice(0, 2),
+    ];
+  }
+  
+  return questions.slice(0, 4);
+}
+
+function getWorkflowMode(currentTab, currentView) {
+  if (currentView === 'library') return 'Library';
+  
+  const designingTabs = ['visual', 'entities', 'queues', 'bevents', 'cevents', 'state', 'goals'];
+  const runningTabs = ['execute'];
+  const analyzingTabs = ['results', 'history', 'validate', 'overview'];
+  
+  if (designingTabs.includes(currentTab)) return 'Designing';
+  if (runningTabs.includes(currentTab)) return 'Running';
+  if (analyzingTabs.includes(currentTab)) return 'Analyzing';
+  
+  return 'Designing';
+}
+
+function buildModelSummary(model, validation) {
+  if (!model) return null;
+  
+  return {
+    entityCount: (model.entityTypes || []).length,
+    queueCount: (model.queues || []).length,
+    bEventCount: (model.bEvents || []).length,
+    cEventCount: (model.cEvents || []).length,
+    hasValidationErrors: (validation?.errors || []).length > 0,
+    hasValidationWarnings: (validation?.warnings || []).length > 0,
+  };
+}
+
+export function HelpAssistant({
+  isOpen,
+  onClose,
+  currentModel,
+  currentTab,
+  currentView,
+  validation,
+}) {
+  const [conversationHistory, setConversationHistory] = useState([]);
+  const [suggestedQuestions, setSuggestedQuestions] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [currentResponse, setCurrentResponse] = useState('');
+  const [error, setError] = useState(null);
+  const [inputValue, setInputValue] = useState('');
+  const conversationEndRef = useRef(null);
+  const inputRef = useRef(null);
+  const systemPrompt = useCallback(() => buildHelpAssistantSystemPrompt(), []);
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    try {
+      if (conversationEndRef.current && typeof conversationEndRef.current.scrollIntoView === 'function') {
+        conversationEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    } catch (e) {
+      // Ignore scroll errors in test environments
+    }
+  }, [conversationHistory, currentResponse]);
+
+  // Focus input when panel opens
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  // Update suggested questions when context changes
+  useEffect(() => {
+    if (isOpen) {
+      const questions = getSuggestedQuestions(currentTab, currentView, validation);
+      setSuggestedQuestions(questions);
+    }
+  }, [currentTab, currentView, validation, isOpen]);
+
+  // Handle escape key to close
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [isOpen, onClose]);
+
+  const handleSubmit = useCallback(async (question) => {
+    if (!question.trim() || isLoading) return;
+    
+    const userQuestion = question.trim();
+    setInputValue('');
+    setError(null);
+    
+    // Add user message to history
+    const newHistory = [...conversationHistory, { role: 'user', content: userQuestion }];
+    setConversationHistory(newHistory);
+    setIsLoading(true);
+    setCurrentResponse('');
+    
+    // Build context
+    const workflowMode = getWorkflowMode(currentTab, currentView);
+    const modelSummary = buildModelSummary(currentModel, validation);
+    
+    // Build messages for LLM
+    const messages = [
+      ...conversationHistory.slice(-10), // Keep last 10 turns
+      {
+        role: 'user',
+        content: buildHelpUserMessage(userQuestion, {
+          workflowMode,
+          currentTab,
+          currentView,
+          modelSummary,
+        }),
+      },
+    ];
+    
+    try {
+      const response = await callLLMOnce({
+        kind: 'help-assistant',
+        messages: [
+          { role: 'system', content: systemPrompt() },
+          ...messages,
+        ],
+        maxTokens: 800,
+        stream: false,
+        responseFormat: 'text',
+      });
+      
+      // Extract response text
+      const answer = typeof response === 'string' 
+        ? response 
+        : response?.answer || response?.content || JSON.stringify(response);
+      
+      setConversationHistory(prev => [...prev, { role: 'assistant', content: answer }]);
+    } catch (err) {
+      setError(err?.message || 'Failed to get response from Help Assistant');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [conversationHistory, currentModel, currentTab, currentView, validation, isLoading, systemPrompt]);
+
+  const handleSuggestedClick = (question) => {
+    handleSubmit(question);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit(inputValue);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="help-assistant-title"
+      style={{
+        position: 'fixed',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: '480px',
+        maxWidth: '100vw',
+        background: C.surface,
+        borderLeft: `1px solid ${C.border}`,
+        zIndex: Z.modal,
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: '-4px 0 12px rgba(0,0,0,0.1)',
+      }}
+    >
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '14px 18px',
+        borderBottom: `1px solid ${C.border}`,
+        flexShrink: 0,
+      }}>
+        <div>
+          <div id="help-assistant-title" style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+            Help Assistant
+          </div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+            Ask about DES Studio or modelling concepts
+          </div>
+        </div>
+        <button
+          type="button"
+          aria-label="Close help"
+          onClick={onClose}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: C.muted,
+            fontSize: 18,
+            cursor: 'pointer',
+            lineHeight: 1,
+            padding: '4px',
+          }}
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Conversation Area */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: '14px 18px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}>
+        {/* Suggested Questions */}
+        {conversationHistory.length === 0 && suggestedQuestions.length > 0 && (
+          <div style={{
+            background: C.bg,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            padding: 12,
+          }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, marginBottom: 8 }}>
+              SUGGESTED QUESTIONS
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {suggestedQuestions.map((q, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => handleSuggestedClick(q)}
+                  style={{
+                    background: C.panel,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 6,
+                    padding: '8px 12px',
+                    color: C.text,
+                    fontFamily: FONT,
+                    fontSize: 11,
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = C.accent;
+                    e.currentTarget.style.background = C.accent + '11';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = C.border;
+                    e.currentTarget.style.background = C.panel;
+                  }}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Conversation History */}
+        {conversationHistory.map((turn, i) => (
+          <MessageBubble
+            key={i}
+            role={turn.role}
+            content={turn.content}
+          />
+        ))}
+
+        {/* Current Response (streaming) */}
+        {currentResponse && (
+          <MessageBubble role="assistant" content={currentResponse} />
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div style={{
+            background: C.red + '22',
+            border: `1px solid ${C.red}`,
+            borderRadius: 6,
+            padding: 10,
+            color: C.red,
+            fontFamily: FONT,
+            fontSize: 11,
+          }}>
+            {error}
+          </div>
+        )}
+
+        {/* Loading Indicator */}
+        {isLoading && !currentResponse && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            color: C.muted,
+            fontSize: 11,
+            fontFamily: FONT,
+          }}>
+            <div style={{
+              width: 16,
+              height: 16,
+              border: `2px solid ${C.border}`,
+              borderTopColor: C.accent,
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+            Thinking...
+          </div>
+        )}
+
+        <div ref={conversationEndRef} />
+      </div>
+
+      {/* Input Area */}
+      <div style={{
+        padding: '14px 18px',
+        borderTop: `1px solid ${C.border}`,
+        flexShrink: 0,
+      }}>
+        <Field
+          value={inputValue}
+          onChange={setInputValue}
+          multiline
+          rows={3}
+          placeholder="e.g. How do I set up exponential arrivals?"
+          onKeyDown={handleKeyDown}
+          disabled={isLoading}
+          inputStyle={{
+            width: '100%',
+            background: C.bg,
+            border: `1px solid ${C.border}`,
+            borderRadius: 5,
+            color: C.text,
+            fontFamily: FONT,
+            fontSize: 12,
+            padding: '8px 10px',
+            outline: 'none',
+            boxSizing: 'border-box',
+            resize: 'none',
+          }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+          <Btn
+            variant="primary"
+            onClick={() => handleSubmit(inputValue)}
+            disabled={!inputValue.trim() || isLoading}
+          >
+            Send
+          </Btn>
+        </div>
+      </div>
+
+      {/* Inline styles for animation */}
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
