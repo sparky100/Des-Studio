@@ -20,6 +20,8 @@ import { ModelLibrary }                     from "./ui/ModelLibrary.jsx";
 import { extractImportedModelPayload }      from "./ui/shared/utils.js";
 import { ModelDetail }                      from "./ui/ModelDetail.jsx";
 import { validateModel }                    from "./engine/validation.js";
+import { decodeModelFromUrl, validateLinkModel } from "./utils/importLink.js";
+import { ImportPreview }                    from "./ui/ImportPreview.jsx";
 import DashboardView                        from "./ui/share/DashboardView.jsx";
 import { AdminPanel }                       from "./ui/AdminPanel.jsx";
 import { UserSettingsPanel }               from "./ui/UserSettingsPanel.jsx";
@@ -112,7 +114,19 @@ export default function App(){
   const [showSettings,setShowSettings]=useState(false)
   const [shareToken,setShareToken]=useState(null)
   const [showKeyboardShortcuts,setShowKeyboardShortcuts]=useState(false)
+  const [pendingImport,setPendingImport]=useState(null)
 
+
+  useEffect(()=>{
+    const hash=window.location.hash
+    if(hash.startsWith('#import')){
+      try{
+        const model=decodeModelFromUrl(hash)
+        const {errors,warnings}=validateLinkModel(model)
+        setPendingImport({model,errors,warnings})
+      }catch(_){}
+    }
+  },[])
 
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{
@@ -123,6 +137,17 @@ export default function App(){
       if(event==='PASSWORD_RECOVERY'){setIsRecoverySession(true)}
       setSession(session)
       if(!session){setLoading(false);setModels([]);setProfile(null);setIsRecoverySession(false)}
+      if(session && event==='SIGNED_IN'){
+        const stored=sessionStorage.getItem('des.pendingImport')
+        if(stored){
+          try{
+            const model=JSON.parse(stored)
+            const {errors,warnings}=validateLinkModel(model)
+            setPendingImport({model,errors,warnings})
+            sessionStorage.removeItem('des.pendingImport')
+          }catch(_){}
+        }
+      }
     })
     return ()=>subscription.unsubscribe()
   },[])
@@ -382,6 +407,31 @@ export default function App(){
 
   if(shareToken){
     return <DashboardView token={shareToken} onBack={()=>{setShareToken(null);window.location.hash=''}} />
+  }
+
+  if(pendingImport){
+    return (
+      <ImportPreview
+        model={pendingImport.model}
+        errors={pendingImport.errors}
+        warnings={pendingImport.warnings}
+        user={session?.user||null}
+        onSave={async()=>{
+          const saved=await saveModel({
+            ...pendingImport.model,
+            name:pendingImport.model.name||'Imported Model',
+          },uid)
+          await loadData()
+          setPendingImport(null)
+          if(window.location.hash.startsWith('#import'))window.location.hash=''
+          setOpenId(saved.id)
+        }}
+        onDismiss={()=>{
+          setPendingImport(null)
+          if(window.location.hash.startsWith('#import'))window.location.hash=''
+        }}
+      />
+    )
   }
 
   if(showAdmin){
