@@ -597,7 +597,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       ...nextHistory.slice(-10),
       {
         role: "user",
-        content: buildModelBuilderUserMessage(text, model, nextHistory),
+        content: buildModelBuilderUserMessage(text, model),
       },
     ];
 
@@ -617,7 +617,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     const messages = [
       ...savedConfirm.messages,
       { role: "assistant", content: savedConfirm.explanation },
-      { role: "user", content: buildModelBuilderUserMessage(yesMessage, model, nextHistory) },
+      { role: "user", content: buildModelBuilderUserMessage(yesMessage, model) },
     ];
 
     await callAndProcess(messages, yesMessage);
