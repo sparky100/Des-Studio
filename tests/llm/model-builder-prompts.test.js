@@ -115,18 +115,17 @@ describe("model builder prompts", () => {
     const message = buildModelBuilderUserMessage(
       "Add a second server",
       { entityTypes: [{ id: "srv", name: "Server", role: "server" }], queues: [], bEvents: [], cEvents: [], stateVariables: [] },
-      [{ role: "user", content: "Initial request" }]
     );
     const payload = JSON.parse(message);
     expect(payload.currentModel.entityTypes[0].name).toBe("Server");
-    expect(payload.conversationHistory[0].content).toBe("Initial request");
     expect(payload.requiredResponseKeys).toContain("templateId");
   });
 
-  it("instructs to check the template catalogue when no current model exists", () => {
-    const message = buildModelBuilderUserMessage("Build a call centre", {}, []);
+  it("instructs to follow three-phase discipline when no current model exists", () => {
+    const message = buildModelBuilderUserMessage("Build a call centre", {});
     const payload = JSON.parse(message);
-    expect(payload.instruction).toMatch(/template catalogue/i);
+    expect(payload.instruction).toMatch(/three-phase/i);
+    expect(payload.instruction).toMatch(/Phase B/i);
   });
 
   it("includes simulation results in the payload when results are provided", () => {
@@ -138,7 +137,6 @@ describe("model builder prompts", () => {
     const message = buildModelBuilderUserMessage(
       "Waits are too long, add a server",
       { entityTypes: [{ id: "cust", name: "Customer", role: "customer" }], queues: [], bEvents: [], cEvents: [], stateVariables: [] },
-      [],
       results
     );
     const payload = JSON.parse(message);
@@ -148,7 +146,7 @@ describe("model builder prompts", () => {
   });
 
   it("leaves simulationResults null when no results provided", () => {
-    const message = buildModelBuilderUserMessage("Add a server", { entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, []);
+    const message = buildModelBuilderUserMessage("Add a server", { entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] });
     const payload = JSON.parse(message);
     expect(payload.simulationResults).toBeNull();
   });

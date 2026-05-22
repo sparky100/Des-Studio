@@ -31,13 +31,6 @@ const TEMPLATE_CATALOGUE = [
   { id: "data-center",       name: "Data Center",             domain: "Technology",      scenario: "Large parallel server pool",        macros: "ARRIVE ASSIGN COMPLETE",            when: "Job processing across a large number of servers" },
 ];
 
-function trimHistory(history = [], limit = 10) {
-  return history.slice(-limit).map(turn => ({
-    role: turn.role === "assistant" ? "assistant" : "user",
-    content: String(turn.content || ""),
-  }));
-}
-
 export function buildModelBuilderSystemPrompt() {
   const catalogueLines = TEMPLATE_CATALOGUE.map(t =>
     `  id:${t.id} | "${t.name}" (${t.domain}) | ${t.scenario} | macros: ${t.macros} | use when: ${t.when}`
@@ -161,16 +154,15 @@ export function buildModelBuilderSystemPrompt() {
   ].join("\n");
 }
 
-export function buildModelBuilderUserMessage(description, currentModel = {}, conversationHistory = [], results = null) {
+export function buildModelBuilderUserMessage(description, currentModel = {}, results = null) {
   const hasCurrentModel = MODEL_SECTIONS.some(section => Array.isArray(currentModel?.[section]) && currentModel[section].length);
   const instruction = hasCurrentModel
     ? (results
-      ? "Refine the current model based on the simulation results. Use KPI data to identify bottlenecks and suggest targeted structural changes (e.g. add servers, adjust routing, increase capacity)."
-      : "Refine the current model unless the user explicitly requests a full rebuild.")
-    : "Build a DES Studio model proposal from the request. Check the template catalogue first — if a template matches, adapt it rather than building from scratch.";
+      ? "Refine the current model based on the simulation results. Use KPI data to identify bottlenecks and suggest targeted structural changes (e.g. add servers, adjust routing, increase capacity). Use intent: refine."
+      : "Refine the current model unless the user explicitly requests a full rebuild. Use intent: refine. For simple unambiguous changes you may skip Phase B confirmation.")
+    : "Follow the three-phase conversation discipline from the system prompt. Phase A: ask targeted clarifying questions (intent: clarify) until you have enough detail. Phase B: summarise what you will build in plain English (intent: confirm, no proposedModel). Phase C: generate the model only after the user confirms. Do NOT generate proposedModel until the user has confirmed in Phase B.";
   return JSON.stringify({
     currentModel: hasCurrentModel ? currentModel : null,
-    conversationHistory: trimHistory(conversationHistory),
     simulationResults: results || null,
     userRequest: String(description || ""),
     instruction,

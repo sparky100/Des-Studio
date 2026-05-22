@@ -21,7 +21,11 @@ function normaliseMessages(messages = []) {
   return messages
     .filter(message => message && typeof message === "object")
     .map(message => ({
-      role: message.role === "assistant" || message.role === "system" ? message.role : "user",
+      role: message.role === "assistant" || message.role === "assistant-confirm"
+        ? "assistant"
+        : message.role === "system"
+          ? "system"
+          : "user",
       content: String(message.content || ""),
     }))
     .filter(message => message.content.trim());
@@ -36,7 +40,7 @@ export function buildLlmRequest({
 } = {}) {
   const task = TASK_SET.has(kind) ? kind : LLM_TASKS.NARRATIVE;
   const format = FORMAT_SET.has(responseFormat) ? responseFormat : LLM_RESPONSE_FORMATS.TEXT;
-  const tokenLimit = Math.min(Math.max(Number(maxTokens) || 450, 1), 4000);
+  const tokenLimit = Math.min(Math.max(Number(maxTokens) || 450, 1), 16000);
 
   return {
     version: LLM_CONTRACT_VERSION,

@@ -74,7 +74,7 @@ describe("LLM API client", () => {
     const body = JSON.parse(options.body);
     expect(body).toEqual(expect.objectContaining({
       kind: "model_builder",
-      maxTokens: 4000,
+      maxTokens: 8000,
       stream: false,
       responseFormat: "json",
     }));
