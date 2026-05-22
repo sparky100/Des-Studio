@@ -25,22 +25,19 @@ export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,
       onMouseEnter={e=>e.currentTarget.style.borderColor=C.accent}
       onMouseLeave={e=>e.currentTarget.style.borderColor=C.border}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-        <div style={{fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT,lineHeight:1.3,display:"flex",alignItems:"center",gap:8}}>
-          <span style={{width:8,height:8,borderRadius:"50%",background:healthColor,flexShrink:0}} title={hasErrors ? `${validation.errors.length} error${validation.errors.length===1?"":"s"}` : hasWarnings ? `${validation.warnings.length} warning${validation.warnings.length===1?"":"s"}` : "No issues"}/>
+        <div style={{fontWeight:700,fontSize:14,color:C.text,fontFamily:FONT,lineHeight:1.3}}>
           {model.name}
         </div>
         <div style={{display:"flex",gap:5,flexShrink:0,flexWrap:"wrap"}}>
-          <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
-          {currentVersion > 0 && <Tag label={`V${currentVersion}`} color={C.purple}/>}
           {isOwner&&onCopy&&<Btn small variant="ghost" onClick={e=>{e.stopPropagation();onCopy(model);}}>Copy</Btn>}
           {isOwner&&onDelete&&<Btn small variant="danger" onClick={e=>{e.stopPropagation();onDelete(model);}}>Delete</Btn>}
+          <Tag label={model.visibility} color={model.visibility==="public"?C.green:C.accent}/>
+          {currentVersion > 0 && <Tag label={`V${currentVersion}`} color={C.purple}/>}
         </div>
       </div>
       <div style={{fontSize:12,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>{model.description}</div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <Tag label={`${(model.entityTypes||[]).length} types`} color={C.server}/>
-        <Tag label={`${(model.bEvents||[]).length} B-events`} color={C.bEvent}/>
-        <Tag label={`${(model.cEvents||[]).length} C-events`} color={C.cEvent}/>
+        <Tag label="Validation Status" color={hasErrors ? C.red : hasWarnings ? C.amber : C.green}/>
         {model.statsLoading&&<Tag label="— runs" color={C.muted}/>}
         {!model.statsLoading&&model.statsError&&<Tag label="runs —" color={C.muted}/>}
         {!model.statsLoading&&!model.statsError&&Number.isFinite(runCount)&&runCount>0&&<Tag label={`${runCount} runs`} color={C.green}/>}

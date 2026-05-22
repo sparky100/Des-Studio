@@ -508,7 +508,10 @@ export default function App(){
     return(
       <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
         <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 24px',display:'flex',alignItems:'center',height:52}}>
-          <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2}}>DES STUDIO</div>
+          <div>
+            <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2}}>DES STUDIO</div>
+            <div style={{fontSize:9,color:C.muted,letterSpacing:0.5}}>a simmoldr.app</div>
+          </div>
         </div>
         <div style={{maxWidth:480,margin:'0 auto',padding:'60px 24px',textAlign:'center'}}>
           <div style={{fontSize:18,fontWeight:700,color:C.red,marginBottom:12}}>Account Suspended</div>

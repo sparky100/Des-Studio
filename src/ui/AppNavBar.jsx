@@ -4,8 +4,10 @@ import { C, FONT } from "./shared/tokens.js";
 export function AppNavBar({ profile, isAdmin, isAdminActive, onSettings, onAdmin, onSignOut }) {
   return (
     <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 24px", display: "flex", alignItems: "center", gap: 16, height: 52 }}>
-      <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>DES STUDIO</div>
-      <div style={{ fontSize: 11, color: C.muted, borderLeft: `1px solid ${C.border}`, paddingLeft: 16 }}>Three-Phase · Entities · Servers</div>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>DES STUDIO</div>
+        <div style={{ fontSize: 9, color: C.muted, letterSpacing: 0.5 }}>a simmoldr.app</div>
+      </div>
       <div style={{ flex: 1 }} />
       {profile && (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
