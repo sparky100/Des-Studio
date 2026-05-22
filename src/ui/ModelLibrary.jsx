@@ -13,6 +13,7 @@ export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,
   const validation = useMemo(() => validateModel(model), [model]);
   const hasErrors = validation.errors.length > 0;
   const hasWarnings = validation.warnings.length > 0;
+  const healthLabel = hasErrors ? "Validation Errors" : hasWarnings ? "Validation Warnings" : "Ready";
   const healthColor = hasErrors ? C.red : hasWarnings ? C.amber : C.green;
   const openFromKeyboard=e=>{
     if(e.key==="Enter"||e.key===" "){
@@ -37,7 +38,7 @@ export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,
       </div>
       <div style={{fontSize:12,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>{model.description}</div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <Tag label="Validation Status" color={hasErrors ? C.red : hasWarnings ? C.amber : C.green}/>
+        <Tag label={healthLabel} color={healthColor}/>
         {model.statsLoading&&<Tag label="— runs" color={C.muted}/>}
         {!model.statsLoading&&model.statsError&&<Tag label="runs —" color={C.muted}/>}
         {!model.statsLoading&&!model.statsError&&Number.isFinite(runCount)&&runCount>0&&<Tag label={`${runCount} runs`} color={C.green}/>}

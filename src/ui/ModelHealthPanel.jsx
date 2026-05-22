@@ -10,16 +10,6 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
   const hasWarnings = warnings.length > 0;
   const isGettingStarted = isStarterBlank;
   const isExecuteTab = tab === "execute";
-  const statusColor = isGettingStarted ? C.accent : hasBlockers ? C.red : hasWarnings ? C.amber : C.green;
-  const statusBg = isGettingStarted ? alpha(C.accent, 0.08) : hasBlockers ? C.errorBg : hasWarnings ? C.warmup : alpha(C.green, 0.08);
-  const statusBorder = isGettingStarted ? C.accent : hasBlockers ? C.danger : hasWarnings ? C.amber : C.green;
-  const statusTitle = isGettingStarted
-    ? "Getting started"
-    : hasBlockers
-    ? "Needs fixes before it can run"
-    : hasWarnings
-      ? `Ready to run, but ${warnings.length} thing${warnings.length === 1 ? "" : "s"} ${warnings.length === 1 ? "is" : "are"} worth checking`
-      : "Ready to run";
   const completedRuns = Number.isFinite(model.stats?.runs) ? model.stats.runs : 0;
   const actionHint = isGettingStarted
     ? "Choose a build path below to start defining your model."
@@ -50,13 +40,6 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10, minWidth: 0, flex: "1 1 280px", flexWrap: "wrap" }}>
-        <div style={{
-          background: statusBg, border: `1px solid ${statusBorder}66`, borderRadius: 6,
-          padding: "6px 9px", color: statusColor, fontFamily: FONT, fontSize: 11,
-          fontWeight: 700, whiteSpace: "nowrap",
-        }}>
-          {statusTitle}
-        </div>
         <div style={{ minWidth: 0, flex: "1 1 220px" }}>
           <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.4, fontWeight: 700, marginBottom: 4 }}>MODEL HEALTH</div>
           <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
