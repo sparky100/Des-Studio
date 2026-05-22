@@ -2,7 +2,7 @@ import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[]})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit})=>{
   const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:[],schedules:[],description:""}]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
   const commitName=(i,v)=>{
@@ -80,7 +80,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
           const n=[...events];
           const{balkProbability:_p,balkCondition:_c,...rest}=n[i];
           if(mode==="probability") n[i]={...rest,balkProbability:0.1};
-          else if(mode==="condition") n[i]={...rest,balkCondition:""};
+          else if(mode==="condition") n[i]={...rest,balkCondition:{variable:'',operator:'>',value:0}};
           else n[i]={...rest};
           onChange(n);
         };
@@ -305,7 +305,8 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                     <Btn small variant="danger" ariaLabel={`Remove B-event schedule ${j+1}`} onClick={()=>remS(i,j)}>✕</Btn>
                   </div>
                   <DistPicker value={{dist:s.dist,distParams:s.distParams}} onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams})} compact
-                    attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}/>
+                    attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
+                    epoch={epoch} timeUnit={timeUnit}/>
                   <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:s.isRenege?C.reneged:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
                     <input type="checkbox" checked={!!s.isRenege} onChange={e=>updS(i,j,{isRenege:e.target.checked})} style={{accentColor:C.reneged}}/>
                     Reneging timer

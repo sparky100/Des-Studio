@@ -99,6 +99,8 @@ export function norm(r) {
     graph:          modelJson.graph ?? r.graph ?? null,
     experimentDefaults: modelJson.experimentDefaults ?? r.experiment_defaults ?? {},
     goals:          r.goals            || [],
+    timeUnit:       modelJson.timeUnit ?? 'minutes',
+    epoch:          modelJson.epoch ?? null,
     owner_id:       r.owner_id,
     owner:          r.owner_id,
     createdAt:      r.created_at,
@@ -119,6 +121,8 @@ function modelJsonFromModel(model = {}) {
     graph:                model.graph || null,
     experimentDefaults:   model.experimentDefaults || {},
     goals:                model.goals || [],
+    timeUnit:             model.timeUnit || 'minutes',
+    epoch:                model.epoch || null,
   };
 }
 

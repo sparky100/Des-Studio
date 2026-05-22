@@ -219,6 +219,7 @@ export function validateModel(model) {
         'bevents');
     }
     (b.schedules || []).forEach((s, j) => {
+      if (s.rows || s.times) return; // rows/times entries have no distribution
       checkDist(s.dist, s.distParams,
         `B-Event '${b.name || b.id}' schedule ${j + 1}`, 'bevents');
     });

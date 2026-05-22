@@ -30,6 +30,10 @@ export function extractImportedModelPayload(payload) {
       model[key] = Array.isArray(source[key]) ? source[key] : [];
     }
   }
+  // Preserve scalar settings that are not array-valued model keys
+  if (source.timeUnit) model.timeUnit = source.timeUnit;
+  if (source.epoch)    model.epoch    = source.epoch;
+  if (Array.isArray(source.dataSources)) model.dataSources = source.dataSources;
   return model;
 }
 

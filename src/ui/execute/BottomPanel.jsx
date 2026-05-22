@@ -18,6 +18,7 @@ const TABS = [
   { id: "entities",  label: "Entity Details" },
   { id: "charts",    label: "Charts" },
   { id: "stagekpis", label: "Live Metrics" },
+  { id: "fel",       label: "FEL" },
 ];
 
 const BOTTOM_PANEL_BODY_HEIGHT = 320;
@@ -636,6 +637,64 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
   );
 }
 
+// ── FEL tab ──────────────────────────────────────────────────────────────────
+
+function FelTab({ snap }) {
+  const fel = snap?.felPreview;
+  if (!snap) {
+    return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>Run the simulation to see the Future Events List.</div>;
+  }
+  if (!fel || fel.length === 0) {
+    return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>FEL is empty — simulation complete.</div>;
+  }
+  const clock = snap.clock || 0;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+        {fel.length} event{fel.length !== 1 ? "s" : ""} scheduled · clock t={fmt(clock, 1)}
+        {fel.length === 100 && <span style={{ color: C.amber }}> (showing first 100)</span>}
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
+          <thead>
+            <tr style={{ borderBottom: `2px solid ${C.border}` }}>
+              <th style={{ padding: "4px 10px", textAlign: "left", color: C.muted, fontSize: 10 }}>Scheduled t</th>
+              <th style={{ padding: "4px 10px", textAlign: "left", color: C.muted, fontSize: 10 }}>Δ from now</th>
+              <th style={{ padding: "4px 10px", textAlign: "left", color: C.muted, fontSize: 10 }}>Event</th>
+              <th style={{ padding: "4px 10px", textAlign: "left", color: C.muted, fontSize: 10 }}>Entity</th>
+              <th style={{ padding: "4px 10px", textAlign: "left", color: C.muted, fontSize: 10 }}>Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fel.map((e, i) => {
+              const delta = e.scheduledTime - clock;
+              return (
+                <tr key={i} style={{ borderBottom: `1px solid ${C.bg}`, background: i % 2 === 0 ? "transparent" : `${C.bg}55` }}>
+                  <td style={{ padding: "4px 10px", color: C.bEvent, fontFamily: "monospace", fontWeight: 700 }}>
+                    {fmt(e.scheduledTime, 2)}
+                  </td>
+                  <td style={{ padding: "4px 10px", color: delta < 0.01 ? C.amber : C.muted, fontFamily: "monospace" }}>
+                    +{fmt(delta, 2)}
+                  </td>
+                  <td style={{ padding: "4px 10px", color: C.text }}>{e.name}</td>
+                  <td style={{ padding: "4px 10px", color: e.contextEntityId != null ? C.kpiArr : C.muted }}>
+                    {e.contextEntityId != null ? `#${e.contextEntityId}` : "—"}
+                  </td>
+                  <td style={{ padding: "4px 10px" }}>
+                    {e.isRenege
+                      ? <span style={{ color: C.reneged, fontSize: 10, fontWeight: 700 }}>RENEGE</span>
+                      : <span style={{ color: C.bEvent, fontSize: 10 }}>B-event</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
 export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries, waitDist }) {
@@ -777,6 +836,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
         >
           {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
+          {activeTab === "fel"       && <FelTab snap={snap} />}
           {activeTab === "charts"    && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {waitDist && Object.keys(waitDist).length > 0 ? (

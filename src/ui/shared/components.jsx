@@ -217,7 +217,7 @@ const PiecewiseEditor=({value,onChange,compact})=>{
   );
 };
 
-const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
+const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
   const dp=value?.distParams||{};
   const hasRows=Array.isArray(dp.rows)&&dp.rows.length>0;
   const times=hasRows?dp.rows.map(r=>r.time):(Array.isArray(dp.times)?dp.times:[]);
@@ -226,6 +226,8 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
   const updDp=(patch)=>onChange({...value,distParams:{...dp,...patch}});
   const [rawText,setRawText]=React.useState(times.join(", "));
   const [rowsMode,setRowsMode]=React.useState(hasRows);
+  const [rowsExpanded,setRowsExpanded]=React.useState(false);
+  const ROWS_PREVIEW=5;
   const prevValueRef=React.useRef(value);
   useEffect(()=>{
     if(prevValueRef.current!==value){
@@ -253,9 +255,10 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
     const isXlsx=/\.(xlsx|xls|ods)$/i.test(file.name);
     const reader=new FileReader();
     reader.onload=(ev)=>{
+      const opts={epoch:epoch||null,timeUnit:timeUnit||'minutes'};
       const result=isXlsx
-        ? parseXlsx(ev.target.result)
-        : parsePlanCsv(ev.target.result);
+        ? parseXlsx(ev.target.result,opts)
+        : parsePlanCsv(ev.target.result,opts);
       setCsvPreview({fileName:file.name,...result});
       setPreviewExpanded(false);
     };
@@ -359,6 +362,14 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
             {csvPreview.attrHeaders.length>0&&` · columns: time, ${csvPreview.attrHeaders.join(", ")}`}
             {csvPreview.skipped>0&&<span style={{color:C.amber}}> · {csvPreview.skipped} row{csvPreview.skipped!==1?"s":""} skipped (non-numeric time)</span>}
           </div>
+          {csvPreview.error&&(
+            <div role="alert" style={{fontSize:11,color:C.red,fontFamily:FONT,background:`${C.red}11`,border:`1px solid ${C.red}44`,borderRadius:4,padding:"5px 8px"}}>
+              {csvPreview.error}
+              {csvPreview.error.includes('epoch')&&!epoch&&(
+                <span> Set a simulation start time in the <strong>Model Data</strong> tab first.</span>
+              )}
+            </div>
+          )}
           {csvPreview.rows.length>0&&(
             <div style={{overflowX:"auto"}}>
               <table style={{borderCollapse:"collapse",fontFamily:FONT,fontSize:10}}>
@@ -387,7 +398,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
           )}
           {csvPreview.rows.length>0
             ? <button onClick={confirmCsvImport} style={{...inpSt,cursor:"pointer",color:C.green,alignSelf:"flex-start"}}>✓ Import {csvPreview.rows.length} arrival{csvPreview.rows.length!==1?"s":""}</button>
-            : <div style={{fontSize:11,color:C.amber,fontFamily:FONT}}>No valid rows found — check the file has a numeric time column.</div>
+            : !csvPreview.error&&<div style={{fontSize:11,color:C.amber,fontFamily:FONT}}>No valid rows found — check the file has a numeric time column.</div>
           }
         </div>
       )}
@@ -424,7 +435,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
               </tr>
             </thead>
             <tbody>
-              {(dp.rows||[]).map((row,i)=>(
+              {(rowsExpanded?(dp.rows||[]):(dp.rows||[]).slice(0,ROWS_PREVIEW)).map((row,i)=>(
                 <tr key={i}>
                   <td style={{...tdSt,color:C.muted,fontSize:10,fontFamily:FONT}}>{i+1}</td>
                   <td style={tdSt}>
@@ -445,8 +456,15 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
               ))}
             </tbody>
           </table>
-          <button onClick={addRow} style={{...inpSt,cursor:"pointer",marginTop:4,color:C.green}}>+ Add row</button>
-          <div style={{...labelSt,marginTop:4}}>{(dp.rows||[]).length} planned arrival{(dp.rows||[]).length!==1?"s":""}</div>
+          {(dp.rows||[]).length>ROWS_PREVIEW&&(
+            <button onClick={()=>setRowsExpanded(e=>!e)} style={{...inpSt,cursor:"pointer",marginTop:4,color:C.cEvent,fontSize:10}}>
+              {rowsExpanded?`▲ Show first ${ROWS_PREVIEW}`:`▼ Show all ${(dp.rows||[]).length} rows`}
+            </button>
+          )}
+          <div style={{display:"flex",gap:8,alignItems:"center",marginTop:4}}>
+            <button onClick={addRow} style={{...inpSt,cursor:"pointer",color:C.green}}>+ Add row</button>
+            <div style={labelSt}>{(dp.rows||[]).length} planned arrival{(dp.rows||[]).length!==1?"s":""}</div>
+          </div>
         </div>
         );
       })()}
@@ -482,7 +500,7 @@ const ScheduleEditor=({value,onChange,attrDefs=[]})=>{
   );
 };
 
-const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
+const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[],epoch,timeUnit})=>{
   const fileRef=useRef(null);
   const [csvParse,setCsvParse]=useState(null);
   const [showHelp,setShowHelp]=useState(false);
@@ -682,7 +700,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[]})=>{
       )}
 
       {isPiecewise&&<PiecewiseEditor value={v} onChange={onChange} compact={compact}/>}
-      {isSchedule&&<ScheduleEditor value={v} onChange={onChange} attrDefs={attrDefs}/>}
+      {isSchedule&&<ScheduleEditor value={v} onChange={onChange} attrDefs={attrDefs} epoch={epoch} timeUnit={timeUnit}/>}
 
       {/* CSV column picker */}
       {csvParse&&(

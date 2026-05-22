@@ -265,6 +265,13 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       nextArrivals,
       eventCounts: { ..._eventCounts },
       containers:  Object.keys(containers).length ? containers : undefined,
+      felPreview:  fel.slice(0, 100).map(e => ({
+        scheduledTime:   e.scheduledTime,
+        name:            e.name || e.id,
+        id:              e.id,
+        isRenege:        e._isRenege || false,
+        contextEntityId: e._contextCustId ?? null,
+      })),
     };
   }
 
