@@ -174,18 +174,27 @@ const panelBtnStyle = {
 };
 
 function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef }) {
-  const { fitView } = useReactFlow();
+  const { fitView, getNode, setCenter, getViewport } = useReactFlow();
 
-  // Expose fitView for a specific node so the validation checklist can navigate to it.
-  // Assigned synchronously during render so it is always current.
+  // Pan to a specific node without re-zooming the whole canvas.
+  // Using setCenter instead of fitView prevents the "whole diagram shifts" effect
+  // that occurs when fitView recalculates bounds for a single node with large padding.
   if (fitNodeRef) {
     fitNodeRef.current = (nodeId) => {
-      fitView({
-        nodes: nodeId ? [{ id: nodeId }] : [],
-        padding: 0.4,
-        duration: 400,
-        maxZoom: 1.2,
-      });
+      if (nodeId) {
+        const node = getNode(nodeId);
+        if (node) {
+          const { zoom } = getViewport();
+          const w = node.measured?.width ?? node.width ?? 160;
+          const h = node.measured?.height ?? node.height ?? 40;
+          setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+            zoom: Math.max(zoom, 0.6),
+            duration: 350,
+          });
+          return;
+        }
+      }
+      fitView({ padding: 0.15, duration: 350 });
     };
   }
 
