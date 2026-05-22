@@ -36,6 +36,16 @@ describe('NewModelModal', () => {
     expect(onStartDesign).toHaveBeenCalledWith('Test Model', '');
   });
 
+  it('calls onUseTemplate with the entered draft details', async () => {
+    const user = userEvent.setup();
+    const onUseTemplate = vi.fn();
+    render(<NewModelModal onClose={vi.fn()} onStartDesign={vi.fn()} onUseTemplate={onUseTemplate} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
+    await user.type(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), 'Template Draft');
+    await user.type(screen.getByPlaceholderText(/Optional/i), 'Use this description');
+    await user.click(screen.getByText(/Use a template/i).closest('button'));
+    expect(onUseTemplate).toHaveBeenCalledWith('Template Draft', 'Use this description');
+  });
+
   it('switches to paste mode when paste model is clicked', () => {
     render(<NewModelModal onClose={vi.fn()} onStartDesign={vi.fn()} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
     fireEvent.click(screen.getByText(/Paste model/i).closest('button'));

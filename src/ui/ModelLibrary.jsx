@@ -80,7 +80,10 @@ export const NewModelModal=({onClose,onStartDesign,onUseTemplate,onImportFile,on
       (msg)=>{setPasteStatus({state:"error",message:msg});}
     );
   };
-  const useTemplate=()=>{onUseTemplate?.(name.trim(),desc.trim());onClose();};
+  const useTemplate=()=>{
+    onUseTemplate?.(name.trim(),desc.trim());
+    onClose();
+  };
   const useAi=()=>{onUseAi?.(name.trim(),desc.trim());onClose();};
   const inputStyle={width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontFamily:FONT,fontSize:12,padding:"8px 10px",outline:"none",boxSizing:"border-box"};
   const optionBtn={background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"14px 16",cursor:"pointer",display:"flex",flexDirection:"column",gap:4,textAlign:"left",color:"inherit",fontFamily:FONT};
@@ -246,6 +249,7 @@ export function ModelLibrary({
   const [tmplSearch, setTmplSearch] = useState("");
   const [tmplDomain, setTmplDomain] = useState("All");
   const [showPatternsGuide, setShowPatternsGuide] = useState(false);
+  const pendingTemplateDraftRef = useRef(null);
 
   const DOMAIN_COLORS = { Academic: "#7c6fcd", Healthcare: "#3b9e78", "Service Systems": "#c0813a", Manufacturing: "#3a82c0", Logistics: "#9e3b7a", Technology: "#3a9ec0" };
   const allDomains = ["All", ...Array.from(new Set(TEMPLATES.map(t => t.domain)))];
@@ -258,7 +262,7 @@ export function ModelLibrary({
           <p style={{ fontSize: 12, color: C.muted }}>Build and share discrete-event simulation models.</p>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <Btn variant="primary" onClick={() => setShowNew(true)}>+ New Model</Btn>
+          <Btn variant="primary" onClick={() => { pendingTemplateDraftRef.current = null; setShowNew(true); }}>+ New Model</Btn>
         </div>
       </div>
 
@@ -300,9 +304,21 @@ export function ModelLibrary({
               : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(210px,1fr))", gap: 10 }}>
                 {visible.map(t => {
                   const dc = DOMAIN_COLORS[t.domain] || C.accent;
+                  const startTemplate = () => {
+                    const pendingTemplateDraft = pendingTemplateDraftRef.current;
+                    const draftedTemplate = pendingTemplateDraft
+                      ? {
+                          ...t,
+                          name: pendingTemplateDraft.name || t.name,
+                          description: pendingTemplateDraft.desc || t.description,
+                        }
+                      : t;
+                    onStartTemplate(draftedTemplate);
+                    pendingTemplateDraftRef.current = null;
+                  };
                   return (
                     <div key={t.id} role="button" tabIndex={0} aria-label={`Try ${t.name}`}
-                      onClick={() => onStartTemplate(t)} onKeyDown={e => { if (e.key === "Enter") onStartTemplate(t); }}
+                      onClick={startTemplate} onKeyDown={e => { if (e.key === "Enter") startTemplate(); }}
                       style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, cursor: "pointer", display: "flex", flexDirection: "column", gap: 6 }}
                       onMouseEnter={e => e.currentTarget.style.borderColor = dc + "88"} onMouseLeave={e => e.currentTarget.style.borderColor = C.border}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 4 }}>
@@ -346,18 +362,23 @@ export function ModelLibrary({
         <NewModelModal
           onClose={() => setShowNew(false)}
           onStartDesign={async (name, desc) => { await onCreateNewModel(name, desc, null, { initialTab: "visual", showStarterGuide: false }); }}
-          onUseTemplate={(name, desc) => { setTab("templates"); }}
+          onUseTemplate={(name, desc) => {
+            pendingTemplateDraftRef.current = {
+              name: name.trim(),
+              desc: desc.trim(),
+            };
+            setTab("templates");
+          }}
           onImportFile={(jsonText, name, desc) => {
             setShowNew(false);
             onImportFile(jsonText, name, desc);
           }}
           onPasteJson={(pasteText, name, desc, onSuccess, onError) => {
-            onPasteJsonImport(pasteText, onSuccess, onError);
+            onPasteJsonImport(pasteText, name, desc, onSuccess, onError);
           }}
           onUseAi={(name, desc) => {
-            onCreateNewModel(name, desc, null, { initialTab: "ai", showStarterGuide: false }).then(m => {
+            onCreateNewModel(name, desc, null, { initialTab: "ai", showStarterGuide: false }).then(() => {
               setShowNew(false);
-              if (m) onOpenModel(m);
             });
           }}
         />

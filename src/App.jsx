@@ -291,13 +291,15 @@ export default function App(){
     }
   }, [uid, loadData]);
 
-  const handlePasteJsonImport = useCallback(async (text, onSuccess, onError) => {
+  const handlePasteJsonImport = useCallback(async (text, name, desc, onSuccess, onError) => {
     if (!uid) return;
     setImportStatus({ state: "loading", message: "Validating JSON..." });
     try {
       const payload = JSON.parse(text);
       const importedModel = extractImportedModelPayload(payload);
       const importedValidation = validateModel(importedModel);
+      importedModel.name = name || importedModel.name;
+      importedModel.description = desc || importedModel.description;
       const saved = await saveModel(importedModel, uid);
       await loadData();
       if (importedValidation.errors.length > 0) {
