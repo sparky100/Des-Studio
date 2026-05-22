@@ -125,7 +125,43 @@ describe("model builder prompts", () => {
     const message = buildModelBuilderUserMessage("Build a call centre", {});
     const payload = JSON.parse(message);
     expect(payload.instruction).toMatch(/three-phase/i);
-    expect(payload.instruction).toMatch(/Phase B/i);
+    expect(payload.instruction).toMatch(/PHASE B/i);
+  });
+
+  it("contains PHASE A as a structural marker in the system prompt", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/PHASE A/);
+  });
+
+  it("contains PHASE B as a structural marker in the system prompt", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/PHASE B/);
+  });
+
+  it("contains PHASE C as a structural marker in the system prompt", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/PHASE C/);
+  });
+
+  it("lists confirm as a valid intent value in the system prompt", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/intent.*confirm/i);
+  });
+
+  it("does NOT contain a fixed cap on clarifying questions", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).not.toMatch(/at most 2/i);
+    expect(prompt).not.toMatch(/at most two/i);
+    const message = buildModelBuilderUserMessage("Build a post office", {});
+    const payload = JSON.parse(message);
+    expect(payload.instruction).not.toMatch(/at most 2/i);
+    expect(payload.instruction).not.toMatch(/at most two/i);
+  });
+
+  it("specifies suggestions array in the response format", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/suggestions/i);
+    expect(prompt).toMatch(/refinement/i);
   });
 
   it("includes simulation results in the payload when results are provided", () => {

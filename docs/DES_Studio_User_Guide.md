@@ -149,23 +149,32 @@ Inside the Model Detail view you can build your model three ways — all editing
 
 The AI Model Generator lets you describe a real-world queueing scenario in plain English and receive a complete, validated simulation model. It uses a structured three-step process to ensure the model reflects your intent before any JSON is generated.
 
-#### Step 1 — Discover
+#### Step 1 — Describe your problem
 
-The AI asks targeted clarifying questions about your scenario: who arrives, how often, how many servers, what queues exist, and what you want to measure. Answer in plain English — no simulation jargon needed. The AI will ask as many questions as it needs to understand your system before moving on.
+Open the AI Generator tab and type a sentence or two about what you want to simulate. The AI asks targeted clarifying questions **one at a time** — who arrives, how often, how many servers, what stages exist, and what you want to improve. Answer in plain English; no simulation jargon is needed. The AI asks as many questions as it needs to understand the structure of your system before moving on.
 
-#### Step 2 — Confirm
+#### Step 2 — Confirm the model
 
-Once the AI has enough information, it summarises the model it is about to build in plain English (for example: *"I'll model a GP surgery with 2 GPs, a single FIFO waiting room, and patient arrivals every 8 minutes on average."*). A confirmation card appears with two buttons:
+Once the AI has enough information, it summarises its understanding in plain English before generating anything. The confirmation card follows a consistent structure:
+
+- **Arrivals** — who arrives and how often
+- **Flow** — the queue and service stages in order
+- **Queue discipline** — FIFO, Priority, or LIFO at each stage
+- **Goal** — the performance target, if you stated one
+
+Two buttons appear in the confirmation card:
 
 - **Looks right — build it** — the AI generates the complete model JSON.
-- **Something's wrong** — the AI discards the plan; describe what needs changing and the conversation continues.
+- **Something's wrong** — the confirmation card is dismissed; describe what needs changing and the conversation continues.
+
+No model JSON is generated until you confirm.
 
 #### Step 3 — Review and apply
 
 The generated model appears in a side-by-side preview panel:
 
-- A **Simulation summary card** describes the model in plain English (entity types, arrival rate, queues, servers).
-- The AI's own explanation appears as an italic quote below the summary.
+- A **Simulation summary card** describes the model in plain English: who arrives and how often, how they flow through each stage, how many servers are available at each stage, and the experiment settings.
+- The AI's own explanation appears as an italic quote above the summary.
 - A **Show technical changes** toggle reveals the structured diff (added/removed/modified elements by section) for users who want to inspect the detail.
 - **Apply model** applies the full proposal to your editable model as a draft.
 - **Apply & save all** applies and immediately saves, skipping the draft step.
@@ -178,9 +187,10 @@ After any build or refine response, the AI suggests 2–3 follow-up refinements 
 
 #### Tips
 
-- Be specific about numbers: "three nurses" is better than "some nurses".
-- You can refine iteratively: each "Refine this" round preserves the existing model and only changes what you describe.
-- Use **Apply selected** when you want to merge only part of an AI-generated model into a model you have already built manually.
+- The more specific you are about arrival rates and service times, the more realistic the generated model will be. Round numbers are fine — the important thing is the right order of magnitude.
+- You can switch to the Forms/Tabs editor or the Visual Designer at any time after applying a generated model to make precise adjustments.
+- Generated models are always validated before being applied. The engine will never receive an invalid model from the AI Generator.
+- The AI Generator works best for new models or adding significant new elements. For small targeted changes, editing directly in the Forms/Tabs editor is usually faster.
 
 ---
 

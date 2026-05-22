@@ -199,7 +199,7 @@ flowchart LR
 | 1.71 | 2026-05-15 | Sprint 33 completed. SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. Documentation cleanup: archived 17 superseded/scratch files. |
 | 1.77 | 2026-05-19 | Sprint 67 planned. Added plain-English UX and Results clarity sprint plan, closure template, capability guide, AGENTS tracking, and product-spec presentation requirements. |
 | 1.78 | 2026-05-20 | Sprint 68 completed. Model versioning as explicit milestones: `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. ADR-015 created. 30 new tests. |
-| 1.79 | 2026-05-22 | Sprint 8C completed. AI Model Generator — three-phase conversation discipline (Discover/Confirm/Generate), `confirm` intent, `suggestions[]` proactive refinement chips, plain-English simulation summary card, collapsible technical diff, `llmExplanation` quote, `onRefine` button. 37 tests passing. Updated flowchart, Roadmap Snapshot, Sprint History. Updated User Guide §2.X and Engineering Spec §6.10. |
+| 1.79 | 2026-05-22 | Sprint 8C partially delivered. F8C.2 (confirm bubble) and F8C.5 (docs) complete. F8C.1 (prompt Phase A cap removal and 7-question sequence), F8C.3 (simulation summary card depth), and F8C.4 (chip styling) incomplete. 11 required tests missing. Sprint 8C status corrected to ⚠️ Partial. Implementation plan and closure scaffold created. User Guide §2.X updated to reflect intended behaviour. |
 
 ---
 
@@ -262,7 +262,7 @@ flowchart LR
 | Sprint 8A | ✅ Complete | 2026-05-05 | LLM Provider Architecture Preflight. | 22 focused | N/A | Success | Provider-neutral request contract; server-side provider/model routing. |
 | Sprint 8 | ✅ Complete | 2026-05-05 | AI Generated Model Authoring. | 385 (385) | N/A | Success | AI Generated Model tab, model-builder prompts, diff preview, partial apply. |
 | Sprint 8B | ✅ Complete | 2026-05-05 | Model Definition Coherence. | Focused | N/A | Success | Stabilised queue/service semantics before visual designer work. |
-| Sprint 8C | ✅ Complete | 2026-05-22 | AI Model Generator — Conversational Quality & Outcome Presentation. | 37 (37) | N/A | Success | Three-phase Discover/Confirm/Generate discipline; `confirm` intent; `suggestions[]` chips; plain-English simulation summary card; collapsible technical diff; `llmExplanation` quote; `onRefine` button. |
+| Sprint 8C | ⚠️ Partial | 2026-05-22 | AI Model Generator — Conversational Quality & Outcome Presentation. | 37 (37) | N/A | Partial | F8C.2 (confirm bubble) and F8C.5 (docs) complete. F8C.1 incomplete: 2-question cap not removed, 7-question Phase A sequence absent, Phase B format not enforced. F8C.3 incomplete: SimulationSummaryCard simpler than spec. F8C.4 incomplete: chip styling deviates. 11 required tests missing. See `docs/reviews/sprint-8c-plan.md`. |
 | Sprint 9A | ✅ Complete | 2026-05-05 | Visual Designer Architecture Preflight. | Docs | N/A | Success | ADR-010 accepted. |
 | Sprint 9 | ✅ Complete | 2026-05-06 | Visual Designer Authoring. | 38 focused | N/A | Success | Graph-first authoring, round-trip parity, drag-to-place palette, visual validation summary. |
 | Sprint 9B | ✅ Complete | 2026-05-07 | Visual Designer UX Hardening. | Focused | N/A | Success | Resource editing, safe delete, richer validation, connection editing, palette affordances, entity attribute logic fixes complete. |

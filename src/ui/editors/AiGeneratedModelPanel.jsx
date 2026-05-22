@@ -399,6 +399,7 @@ function ConfirmBubble({ explanation, onConfirm, onRefute }) {
 }
 
 function RefinementChips({ suggestions, onChipClick }) {
+  const [hovered, setHovered] = useState(null);
   if (!suggestions || !suggestions.length) return null;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, paddingTop: 4 }}>
@@ -407,17 +408,19 @@ function RefinementChips({ suggestions, onChipClick }) {
           key={index}
           type="button"
           onClick={() => onChipClick(suggestion)}
+          onMouseEnter={() => setHovered(index)}
+          onMouseLeave={() => setHovered(null)}
           style={{
-            background: C.surface,
-            border: `1px solid ${C.border}`,
-            borderRadius: 20,
-            color: C.accent,
+            background: hovered === index ? C.accent : "transparent",
+            border: `1px solid ${C.accent}`,
+            borderRadius: 999,
+            color: hovered === index ? C.bg : C.accent,
             fontFamily: FONT,
             fontSize: 10,
             fontWeight: 600,
-            padding: "5px 12px",
+            padding: "4px 14px",
             cursor: "pointer",
-            transition: "border-color .15s",
+            transition: "background .15s, color .15s",
           }}
         >
           {suggestion}

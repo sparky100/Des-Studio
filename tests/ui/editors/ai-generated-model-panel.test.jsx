@@ -695,6 +695,38 @@ describe("AiGeneratedModelPanel", () => {
       expect(screen.queryByText(/Add a second/i)).not.toBeInTheDocument();
     });
 
+    it("renders no chips after a confirm response", async () => {
+      mockCallModelBuilder.mockResolvedValue({
+        intent: "confirm",
+        explanation: "I will build a post office.",
+        proposedModel: null,
+        suggestions: ["Add a second clerk"],
+      });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Build it" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByLabelText(/model confirmation/i)).toBeInTheDocument());
+      expect(screen.queryByText(/Add a second clerk/i)).not.toBeInTheDocument();
+    });
+
+    it("renders a single chip when suggestions array has 1 item", async () => {
+      mockCallModelBuilder.mockResolvedValue({
+        intent: "build",
+        explanation: "Built a model.",
+        proposedModel: { ...model },
+        suggestions: ["Only one suggestion"],
+      });
+
+      render(<AiGeneratedModelPanel model={model} canEdit onApplyModel={vi.fn()} />);
+      fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Build" } });
+      fireEvent.click(screen.getByRole("button", { name: /send/i }));
+
+      await waitFor(() => expect(screen.getByText(/Only one suggestion/i)).toBeInTheDocument());
+      expect(screen.getAllByRole("button").filter(b => b.textContent === "Only one suggestion")).toHaveLength(1);
+    });
+
     it("renders nothing when suggestions array is empty", async () => {
       mockCallModelBuilder.mockResolvedValue({
         intent: "build",

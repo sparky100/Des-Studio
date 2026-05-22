@@ -161,9 +161,9 @@ describe("ModelDiffPreview", () => {
 
     expect(screen.getByLabelText(/simulation summary/i)).toBeInTheDocument();
     expect(screen.getByText(/patient.*flowing/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 every 8 time units/i)).toBeInTheDocument();
+    expect(screen.getByText(/patient.*arrive.*8.*exponential/i)).toBeInTheDocument();
     expect(screen.getByText(/Waiting Room/)).toBeInTheDocument();
-    expect(screen.getByText(/2× Nurse/)).toBeInTheDocument();
+    expect(screen.getByText(/Nurse.*2|2.*Nurse/i)).toBeInTheDocument();
   });
 
   it("renders llmExplanation as italic quote when provided", () => {
@@ -198,6 +198,57 @@ describe("ModelDiffPreview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /refine this/i }));
     expect(onRefine).toHaveBeenCalledOnce();
+  });
+
+  it("renders WHO ARRIVES sentence with entity name and distribution", () => {
+    const proposed = {
+      entityTypes: [
+        { id: "cust", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "nurse", name: "Nurse", role: "server", count: 2, attrDefs: [] },
+      ],
+      stateVariables: [],
+      bEvents: [{
+        id: "arrive",
+        name: "Patient Arrival",
+        scheduledTime: "0",
+        effect: "ARRIVE(Patient, Waiting)",
+        schedules: [{ eventId: "arrive", dist: "Exponential", distParams: { mean: "8" } }],
+      }],
+      cEvents: [],
+      queues: [{ id: "q", name: "Waiting Room", discipline: "FIFO" }],
+    };
+
+    render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={vi.fn()} onDiscard={vi.fn()} />);
+
+    expect(screen.getByText(/patient.*arrive.*8.*exponential/i)).toBeInTheDocument();
+  });
+
+  it("omits llmExplanation element when prop is null", () => {
+    render(
+      <ModelDiffPreview
+        currentModel={baseModel}
+        proposedModel={{ ...baseModel }}
+        onApply={vi.fn()}
+        onDiscard={vi.fn()}
+        llmExplanation={null}
+      />
+    );
+
+    expect(screen.queryByText(/simple post office/i)).not.toBeInTheDocument();
+  });
+
+  it("renders RESOURCES section with per-server count", () => {
+    const proposed = {
+      ...baseModel,
+      entityTypes: [
+        { id: "cust", name: "Customer", role: "customer", attrDefs: [] },
+        { id: "srv", name: "Clerk", role: "server", count: 3, attrDefs: [] },
+      ],
+    };
+
+    render(<ModelDiffPreview currentModel={baseModel} proposedModel={proposed} onApply={vi.fn()} onDiscard={vi.fn()} />);
+
+    expect(screen.getByText(/Clerk.*3|3.*Clerk/i)).toBeInTheDocument();
   });
 
   it("shows technical changes toggle and reveals diff on click", () => {

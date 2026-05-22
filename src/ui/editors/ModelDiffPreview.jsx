@@ -125,13 +125,14 @@ function deriveSimulationSummary(proposedModel = {}) {
   const entityTypes = Array.isArray(proposedModel.entityTypes) ? proposedModel.entityTypes : [];
   const queues = Array.isArray(proposedModel.queues) ? proposedModel.queues : [];
   const bEvents = Array.isArray(proposedModel.bEvents) ? proposedModel.bEvents : [];
+  const cEvents = Array.isArray(proposedModel.cEvents) ? proposedModel.cEvents : [];
   const experimentDefaults = proposedModel.experimentDefaults || {};
 
   const customerType = entityTypes.find(e => e.role === "customer");
   const serverTypes = entityTypes.filter(e => e.role === "server");
   const entityName = customerType?.name || "entities";
 
-  // Arrival rate from bEvents with ARRIVE effect
+  // WHO ARRIVES — full sentence from arrival B-event
   let arrivalText = null;
   const arrivalEvent = bEvents.find(ev => {
     const eff = Array.isArray(ev.effect) ? ev.effect.join(";") : String(ev.effect || "");
@@ -144,28 +145,70 @@ function deriveSimulationSummary(proposedModel = {}) {
       const params = schedule.distParams || {};
       if (/exponential/i.test(dist) && params.mean) {
         const mean = parseFloat(params.mean);
-        if (mean > 0) arrivalText = `1 every ${mean} time units (Exponential)`;
+        if (mean > 0) arrivalText = `${entityName} arrive approximately every ${mean} time units (Exponential distribution)`;
       } else if (/fixed/i.test(dist) && params.value) {
-        arrivalText = `every ${params.value} time units (Fixed)`;
+        arrivalText = `${entityName} arrive every ${params.value} time units (Fixed)`;
+      } else if (/triangular/i.test(dist) && params.mode) {
+        arrivalText = `${entityName} arrive approximately every ${params.mode} time units (Triangular distribution)`;
       } else if (dist) {
-        arrivalText = `${dist} distribution`;
+        arrivalText = `${entityName} arrive (${dist} distribution)`;
       }
     }
   }
 
-  // Queues summary
-  const queueText = queues.length === 0
-    ? null
-    : queues.length === 1
-      ? `${queues[0].name} (${queues[0].discipline || "FIFO"})`
-      : `${queues.length} queues`;
+  // HOW THEY FLOW — per-stage flow path derived from queues + C-events + B-events
+  const flowLines = queues.map(queue => {
+    const discipline = queue.discipline || "FIFO";
+    // Find C-event that ASSIGNs from this queue
+    const assignEvent = cEvents.find(ce => {
+      const eff = Array.isArray(ce.effect) ? ce.effect.join(";") : String(ce.effect || "");
+      return new RegExp(`ASSIGN\\(${queue.name}`, "i").test(eff) ||
+        (ce.cSchedules && ce.cSchedules.length > 0 && new RegExp(`ASSIGN.*${queue.name}`, "i").test(eff));
+    });
+    let serverInfo = "";
+    if (assignEvent) {
+      // Extract server type from ASSIGN(queue, server)
+      const eff = Array.isArray(assignEvent.effect) ? assignEvent.effect.join(";") : String(assignEvent.effect || "");
+      const assignMatch = eff.match(/ASSIGN\([^,]+,\s*([^)]+)\)/i);
+      if (assignMatch) {
+        const serverName = assignMatch[1].trim();
+        const serverEntity = serverTypes.find(s => s.name === serverName);
+        const count = serverEntity?.count || 1;
+        // Find service distribution from cSchedules
+        const sched = Array.isArray(assignEvent.cSchedules) ? assignEvent.cSchedules[0] : null;
+        if (sched) {
+          const dist = sched.dist || sched.type || "";
+          const params = sched.distParams || {};
+          const mean = params.mean || params.value || params.mode || "";
+          const distDesc = mean ? `${dist}, mean ~${mean}` : dist;
+          serverInfo = ` → ${count}× ${serverName} (service: ${distDesc})`;
+        } else {
+          serverInfo = ` → ${count}× ${serverName}`;
+        }
+      }
+    }
+    return `→ ${queue.name} (${discipline})${serverInfo}`;
+  });
+  if (flowLines.length) flowLines.push("→ exit");
 
-  // Servers summary
-  const serverText = serverTypes.length === 0
-    ? null
-    : serverTypes.map(s => `${s.count || 1}× ${s.name}`).join(", ");
+  // Reneging annotation
+  const renegeEvent = bEvents.find(ev => {
+    const eff = Array.isArray(ev.effect) ? ev.effect.join(";") : String(ev.effect || "");
+    return /\bRENEGE\(/i.test(eff);
+  });
+  let renegeText = null;
+  if (renegeEvent) {
+    const sched = Array.isArray(renegeEvent.schedules) ? renegeEvent.schedules[0] : null;
+    const mean = sched?.distParams?.mean || sched?.distParams?.value || "";
+    renegeText = mean
+      ? `Entities who wait more than ~${mean} time units without service will leave`
+      : "Entities may abandon the queue if waiting too long";
+  }
 
-  // Experiment
+  // RESOURCES — per server type
+  const resourceLines = serverTypes.map(s => `${s.name}: ${s.count || 1} available`);
+
+  // EXPERIMENT SETTINGS
   const duration = experimentDefaults.maxSimTime;
   const warmup = experimentDefaults.warmupPeriod;
   const reps = experimentDefaults.replications;
@@ -175,37 +218,79 @@ function deriveSimulationSummary(proposedModel = {}) {
   if (reps) experimentParts.push(`${reps} replication${reps === 1 ? "" : "s"}`);
   const experimentText = experimentParts.length ? experimentParts.join(", ") : null;
 
-  return { entityName, arrivalText, queueText, serverText, experimentText };
+  // GOALS
+  const goalsArr = Array.isArray(proposedModel.goals) ? proposedModel.goals
+    : Array.isArray(experimentDefaults.goals) ? experimentDefaults.goals : [];
+  const goals = goalsArr.filter(Boolean);
+
+  return { entityName, arrivalText, flowLines, renegeText, resourceLines, experimentText, goals };
 }
 
 function SimulationSummaryCard({ proposedModel }) {
-  const { entityName, arrivalText, queueText, serverText, experimentText } = deriveSimulationSummary(proposedModel);
-  const rows = [
-    arrivalText && { label: "Arrivals", value: arrivalText },
-    queueText && { label: "Queue", value: queueText },
-    serverText && { label: "Servers", value: serverText },
-    experimentText && { label: "Experiment", value: experimentText },
-  ].filter(Boolean);
+  const { entityName, arrivalText, flowLines, renegeText, resourceLines, experimentText, goals } = deriveSimulationSummary(proposedModel);
 
-  if (!rows.length) return null;
+  const hasContent = arrivalText || flowLines.length > 0 || resourceLines.length > 0 || experimentText || goals.length > 0;
+  if (!hasContent) return null;
+
+  const sectionLabel = { color: C.muted, fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: 1, marginBottom: 4, textTransform: "uppercase" };
+  const rowStyle = { color: C.text, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 };
 
   return (
     <div
       aria-label="Simulation summary"
-      style={{ background: C.bg, border: `1px solid ${C.accent}44`, borderRadius: 8, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}
+      style={{ background: C.bg, border: `1px solid ${C.accent}44`, borderRadius: 8, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}
     >
       <div style={{ color: C.accent, fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 0.5 }}>
         What this model simulates
       </div>
-      <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, fontWeight: 600, marginBottom: 2 }}>
+      <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, fontWeight: 600 }}>
         {entityName} flowing through the system
       </div>
-      {rows.map(({ label, value }) => (
-        <div key={label} style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
-          <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10, fontWeight: 700, minWidth: 72 }}>{label}</span>
-          <span style={{ color: C.text, fontFamily: FONT, fontSize: 11 }}>{value}</span>
+
+      {arrivalText && (
+        <div>
+          <div style={sectionLabel}>Who arrives</div>
+          <div style={rowStyle}>{arrivalText}</div>
         </div>
-      ))}
+      )}
+
+      {flowLines.length > 0 && (
+        <div>
+          <div style={sectionLabel}>How they flow</div>
+          {flowLines.map((line, i) => (
+            <div key={i} style={rowStyle}>{line}</div>
+          ))}
+          {renegeText && <div style={{ ...rowStyle, color: C.muted, marginTop: 4, fontStyle: "italic" }}>{renegeText}</div>}
+        </div>
+      )}
+
+      {resourceLines.length > 0 && (
+        <div>
+          <div style={sectionLabel}>Resources</div>
+          {resourceLines.map((line, i) => (
+            <div key={i} style={rowStyle}>{line}</div>
+          ))}
+        </div>
+      )}
+
+      {experimentText && (
+        <div>
+          <div style={sectionLabel}>Experiment</div>
+          <div style={rowStyle}>{experimentText}</div>
+        </div>
+      )}
+
+      {goals.length > 0 && (
+        <div>
+          <div style={sectionLabel}>Goals</div>
+          {goals.map((goal, i) => {
+            const text = typeof goal === "string" ? goal
+              : goal.metric && goal.target ? `${goal.metric}: ${goal.target}`
+              : goal.metric || JSON.stringify(goal);
+            return <div key={i} style={rowStyle}>{text}</div>;
+          })}
+        </div>
+      )}
     </div>
   );
 }
