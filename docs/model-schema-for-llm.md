@@ -13,6 +13,40 @@ Ask the LLM:
 
 The LLM must produce a single JSON object that passes all validation rules in §5.
 
+### Delivering the model via magic link (recommended)
+
+DES Studio supports a **magic-link import URL** that opens a pre-flight preview directly in the app. After generating the JSON, encode it and produce the import URL:
+
+**URL format:**
+```
+https://<app-url>/#import?m=<base64url-encoded-json>
+```
+
+**Encoding recipe (Python):**
+```python
+import json, base64
+
+def encode_model_link(model: dict, app_url: str) -> str:
+    json_bytes = json.dumps(model, separators=(',', ':')).encode('utf-8')
+    b64 = base64.urlsafe_b64encode(json_bytes).rstrip(b'=').decode()
+    return f"{app_url.rstrip('/')}/#import?m={b64}"
+```
+
+**Encoding recipe (JavaScript / Node):**
+```js
+function encodeModelLink(model, appUrl) {
+  const json = JSON.stringify(model);
+  const b64 = Buffer.from(json, 'utf8').toString('base64url');
+  return `${appUrl.replace(/\/$/, '')}/#import?m=${b64}`;
+}
+```
+
+**LLM prompt addition:**
+> After generating the model JSON, base64url-encode it (no padding, UTF-8) and output the complete import URL:  
+> `https://<app-url>/#import?m=<encoded>`
+
+When the user opens this URL they see a review card with the model summary and validation status before saving.
+
 ---
 
 ## 1. Top-Level Structure

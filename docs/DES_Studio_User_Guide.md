@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.14.0 (Sprints 1–68)
+Version: 1.15.0 (Sprints 1–69)
 
 ---
 
@@ -22,6 +22,7 @@ Version: 1.14.0 (Sprints 1–68)
 | v1.11.0 | 67 | AI Assistant simplified — single "Explain Results" button merges narrative, sensitivity, and suggestions; "Run with this change" replaces "Apply & Re-run"; results update automatically after applying a suggestion |
 | v1.13.0 | 68 | Model versioning — explicit milestones, version history panel, create version dialog with notes, structural change detection, run records reference version |
 | v1.12.0 | 68 | Run History redesign — grouped action pills, More menu, replication count badge, average served per replication; Experiments vs Studies clarified; report export uses model snapshot from run record; "Save this change to model" for AI suggestions |
+| v1.15.0 | 69 | Magic-link model import — encode any model JSON as a URL; opening the link shows a pre-flight preview with validation status, then saves to your library with one click |
 
 ---
 
@@ -886,3 +887,58 @@ In the **Overview** tab, click **Save as scenario baseline** to fork the model w
 ### Run snapshot diffs
 
 In **Run History**, click **⋯ → View model at this run** to see how the model differed from its current state at the time of that run.
+
+---
+
+## 14. Magic-Link Model Import
+
+DES Studio supports a **magic-link** import flow: an external tool (for example, a Claude conversation or a custom script) can generate a model JSON and produce a URL that, when opened, pre-loads the model into a review dialog before saving it to your library.
+
+### URL format
+
+```
+https://<app-url>/#import?m=<base64url-encoded-model-json>
+```
+
+The `m` parameter is the model JSON encoded as a URL-safe base64url string (standard RFC 4648 base64url, no padding).
+
+### Generating a magic link
+
+Use the `encodeModelToLink` helper in `src/utils/importLink.js`:
+
+```js
+import { encodeModelToLink } from './src/utils/importLink.js';
+
+const url = encodeModelToLink(modelJson, 'https://your-des-studio-domain.com');
+// → https://your-des-studio-domain.com/#import?m=eyJuYW1lIjoiLi4uIn0
+```
+
+When prompting an LLM to generate a model, append this instruction:
+
+> "After generating the JSON, encode it as base64url (no padding, URL-safe characters) and output the full import URL:  
+> `https://<app-url>/#import?m=<encoded-json>`"
+
+### What happens when a magic link is opened
+
+1. **Import Preview** — The app decodes the model, validates it, and shows a summary card with:
+   - Entity types (name and role)
+   - Queues (name and discipline)
+   - Experiment defaults (max sim time, warmup, replications)
+   - Validation status (green "passed" or amber warning list)
+
+2. **Signed-in users** — A **Save to my models** button saves the model immediately to the library and opens the editor.
+
+3. **Signed-out users** — A **Sign in to save** button stores the model in `sessionStorage` and navigates to the sign-in form. After sign-in the preview is restored automatically.  
+   A **Continue without saving — copy JSON** link reveals the raw JSON with a copy button for users who do not want to create an account.
+
+4. **Validation warnings** — The import is never blocked by validation errors; warnings are shown so the modeller can fix them in the editor before running.
+
+### Zero-auth entry point
+
+Magic links work regardless of authentication state. Sharing a link with a colleague lets them preview the model without needing an account first.
+
+### Security considerations
+
+- Magic links encode the full model JSON client-side — no server round-trip is made until the user clicks **Save**.
+- Never embed credentials (API keys, passwords) in a model JSON shared via magic link.
+- The `sessionStorage` key (`des.pendingImport`) is cleared immediately after the model is restored post sign-in.
