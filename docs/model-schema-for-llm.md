@@ -1,6 +1,6 @@
 # DES Studio — Model Schema Reference for LLM Generation
 
-**Version:** 1.1.0
+**Version:** 1.2.0
 **Date:** 2026-05-23
 **Sprint baseline:** Sprint 70
 
@@ -8,6 +8,7 @@
 |---------|------|--------|---------|
 | v1.0.0 | 2026-05-23 | Sprint 70 | Initial versioned snapshot — schema as delivered at Sprint 70 |
 | v1.1.0 | 2026-05-23 | Sprint 70 | Added SPT, EDD, PRIORITY(attrName) queue disciplines to §3; added V11 (Normal warning) and V16 (no termination condition warning) to §10 validation table |
+| v1.2.0 | 2026-05-23 | Sprint 70 | Fixed app URL to `https://des.simmodlr.app`; updated LLM delivery instructions to save JSON file and produce magic link |
 
 ---
 
@@ -24,39 +25,58 @@ Ask the LLM:
 
 The LLM must produce a single JSON object that passes all validation rules in §5.
 
-### Delivering the model via magic link (recommended)
+### Delivering the model — save JSON file and magic link (recommended)
 
-DES Studio supports a **magic-link import URL** that opens a pre-flight preview directly in the app. After generating the JSON, encode it and produce the import URL:
+After generating the model JSON the LLM should do **two things**:
 
-**URL format:**
+1. **Save the JSON to a file** — e.g. `coffee-shop.json` — so the user has a portable copy they can version-control, edit, or re-encode later.
+2. **Produce a magic-link import URL** — DES Studio decodes the URL and shows a pre-flight preview card directly in the app; the user can save it to their library in one click.
+
+**App URL:** `https://des.simmodlr.app`
+
+**Magic-link URL format:**
 ```
-https://<app-url>/#import?m=<base64url-encoded-json>
+https://des.simmodlr.app/#import?m=<base64url-encoded-json>
 ```
 
 **Encoding recipe (Python):**
 ```python
 import json, base64
 
-def encode_model_link(model: dict, app_url: str) -> str:
+def encode_model_link(model: dict) -> str:
     json_bytes = json.dumps(model, separators=(',', ':')).encode('utf-8')
     b64 = base64.urlsafe_b64encode(json_bytes).rstrip(b'=').decode()
-    return f"{app_url.rstrip('/')}/#import?m={b64}"
+    return f"https://des.simmodlr.app/#import?m={b64}"
+
+# Save the file and print the link
+with open('model.json', 'w') as f:
+    json.dump(model, f, indent=2)
+
+print(encode_model_link(model))
 ```
 
 **Encoding recipe (JavaScript / Node):**
 ```js
-function encodeModelLink(model, appUrl) {
-  const json = JSON.stringify(model);
-  const b64 = Buffer.from(json, 'utf8').toString('base64url');
-  return `${appUrl.replace(/\/$/, '')}/#import?m=${b64}`;
+const fs = require('fs');
+
+function encodeModelLink(model) {
+  const b64 = Buffer.from(JSON.stringify(model), 'utf8').toString('base64url');
+  return `https://des.simmodlr.app/#import?m=${b64}`;
 }
+
+// Save the file and print the link
+fs.writeFileSync('model.json', JSON.stringify(model, null, 2));
+console.log(encodeModelLink(model));
 ```
 
-**LLM prompt addition:**
-> After generating the model JSON, base64url-encode it (no padding, UTF-8) and output the complete import URL:  
-> `https://<app-url>/#import?m=<encoded>`
+**LLM prompt to use:**
+> Using the DES Studio model schema, generate a JSON model for [your scenario].
+> Then:
+> 1. Save the model as `[name].json`
+> 2. Base64url-encode the JSON (compact, no padding, UTF-8) and output the complete import URL in this format:
+>    `https://des.simmodlr.app/#import?m=<encoded>`
 
-When the user opens this URL they see a review card with the model summary and validation status before saving.
+When the user opens the magic link they see a review card with the model summary and validation status before saving to their library.
 
 ---
 
