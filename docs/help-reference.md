@@ -94,7 +94,7 @@ Performance targets. Defined in `goals[]` array.
 
 ## Macros
 
-All 18 effect macros. Syntax is exact — case-sensitive, parentheses required.
+All 19 effect macros. Syntax is exact — case-sensitive, parentheses required.
 
 ### Flow Control Macros
 
@@ -112,7 +112,7 @@ All 18 effect macros. Syntax is exact — case-sensitive, parentheses required.
 | Macro | Syntax | Purpose | Side Effects | Common Mistakes |
 |-------|--------|---------|--------------|-----------------|
 | PREEMPT | `PREEMPT(ServerType)` | Interrupts in-service entity, replaces with higher-priority entity | Displaced entity re-queues with remaining service preserved | Using without priority queue discipline |
-| FAIL | `FAIL(ServerType)` | Places idle server into failed state | Sets server to failed; interrupts in-progress service | Failing busy server (no effect) |
+| FAIL | `FAIL(ServerType)` | Places server into failed (unavailable) state; interrupts any in-progress service | Sets server to failed; in-service entity re-queues with remaining service time | Forgetting to schedule a paired REPAIR B-event |
 | REPAIR | `REPAIR(ServerType)` | Restores failed server to idle | Sets server to idle; triggers C-scan | Repairing non-failed server (no effect) |
 
 ### Entity Transformation Macros
@@ -178,15 +178,16 @@ All 11 distribution types. Parameter values must be strings (e.g., "5" not 5).
 
 ## Queue Disciplines
 
-All 5 queue disciplines.
+All 6 queue disciplines.
 
 | Discipline | Selection Rule | Tiebreaker | Requirements |
 |-----------|---------------|------------|--------------|
 | FIFO | Smallest arrivalTime | None | Default |
 | LIFO | Largest arrivalTime | None | None |
-| PRIORITY | Smallest Entity.priority value | FIFO on equal priority | Entity type must have numeric priority attribute |
-| SPT | Smallest expected service time | FIFO | Service time distribution must be known |
-| EDD | Earliest Entity.dueDate value | FIFO | Entity type must have numeric dueDate attribute |
+| PRIORITY | Smallest Entity.priority attribute value | FIFO on equal priority | Entity type must have numeric `priority` attribute |
+| PRIORITY(attrName) | Smallest value of the named attribute | FIFO on equal value | Entity type must have the named numeric attribute |
+| SPT | Smallest `serviceTime` or `processingTime` attribute value | FIFO | Entity type must have `serviceTime` or `processingTime` attribute |
+| EDD | Smallest `dueDate` attribute value | FIFO | Entity type must have numeric `dueDate` attribute |
 
 ---
 
@@ -217,19 +218,15 @@ All 5 queue disciplines.
 
 ### Seed
 
-**Purpose:** Reproducibility.
+**Purpose:** Reproducibility — replaying a run with the same seed produces bit-identical results.
 
-**Behaviour:** Integer seed passed to mulberry32 PRNG. Same seed produces bit-identical results.
-
-**Storage:** Seed stored with run record in Supabase.
+**Behaviour:** Integer seed set in the Execute panel before running. Stored with the run record so any past run can be exactly reproduced.
 
 ### Parametric Sweep
 
 **1D sweep:** One parameter varied across range. Full replication batch at each point.
 
-**2D sweep:** Two parameters varied across grid. Heatmap rendering with feasibility colouring (green=all goals met, red=at least one goal violated).
-
-**Goal feasibility:** evaluateSweepPointGoals() determines colouring per point.
+**2D sweep:** Two parameters varied across a grid (capped at 50 points). Heatmap rendering with feasibility colouring (green = all goals met, red = at least one goal violated).
 
 ---
 
@@ -478,7 +475,7 @@ All 5 queue disciplines.
 | **Purpose** | Answers "How do I use DES Studio?" | Answers "What do my results mean?" |
 | **When available** | Any screen (via ? button) | After completed run (Execute panel) |
 | **Knowledge base** | Curated help articles, validation rules, macro syntax, distribution guidance | Run results, model JSON, confidence intervals, goal gaps |
-| **LLM used** | No — curated text from static knowledge base | Yes — calls LLM with grounded data |
+| **Knowledge source** | This help-reference document (curated, versioned alongside docs) | Run results + model JSON passed live at query time |
 | **Example questions** | "What does ARRIVE do?", "How do I set up reneging?", "What does V8 mean?" | "Why is wait time so high?", "Should I add more servers?", "Are these results reliable?" |
 | **Context-awareness** | Suggests questions based on current tab/editor | Analyses current run's specific results |
 
@@ -486,4 +483,4 @@ All 5 queue disciplines.
 
 ---
 
-<!-- help-reference version: 1.0 | sprint baseline: 70 | word count: 3100 -->
+<!-- help-reference version: 1.1 | sprint baseline: Sprint 70 | word count: ~3200 -->
