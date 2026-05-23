@@ -81,7 +81,7 @@ export function GoalsEditor({ goals = [], onChange }) {
               </select>
               <select value={g.operator} onChange={e => upd(i, { operator: e.target.value })}
                 style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4,
-                  color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none", width: 90 }}>
+                  color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none", width: 120 }}>
                 {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               <input type="number" min="0" step="0.1" value={g.target}

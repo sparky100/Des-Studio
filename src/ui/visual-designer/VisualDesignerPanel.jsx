@@ -199,7 +199,7 @@ function ValidationChecklist({ visualIssues, modelErrors, modelWarnings, graph, 
   );
 }
 
-export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
+export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit }) {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [message, setMessage] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
@@ -232,7 +232,12 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange }) {
 
   useEffect(() => {
     if (!canEdit || !isStarterBlank) return;
-    applyModel(createStarterFlowModel(model || {}));
+    const starterModel = createStarterFlowModel(model || {});
+    if (onModelInit) {
+      onModelInit(starterModel);
+    } else {
+      applyModel(starterModel);
+    }
   }, [canEdit, isStarterBlank]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function doDelete(targetNode) {

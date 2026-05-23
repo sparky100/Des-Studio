@@ -406,7 +406,7 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
   );
 }
 
-const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})=>{
+const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,overrides={},initialTab})=>{
   const [model,setModel]=useState(()=>{
     if(!modelData) return null;
     return {
@@ -723,8 +723,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
 
   const TABS=[
     {id:"overview",label:"Overview"},
-    {id:"visual",label:"Design"},
-    {id:"ai",label:"AI"},
+    {id:"visual",label:"Visual"},
+    {id:"ai",label:"AI Builder"},
     {id:"entities",label:"Entity Types"},
     {id:"queues",label:"Queues"},
     {id:"bevents",label:"B-Events"},
@@ -863,7 +863,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
         {tab==="visual"&&(
           renderAuthoringShell(
             <Suspense fallback={<SkeletonPanel rows={5} />}>
-              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel}/>
+              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
             </Suspense>
           )
         )}
@@ -893,11 +893,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
-            {canEdit && allowStarterGuide && !showStarterGuide && (
-              <div style={{display:"flex",justifyContent:"flex-end"}}>
-                <Btn small variant="ghost" onClick={reopenStarterGuide}>Show getting started guide</Btn>
               </div>
             )}
             {model.parentModelId && (
@@ -1174,7 +1169,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,overrides={},initialTab})
             userId={overrides.userId}
             isOwner={isOwner}
             onToast={toast}
-            onVersionChange={(ver, verId) => { setCurrentVersion(ver); setCurrentVersionId(verId); }}
+            onVersionChange={(ver, verId) => { setCurrentVersion(ver); setCurrentVersionId(verId); onLatestVersionChange?.(ver); }}
             currentModel={model}
             onRestoreVersion={handleRestoreVersion}
           />

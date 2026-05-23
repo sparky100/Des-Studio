@@ -487,6 +487,7 @@ export default function App(){
               setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
             }}
             onRefresh={loadData}
+            onLatestVersionChange={(ver) => setModels(prev => prev.map(m => m.id === openId ? { ...m, latestVersion: ver ?? 0 } : m))}
             overrides={{
               autoRun: openModelOptions.autoRun,
               showStarterGuide: openModelOptions.showStarterGuide,

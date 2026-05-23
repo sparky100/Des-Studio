@@ -47,8 +47,16 @@ ${schemaDoc}`,
 
 export function buildModelBuilderUserMessage(description, currentModel = {}, results = null) {
   const hasCurrentModel = MODEL_SECTIONS.some(section => Array.isArray(currentModel?.[section]) && currentModel[section].length);
+  const hasModelMeta = currentModel?.name || currentModel?.description;
 
   const parts = [String(description || "")];
+
+  if (!hasCurrentModel && hasModelMeta) {
+    const meta = [];
+    if (currentModel.name) meta.push(`Model name: ${currentModel.name}`);
+    if (currentModel.description) meta.push(`Model description: ${currentModel.description}`);
+    parts.push("Context:\n" + meta.join("\n"));
+  }
 
   if (hasCurrentModel) {
     parts.push(

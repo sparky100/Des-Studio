@@ -127,8 +127,8 @@ export const NewModelModal=({onClose,onStartDesign,onUseTemplate,onImportFile,on
         <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1,fontWeight:700}}>START WITH</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <button type="button" onClick={startDesign} disabled={!name.trim()||saving} style={optionBtn}>
-            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Design</div>
-            <div style={{fontSize:10,color:C.muted}}>Start building visually</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Draw</div>
+            <div style={{fontSize:10,color:C.muted}}>Draw your model</div>
           </button>
           <button type="button" onClick={useTemplate} style={optionBtn}>
             <div style={{fontSize:12,fontWeight:700,color:C.text}}>Use a template</div>
@@ -143,8 +143,8 @@ export const NewModelModal=({onClose,onStartDesign,onUseTemplate,onImportFile,on
             <div style={{fontSize:10,color:C.muted}}>Paste JSON from clipboard</div>
           </button>
           <button type="button" onClick={useAi} style={{...optionBtn,gridColumn:"1 / -1"}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Use AI</div>
-            <div style={{fontSize:10,color:C.muted}}>Describe your scenario in plain English</div>
+            <div style={{fontSize:12,fontWeight:700,color:C.text}}>Describe</div>
+            <div style={{fontSize:10,color:C.muted}}>Use AI to describe your model</div>
           </button>
         </div>
         <div style={{display:"flex",justifyContent:"flex-end"}}>
