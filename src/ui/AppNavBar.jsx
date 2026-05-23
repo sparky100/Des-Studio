@@ -6,7 +6,7 @@ export function AppNavBar({ profile, isAdmin, isAdminActive, onHelpOpen, onSetti
     <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 24px", display: "flex", alignItems: "center", gap: 16, height: 52 }}>
       <div>
         <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>DES STUDIO</div>
-        <div style={{ fontSize: 9, color: C.muted, letterSpacing: 0.5 }}>a simmoldr.app</div>
+        <div style={{ fontSize: 9, color: C.muted, letterSpacing: 0.5 }}>a simmodlr.app</div>
       </div>
       <div style={{ flex: 1 }} />
       {profile && (
