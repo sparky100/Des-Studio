@@ -168,14 +168,9 @@ export function buildHelpUserMessage(question, context = {}) {
     }
   }
   
-  const contextStr = contextParts.length > 0 
-    ? `\n\nContext: ${contextParts.join('\n')}`
+  const contextStr = contextParts.length > 0
+    ? `\n\nContext:\n${contextParts.join('\n')}`
     : '';
-  
-  return JSON.stringify({
-    userRequest: question,
-    instruction: 'Answer the user question using the knowledge base. Be concise but complete. Use examples where helpful.',
-    context: contextStr,
-    requiredResponseKeys: ['answer'],
-  }, null, 2);
+
+  return `${question}${contextStr}`;
 }
