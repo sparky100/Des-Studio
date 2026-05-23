@@ -99,19 +99,18 @@ describe("help assistant prompt", () => {
         },
       }
     );
-    const payload = JSON.parse(message);
-    expect(payload.userRequest).toBe("How do I add a server?");
-    expect(payload.context).toMatch(/Designing/);
-    expect(payload.context).toMatch(/entities/);
-    expect(payload.context).toMatch(/2 entity type\(s\)/);
-    expect(payload.context).toMatch(/1 queue\(s\)/);
+    expect(typeof message).toBe("string");
+    expect(message).toMatch(/How do I add a server\?/);
+    expect(message).toMatch(/Designing/);
+    expect(message).toMatch(/entities/);
+    expect(message).toMatch(/2 entity type\(s\)/);
+    expect(message).toMatch(/1 queue\(s\)/);
   });
 
   it("buildHelpUserMessage handles empty context", () => {
     const message = buildHelpUserMessage("General question", {});
-    const payload = JSON.parse(message);
-    expect(payload.userRequest).toBe("General question");
-    expect(payload.context).toBe("");
+    expect(typeof message).toBe("string");
+    expect(message).toBe("General question");
   });
 
   it("buildHelpUserMessage includes validation state", () => {
@@ -130,7 +129,6 @@ describe("help assistant prompt", () => {
         },
       }
     );
-    const payload = JSON.parse(message);
-    expect(payload.context).toMatch(/has validation errors/);
+    expect(message).toMatch(/has validation errors/);
   });
 });

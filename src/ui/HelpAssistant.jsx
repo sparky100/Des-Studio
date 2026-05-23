@@ -1,20 +1,69 @@
 // src/ui/HelpAssistant.jsx
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { C, FONT, Z } from './shared/tokens.js';
-import { Btn, Field, SH } from './shared/components.jsx';
+import { Btn } from './shared/components.jsx';
 import { callLLMOnce } from '../llm/apiClient.js';
 import { buildHelpAssistantSystemPrompt, buildHelpUserMessage } from '../llm/help-assistant-prompt.js';
+
+// Render a line with **bold** markers converted to <strong> spans
+function renderLine(line, key) {
+  const parts = line.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <span key={key}>
+      {parts.map((part, i) =>
+        part.startsWith('**') && part.endsWith('**')
+          ? <strong key={i} style={{ fontWeight: 700, color: 'inherit' }}>{part.slice(2, -2)}</strong>
+          : part
+      )}
+    </span>
+  );
+}
+
+// Render assistant markdown text: bold, numbered lists, bullet points, blank-line paragraphs
+function MarkdownContent({ text }) {
+  const lines = String(text || '').split('\n');
+  const nodes = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.trim() === '') {
+      nodes.push(<div key={`gap-${i}`} style={{ height: 6 }} />);
+    } else if (/^\d+\.\s/.test(line)) {
+      // Numbered list item
+      const [, num, rest] = line.match(/^(\d+)\.\s(.*)$/);
+      nodes.push(
+        <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
+          <span style={{ color: C.accent, fontWeight: 700, minWidth: 16 }}>{num}.</span>
+          <span>{renderLine(rest, 0)}</span>
+        </div>
+      );
+    } else if (/^[-•]\s/.test(line)) {
+      // Bullet point
+      const rest = line.replace(/^[-•]\s/, '');
+      nodes.push(
+        <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
+          <span style={{ color: C.accent, minWidth: 10 }}>•</span>
+          <span>{renderLine(rest, 0)}</span>
+        </div>
+      );
+    } else {
+      nodes.push(<div key={i} style={{ marginBottom: 2 }}>{renderLine(line, 0)}</div>);
+    }
+    i++;
+  }
+  return <>{nodes}</>;
+}
 
 // Simple message bubble for conversation
 function MessageBubble({ role, content }) {
   const isUser = role === 'user';
   const isAssistant = role === 'assistant';
   const isSystem = role === 'system';
-  
+
   return (
     <div style={{
       background: isUser ? C.accent + '22' : isAssistant ? C.bg : C.surface,
-      border: `1px solid ${isUser ? C.accent + '44' : isAssistant ? C.border : C.border}`,
+      border: `1px solid ${isUser ? C.accent + '44' : C.border}`,
       borderLeft: isAssistant ? `3px solid ${C.accent}` : 'none',
       borderRadius: 8,
       padding: '10px 12px',
@@ -22,32 +71,19 @@ function MessageBubble({ role, content }) {
       fontFamily: FONT,
       fontSize: 11,
       lineHeight: 1.6,
-      whiteSpace: 'pre-wrap',
     }}>
       {isUser && (
-        <div style={{
-          fontSize: 9,
-          fontWeight: 700,
-          color: C.accent,
-          marginBottom: 4,
-          letterSpacing: 0.5,
-        }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: C.accent, marginBottom: 4, letterSpacing: 0.5 }}>
           YOU
         </div>
       )}
       {isAssistant && (
-        <div style={{
-          fontSize: 9,
-          fontWeight: 700,
-          color: C.muted,
-          marginBottom: 4,
-          letterSpacing: 0.5,
-        }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: C.muted, marginBottom: 4, letterSpacing: 0.5 }}>
           AI
         </div>
       )}
       <div style={{ color: isSystem ? C.muted : C.text }}>
-        {content}
+        {isAssistant ? <MarkdownContent text={content} /> : content}
       </div>
     </div>
   );
@@ -280,10 +316,18 @@ export function HelpAssistant({
         responseFormat: 'text',
       });
       
-      // Extract response text
-      const answer = typeof response === 'string' 
-        ? response 
+      // Extract response text; defensively unwrap JSON { "answer": "..." } if the LLM returns it
+      let answer = typeof response === 'string'
+        ? response
         : response?.answer || response?.content || JSON.stringify(response);
+      if (typeof answer === 'string' && answer.trimStart().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(answer);
+          if (typeof parsed.answer === 'string') answer = parsed.answer;
+        } catch {
+          // Not valid JSON — use as-is
+        }
+      }
       
       setConversationHistory(prev => [...prev, { role: 'assistant', content: answer }]);
     } catch (err) {
@@ -475,15 +519,16 @@ export function HelpAssistant({
         borderTop: `1px solid ${C.border}`,
         flexShrink: 0,
       }}>
-        <Field
+        <textarea
+          ref={inputRef}
+          aria-label="Your question"
           value={inputValue}
-          onChange={setInputValue}
-          multiline
+          onChange={e => setInputValue(e.target.value)}
           rows={3}
           placeholder="e.g. How do I set up exponential arrivals?"
           onKeyDown={handleKeyDown}
           disabled={isLoading}
-          inputStyle={{
+          style={{
             width: '100%',
             background: C.bg,
             border: `1px solid ${C.border}`,
