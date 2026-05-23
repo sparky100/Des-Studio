@@ -34,9 +34,37 @@
               "icon": "lucide-file",
               "title": "ADR-011-conditional-routing-schema"
             }
+          },
+          {
+            "id": "b65686e20034ba5b",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Some Notes on Warnings.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Some Notes on Warnings"
+            }
+          },
+          {
+            "id": "14e20ad8a73e5503",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Untitled.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Untitled"
+            }
           }
         ],
-        "currentTab": 1
+        "currentTab": 3
       }
     ],
     "direction": "vertical"
@@ -198,8 +226,28 @@
       "bases:Create new base": false
     }
   },
-  "active": "34ab82a74db2ade8",
+  "active": "14e20ad8a73e5503",
   "lastOpenFiles": [
+    "reviews/document-gap-tracker.md",
+    "help-knowledge-base.json",
+    "reviews/sprint-70-help-assistant-plan.md",
+    "DES_Studio_Build_Plan.md.tmp.17268.5626a731abed",
+    "DES_Studio_Build_Plan.md.tmp.17268.abdef080ce95",
+    "DES_Studio_Build_Plan.md.tmp.17268.76ac1ce23c0a",
+    "DES_Studio_Build_Plan.md.tmp.17268.cd2b38aecf2c",
+    "DES_Studio_User_Guide.md.tmp.17268.50eed799188c",
+    "DES_Studio_Build_Plan.md.tmp.17268.ff1b5318d759",
+    "DES_Studio_Build_Plan.md.tmp.17268.5a0001465773",
+    "DES_Studio_User_Guide.md.tmp.17268.911c7f2e1128",
+    "reviews/sprint-8c-closure.md",
+    "reviews/sprint-8c-plan.md",
+    "reviews/sprint-8c-plan.md.tmp.17268.dd6dd861f143",
+    "reviews/Sprint_Help_Assistant_Spec.md",
+    "reviews/sprint-8C-ai-generator-conversational-quality.md",
+    "Some Notes on Warnings.md",
+    "Untitled.md",
+    "capability-gap-analysis.md",
+    "decisions/ADR-011-conditional-routing-schema.md",
     "sprint-68-model-versioning-guide.md",
     "reviews/sprint-68-closure.md",
     "decisions/ADR-015-model-versioning-explicit-milestones.md",
@@ -217,26 +265,6 @@
     "reviews/sprint-43-closure-report.md",
     "reviews/sprint-43-plan.md",
     "reviews/sprint-44-closure-report.md",
-    "reviews/sprint-44-plan.md",
-    "reviews/sprint-45-closure-report.md",
-    "reviews/sprint-45-plan.md",
-    "reviews/sprint-46-plan.md",
-    "reviews/sprint-47-closure.md",
-    "reviews/sprint-47a-closure.md",
-    "reviews/sprint-47-plan.md",
-    "reviews/sprint-47a-plan.md",
-    "reviews/sprint-48-closure.md",
-    "reviews/sprint-48-plan.md",
-    "archived",
-    "scratch",
-    "pre-sprint-assessments",
-    "patterns",
-    "examples/sprint-26/recirculation-exit-demo.json",
-    "examples/sprint-26/priority-handoff-demo.json",
-    "examples/sprint-26",
-    "examples",
-    "reviews",
-    "opencode.json",
     "Pasted image 20260505144753.png"
   ]
 }

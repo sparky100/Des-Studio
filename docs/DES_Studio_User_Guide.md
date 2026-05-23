@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.15.0 (Sprints 1–69)
+Version: 1.16.0 (Sprints 1–70)
 
 ---
 
@@ -23,7 +23,7 @@ Version: 1.15.0 (Sprints 1–69)
 | v1.13.0 | 68 | Model versioning — explicit milestones, version history panel, create version dialog with notes, structural change detection, run records reference version |
 | v1.12.0 | 68 | Run History redesign — grouped action pills, More menu, replication count badge, average served per replication; Experiments vs Studies clarified; report export uses model snapshot from run record; "Save this change to model" for AI suggestions |
 | v1.15.0 | 69 | Magic-link model import — encode any model JSON as a URL; opening the link shows a pre-flight preview with validation status, then saves to your library with one click |
-| v1.16.0 | 8C | AI Model Generator three-step flow — Discover/Confirm/Generate conversation discipline, confirmation bubble, plain-English simulation summary card, proactive refinement chips, collapsible technical diff |
+| v1.16.0 | 70 | Help Assistant — in-app contextual help with suggested questions, accessible from any screen via ? button; documentation accuracy fixes (RENEGE_OLDEST macro, ServerAttr/EntityAttr distributions, SPT/EDD queue disciplines) |
 
 ---
 
@@ -382,6 +382,7 @@ Effect macros are the action vocabulary of DES Studio. They appear in the Effect
 | RELEASE | `RELEASE(serverType)` | Frees one unit of the server resource | End of service, after COMPLETE |
 | ASSIGN | `ASSIGN(serverType, queueName)` | Removes the next entity from the queue, binds it to a free server unit | Start-of-service C-Event |
 | RENEGE | `RENEGE(queueName)` | Removes a waiting entity from a queue after a timeout (reneging) | Modelling impatient customers |
+| RENEGE_OLDEST | `RENEGE_OLDEST(entityType)` | Removes the oldest entity of the specified type from its queue | Max-queue-length policies, timeout eviction |
 | BATCH | `BATCH(n, entityType)` | Collects n individual entities of the given type into a single batch entity | Assembly, group boarding, bulk processing |
 | UNBATCH | `UNBATCH(queueName)` | Splits a completed batch back into its constituent individual entities, placing each in the named queue | Post-batch processing where individuals must continue separately |
 | SPLIT | `SPLIT(n)` | Clones the current entity into n copies, each following independent paths | Parallel processing, order splitting |
@@ -620,9 +621,9 @@ Select two runs and click **Compare** to view a side-by-side KPI table and chart
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+S` / `Cmd+S` | Save the current model |
-| `?` | Open the Keyboard Shortcuts reference modal |
+| `?` | Open the Help Assistant |
 
-Pressing `?` at any time (while focus is outside a text input) opens a modal listing all available shortcuts.
+Pressing `?` at any time (while focus is outside a text input) opens the Help Assistant panel with context-aware suggested questions.
 
 ### 7.7 Warmup period and Welch detection
 
@@ -735,6 +736,33 @@ Select two saved runs from the Run History and click **Compare Runs**. The AI pr
 - **Use descriptive names.** Name your queues and entity types clearly (e.g., "Emergency Waiting Room" not "Q1") — the AI uses these names to produce readable, specific output.
 - **Annotate the model description.** A model description explaining the real-world context helps the AI tailor suggestions to the scenario (e.g., "GP surgery, 08:00–16:00, two GPs").
 - **Run warmup detection first.** If Welch detection finds a long warmup, extend the run time so the steady-state sample is large enough for reliable statistics.
+
+---
+
+## 9a. Help Assistant
+
+The Help Assistant provides contextual, in-app guidance accessible from any screen via the `?` button in the toolbar. Unlike the AI Insights panel (which analyses run results), the Help Assistant answers questions about how to use DES Studio itself.
+
+**How to use it.** Click the `?` button in the toolbar to open the Help Assistant panel. Type your question or click one of the suggested questions that appear based on your current screen.
+
+**What it covers:**
+- Model element definitions (entity types, queues, B-events, C-events, state variables, containers)
+- Effect macro usage and syntax
+- Distribution selection guidance (which distribution for which scenario)
+- Validation error explanations (plain-English meanings of V1–V29, W-CAP-01, W-CAP-02)
+- Experiment setup (warmup period, replications, parametric sweeps)
+- Results interpretation (KPI meanings, confidence intervals, goal feasibility)
+
+**Suggested questions by context:**
+| Current screen | Suggested questions |
+|----------------|---------------------|
+| Entity Types tab | "What's the difference between customer and server entities?", "When should I use attributes?" |
+| B-Event editor | "What does ARRIVE do?", "How do I set up reneging?" |
+| Distribution picker | "Which distribution should I choose for arrivals?", "What's the difference between Triangular and Normal?" |
+| Validation errors present | "What does V8 mean?", "How do I fix 'no arrival source'?" |
+| Execute panel | "What is warmup period?", "How many replications should I run?" |
+
+**Keyboard shortcut.** Press `?` at any time (when focus is not in a text input) to open the Help Assistant.
 
 ---
 

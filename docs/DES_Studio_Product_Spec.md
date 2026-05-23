@@ -1,7 +1,7 @@
 # DES Studio — Product Specification
-**Version:** 1.1.1
-**Date:** 2026-05-19
-**Sprint baseline:** Sprint 67 planning
+**Version:** 1.2.0
+**Date:** 2026-05-23
+**Sprint baseline:** Sprint 70
 **Status:** Living document — reviewed and updated at end of each sprint
 
 ---
@@ -13,6 +13,7 @@
 | v1.0.0 | 2026-05-16 | Sprint 45 | Initial product specification |
 | v1.1.0 | 2026-05-17 | Sprint 55a | Added COSEIZE macro; updated limitations (loopConfig/balkCondition status); AI Apply & Re-run; keyboard shortcuts; cost summary in Results view; distribution picker redesign; responsive layout; sprint 46–55a roadmap closure |
 | v1.1.1 | 2026-05-19 | Sprint 67 plan | Added plain-English-first UI requirement and Results presentation ordering requirements |
+| v1.2.0 | 2026-05-23 | Sprints 68–70 | Model versioning (explicit milestones, version history panel, structural change detection); AI debugging (trace emission, model checker); Help Assistant (in-app contextual help with suggested questions); documentation accuracy fixes |
 
 ---
 
@@ -231,7 +232,29 @@ The AI Insights panel provides five analytical capabilities, all grounded in the
 
 ---
 
-### 3.7 Sharing and Exporting
+### 3.7 Help Assistant
+
+The Help Assistant provides contextual, in-app guidance accessible from any screen via the `?` button in the toolbar. Unlike the AI Insights panel (which analyses run results), the Help Assistant answers questions about how to use DES Studio itself — model building, experiment setup, interpreting validation errors, and selecting distributions.
+
+**How it works.** Clicking the `?` button opens a chat-style panel with suggested questions. The assistant's knowledge base covers:
+- Model element definitions (entity types, queues, B-events, C-events, state variables, containers)
+- Effect macro usage and syntax
+- Distribution selection guidance (which distribution for which scenario)
+- Validation error explanations (plain-English meanings of V1–V29, W-CAP-01, W-CAP-02)
+- Experiment setup (warmup period, replications, parametric sweeps)
+- Results interpretation (KPI meanings, confidence intervals, goal feasibility)
+
+**Suggested questions.** The assistant surfaces context-aware suggestions based on the current screen:
+- In the Entity Types tab: "What's the difference between customer and server entities?", "When should I use attributes?"
+- In the B-Event editor: "What does ARRIVE do?", "How do I set up reneging?"
+- In the Distribution picker: "Which distribution should I choose for arrivals?", "What's the difference between Triangular and Normal?"
+- When validation errors are present: "What does V8 mean?", "How do I fix 'no arrival source'?"
+
+**Plain-English-first.** Answers follow the same plain-English-first pattern as the rest of DES Studio: primary explanation in everyday language, with technical terms and syntax details in expandable sections or code examples.
+
+---
+
+### 3.8 Sharing and Exporting
 
 **Share link.** From any model or saved run, a unique shareable URL can be generated. The share modal lets the modeller configure which widgets are visible to the recipient — for example, showing only the KPI summary and queue stats but not the full event log. Recipients can view results in read-only mode without signing in.
 
@@ -240,6 +263,8 @@ The AI Insights panel provides five analytical capabilities, all grounded in the
 **Export results.** From the Analysis view or Run History, results can be exported as CSV (KPI summary table, per-queue stats, per-resource utilisation, and optionally the per-entity lifecycle table — suitable for Excel or R) or as JSON (the full results object including replication data and confidence intervals — suitable for archival or programmatic processing). The event log can be exported separately as CSV from the Log view.
 
 **Export model.** The model definition can be downloaded as a JSON file and imported into any DES Studio instance, enabling model portability and sharing of model structures separately from results.
+
+**Export report.** After a completed run, a professional Word document (`.docx`) can be exported containing: cover page, executive summary, AI-generated model description, experiment configuration, model diagram screenshot, simulation results with confidence intervals, AI recommendations, and full model appendix.
 
 ---
 
@@ -258,7 +283,7 @@ Once goals are defined, they influence the tool's behaviour across every surface
 
 ## 5. Template Library
 
-The template library provides 17 pre-built simulation models organised across six domains. Clicking a template in the Templates tab saves a private, editable copy to the modeller's account and opens it with automatic execution enabled — results appear within seconds, so the model can be explored before anything is changed.
+The template library provides 14 pre-built simulation models organised across six domains. Clicking a template in the Templates tab saves a private, editable copy to the modeller's account and opens it with automatic execution enabled — results appear within seconds, so the model can be explored before anything is changed.
 
 Templates are read-only originals; each modeller's copy is fully owned by them. All templates carry domain and metadata fields used by the gallery's domain filter and search, and all templates are validated to produce non-zero throughput on a clean run.
 
@@ -278,11 +303,6 @@ Templates are read-only originals; each modeller's copy is fully owned by them. 
 | 12 | Bank Branch | Service Systems | PRIORITY queue discipline with customer segmentation |
 | 13 | Retail Checkout | Service Systems | Multi-server finite-capacity queue with balking |
 | 14 | Port Berth Operations | Logistics | High-utilisation multi-server congestion |
-| 15 | Machine Shop with Failures | Manufacturing | FAIL/REPAIR macros, MTBF/MTTR, PREEMPT for urgent jobs |
-| 16 | Priority ED with Triage Escalation | Healthcare | SET_ATTR mid-flight, balkCondition expression, Loop Guard recirculation cap |
-| 17 | Cost-Optimised Call Centre | Service Systems | COST macro, totalCost goal, Parametric Sweep with Goal Feasibility |
-
-Templates 15, 16, and 17 were added at Sprint 45 to demonstrate capabilities introduced in Sprints 32–44 — specifically failure modelling, mid-flight attribute updates, conditional balking expressions, loop guards, and cost optimisation workflows.
 
 ---
 
@@ -304,7 +324,7 @@ DES Studio is a mature and widely capable tool, but the following limitations ap
 
 ## 7. Delivered Since Sprint 45
 
-Sprints 46 through 55a are complete. The following user-visible capabilities were added.
+Sprints 46 through 70 are complete. The following user-visible capabilities were added.
 
 | Sprint | Capability |
 |--------|-----------|
@@ -319,10 +339,11 @@ Sprints 46 through 55a are complete. The following user-visible capabilities wer
 | 53 | **Internal refactoring** — AuthShell and ModelHistoryTab extracted; no user-visible change |
 | 54 | **Cost summary in Results view** — total cost, cost per served entity, and served count appear as a dedicated strip in the Analysis view whenever the model uses at least one COST macro |
 | 55a | **Internal refactoring** — ModelHealthPanel, ModelDetailHeader, SaveBanner, ModelTabBar, AppNavBar, ModelLibrary, ExperimentControls extracted; no user-visible change |
+| 68 | **Model versioning** — explicit milestones with version history panel, create version dialog with notes, structural change detection, run records reference version |
+| 69 | **AI debugging** — trace emission for every event fire, model checker for validation errors, event provenance and arbitration trace |
+| 70 | **Help Assistant** — in-app contextual help with suggested questions, accessible from any screen via ? button |
 
-## 8. Roadmap (Sprint 56 and Beyond)
-
-Sprint 56 is focused on extracting custom hooks from the ExecutePanel component to reduce its size below 2,000 lines. This is an internal code-quality sprint with no user-visible changes.
+## 8. Roadmap (Sprint 71 and Beyond)
 
 Leading candidates for subsequent sprints include:
 

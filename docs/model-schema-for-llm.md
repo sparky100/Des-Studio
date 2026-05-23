@@ -616,6 +616,8 @@ The engine rejects models that violate these rules. All generated models must co
 | V27 | `FILL`/`DRAIN` must reference a declared container `id` |
 | V28 | `epoch`, when set, must be a valid ISO 8601 datetime string (e.g. `"2026-05-18T08:00:00"`) |
 | V29 | A C-event whose `cSchedules` entries all have a `when` predicate must also include a fallback entry (one without `when`); otherwise entities matching no condition receive no service (warning) |
+| W-CAP-01 | Multi-class resource contention detected — multiple customer types competing for the same server type may cause unexpected priority inversion (warning) |
+| W-CAP-02 | Very high arrival rate detected — arrival rate exceeds service capacity by more than 20%; queue growth and long wait times expected (warning) |
 
 ---
 

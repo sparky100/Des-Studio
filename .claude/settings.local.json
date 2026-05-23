@@ -23,7 +23,8 @@
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('@xyflow/react:', p.dependencies['@xyflow/react']\\)\")",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\Des-Studio\\\\src\\\\ui\" -Directory)",
       "Bash(grep -v \"^$\")",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(xargs grep -l \"AI\\\\|aiGenerated\\\\|useAi\")"
     ]
   }
 }

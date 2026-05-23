@@ -1,8 +1,8 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.9.0
-**Date:** 2026-05-18
-**Sprint baseline:** Sprint 58+
+**Version:** 1.10.0
+**Date:** 2026-05-23
+**Sprint baseline:** Sprint 70
 **Status:** Living document — updated at end of each sprint
 
 ---
@@ -21,7 +21,8 @@
 | v1.7.0 | 2026-05-18 | Sprint 64 | Attribute-conditional service times — `when` predicate on cSchedule entries, first-match semantics, V29 validation, CEventEditor UI |
 | v1.8.0 | 2026-05-18 | Sprint 65 | Actuals tracking — `_plannedTime` on entities, `updateScheduledTime()` API, `avgPlanDeviation` in getSummary(), ActualsStreamAdapter, report Plan vs Actual section |
 | v1.9.0 | 2026-05-18 | Sprint 66 | Visual Designer node badge system; Execute Panel UX — Animate/Collect/Speed to Setup, Export consolidation, Share removal, Log guard, Entity Details rename, Analysis graph formatting |
-| v1.10.0 | 2026-05-22 | Sprint 8C | AI Model Builder specification — three-phase conversation discipline (Discover/Confirm/Generate), `confirm` intent, `suggestions[]` array, validation retry loop, chip UI behaviour. Added §6.10. |
+| v1.10.0 | 2026-05-22 | Sprint 70 | Documentation accuracy fixes: removed SEIZE from macro table (ASSIGN is correct), added RENEGE_OLDEST macro, added ServerAttr/EntityAttr distributions, added W-CAP-01/W-CAP-02 validation warnings, added V25/V29 to validation table, added SPT/EDD queue disciplines, added Help Assistant to §7.6, updated version history through Sprint 70 |
+| v1.11.0 | 2026-05-22 | Sprint 8C | AI Model Builder specification — three-phase conversation discipline (Discover/Confirm/Generate), `confirm` intent, `suggestions[]` array, validation retry loop, chip UI behaviour. Added §6.10. |
 
 ---
 
@@ -377,10 +378,10 @@ Macros are strings in the `effect` array of B-events and C-events. They are pars
 | Macro | Syntax | Description | Key side effects |
 |-------|--------|-------------|-----------------|
 | `ARRIVE` | `ARRIVE(Type)` or `ARRIVE(Type, QueueName)` | Creates a new entity of the given type and places it in the named queue. Applies balking (condition or probability) and finite capacity checks first. | Increments queue depth; emits FEL entry for any reneging schedule |
-| `SEIZE` | `SEIZE(Queue, ServerType)` | C-event macro: claims one idle server of ServerType for the first waiting entity in Queue. | Sets server status to `busy`; sets entity status to `inService` |
 | `RELEASE` | `RELEASE(Queue)` or `RELEASE(Queue, TargetQueue)` | Releases the server serving the context entity and optionally routes the entity to a target queue. | Sets server to `idle`; updates service time stats |
 | `COMPLETE` | `COMPLETE()` | Marks the context entity as `done` and releases its server. Final stage in a typical entity lifecycle. | Increments `__served`; records sojourn time |
 | `RENEGE` | `RENEGE(ctx)` | Marks the context entity (identified by `ctx`) as `reneged` and removes it from its queue. | Increments `__reneged` |
+| `RENEGE_OLDEST` | `RENEGE_OLDEST(CustomerType)` | Removes the oldest entity of the given type from its queue. Used for max-queue-length policies or timeout eviction. | Increments `__reneged`; removes entity from queue |
 | `PREEMPT` | `PREEMPT(ServerType)` | Interrupts the in-service entity on the lowest-priority server of the given type. The interrupted entity re-queues with `_remainingService` preserved. | Sets interrupted entity to `waiting`; emits trace entry |
 | `FAIL` | `FAIL(ServerType)` | Fails a currently idle server of the given type; sets its status to `failed`. MTBF/MTTR events are auto-scheduled from entity type config. | Sets server to `failed`; records `_failedAt` timestamp |
 | `REPAIR` | `REPAIR(ServerType)` | Repairs the first failed server of the given type; returns it to `idle`. | Records downtime in `_downtime`; sets server to `idle` |
@@ -614,6 +615,44 @@ When the AI returns structured suggestions, each suggestion card includes a **Ru
 
 ---
 
+### 7.6 Help Assistant (Sprint 70)
+
+The Help Assistant (`src/ui/HelpAssistant.jsx`) provides contextual, in-app guidance accessible from any screen via the `?` button in the toolbar. Unlike the AI Assistant Panel (§7.5), which analyses run results, the Help Assistant answers questions about how to use DES Studio itself.
+
+**Component structure:**
+- **HelpAssistant.jsx** — chat-style panel with message history, suggested questions, and streaming response display
+- **HelpAssistantPrompt.js** — prompt builders for help queries (not LLM-based; uses a curated knowledge base)
+- **suggestedQuestions.js** — context-aware question suggestions based on current screen/tab
+
+**Knowledge base coverage:**
+- Model element definitions (entity types, queues, B-events, C-events, state variables, containers)
+- Effect macro usage and syntax (all 18 macros from §5)
+- Distribution selection guidance (all 11 distributions from §7.2)
+- Validation error explanations (V1–V29, W-CAP-01, W-CAP-02 from §9)
+- Experiment setup (warmup period, replications, parametric sweeps)
+- Results interpretation (KPI meanings, confidence intervals, goal feasibility)
+
+**Suggested questions by context:**
+| Current screen | Suggested questions |
+|----------------|---------------------|
+| Entity Types tab | "What's the difference between customer and server entities?", "When should I use attributes?" |
+| B-Event editor | "What does ARRIVE do?", "How do I set up reneging?" |
+| C-Event editor | "What's the difference between B-events and C-events?", "How do I use ASSIGN?" |
+| Distribution picker | "Which distribution should I choose for arrivals?", "What's the difference between Triangular and Normal?" |
+| Validation errors present | "What does V8 mean?", "How do I fix 'no arrival source'?" |
+| Execute panel | "What is warmup period?", "How many replications should I run?" |
+
+**Plain-English-first.** Answers follow the same plain-English-first pattern as the rest of DES Studio: primary explanation in everyday language, with technical terms and syntax details in expandable sections or code examples.
+
+**Implementation notes:**
+- Help Assistant does not call an LLM — responses are curated text from a static knowledge base
+- Streaming display simulates typing for better UX (50 ms per word)
+- Suggested questions are filtered based on current tab/editor context
+- Modal can be dismissed with Escape key or × button
+- Keyboard shortcut: `?` opens Help Assistant from any screen (when focus is not in a text input)
+
+---
+
 ## 8. Non-Functional Requirements
 
 ### 8.1 Performance
@@ -697,6 +736,8 @@ DES Studio targets WCAG 2.1 AA compliance. Implemented requirements:
 | V27 | Error | FILL/DRAIN macro must reference a declared container ID |
 | V28 | Warning | `epoch` must be a valid ISO 8601 datetime string when set (e.g. `"2026-05-18T08:00:00"`); an invalid value is ignored and real-world clock conversions are disabled |
 | V29 | Warning | A C-event's `cSchedules` list has conditional entries (all with `when`) but no fallback (entry without `when`). Entities not matching any condition will receive no service. |
+| W-CAP-01 | Warning | Multi-class resource contention detected — multiple customer types competing for the same server type may cause unexpected priority inversion |
+| W-CAP-02 | Warning | Very high arrival rate detected — arrival rate exceeds service capacity by more than 20%; queue growth and long wait times expected |
 
 ### 2.10 Actuals Tracking (Sprint 65)
 
