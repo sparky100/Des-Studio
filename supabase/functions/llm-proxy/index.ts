@@ -117,6 +117,36 @@ async function callProvider(request: LlmProxyRequest, config: LlmProviderConfig)
 }
 
 async function loadConfig(): Promise<LlmProviderConfig> {
+  // Try platform_config table first so admin UI changes take effect without redeployment
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (supabaseUrl && serviceRoleKey) {
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/platform_config?key=eq.llm&select=value`,
+        { headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` } },
+      );
+      if (res.ok) {
+        const rows = await res.json();
+        if (rows.length > 0) {
+          const cfg = rows[0].value;
+          const provider = cfg.provider || DEFAULT_PROVIDER;
+          const model = cfg.model || DEFAULT_MODEL;
+          // API key: prefer DB-stored value, fall back to provider-specific env var
+          const apiKey = cfg.apiKey ||
+            (provider === "anthropic"
+              ? Deno.env.get("ANTHROPIC_API_KEY")
+              : Deno.env.get("OPENAI_API_KEY")) || "";
+          const temperature = typeof cfg.temperature === "number" ? cfg.temperature : 0.3;
+          const rateLimitPerHour = typeof cfg.rateLimitPerHour === "number" ? cfg.rateLimitPerHour : 25;
+          return { provider, model, apiKey, temperature, rateLimitPerHour };
+        }
+      }
+    }
+  } catch {
+    // fall through to env vars
+  }
+  // Fallback: env vars (used when platform_config is unavailable)
   const provider = Deno.env.get("LLM_PROVIDER") || DEFAULT_PROVIDER;
   const model = Deno.env.get("LLM_MODEL") || DEFAULT_MODEL;
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("OPENAI_API_KEY") || "";
