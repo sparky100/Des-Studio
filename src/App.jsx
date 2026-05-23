@@ -513,6 +513,16 @@ export default function App(){
             }}
           />
         </ErrorBoundary>
+        {helpOpen && (
+          <HelpAssistant
+            isOpen={helpOpen}
+            onClose={() => setHelpOpen(false)}
+            currentModel={model}
+            currentTab={null}
+            currentView="model-detail"
+            validation={null}
+          />
+        )}
       </div>
     )
   }
