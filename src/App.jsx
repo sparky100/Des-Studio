@@ -492,6 +492,7 @@ export default function App(){
               autoRun: openModelOptions.autoRun,
               showStarterGuide: openModelOptions.showStarterGuide,
               isOwner: true, canEdit: true, profiles, userId: isLocal ? null : uid, isAdmin,
+              onHelpOpen: () => setHelpOpen(true),
               onSave: isLocal
                 ? async (m) => saveLocalModel(m)
                 : async (m) => { const saved = await saveModel(m, uid); await loadData(); return saved; },

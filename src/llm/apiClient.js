@@ -167,12 +167,16 @@ export async function callLLMOnce(prompt) {
     body: JSON.stringify(buildLlmRequest({
       kind: prompt.kind,
       messages: prompt.messages,
-      maxTokens: prompt.max_tokens || 450,
+      maxTokens: prompt.maxTokens || prompt.max_tokens || 800,
       stream: false,
       responseFormat: "text",
     })),
   });
-  if (!response.ok) throw new Error(`LLM proxy returned ${response.status}`);
+  if (!response.ok) {
+    let detail = "";
+    try { const err = await response.json(); detail = err?.error?.message || err?.message || ""; } catch {}
+    throw new Error(`LLM proxy returned ${response.status}${detail ? `: ${detail}` : ""}`);
+  }
   const payload = await response.json();
   if (Array.isArray(payload?.content)) return payload.content.map(p => p?.text || "").join("");
   return payload?.content || payload?.text || payload?.completion || String(payload || "");

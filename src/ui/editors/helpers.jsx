@@ -309,9 +309,8 @@ const EffectPicker = ({effects, options, onChange}) => {
           return (
             <span key={j} style={{display:'inline-flex',alignItems:'center',gap:4,
               background:cfg.color+'18',border:`1px solid ${cfg.color}44`,
-              borderRadius:5,padding:'3px 8px',fontFamily:FONT,fontSize:11,color:cfg.color,
-              maxWidth:260,overflow:'hidden'}}>
-              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:220}}
+              borderRadius:5,padding:'3px 8px',fontFamily:FONT,fontSize:11,color:cfg.color}}>
+              <span style={{whiteSpace:'nowrap'}}
                 title={display}>{display}</span>
               <button onClick={()=>remove(j)} aria-label={`Remove effect ${j+1}`}
                 style={{background:'none',border:'none',color:cfg.color,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,flexShrink:0}}>✕</button>

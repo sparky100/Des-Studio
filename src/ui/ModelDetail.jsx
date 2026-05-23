@@ -837,6 +837,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         model={model} canEdit={canEdit} dirty={dirty} saving={saving}
         past={past} future={future} currentVersion={currentVersion}
         onBack={handleBack} onUndo={undo} onRedo={redo} onSave={save} onDiscard={discard}
+        onHelpOpen={overrides.onHelpOpen}
       />
       <ModelTabBar
         tab={tab} setTab={setTab}
