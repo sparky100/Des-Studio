@@ -138,7 +138,7 @@ export default function App(){
       if(event==='PASSWORD_RECOVERY'){setIsRecoverySession(true)}
       setSession(session)
       if(!session){setLoading(false);setModels([]);setProfile(null);setIsRecoverySession(false)}
-      if(session && event==='SIGNED_IN'){
+      if(session && (event==='SIGNED_IN'||event==='SIGNED_UP')){
         const stored=sessionStorage.getItem('des.pendingImport')
         if(stored){
           try{

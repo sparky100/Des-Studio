@@ -153,11 +153,11 @@ export function ImportPreview({ model, errors, warnings, user, onSave, onDismiss
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ background: alpha(C.accent, 0.06), border: `1px solid ${alpha(C.accent, 0.2)}`, borderRadius: RADIUS.md, padding: `${SPACE.sm + 2}px ${SPACE.md + 2}px` }}>
                 <div style={{ ...TYPO.caption, color: C.muted, fontFamily: FONT }}>
-                  Sign in to save this model to your account
+                  Sign in or sign up to save this model to your account
                 </div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <Btn variant="primary" onClick={handleSignInToSave}>Sign in to save</Btn>
+                <Btn variant="primary" onClick={handleSignInToSave}>Sign in / Sign up to save</Btn>
                 <button
                   type="button"
                   onClick={() => setShowRawJson(v => !v)}
