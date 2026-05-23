@@ -1,6 +1,6 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.10.0
+**Version:** 1.12.0
 **Date:** 2026-05-23
 **Sprint baseline:** Sprint 70
 **Status:** Living document — updated at end of each sprint
@@ -22,7 +22,8 @@
 | v1.8.0 | 2026-05-18 | Sprint 65 | Actuals tracking — `_plannedTime` on entities, `updateScheduledTime()` API, `avgPlanDeviation` in getSummary(), ActualsStreamAdapter, report Plan vs Actual section |
 | v1.9.0 | 2026-05-18 | Sprint 66 | Visual Designer node badge system; Execute Panel UX — Animate/Collect/Speed to Setup, Export consolidation, Share removal, Log guard, Entity Details rename, Analysis graph formatting |
 | v1.10.0 | 2026-05-22 | Sprint 70 | Documentation accuracy fixes: removed SEIZE from macro table (ASSIGN is correct), added RENEGE_OLDEST macro, added ServerAttr/EntityAttr distributions, added W-CAP-01/W-CAP-02 validation warnings, added V25/V29 to validation table, added SPT/EDD queue disciplines, added Help Assistant to §7.6, updated version history through Sprint 70 |
-| v1.11.0 | 2026-05-22 | Sprint 8C | AI Model Builder specification — three-phase conversation discipline (Discover/Confirm/Generate), `confirm` intent, `suggestions[]` array, validation retry loop, chip UI behaviour. Added §6.10. |
+| v1.11.0 | 2026-05-22 | Sprint 8 | AI Model Builder specification — three-phase conversation discipline (Discover/Confirm/Generate), `confirm` intent, `suggestions[]` array, validation retry loop, chip UI behaviour. Added §6.10. (Retroactively documented.) |
+| v1.12.0 | 2026-05-23 | Sprint 70 | Documentation accuracy fixes: corrected v1.11.0 sprint label from "Sprint 8C" to "Sprint 8"; documented previously-undocumented prompt builders (buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildCiResults) in new §6.11 |
 
 ---
 
@@ -488,7 +489,7 @@ Called for each point in a 1D sweep or 2D sweep grid to determine whether the po
 
 Pre-computes goal gap data for inclusion in both the narrative and suggestion prompts. For each goal, returns: `metric`, `label`, `operator`, `target`, `current` (actual value from `aggregateStats` CI mean or `summary` for single runs), `gap` (`current - target`), and `met` (boolean result of applying the operator).
 
-### 6.10 AI Model Builder (Sprint 8C+)
+### 6.10 AI Model Builder (Sprint 8+)
 
 **Entry point:** `src/llm/model-builder-prompts.js`  
 **Key exports:** `buildModelBuilderSystemPrompt()`, `buildModelBuilderUserMessage()`  
@@ -544,6 +545,26 @@ The system prompt structures LLM behaviour in three explicit phases. No fixed ca
 | Refinement chips | `intent: "build"` or `"refine"` with non-empty `suggestions[]` | Pill buttons below the last message |
 | Correction mode | "Something's wrong" clicked | Placeholder changes to "Describe what's wrong…"; confirmation bubble removed from history |
 | Proposal preview | `proposedModel` returned | `ModelDiffPreview` panel slides in beside the chat |
+
+### 6.11 Additional Prompt Builders (Schedule Refinement)
+
+The following exports exist in `src/llm/prompts.js` but were not previously documented.
+
+**`buildPlanRefinementPrompt(model, results, userRequest)`**
+
+Produces a structured prompt asking the LLM to propose changes to a model's Schedule distribution (`times[]` or `rows[]`) based on run results and a plain-English user instruction. Returns a JSON instruction block that `applySchedulePatch` can consume.
+
+**`parsePlanRefinementResponse(text) → SchedulePatch | null`**
+
+Extracts the fenced ` ```json ` block from the LLM response and parses it into a `SchedulePatch` object. Returns `null` if the block is absent or malformed.
+
+**`applySchedulePatch(model, patch) → model`**
+
+Creates a deep clone of `model` and applies a `SchedulePatch` to the relevant B-event's Schedule distribution `times[]` or `rows[]` array. Returns the patched clone; never mutates the input. Unknown patch targets return the original clone unchanged.
+
+**`buildCiResults(aggregateStats) → CiResult[]`**
+
+Formats `aggregateStats` from a replication batch into a compact array of `{ metric, mean, lower, upper, halfWidth }` objects suitable for inclusion in sensitivity and comparison prompts. Used internally by `buildSensitivityPrompt` and `buildComparisonPrompt`.
 
 ---
 

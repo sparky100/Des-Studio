@@ -1,5 +1,16 @@
 # DES Studio — Model Schema Reference for LLM Generation
 
+**Version:** 1.1.0
+**Date:** 2026-05-23
+**Sprint baseline:** Sprint 70
+
+| Version | Date | Sprint | Changes |
+|---------|------|--------|---------|
+| v1.0.0 | 2026-05-23 | Sprint 70 | Initial versioned snapshot — schema as delivered at Sprint 70 |
+| v1.1.0 | 2026-05-23 | Sprint 70 | Added SPT, EDD, PRIORITY(attrName) queue disciplines to §3; added V11 (Normal warning) and V16 (no termination condition warning) to §10 validation table |
+
+---
+
 **Purpose:** This file is the authoritative specification for generating valid DES Studio model JSON.
 Paste it (or reference it) as context when prompting any LLM to create or modify a model.
 
@@ -189,9 +200,12 @@ Queues are waiting areas for customers.
 - `name` must be unique across all queues. **Queue names are used as references in macros — they must match exactly (case-sensitive).**
 - `customerType` must match the `name` of a customer entity type.
 - `capacity`: `""` means unlimited. An integer ≥ 1 sets a finite buffer.
-- `discipline`: `"FIFO"` (default), `"LIFO"`, or `"PRIORITY"`.
+- `discipline`: `"FIFO"` (default), `"LIFO"`, `"PRIORITY"`, `"PRIORITY(attrName)"`, `"SPT"`, or `"EDD"`.
   - `PRIORITY` requires the customer entity type to have an attribute named **exactly** `priority` of type `number`. Lower numeric value = higher priority.
+  - `PRIORITY(attrName)` uses the named attribute instead of `priority` — e.g. `"PRIORITY(severity)"`. The named attribute must be of type `number`.
   - `LIFO` selects the most-recently-arrived entity (last in, first out).
+  - `SPT` (Shortest Processing Time) selects the entity with the smallest `serviceTime` or `processingTime` attribute value. FIFO tiebreaker on equal values.
+  - `EDD` (Earliest Due Date) selects the entity with the smallest `dueDate` attribute value. FIFO tiebreaker on equal values.
 - `overflowDestination` (optional): name of another queue to receive overflow entities when this queue is full.
 
 ---
@@ -599,10 +613,12 @@ The engine rejects models that violate these rules. All generated models must co
 | V8 | At least one B-event must have an `ARRIVE()` effect |
 | V9 | Queue names in C-event conditions must match a defined queue |
 | V10 | Attribute names must not start with `Resource` or `Queue` |
+| V11 | Warning — Normal distribution where `mean < 2 × stddev`; negative samples are likely (engine clamps to 0) |
 | V12 | Piecewise distribution must start at time 0; periods must be sorted ascending; at least one period required |
 | V13 | Piecewise distribution periods must be sorted ascending by `startTime` |
 | V14 | Server `shiftSchedule` must start at time 0, be sorted ascending, and use positive integer capacities |
 | V15 | Shift times after configured run duration are unreachable (warning) |
+| V16 | Warning — no `maxSimTime` or `terminationCondition` configured; run may execute until the cycle limit |
 | V17 | `routing` table and `RELEASE(Server, Queue)` in the same effect are mutually exclusive |
 | V18 | `probabilisticRouting` probabilities must sum to 1.0 (±0.001) |
 | V19 | Server `count` must be an integer ≥ 1 |

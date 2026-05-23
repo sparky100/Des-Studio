@@ -1,5 +1,5 @@
 # DES Studio — Product Specification
-**Version:** 1.2.0
+**Version:** 1.3.0
 **Date:** 2026-05-23
 **Sprint baseline:** Sprint 70
 **Status:** Living document — reviewed and updated at end of each sprint
@@ -14,6 +14,7 @@
 | v1.1.0 | 2026-05-17 | Sprint 55a | Added COSEIZE macro; updated limitations (loopConfig/balkCondition status); AI Apply & Re-run; keyboard shortcuts; cost summary in Results view; distribution picker redesign; responsive layout; sprint 46–55a roadmap closure |
 | v1.1.1 | 2026-05-19 | Sprint 67 plan | Added plain-English-first UI requirement and Results presentation ordering requirements |
 | v1.2.0 | 2026-05-23 | Sprints 68–70 | Model versioning (explicit milestones, version history panel, structural change detection); AI debugging (trace emission, model checker); Help Assistant (in-app contextual help with suggested questions); documentation accuracy fixes |
+| v1.3.0 | 2026-05-23 | Sprint 70 | Added RENEGE_OLDEST to §3.3 macro table (was missing from all four macro category tables) |
 
 ---
 
@@ -137,6 +138,7 @@ Effect macros are the action vocabulary of DES Studio. They appear in the Effect
 | RELEASE | Frees one unit of a server resource and routes the entity to the next queue in the flow |
 | ASSIGN | Takes the next eligible entity from a queue and binds it to a free server, starting the service clock |
 | RENEGE | Removes an entity that has waited too long from a queue before it reaches service |
+| RENEGE_OLDEST | Removes the oldest waiting entity of a given type from its queue — used for max-queue-length policies and timeout eviction |
 
 #### Resource Management
 

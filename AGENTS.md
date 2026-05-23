@@ -1,13 +1,13 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-21 | Reflects: Sprint 68 — Model Versioning.*
+*Last updated: 2026-05-23 | Reflects: Sprint 70 — Help Assistant.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Current sprint plan: `docs/reviews/sprint-68-plan.md`
-- Latest closure report: `docs/reviews/sprint-68-closure.md`
-- Capability guide: `docs/sprint-68-model-versioning-guide.md`
+- Current sprint plan: `docs/reviews/sprint-70-plan.md`
+- Latest closure report: `docs/reviews/sprint-70-closure.md`
+- Capability guide: `docs/sprint-70-help-assistant-guide.md`
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
@@ -58,7 +58,7 @@ project root
 │   │   ├── entities.js              ← Entity pool, queue discipline, waitingOf()
 │   │   ├── distributions.js         ← Sampler functions
 │   │   ├── conditions.js            ← Condition evaluator (currently uses new Function — MUST BE REPLACED)
-│   │   ├── macros.js                ← ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE
+│   │   ├── macros.js                ← 19 effect macros — see §5.1 for full list
 │   │   └── adapters/                ← Real-time data adapter layer (Sprint 57+)
 │   │       ├── index.js             ← AdapterRegistry + nullRegistry (default, zero-cost pass-through)
 │   │       ├── RestAdapter.js       ← Poll-based REST with TTL cache and 3× retry
@@ -130,7 +130,7 @@ This rule applies symmetrically: if an AI capability is added (new prompt field,
 
 ## 3a. Build-On Rule — Read Before Changing
 
-This project has an **existing working application**. Codex must never rewrite a working component from scratch. The correct approach for every task is:
+This project has an **existing working application**. the agent must never rewrite a working component from scratch. The correct approach for every task is:
 
 1. **READ** the target file and show the relevant current code
 2. **IDENTIFY** what already works and must be preserved
@@ -144,7 +144,7 @@ If Codex finds itself rewriting a file that the audit marked as working (✓), s
 | File | What works | What is wrong |
 |---|---|---|
 | `src/engine/index.js` | Three-Phase A/B/C loop structure | C-scan restart granularity (fix in place) |
-| `src/engine/macros.js` | All seven macros correct (ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE, BATCH, UNBATCH) | Nothing — preserve entirely |
+| `src/engine/macros.js` | All 19 macros correct (see §5.1 for full list) | Nothing — preserve entirely |
 | `src/engine/entities.js` | FIFO discipline correct | LIFO/Priority never read (extend waitingOf) |
 | `src/engine/conditions.js` | Condition evaluation structure | new Function() call (replace with safe eval) |
 | `src/engine/distributions.js` | All sampler functions | Math.random() (add seeded RNG) |
@@ -218,19 +218,31 @@ while (fel.length > 0 && !terminationConditionMet()) {
 
 **Full specification:** `docs/addition1_entity_model.md` — read this before any Sprint 1–3 work.
 
-### 5.1 The Seven Permitted Macros
+### 5.1 Effect Macros
 
-| Macro | Phase | Purpose |
-|---|---|---|
-| `ARRIVE` | B-Event | Creates entity, places in queue, schedules next arrival |
-| `SEIZE` | C-Event | Removes entity from queue, assigns to resource, schedules COMPLETE |
-| `COMPLETE` | B-Event | Releases resource, records stats, routes entity to next node |
-| `ASSIGN` | B or C | Modifies a mutable entity attribute or user-defined state variable |
-| `RENEGE` | B-Event | Removes entity from queue after patience timeout, routes to Sink |
-| `BATCH` | C-Event | Accumulates N entities per queue discipline; creates parent batch entity with `batch.children` |
-| `UNBATCH` | B-Event | Restores children from parent.batch to target queue; parent marked done |
+| Macro | Phase | Syntax | Purpose |
+|---|---|---|---|
+| `ARRIVE` | B-Event | `ARRIVE(EntityType[, QueueName])` | Creates entity, places in queue (defaults to `TypeName+"Queue"`), schedules next arrival |
+| `ASSIGN` | C-Event | `ASSIGN(QueueName, ServerType)` | Removes entity from named queue, binds to a free server, schedules cSchedule B-events |
+| `COMPLETE` | B-Event | `COMPLETE()` | Marks entity as served, records stats, removes from active service |
+| `RELEASE` | B-Event | `RELEASE(ServerType[, TargetQueue])` | Frees server, optionally routes entity to a target queue |
+| `RENEGE` | B-Event | `RENEGE(ctx)` | Removes entity from queue after patience timeout; always use `ctx` |
+| `RENEGE_OLDEST` | C-Event | `RENEGE_OLDEST(EntityType)` | Removes the oldest entity of the given type from its queue |
+| `BATCH` | C-Event | `BATCH(QueueName, N\|Entity.attrName)` | Accumulates N entities from named queue into a parent batch entity |
+| `UNBATCH` | B-Event | `UNBATCH(QueueName)` | Restores batch children to the named queue |
+| `FILL` | B or C | `FILL(ContainerName, amount)` | Adds amount to a named container (clamped to capacity) |
+| `DRAIN` | C-Event | `DRAIN(ContainerName, amount)` | Removes amount from container; no-op if level < amount |
+| `PREEMPT` | B or C | `PREEMPT(ServerType)` | Interrupts in-progress service; displaced entity re-queues with remaining service time |
+| `FAIL` | B-Event | `FAIL(ServerType)` | Places server into failed state; interrupts in-progress service |
+| `REPAIR` | B-Event | `REPAIR(ServerType)` | Restores failed server to idle |
+| `SPLIT` | B or C | `SPLIT(EntityType, N, TargetQueue)` | Creates N−1 clones of the current entity, places them in TargetQueue |
+| `COSEIZE` | C-Event | `COSEIZE(QueueName, Srv1, Srv2[, ...])` | Atomically seizes one entity and multiple server types; fails cleanly if any server unavailable |
+| `MATCH` | C-Event | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each queue into a combined batch in TargetQueue |
+| `SET` | B or C | `SET(varName, expr)` | Sets a model-level state variable to an arithmetic expression |
+| `SET_ATTR` | B or C | `SET_ATTR(attrName, expr)` | Sets a named attribute on the current entity instance |
+| `COST` | B or C | `COST(expr)` | Accumulates expression value to `summary.totalCost` and entity `__cost` |
 
-**These seven macros are the complete and closed set.** No other macros may be added without updating `docs/addition1_entity_model.md` first.
+**All 19 macros above are implemented in `src/engine/macros.js`.** New macros require updating `docs/addition1_entity_model.md` and adding tests before use.
 
 ### 5.2 Prohibited Action Patterns
 
@@ -265,17 +277,20 @@ function evaluateCondition(conditionString, state) {
 
 ## 6. Queue Discipline Rules
 
-Queue discipline is enforced **in the engine** on every SEIZE call. It is not a UI-only configuration.
+Queue discipline is enforced **in the engine** via `queueDisciplineComparator()` in `src/engine/entities.js`. It is not a UI-only configuration.
 
 | Discipline | Entity Selection Rule | Tiebreaker |
 |---|---|---|
 | `FIFO` | Smallest `arrivalTime` among candidates | — |
 | `LIFO` | Largest `arrivalTime` among candidates | — |
 | `PRIORITY` | Smallest `Entity.priority` attribute value | FIFO on equal priority |
+| `PRIORITY(attrName)` | Smallest value of the named entity attribute | FIFO on equal value |
+| `SPT` | Smallest `attrs.serviceTime` or `attrs.processingTime` | FIFO on equal value |
+| `EDD` | Smallest `attrs.dueDate` | FIFO on equal value |
 
-**Current state (audit finding C2):** The engine ignores `q.discipline` entirely. `waitingOf()` in `entities.js` always sorts by `arrivalTime` ascending (FIFO). LIFO and PRIORITY must be implemented before either option appears in the UI.
+All six disciplines are fully implemented in `src/engine/entities.js`. The `QueueEditor` dropdown may expose all implemented disciplines.
 
-**Rule:** If LIFO or PRIORITY is not yet implemented, remove it from the `QueueEditor` dropdown. Never show a UI option that the engine does not honour.
+**Rule:** Never show a UI discipline option that the engine does not honour. If a new discipline is added to the UI it must be simultaneously implemented in `queueDisciplineComparator()`.
 
 ---
 
@@ -467,29 +482,49 @@ Examples:
 
 ## 8. Pre-Run Model Validation
 
-All validation runs before `buildEngine()` is called. Validation failures block the run and surface errors inline in the editor panel — not as console logs, not as toasts only.
+All validation runs before `buildEngine()` is called via `validateModel(model)` in `src/engine/validation.js`. Returns `{errors, warnings}`. Errors block the run; warnings show a banner but allow execution. Each issue carries `{code, message, tab}`.
+
+Note: V7 does not exist — the numbering jumps from V6 to V8 in both docs and code.
 
 ### Blocking Errors (run prevented)
 
 | Code | Rule |
 |---|---|
-| V1 | Every Entity Class has a unique, non-empty name |
-| V2 | Every attribute name is unique within its Entity Class |
-| V3 | Every `defaultValue` matches its declared `valueType` |
-| V4 | PRIORITY queue discipline requires a numeric `priority` attribute on the entity class |
-| V5 | All distribution parameters are within valid bounds |
-| V6 | No B-Event schedule references a deleted or non-existent event ID |
-| V7 | Every Activity node has exactly one incoming and one outgoing edge |
-| V8 | Model contains at least one Source node and one Sink node |
-| V9 | No C-Event condition references an undefined variable or attribute |
-| V10 | No attribute name collides with built-in namespaces (`Resource`, `Queue`) |
+| V1 | Every entity type must have a unique, non-empty name |
+| V2 | Attribute names must be unique within each entity type |
+| V3 | Every `defaultValue` must match its declared `valueType` |
+| V4 | A queue with `discipline: "PRIORITY"` requires the entity type to have a `priority` attribute of type `number` |
+| V5 | Distribution parameters must be within valid bounds |
+| V6 | Every `schedules[].eventId` and `cSchedules[].eventId` must reference an existing B-event ID |
+| V8 | Model must have at least one ARRIVE source and at least one COMPLETE/RENEGE sink; both missing = error, one missing = warning |
+| V9 | C-event conditions must reference only defined queue names |
+| V10 | Attribute names must not start with reserved namespace prefixes `Resource` or `Queue` |
+| V12 | Piecewise distribution must have at least one period, start at time 0, nested piecewise not supported |
+| V13 | Piecewise periods must be sorted ascending by `startTime` |
+| V14 | Shift schedule must have numeric times, start at 0, be ascending, capacity integer ≥ 1 |
+| V17 | Routing table entries must reference defined queues; routing and RELEASE target are mutually exclusive |
+| V18 | Probabilistic routing probabilities must sum to 1.0 ±0.001 |
+| V19 | Server entity type `count` must be integer ≥ 1 |
+| V20 | Queue `capacity` must be integer ≥ 1 when set; `overflowDestination` must reference a defined queue |
+| V21 | `balkProbability` must be in [0, 1] |
+| V22 | BATCH size must be integer ≥ 2; referenced queue must exist |
+| V23 | UNBATCH target queue must exist |
+| V24 | `loopConfig.maxLoopCount` must be integer ≥ 1 |
+| V26 | Container `id` must be unique and non-empty; `capacity` > 0; `initialLevel` ≥ 0 and ≤ capacity |
+| V27 | FILL/DRAIN must reference a declared container ID |
 
 ### Warnings (run proceeds, banner shown)
 
 | Code | Rule |
 |---|---|
-| V11 | Normal distribution where `mean < 2 × stdDev` — frequent negative sample clamping likely |
-| V12 | Phase C pass cap was hit in the previous run — model may have an unstable C-scan |
+| V11 | Normal distribution where `mean < 2 × stddev` — negative samples likely (engine clamps to 0) |
+| V15 | A shift change time is after the configured run duration (shift will never fire) |
+| V16 | No `maxSimTime` or `terminationCondition` configured — run may execute until cycle limit |
+| V25 | `RENEGE(TypeName)` silently fails; the correct form is `RENEGE(ctx)` |
+| V28 | `epoch`, when set, must be a valid ISO 8601 datetime string |
+| V29 | A C-event whose `cSchedules` all have a `when` predicate has no fallback entry — entities matching no condition receive no service |
+| W-CAP-01 | Multi-class resource contention detected — multiple customer types competing for the same server type |
+| W-CAP-02 | Very high arrival rate detected — arrival rate exceeds service capacity by more than 20% |
 
 ---
 
@@ -499,15 +534,23 @@ The distribution system is **open and extensible**. New distribution types can b
 
 ### 9.1 Currently Supported Distributions
 
+All 11 distributions below are registered in `src/engine/distributions.js`. All numeric parameter values in model JSON must be strings (e.g. `"5"`, not `5`).
+
 | Type | Key Parameters | Notes |
 |---|---|---|
-| `exponential` | `rate` (λ > 0) | Primary inter-arrival distribution |
-| `uniform` | `min`, `max` | `max > min` enforced at validation |
-| `normal` | `mean`, `stdDev` | Negative samples clamped to 0 for durations |
-| `triangular` | `min`, `mode`, `max` | `min ≤ mode ≤ max` enforced |
-| `fixed` | `value` | Deterministic. Used for M/D/1 benchmarks. |
-| `lognormal` | `logMean`, `logStdDev` | Negative samples clamped to 0 |
-| `empirical` | `values[]` | Samples uniformly from inline list |
+| `Fixed` | `value` | Deterministic. Used for M/D/1 benchmarks. |
+| `Uniform` | `min`, `max` | `max > min` enforced at validation |
+| `Exponential` | `mean` | mean > 0. Primary inter-arrival distribution. |
+| `Normal` | `mean`, `stddev` (lowercase) | Negative samples clamped to 0 for durations; V11 warns if mean < 2×stddev |
+| `Triangular` | `min`, `mode`, `max` | `min ≤ mode ≤ max` enforced |
+| `Erlang` | `k`, `mean` | k must be positive integer; mean > 0 |
+| `Empirical` | `values[]` | Samples uniformly from inline list; also supports CSV import |
+| `Piecewise` | `periods[]` each with `startTime`, `dist`, `distParams` | First period at time 0; sorted ascending |
+| `ServerAttr` | `attr` (attribute name) | Reads named attribute from the matched server entity; returns max(0, value) or 1 if not found |
+| `EntityAttr` | `attr` (attribute name) | Reads named attribute from the arriving customer entity; returns value or 0 if not found |
+| `Schedule` | `times[]` or `rows[]` with optional `jitter` (Normal or Uniform) | Planned absolute arrival times; exhausts and stops |
+
+**`lognormal` is not implemented** — do not reference it in model JSON or documentation.
 
 ### 9.2 Distribution Architecture — Extensibility Rules
 
@@ -1422,17 +1465,19 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 54 | ✅ Complete | 2026-05-16 | Cost modelling visibility: totalCost/costPerServed in CI_METRICS, ANALYSIS_METRICS, ResultsWorkspace tile; per-entity cost in entity.attrs.__cost |
 | Sprint 55a | ✅ Complete | 2026-05-16 | God component decomposition: ModelHealthPanel, ModelDetailHeader, SaveBanner, ModelTabBar from ModelDetail; AppNavBar, ModelLibrary from App; ExperimentControls from execute/index |
 | Sprint 68 | ✅ Complete | 2026-05-20 | Model versioning as explicit milestones: `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version |
+| Sprint 69 | ✅ Complete | 2026-05-22 | AI debugging — structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, entity inspector panel, canvas node overlays, magic-link model import |
+| Sprint 70 | ✅ Complete | 2026-05-23 | Help Assistant — in-app contextual help, suggested questions, `src/ui/HelpAssistant.jsx`, `buildHelpAssistantSystemPrompt` prompt builder; documentation accuracy fixes across all docs |
 
 ---
 
-## 21. Current Sprint — Sprint 55a complete
+## 21. Current Sprint — Sprint 70 complete
 
-**Goal:** Expand the built-in template library from 10 to 14 templates across 6 domains, fix all broken templates (ARRIVE and ASSIGN macro bugs), add `domain`/`templateMeta` fields, upgrade the template gallery UI with domain filtering and search, add an in-app Patterns Guide panel, and document 6 reusable modelling patterns.
+**Goal:** Help Assistant — in-app contextual help panel (`src/ui/HelpAssistant.jsx`) accessible from any screen via the `?` button; suggested questions based on current screen; `buildHelpAssistantSystemPrompt` prompt builder in `src/llm/prompts.js`; documentation accuracy fixes across all four documentation files.
 
 **Source reviews:**
-- `docs/reviews/sprint-30-pre-sprint-assessment.md`
+- `docs/reviews/sprint-70-plan.md`
 
-**Status:** ✅ Complete | **Completed:** 2026-05-14
+**Status:** ✅ Complete | **Completed:** 2026-05-23
 
 **Delivered:**
 - F30.0 — Fixed ARRIVE queue-name mismatch in 9 templates; fixed ASSIGN entity-type-vs-queue-name mismatch in 6 templates

@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.16.0 (Sprints 1–70)
+Version: 1.17.0 (Sprints 1–70)
 
 ---
 
@@ -22,8 +22,10 @@ Version: 1.16.0 (Sprints 1–70)
 | v1.11.0 | 67 | AI Assistant simplified — single "Explain Results" button merges narrative, sensitivity, and suggestions; "Run with this change" replaces "Apply & Re-run"; results update automatically after applying a suggestion |
 | v1.13.0 | 68 | Model versioning — explicit milestones, version history panel, create version dialog with notes, structural change detection, run records reference version |
 | v1.12.0 | 68 | Run History redesign — grouped action pills, More menu, replication count badge, average served per replication; Experiments vs Studies clarified; report export uses model snapshot from run record; "Save this change to model" for AI suggestions |
+| v1.14.0 | 69 | AI debugging — trace emission for every event fire, model checker for validation errors, event provenance and arbitration trace, entity inspector panel, canvas node overlays |
 | v1.15.0 | 69 | Magic-link model import — encode any model JSON as a URL; opening the link shows a pre-flight preview with validation status, then saves to your library with one click |
 | v1.16.0 | 70 | Help Assistant — in-app contextual help with suggested questions, accessible from any screen via ? button; documentation accuracy fixes (RENEGE_OLDEST macro, ServerAttr/EntityAttr distributions, SPT/EDD queue disciplines) |
+| v1.17.0 | 70 | Macro syntax corrections — fixed COMPLETE(), ASSIGN(QueueName, ServerType), RENEGE(ctx), BATCH(QueueName, N), PREEMPT(ServerType), SPLIT(EntityType, N, TargetQueue); added missing v1.14.0 version entry |
 
 ---
 
@@ -378,17 +380,17 @@ Effect macros are the action vocabulary of DES Studio. They appear in the Effect
 | Macro | Syntax | What it does | When to use |
 |-------|--------|--------------|-------------|
 | ARRIVE | `ARRIVE(entityType)` | Creates a new entity instance of the given type and injects it into the model | The arrival B-Event that generates new customers |
-| COMPLETE | `COMPLETE(customerType)` | Marks the entity as served and removes it from active service | End of service B-Event; pairs with RELEASE |
-| RELEASE | `RELEASE(serverType)` | Frees one unit of the server resource | End of service, after COMPLETE |
-| ASSIGN | `ASSIGN(serverType, queueName)` | Removes the next entity from the queue, binds it to a free server unit | Start-of-service C-Event |
-| RENEGE | `RENEGE(queueName)` | Removes a waiting entity from a queue after a timeout (reneging) | Modelling impatient customers |
+| COMPLETE | `COMPLETE()` | Marks the entity as served and removes it from active service | End of service B-Event; pairs with RELEASE |
+| RELEASE | `RELEASE(ServerType)` | Frees one unit of the server resource | End of service, after COMPLETE |
+| ASSIGN | `ASSIGN(QueueName, ServerType)` | Removes the next entity from the queue, binds it to a free server unit | Start-of-service C-Event |
+| RENEGE | `RENEGE(ctx)` | Removes a waiting entity from a queue after a timeout (reneging) | Modelling impatient customers |
 | RENEGE_OLDEST | `RENEGE_OLDEST(entityType)` | Removes the oldest entity of the specified type from its queue | Max-queue-length policies, timeout eviction |
-| BATCH | `BATCH(n, entityType)` | Collects n individual entities of the given type into a single batch entity | Assembly, group boarding, bulk processing |
+| BATCH | `BATCH(QueueName, N)` | Collects N individual entities from the named queue into a single batch entity | Assembly, group boarding, bulk processing |
 | UNBATCH | `UNBATCH(queueName)` | Splits a completed batch back into its constituent individual entities, placing each in the named queue | Post-batch processing where individuals must continue separately |
-| SPLIT | `SPLIT(n)` | Clones the current entity into n copies, each following independent paths | Parallel processing, order splitting |
+| SPLIT | `SPLIT(EntityType, N, TargetQueue)` | Creates N−1 clones of the current entity of the given type and places them in TargetQueue | Parallel processing, order splitting |
 | MATCH | `MATCH(typeA, queueA, typeB, queueB, targetQueue)` | Pairs one entity from queueA with one entity from queueB into a combined batch placed in targetQueue | Kitting and assembly where two components must meet |
 | COSEIZE | `COSEIZE(queueName, serverType1, serverType2, ...)` | Atomically seizes one entity from the queue and one idle server of each listed type; fails cleanly if any type has no idle server | Multi-resource operations requiring simultaneous capture (e.g. patient needs both a doctor and a room) |
-| PREEMPT | `PREEMPT(serverType, custId)` | Interrupts the entity currently in service on the server and replaces it with the higher-priority entity | Emergency/priority override |
+| PREEMPT | `PREEMPT(ServerType)` | Interrupts the entity currently in service on the server and replaces it with the higher-priority entity | Emergency/priority override |
 | FAIL | `FAIL(serverType)` | Places the server into a failed (unavailable) state | Random breakdowns |
 | REPAIR | `REPAIR(serverType)` | Restores the server from failed state back to idle | End of repair B-Event |
 | COST | `COST(amount)` | Adds amount to the model's cumulative cost total | Cost-benefit analysis, penalty tracking |
