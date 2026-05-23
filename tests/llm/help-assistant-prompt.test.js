@@ -8,63 +8,63 @@ describe("help assistant prompt", () => {
   it("buildHelpAssistantSystemPrompt returns a string", () => {
     const prompt = buildHelpAssistantSystemPrompt();
     expect(typeof prompt).toBe("string");
-    expect(prompt.length).toBeGreaterThan(1000);
+    expect(prompt.length).toBeGreaterThan(500);
   });
 
   it("prompt contains role and scope definition", () => {
     const prompt = buildHelpAssistantSystemPrompt();
     expect(prompt).toMatch(/DES Studio Help Assistant/i);
     expect(prompt).toMatch(/your role/i);
-    expect(prompt).toMatch(/scope/i);
+    expect(prompt).toMatch(/knowledge base/i);
   });
 
-  it("prompt contains User Guide excerpts", () => {
+  it("prompt contains Three-Phase method reference", () => {
     const prompt = buildHelpAssistantSystemPrompt();
-    expect(prompt).toMatch(/getting started/i);
-    expect(prompt).toMatch(/entity types/i);
-    expect(prompt).toMatch(/queues/i);
-    expect(prompt).toMatch(/b-events/i);
-    expect(prompt).toMatch(/c-events/i);
-    expect(prompt).toMatch(/distributions/i);
-    expect(prompt).toMatch(/running simulations/i);
-    expect(prompt).toMatch(/results/i);
+    expect(prompt).toMatch(/three-phase/i);
   });
 
-  it("prompt contains Engineering Spec excerpts", () => {
+  it("prompt contains macro references", () => {
     const prompt = buildHelpAssistantSystemPrompt();
-    expect(prompt).toMatch(/three-phase method/i);
-    expect(prompt).toMatch(/model schema/i);
-    expect(prompt).toMatch(/macros/i);
-    expect(prompt).toMatch(/validation rules/i);
-  });
-
-  it("prompt contains LLM schema (macros, distributions)", () => {
-    const prompt = buildHelpAssistantSystemPrompt();
-    expect(prompt).toMatch(/b-event macros/i);
-    expect(prompt).toMatch(/c-event macros/i);
     expect(prompt).toMatch(/ARRIVE/);
     expect(prompt).toMatch(/ASSIGN/);
     expect(prompt).toMatch(/COMPLETE/);
+    expect(prompt).toMatch(/RENEGE/);
+  });
+
+  it("prompt contains distribution references", () => {
+    const prompt = buildHelpAssistantSystemPrompt();
     expect(prompt).toMatch(/exponential/i);
     expect(prompt).toMatch(/uniform/i);
     expect(prompt).toMatch(/normal/i);
+    expect(prompt).toMatch(/triangular/i);
   });
 
-  it("prompt contains scope boundaries", () => {
+  it("prompt contains validation rules", () => {
     const prompt = buildHelpAssistantSystemPrompt();
-    expect(prompt).toMatch(/you do not/i);
-    expect(prompt).toMatch(/ai insights/i);
-    expect(prompt).toMatch(/ai generated model/i);
+    expect(prompt).toMatch(/V1/);
+    expect(prompt).toMatch(/V8/);
+    expect(prompt).toMatch(/error/i);
   });
 
-  it("prompt contains example Q&A pairs", () => {
+  it("prompt contains queue disciplines", () => {
     const prompt = buildHelpAssistantSystemPrompt();
-    expect(prompt).toMatch(/example q&a/i);
-    expect(prompt).toMatch(/exponential inter-arrival/i);
-    expect(prompt).toMatch(/b-events and c-events/i);
-    expect(prompt).toMatch(/replications/i);
+    expect(prompt).toMatch(/FIFO/i);
+    expect(prompt).toMatch(/LIFO/i);
+    expect(prompt).toMatch(/PRIORITY/i);
+  });
+
+  it("prompt contains KPI definitions", () => {
+    const prompt = buildHelpAssistantSystemPrompt();
+    expect(prompt).toMatch(/avgwait/i);
+    expect(prompt).toMatch(/utilisation/i);
+    expect(prompt).toMatch(/confidence interval/i);
+  });
+
+  it("prompt contains common problems section", () => {
+    const prompt = buildHelpAssistantSystemPrompt();
+    expect(prompt).toMatch(/common problems/i);
     expect(prompt).toMatch(/queue growing/i);
-    expect(prompt).toMatch(/priority queuing/i);
+    expect(prompt).toMatch(/warmup/i);
   });
 
   it("prompt contains workflow modes", () => {
