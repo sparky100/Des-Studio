@@ -386,6 +386,40 @@ All 6 queue disciplines.
 
 ---
 
+## Model Library
+
+### Model Cards
+
+Each model in the library displays a card showing name, description, visibility (public/private), health status, run count, owner, and last updated date.
+
+**Version badge:** When a model has at least one saved version, the card shows a purple **V{n}** badge indicating the latest version number. The badge updates immediately after creating a version — no page refresh required.
+
+**Health indicator:** Green = no issues, amber = warnings, red = validation errors.
+
+### Creating a New Model
+
+Open the New Model dialog from the **+ New Model** button. Enter a name and optional description, then choose a starting method:
+
+| Option | Behaviour |
+|--------|-----------|
+| **Draw** | Opens the Visual designer with a starter flow pre-placed on the canvas |
+| **Describe** | Opens the AI Builder tab; the model name and description are passed as context to the AI |
+| **Use a template** | Browse pre-built scenario templates |
+| **Import a file** | Upload a `.json` model file |
+| **Paste model** | Paste raw model JSON from clipboard |
+
+**Tip:** The description you enter in the New Model dialog is used by the AI Builder as context. Write a sentence describing the system you want to model ("A two-stage manufacturing line with a shared inspector") to get better initial AI output.
+
+### Model Versioning
+
+Create named version snapshots of your model from the **Versions** tab (visible to model owners). Versions capture the full model JSON at a point in time and can be compared (Diff) or restored.
+
+**Creating a version:** Click **+ Create version**, optionally name it and add notes. The version number is auto-assigned. Structural changes (entity types, queues, events) are detected and flagged automatically.
+
+**Version badge:** The latest version number appears on the model card in the library immediately after creation.
+
+---
+
 ## Authoring Modes
 
 ### Forms/Tabs Editors
@@ -396,15 +430,17 @@ All 6 queue disciplines.
 
 **Strengths:** All fields visible; structured validation; no ambiguity.
 
-### AI Generator
+### AI Builder
 
 **Purpose:** Bootstrap from natural language description.
 
 **When to use:** New model from scenario description; unfamiliar domain.
 
-**Behaviour:** Three-phase conversation (Discover → Confirm → Generate). Asks targeted questions; confirms understanding before generating JSON.
+**Access:** Design mode → **AI Builder** sub-tab. Also available from the New Model dialog via **Describe**.
 
-**Strengths:** Fast scaffolding; suggests realistic parameters.
+**Behaviour:** Three-phase conversation (Discover → Confirm → Generate). Asks targeted questions; confirms understanding before generating JSON. Uses the model's name and description as context from the first message — set these on the Overview tab for best results. When editing an existing model, the current model structure is also provided as context.
+
+**Strengths:** Fast scaffolding; suggests realistic parameters; refines incrementally.
 
 ### Visual Designer
 
@@ -412,7 +448,9 @@ All 6 queue disciplines.
 
 **When to use:** Reviewing flow; presenting to stakeholders; connection verification.
 
-**Strengths:** Visual flow; node badges show advanced config (conditional, feed); bidirectional sync with Forms/Tabs.
+**Access:** Design mode → **Visual** sub-tab. Also available from the New Model dialog via **Draw**.
+
+**Strengths:** Visual flow; node badges show advanced config (conditional, feed); bidirectional sync with Forms/Tabs. New blank models open with a starter flow pre-placed on the canvas — no unsaved changes until you make your first edit.
 
 ---
 
@@ -483,4 +521,4 @@ All 6 queue disciplines.
 
 ---
 
-<!-- help-reference version: 1.1 | sprint baseline: Sprint 70 | word count: ~3200 -->
+<!-- help-reference version: 1.2 | sprint baseline: Sprint 70 | updated: 2026-05-23 | word count: ~3700 -->
