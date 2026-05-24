@@ -76,6 +76,7 @@ async function runDesModelsSelect(buildQuery) {
     if (!isSchemaCompatibilityError(result.error)) {
       throw result.error;
     }
+    console.warn('[DB] schema fallback triggered — missing column or schema mismatch:', result.error?.message || result.error);
     desModelsSelectModeIndex = Math.min(i + 1, DES_MODELS_SELECTS.length - 1);
   }
   throw lastError;
@@ -285,6 +286,7 @@ export async function saveModel(model, userId) {
 
   let result = await persist(initialRow);
   if (result.error && isSchemaCompatibilityError(result.error) && errorText(result.error).includes("model_json")) {
+    console.warn('[DB] model_json column missing — falling back to legacy save (dataSources will not be persisted):', result.error?.message || result.error);
     desModelsSelectModeIndex = Math.min(1, DES_MODELS_SELECTS.length - 1);
     const { model_json, ...legacyRow } = row;
     result = await persist(legacyRow);
