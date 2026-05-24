@@ -1032,3 +1032,52 @@ export async function deleteVersion(modelId, versionId, userId) {
   return { ok: true };
 }
 
+// ── Feedback admin functions ───────────────────────────────────────────────
+
+const FEEDBACK_STATUSES = ["new", "reviewed", "actioned", "dismissed"];
+
+/**
+ * Fetch feedback rows for admin triage. Requires admin RLS policy.
+ * @param {{ limit?: number, offset?: number, status?: string }} opts
+ * @returns {Promise<Array<{id,createdAt,userId,category,message,appVersion,pageContext,status}>>}
+ */
+export async function fetchFeedback({ limit = 100, offset = 0, status } = {}) {
+  let query = supabase
+    .from("feedback")
+    .select("id, created_at, user_id, category, message, app_version, page_context, status")
+    .order("created_at", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (status) query = query.eq("status", status);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return (data || []).map(r => ({
+    id:          r.id,
+    createdAt:   r.created_at,
+    userId:      r.user_id,
+    category:    r.category,
+    message:     r.message,
+    appVersion:  r.app_version,
+    pageContext: r.page_context,
+    status:      r.status,
+  }));
+}
+
+/**
+ * Update the status of a feedback row (admin-only).
+ * @param {string} id  - UUID of the feedback row
+ * @param {string} status - one of: new | reviewed | actioned | dismissed
+ */
+export async function updateFeedbackStatus(id, status) {
+  if (!FEEDBACK_STATUSES.includes(status)) {
+    throw new Error(`Invalid feedback status "${status}". Must be one of: ${FEEDBACK_STATUSES.join(", ")}.`);
+  }
+  const { error } = await supabase
+    .from("feedback")
+    .update({ status })
+    .eq("id", id);
+  if (error) throw error;
+}
+

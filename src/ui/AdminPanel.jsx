@@ -4,7 +4,8 @@ import { C, FONT } from "./shared/tokens.js";
 import { Btn, Tag, SH, InfoBox, SectionPanel } from "./shared/components.jsx";
 import { useViewport } from "./shared/hooks.js";
 import { getPlatformConfig, setPlatformConfig, fetchAllUsers, updateUserRole,
-         suspendUser, unsuspendUser, logAdminAction, fetchAuditLog } from "../db/models.js";
+         suspendUser, unsuspendUser, logAdminAction, fetchAuditLog,
+         fetchFeedback, updateFeedbackStatus } from "../db/models.js";
 
 const LLM_PROVIDERS = [
   { value: "anthropic",    label: "Anthropic" },
@@ -26,6 +27,8 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const [limits, setLimits] = useState(null);
   const [users, setUsers] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
+  const [feedback, setFeedback] = useState([]);
+  const [feedbackFilter, setFeedbackFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
@@ -42,16 +45,18 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [llmCfg, limitsCfg, allUsers, log] = await Promise.all([
+      const [llmCfg, limitsCfg, allUsers, log, fb] = await Promise.all([
         getPlatformConfig("llm"),
         getPlatformConfig("limits"),
         fetchAllUsers(),
         fetchAuditLog(100),
+        fetchFeedback({ limit: 200 }),
       ]);
       setLlmConfig(llmCfg);
       setLimits(limitsCfg);
       setUsers(allUsers || []);
       setAuditLog(log || []);
+      setFeedback(fb || []);
       if (llmCfg) {
         setProvider(llmCfg.provider || "anthropic");
         setModel(llmCfg.model || "claude-sonnet-4-20250514");
@@ -155,6 +160,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
     { id: "llm",      label: "LLM Provider" },
     { id: "limits",   label: "Platform Limits" },
     { id: "users",    label: "Users" },
+    { id: "feedback", label: `Feedback${feedback.filter(f => f.status === "new").length ? ` (${feedback.filter(f => f.status === "new").length})` : ""}` },
     { id: "auditlog", label: "Audit Log" },
   ];
 
@@ -335,6 +341,147 @@ function AdminPanel({ userId, isAdmin, onClose }) {
               )}
             </div>
           )}
+
+          {/* ── FEEDBACK ── */}
+          {tab === "feedback" && (() => {
+            const STATUS_COLORS = {
+              new:       C.accent,
+              reviewed:  C.amber,
+              actioned:  C.green,
+              dismissed: C.muted,
+            };
+            const CATEGORY_COLORS = {
+              bug:      C.red,
+              feature:  C.accent,
+              question: C.amber,
+              other:    C.muted,
+            };
+            const ALL_STATUSES = ["new", "reviewed", "actioned", "dismissed"];
+
+            const filtered = feedbackFilter === "all"
+              ? feedback
+              : feedback.filter(f => f.status === feedbackFilter);
+
+            const handleStatusChange = async (id, status) => {
+              try {
+                await updateFeedbackStatus(id, status);
+                setFeedback(prev => prev.map(f => f.id === id ? { ...f, status } : f));
+              } catch (err) {
+                setSaveStatus({ state: "error", message: err.message });
+              }
+            };
+
+            return (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                <SH label="Feedback Triage" color={C.accent} />
+
+                {/* Filter bar */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Filter:</span>
+                  {["all", ...ALL_STATUSES].map(s => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setFeedbackFilter(s)}
+                      style={{
+                        background: feedbackFilter === s ? C.accent + "22" : "transparent",
+                        border: `1px solid ${feedbackFilter === s ? C.accent : C.border}`,
+                        borderRadius: 4, color: feedbackFilter === s ? C.accent : C.muted,
+                        fontFamily: FONT, fontSize: 11, fontWeight: 600,
+                        padding: "4px 10px", cursor: "pointer",
+                      }}
+                    >
+                      {s === "all"
+                        ? `All (${feedback.length})`
+                        : `${s} (${feedback.filter(f => f.status === s).length})`}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setLoading(true);
+                      try {
+                        const fb = await fetchFeedback({ limit: 200 });
+                        setFeedback(fb || []);
+                      } catch (err) {
+                        setSaveStatus({ state: "error", message: err.message });
+                      }
+                      setLoading(false);
+                    }}
+                    style={{ marginLeft: "auto", background: "transparent", border: `1px solid ${C.border}`,
+                      borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 11,
+                      padding: "4px 10px", cursor: "pointer" }}
+                  >
+                    ↻ Refresh
+                  </button>
+                </div>
+
+                {filtered.length === 0 ? (
+                  <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+                    No feedback submissions{feedbackFilter !== "all" ? ` with status "${feedbackFilter}"` : ""}.
+                  </div>
+                ) : (
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                        {["Category", "Message", "User", "Version", "Date", "Status"].map(h => (
+                          <th key={h} scope="col" style={{
+                            textAlign: "left", padding: "6px 10px",
+                            color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: 1,
+                          }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map(fb => (
+                        <tr key={fb.id} style={{ borderBottom: `1px solid ${C.border}20` }}>
+                          <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>
+                            <Tag label={fb.category || "—"} color={CATEGORY_COLORS[fb.category] || C.muted} />
+                          </td>
+                          <td style={{ padding: "6px 10px", maxWidth: 320 }}>
+                            <div style={{ color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 300 }}
+                              title={fb.message}>
+                              {fb.message}
+                            </div>
+                            {fb.pageContext && (
+                              <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>
+                                {fb.pageContext}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: "6px 10px", fontSize: 10, color: C.muted, whiteSpace: "nowrap" }}>
+                            {fb.userId ? fb.userId.slice(0, 8) + "…" : "(anon)"}
+                          </td>
+                          <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>
+                            {fb.appVersion || "—"}
+                          </td>
+                          <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>
+                            {new Date(fb.createdAt).toLocaleDateString()}
+                          </td>
+                          <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>
+                            <select
+                              value={fb.status}
+                              onChange={e => handleStatusChange(fb.id, e.target.value)}
+                              style={{
+                                background: C.bg, border: `1px solid ${STATUS_COLORS[fb.status] || C.border}`,
+                                borderRadius: 4, color: STATUS_COLORS[fb.status] || C.text,
+                                fontFamily: FONT, fontSize: 11, padding: "3px 6px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {ALL_STATUSES.map(s => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── AUDIT LOG ── */}
           {tab === "auditlog" && (
