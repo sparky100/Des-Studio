@@ -793,6 +793,120 @@ const APPOINTMENT_CLINIC = {
   ],
 };
 
+// ── Transport / Live Plan ─────────────────────────────────────────────────────
+// TfL real-time arrivals feed → scheduleFeed plan injection.
+// Each scheduled train at King's Cross St. Pancras becomes one entity
+// (the alighting passenger cohort). No auth needed; TfL API is CORS-open.
+// Set epoch to the current datetime before running for live alignment.
+
+const TFL_STATION_PLAN = {
+  name: "London Underground — Live Train Plan (TfL)",
+  description: "Station crowd-flow model for King's Cross St. Pancras. Each scheduled train (Victoria & Northern lines) from the TfL live arrivals API becomes a 'Train' entity representing its alighting passenger cohort. Cohorts flow through Platform Supervisors then Ticket Barriers. Set epoch to the current datetime to align ISO arrival times; the Exponential(4 min) fallback runs without any setup.",
+  domain: "Transport",
+  templateMeta: {
+    scenarioType: "Real-time plan injection — station crowd flow and barrier capacity",
+    keyMacros: ["ARRIVE", "ASSIGN", "RELEASE", "COMPLETE"],
+    paramGuide: "Update epoch to the current datetime (ISO 8601, e.g. 2026-05-24T14:00:00) before running live. TfL data covers the next ~30 min; maxSimTime 45 captures all trains and their processing. Fallback when TfL unavailable: Exponential(4 min) between trains. 2 supervisors (platform, 1–3 min), 6 barriers (0.5–2 min).",
+    limitations: "Each Train entity represents a whole passenger cohort, not individual passengers. TfL returns a rolling ~30-min prediction window — re-run to refresh the forecast. No CORS proxy required; api.tfl.gov.uk supports cross-origin browser requests. Change the StopPoint ID in dataSources.url for a different station.",
+  },
+  epoch: "2026-05-24T14:00:00",   // ← update to current datetime before running live
+  timeUnit: "minutes",
+  entityTypes: [
+    { id: "et_train",      name: "Train",      role: "customer", count: 0, attrDefs: [
+      { name: "line", valueType: "string", defaultValue: "Unknown", mutable: false },
+    ]},
+    { id: "et_supervisor", name: "Supervisor", role: "server",   count: 2, attrDefs: [] },
+    { id: "et_barrier",    name: "Barrier",    role: "server",   count: 6, attrDefs: [] },
+  ],
+  stateVariables: [],
+  bEvents: [
+    {
+      id: "b_train_arrive",
+      name: "Train Arrives",
+      scheduledTime: "0",
+      effect: ["ARRIVE(Train, Platform)"],
+      // No static rows — dist is the offline fallback.
+      // When liveDataMode fires, prefetchScheduleFeeds injects TfL rows and
+      // flips dist to "Schedule" so every planned arrival fires in order.
+      schedules: [{
+        eventId: "b_train_arrive",
+        dist: "Exponential",
+        distParams: { mean: "4" },
+      }],
+    },
+    {
+      id: "b_platform_clear",
+      name: "Platform Cleared",
+      scheduledTime: "9999",
+      effect: ["RELEASE(Supervisor, Barrier Queue)"],
+      schedules: [],
+    },
+    {
+      id: "b_exit_done",
+      name: "Cohort Exits",
+      scheduledTime: "9999",
+      effect: ["COMPLETE()"],
+      schedules: [],
+    },
+  ],
+  cEvents: [
+    {
+      id: "c_clear_platform",
+      name: "Clear Platform",
+      priority: 1,
+      condition: "queue(Platform).length > 0 AND idle(Supervisor).count > 0",
+      effect: ["ASSIGN(Platform, Supervisor)"],
+      cSchedules: [{
+        eventId: "b_platform_clear",
+        dist: "Uniform",
+        distParams: { min: "1", max: "3" },
+        useEntityCtx: true,
+      }],
+    },
+    {
+      id: "c_process_barrier",
+      name: "Process Barrier",
+      priority: 2,
+      condition: "queue(Barrier Queue).length > 0 AND idle(Barrier).count > 0",
+      effect: ["ASSIGN(Barrier Queue, Barrier)"],
+      cSchedules: [{
+        eventId: "b_exit_done",
+        dist: "Uniform",
+        distParams: { min: "0.5", max: "2" },
+        useEntityCtx: true,
+      }],
+    },
+  ],
+  queues: [
+    { id: "q_platform", name: "Platform",     customerType: "Train", capacity: "", discipline: "FIFO" },
+    { id: "q_barrier",  name: "Barrier Queue", customerType: "Train", capacity: "", discipline: "FIFO" },
+  ],
+  goals: [
+    { metric: "summary.avgWait",    operator: "<",  target: 3, label: "Mean platform wait < 3 min" },
+    { metric: "summary.avgSojourn", operator: "<",  target: 8, label: "Mean total exit time < 8 min" },
+  ],
+  containerTypes: [],
+  dataSources: [{
+    id: "ds_tfl",
+    label: "TfL Arrivals — King's Cross St. Pancras",
+    type: "scheduleFeed",
+    url: "https://api.tfl.gov.uk/StopPoint/940GZZLUKSKX/Arrivals",
+    entityType: "Train",
+    targetBEventId: "b_train_arrive",
+    timeField: "expectedArrival",
+    attrMap: {
+      lineName: "line",
+      vehicleId: "entityId",
+    },
+  }],
+  experimentDefaults: {
+    maxSimTime: 45,
+    warmupPeriod: 0,
+    replications: 5,
+    liveDataMode: "calibrated_batch",
+  },
+};
+
 // ── Aviation / Live Data ──────────────────────────────────────────────────────
 // First real-time template: uses OpenSky Network adapter to feed live aircraft
 // inter-arrival times. experimentDefaults.liveDataMode "calibrated_batch" tells
@@ -929,6 +1043,8 @@ export const TEMPLATES = [
   { id: "machine-shop-failures",  ...MACHINE_SHOP_FAILURES },
   { id: "priority-ed-balking",    ...PRIORITY_ED_BALKING },
   { id: "cost-call-centre",       ...COST_CALL_CENTRE },
+  // Transport / Live Plan
+  { id: "tfl-station-plan",       ...TFL_STATION_PLAN },
   // Aviation / Live Data
   { id: "plane-arrivals-live",    ...PLANE_ARRIVALS_LIVE },
 ];

@@ -172,7 +172,10 @@ export class AdapterRegistry {
         if (sched.eventId !== be.id) return sched;
         const combined = [...(sched.rows || []), ...liveRows];
         combined.sort((a, b) => a.time - b.time);
-        return { ...sched, rows: combined };
+        // Switch dist to "Schedule" so phase-B re-scheduling steps through
+        // rows correctly (Schedule sampler returns plannedTime − clock).
+        // The original dist is preserved as a no-op fallback field.
+        return { ...sched, dist: "Schedule", rows: combined };
       });
 
       return { ...be, schedules };
