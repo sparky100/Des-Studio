@@ -26,6 +26,7 @@ Version: 1.17.0 (Sprints 1–70)
 | v1.15.0 | 69 | Magic-link model import — encode any model JSON as a URL; opening the link shows a pre-flight preview with validation status, then saves to your library with one click |
 | v1.16.0 | 70 | Help Assistant — in-app contextual help with suggested questions, accessible from any screen via ? button; documentation accuracy fixes (RENEGE_OLDEST macro, ServerAttr/EntityAttr distributions, SPT/EDD queue disciplines) |
 | v1.17.0 | 70 | Macro syntax corrections — fixed COMPLETE(), ASSIGN(QueueName, ServerType), RENEGE(ctx), BATCH(QueueName, N), PREEMPT(ServerType), SPLIT(EntityType, N, TargetQueue); added missing v1.14.0 version entry |
+| v1.18.0 | 71 | In-app Feedback widget and About panel — toolbar Feedback button (speech-bubble icon) opens a Supabase-backed submission form; Info button (ⓘ icon) opens the About panel showing version and contact details; Supabase `feedback` table with RLS policies for authenticated and anonymous submission |
 
 ---
 
@@ -126,16 +127,21 @@ After sign-in (or on first open), DES Studio shows the Model Library with two ta
 
 ### Creating a model
 
-There are four ways to create a new model in DES Studio:
+Click **+ New Model** in the My Models tab to open the new model dialog. Enter a name (required) and an optional description — a good description helps the AI tailor suggestions to your scenario.
 
-| Method | How | Best for |
-|--------|-----|----------|
-| **New Model** | Click **New Model** in My Models, give it a name and optional description | Starting from scratch |
-| **Import** | Click **Import** to upload a `.json` file | Loading a model saved from another DES Studio instance |
-| **Paste JSON** | Click **Paste JSON** in the library header and paste model JSON from the clipboard | Quickly importing a model shared as text |
-| **Templates** | Click a template in the Templates tab | Starting from a pre-built scenario (creates a private copy) |
+Then choose a starting point from the five options presented:
 
-All four methods run the same validation gate before opening the model. Import and Paste JSON also create a new model owned by you — they do not overwrite existing models.
+| Option | What it does | Best for |
+|--------|-------------|----------|
+| **Draw** | Opens the Visual Designer canvas with an empty model | Modellers who prefer to sketch the flow graph first |
+| **Use a template** | Opens the template browser; selecting a template creates a private copy and opens it immediately | Starting from a proven pattern (M/M/c, ER triage, call centre, etc.) — see the Templates tab for the full catalogue |
+| **Import a file** | Opens a file picker for `.json` model files | Loading a model exported from another DES Studio instance or received as a file |
+| **Paste model** | Opens a text area to paste model JSON | Quickly importing a model shared as text (e.g. from a colleague, a Claude conversation, or an AI-generated magic link) |
+| **Describe** | Opens the AI Model Generator | Bootstrapping a model from a plain-English scenario description — the AI asks targeted follow-up questions, then generates the model structure |
+
+All five options create a new model record owned by you. The name you entered in the dialog is always applied to the new model. Descriptions are optional but recommended — the AI reads them to contextualise suggestions.
+
+> **Templates tab.** The Templates tab in the Model Library is a separate read-only catalogue. Clicking a template card there also creates a private copy and opens it immediately — it is equivalent to choosing **Use a template** from the New Model dialog.
 
 ### Three authoring modes
 
@@ -765,6 +771,45 @@ The Help Assistant provides contextual, in-app guidance accessible from any scre
 | Execute panel | "What is warmup period?", "How many replications should I run?" |
 
 **Keyboard shortcut.** Press `?` at any time (when focus is not in a text input) to open the Help Assistant.
+
+---
+
+## 9b. Toolbar Utility Buttons
+
+Three utility buttons sit on the right side of the toolbar, to the left of the **Settings** and **Sign Out** controls:
+
+| Button | Icon | What it does |
+|--------|------|-------------|
+| **Feedback** | Speech-bubble (◻) | Opens the Feedback widget — submit a bug report, feature request, question, or general comment directly to the DES Studio team |
+| **About** | Info circle (ⓘ) | Opens the About panel — shows the app version, copyright, contact address, and the Three-Phase method attribution |
+| **Help** | `?` | Opens the Help Assistant (see §9a) |
+
+### Submitting feedback
+
+Click the speech-bubble icon (labelled **Submit feedback**) to open the Feedback widget. The widget is accessible from any screen — you do not need to be in a model to use it.
+
+**Steps:**
+1. Choose a category: **Bug Report**, **Feature Request**, **Question**, or **Other** — click the pill to select it.
+2. Type your message in the text box (minimum 10 characters, maximum 2000).
+3. Click **Send Feedback**. A character counter below the text box shows how many characters you have used.
+
+On successful submission you will see a confirmation message: *"Thank you — your feedback has been received."* The widget does not close automatically — click **Close** when you are ready.
+
+If the submission fails (for example due to a network error), an error message appears and you can try again.
+
+**What is sent.** Each submission records: your chosen category, your message, your app version, the page you were on when you opened the widget, your browser user-agent string, and your user ID if you are signed in. Anonymous users can also submit feedback — in that case no user ID is included.
+
+**Keyboard.** Press `Escape` to close the widget without submitting.
+
+### About panel
+
+Click the info-circle icon (labelled **About DES Studio**) to view the About panel. It shows:
+- App name and version (e.g. `v7.0.0`)
+- Copyright notice
+- Contact address: [support@simmodlr.app](mailto:support@simmodlr.app)
+- Method attribution: Three-Phase Simulation approach (Tocher/Pidd)
+
+Press `Escape` or click **×** to close.
 
 ---
 

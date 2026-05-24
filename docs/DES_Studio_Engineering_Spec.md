@@ -24,6 +24,7 @@
 | v1.10.0 | 2026-05-22 | Sprint 70 | Documentation accuracy fixes: removed SEIZE from macro table (ASSIGN is correct), added RENEGE_OLDEST macro, added ServerAttr/EntityAttr distributions, added W-CAP-01/W-CAP-02 validation warnings, added V25/V29 to validation table, added SPT/EDD queue disciplines, added Help Assistant to §7.6, updated version history through Sprint 70 |
 | v1.11.0 | 2026-05-22 | Sprint 8 | AI Model Builder specification — three-phase conversation discipline (Discover/Confirm/Generate), `confirm` intent, `suggestions[]` array, validation retry loop, chip UI behaviour. Added §6.10. (Retroactively documented.) |
 | v1.12.0 | 2026-05-23 | Sprint 70 | Documentation accuracy fixes: corrected v1.11.0 sprint label from "Sprint 8C" to "Sprint 8"; documented previously-undocumented prompt builders (buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildCiResults) in new §6.11 |
+| v1.13.0 | 2026-05-24 | Sprint 71 | In-app Feedback widget and About panel — `public.feedback` Supabase table with RLS; `submitFeedback()` exported from `src/db/supabase.js`; no-op stub in `src/db/local.js`; `FeedbackModal` and `AboutModal` React components in `src/ui/`; `AppNavBar` extended with Feedback and Info icon buttons; `VITE_APP_VERSION` injected via `vite.config.js` define; 26 new UI tests in `src/ui/__tests__/` |
 
 ---
 
@@ -71,6 +72,7 @@ Supabase provides PostgreSQL-backed persistence via `src/db/supabase.js`. The da
 - Model records (`models` table: id, name, description, model JSON, owner, created_at, updated_at, is_public, tags)
 - Run history (`run_results` table: model_id, run_label, summary, experiment config, tags, archived flag)
 - Saved experiment configurations (`experiments` table)
+- User feedback (`feedback` table: id, created_at, user_id, category, message, app_version, page_context, user_agent, status — see §2.7)
 
 An anonymous mode (no Supabase connection) uses `src/db/local.js` which persists to browser localStorage with the same interface contract.
 
@@ -124,7 +126,104 @@ The report generation module produces professional Word documents (`.docx`) from
 - Filename pattern: `<ModelName> — <RunLabel> — Report.docx`
 - `docx` v9 API notes: hex colours without `#` prefix; `PageNumberElement` (not `PageNumber` constructor); `ImageRun` requires `type: 'png'`
 
-### 2.7 Clock Utilities (Sprint 62)
+### 2.7 In-App Feedback and About Panel (Sprint 71)
+
+#### Database schema
+
+The `public.feedback` table records user feedback submissions:
+
+```sql
+CREATE TABLE public.feedback (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  user_id     uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  category    text NOT NULL CHECK (category IN ('bug','feature','question','other')),
+  message     text NOT NULL CHECK (char_length(message) BETWEEN 10 AND 2000),
+  app_version text,
+  page_context text,
+  user_agent  text,
+  status      text NOT NULL DEFAULT 'new'
+);
+```
+
+RLS is enabled. Two policies are defined: `"Users can submit feedback"` (authenticated, `auth.uid() = user_id`) and `"Anonymous feedback allowed"` (anon, `user_id IS NULL`). Users have no SELECT, UPDATE, or DELETE access.
+
+Migration file: `supabase/migrations/20260524053042_create_feedback_table.sql`
+
+#### `submitFeedback()` — `src/db/supabase.js`
+
+```js
+export async function submitFeedback({ category, message, userId, appVersion, pageContext })
+```
+
+Inserts one row into `public.feedback`. Sets `user_agent` to `navigator.userAgent` (guarded for non-browser environments). Throws the Supabase error object on failure. A no-op stub with the same signature is exported from `src/db/local.js` for anonymous/local mode.
+
+#### `FeedbackModal` — `src/ui/FeedbackModal.jsx`
+
+Props: `{ isOpen, onClose, userId, currentPage }`
+
+- Renders only when `isOpen` is true (null return on false)
+- Category state: four pill buttons with `aria-pressed`, default `"bug"`
+- Message state: controlled textarea, minLength 10, maxLength 2000
+- Submit: calls `submitFeedback()`; disables button while in-flight; shows success state on resolve; shows inline error on reject (retry allowed)
+- Form resets on every open (`useEffect` on `isOpen`)
+- Focus trap: `useEffect` captures Tab/Shift-Tab to cycle within focusable elements; focus moves to first focusable element on open
+- Escape: `keydown` listener calls `onClose`
+- `aria-labelledby` points to the heading `div` with id `feedback-modal-heading`
+- Reads `import.meta.env.VITE_APP_VERSION` as a module-level constant
+
+#### `AboutModal` — `src/ui/AboutModal.jsx`
+
+Props: `{ isOpen, onClose }`
+
+- Renders only when `isOpen` is true
+- Static content: app name, tagline, version (`VITE_APP_VERSION`), copyright, `mailto:` contact link, method attribution, footer note
+- Escape: `keydown` listener calls `onClose`
+- `aria-labelledby` points to heading id `about-modal-heading`
+- No data fetching; no side effects beyond focus management
+
+#### `AppNavBar` extensions — `src/ui/AppNavBar.jsx`
+
+- Imports `FeedbackModal` and `AboutModal`
+- Adds two local state variables: `feedbackOpen` and `aboutOpen` (both `useState(false)`)
+- Renders two new icon-only `<button>` elements (inline SVG icons) to the left of the existing `?` Help button:
+  - Feedback: `aria-label="Submit feedback"`, speech-bubble SVG, opens `FeedbackModal`
+  - Info: `aria-label="About DES Studio"`, i-circle SVG, opens `AboutModal`
+- Renders `<FeedbackModal>` and `<AboutModal>` as siblings of the navbar div (not inside it, to avoid stacking context issues)
+- Accepts two new props: `userId` (string|null) and `currentPage` (string) — forwarded to `FeedbackModal`
+- `App.jsx` passes `userId={uid ?? null}` and `currentPage={openId ? \`model/${openId}\` : shareToken ? \`share/${shareToken}\` : 'library'}`
+
+#### App version injection — `vite.config.js`
+
+```js
+define: {
+  'import.meta.env.VITE_APP_VERSION': JSON.stringify(process.env.npm_package_version),
+},
+```
+
+`npm_package_version` is set automatically by npm when running scripts, so the version is read from `package.json` at build time with no manual maintenance.
+
+#### Tests
+
+`src/ui/__tests__/FeedbackModal.test.jsx` (14 tests) and `src/ui/__tests__/AboutModal.test.jsx` (12 tests) run in the jsdom environment. The `vite.config.js` `environmentMatchGlobs` array is extended to include `['src/ui/**/__tests__/**', 'jsdom']`.
+
+Key FeedbackModal assertions:
+- Submit button disabled when message is empty or < 10 characters
+- Submit button enabled when message ≥ 10 characters
+- Selecting a category pill sets `aria-pressed="true"` on that pill and `"false"` on others
+- Successful submission shows confirmation text
+- `submitFeedback` called with correct `category`, `message`, and `appVersion`
+- Error state shown on rejection; retry available
+- Escape key calls `onClose`
+
+Key AboutModal assertions:
+- App name rendered in dialog content
+- Version row present (value starts with `v`)
+- `mailto:support@simmodlr.app` link rendered with correct `href`
+- Three-Phase method text present
+- Escape key calls `onClose`; backdrop click calls `onClose`
+
+### 2.8 Clock Utilities (Sprint 62)
 
 `src/engine/clockUtils.js` provides real-world clock conversion helpers. These functions are stateless pure utilities that accept the model's `epoch` and `timeUnit` fields.
 
@@ -138,7 +237,7 @@ The report generation module produces professional Word documents (`.docx`) from
 
 These utilities are used by `planCsvParser.js` (CSV import), the report generator (cover page period line), and the experiment controls UI (start/end wall-clock display).
 
-### 2.8 Planned Data Import (Sprint 63)
+### 2.9 Planned Data Import (Sprint 63)
 
 Sprint 63 adds two new ways to feed a planned-arrival schedule into a B-event's `rows[]`:
 
@@ -172,7 +271,7 @@ When an entity attribute named `entityId` is set (via `attrMap` or CSV), it beco
 
 Added inline to the Model Data tab. Allows modellers to add, configure, and remove data sources without editing JSON. Exposes all `scheduleFeed`-specific fields (entityType, targetBEventId, timeField, attrMap JSON editor) when `type: "scheduleFeed"` is selected.
 
-### 2.9 Attribute-Conditional Service Times (Sprint 64)
+### 2.10 Attribute-Conditional Service Times (Sprint 64)
 
 #### `when` predicate on `cSchedule` entries
 
@@ -760,7 +859,7 @@ DES Studio targets WCAG 2.1 AA compliance. Implemented requirements:
 | W-CAP-01 | Warning | Multi-class resource contention detected — multiple customer types competing for the same server type may cause unexpected priority inversion |
 | W-CAP-02 | Warning | Very high arrival rate detected — arrival rate exceeds service capacity by more than 20%; queue growth and long wait times expected |
 
-### 2.10 Actuals Tracking (Sprint 65)
+### 2.11 Actuals Tracking (Sprint 65)
 
 #### `_plannedTime` on entity objects
 
@@ -797,7 +896,7 @@ Message formats accepted: plain sim-time numbers, HH:MM strings, ISO 8601 dateti
 
 `buildResults()` in `reportGenerator.js` includes a "Plan vs Actual" section only when `summary.avgPlanDeviation` is non-null. Shows average deviation and direction (early / on time / late).
 
-### 2.11 Visual Designer Badge System (Sprint 66)
+### 2.12 Visual Designer Badge System (Sprint 66)
 
 `deriveGraphFromModel(model)` in `src/ui/visual-designer/graph.js` populates a `badges: string[]` field on each visual node. Badges are read-only indicators; they never modify the model.
 
