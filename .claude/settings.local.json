@@ -26,7 +26,8 @@
       "Bash(git commit *)",
       "Bash(xargs grep -l \"AI\\\\|aiGenerated\\\\|useAi\")",
       "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__list_projects",
-      "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__apply_migration"
+      "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__apply_migration",
+      "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__execute_sql"
     ]
   }
 }
