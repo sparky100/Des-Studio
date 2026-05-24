@@ -10,7 +10,30 @@ const TABS = [
   { id: "ui",      label: "UI" },
 ];
 
-function UserSettingsPanel({ userId, onClose }) {
+function PlanBadge({ plan }) {
+  const isPro = plan === "pro";
+  return (
+    <span style={{
+      display: "inline-flex",
+      alignItems: "center",
+      fontSize: 9,
+      fontWeight: 700,
+      fontFamily: "inherit",
+      letterSpacing: 1.2,
+      padding: "2px 7px",
+      borderRadius: 3,
+      background: isPro ? "#06b6d422" : "#7a98bb18",
+      color:      isPro ? "#06b6d4"   : "#7a98bb",
+      border:     `1px solid ${isPro ? "#06b6d444" : "#7a98bb33"}`,
+      textTransform: "uppercase",
+      userSelect: "none",
+    }}>
+      {isPro ? "PRO" : "FREE"}
+    </span>
+  );
+}
+
+function UserSettingsPanel({ userId, plan, onClose }) {
   const [tab, setTab] = useState("execute");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -78,6 +101,7 @@ function UserSettingsPanel({ userId, onClose }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         {onClose && <Btn small variant="ghost" onClick={onClose}>← Back</Btn>}
         <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT }}>Settings</div>
+        <PlanBadge plan={plan} />
       </div>
 
       <div role="tablist" style={{ display: "flex", gap: 2, background: C.surface, borderRadius: 6, padding: 2, width: "fit-content" }}>

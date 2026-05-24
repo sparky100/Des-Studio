@@ -1945,6 +1945,28 @@ npm run build
 
 ---
 
+### Sprint 71 — Individual SaaS Operator Layer ✅
+
+**Goal:** Deliver Phase 1 SaaS operator foundation: user lifecycle visibility, per-user usage intelligence, and signup notifications. Designed for clean Phase 2 (org/team tenancy) additive migration.
+
+**Status:** ✅ Complete — 2026-05-24
+
+**Migration:** `supabase/migrations/20260524060000_sprint71_saas_operator.sql`
+
+| Feature | Status | Description |
+|---|---|---|
+| F71.1 — Schema migration | ✅ | Added `email`, `plan`, `signup_at`, `last_active_at`, `organisation_id` to profiles. `email` synced from auth.users via trigger. `last_active_at` updated on profile row updates. `admin_user_stats` view + security-definer RPCs. |
+| F71.2 — last_active_at touch | ✅ | `touchLastActive(userId)` in `src/db/supabase.js`. Called once per session in `App.jsx` via `useRef` guard. |
+| F71.3 — Signup notification Edge Function | ✅ | `supabase/functions/notify-new-signup/index.ts`. Resend email (primary) + Slack (optional). WEBHOOK_SECRET verification. Always returns 200. Manual webhook setup documented. |
+| F71.4 — Enhanced admin user list | ✅ | Replaced `fetchAllUsers` with `fetchAdminUserStats` RPC. New columns: plan badge, signup date, last active (relative), model count, runs (30d), total runs. Client-side sort on all columns. Email prefix search. Row-click detail drawer with Change Plan/Role/Suspend. |
+| F71.5 — Usage tab | ✅ | New "Usage" tab in AdminPanel. KPI tiles: total users, active 7d, active 30d, total models. Usage table (sorted by runs_last_30d desc). Signups-over-time bar chart (inline SVG). |
+| F71.6 — Plan badge (user-facing) | ✅ | `PlanBadge` component in `UserSettingsPanel`. FREE (grey) / PRO (blue). `plan` prop passed from `App.jsx` via updated `fetchProfiles` (added `plan` to select). |
+| F71.7 — Docs and tests | ✅ | AGENTS.md updated. `.env.example` updated. 3 new test files: `tests/db/admin-user-stats.test.js`, `tests/notify-signup.test.js`, `tests/ui/admin-panel-users.test.jsx`. Existing `admin-panel.test.jsx` updated. |
+
+**Phase 2 deferred:** organisations table, org-scoped RLS, member invites, per-org usage, Stripe billing, upgrade/downgrade flow.
+
+---
+
 *End of build plan. Update after each sprint.*
 *The most important rule: read the existing file before changing it.*
 *Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec — never add a free-text escape hatch.*

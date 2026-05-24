@@ -3,8 +3,8 @@
 // All UI components are in ui/
 // All DB operations are in db/
 
-import { useState, useEffect, useCallback } from "react";
-import { supabase }                         from "./db/supabase.js";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { supabase, touchLastActive }         from "./db/supabase.js";
 import { fetchModels, fetchProfiles,
          saveModel, deleteModel,
          setVisibility, setAccess, forkModel,
@@ -94,6 +94,7 @@ export { createSampleMm1Model, extractImportedModelPayload };
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App(){
+  const lastActiveTouched=useRef(false)
   const [session,setSession]=useState(null)
   const [profile,setProfile]=useState(null)
   const [profiles,setProfiles]=useState([])
@@ -166,6 +167,11 @@ export default function App(){
   const loadData=useCallback(async()=>{
     if(!session)return
     setLoading(true);setError('');setRunStatsError('');setActionError('')
+    // Touch last_active_at once per session load (telemetry — errors swallowed inside touchLastActive)
+    if(!lastActiveTouched.current){
+      lastActiveTouched.current=true
+      touchLastActive(session.user.id)
+    }
     try{
       const [mods,profs]=await Promise.all([fetchModels(session.user.id),fetchProfiles()])
       const withLoadingStats = mods.map(model => ({ ...model, statsLoading: true }));
@@ -455,7 +461,7 @@ export default function App(){
     return (
       <div style={{background:C.bg,minHeight:'100vh'}}>
         <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');`}</style>
-        <UserSettingsPanel userId={uid} onClose={()=>setShowSettings(false)} />
+        <UserSettingsPanel userId={uid} plan={profile?.plan} onClose={()=>setShowSettings(false)} />
       </div>
     );
   }
