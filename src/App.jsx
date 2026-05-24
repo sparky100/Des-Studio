@@ -570,6 +570,8 @@ export default function App(){
         onSettings={() => setShowSettings(true)}
         onAdmin={() => { setShowAdmin(true); setOpenId(null); }}
         onSignOut={signOut}
+        userId={uid ?? null}
+        currentPage={openId ? `model/${openId}` : shareToken ? `share/${shareToken}` : 'library'}
       />
       <ModelLibrary
         myModels={myModels}

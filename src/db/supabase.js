@@ -10,3 +10,21 @@ if (!url || !anon) {
 
 export const supabase = createClient(url, anon);
 
+/**
+ * Submit user feedback to the Supabase feedback table.
+ * Inserts one row; throws on error.
+ *
+ * @param {{ category: string, message: string, userId: string|null, appVersion: string|undefined, pageContext: string|undefined }} params
+ */
+export async function submitFeedback({ category, message, userId, appVersion, pageContext }) {
+  const { error } = await supabase.from('feedback').insert({
+    category,
+    message,
+    user_id: userId ?? null,
+    app_version: appVersion,
+    page_context: pageContext,
+    user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+  });
+  if (error) throw error;
+}
+
