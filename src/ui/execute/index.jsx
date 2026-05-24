@@ -88,6 +88,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const [executeSection, setExecuteSection] = useState("run");
   const [showRunSetup, setShowRunSetup] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [diagnosticsPanelOpen, setDiagnosticsPanelOpen] = useState(false);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
   const [runHistoryStatus, setRunHistoryStatus] = useState("idle");
   const [runHistoryError, setRunHistoryError] = useState("");
@@ -1842,6 +1843,17 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       )}
 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <Btn
+          variant="ghost"
+          onClick={() => {
+            const issues = checkModel(model);
+            setModelCheckerIssues(issues);
+            setModelCheckerOpen(true);
+          }}
+          title="Run structural checks on this model"
+        >
+          Check Model
+        </Btn>
         <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive}>⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
@@ -1859,17 +1871,6 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           />
         </div>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
-        <Btn
-          variant="ghost"
-          onClick={() => {
-            const issues = checkModel(model);
-            setModelCheckerIssues(issues);
-            setModelCheckerOpen(true);
-          }}
-          title="Run structural checks on this model"
-        >
-          Check Model
-        </Btn>
         <Btn variant={view === "visual" ? "primary" : "ghost"} onClick={() => setView("visual")}>Live View</Btn>
         <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Results</Btn>
         <Btn
@@ -1880,7 +1881,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           style={autoRunning || mode === "running" ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
         >Log</Btn>
         <Btn variant={view === "entities" ? "primary" : "ghost"} onClick={() => setView("entities")} disabled={!results?.entitySummary?.length}>Entity Details</Btn>
-        <Btn variant={view === "diagnostics" ? "primary" : "ghost"} onClick={() => setView("diagnostics")}>Diagnostics</Btn>
+        <Btn variant={diagnosticsPanelOpen ? "primary" : "ghost"} onClick={() => setDiagnosticsPanelOpen(open => !open)}>Diagnostics</Btn>
         <div style={{ position: "relative" }}>
           {showExportPopover && (
             <div
@@ -1928,7 +1929,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
             </div>
           )}
         </div>
-        <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)} disabled={executeSection === "experiments"} title={executeSection === "experiments" ? "AI Insights is not available for parametric sweeps" : undefined}>AI Insights</Btn>
+        <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)} disabled={executeSection === "experiments"} title={executeSection === "experiments" ? "Analyse is not available for parametric sweeps" : undefined}>Analyse</Btn>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
       </div>
 
@@ -2466,18 +2467,42 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         </div>
       )}
 
-      {view === "diagnostics" && (
-        <div style={{ background: C.logBg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
-          <DiagnosticsTab
-            model={model}
-            results={results}
-            onGoToNode={setSelectedNodeLabel}
-          />
-        </div>
-      )}
         </>
       )}
       </div>
+
+      {diagnosticsPanelOpen && (
+        <div style={{
+          width: 380, minWidth: 320, flexShrink: 0,
+          background: C.panel,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+          display: "flex", flexDirection: "column",
+          maxHeight: "calc(100vh - 120px)",
+          overflowY: "auto",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
+            position: "sticky", top: 0, background: C.panel, zIndex: 1,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>Diagnostics</div>
+            <button
+              type="button"
+              aria-label="Close diagnostics"
+              onClick={() => setDiagnosticsPanelOpen(false)}
+              style={{ background: "none", border: "none", color: C.muted, fontSize: 16, cursor: "pointer", padding: "0 4px" }}
+            >✕</button>
+          </div>
+          <div style={{ padding: 14 }}>
+            <DiagnosticsTab
+              model={model}
+              results={results}
+              onGoToNode={setSelectedNodeLabel}
+            />
+          </div>
+        </div>
+      )}
 
       {aiPanelOpen && (
         <AiAssistantPanel

@@ -589,7 +589,7 @@ export const AiAssistantPanel = ({
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
-          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>AI Assistant</div>
+          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>Analyse Results</div>
           <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>
         </div>
         <Btn small variant="ghost" onClick={onClose} ariaLabel="Close AI assistant">x</Btn>

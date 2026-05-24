@@ -728,8 +728,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
 
   const TABS=[
     {id:"overview",label:"Overview"},
-    {id:"visual",label:"Visual"},
-    {id:"ai",label:"AI Builder"},
+    {id:"visual",label:"Draw"},
+    {id:"ai",label:"Describe"},
     {id:"entities",label:"Entity Types"},
     {id:"queues",label:"Queues"},
     {id:"bevents",label:"B-Events"},
@@ -889,7 +889,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(160px, 1fr))",gap:10}}>
                   {[
                     {title:"Design",body:"Sketch the process map first, then refine the generated structure.",action:"Open Design",onClick:()=>{setTab("visual");dismissStarterGuide();},primary:true},
-                    {title:"AI Designer",body:"Describe the system in plain language and let the assistant draft the model.",action:"Open AI Designer",onClick:()=>{setTab("ai");dismissStarterGuide();}},
+                    {title:"Describe",body:"Describe the system in plain language and let the assistant draft the model.",action:"Open Describe",onClick:()=>{setTab("ai");dismissStarterGuide();}},
                     {title:"Use a Template",body:"Start from a proven template and copy it into your own model workspace.",action:"Browse Templates",onClick:()=>{dismissStarterGuide();overrides.onExitToTemplates?.();}},
                   ].map(option=>(
                     <div key={option.title} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:RADIUS.sm,padding:12,display:"flex",flexDirection:"column",gap:8}}>
