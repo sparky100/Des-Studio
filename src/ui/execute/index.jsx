@@ -7,6 +7,7 @@ import { Tag, PhaseTag, Btn, SH, InfoBox } from "../shared/components.jsx";
 import { useViewport } from "../shared/hooks.js";
 import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { buildEngine } from "../../engine/index.js";
+import { AdapterRegistry } from "../../engine/adapters/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
@@ -33,6 +34,20 @@ import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
 import { generateReport } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
+
+/** Collect {{env.VAR}} secrets from sessionStorage for live-data adapters. */
+function collectEnvSecrets(dataSources) {
+  const secrets = {};
+  for (const ds of dataSources || []) {
+    if (!ds.authSecret) continue;
+    const m = String(ds.authSecret).match(/^\{\{env\.(.+?)\}\}$/);
+    if (m) {
+      const val = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(m[1]) : null;
+      if (val) secrets[m[1]] = val;
+    }
+  }
+  return secrets;
+}
 
 const numberDefault = (value, fallback) => {
   const n = Number(value);
@@ -361,6 +376,28 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     const maxTimeForRun = terminationMode === 'time' ? maxSimTime : null;
     const stopConditionForRun = terminationMode === 'condition' ? terminationCondition : null;
 
+    // ── Live data prefetch (calibrated_batch / lookahead) ─────────────────
+    // Resolve all dataSources before handing the model to the engine or workers.
+    // The resulting runModel has live values baked into distParams and sched.rows
+    // so the engine and web workers stay stateless (no registry needed in workers).
+    let runModel = model;
+    const liveDataMode = model.experimentDefaults?.liveDataMode;
+    if (liveDataMode) {
+      setSaveStatus({ state: 'saving', message: '⏳ Fetching live data…' });
+      try {
+        const envSecrets = collectEnvSecrets(model.dataSources);
+        const registry = new AdapterRegistry(model.dataSources || [], envSecrets);
+        await registry.prefetchAll();
+        runModel = await registry.prefetchScheduleFeeds(runModel);
+        runModel = registry.resolveAllParamSources(runModel);
+        registry.dispose();
+      } catch (err) {
+        console.warn('[LiveData] Prefetch failed — running with static model:', err);
+      }
+      setSaveStatus(null);
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     if (replications > 1) {
       const batchId = makeBatchId();
       const completedPayloads = [];
@@ -378,7 +415,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       setAggregateStats({});
 
       runnerRef.current = runReplications({
-        model,
+        model: runModel,
         replications,
         baseSeed: runSeed,
         warmupPeriod,
@@ -489,7 +526,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     setMode("running");
 
     const engine = buildEngine(
-      model,
+      runModel,
       runSeed,
       warmupPeriod,
       maxTimeForRun,

@@ -163,14 +163,51 @@ export class AdapterRegistry {
     if (!Object.keys(rowsByBEvent).length) return model;
 
     const bEvents = (model.bEvents || []).map(be => {
-      const merged = rowsByBEvent[be.id];
-      if (!merged) return be;
-      const combined = [...(be.rows || []), ...merged];
-      combined.sort((a, b) => a.time - b.time);
-      return { ...be, rows: combined };
+      const liveRows = rowsByBEvent[be.id];
+      if (!liveRows) return be;
+
+      // Inject rows into the first self-referencing schedule entry.
+      // The engine reads sched.rows (inside schedules[]), not be.rows (top-level).
+      const schedules = (be.schedules || []).map(sched => {
+        if (sched.eventId !== be.id) return sched;
+        const combined = [...(sched.rows || []), ...liveRows];
+        combined.sort((a, b) => a.time - b.time);
+        return { ...sched, rows: combined };
+      });
+
+      return { ...be, schedules };
     });
 
     return { ...model, bEvents };
+  }
+
+  /**
+   * Walk all B-event schedules and C-event cSchedules, substituting distParams
+   * values for any entry that has a paramSource binding, using values already
+   * cached by prefetchAll(). Call after prefetchAll(). Returns a new model —
+   * does not mutate the original.
+   *
+   * @param {object} model
+   * @returns {object}
+   */
+  resolveAllParamSources(model) {
+    const resolveEntry = (entry) => {
+      if (!entry.paramSource) return entry;
+      const resolved = this.resolve(entry.distParams || {}, entry.paramSource);
+      return { ...entry, distParams: resolved };
+    };
+
+    const bEvents = (model.bEvents || []).map(be => ({
+      ...be,
+      schedules: (be.schedules || []).map(resolveEntry),
+    }));
+
+    const cEvents = (model.cEvents || []).map(ce => ({
+      ...ce,
+      cSchedules: (ce.cSchedules || []).map(resolveEntry),
+    }));
+
+    return { ...model, bEvents, cEvents };
   }
 
   dispose() {
