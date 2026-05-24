@@ -5,6 +5,13 @@
 
 import { supabase } from "./supabase.js";
 
+// Every column that this module reads or writes. Used by validateDbSchema().
+export const EXPECTED_COLUMNS = [
+  'id', 'owner_id', 'name', 'description', 'entity_types', 'state_variables',
+  'b_events', 'c_events', 'visibility', 'access', 'created_at', 'updated_at',
+  'queues', 'tags', 'goals', 'latest_version', 'model_json', 'parent_model_id',
+];
+
 export const DEFAULT_USER_SETTINGS = Object.freeze({
   ui: {},
   execute: {},
@@ -76,6 +83,10 @@ async function runDesModelsSelect(buildQuery) {
     if (!isSchemaCompatibilityError(result.error)) {
       throw result.error;
     }
+    if (process.env.NODE_ENV === 'development') {
+      throw new Error(`DES Studio schema mismatch: ${result.error.message}`);
+    }
+    console.warn('[DB] schema fallback triggered — missing column or schema mismatch:', result.error?.message || result.error);
     desModelsSelectModeIndex = Math.min(i + 1, DES_MODELS_SELECTS.length - 1);
   }
   throw lastError;
@@ -285,6 +296,10 @@ export async function saveModel(model, userId) {
 
   let result = await persist(initialRow);
   if (result.error && isSchemaCompatibilityError(result.error) && errorText(result.error).includes("model_json")) {
+    if (process.env.NODE_ENV === 'development') {
+      throw new Error(`DES Studio schema mismatch: ${result.error.message}`);
+    }
+    console.warn('[DB] model_json column missing — falling back to legacy save (dataSources will not be persisted):', result.error?.message || result.error);
     desModelsSelectModeIndex = Math.min(1, DES_MODELS_SELECTS.length - 1);
     const { model_json, ...legacyRow } = row;
     result = await persist(legacyRow);
@@ -1143,5 +1158,34 @@ export async function updateUserPlan(userId, plan) {
     .eq("id", userId);
   if (error) throw error;
   return { ok: true };
+}
+
+// ── Dev-only schema probe ─────────────────────────────────────────────────────
+
+/**
+ * validateDbSchema — dev-only startup probe.
+ *
+ * Issues a lightweight SELECT against des_models to confirm all EXPECTED_COLUMNS
+ * exist. Only runs when NODE_ENV === 'development'. Never throws — logs diagnostics
+ * to console.error so developers see schema drift immediately without crashing the app.
+ *
+ * Call once from App.jsx useEffect on mount.
+ */
+export async function validateDbSchema() {
+  if (process.env.NODE_ENV !== 'development') return;
+
+  const { error } = await supabase
+    .from('des_models')
+    .select(EXPECTED_COLUMNS.join(','))
+    .limit(0);
+
+  if (error) {
+    console.error(
+      '[DES Studio] validateDbSchema: des_models schema mismatch detected.\n' +
+      'Expected columns: ' + EXPECTED_COLUMNS.join(', ') + '\n' +
+      'Error: ' + (error.message || JSON.stringify(error)) + '\n' +
+      'Run the latest Supabase migration or update EXPECTED_COLUMNS in src/db/models.js.'
+    );
+  }
 }
 

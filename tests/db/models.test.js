@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   __resetDesModelsSchemaModeForTests,
   norm,
@@ -949,6 +949,325 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
 
       expect(run.results_json).toEqual({});
       expect(run.summary).toBeNull();
+    });
+  });
+});
+
+// ── Sprint 71.1 — Persistence unit tests ──────────────────────────────────────
+describe('Sprint 71 — persistence layer', () => {
+  // Rebuild mock query builder after vi.clearAllMocks() wipes mockReturnThis() implementations.
+  // Earlier describe blocks (share links, sweeps, getRun) override supabase.from.mockReturnValue,
+  // and vi.clearAllMocks() in afterEach removes those implementations, leaving supabase.from
+  // returning undefined. We restore a fresh chainable query builder here.
+  function makeQb() {
+    const qb = {
+      select: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      or: vi.fn().mockReturnThis(),
+      contains: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    return qb;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetDesModelsSchemaModeForTests();
+    const qb = makeQb();
+    supabase.from.mockReturnValue(qb);
+  });
+
+  // ── 71.1.1  saveModel serialises dataSources correctly ───────────────────
+  describe('saveModel — dataSources / model_json / parent_model_id serialisation', () => {
+    it('includes dataSources inside model_json when the array is non-empty', async () => {
+      const model = {
+        name: 'Airport Arrivals',
+        entityTypes: [],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+        dataSources: [{ id: 'ds1', url: 'https://example.com/data.csv' }],
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'new-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json).toBeDefined();
+      expect(insertArg.model_json.dataSources).toEqual([
+        { id: 'ds1', url: 'https://example.com/data.csv' },
+      ]);
+    });
+
+    it('does NOT drop model_json from the insert payload', async () => {
+      const model = {
+        name: 'No drop test',
+        entityTypes: [],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+        graph: { nodes: [], edges: [] },
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'new-id-2', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json).not.toBeUndefined();
+      expect(insertArg.model_json).not.toBeNull();
+    });
+
+    it('includes parent_model_id when it is present on the model object', async () => {
+      // parent_model_id is passed through norm(), not via toRow, so we verify
+      // that norm() correctly picks it up from the returned DB row.
+      const dbRow = {
+        id: 'child-id',
+        name: 'Child Model',
+        owner_id: 'u1',
+        parent_model_id: 'parent-uuid',
+        entity_types: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: {},
+      };
+      const result = norm(dbRow);
+      expect(result.parentModelId).toBe('parent-uuid');
+    });
+
+    it('does not emit undefined for model_json fields', async () => {
+      const model = {
+        name: 'No undefined',
+        entityTypes: [],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'x', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      const json = insertArg.model_json;
+      const undefinedKeys = Object.keys(json).filter(k => json[k] === undefined);
+      expect(undefinedKeys).toHaveLength(0);
+    });
+  });
+
+  // ── 71.1.2  norm() structural validity ───────────────────────────────────
+  describe('norm() — deserialises stored DB record into a structurally valid model', () => {
+    it('returns all expected top-level fields', () => {
+      const dbRow = {
+        id: 'model-id-1',
+        name: 'Full Model',
+        description: 'A description',
+        tags: ['tag1'],
+        visibility: 'public',
+        access: { 'u2': 'viewer' },
+        entity_types: [{ id: 'et1' }],
+        state_variables: [],
+        b_events: [{ id: 'be1' }],
+        c_events: [],
+        queues: [{ id: 'q1' }],
+        goals: ['goal1'],
+        owner_id: 'u1',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-05-01T00:00:00Z',
+        latest_version: 3,
+        parent_model_id: 'parent-id',
+        model_json: {
+          graph: { nodes: [], edges: [] },
+          experimentDefaults: { maxSimTime: 500 },
+          timeUnit: 'hours',
+          epoch: '2026-01-01',
+          dataSources: [{ id: 'ds1' }],
+        },
+      };
+
+      const result = norm(dbRow);
+
+      const EXPECTED_TOP_LEVEL_FIELDS = [
+        'id', 'name', 'entityTypes', 'bEvents', 'cEvents', 'queues',
+        'graph', 'experimentDefaults', 'dataSources', 'timeUnit', 'epoch',
+        'goals', 'parentModelId',
+      ];
+
+      for (const field of EXPECTED_TOP_LEVEL_FIELDS) {
+        expect(result).toHaveProperty(field);
+      }
+    });
+
+    it('maps snake_case DB columns to camelCase model fields', () => {
+      const result = norm({
+        id: 'id-1',
+        name: 'CamelCase',
+        entity_types: [{ id: 'et' }],
+        b_events: [{ id: 'be' }],
+        c_events: [{ id: 'ce' }],
+        queues: [{ id: 'q' }],
+        owner_id: 'u1',
+        parent_model_id: 'p-id',
+        model_json: { timeUnit: 'seconds', epoch: 'T0', dataSources: [] },
+      });
+
+      expect(result.entityTypes).toEqual([{ id: 'et' }]);
+      expect(result.bEvents).toEqual([{ id: 'be' }]);
+      expect(result.cEvents).toEqual([{ id: 'ce' }]);
+      expect(result.parentModelId).toBe('p-id');
+      expect(result.timeUnit).toBe('seconds');
+      expect(result.epoch).toBe('T0');
+    });
+  });
+
+  // ── 71.1.3  Round-trip: model_json in insert contains dataSources ─────────
+  describe('round-trip — model_json.dataSources survives saveModel insert', () => {
+    it('the insert payload model_json contains dataSources from the input object', async () => {
+      const dataSources = [
+        { id: 'ds-rt', url: 'https://example.com/arrivals.csv', format: 'csv' },
+      ];
+      const model = {
+        name: 'Round Trip Model',
+        entityTypes: [],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+        dataSources,
+      };
+
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'rt-id', name: model.name, owner_id: 'u1' },
+        error: null,
+      });
+
+      await saveModel(model, 'u1');
+
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json.dataSources).toEqual(dataSources);
+    });
+  });
+
+  // ── 71.1.4  Null / undefined field handling ───────────────────────────────
+  describe('norm() — null and undefined field handling', () => {
+    it('defaults dataSources to [] when model_json has no dataSources', () => {
+      const result = norm({
+        id: 'x',
+        name: 'No DS',
+        entity_types: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: {},
+      });
+      expect(result.dataSources).toEqual([]);
+    });
+
+    it('defaults epoch to null when not present in model_json', () => {
+      const result = norm({
+        id: 'x',
+        name: 'No Epoch',
+        entity_types: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: {},
+      });
+      expect(result.epoch).toBeNull();
+    });
+
+    it('defaults graph to null when not present in model_json or row', () => {
+      const result = norm({
+        id: 'x',
+        name: 'No Graph',
+        entity_types: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: {},
+      });
+      expect(result.graph).toBeNull();
+    });
+
+    it('defaults parentModelId to null when parent_model_id is absent', () => {
+      const result = norm({
+        id: 'x',
+        name: 'No Parent',
+        entity_types: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: {},
+      });
+      expect(result.parentModelId).toBeNull();
+    });
+  });
+
+  // ── Sprint 71.2 — NODE_ENV guard: schema mismatch throws in dev ───────────
+  describe('runDesModelsSelect — NODE_ENV=development throws on schema mismatch', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('throws in development when a schema compatibility error occurs', async () => {
+      vi.stubEnv('NODE_ENV', 'development');
+      __resetDesModelsSchemaModeForTests();
+
+      supabase.from('des_models').select().or.mockReturnThis();
+      supabase.from('des_models').select().contains.mockReturnThis();
+      supabase.from('des_models').order
+        .mockResolvedValue({
+          data: null,
+          error: { code: '42703', message: 'column des_models.model_json does not exist' },
+        });
+
+      await expect(fetchModels('dev-user')).rejects.toThrow('DES Studio schema mismatch');
+    });
+
+    it('does NOT throw in production — silent fallback still runs', async () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      __resetDesModelsSchemaModeForTests();
+
+      supabase.from('des_models').select().or.mockReturnThis();
+      supabase.from('des_models').select().contains.mockReturnThis();
+      supabase.from('des_models').order
+        // First call: current schema fails
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
+        // Fallback (legacy): succeeds
+        .mockResolvedValueOnce({ data: [], error: null })
+        // Remaining parallel calls also need responses
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
+        .mockResolvedValueOnce({ data: [], error: null })
+        .mockResolvedValueOnce({ data: null, error: { code: '42703', message: 'column des_models.model_json does not exist' } })
+        .mockResolvedValueOnce({ data: [], error: null });
+
+      await expect(fetchModels('prod-user')).resolves.not.toThrow();
     });
   });
 });
