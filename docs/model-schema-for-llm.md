@@ -1,14 +1,15 @@
 # DES Studio — Model Schema Reference for LLM Generation
 
-**Version:** 1.2.0
-**Date:** 2026-05-23
-**Sprint baseline:** Sprint 70
+**Version:** 1.3.0
+**Date:** 2026-05-24
+**Sprint baseline:** Sprint 71
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
 | v1.0.0 | 2026-05-23 | Sprint 70 | Initial versioned snapshot — schema as delivered at Sprint 70 |
 | v1.1.0 | 2026-05-23 | Sprint 70 | Added SPT, EDD, PRIORITY(attrName) queue disciplines to §3; added V11 (Normal warning) and V16 (no termination condition warning) to §10 validation table |
 | v1.2.0 | 2026-05-23 | Sprint 70 | Fixed app URL to `https://des.simmodlr.app`; updated LLM delivery instructions to save JSON file and produce magic link |
+| v1.3.0 | 2026-05-24 | Sprint 71 | Added `openSky` data source type to §15 (OpenSky Network real-time adapter); added §15.1 `openSky` field reference and supported airports table; added "Airport Arrivals" model pattern to §11 |
 
 ---
 
@@ -697,6 +698,66 @@ For multi-stage models, use `RELEASE(ServerType, NextQueueName)` at the end of s
 - Stage 2 C-event: `"condition": "queue(Treatment Queue).length > 0 AND idle(Doctor).count > 0"`, `"effect": ["ASSIGN(Treatment Queue, Doctor)"]`
 - Stage 2 completion B-event: `"effect": ["COMPLETE()"]`
 
+### Airport arrivals with live OpenSky data
+
+A two-stage ground-handling model where aircraft arrival rate is driven by real-time data from the OpenSky Network (see §15.1 for full `openSky` adapter reference).
+
+```json
+{
+  "name": "Airport Arrivals — Live (OpenSky)",
+  "description": "Real-time aircraft arrival and ground-handling model. Arrival inter-arrival times are pulled live from OpenSky for EGLL. Gate controllers assign stands (2–8 min), ground crews perform turnaround (25–90 min).",
+  "timeUnit": "minutes",
+  "entityTypes": [
+    { "id": "et_aircraft",  "name": "Aircraft",        "role": "customer", "count": 0, "attrDefs": [] },
+    { "id": "et_gate_ctrl", "name": "Gate Controller", "role": "server",   "count": 3, "attrDefs": [] },
+    { "id": "et_gnd_crew",  "name": "Ground Crew",     "role": "server",   "count": 5, "attrDefs": [] }
+  ],
+  "queues": [
+    { "id": "q_holding",    "name": "Holding Stack",  "customerType": "Aircraft", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_turnaround", "name": "Turnaround Bay", "customerType": "Aircraft", "capacity": "", "discipline": "FIFO" }
+  ],
+  "bEvents": [
+    { "id": "b_arrive", "name": "Aircraft Arrives", "scheduledTime": "0",
+      "effect": ["ARRIVE(Aircraft, Holding Stack)"],
+      "schedules": [{
+        "eventId": "b_arrive",
+        "dist": "Exponential",
+        "distParams": { "mean": "3.5" },
+        "paramSource": { "sourceId": "ds_opensky", "field": "interArrivalMean", "targetParam": "mean", "fallback": "3.5" }
+      }]
+    },
+    { "id": "b_gate_done",       "name": "Gate Assigned",     "scheduledTime": "9999", "effect": ["RELEASE(Gate Controller, Turnaround Bay)"], "schedules": [] },
+    { "id": "b_turnaround_done", "name": "Turnaround Complete","scheduledTime": "9999", "effect": ["COMPLETE()"], "schedules": [] }
+  ],
+  "cEvents": [
+    { "id": "c_assign_gate", "name": "Assign Gate", "priority": 1,
+      "condition": "queue(Holding Stack).length > 0 AND idle(Gate Controller).count > 0",
+      "effect": ["ASSIGN(Holding Stack, Gate Controller)"],
+      "cSchedules": [{ "eventId": "b_gate_done", "dist": "Uniform", "distParams": { "min": "2", "max": "8" }, "useEntityCtx": true }]
+    },
+    { "id": "c_start_turnaround", "name": "Start Turnaround", "priority": 2,
+      "condition": "queue(Turnaround Bay).length > 0 AND idle(Ground Crew).count > 0",
+      "effect": ["ASSIGN(Turnaround Bay, Ground Crew)"],
+      "cSchedules": [{ "eventId": "b_turnaround_done", "dist": "Triangular", "distParams": { "min": "25", "mode": "45", "max": "90" }, "useEntityCtx": true }]
+    }
+  ],
+  "goals": [
+    { "metric": "summary.avgSojourn", "operator": "<=", "target": 90, "label": "Mean sojourn ≤ 90 min" },
+    { "metric": "summary.avgWait",    "operator": "<",  "target": 15, "label": "Mean holding wait < 15 min" }
+  ],
+  "dataSources": [{
+    "id": "ds_opensky", "label": "OpenSky Network — Live Arrivals",
+    "type": "openSky", "url": "https://opensky-network.org/api/states/all",
+    "airportIcao": "EGLL", "radiusNm": 50, "refreshSecs": 30
+  }],
+  "experimentDefaults": { "maxSimTime": 480, "warmupPeriod": 60, "replications": 5, "liveDataMode": "calibrated_batch" }
+}
+```
+
+**Change airport:** edit `dataSources[0].airportIcao` to any supported ICAO code (see §15.1). The fallback `"3.5"` minutes keeps the model runnable offline.
+
+---
+
 ### Reneging (Abandonment)
 
 Add a renege schedule to the arrival B-event. The renege fires if the entity hasn't been served within the timeout:
@@ -927,15 +988,78 @@ Models can connect distribution parameters to live REST or WebSocket feeds so th
 |---|---|---|
 | `id` | Yes | Unique within the model; referenced by `paramSource.sourceId` |
 | `label` | Yes | Human-readable name shown in the UI |
-| `type` | Yes | `"rest"` \| `"scheduleFeed"` \| `"actualsStream"` \| `"websocket"` \| `"stateSnapshot"` \| `"mock"` |
-| `url` | Yes | Full HTTPS URL to the endpoint |
+| `type` | Yes | `"rest"` \| `"scheduleFeed"` \| `"actualsStream"` \| `"websocket"` \| `"stateSnapshot"` \| `"openSky"` \| `"mock"` |
+| `url` | Yes | Full HTTPS URL to the endpoint. For `openSky` sources, set to `"https://opensky-network.org/api/states/all"` — the adapter constructs the bounding-box query internally. |
 | `authHeader` | No | Header name for authentication (e.g. `"Authorization"`) |
 | `authSecret` | No | `{{env.VAR_NAME}}` placeholder — **never a literal credential**. Actual value is entered by the user in `sessionStorage` at runtime. |
-| `refreshSecs` | No | Cache TTL in seconds for REST sources (default 60, minimum 10) |
+| `refreshSecs` | No | Cache TTL in seconds for REST sources (default 60, minimum 10). For `openSky`, the adapter polls every 30 s internally; set `refreshSecs: 30` to align. |
 | `entityType` | `scheduleFeed` only | Name of the entity type that will arrive |
 | `targetBEventId` | `scheduleFeed` only | ID of the B-event whose `rows[]` will be populated |
 | `timeField` | `scheduleFeed` only | Dot-notation path in each activity object to the start time (default `"time"`) |
 | `attrMap` | `scheduleFeed` only | Object mapping API field paths to entity attribute names. Use `"entityId"` as the target name to set the entity display name |
+| `airportIcao` | `openSky` only | ICAO airport code (see §15.1 for supported airports). Default `"EGLL"`. |
+| `radiusNm` | `openSky` only | Detection radius in nautical miles (default 50). Aircraft within this radius of the airport that are descending and below 3 000 m are counted as arrivals. |
+
+### 15.1 `openSky` data source
+
+The `openSky` source type connects directly to the [OpenSky Network REST API](https://opensky-network.org/apidoc/rest.html) to detect arriving aircraft in real time. The adapter polls the `states/all` endpoint every 30 seconds, filters for aircraft that are descending, within the configured radius, and below 3 000 m altitude, and computes inter-arrival intervals in minutes. No authentication is required (the public endpoint is rate-limited).
+
+**Supported airports (`airportIcao`):**
+
+| ICAO | Airport |
+|------|---------|
+| `EGLL` | London Heathrow (default) |
+| `KJFK` | New York JFK |
+| `KLAX` | Los Angeles |
+| `KORD` | Chicago O'Hare |
+| `EDDF` | Frankfurt |
+| `RJTT` | Tokyo Haneda |
+| `YSSY` | Sydney |
+| `LFPG` | Paris CDG |
+
+**Fields exposed via `paramSource.field`:**
+
+| Field | Type | Description |
+|---|---|---|
+| `interArrivalMean` | number (minutes) | Mean of all observed inter-arrival intervals. Returns `null` until at least 2 arrivals are detected. |
+| `arrivalCount` | number | Total number of arrivals detected since the adapter started. |
+| `interArrivals` | number[] | Full array of observed inter-arrival intervals in minutes. |
+
+**Example data source declaration:**
+
+```json
+{
+  "id": "ds_opensky",
+  "label": "OpenSky Network — Live Arrivals",
+  "type": "openSky",
+  "url": "https://opensky-network.org/api/states/all",
+  "airportIcao": "EGLL",
+  "radiusNm": 50,
+  "refreshSecs": 30
+}
+```
+
+**Binding to a B-event schedule:**
+
+```json
+{
+  "eventId": "b_arrive",
+  "dist": "Exponential",
+  "distParams": { "mean": "3.5" },
+  "paramSource": {
+    "sourceId": "ds_opensky",
+    "field": "interArrivalMean",
+    "targetParam": "mean",
+    "fallback": "3.5"
+  }
+}
+```
+
+The `fallback` value is used when the adapter has not yet observed enough arrivals (< 2). `"3.5"` minutes ≈ 17 arrivals/hour, typical for a major hub in peak hours.
+
+**Required experiment mode:** set `experimentDefaults.liveDataMode: "calibrated_batch"` so the engine prefetches the live inter-arrival mean once before starting the run.
+
+---
 
 ### `scheduleFeed` data source
 

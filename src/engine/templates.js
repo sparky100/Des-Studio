@@ -793,6 +793,114 @@ const APPOINTMENT_CLINIC = {
   ],
 };
 
+// ── Aviation / Live Data ──────────────────────────────────────────────────────
+// First real-time template: uses OpenSky Network adapter to feed live aircraft
+// inter-arrival times. experimentDefaults.liveDataMode "calibrated_batch" tells
+// the engine to prefetch the OpenSky data once before each run begins.
+
+const PLANE_ARRIVALS_LIVE = {
+  name: "Airport Arrivals — Live (OpenSky)",
+  description: "Real-time aircraft arrival and ground-handling model. Arrival inter-arrival times are pulled live from the OpenSky Network for the configured airport (default: London Heathrow, EGLL). Gate controllers assign stands (2–8 min), then ground crews perform turnaround (25–90 min). Run in calibrated_batch mode to use actual traffic data; falls back to 3.5 min mean if the API is unreachable.",
+  domain: "Aviation",
+  templateMeta: {
+    scenarioType: "Real-time two-stage arrival and ground handling with OpenSky live data",
+    keyMacros: ["ARRIVE", "ASSIGN", "RELEASE", "COMPLETE"],
+    paramGuide: "Live interArrivalMean from OpenSky (fallback 3.5 min ≈ 17 arr/hr). Gate assignment Uniform(2,8) min. Turnaround Triangular(25,45,90) min. Change airportIcao in dataSources to any of: EGLL, KJFK, KLAX, KORD, EDDF, RJTT, YSSY, LFPG.",
+    limitations: "Uses OpenSky public API (unauthenticated, rate-limited). No aircraft-type differentiation, slot system, or runway capacity constraint. Turnaround time is synthetic — not sourced from live data. interArrivalMean updates only after ≥2 arrivals are detected; allow a few minutes for the adapter to warm up.",
+  },
+  entityTypes: [
+    { id: "et_aircraft",  name: "Aircraft",        role: "customer", count: 0, attrDefs: [] },
+    { id: "et_gate_ctrl", name: "Gate Controller", role: "server",   count: 3, attrDefs: [] },
+    { id: "et_gnd_crew",  name: "Ground Crew",     role: "server",   count: 5, attrDefs: [] },
+  ],
+  stateVariables: [],
+  bEvents: [
+    {
+      id: "b_arrive",
+      name: "Aircraft Arrives",
+      scheduledTime: "0",
+      effect: ["ARRIVE(Aircraft, Holding Stack)"],
+      schedules: [{
+        eventId: "b_arrive",
+        dist: "Exponential",
+        distParams: { mean: "3.5" },
+        paramSource: {
+          sourceId: "ds_opensky",
+          field: "interArrivalMean",
+          targetParam: "mean",
+          fallback: "3.5",
+        },
+      }],
+    },
+    {
+      id: "b_gate_done",
+      name: "Gate Assigned",
+      scheduledTime: "9999",
+      effect: ["RELEASE(Gate Controller, Turnaround Bay)"],
+      schedules: [],
+    },
+    {
+      id: "b_turnaround_done",
+      name: "Turnaround Complete",
+      scheduledTime: "9999",
+      effect: ["COMPLETE()"],
+      schedules: [],
+    },
+  ],
+  cEvents: [
+    {
+      id: "c_assign_gate",
+      name: "Assign Gate",
+      priority: 1,
+      condition: "queue(Holding Stack).length > 0 AND idle(Gate Controller).count > 0",
+      effect: ["ASSIGN(Holding Stack, Gate Controller)"],
+      cSchedules: [{
+        eventId: "b_gate_done",
+        dist: "Uniform",
+        distParams: { min: "2", max: "8" },
+        useEntityCtx: true,
+      }],
+    },
+    {
+      id: "c_start_turnaround",
+      name: "Start Turnaround",
+      priority: 2,
+      condition: "queue(Turnaround Bay).length > 0 AND idle(Ground Crew).count > 0",
+      effect: ["ASSIGN(Turnaround Bay, Ground Crew)"],
+      cSchedules: [{
+        eventId: "b_turnaround_done",
+        dist: "Triangular",
+        distParams: { min: "25", mode: "45", max: "90" },
+        useEntityCtx: true,
+      }],
+    },
+  ],
+  queues: [
+    { id: "q_holding",    name: "Holding Stack",  customerType: "Aircraft", capacity: "", discipline: "FIFO" },
+    { id: "q_turnaround", name: "Turnaround Bay", customerType: "Aircraft", capacity: "", discipline: "FIFO" },
+  ],
+  goals: [
+    { metric: "summary.avgSojourn", operator: "<=", target: 90, label: "Mean sojourn ≤ 90 min (gate assignment + turnaround)" },
+    { metric: "summary.avgWait",    operator: "<",  target: 15, label: "Mean holding wait < 15 min" },
+  ],
+  containerTypes: [],
+  dataSources: [{
+    id: "ds_opensky",
+    label: "OpenSky Network — Live Arrivals",
+    type: "openSky",
+    url: "https://opensky-network.org/api/states/all",
+    airportIcao: "EGLL",
+    radiusNm: 50,
+    refreshSecs: 30,
+  }],
+  experimentDefaults: {
+    maxSimTime: 480,
+    warmupPeriod: 60,
+    replications: 5,
+    liveDataMode: "calibrated_batch",
+  },
+};
+
 export const TEMPLATES = [
   // Academic
   { id: "mm1",             ...MM1 },
@@ -821,4 +929,6 @@ export const TEMPLATES = [
   { id: "machine-shop-failures",  ...MACHINE_SHOP_FAILURES },
   { id: "priority-ed-balking",    ...PRIORITY_ED_BALKING },
   { id: "cost-call-centre",       ...COST_CALL_CENTRE },
+  // Aviation / Live Data
+  { id: "plane-arrivals-live",    ...PLANE_ARRIVALS_LIVE },
 ];
