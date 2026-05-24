@@ -1,7 +1,7 @@
 # DES Studio — Product Specification
-**Version:** 1.3.0
-**Date:** 2026-05-23
-**Sprint baseline:** Sprint 70
+**Version:** 1.4.0
+**Date:** 2026-05-24
+**Sprint baseline:** Sprint 71
 **Status:** Living document — reviewed and updated at end of each sprint
 
 ---
@@ -15,6 +15,7 @@
 | v1.1.1 | 2026-05-19 | Sprint 67 plan | Added plain-English-first UI requirement and Results presentation ordering requirements |
 | v1.2.0 | 2026-05-23 | Sprints 68–70 | Model versioning (explicit milestones, version history panel, structural change detection); AI debugging (trace emission, model checker); Help Assistant (in-app contextual help with suggested questions); documentation accuracy fixes |
 | v1.3.0 | 2026-05-23 | Sprint 70 | Added RENEGE_OLDEST to §3.3 macro table (was missing from all four macro category tables) |
+| v1.4.0 | 2026-05-24 | Sprint 71 | In-app Feedback widget and About panel — toolbar Feedback button opens a Supabase-backed submission form (category, message, user agent, page context, app version); toolbar Info button opens a static About modal (version, copyright, contact, method attribution); `feedback` table in Supabase with RLS for authenticated and anonymous submission |
 
 ---
 
@@ -267,6 +268,48 @@ The Help Assistant provides contextual, in-app guidance accessible from any scre
 **Export model.** The model definition can be downloaded as a JSON file and imported into any DES Studio instance, enabling model portability and sharing of model structures separately from results.
 
 **Export report.** After a completed run, a professional Word document (`.docx`) can be exported containing: cover page, executive summary, AI-generated model description, experiment configuration, model diagram screenshot, simulation results with confidence intervals, AI recommendations, and full model appendix.
+
+---
+
+### 3.9 In-App Feedback and About Panel
+
+DES Studio provides two lightweight utility surfaces accessible from the toolbar at all times, without navigating away from the current screen.
+
+#### Feedback widget
+
+A speech-bubble icon button in the toolbar (aria-label: "Submit feedback") opens the Feedback widget. The widget allows any user — authenticated or anonymous — to submit a message to the DES Studio team.
+
+**Form fields:**
+- **Category** — four exclusive pill-toggle buttons: Bug Report, Feature Request, Question, Other
+- **Message** — a free-text area (minimum 10 characters, maximum 2000 characters) with a real-time character counter
+
+**Behaviour:**
+- Submit button is disabled until the message reaches 10 characters and is re-enabled after a failed submission (allowing retry)
+- On successful submission: an inline confirmation message is shown ("Thank you — your feedback has been received."); the widget does not close automatically
+- On failure: an inline error message is shown; the user can retry
+- Escape key and the × button close the widget without submitting
+- Focus is trapped inside the widget while open (WCAG 2.1 AA)
+- The widget is accessible from every screen and every model state
+
+**What is collected per submission:** category, message text, app version (from `VITE_APP_VERSION`), page context (the route the user was on when they opened the widget), browser user-agent string, and user ID if authenticated (null for anonymous users).
+
+**Backend:** submissions are written to the `public.feedback` table in Supabase. Row-level security ensures users can only insert their own rows; the table has no user-facing read or update access.
+
+#### About panel
+
+An info-circle icon button in the toolbar (aria-label: "About DES Studio") opens a compact static About modal (~240px body height). It displays:
+- App name and tagline
+- App version (`VITE_APP_VERSION`, injected at build time from `package.json`)
+- Copyright notice
+- Contact email (rendered as a `mailto:` link)
+- Method attribution (Three-Phase Simulation approach — Tocher/Pidd)
+- A footer note directing users to the Feedback button for bug reports
+
+The About panel requires no data fetching. Escape key and the × button close it.
+
+#### Toolbar layout
+
+The three utility buttons occupy the right section of the navbar, ordered left-to-right: Feedback → About → Help (?).
 
 ---
 
