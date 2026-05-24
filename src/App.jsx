@@ -461,7 +461,16 @@ export default function App(){
     return (
       <div style={{background:C.bg,minHeight:'100vh'}}>
         <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');`}</style>
+        <AppNavBar
+          profile={profile} isAdmin={isAdmin} isAdminActive={true}
+          onHelpOpen={() => setHelpOpen(true)}
+          onSettings={() => { setShowAdmin(false); setShowSettings(true); }}
+          onAdmin={() => setShowAdmin(false)}
+          onSignOut={signOut}
+          userId={uid ?? null} currentPage="admin"
+        />
         <AdminPanel userId={uid} isAdmin={true} onClose={()=>setShowAdmin(false)} />
+        {helpOpen && <HelpAssistant isOpen={helpOpen} onClose={() => setHelpOpen(false)} currentModel={null} currentTab={null} currentView="admin" validation={null} />}
       </div>
     );
   }
@@ -470,7 +479,16 @@ export default function App(){
     return (
       <div style={{background:C.bg,minHeight:'100vh'}}>
         <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');`}</style>
+        <AppNavBar
+          profile={profile} isAdmin={isAdmin} isAdminActive={false}
+          onHelpOpen={() => setHelpOpen(true)}
+          onSettings={() => setShowSettings(false)}
+          onAdmin={() => { setShowSettings(false); setShowAdmin(true); }}
+          onSignOut={signOut}
+          userId={uid ?? null} currentPage="settings"
+        />
         <UserSettingsPanel userId={uid} plan={profile?.plan} onClose={()=>setShowSettings(false)} />
+        {helpOpen && <HelpAssistant isOpen={helpOpen} onClose={() => setHelpOpen(false)} currentModel={null} currentTab={null} currentView="settings" validation={null} />}
       </div>
     );
   }
@@ -484,6 +502,14 @@ export default function App(){
     return(
       <div style={{background:C.bg,minHeight:'100vh'}}>
         <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        <AppNavBar
+          profile={profile} isAdmin={isAdmin} isAdminActive={false}
+          onHelpOpen={() => setHelpOpen(true)}
+          onSettings={() => { setOpenId(null); setLocalModel(null); setShowSettings(true); }}
+          onAdmin={() => { setOpenId(null); setLocalModel(null); setShowAdmin(true); }}
+          onSignOut={signOut}
+          userId={uid ?? null} currentPage={`model/${openId}`}
+        />
         <ErrorBoundary
           title="Model view crashed"
           message="This model could not render. Return to the library and reopen it."
