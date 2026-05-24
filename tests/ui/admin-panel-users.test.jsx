@@ -6,29 +6,32 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AdminPanel } from '../../src/ui/AdminPanel.jsx';
 
-const MOCK_USERS = [
-  {
-    id: 'user-a', email: 'alpha@example.com', role: 'user', plan: 'pro',
-    isAdmin: false, suspended: false,
-    signupAt: '2026-05-15T00:00:00Z', lastActiveAt: '2026-05-22T00:00:00Z',
-    modelCount: 5, runCount: 100, runsLast30d: 80,
-  },
-  {
-    id: 'user-b', email: 'beta@example.com', role: 'user', plan: 'free',
-    isAdmin: false, suspended: false,
-    signupAt: '2026-05-01T00:00:00Z', lastActiveAt: '2026-05-10T00:00:00Z',
-    modelCount: 1, runCount: 10, runsLast30d: 5,
-  },
-  {
-    id: 'admin-x', email: 'admin@example.com', role: 'admin', plan: 'pro',
-    isAdmin: true, suspended: false,
-    signupAt: '2026-04-01T00:00:00Z', lastActiveAt: '2026-05-23T00:00:00Z',
-    modelCount: 2, runCount: 20, runsLast30d: 15,
-  },
-];
-
-const PLATFORM_STATS = { total_users: 3, active_7d: 2, active_30d: 3, total_models: 8 };
-const SIGNUP_COUNTS  = [{ day: '2026-05-01', count: 2 }, { day: '2026-05-15', count: 1 }];
+// vi.hoisted ensures these values are available when vi.mock factory is called
+// (vi.mock is hoisted before variable declarations; vi.hoisted is hoisted before vi.mock)
+const { MOCK_USERS, PLATFORM_STATS, SIGNUP_COUNTS } = vi.hoisted(() => ({
+  MOCK_USERS: [
+    {
+      id: 'user-a', email: 'alpha@example.com', role: 'user', plan: 'pro',
+      isAdmin: false, suspended: false,
+      signupAt: '2026-05-15T00:00:00Z', lastActiveAt: '2026-05-22T00:00:00Z',
+      modelCount: 5, runCount: 100, runsLast30d: 80,
+    },
+    {
+      id: 'user-b', email: 'beta@example.com', role: 'user', plan: 'free',
+      isAdmin: false, suspended: false,
+      signupAt: '2026-05-01T00:00:00Z', lastActiveAt: '2026-05-10T00:00:00Z',
+      modelCount: 1, runCount: 10, runsLast30d: 5,
+    },
+    {
+      id: 'admin-x', email: 'admin@example.com', role: 'admin', plan: 'pro',
+      isAdmin: true, suspended: false,
+      signupAt: '2026-04-01T00:00:00Z', lastActiveAt: '2026-05-23T00:00:00Z',
+      modelCount: 2, runCount: 20, runsLast30d: 15,
+    },
+  ],
+  PLATFORM_STATS: { total_users: 42, active_7d: 2, active_30d: 3, total_models: 8 },
+  SIGNUP_COUNTS:  [{ day: '2026-05-01', count: 2 }, { day: '2026-05-15', count: 1 }],
+}));
 
 vi.mock('../../src/db/models.js', () => ({
   getPlatformConfig:    vi.fn().mockResolvedValue(null),
@@ -121,8 +124,9 @@ describe('AdminPanel — Enhanced User List', () => {
     const row = screen.getByText('beta@example.com').closest('tr');
     fireEvent.click(row);
     await waitFor(() => expect(screen.getByText('User Details')).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /FREE/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /PRO/i })).toBeInTheDocument();
+    // Use getAllByRole because "Promote" buttons in the user table also match /PRO/i
+    expect(screen.getAllByRole('button', { name: /^FREE$/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /^PRO$/i }).length).toBeGreaterThan(0);
   });
 
   it('plan change calls updateUserPlan and logAdminAction', async () => {
@@ -158,8 +162,8 @@ describe('AdminPanel — Usage Tab', () => {
 
   it('KPI tile shows correct total_users value', async () => {
     await openUsageTab();
-    // total_users = 3 from PLATFORM_STATS
-    expect(screen.getByText('3')).toBeInTheDocument();
+    // total_users = 42 from PLATFORM_STATS (unique value, not present in user table data)
+    expect(screen.getByText('42')).toBeInTheDocument();
   });
 
   it('renders the signups bar chart section', async () => {

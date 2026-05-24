@@ -2,20 +2,24 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AdminPanel } from '../../src/ui/AdminPanel.jsx';
 
-const MOCK_USERS = [
-  { id: 'user-1', email: 'alice@example.com', role: 'user', plan: 'free',
-    isAdmin: false, suspended: false,
-    signupAt: '2026-05-01T00:00:00Z', lastActiveAt: '2026-05-20T00:00:00Z',
-    modelCount: 2, runCount: 5, runsLast30d: 3 },
-  { id: 'admin-1', email: 'bob@example.com', role: 'admin', plan: 'pro',
-    isAdmin: true, suspended: false,
-    signupAt: '2026-04-01T00:00:00Z', lastActiveAt: '2026-05-22T00:00:00Z',
-    modelCount: 1, runCount: 10, runsLast30d: 5 },
-  { id: 'user-2', email: 'carol@example.com', role: 'user', plan: 'free',
-    isAdmin: false, suspended: true,
-    signupAt: '2026-05-10T00:00:00Z', lastActiveAt: null,
-    modelCount: 0, runCount: 0, runsLast30d: 0 },
-];
+// vi.hoisted ensures these values are available when vi.mock factory is called
+// (vi.mock is hoisted before variable declarations; vi.hoisted is hoisted before vi.mock)
+const { MOCK_USERS } = vi.hoisted(() => ({
+  MOCK_USERS: [
+    { id: 'user-1', email: 'alice@example.com', role: 'user', plan: 'free',
+      isAdmin: false, suspended: false,
+      signupAt: '2026-05-01T00:00:00Z', lastActiveAt: '2026-05-20T00:00:00Z',
+      modelCount: 2, runCount: 5, runsLast30d: 3 },
+    { id: 'admin-1', email: 'bob@example.com', role: 'admin', plan: 'pro',
+      isAdmin: true, suspended: false,
+      signupAt: '2026-04-01T00:00:00Z', lastActiveAt: '2026-05-22T00:00:00Z',
+      modelCount: 1, runCount: 10, runsLast30d: 5 },
+    { id: 'user-2', email: 'carol@example.com', role: 'user', plan: 'free',
+      isAdmin: false, suspended: true,
+      signupAt: '2026-05-10T00:00:00Z', lastActiveAt: null,
+      modelCount: 0, runCount: 0, runsLast30d: 0 },
+  ],
+}));
 
 vi.mock('../../src/db/models.js', () => ({
   getPlatformConfig:    vi.fn().mockResolvedValue(null),
