@@ -13,6 +13,8 @@ import { ExecutePanel } from "./execute/index.jsx";
 import { CsvImportModal } from "./CsvImportModal.jsx";
 import { ResultsWorkspace } from "./results/ResultsWorkspace.jsx";
 import { ModelHistoryTab } from "./ModelHistoryTab.jsx";
+import { LogViewer } from "./execute/LogViewer.jsx";
+import { EntitySummaryTable } from "./execute/SweepViews.jsx";
 import { ModelCard, NewModelModal } from "./ModelLibrary.jsx";
 
 // Lazy-loaded so @xyflow/react is not included in the initial bundle.
@@ -442,6 +444,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [showCsvImport,setShowCsvImport]=useState(false);
   const [analyseRun,setAnalyseRun]=useState(null);
   const [latestResults,setLatestResults]=useState(null);
+  const [latestReplicationResults,setLatestReplicationResults]=useState([]);
+  const [latestWarmupDetection,setLatestWarmupDetection]=useState(null);
+  const [latestLog,setLatestLog]=useState([]);
+  const [resultsView,setResultsView]=useState("summary");
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
     try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
@@ -692,7 +698,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       statsLoading:false,
       statsError:false,
     }));
-    if(tab==="history"){
+    if(tab==="results"&&resultsView==="history"){
       setHistoryLoading(true);setHistoryError("");
       fetchRunHistory(modelId, { archived: historyShowArchived })
         .then(rows=>setHistoryRows(rows))
@@ -738,7 +744,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     {id:"validate",label:"Model Health"},
     {id:"execute",label:"Run"},
     {id:"results",label:"Results"},
-    {id:"history",label:"Run History"},
     ...(isOwner?[{id:"access",label:"Access"}]:[]),
     ...(isOwner?[{id:"versions",label:"Versions"}]:[]),
   ];
@@ -747,7 +752,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
     {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
     {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
-    {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
+    {id:"results",label:"Results",primaryTab:"results",tabs:["results"]},
     ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
     ...(isOwner?[{id:"versions",label:"Versions",primaryTab:"versions",tabs:["versions"]}]:[]),
   ];
@@ -758,7 +763,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
         {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
         {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
-        {id:"results",label:"Results",primaryTab:"results",tabs:["results","history"]},
+        {id:"results",label:"Results",primaryTab:"results",tabs:["results"]},
       ]
     : NAV_MODES;
   const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
@@ -766,7 +771,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     if (activeMode?.id === "overview") return ["overview"];
     if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "state", "validate"];
     if (activeMode?.id === "execute") return ["execute"];
-    if (activeMode?.id === "results") return ["results", "history"];
+    if (activeMode?.id === "results") return ["results"];
     if (activeMode?.id === "access") return ["access"];
     if (activeMode?.id === "versions") return ["versions"];
     return ["overview"];
@@ -805,7 +810,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[isMobileLayout, tab]);
 
   useEffect(()=>{
-    if(tab!=="history"&&tab!=="results")return;
+    if(tab!=="results")return;
     setHistoryLoading(true);setHistoryError("");
     Promise.all([
       fetchRunHistory(modelId, { archived: historyShowArchived }),
@@ -816,11 +821,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       const map = {};
       (links||[]).forEach(link => { if (link.isActive && link.runId) map[link.runId] = link; });
       setShareLinksMap(map);
-      if(tab==="results"){
+      // If no results loaded yet, fall back to the most recent saved run
+      if(!latestResults){
         const selected = nextRows.find(row => row.id === selectedResultsRunId && hasResultsPayload(row));
         const fallback = nextRows.find(hasResultsPayload);
         const row = selected || fallback;
-        if(row && !latestResults){
+        if(row){
           setSelectedResultsRunId(row.id);
           setLatestResults(row.results_json);
         }
@@ -1068,6 +1074,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               currentVersionId={currentVersionId}
               onRunSaved={handleRunSaved}
               onResultsReady={setLatestResults}
+              onRunComplete={({ results, replicationResults, warmupDetection, log }) => {
+                setLatestResults(results);
+                setLatestReplicationResults(replicationResults || []);
+                setLatestWarmupDetection(warmupDetection || null);
+                setLatestLog(log || []);
+              }}
+              onGoToResults={() => { setTab("results"); setResultsView("summary"); }}
               autoRun={overrides.autoRun}
               analyseRun={analyseRun}
               onClearAnalyse={()=>setAnalyseRun(null)}
@@ -1080,57 +1093,111 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           </ErrorBoundary>
         )}
         {tab==="results"&&(
-          <div style={{maxWidth:1200,display:"flex",flexDirection:"column",gap:14}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
-              <div>
-                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700,marginBottom:4}}>RESULTS WORKSPACE</div>
-                <div style={{fontSize:13,color:C.text,fontFamily:FONT,fontWeight:700}}>Run outcomes, charts, and reliability</div>
-              </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <Btn small variant="ghost" onClick={()=>setTab("execute")}>Open Run</Btn>
-                <Btn small variant="ghost" onClick={()=>setTab("history")}>Open Run History</Btn>
-              </div>
-            </div>
-            {historyLoading&&<div style={{color:C.muted,fontFamily:FONT,fontSize:12}}>Loading saved runs...</div>}
-            {historyError&&<div role="alert" style={{color:C.red,fontFamily:FONT,fontSize:12}}>{historyError}</div>}
-            {historyRows.some(hasResultsPayload)&&(
-              <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <label htmlFor="results-run-selector" style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>SAVED RUN</label>
-                <select
-                  id="results-run-selector"
-                  aria-label="Saved run"
-                  value={selectedResultsRunId}
-                  onChange={e=>loadResultsRun(e.target.value)}
-                  style={{minWidth:260,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"6px 8px",outline:"none"}}
+          <div style={{maxWidth:1200,display:"flex",flexDirection:"column",gap:0}}>
+            {/* Results sub-tab bar */}
+            <div style={{display:"flex",alignItems:"center",gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:16,overflowX:"auto"}}>
+              {[
+                {id:"summary",label:"Summary"},
+                {id:"log",label:"Log"},
+                {id:"entities",label:"Entities"},
+                {id:"history",label:"History"},
+              ].map(sub=>(
+                <button
+                  key={sub.id}
+                  onClick={()=>setResultsView(sub.id)}
+                  style={{
+                    background:"none",border:"none",borderBottom:resultsView===sub.id?`2px solid ${C.accent}`:"2px solid transparent",
+                    color:resultsView===sub.id?C.accent:C.muted,cursor:"pointer",
+                    fontFamily:FONT,fontSize:12,fontWeight:resultsView===sub.id?700:400,
+                    padding:"8px 14px",marginBottom:-1,whiteSpace:"nowrap",outline:"none",
+                    transition:"color 0.15s",
+                  }}
+                  aria-current={resultsView===sub.id?"page":undefined}
                 >
-                  {historyRows.filter(hasResultsPayload).map(row=>{
-                    const dt=new Date(row.ran_at);
-                    const label=row.run_label||dt.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-                    return <option key={row.id} value={row.id}>{label}</option>;
-                  })}
-                </select>
+                  {sub.label}
+                </button>
+              ))}
+              <div style={{flex:1}}/>
+              <Btn small variant="ghost" onClick={()=>setTab("execute")} style={{marginRight:4,flexShrink:0}}>← Run</Btn>
+            </div>
+
+            {/* Summary sub-tab */}
+            {resultsView==="summary"&&(
+              <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                {historyLoading&&<div style={{color:C.muted,fontFamily:FONT,fontSize:12}}>Loading saved runs…</div>}
+                {historyError&&<div role="alert" style={{color:C.red,fontFamily:FONT,fontSize:12}}>{historyError}</div>}
+                {historyRows.some(hasResultsPayload)&&(
+                  <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <label htmlFor="results-run-selector" style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>SAVED RUN</label>
+                    <select
+                      id="results-run-selector"
+                      aria-label="Saved run"
+                      value={selectedResultsRunId}
+                      onChange={e=>loadResultsRun(e.target.value)}
+                      style={{minWidth:260,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"6px 8px",outline:"none"}}
+                    >
+                      {historyRows.filter(hasResultsPayload).map(row=>{
+                        const dt=new Date(row.ran_at);
+                        const label=row.run_label||dt.toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+                        return <option key={row.id} value={row.id}>{label}</option>;
+                      })}
+                    </select>
+                  </div>
+                )}
+                {latestResults ? (
+                  <ResultsWorkspace
+                    results={latestResults}
+                    model={model}
+                    replicationResults={latestReplicationResults}
+                    warmupDetection={latestWarmupDetection}
+                  />
+                ) : (
+                  <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
+                    No results yet. Open <strong>Run</strong> to execute the simulation, then come back here to explore the output.
+                  </div>
+                )}
               </div>
             )}
-            {latestResults ? (
-              <ResultsWorkspace results={latestResults} model={model}/>
-            ) : (
-              <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
-                Results from the latest run will appear here. Open Run to generate them, or select a saved run when run history is available.
-              </div>
+
+            {/* Log sub-tab */}
+            {resultsView==="log"&&(
+              latestLog.length > 0 ? (
+                <LogViewer log={latestLog}/>
+              ) : (
+                <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
+                  No log available. Run the simulation first to capture event log data.
+                </div>
+              )
+            )}
+
+            {/* Entities sub-tab */}
+            {resultsView==="entities"&&(
+              latestResults?.entitySummary ? (
+                <EntitySummaryTable
+                  entitySummary={latestResults.entitySummary}
+                  meanWait={latestResults.summary?.avgWait}
+                />
+              ) : (
+                <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
+                  No entity data yet. Run the simulation first to see per-entity-type breakdowns.
+                </div>
+              )
+            )}
+
+            {/* History sub-tab */}
+            {resultsView==="history"&&(
+              <ModelHistoryTab
+                historyRows={historyRows} setHistoryRows={setHistoryRows}
+                historyLoading={historyLoading} setHistoryLoading={setHistoryLoading}
+                historyError={historyError} setHistoryError={setHistoryError}
+                historyShowArchived={historyShowArchived} setHistoryShowArchived={setHistoryShowArchived}
+                shareLinksMap={shareLinksMap} setShareLinksMap={setShareLinksMap}
+                modelId={modelId} userId={overrides.userId} model={model} baseUrl={baseUrl}
+                onAnalyseRun={handleAnalyseRun}
+                onViewResults={row=>{setSelectedResultsRunId(row.id);setLatestResults(row.results_json);setResultsView("summary");}}
+              />
             )}
           </div>
-        )}
-        {tab==="history"&&(
-          <ModelHistoryTab
-            historyRows={historyRows} setHistoryRows={setHistoryRows}
-            historyLoading={historyLoading} setHistoryLoading={setHistoryLoading}
-            historyError={historyError} setHistoryError={setHistoryError}
-            historyShowArchived={historyShowArchived} setHistoryShowArchived={setHistoryShowArchived}
-            shareLinksMap={shareLinksMap} setShareLinksMap={setShareLinksMap}
-            modelId={modelId} userId={overrides.userId} model={model} baseUrl={baseUrl}
-            onAnalyseRun={handleAnalyseRun}
-            onViewResults={row=>{setSelectedResultsRunId(row.id);setLatestResults(row.results_json);setTab("results");}}
-          />
         )}
         {tab==="access"&&isOwner&&(
           <div style={{maxWidth:560,display:"flex",flexDirection:"column",gap:18}}>
