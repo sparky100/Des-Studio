@@ -58,12 +58,11 @@ const intDefault = (value, fallback) => {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 };
 
-const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId, onRunSaved, onResultsReady, autoRun = false, analyseRun = null, onClearAnalyse, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
+const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, analyseRun = null, onClearAnalyse, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
   const [log, setLog] = useState([]);
-  const [view, setView] = useState("visual");
   const [autoSpeed, setAutoSpeed] = useState(400);
   const [autoRunning, setAutoRunning] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
@@ -88,6 +87,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const [executeSection, setExecuteSection] = useState("run");
   const [showRunSetup, setShowRunSetup] = useState(false);
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [diagnosticsPanelOpen, setDiagnosticsPanelOpen] = useState(false);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
   const [runHistoryStatus, setRunHistoryStatus] = useState("idle");
   const [runHistoryError, setRunHistoryError] = useState("");
@@ -287,6 +287,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       };
       setResults(fullResult);
       onResultsReady?.(fullResult);
+      onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log });
       if (modelId) {
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
@@ -451,6 +452,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
             setBatchStatus("complete");
             setResults(batchResult);
             onResultsReady?.(batchResult);
+            onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log });
             setAggregateStats(stats);
             setSaveStatus({ state: 'saving', message: 'Saving replication batch...' });
 
@@ -540,6 +542,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     setResults(result);
     onResultsReady?.(result);
     setLog(result.log);
+    onRunComplete?.({ results: result, replicationResults: [], warmupDetection: null, log: result.log });
     setMode("done");
     if (result.phaseCTruncated || result.summary?.phaseCTruncated) setPhaseCTruncated(true);
 
@@ -1842,6 +1845,17 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       )}
 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <Btn
+          variant="ghost"
+          onClick={() => {
+            const issues = checkModel(model);
+            setModelCheckerIssues(issues);
+            setModelCheckerOpen(true);
+          }}
+          title="Run structural checks on this model"
+        >
+          Check Model
+        </Btn>
         <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive}>⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
@@ -1859,28 +1873,12 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           />
         </div>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
-        <Btn
-          variant="ghost"
-          onClick={() => {
-            const issues = checkModel(model);
-            setModelCheckerIssues(issues);
-            setModelCheckerOpen(true);
-          }}
-          title="Run structural checks on this model"
-        >
-          Check Model
-        </Btn>
-        <Btn variant={view === "visual" ? "primary" : "ghost"} onClick={() => setView("visual")}>Live View</Btn>
-        <Btn variant={view === "results" ? "primary" : "ghost"} onClick={() => setView("results")} disabled={!canOpenResultsView}>Results</Btn>
-        <Btn
-          variant={view === "log" ? "primary" : "ghost"}
-          onClick={() => setView("log")}
-          disabled={autoRunning || mode === "running"}
-          title={autoRunning || mode === "running" ? "Log is available after the run completes" : undefined}
-          style={autoRunning || mode === "running" ? { opacity: 0.4, cursor: "not-allowed" } : undefined}
-        >Log</Btn>
-        <Btn variant={view === "entities" ? "primary" : "ghost"} onClick={() => setView("entities")} disabled={!results?.entitySummary?.length}>Entity Details</Btn>
-        <Btn variant={view === "diagnostics" ? "primary" : "ghost"} onClick={() => setView("diagnostics")}>Diagnostics</Btn>
+        {canOpenResultsView && (
+          <Btn variant="ghost" onClick={() => onGoToResults?.()} title="View results in the Results section">
+            View Results →
+          </Btn>
+        )}
+        <Btn variant={diagnosticsPanelOpen ? "primary" : "ghost"} onClick={() => setDiagnosticsPanelOpen(open => !open)}>Diagnostics</Btn>
         <div style={{ position: "relative" }}>
           {showExportPopover && (
             <div
@@ -1928,7 +1926,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
             </div>
           )}
         </div>
-        <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)} disabled={executeSection === "experiments"} title={executeSection === "experiments" ? "AI Insights is not available for parametric sweeps" : undefined}>AI Insights</Btn>
+        <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)} disabled={executeSection === "experiments"} title={executeSection === "experiments" ? "Analyse is not available for parametric sweeps" : undefined}>Analyse</Btn>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
       </div>
 
@@ -2411,7 +2409,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         </div>
       )}
 
-      {view === "visual" && (() => {
+      {(() => {
         const hasDerivableGraph = !!(model.queues?.length || model.bEvents?.length || model.cEvents?.length);
         if (hasDerivableGraph) {
           return (
@@ -2432,7 +2430,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
                 snap={currentSnap}
                 model={model}
                 hasResults={canOpenResultsView}
-                onOpenResults={() => setView("results")}
+                onOpenResults={() => onGoToResults?.()}
                 selectedNodeLabel={selectedNodeLabel}
                 onClearFilter={() => setSelectedNodeLabel(null)}
                 selectedEntityId={selectedEntityId}
@@ -2447,37 +2445,43 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         return <VisualView snap={currentSnap} model={model} summary={results?.summary} />;
       })()}
 
-      {view === "log" && (
-        <LogViewer log={log} currentClock={currentSnap?.clock} />
-      )}
 
-      {view === "entities" && (
-        <EntitySummaryTable entitySummary={results?.entitySummary} meanWait={results?.summary?.avgWait} />
-      )}
-
-      {view === "results" && (
-        <div style={{ background: C.logBg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
-          <ResultsWorkspace
-            results={results}
-            model={model}
-            replicationResults={replicationResults}
-            warmupDetection={warmupDetection}
-          />
-        </div>
-      )}
-
-      {view === "diagnostics" && (
-        <div style={{ background: C.logBg, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
-          <DiagnosticsTab
-            model={model}
-            results={results}
-            onGoToNode={setSelectedNodeLabel}
-          />
-        </div>
-      )}
         </>
       )}
       </div>
+
+      {diagnosticsPanelOpen && (
+        <div style={{
+          width: 380, minWidth: 320, flexShrink: 0,
+          background: C.panel,
+          border: `1px solid ${C.border}`,
+          borderRadius: 8,
+          display: "flex", flexDirection: "column",
+          maxHeight: "calc(100vh - 120px)",
+          overflowY: "auto",
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
+            position: "sticky", top: 0, background: C.panel, zIndex: 1,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>Diagnostics</div>
+            <button
+              type="button"
+              aria-label="Close diagnostics"
+              onClick={() => setDiagnosticsPanelOpen(false)}
+              style={{ background: "none", border: "none", color: C.muted, fontSize: 16, cursor: "pointer", padding: "0 4px" }}
+            >✕</button>
+          </div>
+          <div style={{ padding: 14 }}>
+            <DiagnosticsTab
+              model={model}
+              results={results}
+              onGoToNode={setSelectedNodeLabel}
+            />
+          </div>
+        </div>
+      )}
 
       {aiPanelOpen && (
         <AiAssistantPanel
