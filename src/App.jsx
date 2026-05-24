@@ -339,7 +339,7 @@ export default function App(){
     if(!uid)return;
     setLoading(true);setError('');
     try{
-      const saved=await saveModel({
+      const payload={
         name: template.name,
         description: template.description,
         visibility: "private",
@@ -349,7 +349,16 @@ export default function App(){
         bEvents: template.bEvents || [],
         cEvents: template.cEvents || [],
         queues: template.queues || [],
-      }, uid);
+        goals: template.goals || [],
+        containerTypes: template.containerTypes || [],
+      };
+      // Preserve optional top-level fields that templates may carry
+      if(template.graph!=null)          payload.graph          = template.graph;
+      if(template.experimentDefaults)   payload.experimentDefaults = template.experimentDefaults;
+      if(template.dataSources?.length)  payload.dataSources    = template.dataSources;
+      if(template.timeUnit)             payload.timeUnit       = template.timeUnit;
+      if(template.epoch)                payload.epoch          = template.epoch;
+      const saved=await saveModel(payload, uid);
       await loadData();
       setOpenModelOptions({ initialTab: "execute", autoRun: true, showStarterGuide: false });
       setOpenId(saved.id);
