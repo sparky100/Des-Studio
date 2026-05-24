@@ -100,3 +100,12 @@ export function fetchLocalSweeps(modelId) {
   const allSweeps = readLocalSweeps();
   return allSweeps[modelId] || [];
 }
+
+/**
+ * No-op stub — feedback submission requires Supabase.
+ * Provided so callers can import from either backend without branching.
+ */
+// eslint-disable-next-line no-unused-vars
+export async function submitFeedback(_params) {
+  // Local mode: silently discard feedback (no Supabase connection available)
+}

@@ -1,61 +1,161 @@
 // ui/AppNavBar.jsx — Top navigation bar for the authenticated app shell
+import { useState } from "react";
 import { C, FONT } from "./shared/tokens.js";
+import { FeedbackModal } from "./FeedbackModal.jsx";
+import { AboutModal }    from "./AboutModal.jsx";
 
-export function AppNavBar({ profile, isAdmin, isAdminActive, onHelpOpen, onSettings, onAdmin, onSignOut }) {
+// Inline SVG icon for feedback (speech bubble / message)
+function FeedbackIcon() {
   return (
-    <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 24px", display: "flex", alignItems: "center", gap: 16, height: 52 }}>
-      <div>
-        <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>DES STUDIO</div>
-        <div style={{ fontSize: 9, color: C.muted, letterSpacing: 0.5 }}>a simmodlr.app</div>
-      </div>
-      <div style={{ flex: 1 }} />
-      {profile && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: "50%",
-            background: (profile.color || C.accent) + "22",
-            border: `1.5px solid ${profile.color || C.accent}55`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 11, fontWeight: 700, color: profile.color || C.accent,
-          }}>
-            {profile.initials || "?"}
-          </div>
-          <span style={{ fontSize: 12, color: C.muted }}>{profile.full_name}</span>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  );
+}
+
+// Inline SVG icon for info (i in circle)
+function InfoIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  );
+}
+
+const navBtnStyle = {
+  background: "#ffffff08",
+  border: `1px solid ${C.border}`,
+  borderRadius: 5,
+  color: C.muted,
+  fontFamily: FONT,
+  fontSize: 11,
+  padding: "5px 12px",
+  cursor: "pointer",
+  fontWeight: 600,
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+};
+
+export function AppNavBar({
+  profile,
+  isAdmin,
+  isAdminActive,
+  onHelpOpen,
+  onSettings,
+  onAdmin,
+  onSignOut,
+  userId,
+  currentPage,
+}) {
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [aboutOpen,    setAboutOpen]    = useState(false);
+
+  return (
+    <>
+      <div style={{
+        background: C.surface,
+        borderBottom: `1px solid ${C.border}`,
+        padding: "0 24px",
+        display: "flex",
+        alignItems: "center",
+        gap: 16,
+        height: 52,
+      }}>
+        {/* Brand */}
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>DES STUDIO</div>
+          <div style={{ fontSize: 9, color: C.muted, letterSpacing: 0.5 }}>a simmodlr.app</div>
         </div>
-      )}
-      <button
-        type="button"
-        aria-label="Help"
-        title="Help"
-        onClick={onHelpOpen}
-        style={{
-          background: "#ffffff08",
-          border: `1px solid ${C.border}`,
-          borderRadius: 5,
-          color: C.muted,
-          fontFamily: FONT,
-          fontSize: 11,
-          padding: "5px 12px",
-          cursor: "pointer",
-          fontWeight: 600,
-        }}
-      >
-        ?
-      </button>
-      <button type="button" onClick={onSettings}
-        style={{ background: "#ffffff08", border: `1px solid ${C.border}`, borderRadius: 5, color: C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
-        Settings
-      </button>
-      {isAdmin && (
-        <button type="button" onClick={onAdmin}
-          style={{ background: isAdminActive ? C.accent + "33" : "#ffffff08", border: `1px solid ${isAdminActive ? C.accent : C.border}`, borderRadius: 5, color: isAdminActive ? C.accent : C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
-          Admin
+
+        <div style={{ flex: 1 }} />
+
+        {/* User profile */}
+        {profile && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: "50%",
+              background: (profile.color || C.accent) + "22",
+              border: `1.5px solid ${profile.color || C.accent}55`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 11, fontWeight: 700, color: profile.color || C.accent,
+            }}>
+              {profile.initials || "?"}
+            </div>
+            <span style={{ fontSize: 12, color: C.muted }}>{profile.full_name}</span>
+          </div>
+        )}
+
+        {/* Feedback button — opens FeedbackModal */}
+        <button
+          type="button"
+          aria-label="Submit feedback"
+          title="Submit feedback"
+          onClick={() => setFeedbackOpen(true)}
+          style={navBtnStyle}
+        >
+          <FeedbackIcon />
         </button>
-      )}
-      <button type="button" onClick={onSignOut}
-        style={{ background: "#ffffff08", border: `1px solid ${C.border}`, borderRadius: 5, color: C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
-        Sign Out
-      </button>
-    </div>
+
+        {/* Info / About button — opens AboutModal */}
+        <button
+          type="button"
+          aria-label="About DES Studio"
+          title="About DES Studio"
+          onClick={() => setAboutOpen(true)}
+          style={navBtnStyle}
+        >
+          <InfoIcon />
+        </button>
+
+        {/* Help (?) button */}
+        <button
+          type="button"
+          aria-label="Help"
+          title="Help"
+          onClick={onHelpOpen}
+          style={navBtnStyle}
+        >
+          ?
+        </button>
+
+        <button type="button" onClick={onSettings} style={navBtnStyle}>
+          Settings
+        </button>
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={onAdmin}
+            style={{
+              ...navBtnStyle,
+              background: isAdminActive ? C.accent + "33" : "#ffffff08",
+              border: `1px solid ${isAdminActive ? C.accent : C.border}`,
+              color: isAdminActive ? C.accent : C.muted,
+            }}
+          >
+            Admin
+          </button>
+        )}
+
+        <button type="button" onClick={onSignOut} style={navBtnStyle}>
+          Sign Out
+        </button>
+      </div>
+
+      {/* Modals rendered outside the navbar flow */}
+      <FeedbackModal
+        isOpen={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        userId={userId ?? null}
+        currentPage={currentPage}
+      />
+      <AboutModal
+        isOpen={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+      />
+    </>
   );
 }

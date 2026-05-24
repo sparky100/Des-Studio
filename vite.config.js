@@ -4,10 +4,17 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   assetsInclude: ['**/*.md'],
+  define: {
+    // Inject package.json version at build time; no manual version maintenance needed.
+    'import.meta.env.VITE_APP_VERSION': JSON.stringify(
+      process.env.npm_package_version
+    ),
+  },
   test: {
     environment: 'node',
     environmentMatchGlobs: [
-      ['tests/ui/**', 'jsdom'],
+      ['tests/ui/**',               'jsdom'],
+      ['src/ui/**/__tests__/**',    'jsdom'],
     ],
     globals: true,
     setupFiles: ['tests/setup.js'],
