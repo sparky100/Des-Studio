@@ -521,7 +521,9 @@ export const AiAssistantPanel = ({
     }
     if (parsedSuggestion) {
       const analysisText = parsedSuggestion.analysis
-        .replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+        .replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "")
+        .replace(/<json>[\s\S]*?<\/json>/gi, "")
+        .trim();
       return (
         <div>
           {analysisText && (
