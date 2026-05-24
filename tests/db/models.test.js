@@ -955,9 +955,33 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
 
 // ── Sprint 71.1 — Persistence unit tests ──────────────────────────────────────
 describe('Sprint 71 — persistence layer', () => {
+  // Rebuild mock query builder after vi.clearAllMocks() wipes mockReturnThis() implementations.
+  // Earlier describe blocks (share links, sweeps, getRun) override supabase.from.mockReturnValue,
+  // and vi.clearAllMocks() in afterEach removes those implementations, leaving supabase.from
+  // returning undefined. We restore a fresh chainable query builder here.
+  function makeQb() {
+    const qb = {
+      select: vi.fn().mockReturnThis(),
+      insert: vi.fn().mockReturnThis(),
+      upsert: vi.fn().mockReturnThis(),
+      update: vi.fn().mockReturnThis(),
+      delete: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      or: vi.fn().mockReturnThis(),
+      contains: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({ data: null, error: null }),
+    };
+    return qb;
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     __resetDesModelsSchemaModeForTests();
+    const qb = makeQb();
+    supabase.from.mockReturnValue(qb);
   });
 
   // ── 71.1.1  saveModel serialises dataSources correctly ───────────────────

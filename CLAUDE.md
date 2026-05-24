@@ -15,3 +15,7 @@ This project uses **OpenCode**, not Claude Code. See the following files for aut
 | `docs/addition1_entity_model.md` | Entity model, action vocabulary, distribution specs |
 
 **Backup:** `AGENTS.md.bak` and `CLAUDE.md.bak` contain the pre-consolidation originals.
+
+## Schema Contract
+
+Any change that adds a field to model_json, db/models.js serialisation, or the Supabase schema must include a corresponding Vitest round-trip assertion in tests/db/. PRs without this are incomplete.

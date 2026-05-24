@@ -1828,6 +1828,12 @@ New nullable/defaulted columns added by migration `20260524060000_sprint71_saas_
 - `admin_user_stats` is a view — Phase 2 redefines it to include org aggregation without data migration.
 - No org RLS policies exist — Phase 2 adds them without untangling existing policies.
 
+## Schema Contract
+
+Any change that adds a field to model_json, db/models.js serialisation, or the Supabase schema must include a corresponding Vitest round-trip assertion in tests/db/. PRs without this are incomplete.
+
+---
+
 ## Documentation & Test Completeness Rule
 
 Standing rule. Applies to every change made to DES Studio, regardless of size or sprint context._

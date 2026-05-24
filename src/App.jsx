@@ -8,7 +8,8 @@ import { supabase, touchLastActive }         from "./db/supabase.js";
 import { fetchModels, fetchProfiles,
          saveModel, deleteModel,
          setVisibility, setAccess, forkModel,
-         fetchRunStatsForModels }         from "./db/models.js";
+         fetchRunStatsForModels,
+         validateDbSchema }               from "./db/models.js";
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
 import { C, FONT, GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
@@ -118,6 +119,10 @@ export default function App(){
   const [pendingImport,setPendingImport]=useState(null)
   const [helpOpen,setHelpOpen]=useState(false)
 
+  // Dev-only: probe des_models schema on mount to catch drift early.
+  useEffect(()=>{
+    if(process.env.NODE_ENV==='development'){validateDbSchema()}
+  },[])
 
   useEffect(()=>{
     const hash=window.location.hash
