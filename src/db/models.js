@@ -101,6 +101,7 @@ export function norm(r) {
     goals:          r.goals            || [],
     timeUnit:       modelJson.timeUnit ?? 'minutes',
     epoch:          modelJson.epoch ?? null,
+    dataSources:    modelJson.dataSources ?? [],
     owner_id:       r.owner_id,
     owner:          r.owner_id,
     createdAt:      r.created_at,
@@ -111,7 +112,7 @@ export function norm(r) {
 }
 
 function modelJsonFromModel(model = {}) {
-  return {
+  const json = {
     schemaVersion:        model.schemaVersion ?? 1,
     entityTypes:          model.entityTypes || [],
     stateVariables:       model.stateVariables || [],
@@ -124,6 +125,8 @@ function modelJsonFromModel(model = {}) {
     timeUnit:             model.timeUnit || 'minutes',
     epoch:                model.epoch || null,
   };
+  if (model.dataSources?.length) json.dataSources = model.dataSources;
+  return json;
 }
 
 // ── Model to row (for save/update) ────────────────────────────────────────────

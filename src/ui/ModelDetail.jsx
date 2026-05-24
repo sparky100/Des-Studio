@@ -67,22 +67,27 @@ function slugifyModelName(name = "") {
 }
 
 function modelJsonFromModel(model = {}) {
-  return MODEL_JSON_KEYS.reduce((json, key) => {
+  const json = MODEL_JSON_KEYS.reduce((acc, key) => {
     if (key === "graph") {
       return model.graph && typeof model.graph === "object" && !Array.isArray(model.graph)
-        ? { ...json, graph: model.graph }
-        : json;
+        ? { ...acc, graph: model.graph }
+        : acc;
     }
     if (key === "experimentDefaults") {
       return model.experimentDefaults && typeof model.experimentDefaults === "object" && !Array.isArray(model.experimentDefaults)
-        ? { ...json, experimentDefaults: model.experimentDefaults }
-        : json;
+        ? { ...acc, experimentDefaults: model.experimentDefaults }
+        : acc;
     }
     return {
-      ...json,
+      ...acc,
       [key]: Array.isArray(model[key]) ? model[key] : [],
     };
   }, {});
+  // Preserve live-data and time fields in exported JSON
+  if (model.timeUnit)                  json.timeUnit    = model.timeUnit;
+  if (model.epoch)                     json.epoch       = model.epoch;
+  if (model.dataSources?.length)       json.dataSources = model.dataSources;
+  return json;
 }
 
 function buildModelExportPayload(model, exportedAt = new Date().toISOString()) {
