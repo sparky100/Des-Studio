@@ -837,7 +837,8 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
 
 export function parsePlanRefinementResponse(text = "") {
   const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
-  const rawJson = fenceMatch ? fenceMatch[1].trim() : text.trim();
+  const tagMatch   = !fenceMatch && text.match(/<json>\s*([\s\S]*?)<\/json>/i);
+  const rawJson    = fenceMatch ? fenceMatch[1].trim() : tagMatch ? tagMatch[1].trim() : text.trim();
   try {
     const parsed = JSON.parse(rawJson);
     const analysis = typeof parsed.analysis === "string" ? parsed.analysis : "";
@@ -857,7 +858,11 @@ export function parsePlanRefinementResponse(text = "") {
       : [];
     return { analysis, recommendations, infeasibleGoals };
   } catch {
-    return { analysis: text, recommendations: [], infeasibleGoals: [] };
+    const cleaned = text
+      .replace(/<json>[\s\S]*?<\/json>/gi, "")
+      .replace(/```json[\s\S]*?```/g, "")
+      .trim();
+    return { analysis: cleaned || text, recommendations: [], infeasibleGoals: [] };
   }
 }
 
@@ -982,8 +987,9 @@ export function buildReportRecommendationsPrompt(model = {}, results = {}) {
 export function parseReportRecommendations(text) {
   try {
     const raw = String(text || "").trim();
-    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const jsonStr = fenced ? fenced[1].trim() : raw;
+    const fenced  = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const tagged  = !fenced && raw.match(/<json>\s*([\s\S]*?)<\/json>/i);
+    const jsonStr = fenced ? fenced[1].trim() : tagged ? tagged[1].trim() : raw;
     const parsed = JSON.parse(jsonStr);
     if (Array.isArray(parsed)) return parsed;
     return [];

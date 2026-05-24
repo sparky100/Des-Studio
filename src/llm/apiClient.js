@@ -103,10 +103,11 @@ function extractJsonText(payload) {
 }
 
 function parseModelBuilderJson(text) {
-  const raw = String(text || "").trim();
+  const raw    = String(text || "").trim();
   const fenced = raw.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const tagged = !fenced && raw.match(/<json>\s*([\s\S]*?)<\/json>/i);
   try {
-    return JSON.parse(fenced ? fenced[1] : raw);
+    return JSON.parse(fenced ? fenced[1] : tagged ? tagged[1] : raw);
   } catch (error) {
     const friendly = new Error("AI returned incomplete or invalid model JSON. Please ask it to produce a smaller model proposal, or answer one more clarifying question first.");
     friendly.cause = error;
