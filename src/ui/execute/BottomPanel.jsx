@@ -514,11 +514,11 @@ function EntityInspector({ entity, snap, onClose }) {
       {entity.attrs && Object.keys(entity.attrs).length > 0 && (
         <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, marginBottom: 4, textTransform: "uppercase" }}>Attributes</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
             {Object.entries(entity.attrs).map(([k, v]) => (
-              <div key={k} style={{ display: "flex", gap: 8, fontSize: 11, fontFamily: FONT }}>
-                <span style={{ color: C.muted, minWidth: 80 }}>{k}</span>
-                <span style={{ color: C.text }}>{String(v)}</span>
+              <div key={k} style={rowStyle}>
+                <span style={labelStyle}>{k}</span>
+                <span style={valueStyle}>{String(v)}</span>
               </div>
             ))}
           </div>
