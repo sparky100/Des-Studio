@@ -3,9 +3,10 @@ import { useState, useEffect, useCallback, Fragment } from "react";
 import { C, FONT } from "./shared/tokens.js";
 import { Btn, Tag, SH, InfoBox, SectionPanel } from "./shared/components.jsx";
 import { useViewport } from "./shared/hooks.js";
-import { getPlatformConfig, setPlatformConfig, fetchAllUsers, updateUserRole,
+import { getPlatformConfig, setPlatformConfig, updateUserRole,
          suspendUser, unsuspendUser, logAdminAction, fetchAuditLog,
-         fetchFeedback, updateFeedbackStatus } from "../db/models.js";
+         fetchAdminUserStats, fetchPlatformStats, fetchSignupCounts,
+         updateUserPlan, fetchFeedback, updateFeedbackStatus } from "../db/models.js";
 
 const LLM_PROVIDERS = [
   { value: "anthropic",    label: "Anthropic" },
@@ -19,6 +20,215 @@ const LLM_MODELS = {
   "opencode-go": ["opencode-go/deepseek-v4-pro", "opencode-go/deepseek-v4-flash"],
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function relativeTime(isoDate) {
+  if (!isoDate) return "Never";
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
+function fullDate(isoDate) {
+  if (!isoDate) return "";
+  return new Date(isoDate).toLocaleString();
+}
+
+function sortUsers(users, col, dir) {
+  const mul = dir === "asc" ? 1 : -1;
+  return [...users].sort((a, b) => {
+    let va = a[col]; let vb = b[col];
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === "string") return mul * va.localeCompare(vb);
+    return mul * (va < vb ? -1 : va > vb ? 1 : 0);
+  });
+}
+
+function PlanBadge({ plan }) {
+  const isPro = plan === "pro";
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center",
+      fontSize: 9, fontWeight: 700, fontFamily: FONT,
+      letterSpacing: 1.2, padding: "2px 7px", borderRadius: 3,
+      background: isPro ? C.accent + "22" : C.muted + "18",
+      color:      isPro ? C.accent         : C.muted,
+      border:     `1px solid ${isPro ? C.accent + "44" : C.muted + "33"}`,
+      textTransform: "uppercase", userSelect: "none",
+    }}>
+      {isPro ? "PRO" : "FREE"}
+    </span>
+  );
+}
+
+// ── Signups Bar Chart (inline SVG — no external chart library needed) ─────────
+function SignupsBarChart({ data }) {
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, fontStyle: "italic" }}>
+        No signup data available for the past 30 days.
+      </div>
+    );
+  }
+  const max = Math.max(...data.map(d => d.count), 1);
+  const chartH = 100;
+  const barGap = 2;
+  const totalW = 600;
+  const barW = Math.max(3, Math.floor((totalW - data.length * barGap) / data.length));
+  const svgW = data.length * (barW + barGap);
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg
+        width="100%"
+        viewBox={`0 0 ${svgW} ${chartH + 22}`}
+        style={{ display: "block", minWidth: Math.min(svgW, totalW) }}
+        aria-label="Daily signups bar chart"
+      >
+        {/* Y-axis label */}
+        <text x="0" y="9" fontSize="8" fill={C.muted} fontFamily={FONT}>
+          New users
+        </text>
+        {/* Bars */}
+        {data.map((d, i) => {
+          const h = Math.max(2, Math.round((d.count / max) * chartH));
+          const x = i * (barW + barGap);
+          const y = chartH - h;
+          return (
+            <g key={d.day}>
+              <rect
+                x={x} y={y}
+                width={barW} height={h}
+                fill={C.accent} opacity={0.75}
+                rx={1}
+              />
+              <title>{d.day}: {d.count} signup{d.count !== 1 ? "s" : ""}</title>
+              {/* Day label every ~5 bars to avoid clutter */}
+              {i % 5 === 0 && (
+                <text
+                  x={x + barW / 2} y={chartH + 14}
+                  fontSize="7" fill={C.muted} fontFamily={FONT}
+                  textAnchor="middle"
+                >
+                  {d.day?.slice(5)} {/* MM-DD */}
+                </text>
+              )}
+            </g>
+          );
+        })}
+        {/* Baseline */}
+        <line x1="0" y1={chartH} x2={svgW} y2={chartH} stroke={C.border} strokeWidth="1" />
+      </svg>
+    </div>
+  );
+}
+
+// ── User detail drawer ────────────────────────────────────────────────────────
+function UserDrawer({ user, currentUserId, onClose, onRoleChange, onPlanChange, onSuspend, onUnsuspend }) {
+  if (!user) return null;
+  const isSelf = user.id === currentUserId;
+
+  const row = (label, value) => (
+    <div style={{ display: "grid", gridTemplateColumns: "130px 1fr", gap: 8, padding: "5px 0", borderBottom: `1px solid ${C.border}20` }}>
+      <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{label}</span>
+      <span style={{ fontSize: 11, color: C.text, fontFamily: FONT, wordBreak: "break-all" }}>{value ?? "—"}</span>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed", inset: 0, zIndex: 199,
+          background: "rgba(0,0,0,0.45)",
+        }}
+      />
+      {/* Drawer */}
+      <div style={{
+        position: "fixed", top: 0, right: 0, bottom: 0,
+        width: 340, zIndex: 200,
+        background: C.panel,
+        borderLeft: `1px solid ${C.border}`,
+        display: "flex", flexDirection: "column",
+        overflowY: "auto",
+      }}>
+        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>User Details</div>
+          <Btn small variant="ghost" onClick={onClose}>✕</Btn>
+        </div>
+
+        <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 6 }}>
+          {row("Email",        user.email || "—")}
+          {row("Role",         user.role)}
+          {row("Plan",         <PlanBadge plan={user.plan} />)}
+          {row("Status",       user.suspended ? <Tag label="suspended" color={C.red} /> : <Tag label="active" color={C.green} />)}
+          {row("Signed up",    user.signupAt   ? <span title={fullDate(user.signupAt)}>{relativeTime(user.signupAt)}</span>   : "—")}
+          {row("Last active",  user.lastActiveAt ? <span title={fullDate(user.lastActiveAt)}>{relativeTime(user.lastActiveAt)}</span> : "Never")}
+          {row("Models",       user.modelCount)}
+          {row("Runs (30d)",   user.runsLast30d)}
+          {row("Total runs",   user.runCount)}
+          {row("ID",           <span style={{ fontSize: 9, color: C.muted }}>{user.id}</span>)}
+        </div>
+
+        {!isSelf && (
+          <div style={{ padding: "12px 20px", display: "flex", flexDirection: "column", gap: 12, borderTop: `1px solid ${C.border}` }}>
+            <SH label="Admin Actions" color={C.amber} />
+
+            {/* Change Plan */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Change Plan</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["free", "pro"].map(p => (
+                  <Btn key={p} small variant={user.plan === p ? "primary" : "ghost"}
+                    onClick={() => onPlanChange(user.id, p)}>
+                    {p.toUpperCase()}
+                  </Btn>
+                ))}
+              </div>
+            </div>
+
+            {/* Change Role */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Change Role</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                {user.isAdmin ? (
+                  <Btn small variant="ghost" onClick={() => onRoleChange(user.id, "user")}>Demote to User</Btn>
+                ) : (
+                  <Btn small variant="ghost" onClick={() => onRoleChange(user.id, "admin")}>Promote to Admin</Btn>
+                )}
+              </div>
+            </div>
+
+            {/* Suspend / Unsuspend */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Suspension</span>
+              {user.suspended ? (
+                <Btn small variant="ghost" onClick={() => onUnsuspend(user.id)}>Unsuspend User</Btn>
+              ) : (
+                <Btn small variant="ghost" onClick={() => onSuspend(user.id)}>
+                  <span style={{ color: C.red }}>Suspend User</span>
+                </Btn>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ── Main AdminPanel ───────────────────────────────────────────────────────────
 function AdminPanel({ userId, isAdmin, onClose }) {
   const { isMobile, isCompact } = useViewport();
   const narrowLayout = isMobile || isCompact;
@@ -27,12 +237,20 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const [limits, setLimits] = useState(null);
   const [users, setUsers] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
+  const [platformStats, setPlatformStats] = useState(null);
+  const [signupCounts, setSignupCounts] = useState([]);
   const [feedback, setFeedback] = useState([]);
   const [feedbackFilter, setFeedbackFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [showKey, setShowKey] = useState(false);
+
+  // User list UI state
+  const [sortCol, setSortCol] = useState("signupAt");
+  const [sortDir, setSortDir] = useState("desc");
+  const [userSearch, setUserSearch] = useState("");
+  const [selectedUser, setSelectedUser] = useState(null);
 
   // LLM form state
   const [provider, setProvider] = useState("anthropic");
@@ -45,17 +263,21 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [llmCfg, limitsCfg, allUsers, log, fb] = await Promise.all([
+      const [llmCfg, limitsCfg, allUsers, log, stats, signups, fb] = await Promise.all([
         getPlatformConfig("llm"),
         getPlatformConfig("limits"),
-        fetchAllUsers(),
+        fetchAdminUserStats(),
         fetchAuditLog(100),
-        fetchFeedback({ limit: 200 }),
+        fetchPlatformStats().catch(() => null),
+        fetchSignupCounts(30).catch(() => []),
+        fetchFeedback({ limit: 200 }).catch(() => []),
       ]);
       setLlmConfig(llmCfg);
       setLimits(limitsCfg);
       setUsers(allUsers || []);
       setAuditLog(log || []);
+      setPlatformStats(stats);
+      setSignupCounts(signups || []);
       setFeedback(fb || []);
       if (llmCfg) {
         setProvider(llmCfg.provider || "anthropic");
@@ -125,6 +347,19 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       await updateUserRole(targetId, role);
       await logAdminAction(role === "admin" ? "promote" : "demote", targetId, null, prev?.role, role);
       setUsers(us => us.map(u => u.id === targetId ? { ...u, role, isAdmin: role === "admin" } : u));
+      setSelectedUser(su => su?.id === targetId ? { ...su, role, isAdmin: role === "admin" } : su);
+    } catch (err) {
+      setSaveStatus({ state: "error", message: err.message });
+    }
+  };
+
+  const handlePlanChange = async (targetId, plan) => {
+    try {
+      const prev = users.find(u => u.id === targetId);
+      await updateUserPlan(targetId, plan);
+      await logAdminAction("update_plan", targetId, null, prev?.plan, plan);
+      setUsers(us => us.map(u => u.id === targetId ? { ...u, plan } : u));
+      setSelectedUser(su => su?.id === targetId ? { ...su, plan } : su);
     } catch (err) {
       setSaveStatus({ state: "error", message: err.message });
     }
@@ -135,6 +370,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       await suspendUser(targetId);
       await logAdminAction("suspend", targetId);
       setUsers(us => us.map(u => u.id === targetId ? { ...u, suspended: true } : u));
+      setSelectedUser(su => su?.id === targetId ? { ...su, suspended: true } : su);
     } catch (err) {
       setSaveStatus({ state: "error", message: err.message });
     }
@@ -145,6 +381,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       await unsuspendUser(targetId);
       await logAdminAction("unsuspend", targetId);
       setUsers(us => us.map(u => u.id === targetId ? { ...u, suspended: false } : u));
+      setSelectedUser(su => su?.id === targetId ? { ...su, suspended: false } : su);
     } catch (err) {
       setSaveStatus({ state: "error", message: err.message });
     }
@@ -156,11 +393,13 @@ function AdminPanel({ userId, isAdmin, onClose }) {
     padding: "6px 10px", outline: "none", ...extra,
   });
 
+  const newFeedbackCount = feedback.filter(f => f.status === "new").length;
   const TABS = [
     { id: "llm",      label: "LLM Provider" },
     { id: "limits",   label: "Platform Limits" },
     { id: "users",    label: "Users" },
-    { id: "feedback", label: `Feedback${feedback.filter(f => f.status === "new").length ? ` (${feedback.filter(f => f.status === "new").length})` : ""}` },
+    { id: "usage",    label: "Usage" },
+    { id: "feedback", label: `Feedback${newFeedbackCount ? ` (${newFeedbackCount})` : ""}` },
     { id: "auditlog", label: "Audit Log" },
   ];
 
@@ -172,8 +411,39 @@ function AdminPanel({ userId, isAdmin, onClose }) {
     );
   }
 
+  // Derived: filtered + sorted user list
+  const filteredUsers = sortUsers(
+    users.filter(u => !userSearch || (u.email || "").toLowerCase().startsWith(userSearch.toLowerCase())),
+    sortCol,
+    sortDir,
+  );
+
+  const SortTh = ({ col, label }) => {
+    const active = sortCol === col;
+    return (
+      <th
+        scope="col"
+        onClick={() => { if (active) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("desc"); } }}
+        style={{
+          textAlign: "left", padding: "6px 10px",
+          color: active ? C.accent : C.muted,
+          fontWeight: 700, fontSize: 10, letterSpacing: 1,
+          cursor: "pointer", userSelect: "none", whiteSpace: "nowrap",
+        }}
+      >
+        {label}{active ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+      </th>
+    );
+  };
+
+  const kpiTileStyle = {
+    background: C.surface, border: `1px solid ${C.border}`,
+    borderRadius: 8, padding: "14px 18px",
+    display: "flex", flexDirection: "column", gap: 4, flex: "1 1 120px",
+  };
+
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
+    <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         {onClose && <Btn small variant="ghost" onClick={onClose}>← Back</Btn>}
         <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: FONT }}>Admin Panel</div>
@@ -294,55 +564,158 @@ function AdminPanel({ userId, isAdmin, onClose }) {
           {tab === "users" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <SH label="User Management" color={C.server} />
-              {users.length === 0 ? (
+
+              {/* Search */}
+              <input
+                type="text"
+                placeholder="Filter by email…"
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+                style={{ ...inp(), maxWidth: 260 }}
+                aria-label="Filter users by email"
+              />
+
+              {filteredUsers.length === 0 ? (
                 <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>No users found.</div>
               ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
-                  <thead>
-                    <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                      {["User", "Role", "Status", "Actions"].map(h => (
-                        <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map(u => (
-                      <tr key={u.id} style={{ borderBottom: `1px solid ${C.border}30`, opacity: u.suspended ? 0.6 : 1 }}>
-                        <td style={{ padding: "6px 10px", color: C.text }}>
-                          <div>{u.username || u.email || u.id?.slice(0, 8)}</div>
-                          <div style={{ fontSize: 9, color: C.muted }}>{u.id}</div>
-                        </td>
-                        <td style={{ padding: "6px 10px" }}>
-                          <Tag label={u.role || "user"} color={u.isAdmin ? C.accent : C.muted} />
-                        </td>
-                        <td style={{ padding: "6px 10px" }}>
-                          {u.suspended
-                            ? <Tag label="suspended" color={C.red} />
-                            : <Tag label="active" color={C.green} />}
-                        </td>
-                        <td style={{ padding: "6px 10px" }}>
-                          <div style={{ display: "flex", gap: 6 }}>
-                            {u.id !== userId && (u.isAdmin ? (
-                              <Btn small variant="ghost" onClick={() => handleRoleChange(u.id, "user")}>Demote</Btn>
-                            ) : (
-                              <Btn small variant="ghost" onClick={() => handleRoleChange(u.id, "admin")}>Promote</Btn>
-                            ))}
-                            {u.id !== userId && (u.suspended ? (
-                              <Btn small variant="ghost" onClick={() => handleUnsuspend(u.id)}>Unsuspend</Btn>
-                            ) : (
-                              <Btn small variant="ghost" onClick={() => handleSuspend(u.id)}>Suspend</Btn>
-                            ))}
-                          </div>
-                        </td>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <SortTh col="email"        label="Email" />
+                        <SortTh col="role"         label="Role" />
+                        <SortTh col="plan"         label="Plan" />
+                        <SortTh col="signupAt"     label="Signed Up" />
+                        <SortTh col="lastActiveAt" label="Last Active" />
+                        <SortTh col="modelCount"   label="Models" />
+                        <SortTh col="runsLast30d"  label="Runs (30d)" />
+                        <SortTh col="runCount"     label="Total Runs" />
+                        <th scope="col" style={{ padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 10, letterSpacing: 1 }}>Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredUsers.map(u => (
+                        <tr
+                          key={u.id}
+                          onClick={() => setSelectedUser(u)}
+                          style={{
+                            borderBottom: `1px solid ${C.border}30`,
+                            opacity: u.suspended ? 0.6 : 1,
+                            cursor: "pointer",
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
+                          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                        >
+                          <td style={{ padding: "6px 10px", color: C.text, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {u.email || u.id?.slice(0, 8)}
+                          </td>
+                          <td style={{ padding: "6px 10px" }}>
+                            <Tag label={u.role || "user"} color={u.isAdmin ? C.accent : C.muted} />
+                          </td>
+                          <td style={{ padding: "6px 10px" }}>
+                            <PlanBadge plan={u.plan} />
+                          </td>
+                          <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>
+                            <span title={fullDate(u.signupAt)}>{relativeTime(u.signupAt)}</span>
+                          </td>
+                          <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>
+                            <span title={fullDate(u.lastActiveAt)}>{relativeTime(u.lastActiveAt)}</span>
+                          </td>
+                          <td style={{ padding: "6px 10px", color: C.text, textAlign: "right" }}>{u.modelCount}</td>
+                          <td style={{ padding: "6px 10px", color: C.text, textAlign: "right" }}>{u.runsLast30d}</td>
+                          <td style={{ padding: "6px 10px", color: C.text, textAlign: "right" }}>{u.runCount}</td>
+                          <td style={{ padding: "6px 10px" }} onClick={e => e.stopPropagation()}>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              {u.id !== userId && (u.isAdmin ? (
+                                <Btn small variant="ghost" onClick={() => handleRoleChange(u.id, "user")}>Demote</Btn>
+                              ) : (
+                                <Btn small variant="ghost" onClick={() => handleRoleChange(u.id, "admin")}>Promote</Btn>
+                              ))}
+                              {u.id !== userId && (u.suspended ? (
+                                <Btn small variant="ghost" onClick={() => handleUnsuspend(u.id)}>Unsuspend</Btn>
+                              ) : (
+                                <Btn small variant="ghost" onClick={() => handleSuspend(u.id)}>Suspend</Btn>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}
 
-          {/* ── FEEDBACK ── */}
+          {/* ── USAGE ── */}
+          {tab === "usage" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <SH label="Platform Usage" color={C.accent} />
+
+              {/* Section 1: KPI tiles */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                {[
+                  { label: "Total users",       value: platformStats?.total_users  ?? "—", color: C.accent },
+                  { label: "Active (7 days)",   value: platformStats?.active_7d    ?? "—", color: C.green },
+                  { label: "Active (30 days)",  value: platformStats?.active_30d   ?? "—", color: C.amber },
+                  { label: "Total models",      value: platformStats?.total_models ?? "—", color: C.server },
+                ].map(tile => (
+                  <div key={tile.label} style={kpiTileStyle}>
+                    <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, textTransform: "uppercase" }}>{tile.label}</div>
+                    <div style={{ fontSize: 26, fontWeight: 700, color: tile.color, fontFamily: FONT }}>{tile.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Section 2: Usage table */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, fontFamily: FONT, letterSpacing: 1, textTransform: "uppercase" }}>
+                  User Activity (sorted by runs last 30 days)
+                </div>
+                {users.length === 0 ? (
+                  <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>No users found.</div>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
+                      <thead>
+                        <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                          {["Email", "Plan", "Models", "Runs (30d)", "Total Runs", "Last Active"].map(h => (
+                            <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 10, letterSpacing: 1 }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[...users].sort((a, b) => (b.runsLast30d ?? 0) - (a.runsLast30d ?? 0)).map(u => (
+                          <tr key={u.id} style={{ borderBottom: `1px solid ${C.border}20` }}>
+                            <td style={{ padding: "6px 10px", color: C.text, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {u.email || u.id?.slice(0, 8)}
+                            </td>
+                            <td style={{ padding: "6px 10px" }}><PlanBadge plan={u.plan} /></td>
+                            <td style={{ padding: "6px 10px", color: C.text, textAlign: "right" }}>{u.modelCount}</td>
+                            <td style={{ padding: "6px 10px", color: C.text, textAlign: "right" }}>{u.runsLast30d}</td>
+                            <td style={{ padding: "6px 10px", color: C.text, textAlign: "right" }}>{u.runCount}</td>
+                            <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>
+                              <span title={fullDate(u.lastActiveAt)}>{relativeTime(u.lastActiveAt)}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 3: Signups over time */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: C.muted, fontFamily: FONT, letterSpacing: 1, textTransform: "uppercase" }}>
+                  Signups — Last 30 Days
+                </div>
+                <SignupsBarChart data={signupCounts} />
+              </div>
+            </div>
+          )}
+
+          {/* ── FEEDBACK ── (from PR #115: feedback triage tab) */}
           {tab === "feedback" && (() => {
             const STATUS_COLORS = {
               new:       C.accent,
@@ -357,7 +730,6 @@ function AdminPanel({ userId, isAdmin, onClose }) {
               other:    C.muted,
             };
             const ALL_STATUSES = ["new", "reviewed", "actioned", "dismissed"];
-
             const filtered = feedbackFilter === "all"
               ? feedback
               : feedback.filter(f => f.status === feedbackFilter);
@@ -374,48 +746,30 @@ function AdminPanel({ userId, isAdmin, onClose }) {
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <SH label="Feedback Triage" color={C.accent} />
-
-                {/* Filter bar */}
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Filter:</span>
                   {["all", ...ALL_STATUSES].map(s => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => setFeedbackFilter(s)}
-                      style={{
-                        background: feedbackFilter === s ? C.accent + "22" : "transparent",
-                        border: `1px solid ${feedbackFilter === s ? C.accent : C.border}`,
-                        borderRadius: 4, color: feedbackFilter === s ? C.accent : C.muted,
-                        fontFamily: FONT, fontSize: 11, fontWeight: 600,
-                        padding: "4px 10px", cursor: "pointer",
-                      }}
-                    >
+                    <button key={s} type="button" onClick={() => setFeedbackFilter(s)} style={{
+                      background: feedbackFilter === s ? C.accent + "22" : "transparent",
+                      border: `1px solid ${feedbackFilter === s ? C.accent : C.border}`,
+                      borderRadius: 4, color: feedbackFilter === s ? C.accent : C.muted,
+                      fontFamily: FONT, fontSize: 11, fontWeight: 600,
+                      padding: "4px 10px", cursor: "pointer",
+                    }}>
                       {s === "all"
                         ? `All (${feedback.length})`
                         : `${s} (${feedback.filter(f => f.status === s).length})`}
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setLoading(true);
-                      try {
-                        const fb = await fetchFeedback({ limit: 200 });
-                        setFeedback(fb || []);
-                      } catch (err) {
-                        setSaveStatus({ state: "error", message: err.message });
-                      }
-                      setLoading(false);
-                    }}
-                    style={{ marginLeft: "auto", background: "transparent", border: `1px solid ${C.border}`,
-                      borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 11,
-                      padding: "4px 10px", cursor: "pointer" }}
-                  >
-                    ↻ Refresh
-                  </button>
+                  <button type="button" onClick={async () => {
+                    setLoading(true);
+                    try { const fb = await fetchFeedback({ limit: 200 }); setFeedback(fb || []); }
+                    catch (err) { setSaveStatus({ state: "error", message: err.message }); }
+                    setLoading(false);
+                  }} style={{ marginLeft: "auto", background: "transparent", border: `1px solid ${C.border}`,
+                    borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 11,
+                    padding: "4px 10px", cursor: "pointer" }}>↻ Refresh</button>
                 </div>
-
                 {filtered.length === 0 ? (
                   <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
                     No feedback submissions{feedbackFilter !== "all" ? ` with status "${feedbackFilter}"` : ""}.
@@ -425,10 +779,8 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                     <thead>
                       <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                         {["Category", "Message", "User", "Version", "Date", "Status"].map(h => (
-                          <th key={h} scope="col" style={{
-                            textAlign: "left", padding: "6px 10px",
-                            color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: 1,
-                          }}>{h}</th>
+                          <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 10px",
+                            color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -439,39 +791,23 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                             <Tag label={fb.category || "—"} color={CATEGORY_COLORS[fb.category] || C.muted} />
                           </td>
                           <td style={{ padding: "6px 10px", maxWidth: 320 }}>
-                            <div style={{ color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 300 }}
-                              title={fb.message}>
-                              {fb.message}
-                            </div>
-                            {fb.pageContext && (
-                              <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>
-                                {fb.pageContext}
-                              </div>
-                            )}
+                            <div style={{ color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 300 }} title={fb.message}>{fb.message}</div>
+                            {fb.pageContext && (<div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>{fb.pageContext}</div>)}
                           </td>
                           <td style={{ padding: "6px 10px", fontSize: 10, color: C.muted, whiteSpace: "nowrap" }}>
                             {fb.userId ? fb.userId.slice(0, 8) + "…" : "(anon)"}
                           </td>
-                          <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>
-                            {fb.appVersion || "—"}
-                          </td>
+                          <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>{fb.appVersion || "—"}</td>
                           <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>
                             {new Date(fb.createdAt).toLocaleDateString()}
                           </td>
                           <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>
-                            <select
-                              value={fb.status}
-                              onChange={e => handleStatusChange(fb.id, e.target.value)}
-                              style={{
-                                background: C.bg, border: `1px solid ${STATUS_COLORS[fb.status] || C.border}`,
-                                borderRadius: 4, color: STATUS_COLORS[fb.status] || C.text,
-                                fontFamily: FONT, fontSize: 11, padding: "3px 6px",
-                                cursor: "pointer",
-                              }}
-                            >
-                              {ALL_STATUSES.map(s => (
-                                <option key={s} value={s}>{s}</option>
-                              ))}
+                            <select value={fb.status} onChange={e => handleStatusChange(fb.id, e.target.value)} style={{
+                              background: C.bg, border: `1px solid ${STATUS_COLORS[fb.status] || C.border}`,
+                              borderRadius: 4, color: STATUS_COLORS[fb.status] || C.text,
+                              fontFamily: FONT, fontSize: 11, padding: "3px 6px", cursor: "pointer",
+                            }}>
+                              {ALL_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                             </select>
                           </td>
                         </tr>
@@ -507,9 +843,10 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                         </td>
                         <td style={{ padding: "6px 10px" }}>
                           <Tag label={entry.action} color={
-                            entry.action === "suspend" ? C.red :
-                            entry.action === "unsuspend" ? C.green :
-                            entry.action === "promote" ? C.accent : C.muted
+                            entry.action === "suspend"     ? C.red    :
+                            entry.action === "unsuspend"   ? C.green  :
+                            entry.action === "promote"     ? C.accent :
+                            entry.action === "update_plan" ? C.server : C.muted
                           } />
                         </td>
                         <td style={{ padding: "6px 10px", color: C.muted, fontSize: 10 }}>
@@ -528,6 +865,19 @@ function AdminPanel({ userId, isAdmin, onClose }) {
             </div>
           )}
         </>
+      )}
+
+      {/* User detail drawer */}
+      {selectedUser && (
+        <UserDrawer
+          user={selectedUser}
+          currentUserId={userId}
+          onClose={() => setSelectedUser(null)}
+          onRoleChange={handleRoleChange}
+          onPlanChange={handlePlanChange}
+          onSuspend={handleSuspend}
+          onUnsuspend={handleUnsuspend}
+        />
       )}
     </div>
   );

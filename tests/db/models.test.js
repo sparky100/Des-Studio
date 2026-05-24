@@ -229,7 +229,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       const profiles = await fetchProfiles();
 
       expect(supabase.from).toHaveBeenCalledWith('profiles');
-      expect(supabase.from('profiles').select).toHaveBeenCalledWith('id, full_name, initials, color, role');
+      expect(supabase.from('profiles').select).toHaveBeenCalledWith('id, full_name, initials, color, role, plan');
       expect(profiles).toEqual([
         expect.objectContaining({ id: 'u1', role: 'admin', isAdmin: true }),
         expect.objectContaining({ id: 'u2', role: 'user', isAdmin: false }),

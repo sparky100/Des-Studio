@@ -11,6 +11,26 @@ if (!url || !anon) {
 export const supabase = createClient(url, anon);
 
 /**
+ * Touch last_active_at for the current session owner.
+ * Called once per session load (not on every render).
+ * Errors are swallowed — this is telemetry, not a critical path.
+ * Fires trg_profiles_last_active, which sets last_active_at = now().
+ *
+ * @param {string} userId - The authenticated user's UUID
+ */
+export async function touchLastActive(userId) {
+  if (!userId) return;
+  try {
+    await supabase
+      .from('profiles')
+      .update({ last_active_at: new Date().toISOString() })
+      .eq('id', userId);
+  } catch (_) {
+    // telemetry only — never throw
+  }
+}
+
+/**
  * Submit user feedback to the Supabase feedback table.
  * Inserts one row; throws on error.
  *

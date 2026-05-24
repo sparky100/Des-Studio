@@ -1769,4 +1769,63 @@ Failure to complete this checklist means the sprint is not closed.
 
 ---
 
+---
+
+## Sprint 71 — SaaS Operator Layer (2026-05-24)
+
+### admin_user_stats view
+A PostgreSQL view in `public.admin_user_stats` provides per-user aggregate stats (model count, run count, runs last 30d, plan, signup_at, last_active_at). Because `des_models` and `simulation_runs` are RLS-protected (per-user), the view is created with the postgres owner (security-definer semantics) so it can aggregate across all users.
+
+**When to use:** Query via the `get_admin_user_stats()` RPC function (security-definer, checks `is_platform_admin()`), NOT by querying the view directly from the client — the RPC enforces the admin permission check.
+
+**vs. direct table queries:** Use `fetchAdminUserStats()` (calls the RPC) for the admin panel. Use direct `profiles` queries for user-facing operations (settings, profile load).
+
+### Admin stats RPCs
+Three security-definer functions live in `public` schema:
+
+| Function | Returns | Notes |
+|---|---|---|
+| `get_admin_user_stats()` | Table of per-user stats | Checks `is_platform_admin()` |
+| `get_platform_stats()` | JSONB with KPI counts | Checks `is_platform_admin()` |
+| `get_signup_counts(p_days int)` | Table of day/count rows | Checks `is_platform_admin()` |
+
+Client-side functions are in `src/db/models.js`: `fetchAdminUserStats`, `fetchPlatformStats`, `fetchSignupCounts`, `updateUserPlan`.
+
+### notify-new-signup Edge Function
+`supabase/functions/notify-new-signup/index.ts` — receives a database webhook POST on INSERT to `auth.users`. Sends an email via Resend API and optionally a Slack message.
+
+**Manual webhook setup (cannot be automated via migration):**
+In Supabase Dashboard -> Database -> Webhooks -> Create new webhook:
+- Table: `auth.users`
+- Events: INSERT
+- URL: `https://<project-ref>.supabase.co/functions/v1/notify-new-signup`
+- Headers: `Authorization: Bearer <WEBHOOK_SECRET>`
+
+### Environment variables (Sprint 71)
+Configured in Supabase Dashboard -> Edge Functions -> Secrets (NOT in .env files):
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `WEBHOOK_SECRET` | Yes | Shared secret between Supabase webhook and `notify-new-signup` |
+| `ADMIN_NOTIFY_EMAIL` | Yes | Destination for signup notification emails |
+| `RESEND_API_KEY` | Yes | Resend transactional email API key |
+| `SLACK_WEBHOOK_URL` | No | Slack incoming webhook URL for parallel notifications |
+
+### profiles schema additions (Sprint 71)
+New nullable/defaulted columns added by migration `20260524060000_sprint71_saas_operator.sql`:
+
+| Column | Type | Default | Notes |
+|---|---|---|---|
+| `email` | text | null | Synced from auth.users via trigger `on_auth_user_sync` |
+| `plan` | text | 'free' | Check constraint: 'free' or 'pro'. Phase 2: per-org billing overrides |
+| `signup_at` | timestamptz | null | Backfilled from auth.users.created_at |
+| `last_active_at` | timestamptz | null | Updated by `trg_profiles_last_active` on any profiles UPDATE |
+| `organisation_id` | uuid | null | Placeholder only. Phase 2: FK to organisations table |
+
+### Phase 2 compatibility
+- `organisation_id` is nullable with no FK constraint — Phase 2 adds the constraint cleanly.
+- `plan` on `profiles` is the individual fallback. Phase 2 adds org-level plan that takes precedence.
+- `admin_user_stats` is a view — Phase 2 redefines it to include org aggregation without data migration.
+- No org RLS policies exist — Phase 2 adds them without untangling existing policies.
+
 *End of AGENTS.md — if any section contradicts a prompt given during a session, this file takes precedence. Flag the contradiction rather than resolving it silently.*

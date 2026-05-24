@@ -208,7 +208,7 @@ export async function fetchModels(userId) {
 export async function fetchProfiles() {
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, initials, color, role");
+    .select("id, full_name, initials, color, role, plan");
   if (error) throw error;
   return (data || []).map(normalizeProfile);
 }
@@ -1032,7 +1032,7 @@ export async function deleteVersion(modelId, versionId, userId) {
   return { ok: true };
 }
 
-// ── Feedback admin functions ───────────────────────────────────────────────
+// ── Feedback admin functions (PR #115) ────────────────────────────────────────
 
 const FEEDBACK_STATUSES = ["new", "reviewed", "actioned", "dismissed"];
 
@@ -1079,5 +1079,66 @@ export async function updateFeedbackStatus(id, status) {
     .update({ status })
     .eq("id", id);
   if (error) throw error;
+  return { ok: true };
+}
+
+// ── Sprint 71: SaaS Operator Layer ───────────────────────────────────────────
+
+/**
+ * Fetch admin user stats via the get_admin_user_stats() security-definer RPC.
+ * Returns aggregated per-user usage data. Requires admin role.
+ * Use in admin panel instead of fetchAllUsers() for the enhanced user list.
+ */
+export async function fetchAdminUserStats() {
+  const { data, error } = await supabase.rpc("get_admin_user_stats");
+  if (error) throw error;
+  return (data || []).map(row => ({
+    id:           row.id,
+    email:        row.email,
+    role:         row.role,
+    plan:         row.plan || "free",
+    suspended:    row.suspended ?? false,
+    signupAt:     row.signup_at,
+    lastActiveAt: row.last_active_at,
+    modelCount:   Number(row.model_count ?? 0),
+    runCount:     Number(row.run_count ?? 0),
+    runsLast30d:  Number(row.runs_last_30d ?? 0),
+    isAdmin:      row.role === "admin",
+  }));
+}
+
+/**
+ * Fetch platform-wide KPI counts for the Usage tab.
+ * Requires admin role.
+ */
+export async function fetchPlatformStats() {
+  const { data, error } = await supabase.rpc("get_platform_stats");
+  if (error) throw error;
+  return data || {};
+}
+
+/**
+ * Fetch daily signup counts for the past p_days days.
+ * Requires admin role.
+ * @param {number} days - Number of days to look back (default 30)
+ */
+export async function fetchSignupCounts(days = 30) {
+  const { data, error } = await supabase.rpc("get_signup_counts", { p_days: days });
+  if (error) throw error;
+  return (data || []).map(row => ({ day: row.day, count: Number(row.count) }));
+}
+
+/**
+ * Update the plan for a user. Admin-only operation.
+ * @param {string} userId - Target user UUID
+ * @param {'free'|'pro'} plan - New plan value
+ */
+export async function updateUserPlan(userId, plan) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ plan })
+    .eq("id", userId);
+  if (error) throw error;
+  return { ok: true };
 }
 

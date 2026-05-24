@@ -2,22 +2,50 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AdminPanel } from '../../src/ui/AdminPanel.jsx';
 
+// vi.hoisted ensures these values are available when vi.mock factory is called
+// (vi.mock is hoisted before variable declarations; vi.hoisted is hoisted before vi.mock)
+const { MOCK_USERS } = vi.hoisted(() => ({
+  MOCK_USERS: [
+    { id: 'user-1', email: 'alice@example.com', role: 'user', plan: 'free',
+      isAdmin: false, suspended: false,
+      signupAt: '2026-05-01T00:00:00Z', lastActiveAt: '2026-05-20T00:00:00Z',
+      modelCount: 2, runCount: 5, runsLast30d: 3 },
+    { id: 'admin-1', email: 'bob@example.com', role: 'admin', plan: 'pro',
+      isAdmin: true, suspended: false,
+      signupAt: '2026-04-01T00:00:00Z', lastActiveAt: '2026-05-22T00:00:00Z',
+      modelCount: 1, runCount: 10, runsLast30d: 5 },
+    { id: 'user-2', email: 'carol@example.com', role: 'user', plan: 'free',
+      isAdmin: false, suspended: true,
+      signupAt: '2026-05-10T00:00:00Z', lastActiveAt: null,
+      modelCount: 0, runCount: 0, runsLast30d: 0 },
+  ],
+}));
+
 vi.mock('../../src/db/models.js', () => ({
-  getPlatformConfig: vi.fn().mockResolvedValue(null),
-  setPlatformConfig: vi.fn().mockResolvedValue({ ok: true }),
-  fetchAllUsers: vi.fn().mockResolvedValue([
-    { id: 'user-1', full_name: 'Alice', role: 'user', isAdmin: false, suspended: false },
-    { id: 'admin-1', full_name: 'Bob',   role: 'admin', isAdmin: true,  suspended: false },
-    { id: 'user-2', full_name: 'Carol', role: 'user', isAdmin: false, suspended: true  },
+  getPlatformConfig:    vi.fn().mockResolvedValue(null),
+  setPlatformConfig:    vi.fn().mockResolvedValue({ ok: true }),
+  fetchAdminUserStats:  vi.fn().mockResolvedValue(MOCK_USERS),
+  fetchPlatformStats:   vi.fn().mockResolvedValue({ total_users: 3, active_7d: 2, active_30d: 3, total_models: 3 }),
+  fetchSignupCounts:    vi.fn().mockResolvedValue([
+    { day: '2026-05-01', count: 1 },
+    { day: '2026-05-10', count: 1 },
+    { day: '2026-05-15', count: 1 },
   ]),
-  updateUserRole: vi.fn().mockResolvedValue({ ok: true }),
-  suspendUser:    vi.fn().mockResolvedValue({ ok: true }),
-  unsuspendUser:  vi.fn().mockResolvedValue({ ok: true }),
-  logAdminAction: vi.fn().mockResolvedValue({ ok: true }),
-  fetchAuditLog:  vi.fn().mockResolvedValue([
+  updateUserRole:       vi.fn().mockResolvedValue({ ok: true }),
+  updateUserPlan:       vi.fn().mockResolvedValue({ ok: true }),
+  suspendUser:          vi.fn().mockResolvedValue({ ok: true }),
+  unsuspendUser:        vi.fn().mockResolvedValue({ ok: true }),
+  logAdminAction:       vi.fn().mockResolvedValue({ ok: true }),
+  fetchAuditLog:        vi.fn().mockResolvedValue([
     { id: 'log-1', actorId: 'admin-1', action: 'promote', targetId: 'user-1',
       targetKey: null, oldValue: 'user', newValue: 'admin', createdAt: '2026-05-15T10:00:00Z' },
   ]),
+  // PR #115: feedback functions
+  fetchFeedback:        vi.fn().mockResolvedValue([
+    { id: 'fb-1', category: 'bug', message: 'Something is broken', userId: 'user-1',
+      appVersion: '0.9.0', pageContext: 'model-detail', status: 'new', createdAt: '2026-05-20T10:00:00Z' },
+  ]),
+  updateFeedbackStatus: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
 const defaultProps = { userId: 'admin-1', isAdmin: true, onClose: vi.fn() };
@@ -25,12 +53,14 @@ const defaultProps = { userId: 'admin-1', isAdmin: true, onClose: vi.fn() };
 describe('AdminPanel', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('renders all four tabs', async () => {
+  it('renders all six tabs (LLM, Limits, Users, Usage, Feedback, Audit Log)', async () => {
     render(<AdminPanel {...defaultProps} />);
     await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument());
     expect(screen.getByRole('tab', { name: /LLM Provider/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Platform Limits/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Users/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Usage/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Feedback/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Audit Log/i })).toBeInTheDocument();
   });
 
@@ -67,10 +97,10 @@ describe('AdminPanel', () => {
     render(<AdminPanel {...defaultProps} />);
     await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('tab', { name: /Users/i }));
-    // 3 users: Alice (active), Bob=admin-1 (current user, no actions), Carol (suspended)
-    // Only Alice gets a Suspend button; Carol gets Unsuspend; Bob gets nothing
+    // admin-1 is currentUser — no Suspend button for them
+    // alice (user-1) gets Suspend; carol (user-2) gets Unsuspend; bob (admin-1) = current user → no action
     const suspendBtns = screen.getAllByRole('button', { name: /^Suspend$/i });
-    expect(suspendBtns).toHaveLength(1); // Alice only — current user excluded
+    expect(suspendBtns).toHaveLength(1); // alice only
   });
 
   it('audit log tab renders log entries', async () => {
