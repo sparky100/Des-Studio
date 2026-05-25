@@ -11,7 +11,7 @@ import { AdapterRegistry } from "../../engine/adapters/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, saveAiInsights, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun } from "../../db/models.js";
+import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun } from "../../db/models.js";
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
 import { callLLMOnce } from "../../llm/apiClient.js";
 import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
@@ -28,7 +28,6 @@ import { qrSvg } from "../share/qr.js";
 import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
-import { AiAssistantPanel } from "./AiAssistantPanel.jsx";
 import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
@@ -58,7 +57,7 @@ const intDefault = (value, fallback) => {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 };
 
-const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, analyseRun = null, onClearAnalyse, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
+const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
@@ -86,7 +85,6 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const [runLabel, setRunLabel] = useState("");
   const [executeSection, setExecuteSection] = useState("run");
   const [showRunSetup, setShowRunSetup] = useState(false);
-  const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [diagnosticsPanelOpen, setDiagnosticsPanelOpen] = useState(false);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
   const [runHistoryStatus, setRunHistoryStatus] = useState("idle");
@@ -688,7 +686,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   }, [saveExecuteSetting]);
 
   useEffect(() => {
-    if (!aiPanelOpen || !modelId) return;
+    if (!modelId) return;
     let cancelled = false;
     setRunHistoryStatus("loading");
     setRunHistoryError("");
@@ -708,7 +706,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     return () => {
       cancelled = true;
     };
-  }, [aiPanelOpen, modelId]);
+  }, [modelId, userId]);
 
   // F28.1: load experiments when tab is opened
   useEffect(() => {
@@ -730,22 +728,6 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       });
     return () => { cancelled = true; };
   }, [executeSection, modelId, userId]);
-
-  // Handle Analyse button from History tab — load saved run into AI panel
-  useEffect(() => {
-    if (!analyseRun || !modelId) return;
-    const resultsJson = analyseRun.results_json || {};
-    if (resultsJson.summary) {
-      setResults(resultsJson);
-      onResultsReady?.(resultsJson);
-      setAggregateStats(resultsJson.aggregateStats || {});
-      setBatchStatus("complete");
-      setReplicationResults(resultsJson.replicationResults || []);
-    }
-    setLoadedRunSnapshot(resultsJson._model_snapshot ?? null);
-    setAiPanelOpen(true);
-    onClearAnalyse?.();
-  }, [analyseRun, modelId, onClearAnalyse, onResultsReady]);
 
   const batchActive = batchStatus === "running" || batchStatus === "cancelling";
   const partialBatchStatus = batchStatus === "cancelled" || batchStatus === "error";
@@ -1926,7 +1908,6 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
             </div>
           )}
         </div>
-        <Btn variant={aiPanelOpen ? "primary" : "ghost"} onClick={() => setAiPanelOpen(open => !open)} disabled={executeSection === "experiments"} title={executeSection === "experiments" ? "Analyse is not available for parametric sweeps" : undefined}>Analyse</Btn>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
       </div>
 
@@ -2482,29 +2463,6 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           </div>
         </div>
       )}
-
-      {aiPanelOpen && (
-        <AiAssistantPanel
-          model={model}
-          results={results}
-          exportConfig={exportConfig}
-          aggregateStats={aggregateStats}
-          comparisonRuns={comparisonRuns}
-          comparisonLoading={runHistoryStatus === "loading"}
-          comparisonError={runHistoryError}
-          onClose={() => setAiPanelOpen(false)}
-          onRunWithPatch={runWithPatch}
-          onApplyPatchedModel={onApplyPatchedModel}
-          onSaveInsights={async (insights) => {
-            if (!latestRunId) return;
-            try { await saveAiInsights(latestRunId, insights); } catch {}
-            if (insights.summary) {
-              try { await updateRunNarrative(latestRunId, insights.summary, null); } catch {}
-            }
-          }}
-        />
-      )}
-
       {/* Share Modal */}
       {showShareModal && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000aa", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}

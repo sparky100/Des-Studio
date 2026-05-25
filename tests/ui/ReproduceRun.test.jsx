@@ -75,11 +75,18 @@ function renderTab(overrides = {}) {
       userId="u1"
       model={{ id: 'm1', name: 'Current Model' }}
       baseUrl=""
-      onAnalyseRun={vi.fn()}
+      onExplainRun={vi.fn()}
       onViewResults={vi.fn()}
       {...overrides}
     />
   );
+}
+
+async function openMoreMenu() {
+  fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: 'Reproduce' })).toBeInTheDocument();
+  });
 }
 
 describe('Reproduce Run', () => {
@@ -95,6 +102,7 @@ describe('Reproduce Run', () => {
     });
 
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
@@ -110,6 +118,7 @@ describe('Reproduce Run', () => {
     });
 
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
@@ -126,6 +135,7 @@ describe('Reproduce Run', () => {
     });
 
     renderTab({ model: differentCurrentModel });
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() => expect(mockBuildEngine).toHaveBeenCalled());
@@ -149,6 +159,7 @@ describe('Reproduce Run', () => {
     });
 
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
@@ -174,6 +185,7 @@ describe('Reproduce Run', () => {
     });
 
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
@@ -196,6 +208,7 @@ describe('Reproduce Run', () => {
     });
 
     renderTab();
+    await openMoreMenu();
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>

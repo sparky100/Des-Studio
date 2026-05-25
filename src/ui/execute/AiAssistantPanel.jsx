@@ -274,6 +274,7 @@ export const AiAssistantPanel = ({
   onSaveInsights,
   onRunWithPatch,
   onApplyPatchedModel,
+  embedded = false,
 }) => {
   const toast = useToast();
   const [response, setResponse] = useState("");
@@ -575,8 +576,8 @@ export const AiAssistantPanel = ({
 
   return (
     <aside aria-label="AI assistant" style={{
-      width: 320,
-      flex: "0 0 320px",
+      width: embedded ? "100%" : 320,
+      flex: embedded ? "1 1 auto" : "0 0 320px",
       background: C.panel,
       border: `1px solid ${C.border}`,
       borderRadius: 8,
@@ -589,10 +590,12 @@ export const AiAssistantPanel = ({
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
-          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>Analyse Results</div>
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>
+          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{embedded ? "Explain Results" : "AI Assistant"}</div>
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+            {embedded ? "Ask the AI to explain the current results in plain English." : "Ask questions about the latest run."}
+          </div>
         </div>
-        <Btn small variant="ghost" onClick={onClose} ariaLabel="Close AI assistant">x</Btn>
+        {!embedded && onClose && <Btn small variant="ghost" onClick={onClose} ariaLabel="Close AI assistant">x</Btn>}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>

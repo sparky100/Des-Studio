@@ -98,7 +98,7 @@ const defaultProps = {
   userId: 'u1',
   model: { id: 'm1', name: 'Current Model' },
   baseUrl: 'http://localhost:5173',
-  onAnalyseRun: vi.fn(),
+  onExplainRun: vi.fn(),
   onViewResults: vi.fn(),
 };
 
@@ -347,7 +347,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     await waitFor(() => expect(mockRevokeShareLink).toHaveBeenCalledWith('link-1', 'u1'));
   });
 
-  // ── View Results / Analyse ─────────────────────────────────────────────
+  // ── View Results / Explain ─────────────────────────────────────────────
 
   it('View Results button only appears when row has results_json payload', () => {
     const withResults = makeRow({ id: 'r1', results_json: { summary: storedSummary } });
@@ -365,11 +365,11 @@ describe('ModelHistoryTab — Run History UI', () => {
     expect(onViewResults).toHaveBeenCalledWith(withResults);
   });
 
-  it('clicking Analyse calls onAnalyseRun', () => {
-    const onAnalyseRun = vi.fn();
-    renderTab({ historyRows: [baseRow], onAnalyseRun });
-    fireEvent.click(screen.getByRole('button', { name: 'Analyse' }));
-    expect(onAnalyseRun).toHaveBeenCalledWith(baseRow);
+  it('clicking Explain calls onExplainRun', () => {
+    const onExplainRun = vi.fn();
+    renderTab({ historyRows: [baseRow], onExplainRun });
+    fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+    expect(onExplainRun).toHaveBeenCalledWith(baseRow);
   });
 
   // ── Archive / Unarchive per row ────────────────────────────────────────
@@ -592,7 +592,7 @@ describe('ModelHistoryTab — Run History UI', () => {
 
   // ── AI insights display ────────────────────────────────────────────────
   // AI insights are no longer shown inline in the table; they are accessible
-  // via the Analyse button which opens the AI assistant panel.
+  // via the Explain button which opens the Results Explain sub-tab.
 
   // ── Date formatting ────────────────────────────────────────────────────
 

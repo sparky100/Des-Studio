@@ -105,7 +105,7 @@ export function ModelHistoryTab({
   historyShowArchived, setHistoryShowArchived,
   shareLinksMap, setShareLinksMap,
   modelId, userId, model, baseUrl,
-  onAnalyseRun, onViewResults,
+  onExplainRun, onViewResults,
 }) {
   const toast = useToast();
   const [historySearch, setHistorySearch] = useState("");
@@ -456,9 +456,9 @@ export function ModelHistoryTab({
                             >View Results</button>
                           )}
                           <button
-                            onClick={() => onAnalyseRun(row)}
+                            onClick={() => onExplainRun?.(row)}
                             style={{ background: C.purple + "22", color: C.purple, border: `1px solid ${C.purple}44`, borderRadius: 999, padding: "4px 12px", fontSize: 11, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}
-                          >Analyse</button>
+                          >Explain</button>
                           <div style={{ position: "relative" }}>
                             <button
                               onClick={(e) => {

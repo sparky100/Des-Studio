@@ -10,11 +10,12 @@ import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEdit
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
 import { GoalsEditor } from "./editors/GoalsEditor.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
+import { AiAssistantPanel } from "./execute/AiAssistantPanel.jsx";
+import { LogViewer } from "./execute/LogViewer.jsx";
+import { EntitySummaryTable } from "./execute/SweepViews.jsx";
 import { CsvImportModal } from "./CsvImportModal.jsx";
 import { ResultsWorkspace } from "./results/ResultsWorkspace.jsx";
 import { ModelHistoryTab } from "./ModelHistoryTab.jsx";
-import { LogViewer } from "./execute/LogViewer.jsx";
-import { EntitySummaryTable } from "./execute/SweepViews.jsx";
 import { ModelCard, NewModelModal } from "./ModelLibrary.jsx";
 
 // Lazy-loaded so @xyflow/react is not included in the initial bundle.
@@ -442,7 +443,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [historyShowArchived,setHistoryShowArchived]=useState(false);
   const [shareLinksMap,setShareLinksMap]=useState({});
   const [showCsvImport,setShowCsvImport]=useState(false);
-  const [analyseRun,setAnalyseRun]=useState(null);
   const [latestResults,setLatestResults]=useState(null);
   const [latestReplicationResults,setLatestReplicationResults]=useState([]);
   const [latestWarmupDetection,setLatestWarmupDetection]=useState(null);
@@ -480,8 +480,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     if (isOwner) loadVersion();
     return () => { cancelled = true; };
   }, [modelId, isOwner]);
-
-  const handleAnalyseRun=useCallback((row)=>{setAnalyseRun(row);setTab("execute");},[]);
 
   const handleRestoreVersion = (versionModelJson) => {
     const restored = {
@@ -698,7 +696,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       statsLoading:false,
       statsError:false,
     }));
-    if(tab==="results"&&resultsView==="history"){
+    if(tab==="results"){
       setHistoryLoading(true);setHistoryError("");
       fetchRunHistory(modelId, { archived: historyShowArchived })
         .then(rows=>setHistoryRows(rows))
@@ -729,6 +727,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     setSelectedResultsRunId(row.id);
     setLatestResults(row.results_json);
   };
+
+  const openResultsForRun = useCallback((row, nextSubtab = "summary") => {
+    if (!hasResultsPayload(row)) return;
+    setSelectedResultsRunId(row.id);
+    setLatestResults(row.results_json);
+    setResultsView(nextSubtab);
+    setTab("results");
+  }, []);
 
 
 
@@ -821,19 +827,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       const map = {};
       (links||[]).forEach(link => { if (link.isActive && link.runId) map[link.runId] = link; });
       setShareLinksMap(map);
-      // If no results loaded yet, fall back to the most recent saved run
-      if(!latestResults){
-        const selected = nextRows.find(row => row.id === selectedResultsRunId && hasResultsPayload(row));
-        const fallback = nextRows.find(hasResultsPayload);
-        const row = selected || fallback;
-        if(row){
-          setSelectedResultsRunId(row.id);
-          setLatestResults(row.results_json);
-        }
+      const selected = nextRows.find(row => row.id === selectedResultsRunId && hasResultsPayload(row));
+      const fallback = nextRows.find(hasResultsPayload);
+      const row = selected || fallback;
+      if(row && !latestResults){
+        setSelectedResultsRunId(row.id);
+        setLatestResults(row.results_json);
       }
     }).catch(e=>setHistoryError(e.message))
     .finally(()=>setHistoryLoading(false));
-  },[tab,modelId,selectedResultsRunId,latestResults]);
+  },[tab,modelId,selectedResultsRunId,latestResults,historyShowArchived]);
 
   if(!model)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',
@@ -1082,8 +1085,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               }}
               onGoToResults={() => { setTab("results"); setResultsView("summary"); }}
               autoRun={overrides.autoRun}
-              analyseRun={analyseRun}
-              onClearAnalyse={()=>setAnalyseRun(null)}
               onExperimentDefaultsChange={canEdit ? defaults => setField("experimentDefaults", defaults) : null}
               onApplyPatchedModel={canEdit ? (patchedModel, suggestion) => {
                 setWholeModel(patchedModel);
@@ -1094,13 +1095,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         )}
         {tab==="results"&&(
           <div style={{maxWidth:1200,display:"flex",flexDirection:"column",gap:0}}>
-            {/* Results sub-tab bar */}
             <div style={{display:"flex",alignItems:"center",gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:16,overflowX:"auto"}}>
               {[
                 {id:"summary",label:"Summary"},
                 {id:"log",label:"Log"},
                 {id:"entities",label:"Entities"},
                 {id:"history",label:"History"},
+                {id:"explain",label:"Explain"},
               ].map(sub=>(
                 <button
                   key={sub.id}
@@ -1121,7 +1122,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               <Btn small variant="ghost" onClick={()=>setTab("execute")} style={{marginRight:4,flexShrink:0}}>← Run</Btn>
             </div>
 
-            {/* Summary sub-tab */}
             {resultsView==="summary"&&(
               <div style={{display:"flex",flexDirection:"column",gap:14}}>
                 {historyLoading&&<div style={{color:C.muted,fontFamily:FONT,fontSize:12}}>Loading saved runs…</div>}
@@ -1158,8 +1158,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 )}
               </div>
             )}
-
-            {/* Log sub-tab */}
             {resultsView==="log"&&(
               latestLog.length > 0 ? (
                 <LogViewer log={latestLog}/>
@@ -1169,8 +1167,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </div>
               )
             )}
-
-            {/* Entities sub-tab */}
             {resultsView==="entities"&&(
               latestResults?.entitySummary ? (
                 <EntitySummaryTable
@@ -1183,8 +1179,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </div>
               )
             )}
-
-            {/* History sub-tab */}
             {resultsView==="history"&&(
               <ModelHistoryTab
                 historyRows={historyRows} setHistoryRows={setHistoryRows}
@@ -1193,9 +1187,40 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 historyShowArchived={historyShowArchived} setHistoryShowArchived={setHistoryShowArchived}
                 shareLinksMap={shareLinksMap} setShareLinksMap={setShareLinksMap}
                 modelId={modelId} userId={overrides.userId} model={model} baseUrl={baseUrl}
-                onAnalyseRun={handleAnalyseRun}
-                onViewResults={row=>{setSelectedResultsRunId(row.id);setLatestResults(row.results_json);setResultsView("summary");}}
+                onExplainRun={row=>openResultsForRun(row,"explain")}
+                onViewResults={row=>openResultsForRun(row,"summary")}
               />
+            )}
+            {resultsView==="explain"&&(
+              latestResults ? (
+                <AiAssistantPanel
+                  model={model}
+                  results={latestResults}
+                  exportConfig={{
+                    modelId,
+                    runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
+                    replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications || latestResults?.replications || 1,
+                    warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
+                    maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
+                    terminationMode: "time",
+                    terminationCondition: null,
+                  }}
+                  aggregateStats={latestResults?.aggregateStats || {}}
+                  comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
+                    id: `saved-${row.id}`,
+                    label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
+                    payload: row,
+                    source: "saved",
+                  }))}
+                  comparisonLoading={historyLoading}
+                  comparisonError={historyError}
+                  embedded
+                />
+              ) : (
+                <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
+                  Results from the latest run will appear here. Open Run to generate them, or select a saved run when run history is available.
+                </div>
+              )
             )}
           </div>
         )}
