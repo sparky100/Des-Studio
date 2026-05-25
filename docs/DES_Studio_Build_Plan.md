@@ -91,7 +91,7 @@ flowchart LR
 | Stage | Status | Summary |
 |---|---|---|
 | Foundations and core DES engine | ✅ Complete | Engine safety, reproducibility, validation, editors, experiment controls, replication, CI, exports, and accessibility in place. |
-| AI results analysis | ✅ Complete | Read-only AI Insights via Supabase Edge Function proxy; run labels and history exports implemented. |
+| AI results analysis | ✅ Complete | Results → Explain provides read-only AI explanation and follow-up Q&A via the Supabase Edge Function proxy; saved-run comparison now lives in Results → History. |
 | Platform foundation | ✅ Complete | Sprint 7B: role/settings persistence and TypeScript tooling/contracts. |
 | Dynamic modelling | ✅ Complete | Sprint 7: time-varying arrival rates and resource capacity schedules. |
 | AI model creation | ✅ Complete | Sprint 8A: provider-neutral LLM routing. Sprint 8: natural-language model authoring. Sprint 13: enhanced prompts, validation feedback, results-informed refinement, Suggest Model Changes. |
@@ -122,7 +122,7 @@ flowchart LR
 | Resource reliability and preemption | ✅ Complete | Sprint 32: PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure events. |
 | Advanced scheduling and analytics | ✅ Complete | Sprint 33: SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
 | Model versioning | ✅ Complete | Sprint 68: explicit milestone versioning, `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. |
-| Plain-English UX and Results clarity | 🔄 Planned | Sprint 67: simplify user-facing language, reorder Results around summary/reliability/bottlenecks, and move technical detail behind progressive disclosure. |
+| Plain-English UX and Results clarity | ✅ Complete | Sprint 67 baseline plus later refinements: Results sub-tabs now group Summary, Log, Entities, History, and Explain; compare lives in Results → History; Describe/Results wording is standardized. |
 | Next roadmap shape | 🔄 In progress | Sprint 34+ roadmap to be defined. |
 
 ### Key Issues and Watchpoints

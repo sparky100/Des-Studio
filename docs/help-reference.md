@@ -403,12 +403,12 @@ Open the New Model dialog from the **+ New Model** button. Enter a name and opti
 | Option | Behaviour |
 |--------|-----------|
 | **Draw** | Opens the Visual designer with a starter flow pre-placed on the canvas |
-| **Describe** | Opens the AI Builder tab; the model name and description are passed as context to the AI |
+| **Describe** | Opens the Describe tab; the model name and description are passed as context to the AI |
 | **Use a template** | Browse pre-built scenario templates |
 | **Import a file** | Upload a `.json` model file |
 | **Paste model** | Paste raw model JSON from clipboard |
 
-**Tip:** The description you enter in the New Model dialog is used by the AI Builder as context. Write a sentence describing the system you want to model ("A two-stage manufacturing line with a shared inspector") to get better initial AI output.
+**Tip:** The description you enter in the New Model dialog is used by the Describe panel as context. Write a sentence describing the system you want to model ("A two-stage manufacturing line with a shared inspector") to get better initial AI output.
 
 ### Model Versioning
 
@@ -436,7 +436,7 @@ Create named version snapshots of your model from the **Versions** tab (visible 
 
 **When to use:** New model from scenario description; unfamiliar domain.
 
-**Access:** Design mode → **AI Builder** sub-tab. Also available from the New Model dialog via **Describe**.
+**Access:** Design mode → **Describe** sub-tab. Also available from the New Model dialog via **Describe**.
 
 **Behaviour:** Three-phase conversation (Discover → Confirm → Generate). Asks targeted questions; confirms understanding before generating JSON. Uses the model's name and description as context from the first message — set these on the Overview tab for best results. When editing an existing model, the current model structure is also provided as context.
 
@@ -454,7 +454,7 @@ Create named version snapshots of your model from the **Versions** tab (visible 
 
 ---
 
-## AI Insights Panel
+## Explain Panel
 
 ### Interpret Results
 
@@ -464,37 +464,15 @@ Create named version snapshots of your model from the **Versions** tab (visible 
 
 **Output:** System performance summary, bottleneck identification, goal assessment, notable patterns.
 
-### Suggest Improvements
-
-**Purpose:** Structured six-step analysis per suggestion.
-
-**When to use:** Goals not met; seeking optimisation.
-
-**Output:** Binding constraint, root cause, specific change, predicted effect, goal impact, ranking.
-
-### Apply & Re-run
-
-**Purpose:** Test suggested change without mutating saved model.
-
-**When to use:** Evaluating AI suggestions before committing.
-
-**Behaviour:** Runs patched model copy; shows before/after comparison table.
-
-### Sensitivity Analysis
-
-**Purpose:** Assess result uncertainty.
-
-**When to use:** Before acting on results; deciding replication count.
-
-**Output:** CI width assessment, KPI uncertainty flags, replication sufficiency recommendation.
-
 ### Compare Runs
 
-**Purpose:** Side-by-side narrative of two saved runs.
+**Purpose:** Side-by-side comparison of two saved runs.
 
 **When to use:** Scenario comparison; before/after change analysis.
 
-**Output:** KPI differences, statistical significance (CI overlap), interpretation of why results differ.
+**Access:** Results → **History**. Select exactly two runs, then click **Compare selected**.
+
+**Output:** KPI differences in a side-by-side comparison table.
 
 ### Ask a Question
 
@@ -506,18 +484,18 @@ Create named version snapshots of your model from the **Versions** tab (visible 
 
 ---
 
-## Help Assistant vs AI Insights
+## Help Assistant vs Explain
 
-| Aspect | Help Assistant | AI Insights |
+| Aspect | Help Assistant | Explain |
 |--------|---------------|-------------|
 | **Purpose** | Answers "How do I use DES Studio?" | Answers "What do my results mean?" |
-| **When available** | Any screen (via ? button) | After completed run (Execute panel) |
+| **When available** | Any screen (via ? button) | After completed run (Results → Explain) |
 | **Knowledge base** | Curated help articles, validation rules, macro syntax, distribution guidance | Run results, model JSON, confidence intervals, goal gaps |
 | **Knowledge source** | This help-reference document (curated, versioned alongside docs) | Run results + model JSON passed live at query time |
 | **Example questions** | "What does ARRIVE do?", "How do I set up reneging?", "What does V8 mean?" | "Why is wait time so high?", "Should I add more servers?", "Are these results reliable?" |
 | **Context-awareness** | Suggests questions based on current tab/editor | Analyses current run's specific results |
 
-**Rule:** Route "how to" questions to Help Assistant. Route "what does this mean" questions to AI Insights.
+**Rule:** Route "how to" questions to Help Assistant. Route "what does this mean" questions to Explain.
 
 ---
 

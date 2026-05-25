@@ -1620,7 +1620,7 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 - Added `src/ui/results/ResultsWorkspace.jsx` as a reusable results analysis workspace with analysis-question framing and explicit `Data:` provenance labels
 - Moved chart rendering out of `BottomPanel.jsx`; the Execute bottom panel now hosts `ResultsWorkspace` instead of owning chart data interpretation
 - Added a top-level `Results` tab in `ModelDetail.jsx` with latest-run handoff from Execute, saved-run history loading, and a saved-run selector
-- History rows with usable `results_json` now include `View Results`, while the existing `Analyse` flow remains available for AI-assisted analysis
+- History rows with usable `results_json` include `View Results`; later follow-on work moved AI explanation into the Results workspace as the `Explain` sub-tab and moved run comparison into Results → History
 - Verification: `npm test -- model-results-tab run-history results-workspace bottom-panel execute-panel` passed (44 tests); `npm run build` passed
 
 **Sprint 21 — SaaS Admin Platform** (2026-05-11):

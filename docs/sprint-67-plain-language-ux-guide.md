@@ -1,7 +1,7 @@
 # Sprint 67 — Plain-English UX & Results Clarity: Capability Guide
 
 **Date:** 2026-05-19
-**Status:** Planned
+**Status:** Implemented baseline, with follow-on refinements through Sprint 71
 
 ---
 
@@ -98,13 +98,13 @@ Raw JSON examples will remain available through advanced help, not as the primar
 
 ---
 
-### 6 — Run History will read as outcomes, not as a back-office table
+### 6 — Results history will read as outcomes, not as a back-office table
 
 Examples:
 
 | Current | Planned |
 |---------|---------|
-| Run History (Last 20) | Recent runs |
+| Results → History | Recent runs |
 | Archive selected | Hide selected runs |
 | Renege rate | Left before service |
 | Avg wait | Average wait |

@@ -33,7 +33,7 @@ DES Studio is a browser-native, no-code discrete-event simulation platform that 
 
 **What they want.** They want to justify a decision — "we need three more nurses on the morning shift" — with quantitative evidence rather than gut feel. They need confidence intervals, scenario comparisons, and a way to share results with a manager who will not run the model themselves.
 
-**Features they primarily use.** Forms/Tabs editors for precise model control; Replication batch for statistical confidence; Parametric Sweep with Goal Feasibility to find the minimum staffing that meets a service-level target; the Analysis view for KPI summaries; Share link and QR code to present results to decision-makers.
+**Features they primarily use.** Forms/Tabs editors for precise model control; Replication batch for statistical confidence; Parametric Sweep with Goal Feasibility to find the minimum staffing that meets a service-level target; the Results view for KPI summaries; Share link and QR code to present results to decision-makers.
 
 ---
 
@@ -43,7 +43,7 @@ DES Studio is a browser-native, no-code discrete-event simulation platform that 
 
 **What they want.** They want to experiment without fear of breaking something. They want to start from a working example, change one parameter, and immediately see what happens. They also want the AI to explain what they are seeing — not just report numbers, but help them understand why a 90% utilised server produces such a long queue.
 
-**Features they primarily use.** Template Library (especially M/M/1 and ER Triage) as learning scaffolds; AI Model Generator to bootstrap unfamiliar scenarios; AI Insights — specifically Interpret Results and Ask a Question — to build intuition; Live View to watch entity flow animate in real time; Histograms to understand wait-time distributions visually.
+**Features they primarily use.** Template Library (especially M/M/1 and ER Triage) as learning scaffolds; AI Model Generator to bootstrap unfamiliar scenarios; Results → Explain to build intuition after a run; Live View to watch entity flow animate in real time; Histograms to understand wait-time distributions visually.
 
 ---
 
@@ -53,7 +53,7 @@ DES Studio is a browser-native, no-code discrete-event simulation platform that 
 
 **What they want.** They want a polished, self-contained results view they can open without a login, share in a meeting via QR code, and hand off to others. They need KPI cards to tell an immediate pass/fail story against agreed service-level targets.
 
-**Features they primarily use.** Share link with configurable widget visibility; QR code for presentation sharing; read-only DashboardView of saved run results; goal-aware KPI cards showing green or red against targets; Export CSV for further analysis in Excel or PowerPoint.
+**Features they primarily use.** Share link with configurable widget visibility; QR code for presentation sharing; read-only DashboardView of saved run results; goal-aware KPI cards showing green or red against targets; Export CSV for further analysis in Excel or PowerPoint; Results → History for reopening and comparing saved runs.
 
 ---
 
@@ -65,7 +65,7 @@ DES Studio provides three authoring modes. All three modes edit the same underly
 
 **Forms/Tabs.** The default authoring mode. Each model element type (Entity Types, Queues, B-Events, C-Events, State Variables, Performance Goals, Containers) has its own tab with structured fields, dropdown selectors, and distribution pickers. This mode is the most precise: every field is explicitly visible and every option is reachable. Best for modellers who know exactly what they want to configure, or who need to check that a parameter was set correctly.
 
-**AI Generator.** The "Generate with AI" button accepts a natural-language scenario description and produces a complete starter model: entity types, queues, events, distributions, and suggested performance goals. The AI Generator is best used for bootstrapping — it creates the structural skeleton in seconds, which the modeller then refines in Forms/Tabs or the Visual Designer. The AI Generator also supports results-informed refinement: after a run it can propose model changes based on what the results reveal, using the same structured six-step analysis as Suggest Improvements.
+**AI Generator.** The Describe panel accepts a natural-language scenario description and produces a complete starter model: entity types, queues, events, distributions, and suggested performance goals. The AI Generator is best used for bootstrapping — it creates the structural skeleton in seconds, which the modeller then refines in Forms/Tabs or the Visual Designer.
 
 **Visual Designer.** A drag-and-drop canvas showing the model as a flow graph — queues as rectangles, events as rounded rectangles or diamonds, entity types as circles, with arcs connecting them. The Visual Designer is best for reviewing topology, confirming that routing connections are correct, and presenting the model structure to stakeholders. Clicking any node opens an inspector panel with the same editable fields as Forms/Tabs.
 
@@ -114,7 +114,7 @@ C-Events fire when a condition becomes true during the model's conditional phase
 
 #### State Variables
 
-State variables are model-level numeric counters or flags that any event can read or write. They are used to track cumulative counts (total calls handled, total cost accrued), implement custom flags (rush hour active), or accumulate metrics that are not automatically captured by the engine. State variables are visible in the event log and in the Analysis view.
+State variables are model-level numeric counters or flags that any event can read or write. They are used to track cumulative counts (total calls handled, total cost accrued), implement custom flags (rush hour active), or accumulate metrics that are not automatically captured by the engine. State variables are visible in the event log and in the Results view.
 
 #### Performance Goals
 
@@ -198,7 +198,7 @@ Effect macros are the action vocabulary of DES Studio. They appear in the Effect
 
 **Entities.** A per-entity lifecycle table. Each row represents one entity instance; columns include arrival time, service start time, departure time, time spent waiting, and any custom attribute values. The table is sortable and filterable. An anomaly detection layer highlights rows where waiting time or total time in system is more than three standard deviations from the mean, enabling fast identification of individual outlier cases and root-cause investigation.
 
-**Analysis.** The primary results dashboard, built on the ResultsWorkspace. It presents aggregate KPI cards (throughput, mean wait, mean time in system, goal pass/fail status with green or red borders), per-queue wait statistics (mean, maximum, p50, p90, p99), per-resource utilisation bars, a cumulative mean chart with Welch warmup cutoff marked, and — when replications have been run — a replication summary table showing the mean and 95% confidence interval for every KPI.
+**Results.** The primary results dashboard, built on the ResultsWorkspace. It presents aggregate KPI cards (throughput, mean wait, mean time in system, goal pass/fail status with green or red borders), per-queue wait statistics (mean, maximum, p50, p90, p99), per-resource utilisation bars, a cumulative mean chart with Welch warmup cutoff marked, and — when replications have been run — a replication summary table showing the mean and 95% confidence interval for every KPI.
 
 ### 3.5a Results Presentation Principles
 
@@ -219,25 +219,21 @@ The Results workspace must be organized around the modeller's decision-making fl
 
 ---
 
-### 3.6 AI Insights
+### 3.6 Results Explanation
 
-The AI Insights panel provides five analytical capabilities, all grounded in the current run's results and the model definition. As of Sprint 45, every AI call receives the model's performance goals, structural summary, per-queue wait distributions, entity failure counts, and anomaly data — giving the AI the specific context it needs to make precise, actionable observations rather than generic queueing advice.
+The Explain panel lives inside Results and is grounded in the current run's results and the model definition. As of Sprint 45, every AI call receives the model's performance goals, structural summary, per-queue wait distributions, entity failure counts, and anomaly data — giving the AI the specific context it needs to make precise, actionable observations rather than generic queueing advice.
 
-**1. Interpret Results.** Produces a plain-English narrative of what the simulation found: overall system performance, which queues are longest, which resources are most utilised, whether performance goals are met, and any notable patterns such as queue oscillation or a long warmup transient.
+**1. Explain Results.** Produces a plain-English narrative of what the simulation found: overall system performance, which queues are longest, which resources are most utilised, whether performance goals are met, and any notable patterns such as queue oscillation or a long warmup transient.
 
-**2. Suggest Improvements.** Produces a structured six-step analysis for each suggested change. The steps are: (1) identify the binding constraint — the queue, resource, or event limiting performance; (2) diagnose the root cause — why the constraint exists; (3) propose a specific, actionable change to the model; (4) estimate the predicted effect quantitatively; (5) assess whether the change is expected to bring the model within the configured performance goal thresholds; and (6) rank all suggestions by expected value. Because the AI receives goal gap data directly, suggestions focus on whatever is blocking feasibility first.
+**2. Ask a Question.** A free-form conversational interface. The modeller types any question about the model or the run — "Why is utilisation above 90%?", "What would happen if I added a priority queue for urgent patients?", "Is the warmup period long enough?" — and the AI answers using the model JSON and the current results as context.
 
-**3. Sensitivity Analysis.** Assesses how much uncertainty exists in the results. The output identifies KPIs with wide confidence intervals relative to their point estimates, flags parameters where small changes produce large KPI swings, and recommends whether the current replication count is sufficient to draw reliable conclusions.
-
-**4. Ask a Question.** A free-form conversational interface. The modeller types any question about the model or the run — "Why is utilisation above 90%?", "What would happen if I added a priority queue for urgent patients?", "Is the warmup period long enough?" — and the AI answers using the model JSON and the current results as context.
-
-**5. Compare Runs.** The modeller selects two saved runs from Run History and requests a comparison. The AI produces a narrative covering which run performed better on each KPI, whether differences are statistically meaningful given confidence interval overlap, and an interpretation of why the results differ — based on the different model parameters or structural changes between the two runs.
+**3. Compare Runs.** The modeller selects two saved runs from Results → History and requests a comparison. DES Studio renders a side-by-side KPI comparison table so run differences are visible before asking the AI for further interpretation.
 
 ---
 
 ### 3.7 Help Assistant
 
-The Help Assistant provides contextual, in-app guidance accessible from any screen via the `?` button in the toolbar. Unlike the AI Insights panel (which analyses run results), the Help Assistant answers questions about how to use DES Studio itself — model building, experiment setup, interpreting validation errors, and selecting distributions.
+The Help Assistant provides contextual, in-app guidance accessible from any screen via the `?` button in the toolbar. Unlike the Explain panel (which analyses run results), the Help Assistant answers questions about how to use DES Studio itself — model building, experiment setup, interpreting validation errors, and selecting distributions.
 
 **How it works.** Clicking the `?` button opens a chat-style panel with suggested questions. The assistant's knowledge base covers:
 - Model element definitions (entity types, queues, B-events, C-events, state variables, containers)
@@ -263,7 +259,7 @@ The Help Assistant provides contextual, in-app guidance accessible from any scre
 
 **QR code.** The share modal also generates a QR code alongside the URL, suitable for display in presentations or printed reports. Scanning the code opens the same read-only results view.
 
-**Export results.** From the Analysis view or Run History, results can be exported as CSV (KPI summary table, per-queue stats, per-resource utilisation, and optionally the per-entity lifecycle table — suitable for Excel or R) or as JSON (the full results object including replication data and confidence intervals — suitable for archival or programmatic processing). The event log can be exported separately as CSV from the Log view.
+**Export results.** From the Results view or Results → History, results can be exported as CSV (KPI summary table, per-queue stats, per-resource utilisation, and optionally the per-entity lifecycle table — suitable for Excel or R) or as JSON (the full results object including replication data, charts, logs, and confidence intervals — suitable for archival or programmatic processing). The event log can be exported separately as CSV from the Log view.
 
 **Export model.** The model definition can be downloaded as a JSON file and imported into any DES Studio instance, enabling model portability and sharing of model structures separately from results.
 
@@ -319,9 +315,9 @@ Performance goals are a first-class feature of DES Studio, not an afterthought. 
 
 Once goals are defined, they influence the tool's behaviour across every surface:
 
-- **KPI cards in the Analysis view** show a green border when a goal is met and a red border when it is violated — giving an immediate pass/fail read without requiring the user to compare numbers manually.
+- **KPI cards in the Results view** show a green border when a goal is met and a red border when it is violated — giving an immediate pass/fail read without requiring the user to compare numbers manually.
 - **Parametric sweep charts** colour every data point on the response curve: green when all goals are met at that parameter value (the feasible region), red when at least one goal is violated. This makes the feasibility boundary visually immediate.
-- **AI Insights receives the goal gap data directly.** When Suggest Improvements or Sensitivity Analysis runs, the AI knows not just the current KPI values but how far each KPI sits from its target. This directs suggestions toward whatever is preventing feasibility rather than toward general optimisation.
+- **The Explain panel receives goal gap data directly.** When it interprets results, the AI knows not just the current KPI values but how far each KPI sits from its target. This keeps the explanation focused on whatever is preventing feasibility rather than on generic optimisation advice.
 - **2D sweep heatmaps** apply the same colouring logic across the full parameter grid, enabling the identification of minimum-cost or minimum-staffing feasible configurations at a glance.
 
 ---
@@ -361,7 +357,7 @@ DES Studio is a mature and widely capable tool, but the following limitations ap
 
 **Templates are read-only originals.** When a user opens a template, DES Studio creates a private copy. The original template cannot be edited by regular users. Template updates (bug fixes, new capabilities) are applied to the originals and propagate to users who open the template after the update — but do not automatically update copies that were already made.
 
-**AI Insights require a configured LLM API key.** The five AI Insights capabilities (Interpret Results, Suggest Improvements, Sensitivity Analysis, Ask a Question, Compare Runs) depend on a large language model provider configured by the platform administrator. DES Studio deployments without a configured API key will show the AI Insights panel but will be unable to generate responses. Self-hosted deployments require an Anthropic or OpenAI API key set in the platform admin panel.
+**AI explanation features require a configured LLM API key.** Results → Explain and related follow-up Q&A depend on a large language model provider configured by the platform administrator. DES Studio deployments without a configured API key will still show the Results workspace, but the Explain panel will be unable to generate responses. Self-hosted deployments require an Anthropic or OpenAI API key set in the platform admin panel.
 
 **AI Apply & Re-run supports numeric field patches only.** The Apply & Re-run feature can automatically apply suggestions that change numeric fields (server count, queue capacity, state variable values). Suggestions requiring structural model changes — adding a new queue, changing routing topology, adding a new event — are presented as manual instructions; the Apply button is disabled for these.
 
@@ -382,7 +378,7 @@ Sprints 46 through 70 are complete. The following user-visible capabilities were
 | 51 | **DistPicker redesign** — distribution families (Parametric / Time-varying / From data); sparkline shape preview; inline parameter validation on blur |
 | 52 | **Responsive layout** — "More ▾" tab overflow dropdown at compact widths; Execute panel vertical stacking on narrow viewports; admin panel single-column on mobile |
 | 53 | **Internal refactoring** — AuthShell and ModelHistoryTab extracted; no user-visible change |
-| 54 | **Cost summary in Results view** — total cost, cost per served entity, and served count appear as a dedicated strip in the Analysis view whenever the model uses at least one COST macro |
+| 54 | **Cost summary in Results view** — total cost, cost per served entity, and served count appear as a dedicated strip in the Results view whenever the model uses at least one COST macro |
 | 55a | **Internal refactoring** — ModelHealthPanel, ModelDetailHeader, SaveBanner, ModelTabBar, AppNavBar, ModelLibrary, ExperimentControls extracted; no user-visible change |
 | 68 | **Model versioning** — explicit milestones with version history panel, create version dialog with notes, structural change detection, run records reference version |
 | 69 | **AI debugging** — trace emission for every event fire, model checker for validation errors, event provenance and arbitration trace |
@@ -393,5 +389,5 @@ Sprints 46 through 70 are complete. The following user-visible capabilities were
 Leading candidates for subsequent sprints include:
 
 - **Per-replication entity anomaly aggregation.** Surface entity types and attribute combinations that are consistently anomalous across replications, not just within a single run.
-- **Prompt caching for reduced AI latency.** Apply prompt caching to the static model-context portions of AI Insights calls, reducing cost and response time for users who run multiple AI analyses in a session.
+- **Prompt caching for reduced AI latency.** Apply prompt caching to the static model-context portions of Explain-panel calls, reducing cost and response time for users who run multiple AI analyses in a session.
 - **AI comparison mode with full goal gap awareness.** Extend the Compare Runs narrative to receive goal gap data for both selected runs.

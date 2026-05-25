@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.17.0 (Sprints 1–70)
+Version: 1.19.0 (Sprints 1–71)
 
 ---
 
@@ -27,6 +27,7 @@ Version: 1.17.0 (Sprints 1–70)
 | v1.16.0 | 70 | Help Assistant — in-app contextual help with suggested questions, accessible from any screen via ? button; documentation accuracy fixes (RENEGE_OLDEST macro, ServerAttr/EntityAttr distributions, SPT/EDD queue disciplines) |
 | v1.17.0 | 70 | Macro syntax corrections — fixed COMPLETE(), ASSIGN(QueueName, ServerType), RENEGE(ctx), BATCH(QueueName, N), PREEMPT(ServerType), SPLIT(EntityType, N, TargetQueue); added missing v1.14.0 version entry |
 | v1.18.0 | 71 | In-app Feedback widget and About panel — toolbar Feedback button (speech-bubble icon) opens a Supabase-backed submission form; Info button (ⓘ icon) opens the About panel showing version and contact details; Supabase `feedback` table with RLS policies for authenticated and anonymous submission |
+| v1.19.0 | 71 | Results workflow refinement — Results now groups Summary, Log, Entities, History, and Explain; run comparison moved into Results → History; saved run records retain chart/log payloads; default run names use `Model Name DD/MM/YYYY HH:mm` |
 
 ---
 
@@ -103,8 +104,8 @@ This structure means that B-Events handle time-scheduled actions (arrivals, serv
 
 1. Define entity types, queues, B-Events, and C-Events in the Forms/Tabs editors (or generate a skeleton with the AI Model Generator).
 2. Set performance goals so the tool and AI have feasibility targets.
-3. Run a single experiment and inspect Live View, Log, Histograms, and Analysis.
-4. Use AI Insights to interpret results and get structured improvement suggestions.
+3. Run a single experiment and inspect Live View, Log, Histograms, and Results.
+4. Use Results → Explain to interpret the outcome and ask follow-up questions.
 5. Run replications for statistical confidence, then sweep a parameter to find the feasible region.
 6. Save and share runs.
 
@@ -150,7 +151,7 @@ Inside the Model Detail view you can build your model three ways — all editing
 | Mode | Access | Best for |
 |------|--------|----------|
 | Forms/Tabs editors | Default view; tabs for each element type | Precise, field-by-field editing of every model element |
-| AI Model Generator | "Design with AI" panel | Bootstrapping a model from a natural-language scenario description |
+| AI Model Generator | "Describe" panel | Bootstrapping a model from a natural-language scenario description |
 | Visual Designer | "Visual Designer" tab | Seeing the model as a flow graph; drag-and-drop topology editing |
 
 ### 2.X AI Model Generator
@@ -230,7 +231,7 @@ Open the **Performance Goals** tab and add:
 
 - Metric: `avgWait`, queue: `Waiting Room`, operator: `<`, target: `15`
 
-Goals are used by the AI Insights engine and by sweep feasibility colouring. Without goals the tool still runs; goals make AI suggestions more targeted.
+Goals are used by the Explain panel and by sweep feasibility colouring. Without goals the tool still runs; goals make AI suggestions more targeted.
 
 ### Step 6: Run the model
 
@@ -240,7 +241,7 @@ Switch to **Live View**: you will see animated entity tokens (circles) flowing f
 
 ### Step 7: Read the results
 
-Switch to **Analysis** view:
+Switch to **Results**:
 
 - **KPI cards**: overall throughput, mean waiting time, mean time in system.
 - **Per-queue stats**: Waiting Room — mean wait, maximum wait, p50/p90/p99 percentiles, mean queue length.
@@ -249,16 +250,14 @@ Switch to **Analysis** view:
 
 If the goal (avgWait < 15) is met, the goal row shows green. If not, it shows red.
 
-### Step 8: Use AI Insights
+### Step 8: Use Explain
 
-Click the **AI Insights** panel and select **Suggest Improvements**. The AI will:
+Open **Results → Explain**. The AI will:
 
-1. Identify the binding constraint (likely: Waiting Room queue length driven by GP utilisation).
-2. Diagnose the root cause.
-3. Propose a change (e.g., add a third GP or reduce consultation time variability).
-4. Predict the effect on wait time.
-5. Assess impact on the performance goal.
-6. Rank suggestions by expected value.
+1. Summarise what happened in plain English.
+2. Highlight reliability issues such as wide confidence intervals or too few repeated runs.
+3. Point to likely bottlenecks and practical next changes.
+4. Answer follow-up questions about this run in the same panel.
 
 ### Step 9: Run a parametric sweep
 
@@ -600,9 +599,9 @@ Open the **Studies** tab.
 
 > **Note:** Study results are shown in charts and tables but are not saved to run history. Use saved Experiments if you need to persist run results.
 
-### 7.5 Run History
+### 7.5 Results History
 
-Open **Run History** to list, re-open, or delete saved runs. The table shows:
+Open **Results → History** to list, re-open, compare, archive, or delete saved runs. The table shows:
 
 | Column | Content |
 |--------|---------|
@@ -617,12 +616,12 @@ Open **Run History** to list, re-open, or delete saved runs. The table shows:
 
 **Row actions:**
 - **View Results** — opens the Results workspace for that run (only when results data exists)
-- **Analyse** — opens the AI assistant with that run's context
+- **Explain** — opens the Explain sub-tab with that run's context
 - **⋯ (More)** — dropdown with Reproduce, Share, Archive/Unarchive, and Delete
 
 **Bulk actions:** Select runs using checkboxes (or **Select all**) to archive, unarchive, delete, or export selected runs as CSV.
 
-Select two runs and click **Compare** to view a side-by-side KPI table and charts. The AI **Compare Runs** feature provides a narrative comparison (see Section 9.4).
+Select exactly two runs and click **Compare selected** to view a side-by-side KPI comparison table.
 
 ### 7.6 Keyboard shortcuts
 
@@ -635,9 +634,9 @@ Pressing `?` at any time (while focus is outside a text input) opens the Help As
 
 ### 7.7 Warmup period and Welch detection
 
-Long-running models may start in an unrealistic empty state. The Analysis view applies **Welch's method** to detect the warmup period automatically: it finds the point in the cumulative mean chart where the running mean stabilises. Statistics reported in the KPI summary exclude data from before the detected warmup cutoff, giving steady-state estimates rather than transient ones.
+Long-running models may start in an unrealistic empty state. The Results view applies **Welch's method** to detect the warmup period automatically: it finds the point in the cumulative mean chart where the running mean stabilises. Statistics reported in the KPI summary exclude data from before the detected warmup cutoff, giving steady-state estimates rather than transient ones.
 
-You can override the warmup period manually by entering a fixed value in the Analysis settings.
+You can override the warmup period manually by entering a fixed value in the Run setup settings.
 
 ---
 
@@ -682,9 +681,9 @@ The Entity Details view is a per-entity lifecycle table. Each row is one entity 
 
 Use the Entity Details view to find individual outlier cases and trace why a specific entity experienced an unusually long wait.
 
-### 8.5 Analysis view
+### 8.5 Results view
 
-The Analysis view (ResultsWorkspace) is the primary results dashboard. It contains:
+The Results view (`ResultsWorkspace`) is the primary results dashboard. It contains:
 
 | Panel | Contents |
 |-------|----------|
@@ -697,13 +696,13 @@ The Analysis view (ResultsWorkspace) is the primary results dashboard. It contai
 
 ---
 
-## 9. AI Insights
+## 9. Explain Results
 
-The AI Insights panel provides five analytical capabilities, all grounded in the current run's results and the model JSON (as of v1.5.0).
+The Explain panel lives inside **Results** and is grounded in the current run's results and the model JSON.
 
 ### 9.1 Explain Results
 
-Click **Explain Results** to receive a comprehensive analysis of your simulation results in plain English. The output covers three sections:
+Click **Results → Explain** to receive a plain-English analysis of your simulation results. The output covers three sections:
 
 **What Happened** — overall system performance, which queues are longest, which resources are most utilised, whether performance goals are met, and notable patterns.
 
@@ -731,16 +730,12 @@ The AI answers using the current model JSON and results as context.
 
 ### 9.4 Compare Runs
 
-Select two saved runs from the Run History and click **Compare Runs**. The AI produces a narrative comparison covering:
-
-- Which run performed better on each KPI
-- Whether the difference is statistically meaningful (CI overlap)
-- Interpretation of why results differ (different parameters, different model structure)
+Run comparison is available from **Results → History**. Select exactly two saved runs and click **Compare selected** to view the side-by-side KPI comparison table.
 
 ### 9.5 Best practices for getting good AI suggestions
 
 - **Set performance goals first.** Without goals the AI cannot assess feasibility or rank suggestions by goal impact.
-- **Run replications before using AI Insights.** Point estimates from a single run have high variance; the AI's predictions are more reliable when based on CI-validated KPIs.
+- **Run replications before using Explain.** Point estimates from a single run have high variance; the AI's predictions are more reliable when based on CI-validated KPIs.
 - **Use descriptive names.** Name your queues and entity types clearly (e.g., "Emergency Waiting Room" not "Q1") — the AI uses these names to produce readable, specific output.
 - **Annotate the model description.** A model description explaining the real-world context helps the AI tailor suggestions to the scenario (e.g., "GP surgery, 08:00–16:00, two GPs").
 - **Run warmup detection first.** If Welch detection finds a long warmup, extend the run time so the steady-state sample is large enough for reliable statistics.
@@ -749,7 +744,7 @@ Select two saved runs from the Run History and click **Compare Runs**. The AI pr
 
 ## 9a. Help Assistant
 
-The Help Assistant provides contextual, in-app guidance accessible from any screen via the `?` button in the toolbar. Unlike the AI Insights panel (which analyses run results), the Help Assistant answers questions about how to use DES Studio itself.
+The Help Assistant provides contextual, in-app guidance accessible from any screen via the `?` button in the toolbar. Unlike the Explain panel (which analyses run results), the Help Assistant answers questions about how to use DES Studio itself.
 
 **How to use it.** Click the `?` button in the toolbar to open the Help Assistant panel. Type your question or click one of the suggested questions that appear based on your current screen.
 
@@ -907,7 +902,7 @@ DES Studio generates a multi-section Word document (`.docx`) containing:
 
 **The report uses the model snapshot stored with the run record**, not the current model definition. This ensures the report accurately describes what was actually simulated, even if the model has been edited since the run.
 
-**The report file is generated entirely in your browser — no simulation data is sent to any server during report generation.** The AI narrative and recommendations are fetched from the same LLM proxy used by the AI Insights panel; if the LLM is unavailable the report is still generated without the narrative sections.
+**The report file is generated entirely in your browser — no simulation data is sent to any server during report generation.** The AI narrative and recommendations are fetched from the same LLM proxy used by the Explain panel; if the LLM is unavailable the report is still generated without the narrative sections.
 
 The file is saved as `<Model Name> — <Run Label> — Report.docx` and can be opened in Microsoft Word, LibreOffice, or Google Docs.
 
@@ -987,7 +982,7 @@ In the **Overview** tab, click **Save as scenario baseline** to fork the model w
 
 ### Run snapshot diffs
 
-In **Run History**, click **⋯ → View model at this run** to see how the model differed from its current state at the time of that run.
+In **Results → History**, click **⋯ → View model at this run** to see how the model differed from its current state at the time of that run.
 
 ---
 
