@@ -1163,7 +1163,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             )}
             {resultsView==="log"&&(
               (latestLog.length > 0 || Array.isArray(latestResults?.log)) ? (
-                <LogViewer log={latestLog.length > 0 ? latestLog : latestResults?.log || []}/>
+                <LogViewer log={latestLog.length > 0 ? latestLog : latestResults?.log || []} model={model}/>
               ) : (
                 <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
                   No log available. Run the simulation first to capture event log data.

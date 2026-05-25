@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Btn, PhaseTag } from "../shared/components.jsx";
 import { downloadTextFile } from "./executeHelpers.js";
+import { formatSimWallTime } from "../../engine/clockUtils.js";
 
 const ALL_PHASES = ["B", "C", "A", "INIT", "WARMUP", "REP", "SAVE", "ERROR", "CANCEL", "END"];
 
@@ -16,9 +17,12 @@ function buildCsvFromLog(log) {
   return [header, ...rows].join("\n");
 }
 
-export function LogViewer({ log = [], currentClock }) {
+export function LogViewer({ log = [], currentClock, model }) {
   const [phaseFilter, setPhaseFilter] = useState(new Set());
   const [search, setSearch] = useState("");
+  const clockWallTime = model?.epoch && currentClock != null
+    ? formatSimWallTime(currentClock, model.epoch, model.timeUnit || "minutes")
+    : null;
 
   const presentPhases = useMemo(() => {
     const s = new Set(log.map(r => r.phase).filter(Boolean));
@@ -51,6 +55,7 @@ export function LogViewer({ log = [], currentClock }) {
         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.5, fontWeight: 700 }}>
           SIMULATION LOG — {log.length} entries
           {currentClock != null && <span style={{ marginLeft: 8, color: C.server }}>clock {parseFloat(currentClock).toFixed(1)}</span>}
+          {clockWallTime && <span style={{ marginLeft: 8, color: C.accent }}>{clockWallTime}</span>}
         </div>
         <Btn small variant="ghost" onClick={exportCsv} title="Export log as CSV">↓ CSV</Btn>
       </div>
@@ -108,6 +113,11 @@ export function LogViewer({ log = [], currentClock }) {
                 borderBottom: `1px solid ${C.border}22`,
                 color: r.phase === "ERROR" ? C.red : r.phase === "SAVE" ? C.green : C.text }}>
                 <span style={{ color: C.muted, marginRight: 4 }}>[t={r.time?.toFixed?.(1) ?? "—"}]</span>
+                {model?.epoch && r.time != null && (
+                  <span style={{ color: C.accent, marginRight: 6, fontFamily: FONT, fontSize: 10 }}>
+                    {formatSimWallTime(r.time, model.epoch, model.timeUnit || "minutes")}
+                  </span>
+                )}
                 <PhaseTag phase={r.phase} />
                 <span style={{ marginLeft: 6 }}>{r.message}</span>
               </div>

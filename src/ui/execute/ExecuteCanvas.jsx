@@ -20,6 +20,7 @@ import { ExecuteQueueNode }    from "./ExecuteQueueNode.jsx";
 import { ExecuteActivityNode } from "./ExecuteActivityNode.jsx";
 import { ExecuteSinkNode }     from "./ExecuteSinkNode.jsx";
 import { AnimatedEdge }        from "./AnimatedEdge.jsx";
+import { formatSimWallTime }   from "../../engine/clockUtils.js";
 
 const NODE_COLOR = {
   source: C.green,
@@ -587,6 +588,9 @@ export function ExecuteCanvas({
   const allEntities = snap?.entities || [];
   const customers = allEntities.filter(e => e.role !== "server");
   const waiting = customers.filter(e => e.status === "waiting");
+  const wallClock = model?.epoch && snap?.clock != null
+    ? formatSimWallTime(snap.clock, model.epoch, model.timeUnit || "minutes")
+    : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -622,6 +626,11 @@ export function ExecuteCanvas({
             <div style={{ fontSize: 42, fontWeight: 300, color: "#fff", fontFamily: FONT, lineHeight: 1 }}>
               {parseFloat(snap.clock).toFixed(0)}
             </div>
+            {wallClock && (
+              <div style={{ marginTop: 10, fontSize: 11, color: C.accent, fontFamily: FONT, lineHeight: 1.4, maxWidth: 180 }}>
+                {wallClock}
+              </div>
+            )}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
             {kpiSlots.slice(0, 4).map((key, i) => (

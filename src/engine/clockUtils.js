@@ -24,6 +24,10 @@ export function formatWallTime(date) {
   });
 }
 
+export function formatSimWallTime(t, epoch, timeUnit = 'minutes') {
+  return formatWallTime(simToWall(t, epoch, timeUnit));
+}
+
 // Parse a value that could be: plain number, HH:MM, or ISO datetime string.
 // Returns a sim-time number, or null if unparseable/epoch missing.
 export function parseTimeInput(value, epoch, timeUnit = 'minutes') {

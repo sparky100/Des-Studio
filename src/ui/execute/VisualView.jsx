@@ -3,6 +3,7 @@
 import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, Empty } from "../shared/components.jsx";
 import { tokenColor } from "./executeHelpers.js";
+import { formatSimWallTime } from "../../engine/clockUtils.js";
 
 export const CustomerToken = ({ entity, size = 36, showId = true }) => {
   const col = tokenColor(entity.id);
@@ -65,6 +66,7 @@ export const VisualView = ({ snap, model, summary }) => {
   const customers = allEntities.filter(e => e.role !== "server");
   const waiting = customers.filter(e => e.status === "waiting");
   const definedQueues = model.queues || [];
+  const wallClock = model?.epoch ? formatSimWallTime(snap.clock, model.epoch, model.timeUnit || "minutes") : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -93,6 +95,11 @@ export const VisualView = ({ snap, model, summary }) => {
           <div style={{ fontSize: 42, fontWeight: 300, color: "#fff", fontFamily: FONT, lineHeight: 1 }}>
             {parseFloat(snap.clock).toFixed(0)}
           </div>
+          {wallClock && (
+            <div style={{ marginTop: 10, fontSize: 11, color: C.accent, fontFamily: FONT, lineHeight: 1.4, maxWidth: 180 }}>
+              {wallClock}
+            </div>
+          )}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
           {[

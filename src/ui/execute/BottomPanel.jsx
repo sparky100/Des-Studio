@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, PhaseTag } from "../shared/components.jsx";
 import { QueueDepthTimePlot, QueueHistogram } from "./SweepViews.jsx";
+import { formatSimWallTime } from "../../engine/clockUtils.js";
 
 const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
@@ -221,6 +222,11 @@ function StageKpisTable({ snap, model }) {
 
 function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeSelect, model }) {
   const [expandedSeq, setExpandedSeq] = useState(null);
+  const wallTimeFor = (simTime) => (
+    model?.epoch && simTime != null
+      ? formatSimWallTime(simTime, model.epoch, model.timeUnit || "minutes")
+      : null
+  );
   const filtered = useMemo(
     () => selectedNodeLabel
       ? log.filter(e => e.message?.includes(selectedNodeLabel))
@@ -304,6 +310,11 @@ function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeS
               <div style={{ fontSize: 11, fontFamily: "monospace", color: C.kpiSvc,
                 borderBottom: `1px solid ${C.bg}`, padding: "3px 0" }}>
                 <span style={{ color: C.muted }}>[t={r.time?.toFixed(0)}]</span>{" "}
+                {wallTimeFor(r.time) && (
+                  <span style={{ color: C.accent, fontFamily: FONT, fontSize: 10, marginRight: 6 }}>
+                    {wallTimeFor(r.time)}
+                  </span>
+                )}
                 <PhaseTag phase={r.phase} /> {renderLogMessageWithNodeLinks(r.message)}
                 {hasDetail && (
                   <button
@@ -645,7 +656,7 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
 
 // ── FEL tab ──────────────────────────────────────────────────────────────────
 
-function FelTab({ snap }) {
+function FelTab({ snap, model }) {
   const fel = snap?.felPreview;
   if (!snap) {
     return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>Run the simulation to see the Future Events List.</div>;
@@ -654,10 +665,12 @@ function FelTab({ snap }) {
     return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>FEL is empty — simulation complete.</div>;
   }
   const clock = snap.clock || 0;
+  const currentWallTime = model?.epoch ? formatSimWallTime(clock, model.epoch, model.timeUnit || "minutes") : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
         {fel.length} event{fel.length !== 1 ? "s" : ""} scheduled · clock t={fmt(clock, 1)}
+        {currentWallTime && <span style={{ color: C.accent, marginLeft: 8 }}>{currentWallTime}</span>}
         {fel.length === 100 && <span style={{ color: C.amber }}> (showing first 100)</span>}
       </div>
       <div style={{ overflowX: "auto" }}>
@@ -842,7 +855,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
         >
           {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
-          {activeTab === "fel"       && <FelTab snap={snap} />}
+          {activeTab === "fel"       && <FelTab snap={snap} model={model} />}
           {activeTab === "charts"    && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {waitDist && Object.keys(waitDist).length > 0 ? (
