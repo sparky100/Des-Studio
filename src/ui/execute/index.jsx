@@ -1864,8 +1864,21 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         >
           Check Model
         </Btn>
-        <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive}>⟳ Reset</Btn>
-        <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}>⏭ Step</Btn>
+        {/* Run button shows validation state — Option B */}
+        {hasErrors ? (
+          <Btn variant="danger" disabled={true} title={`${validation.errors.length} blocker(s) must be resolved before running`}>
+            ✕ {validation.errors.length} blocker{validation.errors.length !== 1 ? "s" : ""}
+          </Btn>
+        ) : hasWarnings ? (
+          <Btn variant="amber" onClick={initEngine} disabled={batchActive} title={`${validation.warnings.length} warning(s) — model can run but worth checking`}>
+            ⚠ Run ({validation.warnings.length} warning{validation.warnings.length !== 1 ? "s" : ""})
+          </Btn>
+        ) : (
+          <Btn variant="primary" onClick={initEngine} disabled={batchActive} title="Model is valid — ready to run">
+            ✓ Run
+          </Btn>
+        )}
+        <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}> Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
@@ -1880,7 +1893,9 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
             style={{ width: 72, accentColor: C.accent, cursor: "pointer" }}
           />
         </div>
-        <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>⚡ Run All</Btn>
+        <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>
+          {hasErrors ? `✕ ${validation.errors.length} blocker${validation.errors.length !== 1 ? "s" : ""}` : "⚡ Run All"}
+        </Btn>
         {canOpenResultsView && (
           <Btn variant="ghost" onClick={() => onGoToResults?.()} title="View results in the Results section">
             View Results →
