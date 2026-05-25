@@ -32,23 +32,32 @@ const NODE_COLOR = {
 // ── Configurable KPI bar (F9C.7) ─────────────────────────────────────────────
 
 const KPI_METRICS = {
-  arrived: { label: "Arrived",       color: C.kpiArr },
-  served:  { label: "Served",        color: C.kpiSvc },
-  reneged: { label: "Reneged",       color: C.danger },
+  arrived: { label: "Arrived total", color: C.kpiArr },
+  served:  { label: "Served total",  color: C.kpiSvc },
+  reneged: { label: "Reneged total", color: C.danger },
   waiting: { label: "Waiting now",   color: C.bEvent },
   clock:   { label: "Sim Clock",     color: C.server },
   active:  { label: "Active now",    color: C.cEvent  },
 };
 
+function preferMetricValue(primary, fallback) {
+  if (fallback == null) return primary ?? null;
+  if (primary == null) return fallback;
+  if (primary === 0 && fallback !== 0) return fallback;
+  return primary;
+}
+
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 export { DEFAULT_KPI_SLOTS };
 
-function resolveKpiValue(key, snap, entities, summary) {
+function resolveKpiValue(key, snap, entities, summary, totals) {
   const customers = entities.filter(e => e.role !== "server");
+  const doneCount = customers.filter(e => e.status === "done").length;
+  const renegedCount = customers.filter(e => e.status === "reneged").length;
   switch (key) {
-    case "arrived": return summary?.total ?? customers.length;
-    case "served":  return summary?.served ?? snap.served ?? 0;
-    case "reneged": return summary?.reneged ?? snap.reneged ?? 0;
+    case "arrived": return preferMetricValue(summary?.total, totals?.arrived) ?? customers.length;
+    case "served":  return preferMetricValue(summary?.served, totals?.served) ?? doneCount ?? snap.served ?? 0;
+    case "reneged": return preferMetricValue(summary?.reneged, totals?.reneged) ?? renegedCount ?? snap.reneged ?? 0;
     case "waiting": return customers.filter(e => e.status === "waiting").length;
     case "clock":   return parseFloat(snap.clock).toFixed(1);
     case "active":  return customers.filter(e => e.status !== "done" && e.status !== "reneged").length;
@@ -56,11 +65,11 @@ function resolveKpiValue(key, snap, entities, summary) {
   }
 }
 
-function KpiSlot({ metricKey, snap, entities, summary, onEdit }) {
+function KpiSlot({ metricKey, snap, entities, summary, totals, onEdit }) {
   const [hovered,  setHovered]  = useState(false);
   const [editing,  setEditing]  = useState(false);
   const meta  = KPI_METRICS[metricKey] || { label: metricKey, color: C.muted };
-  const value = snap ? resolveKpiValue(metricKey, snap, entities, summary) : "—";
+  const value = snap ? resolveKpiValue(metricKey, snap, entities, summary, totals) : "—";
 
   return (
     <div
@@ -405,6 +414,23 @@ export function ExecuteCanvas({
   onNodeSelect,
 }) {
   const baseGraph = useMemo(() => deriveGraphFromModel(model), [model]);
+  const cumulativeGraphTotals = useMemo(() => {
+    if (!snap) return { arrived: 0, served: 0, reneged: 0 };
+    const eventCounts = snap.eventCounts || {};
+    const sourceRefs = new Set(
+      (baseGraph.nodes || [])
+        .filter(node => node.type === "source" && node.refId)
+        .map(node => node.refId)
+    );
+    const sinkRefs = new Set(
+      (baseGraph.nodes || [])
+        .filter(node => node.type === "sink" && node.refId)
+        .map(node => node.refId)
+    );
+    const arrived = [...sourceRefs].reduce((sum, refId) => sum + (eventCounts[refId] || 0), 0);
+    const served = [...sinkRefs].reduce((sum, refId) => sum + (eventCounts[refId] || 0), 0);
+    return { arrived, served, reneged: snap.reneged ?? 0 };
+  }, [baseGraph.nodes, snap]);
   const [canvasHeight, setCanvasHeight] = useState(480);
   const dragStateRef = useRef(null);
 
@@ -640,6 +666,7 @@ export function ExecuteCanvas({
                 snap={snap}
                 entities={allEntities}
                 summary={summary}
+                totals={cumulativeGraphTotals}
                 onEdit={newKey => onKpiSlotChange?.(i, newKey)}
               />
             ))}
