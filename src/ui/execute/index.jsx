@@ -1853,31 +1853,29 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       )}
 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <Btn
-          variant="ghost"
-          onClick={() => {
-            const issues = checkModel(model);
-            setModelCheckerIssues(issues);
-            setModelCheckerOpen(true);
-          }}
-          title="Run structural checks on this model"
-        >
-          Check Model
-        </Btn>
-        {/* Run button shows validation state — Option B */}
+        {/* Validation status indicator — informational only, positioned first */}
         {hasErrors ? (
           <Btn variant="danger" disabled={true} title={`${validation.errors.length} blocker(s) must be resolved before running`}>
-            ✕ {validation.errors.length} blocker{validation.errors.length !== 1 ? "s" : ""}
+             {validation.errors.length} blocker{validation.errors.length !== 1 ? "s" : ""}
           </Btn>
         ) : hasWarnings ? (
-          <Btn variant="amber" onClick={initEngine} disabled={batchActive} title={`${validation.warnings.length} warning(s) — model can run but worth checking`}>
-            ⚠ Run ({validation.warnings.length} warning{validation.warnings.length !== 1 ? "s" : ""})
+          <Btn variant="ghost" disabled={true} title={`${validation.warnings.length} warning(s) — model can run but worth checking`}>
+             {validation.warnings.length} warning{validation.warnings.length !== 1 ? "s" : ""}
           </Btn>
         ) : (
-          <Btn variant="primary" onClick={initEngine} disabled={batchActive} title="Model is valid — ready to run">
-            ✓ Run
+          <Btn variant="success" disabled={true} title="Model is valid — ready to run">
+            ✓ Ready
           </Btn>
         )}
+        <Btn variant="ghost" onClick={() => {
+          const issues = checkModel(model);
+          setModelCheckerIssues(issues);
+          setModelCheckerOpen(true);
+        }}
+        title="Run structural checks on this model">
+          Check Model
+        </Btn>
+        <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive} title="Reset simulation to initial state">⟳ Reset</Btn>
         <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}> Step</Btn>
         <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
