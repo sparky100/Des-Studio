@@ -52,8 +52,8 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
   const navBar = (
     <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 24px", display: "flex", alignItems: "center", gap: 16, height: 52 }}>
       <div>
-        <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>DES STUDIO</div>
-        <div style={{ fontSize: 9, color: C.muted, letterSpacing: 0.5 }}>a simmodlr.app</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2, fontFamily: FONT, lineHeight: 1.1 }}>DES STUDIO</div>
+        <div style={{ fontSize: 9, color: C.muted, letterSpacing: 0.5, fontFamily: FONT, lineHeight: 1.1 }}>a simmodlr.app</div>
       </div>
       <div style={{ flex: 1 }} />
     </div>
@@ -64,7 +64,7 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
       <div style={{ background: C.bg, minHeight: "100vh", color: C.text, fontFamily: FONT }}>
         <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');`}</style>
         <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 24px", display: "flex", alignItems: "center", height: 52 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>DES STUDIO</div>
+          <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2, fontFamily: FONT, lineHeight: 1.1 }}>DES STUDIO</div>
         </div>
         <div style={{ maxWidth: 400, margin: "0 auto", padding: "60px 24px" }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 20 }}>Set new password</div>

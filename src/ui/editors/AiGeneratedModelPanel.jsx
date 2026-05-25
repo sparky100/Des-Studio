@@ -673,17 +673,14 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: proposal ? "minmax(320px, 1fr) minmax(360px, 0.95fr)" : "minmax(320px, 760px)", gap: 16, alignItems: "stretch" }}>
-      <section aria-label="Use AI conversation" style={{ display: "flex", flexDirection: "column", minHeight: 520, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+      <section aria-label="Describe conversation" style={{ display: "flex", flexDirection: "column", minHeight: 520, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: 14, borderBottom: `1px solid ${C.border}` }}>
-          <SH label="Design with AI" />
+          <SH label="Describe" />
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
             Describe the system you want to build, or explain what you want changed.
           </div>
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, padding: 14, overflowY: "auto" }}>
-          {!history.length && (
-            <Empty icon="AI" msg="Start with a plain-language description, or ask for a change to the current model." />
-          )}
           {history.map((turn, index) => {
             if (turn.role === "assistant-confirm") {
               return (

@@ -56,7 +56,7 @@ export function ImportPreview({ model, errors, warnings, user, onSave, onDismiss
       <style>{`*{box-sizing:border-box;margin:0;padding:0;}@import url('${GOOGLE_FONT_URL}');`}</style>
 
       <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: '0 24px', display: 'flex', alignItems: 'center', height: 52, flexShrink: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>DES STUDIO</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2, fontFamily: FONT, lineHeight: 1.1 }}>DES STUDIO</div>
       </div>
 
       <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px' }}>

@@ -726,12 +726,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     if (!hasResultsPayload(row)) return;
     setSelectedResultsRunId(row.id);
     setLatestResults(row.results_json);
+    setLatestLog(Array.isArray(row.results_json?.log) ? row.results_json.log : []);
   };
 
   const openResultsForRun = useCallback((row, nextSubtab = "summary") => {
     if (!hasResultsPayload(row)) return;
     setSelectedResultsRunId(row.id);
     setLatestResults(row.results_json);
+    setLatestLog(Array.isArray(row.results_json?.log) ? row.results_json.log : []);
     setResultsView(nextSubtab);
     setTab("results");
   }, []);
@@ -833,6 +835,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       if(row && !latestResults){
         setSelectedResultsRunId(row.id);
         setLatestResults(row.results_json);
+        setLatestLog(Array.isArray(row.results_json?.log) ? row.results_json.log : []);
       }
     }).catch(e=>setHistoryError(e.message))
     .finally(()=>setHistoryLoading(false));
@@ -1159,8 +1162,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               </div>
             )}
             {resultsView==="log"&&(
-              latestLog.length > 0 ? (
-                <LogViewer log={latestLog}/>
+              (latestLog.length > 0 || Array.isArray(latestResults?.log)) ? (
+                <LogViewer log={latestLog.length > 0 ? latestLog : latestResults?.log || []}/>
               ) : (
                 <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
                   No log available. Run the simulation first to capture event log data.

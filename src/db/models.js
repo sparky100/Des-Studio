@@ -350,8 +350,9 @@ export async function setAccess(id, access, userId) {
 export async function saveSimulationRun(modelId, userId, result, config = {}) {
   const s = result.summary || {};
   const resultsJson = config.resultsJson ? { ...config.resultsJson } : {
+    ...result,
     summary: s,
-    clock: result.snap?.clock,
+    clock: result.snap?.clock ?? result.clock ?? null,
   };
   if (!resultsJson.summary) {
     resultsJson.summary = s;

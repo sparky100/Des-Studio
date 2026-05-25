@@ -15,6 +15,7 @@ const mockUnarchiveRun = vi.hoisted(() => vi.fn());
 const mockDeleteSimulationRun = vi.hoisted(() => vi.fn());
 const mockRevokeShareLink = vi.hoisted(() => vi.fn());
 const mockBuildEngine = vi.hoisted(() => vi.fn());
+const mockCompareScenarios = vi.hoisted(() => vi.fn());
 
 vi.mock('../../src/db/models.js', () => ({
   getRun: mockGetRun,
@@ -29,6 +30,10 @@ vi.mock('../../src/db/models.js', () => ({
 
 vi.mock('../../src/engine/index.js', () => ({
   buildEngine: mockBuildEngine,
+}));
+
+vi.mock('../../src/engine/statistics.js', () => ({
+  compareScenarios: mockCompareScenarios,
 }));
 
 vi.mock('../../src/db/runRecord.js', () => ({
@@ -128,6 +133,13 @@ describe('ModelHistoryTab — Run History UI', () => {
     vi.clearAllMocks();
     mockGetRun.mockReset();
     mockBuildEngine.mockReset();
+    mockCompareScenarios.mockReset();
+    mockCompareScenarios.mockReturnValue({
+      labels: { a: 'Baseline', b: 'Variant' },
+      comparisons: [
+        { metric: 'summary.avgWait', meanDiff: 1.5, lower: 0.5, upper: 2.5, significant95: true, significant99: false },
+      ],
+    });
   });
 
   // ── Empty / Loading / Error states ──────────────────────────────────────
@@ -216,6 +228,44 @@ describe('ModelHistoryTab — Run History UI', () => {
     const checkbox = screen.getByLabelText('Select run Baseline');
     fireEvent.click(checkbox);
     expect(screen.getByText('1 run selected')).toBeInTheDocument();
+  });
+
+  it('compares exactly two selected runs from history', () => {
+    const rows = [
+      makeRow({
+        id: 'r1',
+        run_label: 'Baseline',
+        replications: 3,
+        results_json: {
+          summary: storedSummary,
+          replicationResults: [
+            { result: { summary: { avgWait: 5, avgSvc: 2, avgSojourn: 7, served: 10, reneged: 0, totalCost: 0 } } },
+            { result: { summary: { avgWait: 6, avgSvc: 2, avgSojourn: 8, served: 10, reneged: 0, totalCost: 0 } } },
+          ],
+        },
+      }),
+      makeRow({
+        id: 'r2',
+        run_label: 'Variant',
+        replications: 3,
+        results_json: {
+          summary: storedSummary,
+          replicationResults: [
+            { result: { summary: { avgWait: 7, avgSvc: 2, avgSojourn: 9, served: 10, reneged: 0, totalCost: 0 } } },
+            { result: { summary: { avgWait: 8, avgSvc: 2, avgSojourn: 10, served: 10, reneged: 0, totalCost: 0 } } },
+          ],
+        },
+      }),
+    ];
+    renderTab({ historyRows: rows });
+    fireEvent.click(screen.getByLabelText('Select run Baseline'));
+    fireEvent.click(screen.getByLabelText('Select run Variant'));
+    fireEvent.click(screen.getByRole('button', { name: 'Compare selected' }));
+
+    expect(mockCompareScenarios).toHaveBeenCalled();
+    expect(screen.getByText('RUN COMPARISON')).toBeInTheDocument();
+    expect(screen.getAllByText('Baseline').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Variant').length).toBeGreaterThan(0);
   });
 
   it('select all checkbox selects all rows', () => {

@@ -576,8 +576,9 @@ export const AiAssistantPanel = ({
 
   return (
     <aside aria-label="AI assistant" style={{
-      width: embedded ? "100%" : 320,
-      flex: embedded ? "1 1 auto" : "0 0 320px",
+      width: embedded ? "min(420px, 100%)" : 320,
+      maxWidth: embedded ? 420 : 320,
+      flex: embedded ? "0 0 auto" : "0 0 320px",
       background: C.panel,
       border: `1px solid ${C.border}`,
       borderRadius: 8,
@@ -587,6 +588,8 @@ export const AiAssistantPanel = ({
       gap: 12,
       minHeight: 520,
       alignSelf: "stretch",
+      marginLeft: embedded ? "auto" : 0,
+      boxShadow: embedded ? "0 10px 28px rgba(0,0,0,0.24)" : "none",
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>

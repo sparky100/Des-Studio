@@ -29,7 +29,7 @@ const baseModel = {
   owner_id: "user-1",
 };
 
-describe("ModelDetail Analysis tab", () => {
+describe("ModelDetail Results tab", () => {
   beforeEach(() => {
     mockFetchRunHistory.mockReset();
     mockListShareLinks.mockReset();
@@ -37,7 +37,7 @@ describe("ModelDetail Analysis tab", () => {
     mockListShareLinks.mockResolvedValue([]);
   });
 
-  test("shows a top-level Analysis workspace tab with run guidance", () => {
+  test("shows a top-level Results tab with run guidance", () => {
     render(
       <ModelDetail
         modelId="m1"
@@ -48,15 +48,16 @@ describe("ModelDetail Analysis tab", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^results$/i }));
 
-    expect(screen.getByText(/ANALYSIS WORKSPACE/i)).toBeInTheDocument();
-    expect(screen.getByText(/latest run will appear here/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /open execute/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /open history/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Summary" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Log" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
+    expect(screen.getByText(/No results yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /← Run/i })).toBeInTheDocument();
   });
 
-  test("loads a saved run directly in Analysis", async () => {
+  test("loads a saved run directly in Results and shows its log", async () => {
     mockFetchRunHistory.mockResolvedValue([
       {
         id: "run-1",
@@ -64,6 +65,10 @@ describe("ModelDetail Analysis tab", () => {
         ran_at: "2026-05-11T10:00:00.000Z",
         results_json: {
           summary: { served: 3 },
+          log: [
+            { phase: "INIT", time: 0, message: "Run started" },
+            { phase: "END", time: 5, message: "Run finished" },
+          ],
           timeSeries: [
             {
               t: 0,
@@ -100,12 +105,13 @@ describe("ModelDetail Analysis tab", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /analysis/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^results$/i }));
 
     await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith("m1", expect.objectContaining({ archived: false })));
     expect(await screen.findByRole("combobox", { name: /saved run/i })).toHaveValue("run-1");
     expect(screen.getByText(/Morning baseline/i)).toBeInTheDocument();
-    expect(screen.getByText(/Where are queues forming/i)).toBeInTheDocument();
-    expect(screen.getByText(/Data: Queue-specific runtime counts/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Log" }));
+    expect(screen.getByText(/Run started/i)).toBeInTheDocument();
+    expect(screen.getByText(/Run finished/i)).toBeInTheDocument();
   });
 });

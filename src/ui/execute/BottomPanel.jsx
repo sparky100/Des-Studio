@@ -409,6 +409,12 @@ function EntityInspector({ entity, snap, onClose }) {
   const clock = snap?.clock ?? 0;
   const waitingAge = entity.waitingSince != null ? clock - entity.waitingSince : null;
   const stages = entity.stages || [];
+  const formatAttrValue = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value.toFixed(1).replace(/\.0$/, "");
+    }
+    return String(value);
+  };
 
   const rowStyle = {
     display: "flex",
@@ -518,7 +524,7 @@ function EntityInspector({ entity, snap, onClose }) {
             {Object.entries(entity.attrs).map(([k, v]) => (
               <div key={k} style={rowStyle}>
                 <span style={labelStyle}>{k}</span>
-                <span style={valueStyle}>{String(v)}</span>
+                <span style={valueStyle}>{formatAttrValue(v)}</span>
               </div>
             ))}
           </div>

@@ -179,6 +179,21 @@ export function downloadTextFile(content, filename, type) {
   URL.revokeObjectURL(url);
 }
 
+export function formatRunTimestamp(date = new Date()) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date).replace(",", "");
+}
+
+export function makeDefaultRunLabel(modelName, date = new Date()) {
+  return `${modelName || "Model"} ${formatRunTimestamp(date)}`;
+}
+
 export function makeRunLabel(payload) {
   if (!payload) return "Run";
   if (payload.run_label) return payload.run_label;

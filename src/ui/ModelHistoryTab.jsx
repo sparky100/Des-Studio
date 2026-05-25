@@ -6,6 +6,8 @@ import { useToast } from "./shared/ToastContext.jsx";
 import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink } from "../db/models.js";
 import { buildEngine } from "../engine/index.js";
 import { compareResults } from "../db/runRecord.js";
+import { compareScenarios } from "../engine/statistics.js";
+import { CI_METRICS, METRIC_LABELS, fmt } from "./execute/executeHelpers.js";
 import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
 
 function slugifyModelName(name = "") {
@@ -117,6 +119,7 @@ export function ModelHistoryTab({
   const [snapshotDiffLoading, setSnapshotDiffLoading] = useState(false);
   const [moreMenuId, setMoreMenuId] = useState(null);
   const [moreMenuPos, setMoreMenuPos] = useState({ top: 0, right: 0 });
+  const [selectedComparison, setSelectedComparison] = useState(null);
 
   const handleReproduce = async (rowId) => {
     setReproduceState(prev => ({ ...prev, [rowId]: { status: 'running', message: '' } }));
@@ -225,6 +228,34 @@ export function ModelHistoryTab({
     toast.success(`Deleted ${ids.length} run${ids.length !== 1 ? "s" : ""}`);
   };
 
+  const compareSelected = () => {
+    const selectedRows = historyRows.filter(row => historySelected.has(row.id));
+    if (selectedRows.length !== 2) {
+      setSelectedComparison({ error: "Select exactly 2 runs to compare." });
+      return;
+    }
+    const [rowA, rowB] = selectedRows;
+    const repsA = rowA?.results_json?.replicationResults || [];
+    const repsB = rowB?.results_json?.replicationResults || [];
+    if (repsA.length < 2 || repsB.length < 2) {
+      setSelectedComparison({ error: `Both runs must have at least 2 replications. Run A: ${repsA.length}, Run B: ${repsB.length}.` });
+      return;
+    }
+    const labelA = rowA.run_label || formatRunDate(rowA.ran_at);
+    const labelB = rowB.run_label || formatRunDate(rowB.ran_at);
+    const result = compareScenarios(repsA, repsB, CI_METRICS, { labelA, labelB });
+    const meansA = {};
+    const meansB = {};
+    for (const metric of CI_METRICS) {
+      const parts = metric.split(".");
+      const valsA = repsA.map(r => { let v = r?.result || r; for (const p of parts) v = v?.[p]; return v; }).filter(Number.isFinite);
+      const valsB = repsB.map(r => { let v = r?.result || r; for (const p of parts) v = v?.[p]; return v; }).filter(Number.isFinite);
+      meansA[metric] = valsA.length ? valsA.reduce((s, v) => s + v, 0) / valsA.length : null;
+      meansB[metric] = valsB.length ? valsB.reduce((s, v) => s + v, 0) / valsB.length : null;
+    }
+    setSelectedComparison({ ...result, meansA, meansB });
+  };
+
   const latest = historyRows[0];
   const arrived = Number(latest?.total_arrived || 0);
   const reneged = Number(latest?.total_reneged || 0);
@@ -270,6 +301,7 @@ export function ModelHistoryTab({
         <div style={{ background: alpha(C.accent, 0.08), border: `1px solid ${alpha(C.accent, 0.3)}`, borderRadius: 6, padding: "8px 12px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
           <span style={{ fontSize: 12, fontFamily: FONT, color: C.text }}>{historySelected.size} run{historySelected.size !== 1 ? "s" : ""} selected</span>
           <Btn small variant="ghost" onClick={exportSelectedCsv}>Export as CSV</Btn>
+          <Btn small variant="ghost" onClick={compareSelected} disabled={historySelected.size !== 2}>Compare selected</Btn>
           {userId && (
             <>
               <Btn small variant="ghost" onClick={archiveSelected}>Archive</Btn>
@@ -278,6 +310,55 @@ export function ModelHistoryTab({
             </>
           )}
           <Btn small variant="ghost" onClick={() => setHistorySelected(new Set())}>Clear selection</Btn>
+        </div>
+      )}
+
+      {selectedComparison?.error && (
+        <div style={{ fontSize: 12, color: C.red, fontFamily: FONT, marginBottom: 8 }}>{selectedComparison.error}</div>
+      )}
+      {selectedComparison && !selectedComparison.error && (
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 12, marginBottom: 12 }}>
+          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN COMPARISON</span>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
+              <thead>
+                <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                  <th scope="col" style={{ padding: "6px 8px" }}>KPI</th>
+                  <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{selectedComparison.labels?.a}</th>
+                  <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{selectedComparison.labels?.b}</th>
+                  <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
+                  <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
+                  <th scope="col" style={{ padding: "6px 8px" }}>Significant?</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedComparison.comparisons?.map((c, i) => {
+                  const mA = selectedComparison.meansA?.[c.metric];
+                  const mB = selectedComparison.meansB?.[c.metric];
+                  return (
+                    <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "right" }}>{mA != null ? fmt(mA) : "—"}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "right" }}>{mB != null ? fmt(mB) : "—"}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
+                        {c.meanDiff != null ? (c.meanDiff > 0 ? "+" : "") + fmt(c.meanDiff) : "—"}
+                      </td>
+                      <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>
+                        {c.lower != null && c.upper != null ? `[${fmt(c.lower)}, ${fmt(c.upper)}]` : "—"}
+                      </td>
+                      <td style={{ padding: "6px 8px" }}>
+                        {c.significant95 ? (
+                          <span style={{ color: c.significant99 ? C.green : C.amber, fontWeight: 700 }}>
+                            {c.significant99 ? "Yes (99%)" : "Yes (95%)"}
+                          </span>
+                        ) : <span style={{ color: C.muted }}>No</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

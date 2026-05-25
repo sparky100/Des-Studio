@@ -582,8 +582,8 @@ export default function App(){
       <div style={{background:C.bg,minHeight:'100vh',color:C.text,fontFamily:FONT}}>
         <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 24px',display:'flex',alignItems:'center',height:52}}>
           <div>
-            <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2}}>DES STUDIO</div>
-            <div style={{fontSize:9,color:C.muted,letterSpacing:0.5}}>a simmoldr.app</div>
+            <div style={{fontWeight:700,fontSize:14,color:C.accent,letterSpacing:2,fontFamily:FONT,lineHeight:1.1}}>DES STUDIO</div>
+            <div style={{fontSize:9,color:C.muted,letterSpacing:0.5,fontFamily:FONT,lineHeight:1.1}}>a simmodlr.app</div>
           </div>
         </div>
         <div style={{maxWidth:480,margin:'0 auto',padding:'60px 24px',textAlign:'center'}}>

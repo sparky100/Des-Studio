@@ -4,7 +4,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 const ExecuteCanvas = lazy(() => import("./ExecuteCanvas.jsx").then(m => ({ default: m.ExecuteCanvas })));
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, SH, InfoBox } from "../shared/components.jsx";
-import { useViewport } from "../shared/hooks.js";
 import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { buildEngine } from "../../engine/index.js";
 import { AdapterRegistry } from "../../engine/adapters/index.js";
@@ -25,7 +24,7 @@ import { enumerateSweepableParams, generate2DSweepValues } from "../../engine/sw
 import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { qrSvg } from "../share/qr.js";
-import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
 import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
@@ -81,9 +80,9 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const [terminationMode, setTerminationMode] = useState(() => experimentDefaults.terminationMode === "condition" ? "condition" : "time");
   const [terminationCondition, setTerminationCondition] = useState(() => experimentDefaults.terminationCondition || null);
   const [replications, setReplications] = useState(() => intDefault(experimentDefaults.replications, 1));
-  const { isCompact } = useViewport();
   const [runLabel, setRunLabel] = useState("");
   const [executeSection, setExecuteSection] = useState("run");
+  const [hideRunReadiness, setHideRunReadiness] = useState(false);
   const [showRunSetup, setShowRunSetup] = useState(false);
   const [diagnosticsPanelOpen, setDiagnosticsPanelOpen] = useState(false);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
@@ -109,11 +108,6 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const [comparisonIdxA, setComparisonIdxA] = useState(0);
   const [comparisonIdxB, setComparisonIdxB] = useState(null);
   const [comparisonResult, setComparisonResult] = useState(null);
-  // F28.2: Run comparison
-  const [runCompareIdA, setRunCompareIdA] = useState("");
-  const [runCompareIdB, setRunCompareIdB] = useState("");
-  const [runCompareResult, setRunCompareResult] = useState(null);
-
   // F28.1: Saved experiment definitions
   const [experiments, setExperiments] = useState([]);
   const [experimentsStatus, setExperimentsStatus] = useState("idle");
@@ -135,6 +129,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const liveHistThrottleRef = useRef(0);
   const runnerRef = useRef(null);
   const saveInProgressRef = useRef(false);
+  const logRef = useRef([]);
   const [animationEnabled, setAnimationEnabled] = useState(true);
   const [collectTimeSeries, setCollectTimeSeries] = useState(true);
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
@@ -168,6 +163,14 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       modeLabel,
     ];
   }, [warmupPeriod, replications, seed, terminationMode, maxSimTime]);
+  const effectiveRunLabel = useMemo(
+    () => runLabel.trim() || makeDefaultRunLabel(model?.name),
+    [runLabel, model?.name]
+  );
+
+  useEffect(() => {
+    logRef.current = log;
+  }, [log]);
   const persistExperimentDefaults = useCallback((patch) => {
     if (!onExperimentDefaultsChange) return;
     onExperimentDefaultsChange({
@@ -212,6 +215,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
 
   const initEngine = useCallback(() => {
     if (hasErrors) return;
+    setHideRunReadiness(true);
     setExecuteSection("run");
     runSeedRef.current = seed;
     setResolvedSeed(seed);
@@ -226,7 +230,9 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       collectTimeSeries
     );
     setCurrentSnap(engineRef.current.getSnap());
-    setLog([{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }]);
+    const initLog = [{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }];
+    logRef.current = initLog;
+    setLog(initLog);
     setMode("stepping");
     setSaveStatus(null);
     setPhaseCTruncated(false);
@@ -250,10 +256,14 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
 
   const doStep = useCallback(() => {
     if (!engineRef.current) return;
+    setHideRunReadiness(true);
     setExecuteSection("run");
     const r = engineRef.current.step();
+    const cycleLog = r.cycleLog || [];
+    const nextLog = [...logRef.current, ...cycleLog];
     setCurrentSnap(r.snap);
-    setLog(prev => [...prev, ...(r.cycleLog || [])]);
+    logRef.current = nextLog;
+    setLog(nextLog);
     if (r.phaseCTruncated) setPhaseCTruncated(true);
 
     if (!r.done && engineRef.current) {
@@ -269,6 +279,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       setLiveWaitDist(null);
       stopAuto();
       const summary = engineRef.current.getSummary();
+      const finalLog = nextLog;
       const fullResult = {
         snap: r.snap,
         summary: {
@@ -282,10 +293,11 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         timeSeries:    engineRef.current.getTimeSeries?.(),
         waitDist:      engineRef.current.getWaitDist?.(),
         entitySummary: engineRef.current.getEntitySummary?.(),
+        log:           finalLog,
       };
       setResults(fullResult);
       onResultsReady?.(fullResult);
-      onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log });
+      onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
       if (modelId) {
         setSaveStatus({ state: 'saving', message: 'Saving results...' });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
@@ -297,7 +309,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           terminationMode,
           terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
         }, stepSeed);
-        const config = { seed: stepSeed, runLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null, runRecord, versionId: currentVersionId || null };
+        const config = { seed: stepSeed, runLabel: effectiveRunLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null, runRecord, versionId: currentVersionId || null };
         const save = userId ? saveSimulationRun(modelId, userId, fullResult, config) : saveLocalRun(modelId, fullResult, config);
         save
           .then((runId) => {
@@ -315,7 +327,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           });
       }
     }
-  }, [userId, modelId, model, runLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved, onResultsReady]);
+  }, [userId, modelId, model, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved, onResultsReady]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -367,6 +379,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       setModelCheckerOpen(true);
     }
 
+    setHideRunReadiness(true);
     setExecuteSection("run");
 
     const runSeed = seed;
@@ -405,7 +418,9 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       setCurrentSnap(null);
       setResults(null);
       onResultsReady?.(null);
-      setLog([{ phase: "INIT", time: 0, message: `Replication batch started  (N=${replications}, base seed: ${runSeed})` }]);
+    const batchInitLog = [{ phase: "INIT", time: 0, message: `Replication batch started  (N=${replications}, base seed: ${runSeed})` }];
+    logRef.current = batchInitLog;
+    setLog(batchInitLog);
       setSaveStatus(null);
       setPhaseCTruncated(false);
       setBatchStatus("running");
@@ -430,14 +445,18 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           setReplicationResults(ordered);
           setAggregateStats(nextStats);
           setCurrentSnap(payload.result?.snap || null);
-          setLog(prev => [
-            ...prev,
-            {
-              phase: "REP",
-              time: payload.result?.finalTime || 0,
-              message: `Replication ${payload.replicationIndex + 1}/${replications} complete  (seed: ${payload.seed})`,
-            },
-          ]);
+          setLog(prev => {
+            const next = [
+              ...prev,
+              {
+                phase: "REP",
+                time: payload.result?.finalTime || 0,
+                message: `Replication ${payload.replicationIndex + 1}/${replications} complete  (seed: ${payload.seed})`,
+              },
+            ];
+            logRef.current = next;
+            return next;
+          });
           if (payload.result?.phaseCTruncated || payload.result?.summary?.phaseCTruncated) setPhaseCTruncated(true);
         },
         onComplete: async payloads => {
@@ -450,7 +469,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
             setBatchStatus("complete");
             setResults(batchResult);
             onResultsReady?.(batchResult);
-            onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log });
+            onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log: logRef.current });
             setAggregateStats(stats);
             setSaveStatus({ state: 'saving', message: 'Saving replication batch...' });
 
@@ -463,7 +482,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
                 terminationCondition: stopConditionForRun,
               }, runSeed);
               const batchConfig = {
-                seed: runSeed, runLabel, replications, warmupPeriod, maxTime: maxTimeForRun, batchId,
+                seed: runSeed, runLabel: effectiveRunLabel, replications, warmupPeriod, maxTime: maxTimeForRun, batchId,
                 aggregateStats: stats,
                 replicationResults: ordered.map(payload => ({
                   replicationIndex: payload.replicationIndex, seed: payload.seed,
@@ -522,7 +541,9 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     onResultsReady?.(null);
     setSaveStatus(null);
     setPhaseCTruncated(false);
-    setLog([{ phase: "INIT", time: 0, message: `Run started  (seed: ${runSeed})` }]);
+    const runInitLog = [{ phase: "INIT", time: 0, message: `Run started  (seed: ${runSeed})` }];
+    logRef.current = runInitLog;
+    setLog(runInitLog);
     setMode("running");
 
     const engine = buildEngine(
@@ -539,6 +560,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     setCurrentSnap(result.snap);
     setResults(result);
     onResultsReady?.(result);
+    logRef.current = result.log;
     setLog(result.log);
     onRunComplete?.({ results: result, replicationResults: [], warmupDetection: null, log: result.log });
     setMode("done");
@@ -556,7 +578,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         terminationMode,
         terminationCondition: stopConditionForRun,
       }, runSeed);
-      const config = { seed: runSeed, runLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun, runRecord: singleRunRecord, versionId: currentVersionId || null };
+      const config = { seed: runSeed, runLabel: effectiveRunLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun, runRecord: singleRunRecord, versionId: currentVersionId || null };
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
       let runId;
       try {
@@ -586,7 +608,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     } finally {
       saveInProgressRef.current = false;
     }
-  }, [model, userId, modelId, seed, runLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, stopAuto, onRunSaved, onResultsReady]);
+  }, [model, userId, modelId, seed, effectiveRunLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, stopAuto, onRunSaved, onResultsReady]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -617,10 +639,15 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     if (autoRunning) {
       stopAuto();
     } else {
+      setHideRunReadiness(true);
       if (mode === "idle") initEngine();
       setAutoRunning(true);
     }
   };
+
+  useEffect(() => {
+    setHideRunReadiness(false);
+  }, [modelId, currentVersionId]);
 
   useEffect(() => {
     if (!autoRunning) return;
@@ -740,13 +767,13 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const exportConfig = useMemo(() => ({
     modelId,
     seed: runSeedRef.current,
-    runLabel: runLabel.trim() || null,
+    runLabel: effectiveRunLabel,
     replications,
     warmupPeriod,
     maxSimTime: terminationMode === "time" ? maxSimTime : null,
     terminationMode,
     terminationCondition: terminationMode === "condition" ? terminationCondition : null,
-  }), [modelId, runLabel, replications, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
+  }), [modelId, effectiveRunLabel, replications, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
   const exportPartial = partialBatchStatus && replicationResults.length > 0;
   const resultFilenameBase = `des-studio-results-${slugifyResultName(model.name)}${exportPartial ? "-partial" : ""}-${timestampForFilename()}`;
   const comparisonRuns = useMemo(() => {
@@ -828,7 +855,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     const rj = rec?.results_json || {};
     return {
       runId: rec?.id || runId || 'unknown',
-      runLabel: rec?.run_label || runLabel || `${model.name || 'Model'} — ${new Date().toLocaleDateString()}`,
+      runLabel: rec?.run_label || effectiveRunLabel,
       engineVersion: rec?.engine_version || rj._engine_version || '1.0',
       seed: rec?.seed ?? rj._base_seed ?? seed ?? 'unknown',
       prnAlgorithm: 'mulberry32',
@@ -866,7 +893,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     } finally {
       setReportGenerating(false);
     }
-  }, [results, latestRunId, model, exportConfig, runLabel, seed, savedRunHistory]);
+  }, [results, latestRunId, model, exportConfig, effectiveRunLabel, seed, savedRunHistory]);
 
   const loadShareLinks = useCallback(async () => {
     if (!modelId) return;
@@ -1027,8 +1054,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   }, [qrToken, baseUrl]);
 
   return (
-    <div style={{ display: "flex", flexDirection: isCompact ? "column" : "row", alignItems: "stretch", gap: 14 }}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, flex: 1, minWidth: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[
           { id: "run", label: "Run" },
@@ -1913,71 +1939,73 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
 
       {executeSection === "run" && (
         <>
-      <div
-        role={hasErrors ? "alert" : "status"}
-        style={{
-          background: C.panel,
-          border: `1px solid ${readinessBorder}`,
-          borderRadius: 8,
-          padding: 12,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-            <span
-              style={{
-                background: readinessTagBg,
-                border: `1px solid ${readinessBorder}`,
-                borderRadius: 999,
-                color: readinessTagColor,
-                fontFamily: FONT,
-                fontSize: 11,
-                fontWeight: 700,
-                padding: "5px 10px",
-              }}
-            >
-              {readinessTitle}
-            </span>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>
-                RUN READINESS
-              </div>
-              <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
-                {readinessSummary}
-              </div>
-            </div>
-          </div>
-          {runLabel.trim() && <Tag label={runLabel.trim()} color={C.accent} />}
-        </div>
-        {readinessIssues.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {readinessIssues.slice(0, 4).map((issue, index) => (
-              <div
-                key={`${issue.code}-${index}`}
+      {!hideRunReadiness && (
+        <div
+          role={hasErrors ? "alert" : "status"}
+          style={{
+            background: C.panel,
+            border: `1px solid ${readinessBorder}`,
+            borderRadius: 8,
+            padding: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <span
                 style={{
-                  background: hasErrors ? C.errorBg : C.warmup,
-                  border: `1px solid ${hasErrors ? C.danger : C.amber}55`,
-                  borderRadius: 6,
-                  color: hasErrors ? C.error : C.warnBg,
+                  background: readinessTagBg,
+                  border: `1px solid ${readinessBorder}`,
+                  borderRadius: 999,
+                  color: readinessTagColor,
                   fontFamily: FONT,
                   fontSize: 11,
-                  padding: "8px 10px",
+                  fontWeight: 700,
+                  padding: "5px 10px",
                 }}
               >
-                [{issue.code}] {issue.message}
+                {readinessTitle}
+              </span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>
+                  RUN READINESS
+                </div>
+                <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
+                  {readinessSummary}
+                </div>
               </div>
-            ))}
-            {readinessIssues.length > 4 && (
-              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
-                {readinessIssues.length - 4} more item{readinessIssues.length - 4 === 1 ? "" : "s"} in Model Health.
-              </div>
-            )}
+            </div>
+            {runLabel.trim() && <Tag label={runLabel.trim()} color={C.accent} />}
           </div>
-        )}
-      </div>
+          {readinessIssues.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {readinessIssues.slice(0, 4).map((issue, index) => (
+                <div
+                  key={`${issue.code}-${index}`}
+                  style={{
+                    background: hasErrors ? C.errorBg : C.warmup,
+                    border: `1px solid ${hasErrors ? C.danger : C.amber}55`,
+                    borderRadius: 6,
+                    color: hasErrors ? C.error : C.warnBg,
+                    fontFamily: FONT,
+                    fontSize: 11,
+                    padding: "8px 10px",
+                  }}
+                >
+                  [{issue.code}] {issue.message}
+                </div>
+              ))}
+              {readinessIssues.length > 4 && (
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+                  {readinessIssues.length - 4} more item{readinessIssues.length - 4 === 1 ? "" : "s"} in Model Health.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Model Checker panel */}
       {modelCheckerOpen && modelCheckerIssues !== null && (
@@ -2283,113 +2311,6 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         </div>
       )}
 
-      {/* F28.2: Run comparison panel — visible in run section when run history is available */}
-      {executeSection === "run" && savedRunHistory.length >= 2 && (
-        <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-          <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE RUNS</span>
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 140 }}>
-              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Baseline run</span>
-              <select
-                aria-label="Baseline run"
-                value={runCompareIdA}
-                onChange={e => { setRunCompareIdA(e.target.value); setRunCompareResult(null); }}
-                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
-              >
-                <option value="">Select run…</option>
-                {savedRunHistory.map(row => (
-                  <option key={row.id} value={row.id}>{row.run_label || `Run ${new Date(row.ran_at || Date.now()).toLocaleString()}`}</option>
-                ))}
-              </select>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 140 }}>
-              <span style={{ fontSize: 10, color: C.label, fontFamily: FONT }}>Variant run</span>
-              <select
-                aria-label="Variant run"
-                value={runCompareIdB}
-                onChange={e => { setRunCompareIdB(e.target.value); setRunCompareResult(null); }}
-                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
-              >
-                <option value="">Select run…</option>
-                {savedRunHistory.filter(row => row.id !== runCompareIdA).map(row => (
-                  <option key={row.id} value={row.id}>{row.run_label || `Run ${new Date(row.ran_at || Date.now()).toLocaleString()}`}</option>
-                ))}
-              </select>
-            </div>
-            <Btn small variant="primary" disabled={!runCompareIdA || !runCompareIdB} onClick={() => {
-              const rowA = savedRunHistory.find(r => r.id === runCompareIdA);
-              const rowB = savedRunHistory.find(r => r.id === runCompareIdB);
-              const repsA = rowA?.results_json?.replicationResults || [];
-              const repsB = rowB?.results_json?.replicationResults || [];
-              if (repsA.length < 2 || repsB.length < 2) {
-                setRunCompareResult({ error: `Both runs must have at least 2 replications. Baseline: ${repsA.length}, Variant: ${repsB.length}.` });
-                return;
-              }
-              const labelA = rowA?.run_label || `Run A`;
-              const labelB = rowB?.run_label || `Run B`;
-              const result = compareScenarios(repsA, repsB, CI_METRICS, { labelA, labelB });
-              const meansA = {}, meansB = {};
-              for (const m of CI_METRICS) {
-                const parts = m.split(".");
-                const vA = repsA.map(r => { let v = r?.result || r; for (const p of parts) v = v?.[p]; return v; }).filter(Number.isFinite);
-                const vB = repsB.map(r => { let v = r?.result || r; for (const p of parts) v = v?.[p]; return v; }).filter(Number.isFinite);
-                meansA[m] = vA.length ? vA.reduce((s, v) => s + v, 0) / vA.length : null;
-                meansB[m] = vB.length ? vB.reduce((s, v) => s + v, 0) / vB.length : null;
-              }
-              setRunCompareResult({ ...result, meansA, meansB });
-            }}>
-              Compare
-            </Btn>
-          </div>
-
-          {runCompareResult?.error && (
-            <div style={{ fontSize: 12, color: C.red, fontFamily: FONT }}>{runCompareResult.error}</div>
-          )}
-          {runCompareResult && !runCompareResult.error && (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
-                <thead>
-                  <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                    <th scope="col" style={{ padding: "6px 8px" }}>KPI</th>
-                    <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{runCompareResult.labels?.a}</th>
-                    <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{runCompareResult.labels?.b}</th>
-                    <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
-                    <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
-                    <th scope="col" style={{ padding: "6px 8px" }}>Significant?</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {runCompareResult.comparisons?.map((c, i) => {
-                    const mA = runCompareResult.meansA?.[c.metric];
-                    const mB = runCompareResult.meansB?.[c.metric];
-                    return (
-                      <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                        <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{mA != null ? fmt(mA) : "—"}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{mB != null ? fmt(mB) : "—"}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
-                          {c.meanDiff != null ? (c.meanDiff > 0 ? "+" : "") + fmt(c.meanDiff) : "—"}
-                        </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>
-                          {c.lower != null && c.upper != null ? `[${fmt(c.lower)}, ${fmt(c.upper)}]` : "—"}
-                        </td>
-                        <td style={{ padding: "6px 8px" }}>
-                          {c.significant95 ? (
-                            <span style={{ color: c.significant99 ? C.green : C.amber, fontWeight: 700 }}>
-                              {c.significant99 ? "Yes (99%)" : "Yes (95%)"}
-                            </span>
-                          ) : <span style={{ color: C.muted }}>No</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
       {(() => {
         const hasDerivableGraph = !!(model.queues?.length || model.bEvents?.length || model.cEvents?.length);
         if (hasDerivableGraph) {
@@ -2425,21 +2346,22 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         }
         return <VisualView snap={currentSnap} model={model} summary={results?.summary} />;
       })()}
-
-
         </>
       )}
-      </div>
-
       {diagnosticsPanelOpen && (
         <div style={{
-          width: 380, minWidth: 320, flexShrink: 0,
+          width: 380, minWidth: 320, maxWidth: 420, flexShrink: 0,
           background: C.panel,
           border: `1px solid ${C.border}`,
           borderRadius: 8,
           display: "flex", flexDirection: "column",
           maxHeight: "calc(100vh - 120px)",
           overflowY: "auto",
+          position: "fixed",
+          right: 16,
+          top: 96,
+          zIndex: 60,
+          boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
         }}>
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",

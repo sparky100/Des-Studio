@@ -493,6 +493,35 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       );
     });
 
+    it('persists chart and log payloads for saved run results by default', async () => {
+      supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-3b' }, error: null });
+
+      await saveSimulationRun('m1', 'u1', {
+        summary: { total: 3, served: 2, reneged: 1, avgWait: 4, avgSvc: 2, avgSojourn: 6 },
+        snap: { clock: 25 },
+        timeSeries: [
+          { t: 0, byQueue: { Main: { waiting: 0, total: 0 } }, byType: { Customer: { waiting: 0, idle: 0, busy: 0, total: 0 } } },
+          { t: 25, byQueue: { Main: { waiting: 2, total: 3 } }, byType: { Customer: { waiting: 2, idle: 0, busy: 0, total: 3 } } },
+        ],
+        waitDist: { Main: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4, values: [2, 4] } },
+        log: [{ phase: 'END', time: 25, message: 'Run finished' }],
+        entitySummary: [{ type: 'Customer', status: 'done', count: 2 }],
+      });
+
+      expect(supabase.from('simulation_runs').insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          results_json: expect.objectContaining({
+            timeSeries: expect.any(Array),
+            waitDist: expect.objectContaining({
+              Main: expect.objectContaining({ n: 2, values: [2, 4] }),
+            }),
+            log: [{ phase: 'END', time: 25, message: 'Run finished' }],
+            entitySummary: [{ type: 'Customer', status: 'done', count: 2 }],
+          }),
+        })
+      );
+    });
+
     it('persists Phase C truncation metadata in results_json', async () => {
       supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-4' }, error: null });
 

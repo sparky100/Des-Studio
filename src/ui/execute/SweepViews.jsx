@@ -671,8 +671,11 @@ export function EntitySummaryTable({ entitySummary, meanWait }) {
     _wait: computeWait(e),
     _svc: computeSvc(e),
     _sojourn: computeSojourn(e),
-    _attrStr: Object.entries(e.attrs || {}).map(([k, v]) => `${k}=${v}`).join(", "),
   })), [customers]);
+
+  const attrColumns = useMemo(() => (
+    [...new Set(rows.flatMap(row => Object.keys(row.attrs || {})))].sort((a, b) => a.localeCompare(b))
+  ), [rows]);
 
   const filtered = useMemo(() => rows.filter(r => {
     if (typeFilter !== "all" && r.type !== typeFilter) return false;
@@ -683,8 +686,8 @@ export function EntitySummaryTable({ entitySummary, meanWait }) {
   const sorted = useMemo(() => {
     const key = sortKey;
     return [...filtered].sort((a, b) => {
-      const av = key.startsWith("_") ? a[key] : (a[key] ?? 0);
-      const bv = key.startsWith("_") ? b[key] : (b[key] ?? 0);
+      const av = key.startsWith("attr:") ? a.attrs?.[key.slice(5)] : key.startsWith("_") ? a[key] : (a[key] ?? 0);
+      const bv = key.startsWith("attr:") ? b.attrs?.[key.slice(5)] : key.startsWith("_") ? b[key] : (b[key] ?? 0);
       if (av == null && bv == null) return 0;
       if (av == null) return sortAsc ? 1 : -1;
       if (bv == null) return sortAsc ? -1 : 1;
@@ -703,6 +706,13 @@ export function EntitySummaryTable({ entitySummary, meanWait }) {
     fontWeight: sortKey === col ? 700 : 400, fontSize: 10, whiteSpace: "nowrap",
     background: "transparent", border: "none", textAlign: "left", fontFamily: FONT,
   });
+
+  const formatAttrValue = value => {
+    if (value == null || value === "") return "—";
+    if (typeof value === "boolean") return value ? "True" : "False";
+    if (typeof value === "number") return Number.isFinite(value) ? value.toString() : "—";
+    return String(value);
+  };
 
   if (!customers.length) return (
     <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, padding: 12, fontStyle: "italic" }}>
@@ -748,7 +758,7 @@ export function EntitySummaryTable({ entitySummary, meanWait }) {
               {[
                 ["id", "ID"], ["type", "Type"], ["status", "Outcome"],
                 ["arrivalTime", "Arrived"], ["_wait", "Wait"], ["_svc", "Service"],
-                ["_sojourn", "Sojourn"], ["_attrStr", "Attributes"],
+                ["_sojourn", "Sojourn"],
               ].map(([col, label]) => (
                 <th key={col} scope="col">
                   <button style={thStyle(col)} onClick={() => setSort(col)}>
@@ -756,6 +766,16 @@ export function EntitySummaryTable({ entitySummary, meanWait }) {
                   </button>
                 </th>
               ))}
+              {attrColumns.map(attrName => {
+                const col = `attr:${attrName}`;
+                return (
+                  <th key={col} scope="col">
+                    <button style={thStyle(col)} onClick={() => setSort(col)}>
+                      {attrName} {sortKey === col ? (sortAsc ? "▲" : "▼") : ""}
+                    </button>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -779,7 +799,11 @@ export function EntitySummaryTable({ entitySummary, meanWait }) {
                   </td>
                   <td style={{ padding: "4px 8px" }}>{fmtT(e._svc)}</td>
                   <td style={{ padding: "4px 8px" }}>{fmtT(e._sojourn)}</td>
-                  <td style={{ padding: "4px 8px", color: C.muted, fontSize: 10 }}>{e._attrStr || "—"}</td>
+                  {attrColumns.map(attrName => (
+                    <td key={attrName} style={{ padding: "4px 8px", color: C.muted, fontSize: 10, whiteSpace: "nowrap" }}>
+                      {formatAttrValue(e.attrs?.[attrName])}
+                    </td>
+                  ))}
                 </tr>
               );
             })}
