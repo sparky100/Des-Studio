@@ -96,7 +96,7 @@ export const VisualView = ({ snap, model, summary }) => {
             {parseFloat(snap.clock).toFixed(0)}
           </div>
           {wallClock && (
-            <div style={{ marginTop: 10, fontSize: 11, color: C.accent, fontFamily: FONT, lineHeight: 1.4, maxWidth: 180 }}>
+            <div style={{ marginTop: 10, fontSize: 13, color: C.accent, fontFamily: FONT, fontWeight: 600, lineHeight: 1.4, maxWidth: 180 }}>
               {wallClock}
             </div>
           )}
