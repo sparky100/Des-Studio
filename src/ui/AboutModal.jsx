@@ -113,7 +113,7 @@ export function AboutModal({ isOpen, onClose }) {
           {/* Details grid */}
           <div style={{ display: "flex", flexDirection: "column", gap: SPACE.sm }}>
             <Row label="Version"   value={`v${APP_VERSION || "—"}`} />
-            <Row label="Copyright" value="© 2025 SimModlr. All rights reserved." />
+            <Row label="Copyright" value="© 2026 SimModlr. All rights reserved." />
             <Row
               label="Contact"
               value={
