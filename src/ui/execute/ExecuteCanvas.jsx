@@ -545,9 +545,11 @@ export function ExecuteCanvas({
           const throughputPerHour = snap.clock > 0
             ? (snap.served / snap.clock) * 60
             : null;
+          // Per-sink count from eventCounts (B-Event fire count for COMPLETE/RENEGE)
+          const sinkFireCount = node.refId ? (snap.eventCounts?.[node.refId] ?? 0) : 0;
           liveData = {
-            served: snap.served ?? 0,
-            reneged: snap.reneged ?? 0,
+            served: sinkFireCount,
+            reneged: 0,
             throughputPerHour,
             meanSojourn,
           };
