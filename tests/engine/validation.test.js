@@ -539,4 +539,128 @@ describe("V5 — EntityAttr skips dist validation", () => {
     const { errors } = validateModel(model);
     expect(errors.filter(e => e.code === "V5")).toHaveLength(0);
   });
+
+  it("emits V30 error when probabilisticRouting has null queue without COMPLETE() or RENEGE()", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" }],
+      bEvents: [
+        {
+          id: "b1",
+          name: "Arrival",
+          effect: ["ARRIVE(Customer)"],
+          schedules: [{ dist: "Exponential", distParams: { mean: "5" } }],
+        },
+        {
+          id: "b_exit",
+          name: "Exit",
+          effect: ["RELEASE(Server)"],
+          schedules: [],
+          probabilisticRouting: [{ queueName: null, probability: 1 }],
+        },
+      ],
+      cEvents: [{
+        id: "c1",
+        name: "Start Service",
+        condition: "queue(Queue1).length > 0",
+        effect: "ASSIGN(Queue1, Server)",
+        cSchedules: [{ eventId: "b_exit", dist: "Fixed", distParams: { value: "10" } }],
+      }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V30", tab: "bevents" }),
+    ]));
+  });
+
+  it("does not emit V30 when probabilisticRouting has null queue AND COMPLETE() effect", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" }],
+      bEvents: [
+        {
+          id: "b1",
+          name: "Arrival",
+          effect: ["ARRIVE(Customer)"],
+          schedules: [{ dist: "Exponential", distParams: { mean: "5" } }],
+        },
+        {
+          id: "b_exit",
+          name: "Exit",
+          effect: ["RELEASE(Server)", "COMPLETE()"],
+          schedules: [],
+          probabilisticRouting: [{ queueName: null, probability: 1 }],
+        },
+      ],
+      cEvents: [{
+        id: "c1",
+        name: "Start Service",
+        condition: "queue(Queue1).length > 0",
+        effect: "ASSIGN(Queue1, Server)",
+        cSchedules: [{ eventId: "b_exit", dist: "Fixed", distParams: { value: "10" } }],
+      }],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V30")).toHaveLength(0);
+  });
+
+  it("does not emit V30 when probabilisticRouting has null queue AND RENEGE() effect", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" }],
+      bEvents: [
+        {
+          id: "b1",
+          name: "Arrival",
+          effect: ["ARRIVE(Customer)"],
+          schedules: [{ dist: "Exponential", distParams: { mean: "5" } }],
+        },
+        {
+          id: "b_exit",
+          name: "Exit",
+          effect: ["RENEGE(ctx)"],
+          schedules: [],
+          probabilisticRouting: [{ queueName: null, probability: 1 }],
+        },
+      ],
+      cEvents: [],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V30")).toHaveLength(0);
+  });
+
+  it("does not emit V30 when probabilisticRouting all point to defined queues", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [
+        { id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" },
+        { id: "q2", name: "Queue2", discipline: "FIFO", customerType: "Customer" },
+      ],
+      bEvents: [
+        {
+          id: "b1",
+          name: "Arrival",
+          effect: ["ARRIVE(Customer)"],
+          schedules: [{ dist: "Exponential", distParams: { mean: "5" } }],
+        },
+        {
+          id: "b_route",
+          name: "Route",
+          effect: ["RELEASE(Server)"],
+          schedules: [],
+          probabilisticRouting: [
+            { queueName: "Queue1", probability: 0.5 },
+            { queueName: "Queue2", probability: 0.5 },
+          ],
+        },
+      ],
+      cEvents: [],
+    };
+    const { errors } = validateModel(model);
+    expect(errors.filter(e => e.code === "V30")).toHaveLength(0);
+  });
 });

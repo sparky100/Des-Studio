@@ -512,6 +512,7 @@ Note: V7 does not exist — the numbering jumps from V6 to V8 in both docs and c
 | V24 | `loopConfig.maxLoopCount` must be integer ≥ 1 |
 | V26 | Container `id` must be unique and non-empty; `capacity` > 0; `initialLevel` ≥ 0 and ≤ capacity |
 | V27 | FILL/DRAIN must reference a declared container ID |
+| V30 | B-Event with probabilisticRouting to null (exit) must have COMPLETE() or RENEGE() effect |
 
 ### Warnings (run proceeds, banner shown)
 

@@ -31,7 +31,7 @@ The LLM must produce a single JSON object that passes all validation rules in §
 After generating the model JSON the LLM should do **two things**:
 
 1. **Save the JSON to a file** — e.g. `coffee-shop.json` — so the user has a portable copy they can version-control, edit, or re-encode later.
-2. **Produce a magic-link import URL** — DES Studio decodes the URL and shows a pre-flight preview card directly in the app; the user can save it to their library in one click.
+2. **Ask the user if they want to Produce a magic-link import URL** — DES Studio decodes the URL and shows a pre-flight preview card directly in the app; the user can save it to their library in one click.
 
 **App URL:** `https://des.simmodlr.app`
 
@@ -385,6 +385,16 @@ Predicate object fields:
 
 - Probabilities must sum to exactly `1.0` (±0.001).
 - `queueName` must reference a valid queue name, or `null` to exit the system.
+- **When `queueName` is `null` (exit), the B-Event's `effect` array MUST include either `COMPLETE()` or `RENEGE(ctx)`** to mark the entity lifecycle as complete. Without this, entities will exit but not be counted as served (validation error V30).
+- **Correct pattern for exit:**
+  ```json
+  {
+    "id": "b_departure_done",
+    "name": "Departure Complete",
+    "effect": ["RELEASE(Server)", "COMPLETE()"],
+    "probabilisticRouting": [{ "queueName": null, "probability": 1 }]
+  }
+  ```
 
 ### Optional: Balking
 

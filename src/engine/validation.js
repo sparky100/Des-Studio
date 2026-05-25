@@ -438,13 +438,22 @@ export function validateModel(model) {
     }
 
     // Each branch must reference a valid queue, or null/"" meaning "exit system"
+    let hasNullRouting = false;
     b.probabilisticRouting.forEach((branch, idx) => {
       const qName = branch.queueName == null ? null : String(branch.queueName).trim();
-      if (qName === null || qName === '') return; // null = exit system — valid
-      if (!queueNamesLower.has(qName.toLowerCase())) {
+      if (qName === null || qName === '') {
+        hasNullRouting = true; // null = exit system
+      } else if (!queueNamesLower.has(qName.toLowerCase())) {
         err('V18', `${bLabel} probabilisticRouting entry ${idx + 1} references unknown queue '${qName}'.`, 'bevents');
       }
     });
+
+    // V30: If probabilisticRouting has null queue, effect must include COMPLETE() or RENEGE()
+    if (hasNullRouting && !/COMPLETE\s*\(|RENEGE\s*\(/i.test(effectStr)) {
+      err('V30',
+        `${bLabel} routes entities to exit (null queue) but has no COMPLETE() or RENEGE() effect — entities will not be counted as served. Add COMPLETE() to the effect list.`,
+        'bevents');
+    }
   });
 
   // ── V20: Queue capacity must be integer >= 1 when set (F11.1) ───────────────
