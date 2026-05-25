@@ -1,13 +1,13 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-23 | Reflects: Sprint 70 — Help Assistant.*
+*Last updated: 2026-05-25 | Reflects: Sprint 72 — Performance Optimisation planning.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Current sprint plan: `docs/reviews/sprint-70-plan.md`
-- Latest closure report: `docs/reviews/sprint-70-closure.md`
-- Capability guide: `docs/sprint-70-help-assistant-guide.md`
+- Current sprint plan: `docs/reviews/sprint-72-performance-optimisation-plan.md`
+- Latest closure report: `docs/reviews/sprint-72-performance-optimisation-closure.md`
+- Capability guide: `docs/performance-envelope.md`
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
@@ -1471,57 +1471,38 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 
 ---
 
-## 21. Current Sprint — Sprint 70 complete
+## 21. Current Sprint — Sprint 72 planned
 
-**Goal:** Help Assistant — in-app contextual help panel (`src/ui/HelpAssistant.jsx`) accessible from any screen via the `?` button; suggested questions based on current screen; `buildHelpAssistantSystemPrompt` prompt builder in `src/llm/prompts.js`; documentation accuracy fixes across all four documentation files.
+**Goal:** Performance Optimisation — reduce execution cost for models with many C-events by removing legacy runtime condition-string execution, migrating old models to canonical predicate JSON, and optimising the Phase C hot path through compilation, caching, and dependency-aware scans.
 
 **Source reviews:**
-- `docs/reviews/sprint-70-plan.md`
+- `docs/reviews/sprint-72-performance-optimisation-plan.md`
+- `docs/performance-envelope.md`
 
-**Status:** ✅ Complete | **Completed:** 2026-05-23
+**Status:** 🔄 Planned | **Started:** 2026-05-25
 
-**Delivered:**
-- F30.0 — Fixed ARRIVE queue-name mismatch in 9 templates; fixed ASSIGN entity-type-vs-queue-name mismatch in 6 templates
-- F30.1 — `domain` and `templateMeta` fields added to all 14 templates
-- F30.2 — Healthcare pack: Ward Bed Admission added; Outpatient Clinic ARRIVE fixed
-- F30.3 — Service Systems pack: Bank Branch + Retail Checkout added; Call Center / Fast Food / Airport ASSIGN fixed
-- F30.4 — Manufacturing/Logistics pack: Port Berth Operations added; Factory / Construction / Warehouse ASSIGN confirmed correct
-- F30.5 — Template gallery redesign: domain filter strip, full-text search, richer cards
-- F30.6 — In-app Patterns Guide panel (6 patterns, accessible from gallery toolbar)
-- F30.7 — `docs/patterns/` with 6 Markdown pattern reference files
-
-**Exit gate met:**
-- 1000/1000 Vitest tests passing
-- All 14 templates: `served > 0` headless validation
-- Build clean (`npx vite build` no errors)
+**Planned deliverables:**
+- 72-1 — Baseline profiling refresh with Sprint 72 benchmark scenarios
+- 72-2 — File-by-file audit of legacy condition producers/consumers
+- 72-3 — Deterministic load-time migration from supported legacy condition strings to predicate JSON
+- 72-4 — Removal of legacy runtime string-condition execution from the engine hot path
+- 72-5 — Precompiled predicate evaluators and dependency metadata
+- 72-6 — Cached C-event priority ordering and reduced helper churn in Phase C
+- 72-7 — Dirty-dependency filtering for candidate C-event scans
+- 72-8 — Focused correctness, migration, and benchmark regression coverage
+- 72-9 — Documentation, benchmark, and architecture tracking updates
 
 **Implementation guardrails:**
-- Fix only assertion drift — no engine rewrites unless a test reveals a genuine engine bug.
-- All new tests must use fixed seeds; no `Math.random()` in any test.
-- Benchmark scripts must exit 0 independently of the Vitest suite (they are node scripts, not Vitest tests).
-- Performance envelope document records baselines; do not gate CI on throughput numbers (environment variance too high).
-- No new runtime dependencies.
+- Preserve the Three-Phase restart rule exactly; do not “optimise” by changing semantics.
+- Remove legacy runtime execution only after load-time migration is in place for existing saved models.
+- Benchmarks must record before/after evidence; do not claim performance improvement without measured data.
+- Keep the engine safe: no `eval`, `new Function`, or dynamic execution helpers.
+- Prefer checkpointed, resumable changes over one-shot refactors.
 
-| Feature | Status | Notes |
-|---|---|---|
-| F29.0 — Fix 18 pre-existing test failures | ✅ Complete | All 18 were assertion drift (UI restructure, Sprint 28 tab rename, V8 validation policy, proxy contract). 947/947 passing. |
-| F29.1 — M/M/c analytical benchmark + CI gate | ✅ Complete | `tests/engine/mmc_benchmark.js` exits 0 (2.66% error, Erlang-C Wq=1.7778). `replication-ci.test.js` extended with 20-rep M/M/c CI gate. |
-| F29.2 — Reproducibility contract in AGENTS.md | ✅ Complete | Reproducibility Contract section added to §9.4; 5 invariants documented; ADR-004 cross-referenced. |
-| F29.3 — Performance timing script + envelope doc | ✅ Complete | `tests/engine/perf_timing.js` added. `docs/performance-envelope.md` created with benchmarked baselines. |
-| F29.4 — Locked golden regression fixtures | ✅ Complete | `tests/benchmarks/golden.test.js` — 4 tests pin M/M/1 and M/M/c mean wait to tight analytical windows (seed=42). |
-| F29.5 — GitHub Actions CI workflow | ✅ Complete | `.github/workflows/ci.yml` — 3 jobs: Vitest suite, analytical benchmarks, production build. |
-| F29.6 — RNG cross-replication independence test | ✅ Complete | 3 tests added to `tests/engine/distributions.test.js`: distinct traces, no shared state, 10 seeds all distinct. |
-
-**Sprint 29 exit gate:**
-- 947/947 Vitest tests passing (0 failures).
-- `node tests/engine/mm1_benchmark.js` exits 0.
-- `node tests/engine/mmc_benchmark.js` exits 0.
-- `tests/benchmarks/golden.test.js` (4 tests) passing.
-- `tests/engine/distributions.test.js` independence tests (3 tests) passing.
-- `docs/performance-envelope.md` exists with baseline data.
-- `.github/workflows/ci.yml` exists and is syntactically valid.
-- AGENTS.md reproducibility contract section complete.
-- Sprint history updated to Sprint 29.
+**Sprint 72 restart rule:**
+- If work pauses after migration but before runtime removal, that is a valid checkpoint.
+- If work pauses after compiled evaluators but before dirty filtering, keep the full-scan compiled path as the safe baseline.
+- Record all benchmark deltas in `docs/performance-envelope.md` as each optimisation layer lands.
 
 ### Recently Completed
 

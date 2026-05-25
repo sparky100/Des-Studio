@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.77 | Created: 2026-04-30 | Updated: 2026-05-19 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.80 | Created: 2026-04-30 | Updated: 2026-05-25 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -123,7 +123,7 @@ flowchart LR
 | Advanced scheduling and analytics | ✅ Complete | Sprint 33: SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
 | Model versioning | ✅ Complete | Sprint 68: explicit milestone versioning, `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. |
 | Plain-English UX and Results clarity | ✅ Complete | Sprint 67 baseline plus later refinements: Results sub-tabs now group Summary, Log, Entities, History, and Explain; compare lives in Results → History; Describe/Results wording is standardized. |
-| Next roadmap shape | 🔄 In progress | Sprint 34+ roadmap to be defined. |
+| Performance optimisation | 🔄 Planned | Sprint 72 will remove legacy runtime condition evaluation, migrate old models to predicate JSON, and optimise the Phase C hot path with benchmarks and correctness gates. |
 
 ### Key Issues and Watchpoints
 
@@ -200,6 +200,7 @@ flowchart LR
 | 1.77 | 2026-05-19 | Sprint 67 planned. Added plain-English UX and Results clarity sprint plan, closure template, capability guide, AGENTS tracking, and product-spec presentation requirements. |
 | 1.78 | 2026-05-20 | Sprint 68 completed. Model versioning as explicit milestones: `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. ADR-015 created. 30 new tests. |
 | 1.79 | 2026-05-22 | Sprint 8C complete — AI Generator conversational quality redesign. Three-phase elicitation (Discovery/Confirmation/Build), no fixed question cap, 7-question ordered sequence, Phase B "Here is my understanding" format enforced. Confirmation bubble with one-click sign-off. Simulation summary card (WHO ARRIVES / HOW THEY FLOW / RESOURCES / GOALS) replacing schema diff as primary view. Proactive refinement chips. 11 new tests added (6 prompt, 3 ModelDiffPreview, 2 AiGeneratedModelPanel). User Guide §2.X and Engineering Spec §6.10 updated. |
+| 1.80 | 2026-05-25 | Sprint 72 planned. Added Performance Optimisation sprint plan and closure scaffold, updated AGENTS sprint tracking, and added roadmap/build-plan entries for predicate-only condition execution and Phase C optimisation. |
 
 ---
 
@@ -285,6 +286,7 @@ flowchart LR
 | Sprint 24 | ✅ Complete | 2026-05-12 | Simulation Correctness & SimPy-Informed Remediation. | Focused + full-suite verification | N/A | Success | Fixed Phase C warning propagation, lifecycle/context integrity, initial FEL scheduling, persistence contract, shift capacity reconciliation, and added SimPy-informed JS regression coverage. |
 | Sprint 25 | ✅ Complete | 2026-05-12 | Simulation Contract Consolidation. | 235 focused tests | N/A | Success | Finalized the V8 policy, warm-up truncation semantics, centralized queue/entity arbitration, contract regression coverage, and SimPy-informed documentation follow-through. |
 | Sprint 26 | ✅ Complete | 2026-05-12 | Resource Semantics & Waiting Behaviour. | Focused | N/A | Success | Explicit waiting/resource ownership contracts, mirrored active claims, stale-claim protection, ADR-013/014, capability guide, sample models, regression coverage for contention/routing/recirculation. |
+| Sprint 72 | 🔄 Planned | TBD | Performance Optimisation. | TBD | N/A | TBD | Remove legacy runtime condition execution, migrate models to predicate JSON, and optimise the Phase C hot path with benchmarked checkpoints. |
 | Sprint 27 | ✅ Complete | 2026-05-13 | Simulation Debugging & Explainability. | Focused | N/A | Success | Structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, Execute explainability surfaces (event log, entity inspector, canvas overlays). |
 | Sprint 28 | ✅ Complete | 2026-05-14 | Experiments & Statistical Workbench. | 947 (947) | 1.48% | Success | Saved experiment configs, CI precision display, warm-up transient diagnostics, anomalous replication flagging, run archiving/tagging/filtering. |
 | Sprint 29 | ✅ Complete | 2026-05-14 | Test Infrastructure, Benchmarks & Reproducibility. | 1000 (1000) | 1.48%/2.66% | Success | F29.0–F29.6: 18 test failures fixed, M/M/c benchmark, reproducibility contract, performance envelope, golden fixtures, GitHub Actions CI, RNG independence tests. |
@@ -1961,6 +1963,42 @@ npm run build
 | F71.4 — Enhanced admin user list | ✅ | Replaced `fetchAllUsers` with `fetchAdminUserStats` RPC. New columns: plan badge, signup date, last active (relative), model count, runs (30d), total runs. Client-side sort on all columns. Email prefix search. Row-click detail drawer with Change Plan/Role/Suspend. |
 | F71.5 — Usage tab | ✅ | New "Usage" tab in AdminPanel. KPI tiles: total users, active 7d, active 30d, total models. Usage table (sorted by runs_last_30d desc). Signups-over-time bar chart (inline SVG). |
 | F71.6 — Plan badge (user-facing) | ✅ | `PlanBadge` component in `UserSettingsPanel`. FREE (grey) / PRO (blue). `plan` prop passed from `App.jsx` via updated `fetchProfiles` (added `plan` to select). |
+
+### Sprint 72 — Performance Optimisation 🔄
+
+**Goal:** Reduce execution overhead for models with many C-events by removing the legacy runtime condition-string path, migrating old models to canonical predicate JSON, and optimising the Phase C hot path with measurable benchmarks.
+
+**Status:** 🔄 Planned | **Started:** 2026-05-25
+
+**Source documents:**
+- `docs/reviews/sprint-72-performance-optimisation-plan.md`
+- `docs/reviews/sprint-72-performance-optimisation-closure.md`
+- `docs/performance-envelope.md`
+
+**Scope guardrails:**
+- Preserve Three-Phase correctness exactly; no changes to the restart rule or one-event-at-a-time Phase C semantics.
+- Migrate existing supported legacy models before removing the runtime legacy condition evaluator.
+- Measure every optimisation step against named benchmark scenarios; no performance claims without recorded evidence.
+- No new runtime dependencies.
+
+| ID | Feature / refinement | Status | Deliverable |
+|---|---|---|---|
+| F72.1 | Benchmark refresh and baselines | 🔄 Planned | Updated benchmark fixtures and pre-optimisation baseline in `docs/performance-envelope.md`. |
+| F72.2 | Legacy-condition contract audit | 🔄 Planned | File-by-file map of remaining legacy producers/consumers and canonical predicate shape. |
+| F72.3 | Load-time migration to predicate JSON | 🔄 Planned | Deterministic migration utility for supported legacy conditions. |
+| F72.4 | Remove legacy runtime condition execution | 🔄 Planned | Engine executes predicate JSON only. |
+| F72.5 | Precompiled predicate evaluators | 🔄 Planned | Compiled evaluators and dependency metadata cached at engine build time. |
+| F72.6 | Phase C helper/order caching | 🔄 Planned | Cached C-event order and reduced helper churn inside Phase C scans. |
+| F72.7 | Dirty-dependency candidate filtering | 🔄 Planned | Candidate subset scans with safe full-scan fallback. |
+| F72.8 | Correctness and migration coverage | 🔄 Planned | Focused engine/db/ui tests plus benchmark verification. |
+| F72.9 | Documentation and architecture updates | 🔄 Planned | AGENTS, build plan, engineering spec, closure report, and measured results updated. |
+
+**Exit gate:**
+- Focused migration/correctness tests pass.
+- Named performance scenarios run successfully with before/after measurements recorded.
+- `npm run build` passes.
+- Legacy runtime condition execution path is removed.
+- Docs reflect the predicate-only runtime contract and delivered optimisation layers.
 | F71.7 — Docs and tests | ✅ | AGENTS.md updated. `.env.example` updated. 3 new test files: `tests/db/admin-user-stats.test.js`, `tests/notify-signup.test.js`, `tests/ui/admin-panel-users.test.jsx`. Existing `admin-panel.test.jsx` updated. |
 
 **Phase 2 deferred:** organisations table, org-scoped RLS, member invites, per-org usage, Stripe billing, upgrade/downgrade flow.
