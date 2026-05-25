@@ -4,6 +4,7 @@ import { C, FONT, alpha } from "./shared/tokens.js";
 import { Btn, Empty } from "./shared/components.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink } from "../db/models.js";
+import { fetchLocalRunHistory } from "../db/local.js";
 import { buildEngine } from "../engine/index.js";
 import { compareResults } from "../db/runRecord.js";
 import { compareScenarios } from "../engine/statistics.js";
@@ -120,6 +121,9 @@ export function ModelHistoryTab({
   const [moreMenuId, setMoreMenuId] = useState(null);
   const [moreMenuPos, setMoreMenuPos] = useState({ top: 0, right: 0 });
   const [selectedComparison, setSelectedComparison] = useState(null);
+  const runHistoryFetcher = (filters = {}) => (
+    userId ? fetchRunHistory(modelId, filters) : Promise.resolve(fetchLocalRunHistory(modelId))
+  );
 
   const handleReproduce = async (rowId) => {
     setReproduceState(prev => ({ ...prev, [rowId]: { status: 'running', message: '' } }));
@@ -282,7 +286,7 @@ export function ModelHistoryTab({
           const next = !historyShowArchived;
           setHistoryShowArchived(next);
           setHistoryLoading(true); setHistoryError("");
-          fetchRunHistory(modelId, { archived: next })
+          runHistoryFetcher({ archived: next })
             .then(rows => setHistoryRows(rows))
             .catch(e => setHistoryError(e.message))
             .finally(() => setHistoryLoading(false));

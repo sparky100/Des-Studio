@@ -798,6 +798,47 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       await expect(getShareLink('revoked-token')).rejects.toThrow('revoked');
     });
 
+    it('fetchRunHistory falls back to results_json summary when top-level metrics are zeroed', async () => {
+      supabase.from('simulation_runs').limit.mockResolvedValueOnce({
+        data: [{
+          id: 'run-1',
+          ran_at: '2026-05-09T11:00:00Z',
+          total_arrived: 0,
+          total_served: 0,
+          total_reneged: 0,
+          avg_wait_time: 0,
+          avg_service_time: 0,
+          renege_rate: 0,
+          duration_ms: null,
+          replications: 1,
+          seed: 42,
+          max_simulation_time: 500,
+          warmup_period: 0,
+          ai_insights: null,
+          run_label: '',
+          tags: [],
+          archived: false,
+          version_id: null,
+          model_versions: null,
+          results_json: {
+            runLabel: 'Recovered run',
+            summary: { total: 100, served: 95, reneged: 5, avgWait: 8.2, avgSvc: 1.1 },
+          },
+        }],
+        error: null,
+      });
+
+      const [row] = await fetchRunHistory('model-1');
+
+      expect(row.run_label).toBe('Recovered run');
+      expect(row.total_arrived).toBe(100);
+      expect(row.total_served).toBe(95);
+      expect(row.total_reneged).toBe(5);
+      expect(row.avg_wait_time).toBe(8.2);
+      expect(row.avg_service_time).toBe(1.1);
+      expect(row.renege_rate).toBeCloseTo(0.05);
+    });
+
     it('revokeShareLink sets revoked_at and guards by userId', async () => {
       supabase.from('share_links').single.mockResolvedValueOnce({
         data: { id: 'link-1' },

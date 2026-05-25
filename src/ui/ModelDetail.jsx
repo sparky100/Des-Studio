@@ -28,6 +28,7 @@ import { ModelTabBar }       from "./ModelTabBar.jsx";
 import { SaveBanner }        from "./SaveBanner.jsx";
 import { VersionHistoryPanel } from "./VersionHistoryPanel.jsx";
 import { fetchRunHistory, listShareLinks } from "../db/models.js";
+import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
 import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
 
@@ -204,6 +205,33 @@ function buildRunHistoryCsv(rows = []) {
   }
 
   return table.map(row => row.map(csvEscape).join(",")).join("\n");
+}
+
+function preferMetricValue(primary, fallback) {
+  if (fallback == null) return primary ?? null;
+  if (primary == null) return fallback;
+  if (primary === 0 && fallback !== 0) return fallback;
+  return primary;
+}
+
+function hydrateResultsFromHistoryRow(row) {
+  const json = row?.results_json;
+  if (!json || typeof json !== "object") return null;
+  const summary = json.summary || {};
+  const nextSummary = {
+    ...summary,
+    total: preferMetricValue(summary.total, row.total_arrived) ?? 0,
+    served: preferMetricValue(summary.served, row.total_served) ?? 0,
+    reneged: preferMetricValue(summary.reneged, row.total_reneged) ?? 0,
+    avgWait: preferMetricValue(summary.avgWait, row.avg_wait_time),
+    avgSvc: preferMetricValue(summary.avgSvc, row.avg_service_time),
+  };
+  return {
+    ...json,
+    summary: nextSummary,
+    runLabel: json.runLabel || row.run_label || null,
+    replications: json.replications || row.replications || 1,
+  };
 }
 
 const MODEL_HEALTH_TAB_LABELS = {
@@ -679,6 +707,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
 
   const validation = useMemo(() => model ? validateModel(model) : { errors: [], warnings: [] }, [model]);
   const isStarterBlank = useMemo(() => isStarterBlankModel(model), [model]);
+  const runHistoryFetcher = useMemo(
+    () => (overrides.userId ? (filters => fetchRunHistory(modelId, filters)) : () => Promise.resolve(fetchLocalRunHistory(modelId))),
+    [overrides.userId, modelId]
+  );
   const healthValidation = useMemo(() => (
     isStarterBlank ? { errors: [], warnings: [] } : validation
   ), [isStarterBlank, validation]);
@@ -698,7 +730,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     }));
     if(tab==="results"){
       setHistoryLoading(true);setHistoryError("");
-      fetchRunHistory(modelId, { archived: historyShowArchived })
+      runHistoryFetcher({ archived: historyShowArchived })
         .then(rows=>setHistoryRows(rows))
         .catch(e=>setHistoryError(e.message))
         .finally(()=>setHistoryLoading(false));
@@ -725,15 +757,17 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     const row = historyRows.find(r => r.id === runId);
     if (!hasResultsPayload(row)) return;
     setSelectedResultsRunId(row.id);
-    setLatestResults(row.results_json);
-    setLatestLog(Array.isArray(row.results_json?.log) ? row.results_json.log : []);
+    const hydratedResults = hydrateResultsFromHistoryRow(row);
+    setLatestResults(hydratedResults);
+    setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
   };
 
   const openResultsForRun = useCallback((row, nextSubtab = "summary") => {
     if (!hasResultsPayload(row)) return;
     setSelectedResultsRunId(row.id);
-    setLatestResults(row.results_json);
-    setLatestLog(Array.isArray(row.results_json?.log) ? row.results_json.log : []);
+    const hydratedResults = hydrateResultsFromHistoryRow(row);
+    setLatestResults(hydratedResults);
+    setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
     setResultsView(nextSubtab);
     setTab("results");
   }, []);
@@ -821,7 +855,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     if(tab!=="results")return;
     setHistoryLoading(true);setHistoryError("");
     Promise.all([
-      fetchRunHistory(modelId, { archived: historyShowArchived }),
+      runHistoryFetcher({ archived: historyShowArchived }),
       listShareLinks(modelId).catch(()=>[]),
     ]).then(([rows, links])=>{
       const nextRows = rows || [];
@@ -834,12 +868,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       const row = selected || fallback;
       if(row && !latestResults){
         setSelectedResultsRunId(row.id);
-        setLatestResults(row.results_json);
-        setLatestLog(Array.isArray(row.results_json?.log) ? row.results_json.log : []);
+        const hydratedResults = hydrateResultsFromHistoryRow(row);
+        setLatestResults(hydratedResults);
+        setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
       }
     }).catch(e=>setHistoryError(e.message))
     .finally(()=>setHistoryLoading(false));
-  },[tab,modelId,selectedResultsRunId,latestResults,historyShowArchived]);
+  },[tab,modelId,selectedResultsRunId,latestResults,historyShowArchived,runHistoryFetcher]);
 
   if(!model)return(
     <div style={{background:C.bg,minHeight:'100vh',display:'flex',alignItems:'center',

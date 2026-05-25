@@ -42,6 +42,13 @@ const validModel = {
       effect: 'ARRIVE(Customer)',
       schedules: [],
     },
+    {
+      id: 'b_complete',
+      name: 'Complete',
+      scheduledTime: '9999',
+      effect: 'COMPLETE()',
+      schedules: [],
+    },
   ],
   cEvents: [],
   queues: [],

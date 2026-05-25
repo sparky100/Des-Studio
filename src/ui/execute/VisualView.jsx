@@ -65,6 +65,9 @@ export const VisualView = ({ snap, model, summary }) => {
   const servers = allEntities.filter(e => e.role === "server");
   const customers = allEntities.filter(e => e.role !== "server");
   const waiting = customers.filter(e => e.status === "waiting");
+  const totalArrived = summary?.total ?? customers.length;
+  const totalServed = summary?.served ?? snap.served ?? 0;
+  const totalReneged = summary?.reneged ?? snap.reneged ?? 0;
   const definedQueues = model.queues || [];
   const wallClock = model?.epoch ? formatSimWallTime(snap.clock, model.epoch, model.timeUnit || "minutes") : null;
 
@@ -103,10 +106,10 @@ export const VisualView = ({ snap, model, summary }) => {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
           {[
-            { label: "Arrived", value: customers.length, color: C.kpiArr },
-            { label: "Served", value: snap.served || 0, color: C.kpiSvc },
-            { label: "Reneged", value: snap.reneged || 0, color: C.danger },
-            { label: "Waiting", value: waiting.length, color: C.bEvent },
+            { label: "Arrived", value: totalArrived, color: C.kpiArr },
+            { label: "Served", value: totalServed, color: C.kpiSvc },
+            { label: "Reneged", value: totalReneged, color: C.danger },
+            { label: "Waiting now", value: waiting.length, color: C.bEvent },
           ].map(s => (
             <div key={s.label} style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10, textAlign: "center" }}>
               <div style={{ fontSize: 9, color: C.label, fontWeight: 700, marginBottom: 4 }}>{s.label.toUpperCase()}</div>

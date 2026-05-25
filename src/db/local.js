@@ -52,19 +52,83 @@ function readLocalRuns() {
   } catch { return {}; }
 }
 
+function buildLocalResultsJson(result, config = {}) {
+  const summary = result?.summary || {};
+  const resultsJson = {
+    ...result,
+    summary,
+    clock: result?.snap?.clock ?? result?.clock ?? null,
+  };
+  if (config?.batchId) resultsJson.batch_id = config.batchId;
+  if (config?.aggregateStats) resultsJson.aggregateStats = config.aggregateStats;
+  if (config?.replicationResults) resultsJson.replications = config.replicationResults;
+  if (config?.runLabel) resultsJson.runLabel = config.runLabel;
+  return resultsJson;
+}
+
+function preferSummaryValue(primary, summaryValue) {
+  if (summaryValue == null) return primary ?? null;
+  if (primary == null) return summaryValue;
+  if (primary === 0 && summaryValue !== 0) return summaryValue;
+  return primary;
+}
+
+function normalizeLocalRunRow(row = {}) {
+  const resultsJson = row.results_json || row.resultsJson || buildLocalResultsJson(row, {
+    runLabel: row.runLabel || row.run_label || "",
+  });
+  const summary = resultsJson.summary || row.summary || {};
+  const total = preferSummaryValue(row.total_arrived, summary.total) ?? 0;
+  const served = preferSummaryValue(row.total_served, summary.served) ?? 0;
+  const reneged = preferSummaryValue(row.total_reneged, summary.reneged) ?? 0;
+  const ranAt = row.ran_at || row.createdAt || row.created_at || new Date().toISOString();
+  const replications = row.replications || 1;
+
+  return {
+    id: row.id || genId(),
+    ran_at: ranAt,
+    createdAt: ranAt,
+    seed: row.seed ?? null,
+    replications,
+    warmup_period: row.warmup_period ?? row.warmupPeriod ?? null,
+    max_simulation_time: row.max_simulation_time ?? row.maxSimTime ?? null,
+    total_arrived: total,
+    total_served: served,
+    total_reneged: reneged,
+    avg_wait_time: preferSummaryValue(row.avg_wait_time, summary.avgWait),
+    avg_service_time: preferSummaryValue(row.avg_service_time, summary.avgSvc),
+    renege_rate: total ? (reneged / total) : 0,
+    duration_ms: row.duration_ms ?? row.durationMs ?? null,
+    run_label: row.run_label || row.runLabel || "",
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    archived: !!row.archived,
+    ai_insights: row.ai_insights || null,
+    version_id: row.version_id || row.versionId || null,
+    results_json: resultsJson,
+  };
+}
+
 export function saveLocalRun(modelId, result, config) {
   const allRuns = readLocalRuns();
   if (!allRuns[modelId]) allRuns[modelId] = [];
-  allRuns[modelId].push({
+  const summary = result?.summary || {};
+  allRuns[modelId].push(normalizeLocalRunRow({
     id: genId(),
-    createdAt: new Date().toISOString(),
-    seed: config?.seed,
+    ran_at: new Date().toISOString(),
+    seed: config?.seed ?? null,
     replications: config?.replications || 1,
-    warmupPeriod: config?.warmupPeriod,
-    maxSimTime: config?.maxTime,
-    runLabel: config?.runLabel || "",
-    ...result,
-  });
+    warmup_period: config?.warmupPeriod ?? null,
+    max_simulation_time: config?.maxTime ?? null,
+    total_arrived: summary.total ?? 0,
+    total_served: summary.served ?? 0,
+    total_reneged: summary.reneged ?? 0,
+    avg_wait_time: summary.avgWait ?? null,
+    avg_service_time: summary.avgSvc ?? null,
+    duration_ms: config?.durationMs ?? null,
+    run_label: config?.runLabel || "",
+    version_id: config?.versionId || null,
+    results_json: buildLocalResultsJson(result, config),
+  }));
   // Keep last 50 runs per model
   if (allRuns[modelId].length > 50) allRuns[modelId] = allRuns[modelId].slice(-50);
   localStorage.setItem(RUNS_KEY, JSON.stringify(allRuns));
@@ -72,7 +136,9 @@ export function saveLocalRun(modelId, result, config) {
 
 export function fetchLocalRunHistory(modelId) {
   const allRuns = readLocalRuns();
-  return allRuns[modelId] || [];
+  return (allRuns[modelId] || [])
+    .map(normalizeLocalRunRow)
+    .sort((a, b) => new Date(b.ran_at).getTime() - new Date(a.ran_at).getTime());
 }
 
 // Sweep storage (localStorage)

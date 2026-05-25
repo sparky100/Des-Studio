@@ -254,6 +254,24 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     }
   }, []);
 
+  const refreshRunHistory = useCallback(async () => {
+    if (!modelId) return [];
+    setRunHistoryStatus("loading");
+    setRunHistoryError("");
+    const fetcher = userId ? fetchRunHistory : fetchLocalRunHistory;
+    try {
+      const rows = await fetcher(modelId);
+      setSavedRunHistory(rows || []);
+      setRunHistoryStatus("loaded");
+      return rows || [];
+    } catch (error) {
+      setSavedRunHistory([]);
+      setRunHistoryError(error?.message || "could not load run history");
+      setRunHistoryStatus("error");
+      return [];
+    }
+  }, [modelId, userId]);
+
   const doStep = useCallback(() => {
     if (!engineRef.current) return;
     setHideRunReadiness(true);
@@ -310,13 +328,16 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
         }, stepSeed);
         const config = { seed: stepSeed, runLabel: effectiveRunLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null, runRecord, versionId: currentVersionId || null };
-        const save = userId ? saveSimulationRun(modelId, userId, fullResult, config) : saveLocalRun(modelId, fullResult, config);
+        const save = userId
+          ? saveSimulationRun(modelId, userId, fullResult, config)
+          : Promise.resolve(saveLocalRun(modelId, fullResult, config));
         save
           .then((runId) => {
             if (runId) {
               setLatestRunId(runId);
               storeRunNarrative(runId, model, fullResult);
             }
+            void refreshRunHistory();
             setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
             onRunSaved?.();
@@ -327,7 +348,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           });
       }
     }
-  }, [userId, modelId, model, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved, onResultsReady]);
+  }, [userId, modelId, model, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved, onResultsReady, refreshRunHistory]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -500,6 +521,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
               } else {
                 saveLocalRun(modelId, batchResult, batchConfig);
               }
+              void refreshRunHistory();
               setSaveStatus({ state: 'success', message: '✓ Replication batch saved successfully!' });
               setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved." }]);
               onRunSaved?.();
@@ -599,6 +621,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         setLatestRunId(runId);
         storeRunNarrative(runId, model, result);
       }
+      void refreshRunHistory();
       setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
       onRunSaved?.();
@@ -608,7 +631,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     } finally {
       saveInProgressRef.current = false;
     }
-  }, [model, userId, modelId, seed, effectiveRunLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, stopAuto, onRunSaved, onResultsReady]);
+  }, [model, userId, modelId, seed, effectiveRunLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, stopAuto, onRunSaved, onResultsReady, refreshRunHistory]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -715,25 +738,16 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   useEffect(() => {
     if (!modelId) return;
     let cancelled = false;
-    setRunHistoryStatus("loading");
-    setRunHistoryError("");
-    const fetcher = userId ? fetchRunHistory : fetchLocalRunHistory;
-    fetcher(modelId)
+    refreshRunHistory()
       .then(rows => {
         if (cancelled) return;
         setSavedRunHistory(rows || []);
-        setRunHistoryStatus("loaded");
       })
-      .catch(error => {
-        if (cancelled) return;
-        setSavedRunHistory([]);
-        setRunHistoryError(error?.message || "could not load run history");
-        setRunHistoryStatus("error");
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [modelId, userId]);
+  }, [modelId, refreshRunHistory]);
 
   // F28.1: load experiments when tab is opened
   useEffect(() => {
@@ -779,7 +793,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const comparisonRuns = useMemo(() => {
     const savedRuns = savedRunHistory.map(row => ({
       id: `saved-${row.id}`,
-      label: row.run_label || `Saved ${row.ran_at ? new Date(row.ran_at).toLocaleString() : row.id}`,
+      label: row.run_label || row.runLabel || `Saved ${(row.ran_at || row.createdAt) ? new Date(row.ran_at || row.createdAt).toLocaleString() : row.id}`,
       payload: row,
       source: "saved",
     }));
@@ -791,6 +805,15 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     }));
     return [...savedRuns, ...currentReplications];
   }, [savedRunHistory, replicationResults]);
+  const recentSavedRuns = useMemo(
+    () => savedRunHistory.slice(0, 3).map(row => ({
+      id: row.id,
+      label: row.run_label || row.runLabel || "Saved run",
+      timestamp: row.ran_at || row.createdAt || null,
+      replications: row.replications || 1,
+    })),
+    [savedRunHistory]
+  );
 
   const runWithPatch = useCallback((patchedModel) => {
     return new Promise((resolve) => {
@@ -2321,6 +2344,78 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
               </>
             );
           })()}
+
+          {batchStatus === "complete" && (
+            <div style={{
+              background: C.surface,
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              padding: 12,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+                    SAVED RUNS
+                  </div>
+                  <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, marginTop: 2 }}>
+                    {runHistoryStatus === "loading"
+                      ? "Refreshing saved run history..."
+                      : recentSavedRuns.length
+                        ? "Latest saved runs for this model"
+                        : "The batch finished, but no saved runs are visible yet."}
+                  </div>
+                </div>
+                {canOpenResultsView && (
+                  <Btn small variant="ghost" onClick={() => onGoToResults?.()}>
+                    View Results →
+                  </Btn>
+                )}
+              </div>
+
+              {runHistoryStatus === "error" && (
+                <div style={{ fontSize: 11, color: C.red, fontFamily: FONT }}>
+                  Could not refresh run history: {runHistoryError}
+                </div>
+              )}
+
+              {recentSavedRuns.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {recentSavedRuns.map(run => (
+                    <div
+                      key={run.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        flexWrap: "wrap",
+                        padding: "8px 10px",
+                        borderRadius: 6,
+                        border: `1px solid ${C.border}`,
+                        background: C.cardBg,
+                      }}
+                    >
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, fontWeight: 600 }}>
+                          {run.label}
+                        </div>
+                        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
+                          {run.timestamp ? new Date(run.timestamp).toLocaleString() : "Saved just now"}
+                        </div>
+                      </div>
+                      <Tag
+                        label={`${run.replications} run${run.replications === 1 ? "" : "s"}`}
+                        color={C.accent}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -35,20 +35,20 @@ const KPI_METRICS = {
   arrived: { label: "Arrived",       color: C.kpiArr },
   served:  { label: "Served",        color: C.kpiSvc },
   reneged: { label: "Reneged",       color: C.danger },
-  waiting: { label: "Waiting",       color: C.bEvent },
+  waiting: { label: "Waiting now",   color: C.bEvent },
   clock:   { label: "Sim Clock",     color: C.server },
-  active:  { label: "Active",        color: C.cEvent  },
+  active:  { label: "Active now",    color: C.cEvent  },
 };
 
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 export { DEFAULT_KPI_SLOTS };
 
-function resolveKpiValue(key, snap, entities) {
+function resolveKpiValue(key, snap, entities, summary) {
   const customers = entities.filter(e => e.role !== "server");
   switch (key) {
-    case "arrived": return customers.length;
-    case "served":  return snap.served || 0;
-    case "reneged": return snap.reneged || 0;
+    case "arrived": return summary?.total ?? customers.length;
+    case "served":  return summary?.served ?? snap.served ?? 0;
+    case "reneged": return summary?.reneged ?? snap.reneged ?? 0;
     case "waiting": return customers.filter(e => e.status === "waiting").length;
     case "clock":   return parseFloat(snap.clock).toFixed(1);
     case "active":  return customers.filter(e => e.status !== "done" && e.status !== "reneged").length;
@@ -56,11 +56,11 @@ function resolveKpiValue(key, snap, entities) {
   }
 }
 
-function KpiSlot({ metricKey, snap, entities, onEdit }) {
+function KpiSlot({ metricKey, snap, entities, summary, onEdit }) {
   const [hovered,  setHovered]  = useState(false);
   const [editing,  setEditing]  = useState(false);
   const meta  = KPI_METRICS[metricKey] || { label: metricKey, color: C.muted };
-  const value = snap ? resolveKpiValue(metricKey, snap, entities) : "—";
+  const value = snap ? resolveKpiValue(metricKey, snap, entities, summary) : "—";
 
   return (
     <div
@@ -639,6 +639,7 @@ export function ExecuteCanvas({
                 metricKey={key}
                 snap={snap}
                 entities={allEntities}
+                summary={summary}
                 onEdit={newKey => onKpiSlotChange?.(i, newKey)}
               />
             ))}

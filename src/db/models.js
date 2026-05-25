@@ -420,10 +420,28 @@ export async function saveAiInsights(runId, insights) {
   return { ok: true };
 }
 
+function preferSummaryValue(primary, summaryValue) {
+  if (summaryValue == null) return primary ?? null;
+  if (primary == null) return summaryValue;
+  if (primary === 0 && summaryValue !== 0) return summaryValue;
+  return primary;
+}
+
 export function normalizeRunHistoryRow(row = {}) {
+  const summary = row.results_json?.summary || {};
+  const totalArrived = preferSummaryValue(row.total_arrived, summary.total) ?? 0;
+  const totalServed = preferSummaryValue(row.total_served, summary.served) ?? 0;
+  const totalReneged = preferSummaryValue(row.total_reneged, summary.reneged) ?? 0;
+  const avgWaitTime = preferSummaryValue(row.avg_wait_time, summary.avgWait);
+  const avgServiceTime = preferSummaryValue(row.avg_service_time, summary.avgSvc);
   return {
     ...row,
-    avg_service_time: row.avg_service_time ?? row.results_json?.summary?.avgSvc ?? null,
+    total_arrived: totalArrived,
+    total_served: totalServed,
+    total_reneged: totalReneged,
+    avg_wait_time: avgWaitTime,
+    avg_service_time: avgServiceTime,
+    renege_rate: totalArrived ? (totalReneged / totalArrived) : (row.renege_rate ?? 0),
     // Prefer real column; fall back to JSON for legacy rows
     run_label: row.run_label || row.results_json?.runLabel || row.results_json?.run_label || "",
     tags: row.tags || [],
