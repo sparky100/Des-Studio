@@ -43,6 +43,7 @@ vi.mock('../../src/db/models.js', () => ({
   // PR #115: feedback functions
   fetchFeedback:        vi.fn().mockResolvedValue([
     { id: 'fb-1', category: 'bug', message: 'Something is broken', userId: 'user-1',
+      accountEmail: 'alice@example.com', replyEmail: 'reply@example.com',
       appVersion: '0.9.0', pageContext: 'model-detail', status: 'new', createdAt: '2026-05-20T10:00:00Z' },
   ]),
   updateFeedbackStatus: vi.fn().mockResolvedValue({ ok: true }),
@@ -120,5 +121,13 @@ describe('AdminPanel', () => {
     fireEvent.click(promoteBtn);
     await waitFor(() => expect(updateUserRole).toHaveBeenCalled());
     expect(logAdminAction).toHaveBeenCalledWith('promote', expect.any(String), null, expect.any(String), 'admin');
+  });
+
+  it('feedback tab shows contact email details for replies', async () => {
+    render(<AdminPanel {...defaultProps} />);
+    await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('tab', { name: /Feedback/i }));
+    expect(screen.getByText('reply@example.com')).toBeInTheDocument();
+    expect(screen.getByText('alice@example.com')).toBeInTheDocument();
   });
 });

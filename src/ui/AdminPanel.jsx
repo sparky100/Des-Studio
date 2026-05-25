@@ -733,6 +733,15 @@ function AdminPanel({ userId, isAdmin, onClose }) {
             const filtered = feedbackFilter === "all"
               ? feedback
               : feedback.filter(f => f.status === feedbackFilter);
+            const contactForFeedback = (fb) => {
+              const matchedUser = fb.userId ? users.find(u => u.id === fb.userId) : null;
+              return {
+                primary: fb.replyEmail || fb.accountEmail || matchedUser?.email || (fb.userId ? `${fb.userId.slice(0, 8)}…` : "(anon)"),
+                secondary: fb.replyEmail
+                  ? (fb.accountEmail || matchedUser?.email || null)
+                  : (fb.userId ? `${fb.userId.slice(0, 8)}…` : null),
+              };
+            };
 
             const handleStatusChange = async (id, status) => {
               try {
@@ -778,14 +787,16 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
                     <thead>
                       <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                        {["Category", "Message", "User", "Version", "Date", "Status"].map(h => (
+                        {["Category", "Message", "Contact", "Version", "Date", "Status"].map(h => (
                           <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 10px",
                             color: C.muted, fontWeight: 700, fontSize: 11, letterSpacing: 1 }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {filtered.map(fb => (
+                      {filtered.map(fb => {
+                        const contact = contactForFeedback(fb);
+                        return (
                         <tr key={fb.id} style={{ borderBottom: `1px solid ${C.border}20` }}>
                           <td style={{ padding: "6px 10px", whiteSpace: "nowrap" }}>
                             <Tag label={fb.category || "—"} color={CATEGORY_COLORS[fb.category] || C.muted} />
@@ -794,8 +805,15 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                             <div style={{ color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 300 }} title={fb.message}>{fb.message}</div>
                             {fb.pageContext && (<div style={{ fontSize: 9, color: C.muted, marginTop: 2 }}>{fb.pageContext}</div>)}
                           </td>
-                          <td style={{ padding: "6px 10px", fontSize: 10, color: C.muted, whiteSpace: "nowrap" }}>
-                            {fb.userId ? fb.userId.slice(0, 8) + "…" : "(anon)"}
+                          <td style={{ padding: "6px 10px", maxWidth: 220 }}>
+                            <div style={{ color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={contact.primary}>
+                              {contact.primary}
+                            </div>
+                            {contact.secondary && (
+                              <div style={{ fontSize: 9, color: C.muted, marginTop: 2 }} title={contact.secondary}>
+                                {contact.secondary}
+                              </div>
+                            )}
                           </td>
                           <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>{fb.appVersion || "—"}</td>
                           <td style={{ padding: "6px 10px", color: C.muted, whiteSpace: "nowrap" }}>
@@ -811,7 +829,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                             </select>
                           </td>
                         </tr>
-                      ))}
+                      )})}
                     </tbody>
                   </table>
                 )}

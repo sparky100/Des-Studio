@@ -14,6 +14,7 @@ const CATEGORIES = [
 
 const MAX_CHARS = 2000;
 const MIN_CHARS = 10;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Collect all focusable elements within a container
 function getFocusable(container) {
@@ -32,6 +33,7 @@ function getFocusable(container) {
 export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
   const [category, setCategory] = useState("bug");
   const [message, setMessage]   = useState("");
+  const [replyEmail, setReplyEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess]   = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -44,6 +46,7 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
     if (isOpen) {
       setCategory("bug");
       setMessage("");
+      setReplyEmail("");
       setSubmitting(false);
       setSuccess(false);
       setErrorMsg("");
@@ -96,6 +99,11 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
 
   const handleSubmit = useCallback(async () => {
     if (message.length < MIN_CHARS || submitting) return;
+    const trimmedReplyEmail = replyEmail.trim();
+    if (trimmedReplyEmail && !EMAIL_RE.test(trimmedReplyEmail)) {
+      setErrorMsg("Enter a valid reply email address or leave it blank.");
+      return;
+    }
     setSubmitting(true);
     setErrorMsg("");
     try {
@@ -105,6 +113,7 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
         userId,
         appVersion: APP_VERSION,
         pageContext: currentPage,
+        replyEmail: trimmedReplyEmail,
       });
       setSuccess(true);
     } catch (err) {
@@ -112,7 +121,7 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
     } finally {
       setSubmitting(false);
     }
-  }, [category, message, userId, currentPage, submitting]);
+  }, [category, message, userId, currentPage, replyEmail, submitting]);
 
   if (!isOpen) return null;
 
@@ -289,6 +298,42 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
                   <span style={{ color: message.length > MAX_CHARS * 0.9 ? C.amber : C.muted }}>
                     {message.length} / {MAX_CHARS}
                   </span>
+                </div>
+              </div>
+
+              {/* Optional reply email */}
+              <div>
+                <div style={{ fontFamily: FONT, ...TYPO.label, color: C.muted, marginBottom: SPACE.sm }}>
+                  Reply Email
+                </div>
+                <input
+                  type="email"
+                  aria-label="Reply email"
+                  placeholder={userId ? "Optional if you want a different reply address" : "Optional if you want a reply"}
+                  value={replyEmail}
+                  onChange={(e) => {
+                    setReplyEmail(e.target.value);
+                    if (errorMsg === "Enter a valid reply email address or leave it blank.") {
+                      setErrorMsg("");
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    background: C.surface,
+                    border: `1px solid ${replyEmail.trim() && !EMAIL_RE.test(replyEmail.trim()) ? C.amber : C.border}`,
+                    borderRadius: RADIUS.md,
+                    color: C.text,
+                    fontFamily: FONT,
+                    fontSize: 13,
+                    padding: SPACE.sm,
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <div style={{ marginTop: 4, fontFamily: FONT, fontSize: 11, color: C.muted, lineHeight: 1.4 }}>
+                  {userId
+                    ? "Signed-in feedback will also carry your account email when available."
+                    : "Add an email address here if you would like a reply to anonymous feedback."}
                 </div>
               </div>
 

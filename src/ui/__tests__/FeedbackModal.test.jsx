@@ -135,6 +135,33 @@ describe("FeedbackModal", () => {
     // must be present as the key (even if undefined).
     expect(callArgs[0]).toHaveProperty("appVersion");
     expect(callArgs[0].userId).toBe("user-abc");
+    expect(callArgs[0].replyEmail).toBe("");
+  });
+
+  it("passes the optional reply email through on submit", async () => {
+    render(<FeedbackModal {...DEFAULT_PROPS} />);
+
+    await userEvent.type(screen.getByRole("textbox", { name: /feedback message/i }), "Please contact me about this issue");
+    await userEvent.type(screen.getByRole("textbox", { name: /reply email/i }), "person@example.com");
+    await userEvent.click(screen.getByRole("button", { name: /send feedback/i }));
+
+    await waitFor(() => {
+      expect(vi.mocked(submitFeedback)).toHaveBeenCalledTimes(1);
+    });
+
+    const [callArgs] = vi.mocked(submitFeedback).mock.calls;
+    expect(callArgs[0].replyEmail).toBe("person@example.com");
+  });
+
+  it("shows an inline error when reply email is invalid", async () => {
+    render(<FeedbackModal {...DEFAULT_PROPS} />);
+
+    await userEvent.type(screen.getByRole("textbox", { name: /feedback message/i }), "Please contact me about this issue");
+    await userEvent.type(screen.getByRole("textbox", { name: /reply email/i }), "not-an-email");
+    await userEvent.click(screen.getByRole("button", { name: /send feedback/i }));
+
+    expect(screen.getByText(/enter a valid reply email address/i)).toBeInTheDocument();
+    expect(vi.mocked(submitFeedback)).not.toHaveBeenCalled();
   });
 
   // ── Error state ────────────────────────────────────────────────────────────

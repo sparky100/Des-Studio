@@ -1058,12 +1058,12 @@ const FEEDBACK_STATUSES = ["new", "reviewed", "actioned", "dismissed"];
 /**
  * Fetch feedback rows for admin triage. Requires admin RLS policy.
  * @param {{ limit?: number, offset?: number, status?: string }} opts
- * @returns {Promise<Array<{id,createdAt,userId,category,message,appVersion,pageContext,status}>>}
+ * @returns {Promise<Array<{id,createdAt,userId,accountEmail,replyEmail,category,message,appVersion,pageContext,status}>>}
  */
 export async function fetchFeedback({ limit = 100, offset = 0, status } = {}) {
   let query = supabase
     .from("feedback")
-    .select("id, created_at, user_id, category, message, app_version, page_context, status")
+    .select("id, created_at, user_id, account_email, reply_email, category, message, app_version, page_context, status")
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -1076,6 +1076,8 @@ export async function fetchFeedback({ limit = 100, offset = 0, status } = {}) {
     id:          r.id,
     createdAt:   r.created_at,
     userId:      r.user_id,
+    accountEmail:r.account_email,
+    replyEmail:  r.reply_email,
     category:    r.category,
     message:     r.message,
     appVersion:  r.app_version,

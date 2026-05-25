@@ -36,10 +36,11 @@ function escapeHtml(str: string | null | undefined): string {
 
 function buildEmailHtml(record: Record<string, unknown>): string {
   const {
-    id, category, message, user_id,
+    id, category, message, user_id, account_email, reply_email,
     app_version, page_context, created_at,
   } = record as {
     id?: string; category?: string; message?: string; user_id?: string;
+    account_email?: string; reply_email?: string;
     app_version?: string; page_context?: string; created_at?: string;
   };
 
@@ -65,6 +66,14 @@ function buildEmailHtml(record: Record<string, unknown>): string {
     <tr style="background:#f5f5f5">
       <th align="left" style="border:1px solid #ddd;font-weight:600">User ID</th>
       <td style="border:1px solid #ddd;font-size:11px;color:#555">${escapeHtml(user_id) === "—" ? "(anonymous)" : escapeHtml(user_id)}</td>
+    </tr>
+    <tr>
+      <th align="left" style="border:1px solid #ddd;font-weight:600">Account email</th>
+      <td style="border:1px solid #ddd">${escapeHtml(account_email)}</td>
+    </tr>
+    <tr style="background:#f5f5f5">
+      <th align="left" style="border:1px solid #ddd;font-weight:600">Reply email</th>
+      <td style="border:1px solid #ddd">${escapeHtml(reply_email)}</td>
     </tr>
     <tr>
       <th align="left" style="border:1px solid #ddd;font-weight:600">App version</th>

@@ -34,13 +34,27 @@ export async function touchLastActive(userId) {
  * Submit user feedback to the Supabase feedback table.
  * Inserts one row; throws on error.
  *
- * @param {{ category: string, message: string, userId: string|null, appVersion: string|undefined, pageContext: string|undefined }} params
+ * @param {{ category: string, message: string, userId: string|null, appVersion: string|undefined, pageContext: string|undefined, replyEmail?: string }} params
  */
-export async function submitFeedback({ category, message, userId, appVersion, pageContext }) {
+export async function submitFeedback({ category, message, userId, appVersion, pageContext, replyEmail }) {
+  let accountEmail = null;
+  if (userId) {
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user?.id === userId) {
+        accountEmail = data.user.email || null;
+      }
+    } catch (_) {
+      // Best-effort enrichment only — feedback should still be saved.
+    }
+  }
+
   const { error } = await supabase.from('feedback').insert({
     category,
     message,
     user_id: userId ?? null,
+    account_email: accountEmail,
+    reply_email: replyEmail?.trim() || null,
     app_version: appVersion,
     page_context: pageContext,
     user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
