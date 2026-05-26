@@ -13,6 +13,7 @@ import { buildTraceFromLog } from "../simulation/traceCollector.js";
 import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting }   from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
+import { makeSingleRunProgress } from "./progress-contract.js";
 import { nullRegistry }                        from "./adapters/index.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
@@ -337,8 +338,9 @@ function makeFailureEvents(model, rng) {
   return events;
 }
 
-export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500, collectTimeSeries = false, registry = nullRegistry) {
+export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500, collectTimeSeries = false, registry = nullRegistry, options = {}) {
   const runtimeModel = modelWithShiftInitialCapacity(model);
+  const engineOptions = options || {};
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
   const rng = mulberry32(seed);
   let _warmupComplete = false;
@@ -360,6 +362,15 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const incEventCount = (id) => {
     if (id) _eventCounts[id] = (_eventCounts[id] || 0) + 1;
   };
+  const _runtimeMetrics = {
+    eventsProcessed: 0,
+    cEventScans: 0,
+    cEventsFired: 0,
+    entitiesCreated: 0,
+    maxQueueLengthByQueue: {},
+    maxFutureEventListSize: 0,
+  };
+  let _cycleCount = 0;
 
   // ── Structured trace ─────────────────────────────────────────────────────
   // Monotonically increasing sequence index for ordering trace entries.
@@ -377,6 +388,23 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   });
 
   const makeTraceEntry = (phase, extra = {}) => _trace(phase, extra);
+  const noteQueueDepth = (queueName) => {
+    if (!queueName) return;
+    const depth = entities.filter(entity => entity.role !== "server" && entity.status === "waiting" && entity.queue === queueName).length;
+    const currentMax = _runtimeMetrics.maxQueueLengthByQueue[queueName] || 0;
+    if (depth > currentMax) {
+      _runtimeMetrics.maxQueueLengthByQueue[queueName] = depth;
+    }
+  };
+  const noteEntityCreated = (entity) => {
+    _runtimeMetrics.entitiesCreated++;
+    if (entity?.queue) noteQueueDepth(entity.queue);
+  };
+  const noteFelSize = () => {
+    if (fel.length > _runtimeMetrics.maxFutureEventListSize) {
+      _runtimeMetrics.maxFutureEventListSize = fel.length;
+    }
+  };
 
   // ── Initialise scalar state ───────────────────────────────────────────────
   const state = { __served: 0, __reneged: 0 };
@@ -406,13 +434,14 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   );
   // Assign IDs to pre-created servers
   for (const e of entities) e.id = nextId();
+  _runtimeMetrics.entitiesCreated += entities.length;
 
   const helpers = () => makeHelpers(entities, runtimeModel);
   const createServerEntity = (serverTypeName, arrivalTime = clock) => {
     const match = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
     const entityType = (runtimeModel.entityTypes || []).find(et => et.role === "server" && match(et.name, serverTypeName));
     if (!entityType) return null;
-    return {
+    const created = {
       id: nextId(),
       type: entityType.name.trim(),
       role: "server",
@@ -421,6 +450,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       arrivalTime,
       stages: [],
     };
+    noteEntityCreated(created);
+    return created;
   };
   const sortedCEvents = (runtimeModel.cEvents || []).slice()
     .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999))
@@ -577,6 +608,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   }
 
   fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
+  noteFelSize();
 
   log.push(_trace("INIT", { message: "Engine initialised" }));
 
@@ -597,6 +629,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     createServerEntity,
     incQueueMetric,
     incEventCount,
+    noteEntityCreated,
+    noteQueueDepth,
     _arbitration,
     registry,
   });
@@ -648,6 +682,7 @@ const cycleLog = [];
     }
 
     const phaseAClock = { from: previousClock, to: clock, dueEvents: due.map(e => ({ id: e.id || e.name, name: e.name || e.id || "?", type: e.type || "B" })) };
+    _cycleCount++;
     const phaseAEntry = makeTraceEntry("A", { message: `Clock → t=${clock.toFixed(3)}`, clock: phaseAClock });
     cycleLog.push(phaseAEntry);
     log.push(phaseAEntry);
@@ -657,6 +692,7 @@ const cycleLog = [];
     let phaseCDirty = enableFilteredPhaseC ? createDirtySet() : null;
 
     for (const ev of due) {
+      _runtimeMetrics.eventsProcessed++;
       if (ev.type === 'WARMUP' && !_warmupComplete) {
         _warmupComplete = true;
         _statsResetTime = clock;
@@ -762,6 +798,7 @@ const cycleLog = [];
 
       for (const entry of felEntries) fel.push(entry);
       fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
+      noteFelSize();
 
       const msg = [`B: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
       const entityIds = [
@@ -790,6 +827,7 @@ const cycleLog = [];
         if (enableFilteredPhaseC && !shouldEvaluateCEvent(ev, phaseCDirty, h, runtimeModel, queueWaitingCache)) {
           continue;
         }
+        _runtimeMetrics.cEventScans++;
         const condTrue = ev._compiledCondition(predicateCtx);
         if (!condTrue) {
           const falseEntry = makeTraceEntry("C", {
@@ -821,6 +859,9 @@ const cycleLog = [];
         }
         for (const entry of felEntries) fel.push(entry);
         if (felEntries.length) fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
+        noteFelSize();
+        _runtimeMetrics.cEventsFired++;
+        _runtimeMetrics.eventsProcessed++;
         cFired = true;
         const msg = [`C: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
         const entityIds = [
@@ -903,28 +944,30 @@ const cycleLog = [];
     return { done: false, cycleLog, snap: stepSnap, felSize: fel.length, phaseCTruncated };
   }
 
-  // ── runAll(): run to completion ───────────────────────────────────────────
-  function runAll() {
-    let c = 0;
+  function getProgressSnapshot(overrides = {}) {
+    const cancelled = !!overrides.cancelled;
+    const done = !!overrides.done || cancelled || _terminationConditionMet || fel.length === 0 || _cycleCount >= maxCycles;
+    return makeSingleRunProgress({
+      completed: _cycleCount,
+      total: maxCycles,
+      running: done ? 0 : 1,
+      cancelled,
+      clock,
+      felSize: fel.length,
+      eventsProcessed: _runtimeMetrics.eventsProcessed,
+      terminationMode: terminationCondition ? "condition" : "time",
+      ...overrides,
+    });
+  }
 
-    // Initial termination check
-    if (terminationCondition) {
-      const h = makeHelpers(entities, runtimeModel);
-      if (compiledTerminationCondition(usePredicateState(h))) {
-        _terminationConditionMet = true;
-        log.push(makeTraceEntry("END", { message: "Termination condition met at start" }));
-      }
-    }
-
-    while (fel.length > 0 && c < maxCycles && !_terminationConditionMet) {
-      c++;
-      const r = step({ captureSnap: false });
-      if (r.done) break;
-    }
-    if (!_terminationConditionMet && c >= maxCycles) {
-      log.push(makeTraceEntry("END", { message: `Cycle limit reached (${maxCycles}) — simulation halted` }));
-    } else if (fel.length === 0 && !_terminationConditionMet) {
-      log.push(makeTraceEntry("END", { message: "FEL empty — simulation complete" }));
+  function buildRunResult(cancelMeta = null) {
+    const cancellation = cancelMeta?.cancelled ? {
+      cancelled: true,
+      partial: true,
+      completionStatus: "cancelled",
+    } : null;
+    if (cancelMeta?.message) {
+      log.push(makeTraceEntry("CANCEL", { message: cancelMeta.message }));
     }
 
     const engineSummary = getSummary();
@@ -936,6 +979,7 @@ const cycleLog = [];
       log,
       snap:            snap(clock),
       summary:         engineSummary,
+      runtimeMetrics:  getRuntimeMetrics(engineSummary.served),
       phaseCTruncated: _phaseCTruncated,
       warnings:        warnings.slice(),
       entitySummary:   entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
@@ -944,7 +988,46 @@ const cycleLog = [];
       perQueue:        Object.keys(_perQueue).length ? { ..._perQueue } : undefined,
       trace,
       traceTruncated,
+      ...(cancellation || {}),
     };
+  }
+
+  // ── runAll(): run to completion ───────────────────────────────────────────
+  function runAll(runOptions = {}) {
+    const onProgress = runOptions.onProgress || engineOptions.onProgress;
+    const shouldCancel = runOptions.shouldCancel || engineOptions.shouldCancel;
+
+    // Initial termination check
+    if (terminationCondition) {
+      const h = makeHelpers(entities, runtimeModel);
+      if (compiledTerminationCondition(usePredicateState(h))) {
+        _terminationConditionMet = true;
+        log.push(makeTraceEntry("END", { message: "Termination condition met at start" }));
+      }
+    }
+
+    onProgress?.(getProgressSnapshot());
+    if (shouldCancel?.(getProgressSnapshot())) {
+      onProgress?.(getProgressSnapshot({ cancelled: true, done: true }));
+      return buildRunResult({ cancelled: true, message: "Run cancelled before processing any events." });
+    }
+
+    while (fel.length > 0 && _cycleCount < maxCycles && !_terminationConditionMet) {
+      const r = step({ captureSnap: false });
+      onProgress?.(getProgressSnapshot());
+      if (r.done) break;
+      if (shouldCancel?.(getProgressSnapshot())) {
+        onProgress?.(getProgressSnapshot({ cancelled: true, done: true }));
+        return buildRunResult({ cancelled: true, message: "Run cancelled at a safe checkpoint. Partial results shown." });
+      }
+    }
+    if (!_terminationConditionMet && _cycleCount >= maxCycles) {
+      log.push(makeTraceEntry("END", { message: `Cycle limit reached (${maxCycles}) — simulation halted` }));
+    } else if (fel.length === 0 && !_terminationConditionMet) {
+      log.push(makeTraceEntry("END", { message: "FEL empty — simulation complete" }));
+    }
+    onProgress?.(getProgressSnapshot({ done: true }));
+    return buildRunResult();
   }
 
   function truncateInterval(start, end) {
@@ -1101,6 +1184,22 @@ const cycleLog = [];
     };
   }
 
+  function getRuntimeMetrics(entitiesCompleted = state.__served || 0) {
+    return {
+      wall_clock_ms: null,
+      replications: 1,
+      events_processed: _runtimeMetrics.eventsProcessed,
+      c_event_scans: _runtimeMetrics.cEventScans,
+      c_events_fired: _runtimeMetrics.cEventsFired,
+      entities_created: _runtimeMetrics.entitiesCreated,
+      entities_completed: entitiesCompleted,
+      max_queue_length_by_queue: Object.keys(_runtimeMetrics.maxQueueLengthByQueue).length
+        ? { ..._runtimeMetrics.maxQueueLengthByQueue }
+        : undefined,
+      max_future_event_list_size: _runtimeMetrics.maxFutureEventListSize,
+    };
+  }
+
   /**
    * Reschedule a planned-arrival FEL entry to a new simulation time.
    * Matches FEL entries by entityId in _scheduleRowAttrs (planned arrivals) or
@@ -1128,9 +1227,13 @@ const cycleLog = [];
   return {
     step,
     runAll,
+    buildResult:          (options = {}) => buildRunResult(options?.cancelled ? options : null),
     getSnap:              () => snap(clock),
     getFelSize:           () => fel.length,
+    getCycleCount:        () => _cycleCount,
+    getProgress:          (overrides = {}) => getProgressSnapshot(overrides),
     getSummary,
+    getRuntimeMetrics,
     getTimeSeries:        () => _timeSeries ?? undefined,
     getWaitDist:          () => computeWaitDist(entities),
     getEntitySummary:     () => entities.map(e => ({ ...e, attrs: { ...e.attrs } })),

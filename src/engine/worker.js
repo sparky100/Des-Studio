@@ -1,5 +1,11 @@
 import { buildEngine } from "./index.js";
 
+export const WORKER_MESSAGE_TYPES = {
+  RUN_REPLICATION: "RUN_REPLICATION",
+  REPLICATION_COMPLETE: "REPLICATION_COMPLETE",
+  REPLICATION_ERROR: "REPLICATION_ERROR",
+};
+
 export function runReplicationPayload(payload = {}) {
   const {
     replicationIndex,
@@ -41,21 +47,21 @@ export function buildReplicationError(payload = {}, error) {
 }
 
 export function handleWorkerMessage(message) {
-  if (message?.type !== "RUN_REPLICATION") {
+  if (message?.type !== WORKER_MESSAGE_TYPES.RUN_REPLICATION) {
     return {
-      type: "REPLICATION_ERROR",
+      type: WORKER_MESSAGE_TYPES.REPLICATION_ERROR,
       payload: buildReplicationError(message?.payload, new Error(`Unknown worker message type: ${message?.type}`)),
     };
   }
 
   try {
     return {
-      type: "REPLICATION_COMPLETE",
+      type: WORKER_MESSAGE_TYPES.REPLICATION_COMPLETE,
       payload: runReplicationPayload(message.payload),
     };
   } catch (error) {
     return {
-      type: "REPLICATION_ERROR",
+      type: WORKER_MESSAGE_TYPES.REPLICATION_ERROR,
       payload: buildReplicationError(message.payload, error),
     };
   }

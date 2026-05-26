@@ -45,6 +45,7 @@ describe('runReplications', () => {
         finalTime: 10,
         snap: { clock: 10 },
         summary: { served: 1 },
+        runtimeMetrics: { events_processed: 12, c_event_scans: 7, c_events_fired: 2, entities_created: 3, entities_completed: 1, replications: 1, wall_clock_ms: null },
         entitySummary: [{ id: 1 }],
         log: [{ snap: { entities: new Array(1000).fill({}) } }],
       },
@@ -53,6 +54,7 @@ describe('runReplications', () => {
     expect(payload.result.log).toEqual([]);
     expect(payload.result.summary.served).toBe(1);
     expect(payload.result.snap.clock).toBe(10);
+    expect(payload.result.runtimeMetrics).toEqual(expect.objectContaining({ events_processed: 12, entities_completed: 1 }));
   });
 
   test('assigns deterministic independent seeds', () => {
@@ -83,6 +85,30 @@ describe('runReplications', () => {
     expect(workers).toHaveLength(4);
     workers[0].complete();
     expect(workers).toHaveLength(5);
+  });
+
+  test('emits the shared batch progress shape', () => {
+    const { createWorker } = deferredWorkerFactory();
+    const onProgress = vi.fn();
+
+    runReplications({
+      model: {},
+      replications: 2,
+      baseSeed: 10,
+      workerCount: 2,
+      createWorker,
+      onProgress,
+    });
+
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
+      mode: 'batch',
+      completed: 0,
+      total: 2,
+      running: 2,
+      pending: 0,
+      cancelled: false,
+      workerCount: 2,
+    }));
   });
 
   test('returns final results in replication index order', () => {

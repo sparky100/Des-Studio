@@ -1,4 +1,5 @@
-import { runReplicationPayload } from "./worker.js";
+import { makeBatchProgress } from "./progress-contract.js";
+import { runReplicationPayload, WORKER_MESSAGE_TYPES } from "./worker.js";
 
 function defaultWorkerCount(replications) {
   const cores = typeof navigator !== "undefined" && Number.isFinite(navigator.hardwareConcurrency)
@@ -24,11 +25,11 @@ function createInlineWorker() {
         if (terminated) return;
         try {
           const payload = runReplicationPayload(message.payload);
-          this.onmessage?.({ data: { type: "REPLICATION_COMPLETE", payload } });
+          this.onmessage?.({ data: { type: WORKER_MESSAGE_TYPES.REPLICATION_COMPLETE, payload } });
         } catch (error) {
           this.onmessage?.({
             data: {
-              type: "REPLICATION_ERROR",
+              type: WORKER_MESSAGE_TYPES.REPLICATION_ERROR,
               payload: {
                 replicationIndex: message.payload?.replicationIndex,
                 seed: message.payload?.seed,
@@ -55,6 +56,7 @@ export function compactReplicationPayload(payload) {
       finalTime: result.finalTime,
       snap: result.snap,
       summary: result.summary,
+      runtimeMetrics: result.runtimeMetrics,
       phaseCTruncated: result.phaseCTruncated || result.summary?.phaseCTruncated || false,
       warnings: result.warnings || result.summary?.warnings || [],
       entitySummary: result.entitySummary,
@@ -94,7 +96,7 @@ export function runReplications(options = {}) {
   let cancelled = false;
   let failed = false;
 
-  const progress = () => ({
+  const progress = () => makeBatchProgress({
     completed,
     total,
     running: activeWorkers.size,
@@ -153,7 +155,7 @@ export function runReplications(options = {}) {
         const message = event.data;
         cleanupWorker(replicationIndex);
 
-        if (message?.type === "REPLICATION_COMPLETE") {
+        if (message?.type === WORKER_MESSAGE_TYPES.REPLICATION_COMPLETE) {
           const payload = compactReplicationPayload(message.payload);
           results[payload.replicationIndex] = payload;
           completed++;
@@ -186,7 +188,7 @@ export function runReplications(options = {}) {
 
       try {
         worker.postMessage({
-          type: "RUN_REPLICATION",
+          type: WORKER_MESSAGE_TYPES.RUN_REPLICATION,
           payload: {
             replicationIndex,
             model,

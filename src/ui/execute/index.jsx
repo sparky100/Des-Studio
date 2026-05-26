@@ -20,11 +20,13 @@ import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
 import { CustomerToken, VisualView } from "./VisualView.jsx";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
+import { estimateRunComplexity } from "../../engine/complexity-estimator.js";
+import { getRunAdmission } from "../../engine/run-admission.js";
 import { enumerateSweepableParams, generate2DSweepValues } from "../../engine/sweep-params.js";
 import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { qrSvg } from "../share/qr.js";
-import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
 import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
@@ -55,8 +57,11 @@ const intDefault = (value, fallback) => {
   const n = parseInt(value, 10);
   return Number.isInteger(n) && n > 0 ? n : fallback;
 };
+const nowPerf = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
+const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
+const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
@@ -67,6 +72,8 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
   const [results, setResults] = useState(null);
   const [liveWaitDist, setLiveWaitDist] = useState(null);
+  const [singleRunStatus, setSingleRunStatus] = useState("idle");
+  const [singleRunProgress, setSingleRunProgress] = useState(null);
   const [batchStatus, setBatchStatus] = useState("idle");
   const [batchProgress, setBatchProgress] = useState(null);
   const [replicationResults, setReplicationResults] = useState([]);
@@ -128,8 +135,10 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const autoRef = useRef(null);
   const liveHistThrottleRef = useRef(0);
   const runnerRef = useRef(null);
+  const singleRunCancelRef = useRef(false);
   const saveInProgressRef = useRef(false);
   const logRef = useRef([]);
+  const runStartPerfRef = useRef(null);
   const [animationEnabled, setAnimationEnabled] = useState(true);
   const [collectTimeSeries, setCollectTimeSeries] = useState(true);
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
@@ -185,41 +194,62 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   }, [model.experimentDefaults, warmupPeriod, maxSimTime, replications, terminationMode, terminationCondition, onExperimentDefaultsChange]);
 
   const validation = useMemo(() => {
-    const v = validateModel({
+    return validateModel({
       ...model,
+      warmupPeriod,
+      replications,
+      terminationMode,
       maxSimTime: terminationMode === 'time' ? maxSimTime : 0,
       terminationCondition: terminationMode === 'condition' ? terminationCondition : null
     });
-
-    if (terminationMode === 'time' && warmupPeriod >= maxSimTime) {
-      v.errors.push({ code: 'V14', message: 'Warm-up period must be less than the run duration.', tab: 'execute' });
-    }
-    if (!Number.isInteger(replications) || replications < 1) {
-      v.errors.push({ code: 'V15', message: 'Replication count must be a positive integer.', tab: 'execute' });
-    }
-
-    return v;
   }, [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
-  const hasErrors = validation.errors.length > 0;
-  const hasWarnings = validation.warnings.length > 0;
-  const readinessTagColor = hasErrors ? C.red : C.green;
-  const readinessTagBg = hasErrors ? C.errorBg : `${C.green}18`;
-  const readinessBorder = hasErrors ? C.danger : `${C.green}66`;
-  const readinessTitle = hasErrors
+  const hasValidationErrors = validation.errors.length > 0;
+  const complexityEstimate = useMemo(() => estimateRunComplexity(model, {
+    terminationMode,
+    maxSimTime,
+    replications,
+  }), [model, terminationMode, maxSimTime, replications]);
+  const runAdmission = useMemo(() => getRunAdmission(model, {
+    warmupPeriod,
+    maxSimTime,
+    terminationMode,
+    terminationCondition,
+    replications,
+    collectTimeSeries,
+    plan,
+    isAdmin,
+    validation,
+    complexityEstimate,
+  }), [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, plan, isAdmin, validation, complexityEstimate]);
+  const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
+  const hasAdmissionWarnings = runAdmission.warnings.length > 0;
+  const readinessTagColor = hasAdmissionErrors ? C.red : C.green;
+  const readinessTagBg = hasAdmissionErrors ? C.errorBg : `${C.green}18`;
+  const readinessBorder = hasAdmissionErrors ? C.danger : `${C.green}66`;
+  const readinessTitle = hasAdmissionErrors
     ? "Needs attention"
     : "Ready to run";
-  const readinessSummary = hasErrors
-    ? `${validation.errors.length} blocker${validation.errors.length === 1 ? "" : "s"} to resolve before running.`
+  const readinessSummary = hasAdmissionErrors
+    ? `${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length === 1 ? "" : "s"} to resolve before running.`
     : "No blocking issues found for this scenario.";
-  const readinessIssues = validation.errors;
+  const readinessIssues = runAdmission.hardErrors;
+  const complexityColor = complexityEstimate.riskLevel === "too_large"
+    ? C.red
+    : complexityEstimate.riskLevel === "large"
+      ? C.amber
+      : complexityEstimate.riskLevel === "medium"
+        ? C.warnBg
+        : C.green;
+  const complexityLabel = complexityEstimate.riskLevel.replace("_", " ").toUpperCase();
 
   const initEngine = useCallback(() => {
-    if (hasErrors) return;
+    if (hasValidationErrors) return;
     setHideRunReadiness(true);
     setExecuteSection("run");
     runSeedRef.current = seed;
     setResolvedSeed(seed);
     setLoadedRunSnapshot(null);
+    runStartPerfRef.current = nowPerf();
     engineRef.current = buildEngine(
       model,
       seed,
@@ -240,11 +270,14 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     setLiveWaitDist(null);
     liveHistThrottleRef.current = 0;
     onResultsReady?.(null);
+    singleRunCancelRef.current = false;
+    setSingleRunStatus("idle");
+    setSingleRunProgress(null);
     setBatchStatus("idle");
     setBatchProgress(null);
     setReplicationResults([]);
     setAggregateStats({});
-  }, [model, seed, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries]);
+  }, [model, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries]);
 
   const stopAuto = useCallback(() => {
     if (autoRef.current) {
@@ -297,6 +330,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       setLiveWaitDist(null);
       stopAuto();
       const summary = engineRef.current.getSummary();
+      const wallClockMs = runStartPerfRef.current == null ? null : Math.max(0, Math.round(nowPerf() - runStartPerfRef.current));
       const finalLog = nextLog;
       const fullResult = {
         snap: r.snap,
@@ -311,6 +345,11 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         timeSeries:    engineRef.current.getTimeSeries?.(),
         waitDist:      engineRef.current.getWaitDist?.(),
         entitySummary: engineRef.current.getEntitySummary?.(),
+        runtimeMetrics: {
+          ...engineRef.current.getRuntimeMetrics?.(summary.served),
+          wall_clock_ms: wallClockMs,
+          replications: 1,
+        },
         log:           finalLog,
       };
       setResults(fullResult);
@@ -327,7 +366,17 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           terminationMode,
           terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
         }, stepSeed);
-        const config = { seed: stepSeed, runLabel: effectiveRunLabel, warmupPeriod, maxTime: terminationMode === 'time' ? maxSimTime : null, runRecord, versionId: currentVersionId || null };
+        const config = {
+          seed: stepSeed,
+          runLabel: effectiveRunLabel,
+          warmupPeriod,
+          maxTime: terminationMode === 'time' ? maxSimTime : null,
+          runRecord,
+          versionId: currentVersionId || null,
+          durationMs: wallClockMs,
+          requestedCollectTimeSeries: collectTimeSeries,
+          effectiveCollectTimeSeries: collectTimeSeries,
+        };
         const save = userId
           ? saveSimulationRun(modelId, userId, fullResult, config)
           : Promise.resolve(saveLocalRun(modelId, fullResult, config));
@@ -380,24 +429,17 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
 
   const doRunAll = useCallback(async () => {
     stopAuto();
-    if (hasErrors) return;
+    if (hasAdmissionErrors) return;
     if (saveInProgressRef.current) return;
     if (!modelId) {
       setSaveStatus({ state: 'error', message: '✗ No model to run' });
       return;
     }
-
-    // F69.2: Run model checker before every run. Block on errors, show warnings.
-    const checkerIssues = checkModel(model);
-    setModelCheckerIssues(checkerIssues);
-    const checkerErrors = checkerIssues.filter(i => i.severity === "error");
-    if (checkerErrors.length > 0) {
-      setModelCheckerOpen(true);
-      setSaveStatus({ state: 'error', message: `✗ ${checkerErrors.length} structural error${checkerErrors.length === 1 ? "" : "s"} must be fixed before running. See Model Check panel.` });
-      return;
-    }
-    if (checkerIssues.length > 0) {
-      setModelCheckerOpen(true);
+    setModelCheckerIssues(runAdmission.modelCheckIssues);
+    if (runAdmission.modelCheckIssues.length > 0) setModelCheckerOpen(true);
+    if (runAdmission.confirmations.length > 0) {
+      const confirmed = window.confirm(runAdmission.confirmations.map(item => item.message).join("\n\n"));
+      if (!confirmed) return;
     }
 
     setHideRunReadiness(true);
@@ -408,6 +450,8 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     setLoadedRunSnapshot(null);
     const maxTimeForRun = terminationMode === 'time' ? maxSimTime : null;
     const stopConditionForRun = terminationMode === 'condition' ? terminationCondition : null;
+    const effectiveCollectTimeSeries = runAdmission.effectiveSettings.collectTimeSeries;
+    const chartDataAutoDisabled = collectTimeSeries && !effectiveCollectTimeSeries;
 
     // ── Live data prefetch (calibrated_batch / lookahead) ─────────────────
     // Resolve all dataSources before handing the model to the engine or workers.
@@ -434,12 +478,19 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     if (replications > 1) {
       const batchId = makeBatchId();
       const completedPayloads = [];
+      runStartPerfRef.current = nowPerf();
+      singleRunCancelRef.current = false;
+      setSingleRunStatus("idle");
+      setSingleRunProgress(null);
 
       setMode("running");
       setCurrentSnap(null);
       setResults(null);
       onResultsReady?.(null);
     const batchInitLog = [{ phase: "INIT", time: 0, message: `Replication batch started  (N=${replications}, base seed: ${runSeed})` }];
+    if (chartDataAutoDisabled) {
+      batchInitLog.push({ phase: "NOTE", time: 0, message: "Chart data disabled automatically for this large run." });
+    }
     logRef.current = batchInitLog;
     setLog(batchInitLog);
       setSaveStatus(null);
@@ -456,7 +507,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         warmupPeriod,
         maxSimTime: maxTimeForRun,
         terminationCondition: stopConditionForRun,
-        collectTimeSeries,
+        collectTimeSeries: effectiveCollectTimeSeries,
         onProgress: progress => setBatchProgress(progress),
         onReplicationComplete: payload => {
           completedPayloads[payload.replicationIndex] = payload;
@@ -485,7 +536,11 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           try {
             const ordered = payloads.filter(Boolean);
             const stats = summarizeReplicationResults(ordered, CI_METRICS);
-            const batchResult = makeBatchResult(ordered, stats, maxTimeForRun, warmupPeriod);
+            const wallClockMs = runStartPerfRef.current == null ? null : Math.max(0, Math.round(nowPerf() - runStartPerfRef.current));
+            const batchResult = {
+              ...makeBatchResult(ordered, stats, maxTimeForRun, warmupPeriod),
+              runtimeMetrics: makeBatchRuntimeMetrics(ordered, replications, wallClockMs),
+            };
 
             setBatchStatus("complete");
             setResults(batchResult);
@@ -510,7 +565,10 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
                   summary: payload.result?.summary || {}, finalTime: payload.result?.finalTime,
                 })),
                 runRecord: batchRunRecord,
+                durationMs: wallClockMs,
                 versionId: currentVersionId || null,
+                requestedCollectTimeSeries: collectTimeSeries,
+                effectiveCollectTimeSeries: effectiveCollectTimeSeries,
               };
               if (userId) {
                 const runId = await saveSimulationRun(modelId, userId, batchResult, batchConfig);
@@ -563,10 +621,20 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     onResultsReady?.(null);
     setSaveStatus(null);
     setPhaseCTruncated(false);
+    setBatchStatus("idle");
+    setBatchProgress(null);
+    setReplicationResults([]);
+    setAggregateStats({});
+    singleRunCancelRef.current = false;
+    setSingleRunStatus("running");
     const runInitLog = [{ phase: "INIT", time: 0, message: `Run started  (seed: ${runSeed})` }];
+    if (chartDataAutoDisabled) {
+      runInitLog.push({ phase: "NOTE", time: 0, message: "Chart data disabled automatically for this large run." });
+    }
     logRef.current = runInitLog;
     setLog(runInitLog);
     setMode("running");
+    runStartPerfRef.current = nowPerf();
 
     const engine = buildEngine(
       runModel,
@@ -575,9 +643,39 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
       maxTimeForRun,
       stopConditionForRun,
       5000, 500,
-      collectTimeSeries
+      effectiveCollectTimeSeries
     );
-    const result = engine.runAll();
+    setSingleRunProgress(engine.getProgress());
+
+    let completed = false;
+    while (!completed && !singleRunCancelRef.current) {
+      for (let i = 0; i < 50; i++) {
+        if (singleRunCancelRef.current) break;
+        const stepResult = engine.step({ captureSnap: false });
+        if (stepResult.phaseCTruncated) setPhaseCTruncated(true);
+        if (stepResult.done) {
+          completed = true;
+          break;
+        }
+      }
+      setSingleRunProgress(engine.getProgress({ done: completed }));
+      if (!completed && !singleRunCancelRef.current) {
+        await yieldToBrowser();
+      }
+    }
+
+    const rawResult = singleRunCancelRef.current
+      ? engine.buildResult({ cancelled: true, message: "Run cancelled at a safe checkpoint. Partial results shown." })
+      : engine.buildResult();
+    const wallClockMs = runStartPerfRef.current == null ? null : Math.max(0, Math.round(nowPerf() - runStartPerfRef.current));
+    const result = {
+      ...rawResult,
+      runtimeMetrics: {
+        ...rawResult.runtimeMetrics,
+        wall_clock_ms: wallClockMs,
+        replications: 1,
+      },
+    };
 
     setCurrentSnap(result.snap);
     setResults(result);
@@ -586,7 +684,14 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     setLog(result.log);
     onRunComplete?.({ results: result, replicationResults: [], warmupDetection: null, log: result.log });
     setMode("done");
+    setSingleRunStatus(singleRunCancelRef.current ? "cancelled" : "complete");
+    setSingleRunProgress(engine.getProgress({ done: true, cancelled: singleRunCancelRef.current }));
     if (result.phaseCTruncated || result.summary?.phaseCTruncated) setPhaseCTruncated(true);
+
+    if (singleRunCancelRef.current) {
+      setSaveStatus({ state: 'error', message: 'Run cancelled. Partial results were not saved.' });
+      return;
+    }
 
     saveInProgressRef.current = true;
     setSaveStatus({ state: 'saving', message: 'Saving results...' });
@@ -600,7 +705,18 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         terminationMode,
         terminationCondition: stopConditionForRun,
       }, runSeed);
-      const config = { seed: runSeed, runLabel: effectiveRunLabel, replications: 1, warmupPeriod, maxTime: maxTimeForRun, runRecord: singleRunRecord, versionId: currentVersionId || null };
+      const config = {
+        seed: runSeed,
+        runLabel: effectiveRunLabel,
+        replications: 1,
+        warmupPeriod,
+        maxTime: maxTimeForRun,
+        runRecord: singleRunRecord,
+        versionId: currentVersionId || null,
+        durationMs: wallClockMs,
+        requestedCollectTimeSeries: collectTimeSeries,
+        effectiveCollectTimeSeries: effectiveCollectTimeSeries,
+      };
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
       let runId;
       try {
@@ -631,13 +747,19 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     } finally {
       saveInProgressRef.current = false;
     }
-  }, [model, userId, modelId, seed, effectiveRunLabel, hasErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, stopAuto, onRunSaved, onResultsReady, refreshRunHistory]);
+  }, [model, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, stopAuto, onRunSaved, onResultsReady, refreshRunHistory]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
     setBatchStatus("cancelling");
     runnerRef.current.cancel();
   }, []);
+
+  const cancelSingleRun = useCallback(() => {
+    if (singleRunStatus !== "running") return;
+    singleRunCancelRef.current = true;
+    setSingleRunStatus("cancelling");
+  }, [singleRunStatus]);
 
   // Store LLM-generated narrative and model description in the run record.
   // Called after a run saves successfully — fire-and-forget, never blocks the UI.
@@ -689,11 +811,11 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
 
   const autoRunRef = useRef(false);
   useEffect(() => {
-    if (autoRun && !autoRunRef.current && !hasErrors && modelId) {
+    if (autoRun && !autoRunRef.current && !hasAdmissionErrors && modelId) {
       autoRunRef.current = true;
       doRunAll();
     }
-  }, [autoRun, hasErrors, modelId, doRunAll]);
+  }, [autoRun, hasAdmissionErrors, modelId, doRunAll]);
 
   useEffect(() => {
     if (!userId) return;
@@ -771,6 +893,8 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   }, [executeSection, modelId, userId]);
 
   const batchActive = batchStatus === "running" || batchStatus === "cancelling";
+  const singleRunActive = singleRunStatus === "running" || singleRunStatus === "cancelling";
+  const runBusy = batchActive || singleRunActive;
   const partialBatchStatus = batchStatus === "cancelled" || batchStatus === "error";
   const canExportResults = Boolean(results || (partialBatchStatus && replicationResults.length));
   const canOpenResultsView = Boolean(results || replicationResults.length > 0);
@@ -962,7 +1086,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
   const canShare = userId && results && latestRunId && !shareSaving;
 
   const handleRunSweep = useCallback(() => {
-    if (hasErrors) return;
+    if (hasAdmissionErrors) return;
     if (sweepMode === "1d" && !sweepSelectedParam) return;
     if (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB)) return;
 
@@ -995,7 +1119,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         warmupPeriod,
         maxSimTime: terminationMode === "time" ? maxSimTime : null,
         terminationCondition: terminationMode === "condition" ? terminationCondition : null,
-        collectTimeSeries,
+        collectTimeSeries: runAdmission.effectiveSettings.collectTimeSeries,
         onProgress(progress) {
           setSweepProgress(progress);
         },
@@ -1029,7 +1153,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         warmupPeriod,
         maxSimTime: terminationMode === "time" ? maxSimTime : null,
         terminationCondition: terminationMode === "condition" ? terminationCondition : null,
-        collectTimeSeries,
+        collectTimeSeries: runAdmission.effectiveSettings.collectTimeSeries,
         onProgress(progress) {
           setSweepProgress(progress);
         },
@@ -1054,7 +1178,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
     }
   }, [model, sweepMode, sweepSelectedParam, sweepSelectedParamB, sweepMin, sweepMax, sweepStep,
       sweepMinB, sweepMaxB, sweepStepB, replications, seed, warmupPeriod, maxSimTime,
-      terminationMode, terminationCondition, collectTimeSeries, hasErrors]);
+      terminationMode, terminationCondition, collectTimeSeries, hasAdmissionErrors, runAdmission]);
 
   const handleCancelSweep = useCallback(() => {
     sweepRunnerRef.current?.cancel();
@@ -1547,7 +1671,7 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
 
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <Btn variant="primary" onClick={handleRunSweep}
-                    disabled={sweepStatus === "running" || hasErrors || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))}>
+                    disabled={sweepStatus === "running" || hasAdmissionErrors || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))}>
                     {sweepStatus === "running" ? "Running..." : "Run Sweep"}
                   </Btn>
                   {sweepStatus === "running" && (
@@ -1877,13 +2001,13 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {/* Validation status indicator — informational only, positioned first */}
-        {hasErrors ? (
-          <Btn variant="danger" disabled={true} title={`${validation.errors.length} blocker(s) must be resolved before running`}>
-             {validation.errors.length} blocker{validation.errors.length !== 1 ? "s" : ""}
+        {hasAdmissionErrors ? (
+          <Btn variant="danger" disabled={true} title={`${runAdmission.hardErrors.length} blocker(s) must be resolved before running`}>
+             {runAdmission.hardErrors.length} blocker{runAdmission.hardErrors.length !== 1 ? "s" : ""}
           </Btn>
-        ) : hasWarnings ? (
-          <Btn variant="ghost" disabled={true} title={`${validation.warnings.length} warning(s) — model can run but worth checking`}>
-             {validation.warnings.length} warning{validation.warnings.length !== 1 ? "s" : ""}
+        ) : hasAdmissionWarnings ? (
+          <Btn variant="ghost" disabled={true} title={`${runAdmission.warnings.length} warning(s) — model can run but worth checking`}>
+             {runAdmission.warnings.length} warning{runAdmission.warnings.length !== 1 ? "s" : ""}
           </Btn>
         ) : (
           <Btn variant="success" disabled={true} title="Model is valid — ready to run">
@@ -1898,9 +2022,9 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
         title="Run structural checks on this model">
           Check Model
         </Btn>
-        <Btn variant="primary" onClick={initEngine} disabled={hasErrors || batchActive} title="Reset simulation to initial state">⟳ Reset</Btn>
-        <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasErrors || batchActive}> Step</Btn>
-        <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasErrors || batchActive}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
+        <Btn variant="primary" onClick={initEngine} disabled={hasValidationErrors || runBusy} title="Reset simulation to initial state">⟳ Reset</Btn>
+        <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasValidationErrors || runBusy}> Step</Btn>
+        <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || runBusy}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
             {speedMultiplier.toFixed(1)}×
@@ -1914,8 +2038,8 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
             style={{ width: 72, accentColor: C.accent, cursor: "pointer" }}
           />
         </div>
-        <Btn variant="ghost" onClick={doRunAll} disabled={hasErrors || batchActive || saveStatus?.state === 'saving' || saveInProgressRef.current}>
-          {hasErrors ? `✕ ${validation.errors.length} blocker${validation.errors.length !== 1 ? "s" : ""}` : "⚡ Run All"}
+        <Btn variant="ghost" onClick={doRunAll} disabled={hasAdmissionErrors || runBusy || saveStatus?.state === 'saving' || saveInProgressRef.current}>
+          {hasAdmissionErrors ? `✕ ${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length !== 1 ? "s" : ""}` : "⚡ Run All"}
         </Btn>
         {canOpenResultsView && (
           <Btn variant="ghost" onClick={() => onGoToResults?.()} title="View results in the Results section">
@@ -1971,13 +2095,14 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           )}
         </div>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
+        {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
       </div>
 
       {executeSection === "run" && (
         <>
       {!hideRunReadiness && (
         <div
-          role={hasErrors ? "alert" : "status"}
+          role={hasAdmissionErrors ? "alert" : "status"}
           style={{
             background: C.panel,
             border: `1px solid ${readinessBorder}`,
@@ -2021,10 +2146,10 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
                 <div
                   key={`${issue.code}-${index}`}
                   style={{
-                    background: hasErrors ? C.errorBg : C.warmup,
-                    border: `1px solid ${hasErrors ? C.danger : C.amber}55`,
+                    background: hasAdmissionErrors ? C.errorBg : C.warmup,
+                    border: `1px solid ${hasAdmissionErrors ? C.danger : C.amber}55`,
                     borderRadius: 6,
-                    color: hasErrors ? C.error : C.warnBg,
+                    color: hasAdmissionErrors ? C.error : C.warnBg,
                     fontFamily: FONT,
                     fontSize: 11,
                     padding: "8px 10px",
@@ -2040,6 +2165,119 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
               )}
             </div>
           )}
+          {runAdmission.warnings.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {runAdmission.warnings.slice(0, 3).map((issue, index) => (
+                <div
+                  key={`warn-${issue.code}-${index}`}
+                  style={{
+                    background: `${C.amber}12`,
+                    border: `1px solid ${C.amber}44`,
+                    borderRadius: 6,
+                    color: C.text,
+                    fontFamily: FONT,
+                    fontSize: 11,
+                    padding: "8px 10px",
+                  }}
+                >
+                  [{issue.code}] {issue.message}
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>
+                  RUN SIZE ESTIMATE
+                </div>
+                <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
+                  Conservative preview of likely workload before execution.
+                </div>
+              </div>
+              <span
+                style={{
+                  background: `${complexityColor}18`,
+                  border: `1px solid ${complexityColor}55`,
+                  borderRadius: 999,
+                  color: complexityColor,
+                  fontFamily: FONT,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: "5px 10px",
+                }}
+              >
+                {complexityLabel}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[
+                { label: "Planned arrivals", value: formatEstimate(complexityEstimate.plannedArrivals) },
+                { label: "Planned schedule rows", value: formatEstimate(complexityEstimate.plannedScheduleRows) },
+                { label: "Expected entities", value: formatEstimate(complexityEstimate.expectedEntities) },
+                { label: "Stage moves", value: formatEstimate(complexityEstimate.estimatedStageTransitions) },
+                { label: "C-event scans", value: formatEstimate(complexityEstimate.estimatedCEventScans) },
+                { label: "Replications", value: formatEstimate(complexityEstimate.replications) },
+              ].map(item => (
+                <div
+                  key={item.label}
+                  style={{
+                    background: C.bg,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 6,
+                    minWidth: 112,
+                    padding: "8px 10px",
+                  }}
+                >
+                  <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 3 }}>{item.label}</div>
+                  <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+              Confidence: {complexityEstimate.confidence}. This estimate uses arrival and service means, so real runs may be smaller or larger.
+            </div>
+            {complexityEstimate.unknowns.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {complexityEstimate.unknowns.slice(0, 2).map((item, index) => (
+                  <div
+                    key={`${index}-${item}`}
+                    style={{
+                      background: C.bg,
+                      border: `1px solid ${C.border}`,
+                      borderRadius: 6,
+                      color: C.muted,
+                      fontFamily: FONT,
+                      fontSize: 11,
+                      padding: "8px 10px",
+                    }}
+                  >
+                    {item}
+                  </div>
+                ))}
+              </div>
+            )}
+            {complexityEstimate.bottlenecks.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {complexityEstimate.bottlenecks.map(item => (
+                  <div
+                    key={`${item.queueName}-${item.resourceNames.join("-")}`}
+                    style={{
+                      background: `${C.amber}12`,
+                      border: `1px solid ${C.amber}44`,
+                      borderRadius: 6,
+                      color: C.text,
+                      fontFamily: FONT,
+                      fontSize: 11,
+                      padding: "8px 10px",
+                    }}
+                  >
+                    {item.queueName}: {item.reason}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -2119,6 +2357,30 @@ const ExecutePanel = ({ model, modelId, userId, currentVersion, currentVersionId
           padding: "10px 12px",
         }}>
           ⚠ Model has been modified since this run. Results shown are from the saved run record, not the current model. Run again for updated results.
+        </div>
+      )}
+
+      {singleRunStatus !== "idle" && (
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SINGLE RUN</div>
+            <Tag label={singleRunStatus} color={singleRunStatus === "complete" ? C.green : singleRunStatus === "cancelled" ? C.red : C.amber} />
+            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
+              {singleRunStatus === "cancelled"
+                ? `Stopped at t=${fmt(singleRunProgress?.clock)} after ${singleRunProgress?.completed || 0} cycle${(singleRunProgress?.completed || 0) === 1 ? "" : "s"}`
+                : singleRunStatus === "complete"
+                  ? `Finished at t=${fmt(singleRunProgress?.clock)} after ${singleRunProgress?.completed || 0} cycle${(singleRunProgress?.completed || 0) === 1 ? "" : "s"}`
+                  : `Cycle ${singleRunProgress?.completed || 0}/${singleRunProgress?.total || 0} · t=${fmt(singleRunProgress?.clock)} · FEL ${singleRunProgress?.felSize || 0}`}
+            </div>
+            <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>
+              Events processed: {singleRunProgress?.eventsProcessed || 0}
+            </div>
+          </div>
+          {(singleRunStatus === "cancelling" || singleRunStatus === "cancelled") && (
+            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
+              Cancellation waits for the next safe engine checkpoint, then shows partial results without saving them.
+            </div>
+          )}
         </div>
       )}
 
