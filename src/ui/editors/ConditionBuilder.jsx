@@ -1,13 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { C, FONT, toTitleCase, normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, Field, SH, InfoBox, Empty } from "../shared/components.jsx";
-
-const buildConditionStr = (rows) => {
-  return rows.map((r,i) => {
-    const clause = `${r.token} ${r.operator} ${r.value}`;
-    return i===0 ? clause : `${r.join} ${clause}`;
-  }).join(' ');
-};
+import { buildConditionString, rowsToPredicate, parseConditionString, predicateToRows } from "../../model/conditionFormat.js";
 
 const defaultConditionValueForType = (valueType) => {
   if (valueType === 'boolean') return 'true';
@@ -15,53 +9,20 @@ const defaultConditionValueForType = (valueType) => {
   return '0';
 };
 
-// Convert flat rows to compound predicate JSON structure
-const rowsToCompoundPredicate = (rows) => {
-  if(!rows || rows.length === 0) return null;
-  if(rows.length === 1) {
-    const r = rows[0];
-    return { variable: r.token, operator: r.operator, value: r.value };
-  }
-  // Multiple rows — build compound with AND/OR
-  const clauses = rows.map(r => ({
-    variable: r.token,
-    operator: r.operator,
-    value: r.value,
-  }));
-  // Get the primary connector (first join, or AND if only one clause)
-  const primaryOp = rows.length > 1 ? rows[1].join : 'AND';
-  return { operator: primaryOp, clauses };
-};
+const rowsToCompoundPredicate = rowsToPredicate;
 
-const parseConditionStr = (str, tokens) => {
-  // Try to parse existing condition string back into rows
-  // Supports: TOKEN OP VALUE (AND|OR TOKEN OP VALUE)*
-  if(!str||!str.trim()) return [];
-  const parts = str.trim().split(/\b(AND|OR)\b/i);
-  const rows = [];
-  let join = 'AND';
-  parts.forEach(part => {
-    part = part.trim();
-    if(part.toUpperCase()==='AND'||part.toUpperCase()==='OR'){
-      join = part.toUpperCase(); return;
-    }
-    const m = part.match(/^(.+?)\s*(>=|<=|==|!=|>|<)\s*(.*)$/);
-    if(m){
-      const token = m[1].trim();
-      const op    = m[2].trim();
-      const val   = m[3].trim();
-      const knownToken = tokens.find(t=>t.value===token);
-      rows.push({
-        id: 'r'+crypto.randomUUID(),
-        token: knownToken ? token : (tokens[0]?.value||''),
-        operator: ['>=','<=','==','!=','>','<'].includes(op) ? op : '>',
-        value: val || defaultConditionValueForType(knownToken?.valueType || tokens[0]?.valueType || 'number'),
-        join,
-      });
-      join = 'AND';
-    }
+const parseConditionStr = (value, tokens) => {
+  const baseRows = predicateToRows(value);
+  return baseRows.map(row => {
+    const knownToken = tokens.find(token => token.value === row.token);
+    return {
+      ...row,
+      id: row.id || `r${crypto.randomUUID()}`,
+      token: knownToken ? row.token : (tokens[0]?.value || ''),
+      operator: ['>=','<=','==','!=','>','<'].includes(row.operator) ? row.operator : '>',
+      value: row.value || defaultConditionValueForType(knownToken?.valueType || tokens[0]?.valueType || 'number'),
+    };
   });
-  return rows;
 };
 
 const sameConditionRows = (a = [], b = []) => {
@@ -143,16 +104,16 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
     if (externalChanged) {
       const parsed = parseConditionStr(externalValue, tokens);
       setRows(prev => sameConditionRows(prev, parsed) ? prev : parsed);
-      const normalized = buildConditionStr(parsed);
-      if (normalized && externalValue !== normalized) onChange(normalized);
+      const normalized = rowsToCompoundPredicate(parsed);
+      if (normalized && JSON.stringify(externalValue) !== JSON.stringify(normalized)) onChange(normalized);
     } else if (tokensChanged) {
       const normalizedRows = rows.map(row => ({
         ...row,
         token: tokens.find(t => t.value === row.token) ? row.token : (tokens[0]?.value || ''),
       }));
-      const normalized = buildConditionStr(normalizedRows);
+      const normalized = rowsToCompoundPredicate(normalizedRows);
       setRows(prev => sameConditionRows(prev, normalizedRows) ? prev : normalizedRows);
-      if (normalized && externalValue !== normalized) {
+      if (normalized && JSON.stringify(externalValue) !== JSON.stringify(normalized)) {
         onChange(normalized);
       }
     }
@@ -164,7 +125,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
   // Sync rows → condition string whenever rows change
   const updateRows = (newRows) => {
     setRows(newRows);
-    onChange(buildConditionStr(newRows));
+    onChange(rowsToCompoundPredicate(newRows));
   };
 
   const addRow = () => {
@@ -292,5 +253,7 @@ const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], q
     </div>
   );
 };
+
+const buildConditionStr = buildConditionString;
 
 export { buildConditionStr, defaultConditionValueForType, rowsToCompoundPredicate, parseConditionStr, sameConditionRows, ConditionBuilder };

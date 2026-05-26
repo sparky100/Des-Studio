@@ -11,11 +11,228 @@
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
 import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting }   from "./entities.js";
-import { evalCondition }                        from "./conditions.js";
+import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
 import { nullRegistry }                        from "./adapters/index.js";
 
 export { DISTRIBUTIONS, sample, sampleAttrs };
+
+function normalizeImpactName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function createDirtySet() {
+  return {
+    all: false,
+    queues: new Set(),
+    resources: new Set(),
+    stateVars: new Set(),
+    builtins: new Set(),
+  };
+}
+
+function markDirtyQueue(dirty, queueName) {
+  if (queueName) dirty.queues.add(normalizeImpactName(queueName));
+}
+
+function markDirtyResource(dirty, resourceName) {
+  if (resourceName) dirty.resources.add(normalizeImpactName(resourceName));
+}
+
+function markDirtyStateVar(dirty, stateVarName) {
+  if (stateVarName) dirty.stateVars.add(stateVarName);
+}
+
+function markDirtyBuiltin(dirty, builtinName) {
+  if (builtinName) dirty.builtins.add(builtinName);
+}
+
+function mergeDirtyInto(target, source) {
+  if (!source) return target;
+  target.all = target.all || source.all;
+  for (const queueName of source.queues || []) target.queues.add(queueName);
+  for (const resourceName of source.resources || []) target.resources.add(resourceName);
+  for (const stateVarName of source.stateVars || []) target.stateVars.add(stateVarName);
+  for (const builtinName of source.builtins || []) target.builtins.add(builtinName);
+  return target;
+}
+
+function intersectsSet(a, b) {
+  for (const value of a) {
+    if (b.has(value)) return true;
+  }
+  return false;
+}
+
+function dirtyHasSignals(dirty) {
+  return dirty.all
+    || dirty.queues.size > 0
+    || dirty.resources.size > 0
+    || dirty.stateVars.size > 0
+    || dirty.builtins.size > 0;
+}
+
+function queueHasWaiting(queueName, helpers, model) {
+  const queueDef = (model.queues || []).find(q =>
+    normalizeImpactName(q.name) === normalizeImpactName(queueName)
+  );
+  if (queueDef) {
+    return (helpers.waitingInQueue?.(queueDef.name, queueDef.discipline || "FIFO") || []).length > 0;
+  }
+  return (helpers.waitingOf?.(queueName, "FIFO") || []).length > 0;
+}
+
+function shouldEvaluateCEvent(event, dirty, helpers, model, queueWaitingCache = null) {
+  if (!dirty || !dirtyHasSignals(dirty) || dirty.all) return true;
+  const deps = event._conditionDeps;
+  if (!deps) return true;
+  if (deps.unknown || deps.clock || deps.entityAttrs.size > 0) return true;
+  if (intersectsSet(deps.queues, dirty.queues)) return true;
+  const nonQueueDirty = intersectsSet(deps.resources, dirty.resources)
+    || intersectsSet(deps.stateVars, dirty.stateVars)
+    || intersectsSet(deps.builtins, dirty.builtins);
+  if (!nonQueueDirty) return false;
+  if (deps.queues.size === 0) return true;
+  for (const queueName of deps.queues) {
+    let hasWaiting;
+    if (queueWaitingCache && queueWaitingCache.has(queueName)) {
+      hasWaiting = queueWaitingCache.get(queueName);
+    } else {
+      hasWaiting = queueHasWaiting(queueName, helpers, model);
+      queueWaitingCache?.set(queueName, hasWaiting);
+    }
+    if (hasWaiting) return true;
+  }
+  return false;
+}
+
+function compileEffectImpactTemplate(effectStr) {
+  const text = Array.isArray(effectStr) ? effectStr.filter(Boolean).join(";") : String(effectStr || "");
+  const parts = text.split(";").map(part => part.trim()).filter(Boolean);
+  const actions = [];
+
+  for (const part of parts) {
+    let m;
+    if ((m = part.match(/^ARRIVE\(([^,)]+)(?:\s*,\s*([^,)]+))?\)$/i))) {
+      actions.push({ kind: "arrive", typeName: m[1].trim(), queueName: m[2]?.trim() || `${m[1].trim()}Queue` });
+    } else if ((m = part.match(/^ASSIGN\(([^,)]+)\s*,\s*([^,)]+)\)$/i))) {
+      actions.push({ kind: "assign", queueName: m[1].trim(), resourceName: m[2].trim() });
+    } else if (part.match(/^COMPLETE\(\)$/i)) {
+      actions.push({ kind: "complete" });
+    } else if ((m = part.match(/^RELEASE\(([^,)]+)(?:\s*,\s*([^,)]+))?\)$/i))) {
+      actions.push({ kind: "release", resourceName: m[1].trim(), targetQueue: m[2]?.trim() || null });
+    } else if ((m = part.match(/^RENEGE(?:_OLDEST)?\(([^)]*)\)$/i))) {
+      actions.push({ kind: "renege", queueHint: m[1]?.trim() || null });
+    } else if ((m = part.match(/^COSEIZE\(([^,)]+)\s*,\s*(.+)\)$/i))) {
+      actions.push({ kind: "coseize", queueName: m[1].trim(), resourceNames: m[2].split(",").map(s => s.trim()).filter(Boolean) });
+    } else if ((m = part.match(/^MATCH\(([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\s*,\s*([^,)]+)\)$/i))) {
+      actions.push({ kind: "match", queueNames: [m[2].trim(), m[4].trim(), m[5].trim()] });
+    } else if ((m = part.match(/^BATCH\(([^,)]+)\s*,/i))) {
+      actions.push({ kind: "queueOnly", queueNames: [m[1].trim()] });
+    } else if ((m = part.match(/^UNBATCH\(([^,)]+)\)$/i))) {
+      actions.push({ kind: "queueOnly", queueNames: [m[1].trim()] });
+    } else if ((m = part.match(/^PREEMPT\(([^,)]+)\)$/i))) {
+      actions.push({ kind: "preempt", resourceName: m[1].trim() });
+    } else if ((m = part.match(/^FAIL\(([^,)]+)\)$/i)) || (m = part.match(/^REPAIR\(([^,)]+)\)$/i))) {
+      actions.push({ kind: "resourceOnly", resourceName: m[1].trim() });
+    } else if ((m = part.match(/^SET\((\w+)\s*,/i))) {
+      actions.push({ kind: "stateVar", stateVarName: m[1] });
+    } else if (part.match(/^SET_ATTR\(/i)) {
+      actions.push({ kind: "all" });
+    } else if (part.match(/^COST\(/i)) {
+      actions.push({ kind: "noop" });
+    } else {
+      const scalarMatch = part.match(/^(\w+)\s*(\+\+|--|\+=|-=|=)/);
+      if (scalarMatch) {
+        actions.push({ kind: "stateVar", stateVarName: scalarMatch[1] });
+      } else {
+        actions.push({ kind: "all" });
+      }
+    }
+  }
+
+  return actions;
+}
+
+function deriveDirtyFromTemplate(template, event, ctx) {
+  const dirty = createDirtySet();
+  const currentCustomer = () => {
+    const custId = ctx._lastCustId ?? event?._contextCustId;
+    return custId != null ? ctx.entities.find(entity => entity.id === custId) : null;
+  };
+  const currentServer = () => {
+    const srvId = ctx._lastSrvId ?? event?._contextSrvId;
+    return srvId != null ? ctx.entities.find(entity => entity.id === srvId) : null;
+  };
+
+  for (const action of template || []) {
+    switch (action.kind) {
+      case "arrive":
+        markDirtyQueue(dirty, action.typeName);
+        markDirtyQueue(dirty, action.queueName);
+        break;
+      case "assign":
+        markDirtyQueue(dirty, action.queueName);
+        markDirtyResource(dirty, action.resourceName);
+        break;
+      case "complete": {
+        const customer = currentCustomer();
+        const server = currentServer();
+        markDirtyBuiltin(dirty, "served");
+        markDirtyQueue(dirty, customer?.type);
+        markDirtyQueue(dirty, customer?.lastQueue || customer?.queue);
+        markDirtyResource(dirty, server?.type);
+        break;
+      }
+      case "release": {
+        const customer = currentCustomer();
+        markDirtyResource(dirty, action.resourceName);
+        markDirtyQueue(dirty, customer?.type);
+        markDirtyQueue(dirty, customer?.lastQueue || customer?.queue);
+        markDirtyQueue(dirty, action.targetQueue);
+        break;
+      }
+      case "renege": {
+        const customer = currentCustomer();
+        markDirtyBuiltin(dirty, "reneged");
+        markDirtyQueue(dirty, customer?.type);
+        markDirtyQueue(dirty, customer?.lastQueue || customer?.queue || action.queueHint);
+        break;
+      }
+      case "coseize":
+        markDirtyQueue(dirty, action.queueName);
+        action.resourceNames.forEach(resourceName => markDirtyResource(dirty, resourceName));
+        break;
+      case "match":
+      case "queueOnly":
+        action.queueNames.forEach(queueName => markDirtyQueue(dirty, queueName));
+        break;
+      case "preempt": {
+        const customer = currentCustomer();
+        markDirtyResource(dirty, action.resourceName);
+        markDirtyQueue(dirty, customer?.type);
+        markDirtyQueue(dirty, customer?.lastQueue || customer?.queue);
+        break;
+      }
+      case "resourceOnly":
+        markDirtyResource(dirty, action.resourceName);
+        break;
+      case "stateVar":
+        markDirtyStateVar(dirty, action.stateVarName);
+        break;
+      case "all":
+        dirty.all = true;
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (event?.type === "SHIFT_CHANGE" || event?.type === "FAILURE" || event?.type === "REPAIR") {
+    markDirtyResource(dirty, event.serverTypeName);
+  }
+  return dirty;
+}
 
 function getValidShiftSchedule(entityType) {
   if (!Array.isArray(entityType.shiftSchedule) || entityType.shiftSchedule.length === 0) return [];
@@ -205,6 +422,36 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       stages: [],
     };
   };
+  const sortedCEvents = (runtimeModel.cEvents || []).slice()
+    .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999))
+    .map(event => ({
+      ...event,
+      _compiledCondition: compilePredicate(event.condition),
+      _conditionDeps: getPredicateDependencies(event.condition),
+      _effectImpactTemplate: compileEffectImpactTemplate(event.effect),
+    }));
+  const enableFilteredPhaseC = sortedCEvents.length >= 8;
+  const bEventImpactTemplates = enableFilteredPhaseC
+    ? new Map((runtimeModel.bEvents || []).map(event => [event.id, compileEffectImpactTemplate(event.effect)]))
+    : null;
+  const compiledTerminationCondition = terminationCondition ? compilePredicate(terminationCondition) : null;
+  const predicateState = {
+    currentEntity: null,
+    helpers: null,
+    entities,
+    model: runtimeModel,
+    scalars: state,
+    get clock() { return clock; },
+    get __served() { return state.__served ?? 0; },
+    get __reneged() { return state.__reneged ?? 0; },
+    get __loopCount() { return state.__loopCount ?? 0; },
+  };
+  const usePredicateState = (helpers, currentEntity = null) => {
+    predicateState.helpers = helpers;
+    predicateState.currentEntity = currentEntity;
+    predicateState.entities = entities;
+    return predicateState;
+  };
 
   // ── Snapshot ──────────────────────────────────────────────────────────────
   function snap(clock) {
@@ -391,7 +638,7 @@ const cycleLog = [];
     // Condition-based termination check
     if (terminationCondition) {
       const h = makeHelpers(entities, runtimeModel);
-      if (evalCondition(terminationCondition, h, state, clock)) {
+      if (compiledTerminationCondition(usePredicateState(h))) {
         _terminationConditionMet = true;
         const msg = "Termination condition met — simulation complete";
         const endEntry = makeTraceEntry("END", { message: msg });
@@ -407,6 +654,7 @@ const cycleLog = [];
 
     // Phase B — fire all due events
     fel = fel.filter(ev => Math.abs(ev.scheduledTime - clock) >= 1e-9);
+    let phaseCDirty = enableFilteredPhaseC ? createDirtySet() : null;
 
     for (const ev of due) {
       if (ev.type === 'WARMUP' && !_warmupComplete) {
@@ -501,6 +749,16 @@ const cycleLog = [];
       const ctx = makeCtx(ev);
       ctx.clock = clock;
       const { msgs, felEntries, skipped } = fireBEvent(ev, ctx);
+      if (enableFilteredPhaseC) {
+        mergeDirtyInto(
+          phaseCDirty,
+          deriveDirtyFromTemplate(
+            bEventImpactTemplates.get(ev.id),
+            { ...ev, _contextCustId: ctx._lastCustId ?? ev._contextCustId, _contextSrvId: ctx._lastSrvId ?? ev._contextSrvId },
+            ctx
+          )
+        );
+      }
 
       for (const entry of felEntries) fel.push(entry);
       fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
@@ -521,17 +779,18 @@ const cycleLog = [];
     }
 
 // Phase C — evaluate conditionals until stable
-    // Sort by ev.priority ascending (lower integer = higher priority, missing = last).
-    const sortedCEvents = (runtimeModel.cEvents || []).slice()
-      .sort((a, b) => (a.priority ?? 9999) - (b.priority ?? 9999));
-
     let cFired = true, cPass = 0;
     while (cFired && cPass < maxCPasses) {
       cFired = false; cPass++;
+      const h = makeHelpers(entities, runtimeModel);
+      const predicateCtx = usePredicateState(h);
+      const queueWaitingCache = enableFilteredPhaseC ? new Map() : null;
       for (let idx = 0; idx < sortedCEvents.length; idx++) {
         const ev = sortedCEvents[idx];
-        const h = makeHelpers(entities, runtimeModel);
-        const condTrue = evalCondition(ev.condition, h, state, clock);
+        if (enableFilteredPhaseC && !shouldEvaluateCEvent(ev, phaseCDirty, h, runtimeModel, queueWaitingCache)) {
+          continue;
+        }
+        const condTrue = ev._compiledCondition(predicateCtx);
         if (!condTrue) {
           const falseEntry = makeTraceEntry("C", {
             message: `C: "${ev.name || ev.id}" — condition false`,
@@ -553,6 +812,13 @@ const cycleLog = [];
         const ctx = makeCtx(null);
         ctx.clock = clock;
         const { msgs, felEntries } = fireCEvent(ev, ctx);
+        if (enableFilteredPhaseC) {
+          phaseCDirty = deriveDirtyFromTemplate(
+            ev._effectImpactTemplate,
+            { ...ev, _contextCustId: ctx._lastCustId, _contextSrvId: ctx._lastSrvId },
+            ctx
+          );
+        }
         for (const entry of felEntries) fel.push(entry);
         if (felEntries.length) fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
         cFired = true;
@@ -613,7 +879,7 @@ const cycleLog = [];
     // Condition-based termination check (post-step)
     if (terminationCondition) {
       const h = makeHelpers(entities, runtimeModel);
-      if (evalCondition(terminationCondition, h, state, clock)) {
+      if (compiledTerminationCondition(usePredicateState(h))) {
         _terminationConditionMet = true;
         const msg = "Termination condition met — simulation complete";
         const endEntry = makeTraceEntry("END", { message: msg });
@@ -644,7 +910,7 @@ const cycleLog = [];
     // Initial termination check
     if (terminationCondition) {
       const h = makeHelpers(entities, runtimeModel);
-      if (evalCondition(terminationCondition, h, state, clock)) {
+      if (compiledTerminationCondition(usePredicateState(h))) {
         _terminationConditionMet = true;
         log.push(makeTraceEntry("END", { message: "Termination condition met at start" }));
       }

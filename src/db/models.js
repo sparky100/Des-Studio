@@ -4,6 +4,7 @@
 // The norm() function translates snake_case Supabase rows → camelCase model objects.
 
 import { supabase } from "./supabase.js";
+import { normalizeModelConditions } from "../model/conditionFormat.js";
 
 // Every column that this module reads or writes. Used by validateDbSchema().
 export const EXPECTED_COLUMNS = [
@@ -95,7 +96,7 @@ async function runDesModelsSelect(buildQuery) {
 // ── Row normalisation ─────────────────────────────────────────────────────────
 export function norm(r) {
   const modelJson = r.model_json || {};
-  return {
+  return normalizeModelConditions({
     id:             r.id,
     name:           r.name,
     description:    r.description || "",
@@ -119,7 +120,7 @@ export function norm(r) {
     updatedAt:      r.updated_at,
     latestVersion:  r.latest_version || 0,
     parentModelId:  r.parent_model_id || null,
-  };
+  });
 }
 
 function modelJsonFromModel(model = {}) {

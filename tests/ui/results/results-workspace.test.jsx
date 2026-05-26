@@ -49,17 +49,17 @@ describe("ResultsWorkspace", () => {
   test("renders chart sections as analysis questions", () => {
     render(<ResultsWorkspace results={results} model={model} />);
 
-    expect(screen.getByText(/Where are queues forming/i)).toBeInTheDocument();
-    expect(screen.getByText(/Are resources under- or over-utilised/i)).toBeInTheDocument();
-    expect(screen.getByText(/How variable is customer waiting time/i)).toBeInTheDocument();
+    expect(screen.getByText(/Where do queues build up/i)).toBeInTheDocument();
+    expect(screen.getByText(/How busy are resources/i)).toBeInTheDocument();
+    expect(screen.getByText(/How spread out are waiting times/i)).toBeInTheDocument();
   });
 
   test("shows data provenance labels", () => {
     render(<ResultsWorkspace results={results} model={model} />);
 
-    expect(screen.getByText(/Data: Queue-specific runtime counts/i)).toBeInTheDocument();
-    expect(screen.getByText(/Data: Busy Clerk resources divided by capacity 1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Data: 3 completed waits from engine waitDist/i)).toBeInTheDocument();
+    expect(screen.getByText(/Source: Queue measurements taken during the run/i)).toBeInTheDocument();
+    expect(screen.getByText(/Source: Busy Clerk resources measured during the run, divided by capacity 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Source: 3 waiting times from completed customers/i)).toBeInTheDocument();
   });
 
   test("shows compact data checks under charts", () => {
@@ -94,8 +94,8 @@ describe("ResultsWorkspace", () => {
   test("offers expandable previews of chart data and wait samples", () => {
     render(<ResultsWorkspace results={results} model={model} />);
 
-    expect(screen.getAllByText(/View chart data \(2 points\)/i).length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText(/View wait samples \(3 values\)/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/See the numbers behind this chart \(2 points\)/i).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/See the waiting times behind this chart \(3 values\)/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /csv/i }).length).toBeGreaterThanOrEqual(3);
     expect(screen.getAllByText("time").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("wait")).toBeInTheDocument();
@@ -113,7 +113,7 @@ describe("ResultsWorkspace", () => {
   test("shows detailed-output guidance when chart inputs are absent", () => {
     render(<ResultsWorkspace results={{}} model={model} />);
 
-    expect(screen.getByText(/Detailed output/i)).toBeInTheDocument();
+    expect(screen.getByText(/Keep chart data during the run/i)).toBeInTheDocument();
   });
 
   test("hosts statistical analysis with warm-up and batch-means controls", () => {
@@ -126,11 +126,11 @@ describe("ResultsWorkspace", () => {
       />
     );
 
-    expect(screen.getByText(/How reliable are these outputs/i)).toBeInTheDocument();
-    expect(screen.getByText(/WARM-UP DETECTION/i)).toBeInTheDocument();
+    expect(screen.getByText(/How reliable are these results/i)).toBeInTheDocument();
+    expect(screen.getByText(/START-UP CHECK/i)).toBeInTheDocument();
     expect(screen.getByText(/Welch's method/i)).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: /batch-means metric/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /compute/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: /assess/i })).not.toBeDisabled();
   });
 
   test("computes batch-means and shows distribution diagnostics in Results", () => {
@@ -148,13 +148,13 @@ describe("ResultsWorkspace", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /compute/i }));
+    fireEvent.click(screen.getByRole("button", { name: /assess/i }));
 
-    expect(screen.getByText(/DISTRIBUTION DIAGNOSTICS \(Avg Wait\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/SHAPE OF REPEATED-RUN RESULTS \(AVERAGE WAIT\)/i)).toBeInTheDocument();
     expect(screen.getAllByText(/skewness/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/kurtosis/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/CI LOW/i)).toBeInTheDocument();
-    expect(screen.getByText(/CI HIGH/i)).toBeInTheDocument();
+    expect(screen.getByText(/LOWER BOUND/i)).toBeInTheDocument();
+    expect(screen.getByText(/UPPER BOUND/i)).toBeInTheDocument();
   });
 
   test("uses saved-run replications for analysis", () => {
@@ -170,7 +170,7 @@ describe("ResultsWorkspace", () => {
       />
     );
 
-    expect(screen.getByText(/How reliable are these outputs/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /compute/i })).not.toBeDisabled();
+    expect(screen.getByText(/How reliable are these results/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /assess/i })).not.toBeDisabled();
   });
 });

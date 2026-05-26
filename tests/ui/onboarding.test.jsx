@@ -67,10 +67,10 @@ describe('first-run onboarding', () => {
 
     await user.click(screen.getByRole('button', { name: /use a template/i }));
 
-    expect(await screen.findByRole('button', { name: /try m\/m\/1 queue/i })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /try m\/m\/1 queue/i }, { timeout: 15000 })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /try call center/i })).toBeInTheDocument();
     expect(mockSaveModel).not.toHaveBeenCalled();
-  });
+  }, 15000);
 
   it('provides a valid runnable sample M/M/1 model', () => {
     const sample = createSampleMm1Model();

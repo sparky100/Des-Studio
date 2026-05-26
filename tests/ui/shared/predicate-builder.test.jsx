@@ -60,7 +60,7 @@ describe('ConditionBuilder — operator filtering by valueType', () => {
   });
 
   it('adds a new condition row when + Add Clause is clicked', async () => {
-    let conditionValue = '';
+    let conditionValue = null;
     const handleChange = (val) => {
       conditionValue = val;
     };
@@ -78,8 +78,13 @@ describe('ConditionBuilder — operator filtering by valueType', () => {
     const addButton = screen.getByRole('button', { name: /Add Clause/i });
     fireEvent.click(addButton);
 
-    // After adding, condition value should be non-empty
+    // After adding, condition value should be a predicate object
     expect(conditionValue).toBeTruthy();
+    expect(conditionValue).toEqual(expect.objectContaining({
+      variable: expect.any(String),
+      operator: '>',
+      value: 0,
+    }));
 
     // Re-render with the new condition value so the row displays
     rerender(
@@ -97,7 +102,7 @@ describe('ConditionBuilder — operator filtering by valueType', () => {
   });
 
   it('shows 6 operators (==, !=, <, >, <=, >=) for number tokens', async () => {
-    let conditionValue = '';
+    let conditionValue = null;
     const handleChange = (val) => {
       conditionValue = val;
     };
@@ -137,7 +142,7 @@ describe('ConditionBuilder — operator filtering by valueType', () => {
   });
 
   it('displays a number input for number variables', () => {
-    let conditionValue = '';
+    let conditionValue = null;
     const handleChange = (val) => {
       conditionValue = val;
     };
@@ -171,7 +176,7 @@ describe('ConditionBuilder — operator filtering by valueType', () => {
   });
 
   it('prevents type mismatch by enforcing valid operators only', () => {
-    let conditionValue = '';
+    let conditionValue = null;
     const handleChange = (val) => {
       conditionValue = val;
     };
@@ -200,7 +205,7 @@ describe('ConditionBuilder — operator filtering by valueType', () => {
   });
 
   it('condition builder produces valid predicate JSON from rows', () => {
-    let conditionValue = '';
+    let conditionValue = null;
     const handleChange = (val) => {
       conditionValue = val;
     };
@@ -227,8 +232,13 @@ describe('ConditionBuilder — operator filtering by valueType', () => {
       />
     );
 
-    // Should have a condition value (predicate JSON)
+    // Should have a predicate-object condition value
     expect(conditionValue).toBeTruthy();
+    expect(conditionValue).toEqual(expect.objectContaining({
+      variable: expect.any(String),
+      operator: '>',
+      value: 0,
+    }));
     // Human-readable label should be visible in the dropdown
     expect(screen.queryByText(/Number waiting in MainQueue/i)).toBeInTheDocument();
   });
@@ -319,4 +329,3 @@ describe('EntityFilterBuilder — entity attribute filtering', () => {
     expect(handleChange).toHaveBeenCalledWith(null);
   });
 });
-

@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
-import { evalCondition, evaluatePredicate, buildConditionTokens } from '../../src/engine/conditions.js';
+import { evalCondition, evaluatePredicate, buildConditionTokens, compilePredicate, getPredicateDependencies } from '../../src/engine/conditions.js';
 
 // Tests for the safe JSON predicate evaluator (Addition 1 §4).
 // These tests FAIL on the unmodified codebase (evaluatePredicate does not exist).
@@ -162,6 +162,41 @@ describe('evaluatePredicate — safe JSON predicate evaluator', () => {
     )).toBe(true);
   });
 
+  test('resolves legacy queue token variables against helper state', () => {
+    const state = {
+      helpers: {
+        waitingOf: vi.fn(() => [{ id: 1 }, { id: 2 }]),
+        idleOf: vi.fn(() => [{ id: "srv-1" }]),
+        busyOf: vi.fn(() => []),
+      },
+      model: { queues: [{ name: "Main Queue", discipline: "FIFO" }] },
+    };
+    expect(evaluatePredicate(
+      {
+        operator: 'AND',
+        clauses: [
+          { variable: 'queue(Main Queue).length', operator: '>', value: 0 },
+          { variable: 'idle(Clerk).count', operator: '>', value: 0 },
+        ],
+      },
+      state
+    )).toBe(true);
+  });
+
+  test('resolves legacy attr(Type, attrName) token against helper state', () => {
+    const state = {
+      helpers: {
+        waitingOf: vi.fn(() => []),
+        idleOf: vi.fn(() => [{ attrs: { serviceTime: 4 } }]),
+        busyOf: vi.fn(() => []),
+      },
+    };
+    expect(evaluatePredicate(
+      { variable: 'attr(Server, serviceTime)', operator: '==', value: 4 },
+      state
+    )).toBe(true);
+  });
+
   test('resolves user-defined state variable by plain name', () => {
     expect(evaluatePredicate(
       { variable: 'batchCount', operator: '>', value: 5 },
@@ -305,6 +340,43 @@ describe('evaluatePredicate — safe JSON predicate evaluator', () => {
     }
     expect(exitSpy).not.toHaveBeenCalled();
     exitSpy.mockRestore();
+  });
+});
+
+describe('compilePredicate — reusable predicate evaluators', () => {
+  test('compiles legacy strings into reusable evaluators', () => {
+    const compiled = compilePredicate('queue(Main Queue).length > 0 AND idle(Server).count > 0');
+    const state = {
+      helpers: {
+        waitingOf: vi.fn(() => [{ id: 1 }]),
+        idleOf: vi.fn(() => [{ id: 2 }]),
+        busyOf: vi.fn(() => []),
+      },
+      model: { queues: [{ name: 'Main Queue', discipline: 'FIFO' }] },
+    };
+    expect(compiled(state)).toBe(true);
+  });
+
+  test('captures dependency metadata for queue and resource tokens', () => {
+    const deps = getPredicateDependencies('queue(Main Queue).length > 0 AND idle(Server).count > 0');
+    expect(Array.from(deps.queues)).toEqual(['main queue']);
+    expect(Array.from(deps.resources)).toEqual(['server']);
+    expect(Array.from(deps.stateVars)).toEqual([]);
+    expect(Array.from(deps.builtins)).toEqual([]);
+    expect(deps.clock).toBe(false);
+    expect(deps.unknown).toBe(false);
+  });
+
+  test('captures dependency metadata for state vars and built-ins', () => {
+    const deps = getPredicateDependencies({
+      operator: 'OR',
+      clauses: [
+        { variable: 'served', operator: '>', value: 0 },
+        { variable: 'batchCount', operator: '>', value: 5 },
+      ],
+    });
+    expect(Array.from(deps.builtins)).toEqual(['served']);
+    expect(Array.from(deps.stateVars)).toEqual(['batchCount']);
   });
 });
 

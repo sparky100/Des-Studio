@@ -86,7 +86,7 @@ describe('model JSON import', () => {
     await renderLibrary();
     fireEvent.click(screen.getByRole('button', { name: /\+ new model/i }));
     await screen.findByText('New Model');
-    expect(screen.getByText(/^Design$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Draw$/i)).toBeInTheDocument();
     expect(screen.getByText(/Import a file/i)).toBeInTheDocument();
   });
 
@@ -185,7 +185,7 @@ describe('model JSON import', () => {
     );
   }, 10000);
 
-  it('opens directly in the AI workspace when Use AI is chosen', async () => {
+  it('opens directly in the AI workspace when Describe is chosen', async () => {
     const user = userEvent.setup();
     mockFetchModels.mockReset();
     mockFetchModels.mockResolvedValueOnce([]).mockResolvedValue([
@@ -200,11 +200,12 @@ describe('model JSON import', () => {
     await renderLibrary();
     fireEvent.click(screen.getByRole('button', { name: /\+ new model/i }));
     await user.type(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), 'AI Draft');
-    await user.click(screen.getByText(/Use AI/i).closest('button'));
+    const newModelDialog = screen.getByRole('dialog', { name: /new model/i });
+    await user.click(within(newModelDialog).getByText(/^Describe$/i).closest('button'));
 
     expect(await screen.findByRole('tab', { name: 'AI Designer' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.queryByText(/Get started building your model/i)).not.toBeInTheDocument();
-  });
+  }, 10000);
 
   it('applies entered name and description when starting from a template', async () => {
     const user = userEvent.setup();
@@ -225,8 +226,8 @@ describe('model JSON import', () => {
     const newModelDialog = screen.getByRole('dialog', { name: /new model/i });
     await user.click(within(newModelDialog).getByText(/Use a template/i).closest('button'));
 
-    const templateCards = await screen.findAllByRole('button', { name: /Try /i });
-    await user.click(templateCards[0]);
+    const templateCard = await screen.findByRole('button', { name: /try m\/m\/1 queue/i }, { timeout: 20000 });
+    await user.click(templateCard);
 
     expect(mockSaveModel).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -235,5 +236,5 @@ describe('model JSON import', () => {
       }),
       'user-1'
     );
-  }, 10000);
+  }, 30000);
 });

@@ -81,7 +81,7 @@ describe('BottomPanel — LogTab', () => {
 describe('BottomPanel — EntitiesTab', () => {
   test('renders active entities with status tags', () => {
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} />);
-    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Entity Details/i }));
     expect(screen.getByText(/2 active entities/i)).toBeInTheDocument();
     expect(screen.getByText('waiting')).toBeInTheDocument();
     expect(screen.getAllByText('In Service').length).toBeGreaterThanOrEqual(1);
@@ -90,7 +90,7 @@ describe('BottomPanel — EntitiesTab', () => {
   test('clicking entity row calls onEntitySelect with entity ID', () => {
     const onEntitySelect = vi.fn();
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} onEntitySelect={onEntitySelect} />);
-    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Entity Details/i }));
     const rows = screen.getAllByText(/#1/i);
     fireEvent.click(rows[0]);
     expect(onEntitySelect).toHaveBeenCalledWith(1);
@@ -99,7 +99,7 @@ describe('BottomPanel — EntitiesTab', () => {
   test('clicking same entity again deselects it', () => {
     const onEntitySelect = vi.fn();
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} selectedEntityId={1} onEntitySelect={onEntitySelect} />);
-    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Entity Details/i }));
     const rows = screen.getAllByText(/#1/i);
     fireEvent.click(rows[0]);
     expect(onEntitySelect).toHaveBeenCalledWith(null);
@@ -109,7 +109,7 @@ describe('BottomPanel — EntitiesTab', () => {
 describe('BottomPanel — EntityInspector', () => {
   test('inspector pane shows entity details when entity is selected', () => {
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} selectedEntityId={1} />);
-    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Entity Details/i }));
     const entityIds = screen.getAllByText('#1');
     expect(entityIds.length).toBeGreaterThanOrEqual(1);
     const customerTypes = screen.getAllByText('Customer');
@@ -120,7 +120,7 @@ describe('BottomPanel — EntityInspector', () => {
 
   test('inspector shows waiting age', () => {
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} selectedEntityId={1} />);
-    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Entity Details/i }));
     const waitingLabels = screen.getAllByText(/Waiting/i);
     expect(waitingLabels.length).toBeGreaterThanOrEqual(1);
   });
@@ -128,7 +128,7 @@ describe('BottomPanel — EntityInspector', () => {
   test('inspector close button calls onEntitySelect with null', () => {
     const onEntitySelect = vi.fn();
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} selectedEntityId={1} onEntitySelect={onEntitySelect} />);
-    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Entity Details/i }));
     const closeBtn = screen.getByText('Clear');
     fireEvent.click(closeBtn);
     expect(onEntitySelect).toHaveBeenCalledWith(null);
@@ -136,7 +136,7 @@ describe('BottomPanel — EntityInspector', () => {
 
   test('inspector shows in-service entity with server ID', () => {
     render(<BottomPanel log={[]} snap={mockSnap} model={mockModel} selectedEntityId={2} />);
-    fireEvent.click(screen.getByRole('tab', { name: /Entities/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Entity Details/i }));
     const entityIds = screen.getAllByText('#2');
     expect(entityIds.length).toBeGreaterThanOrEqual(1);
     const inServiceLabels = screen.getAllByText('In Service');
@@ -150,7 +150,7 @@ describe('BottomPanel — tab navigation', () => {
   test('all three tabs are present: Step Log, Entities, Live Metrics', () => {
     render(<BottomPanel log={mockLog} snap={mockSnap} model={mockModel} />);
     expect(screen.getByRole('tab', { name: /Step Log/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /Entities/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Entity Details/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Live Metrics/i })).toBeInTheDocument();
   });
 });

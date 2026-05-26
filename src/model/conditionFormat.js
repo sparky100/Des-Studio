@@ -1,0 +1,209 @@
+function parseScalarValue(raw) {
+  const text = String(raw ?? "").trim();
+  if (text === "true") return true;
+  if (text === "false") return false;
+  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+    return text.slice(1, -1);
+  }
+  const numeric = Number(text);
+  return text !== "" && !Number.isNaN(numeric) ? numeric : text;
+}
+
+function formatScalarValue(value) {
+  if (typeof value === "string" && /\s/.test(value)) {
+    return `"${value.replace(/"/g, '\\"')}"`;
+  }
+  return String(value ?? "");
+}
+
+function isLogicalCondition(condition) {
+  if (!condition || typeof condition !== "object" || Array.isArray(condition)) return false;
+  const op = String(condition.operator || "").toUpperCase();
+  return (op === "AND" || op === "OR") && Array.isArray(condition.clauses);
+}
+
+function isLeafCondition(condition) {
+  return !!condition && typeof condition === "object" && !Array.isArray(condition) && !isLogicalCondition(condition);
+}
+
+export function buildConditionString(rows = []) {
+  return rows
+    .map((row, index) => {
+      const clause = `${row.token} ${row.operator} ${row.value}`;
+      return index === 0 ? clause : `${row.join} ${clause}`;
+    })
+    .join(" ");
+}
+
+export function rowsToPredicate(rows = []) {
+  if (!rows.length) return null;
+  const clauses = rows.map(row => ({
+    variable: row.token,
+    operator: row.operator,
+    value: parseScalarValue(row.value),
+  }));
+  if (clauses.length === 1) return clauses[0];
+  return {
+    operator: rows[1]?.join || "AND",
+    clauses,
+  };
+}
+
+export function predicateToRows(predicate) {
+  if (!predicate) return [];
+  if (typeof predicate === "string") return parseConditionString(predicate);
+
+  if (isLogicalCondition(predicate)) {
+    const rows = predicate.clauses.flatMap((clause, index) => {
+      const clauseRows = predicateToRows(clause);
+      return clauseRows.map((row, rowIndex) => ({
+        ...row,
+        join: (index === 0 && rowIndex === 0) ? "AND" : predicate.operator,
+      }));
+    });
+    return rows.map((row, index) => ({ ...row, id: `r${index}` }));
+  }
+
+  return [{
+    id: "r0",
+    token: predicate.variable || predicate.token || predicate.left || "",
+    operator: predicate.operator || "==",
+    value: formatScalarValue(predicate.value ?? predicate.right),
+    join: "AND",
+  }];
+}
+
+export function parseConditionString(condition = "") {
+  const text = String(condition || "").trim();
+  if (!text) return [];
+
+  const parts = text.split(/\b(AND|OR)\b/i);
+  const rows = [];
+  let join = "AND";
+
+  for (const partRaw of parts) {
+    const part = partRaw.trim();
+    if (!part) continue;
+    if (part.toUpperCase() === "AND" || part.toUpperCase() === "OR") {
+      join = part.toUpperCase();
+      continue;
+    }
+    const match = part.match(/^(.+?)\s*(>=|<=|==|!=|>|<)\s*(.*)$/);
+    if (!match) continue;
+    rows.push({
+      id: `r${rows.length}`,
+      token: match[1].trim(),
+      operator: match[2].trim(),
+      value: match[3].trim(),
+      join,
+    });
+    join = "AND";
+  }
+
+  return rows;
+}
+
+export function variableToLegacyToken(variable = "") {
+  const text = String(variable || "").trim();
+  const queueMatch = text.match(/^Queue\.([^.]+)\.(length|count|size)$/i);
+  if (queueMatch) return `queue(${queueMatch[1]}).length`;
+  const idleMatch = text.match(/^Resource\.([^.]+)\.(idle|idleCount|available|availableCount)$/i);
+  if (idleMatch) return `idle(${idleMatch[1]}).count`;
+  const busyMatch = text.match(/^Resource\.([^.]+)\.(busy|busyCount)$/i);
+  if (busyMatch) return `busy(${busyMatch[1]}).count`;
+  return text;
+}
+
+export function predicateToLegacyString(condition) {
+  if (!condition) return "";
+  if (typeof condition === "string") return condition;
+  if (typeof condition !== "object" || Array.isArray(condition)) return "";
+
+  const op = String(condition.operator || "AND").toUpperCase();
+  if (isLogicalCondition(condition)) {
+    return condition.clauses
+      .map(predicateToLegacyString)
+      .filter(Boolean)
+      .join(` ${op} `);
+  }
+
+  const variable = variableToLegacyToken(condition.variable || condition.token || condition.left);
+  const operator = condition.operator || "==";
+  if (!variable || !operator) return "";
+  return `${variable} ${operator} ${formatScalarValue(condition.value ?? condition.right)}`;
+}
+
+export function conditionToLegacyString(condition) {
+  if (!condition) return "";
+  if (typeof condition === "string") return condition;
+  return predicateToLegacyString(condition);
+}
+
+export function migrateLegacyCondition(condition) {
+  if (!condition) return null;
+  if (typeof condition === "string") {
+    return rowsToPredicate(parseConditionString(condition));
+  }
+  if (isLogicalCondition(condition)) {
+    return {
+      ...condition,
+      operator: String(condition.operator || "AND").toUpperCase(),
+      clauses: condition.clauses
+        .map(migrateLegacyCondition)
+        .filter(Boolean),
+    };
+  }
+  if (isLeafCondition(condition)) {
+    return {
+      variable: condition.variable || condition.token || condition.left || "",
+      operator: condition.operator || "==",
+      value: condition.value ?? condition.right,
+    };
+  }
+  return condition;
+}
+
+export function mapConditionVariables(condition, mapper = value => value) {
+  if (!condition) return condition;
+  if (typeof condition === "string") {
+    return conditionToLegacyString(mapConditionVariables(migrateLegacyCondition(condition), mapper));
+  }
+  if (isLogicalCondition(condition)) {
+    return {
+      ...condition,
+      clauses: condition.clauses.map(clause => mapConditionVariables(clause, mapper)),
+    };
+  }
+  if (isLeafCondition(condition)) {
+    const variable = condition.variable || condition.token || condition.left || "";
+    return {
+      ...condition,
+      variable: mapper(variable),
+    };
+  }
+  return condition;
+}
+
+function normalizeConditionShape(condition) {
+  if (!condition) return null;
+  return migrateLegacyCondition(condition);
+}
+
+function normalizeEventConditions(events = []) {
+  return events.map(event => ({
+    ...event,
+    condition: normalizeConditionShape(event.condition),
+  }));
+}
+
+export function normalizeModelConditions(model = {}) {
+  if (!model || typeof model !== "object") return model;
+  const next = { ...model };
+  if (Array.isArray(model.cEvents)) {
+    next.cEvents = normalizeEventConditions(model.cEvents);
+  }
+  if (model.modelJson && typeof model.modelJson === "object") {
+    next.modelJson = normalizeModelConditions(model.modelJson);
+  }
+  return next;
+}

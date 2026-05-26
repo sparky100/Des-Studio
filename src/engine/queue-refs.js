@@ -1,4 +1,5 @@
 // engine/queue-refs.js — model reference propagation for queue and entity-type renames
+import { mapConditionVariables } from "../model/conditionFormat.js";
 
 function norm(value = "") {
   return String(value || "").trim().toLowerCase();
@@ -68,7 +69,7 @@ export function renameQueue(model, oldName, newName) {
     })),
     cEvents: (model.cEvents || []).map(event => ({
       ...event,
-      condition: replaceQueueToken(event.condition, oldName, newName),
+      condition: mapConditionVariables(event.condition, variable => replaceQueueToken(variable, oldName, newName)),
       effect: (() => {
         let next = replaceQueueToken(event.effect, oldName, newName);
         next = replaceMacroArg(next, "ASSIGN", 0, oldName, newName);
@@ -125,11 +126,11 @@ export function renameEntityType(model, oldName, newName, role = "customer") {
       let nextCondition = event.condition || "";
       let nextEffect = event.effect || "";
       if (role === "customer") {
-        nextCondition = updateCustomerCondition(nextCondition);
+        nextCondition = mapConditionVariables(nextCondition, variable => updateCustomerCondition(variable));
         nextEffect = updateCustomerAssign(nextEffect);
       }
       if (role === "server") {
-        nextCondition = replaceServerTokens(nextCondition, oldName, newName);
+        nextCondition = mapConditionVariables(nextCondition, variable => replaceServerTokens(variable, oldName, newName));
         nextEffect = replaceMacroArg(nextEffect, "ASSIGN", 1, oldName, newName);
       }
       return {

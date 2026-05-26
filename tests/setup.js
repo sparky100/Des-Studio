@@ -41,5 +41,6 @@ const mockSupabase = {
 };
 
 vi.mock('../src/db/supabase.js', () => ({
-  supabase: mockSupabase
+  supabase: mockSupabase,
+  touchLastActive: vi.fn().mockResolvedValue({ data: null, error: null }),
 }));

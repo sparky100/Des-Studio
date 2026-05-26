@@ -59,7 +59,7 @@ describe('ImportPreview', () => {
     expect(onSave).toHaveBeenCalledTimes(1);
   });
 
-  it('"Sign in to save" button is present when user is null', () => {
+  it('"Sign in / Sign up to save" button is present when user is null', () => {
     render(
       <ImportPreview
         model={sampleModel}
@@ -70,7 +70,7 @@ describe('ImportPreview', () => {
         onDismiss={vi.fn()}
       />
     );
-    expect(screen.getByRole('button', { name: /sign in to save/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign in \/ sign up to save/i })).toBeInTheDocument();
   });
 
   it('"Save to my models" button is absent when user is null', () => {
@@ -137,7 +137,7 @@ describe('ImportPreview', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('"Sign in to save" stores model in sessionStorage and calls onDismiss', () => {
+  it('"Sign in / Sign up to save" stores model in sessionStorage and calls onDismiss', () => {
     const onDismiss = vi.fn();
     render(
       <ImportPreview
@@ -149,7 +149,7 @@ describe('ImportPreview', () => {
         onDismiss={onDismiss}
       />
     );
-    fireEvent.click(screen.getByRole('button', { name: /sign in to save/i }));
+    fireEvent.click(screen.getByRole('button', { name: /sign in \/ sign up to save/i }));
     expect(onDismiss).toHaveBeenCalledTimes(1);
     const stored = sessionStorage.getItem('des.pendingImport');
     expect(stored).not.toBeNull();

@@ -76,19 +76,19 @@ describe('run history', () => {
   it('shows run labels and export actions on the history page', async () => {
     renderDetail();
 
-    fireEvent.click(screen.getByRole('button', { name: /analysis/i }));
-    fireEvent.click(screen.getByRole('tab', { name: /history/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^results$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^history$/i }));
 
     await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith('m1', expect.objectContaining({ archived: false })));
     expect((await screen.findAllByText('Two servers')).length).toBeGreaterThanOrEqual(2);
     expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('LATEST RUN');
-    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('SERVED');
+    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('CUSTOMERS SERVED');
     expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('81');
-    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('RENEGE RATE');
+    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('LEFT BEFORE SERVICE');
     expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('0.0%');
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Export History' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Export History CSV' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export run list' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Export run list as CSV' })).toBeEnabled();
   });
 
   it('exports normalized history payloads', () => {
@@ -107,10 +107,10 @@ describe('run history', () => {
   it('downloads run history JSON from the page action', async () => {
     renderDetail();
 
-    fireEvent.click(screen.getByRole('button', { name: /analysis/i }));
-    fireEvent.click(screen.getByRole('tab', { name: /history/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^results$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^history$/i }));
     await screen.findAllByText('Two servers');
-    fireEvent.click(screen.getByRole('button', { name: 'Export History' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export run list' }));
 
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:run-history');

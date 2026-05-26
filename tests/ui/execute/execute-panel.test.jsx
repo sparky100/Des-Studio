@@ -110,19 +110,10 @@ describe('ExecutePanel', () => {
     }));
   });
 
-  it('toggles the AI assistant panel with actions disabled before results exist', () => {
+  it('keeps the Results entry hidden until a run completes', () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-
-    expect(screen.getByRole('complementary', { name: /ai assistant/i })).toBeInTheDocument();
-    expect(screen.getByText('Run the model to start asking questions.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /explain results/i })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /^compare$/i })).toBeDisabled();
-    expect(screen.getByRole('button', { name: /explore sensitivity/i })).toBeDisabled();
-
-    fireEvent.click(screen.getByRole('button', { name: /close ai assistant/i }));
-    expect(screen.queryByRole('complementary', { name: /ai assistant/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /view results/i })).not.toBeInTheDocument();
   });
 
   it('runs one replication through the existing single-run path', async () => {
@@ -141,14 +132,13 @@ describe('ExecutePanel', () => {
     expect(onRunSaved).toHaveBeenCalledOnce();
   });
 
-  it('enables the Analysis view after a run completes', async () => {
+  it('shows the Results entry after a run completes', async () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    expect(screen.getByRole('button', { name: /^analysis$/i })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('button', { name: /^analysis$/i })).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /view results/i })).toBeInTheDocument();
   });
 
   it('saves all 10 sequential single-replication runs — each click triggers one Supabase insert', async () => {
@@ -236,60 +226,15 @@ describe('ExecutePanel', () => {
     expect(cancel).toHaveBeenCalled();
   });
 
-  it('populates AI comparison options from completed replications', async () => {
-    mockRunReplications.mockImplementation(({ onProgress, onReplicationComplete }) => {
-      onProgress({ completed: 0, total: 2, running: 2, pending: 0, cancelled: false, workerCount: 2 });
-      onReplicationComplete({
-        replicationIndex: 0,
-        seed: 10,
-        result: { finalTime: 10, snap: { clock: 10, entities: [], served: 1, reneged: 0 }, summary: { served: 1, reneged: 0, avgWait: 4, avgSvc: 2, avgSojourn: 6 } },
-      });
-      onReplicationComplete({
-        replicationIndex: 1,
-        seed: 11,
-        result: { finalTime: 11, snap: { clock: 11, entities: [], served: 2, reneged: 0 }, summary: { served: 2, reneged: 0, avgWait: 6, avgSvc: 3, avgSojourn: 7 } },
-      });
-      return { cancel: vi.fn() };
-    });
+  it('calls onGoToResults when the Results entry is used after a run', async () => {
+    const onGoToResults = vi.fn();
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onGoToResults={onGoToResults} />);
 
-    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-    openSetup();
-    const spinButtons = screen.getAllByRole('spinbutton');
-    fireEvent.change(spinButtons[1], { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
-    fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
+    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
 
-    expect(await screen.findByRole('option', { name: /replication 1/i })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /replication 2/i })).toBeInTheDocument();
-  });
-
-  it('loads saved run history for AI comparison when the panel opens', async () => {
-    mockFetchRunHistory.mockResolvedValueOnce([
-      {
-        id: 'run-1',
-        ran_at: '2026-05-04T21:47:32.000Z',
-        total_arrived: 100,
-        total_served: 80,
-        total_reneged: 2,
-        avg_wait_time: 7,
-        avg_service_time: 3,
-        renege_rate: 0.02,
-        replications: 1,
-        seed: 123,
-        max_simulation_time: 500,
-        warmup_period: 0,
-        run_label: 'Baseline',
-        results_json: { summary: { avgSojourn: 10 } },
-      },
-    ]);
-
-    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-    fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-
-    await waitFor(() => expect(mockFetchRunHistory).toHaveBeenCalledWith('model-1'));
-    expect(await screen.findByRole('option', { name: 'Baseline' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /view results/i }));
+    expect(onGoToResults).toHaveBeenCalledOnce();
   });
 
   it('updates replication rows and aggregate CI from runner callbacks', async () => {
@@ -358,220 +303,4 @@ describe('ExecutePanel', () => {
     );
   });
 
-  it('shows an AI assistant error banner when streaming fails', async () => {
-    mockStreamNarrative.mockImplementation((prompt, handlers) => {
-      handlers.onError(new Error('network down'));
-    });
-
-    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-    fireEvent.click(screen.getByRole('button', { name: /run all/i }));
-    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-
-    fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-    fireEvent.click(screen.getByRole('button', { name: /explain results/i }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(/analysis unavailable/i);
-    expect(screen.getByRole('alert')).toHaveTextContent(/network down/i);
-  });
-
-  it('streams AI response chunks and shows copy after completion', async () => {
-    mockStreamNarrative.mockImplementation((prompt, handlers) => {
-      handlers.onToken('Queues are ');
-      handlers.onToken('stable.');
-      handlers.onComplete();
-    });
-
-    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-    fireEvent.click(screen.getByRole('button', { name: /run all/i }));
-    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-
-    fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-    fireEvent.click(screen.getByRole('button', { name: /explain results/i }));
-
-    expect(await screen.findByText(/queues are stable/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /copy/i })).toBeInTheDocument();
-  });
-
-  describe('natural language query input (F14.2-4)', () => {
-    beforeEach(() => {
-      mockStreamNarrative.mockReset();
-      mockSaveSimulationRun.mockResolvedValue(undefined);
-    });
-
-    it('shows query input when AI assistant panel is open', async () => {
-      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-
-      expect(screen.getByLabelText(/ask a question/i)).toBeInTheDocument();
-      expect(screen.getByPlaceholderText(/run the model first/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /ask question/i })).toBeDisabled();
-    });
-
-    it('enables query input and Ask button after a run completes', async () => {
-      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
-      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-
-      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-
-      const input = screen.getByLabelText(/ask a question/i);
-      expect(input).not.toBeDisabled();
-      fireEvent.change(input, { target: { value: 'What was the mean wait?' } });
-      expect(screen.getByRole('button', { name: /ask question/i })).not.toBeDisabled();
-    });
-
-    it('submits a query and streams the response', async () => {
-      mockStreamNarrative.mockImplementation((prompt, handlers) => {
-        handlers.onToken('The mean waiting time was ');
-        handlers.onToken('8.2 minutes.');
-        handlers.onComplete();
-      });
-
-      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
-      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-
-      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-
-      const input = screen.getByLabelText(/ask a question/i);
-      fireEvent.change(input, { target: { value: 'What was the mean wait?' } });
-      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
-
-      expect(await screen.findByText(/The mean waiting time was 8\.2 minutes/i)).toBeInTheDocument();
-      expect(mockStreamNarrative).toHaveBeenCalledTimes(1);
-    });
-
-    it('builds conversation history for follow-up questions', async () => {
-      mockStreamNarrative
-        .mockImplementationOnce((prompt, handlers) => {
-          handlers.onToken('Main queue had mean wait of 8.2.');
-          handlers.onComplete();
-        })
-        .mockImplementationOnce((prompt, handlers) => {
-          handlers.onToken('The second queue is Triage.');
-          handlers.onComplete();
-        });
-
-      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
-      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-
-      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-
-      const input = screen.getByLabelText(/ask a question/i);
-
-      fireEvent.change(input, { target: { value: 'Which queue had the longest wait?' } });
-      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
-      await screen.findByText(/Main queue had mean wait of 8\.2/);
-
-      fireEvent.change(input, { target: { value: 'What about the second queue?' } });
-      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
-      expect(await screen.findByText(/The second queue is Triage/)).toBeInTheDocument();
-
-      expect(screen.getByText(/Which queue had the longest wait/i)).toBeInTheDocument();
-      expect(screen.getByText(/What about the second queue/i)).toBeInTheDocument();
-      expect(mockStreamNarrative).toHaveBeenCalledTimes(2);
-    });
-
-    it('clear button resets conversation history', async () => {
-      mockStreamNarrative.mockImplementation((prompt, handlers) => {
-        handlers.onToken('8.2 minutes.');
-        handlers.onComplete();
-      });
-
-      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
-      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-
-      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-
-      const input = screen.getByLabelText(/ask a question/i);
-      fireEvent.change(input, { target: { value: 'What was the mean wait?' } });
-      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
-      await screen.findByText(/8\.2 minutes/);
-
-      fireEvent.click(screen.getByRole('button', { name: /clear/i }));
-
-      expect(screen.queryByText(/What was the mean wait/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/8\.2 minutes/)).not.toBeInTheDocument();
-    });
-
-    it('preserves conversation history in follow-up prompt', async () => {
-      let capturedPrompt = null;
-      mockStreamNarrative.mockImplementation((prompt, handlers) => {
-        capturedPrompt = prompt;
-        handlers.onToken('8.2 minutes.');
-        handlers.onComplete();
-      });
-
-      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
-      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-
-      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-
-      const input = screen.getByLabelText(/ask a question/i);
-      fireEvent.change(input, { target: { value: 'What was the wait?' } });
-      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
-      await screen.findByText(/8\.2 minutes/);
-
-      mockStreamNarrative.mockImplementation((prompt, handlers) => {
-        capturedPrompt = prompt;
-        handlers.onToken('Triage queue.');
-        handlers.onComplete();
-      });
-
-      fireEvent.change(input, { target: { value: 'Which queue?' } });
-      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
-      await screen.findByText(/Triage queue/);
-
-      expect(capturedPrompt.messages.some(m => m.content && m.content.includes('What was the wait?'))).toBe(true);
-    }, 10000);
-
-    it('disables Ask during streaming', async () => {
-      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
-      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-
-      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-
-      const input = screen.getByLabelText(/ask a question/i);
-      fireEvent.change(input, { target: { value: 'Question during streaming' } });
-
-      // Start streaming and hold (don't call onComplete)
-      mockStreamNarrative.mockImplementation((prompt, handlers) => {
-        handlers.onToken('Partial...');
-      });
-
-      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
-      expect(screen.getByRole('button', { name: /ask question/i })).toBeDisabled();
-    });
-
-    it('displays an error when streaming fails during a query', async () => {
-      mockStreamNarrative.mockImplementation((prompt, handlers) => {
-        handlers.onError?.(new Error('LLM proxy returned 500'));
-      });
-
-      render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-
-      fireEvent.click(screen.getByRole('button', { name: /run all/i }));
-      await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-
-      fireEvent.click(screen.getByRole('button', { name: /ai insights/i }));
-
-      const input = screen.getByLabelText(/ask a question/i);
-      fireEvent.change(input, { target: { value: 'What was the mean wait?' } });
-      fireEvent.click(screen.getByRole('button', { name: /ask question/i }));
-
-      expect(await screen.findByText(/LLM proxy returned 500/i)).toBeInTheDocument();
-    });
-  });
 });

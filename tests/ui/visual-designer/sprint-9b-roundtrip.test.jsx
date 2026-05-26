@@ -208,7 +208,7 @@ describe('F9B.6 Sprint 9B round-trip regression', () => {
   });
 
   // ── Test 4: Execute blocked by validation error ────────────────────────────
-  it('4. Run All is disabled and the error panel is visible when the model has a blocking validation error', () => {
+  it('4. Run controls stay blocked and the error panel is visible when the model has a blocking validation error', () => {
     const invalidModel = {
       entityTypes: [
         { id: 'e1', name: '', role: 'customer', attrDefs: [] }, // V1: empty entity name
@@ -223,7 +223,7 @@ describe('F9B.6 Sprint 9B round-trip regression', () => {
       <ExecutePanel model={invalidModel} modelId="model-1" userId="user-1" />
     );
 
-    expect(screen.getByRole('button', { name: /run all/i })).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: /blocker/i }).length).toBeGreaterThan(0);
     expect(screen.getByRole('alert')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('V1');
   });

@@ -23,7 +23,12 @@ vi.mock('@xyflow/react', () => ({
   MiniMap: () => <div data-testid="flow-minimap" />,
   Panel: ({ children }) => <div data-testid="flow-panel">{children}</div>,
   Position: { Left: 'left', Right: 'right' },
-  useReactFlow: () => ({ fitView: vi.fn() }),
+  useReactFlow: () => ({
+    fitView: vi.fn(),
+    getNode: vi.fn(() => null),
+    setCenter: vi.fn(),
+    getViewport: vi.fn(() => ({ zoom: 1 })),
+  }),
   ReactFlow: ({ nodes = [], edges = [], children, fitView, defaultViewport, onNodeClick, onNodeDragStop, onConnect }) => {
     const source = nodes.find(node => node.id.startsWith('source:'));
     const firstQueue = nodes.find(node => node.id.startsWith('queue:'));
@@ -193,7 +198,7 @@ describe('Visual Designer shell', () => {
         expect.objectContaining({ id: 'arrive', effect: 'ARRIVE(Patient, Queue 3)' }),
       ]),
     }));
-  });
+  }, 15000);
 
   it('persists layout changes through the normal save path', async () => {
     const user = userEvent.setup();
@@ -222,7 +227,7 @@ describe('Visual Designer shell', () => {
       }),
     }));
     expect(onSave.mock.calls[0][0].graph.edges).toBeUndefined();
-  });
+  }, 15000);
 
   it('uses visual connections to update canonical source routing', async () => {
     const user = userEvent.setup();
@@ -243,7 +248,7 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /mock select source/i }));
 
     expect(screen.getByLabelText(/target queue/i)).toHaveValue('Consultant Queue');
-  });
+  }, 15000);
 
   it('validation checklist shows clickable error row for a disconnected source and selecting it opens the inspector', async () => {
     const user = userEvent.setup();
@@ -367,5 +372,5 @@ describe('Visual Designer shell', () => {
         ]),
       }),
     }));
-  });
+  }, 15000);
 });

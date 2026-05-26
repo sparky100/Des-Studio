@@ -12,16 +12,16 @@ describe('NewModelModal', () => {
 
   it('shows all start options', () => {
     render(<NewModelModal onClose={vi.fn()} onStartDesign={vi.fn()} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
-    expect(screen.getByText(/^Design$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Draw$/i)).toBeInTheDocument();
     expect(screen.getByText(/Use a template/i)).toBeInTheDocument();
     expect(screen.getByText(/Import a file/i)).toBeInTheDocument();
     expect(screen.getByText(/Paste model/i)).toBeInTheDocument();
-    expect(screen.getByText(/Use AI/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Describe$/i)).toBeInTheDocument();
   });
 
   it('requires name before enabling design start', () => {
     render(<NewModelModal onClose={vi.fn()} onStartDesign={vi.fn()} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
-    const designBtn = screen.getByText(/^Design$/i).closest('button');
+    const designBtn = screen.getByText(/^Draw$/i).closest('button');
     expect(designBtn).toBeDisabled();
     fireEvent.change(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), { target: { value: 'Test Model' } });
     expect(designBtn).not.toBeDisabled();
@@ -32,7 +32,7 @@ describe('NewModelModal', () => {
     const onStartDesign = vi.fn();
     render(<NewModelModal onClose={vi.fn()} onStartDesign={onStartDesign} onUseTemplate={vi.fn()} onImportFile={vi.fn()} onPasteJson={vi.fn()} onUseAi={vi.fn()} />);
     await user.type(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), 'Test Model');
-    await user.click(screen.getByText(/^Design$/i).closest('button'));
+    await user.click(screen.getByText(/^Draw$/i).closest('button'));
     expect(onStartDesign).toHaveBeenCalledWith('Test Model', '');
   });
 

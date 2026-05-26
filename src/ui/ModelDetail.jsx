@@ -31,6 +31,7 @@ import { fetchRunHistory, listShareLinks } from "../db/models.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
 import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
+import { normalizeModelConditions }         from "../model/conditionFormat.js";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
 
@@ -250,12 +251,13 @@ const MODEL_HEALTH_TAB_LABELS = {
 };
 
 function isStarterBlankModel(model = {}) {
-  return !(model.entityTypes || []).length &&
-    !(model.stateVariables || []).length &&
-    !(model.bEvents || []).length &&
-    !(model.cEvents || []).length &&
-    !(model.queues || []).length &&
-    !(model.goals || []).length;
+  const current = model && typeof model === "object" ? model : {};
+  return !(current.entityTypes || []).length &&
+    !(current.stateVariables || []).length &&
+    !(current.bEvents || []).length &&
+    !(current.cEvents || []).length &&
+    !(current.queues || []).length &&
+    !(current.goals || []).length;
 }
 
 function valuesEqual(a, b) {
@@ -445,7 +447,7 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
 const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,overrides={},initialTab})=>{
   const [model,setModel]=useState(()=>{
     if(!modelData) return null;
-    return {
+    return normalizeModelConditions({
       ...modelData,
       entityTypes:   modelData.entityTypes   || [],
       stateVariables:modelData.stateVariables || [],
@@ -455,7 +457,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       graph:         modelData.graph          || null,
       experimentDefaults: modelData.experimentDefaults || {},
       access:        modelData.access         || {},
-    };
+    });
   });
   const toast = useToast();
   const [tab,setTab]=useState(initialTab||"overview");
@@ -510,7 +512,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   }, [modelId, isOwner]);
 
   const handleRestoreVersion = (versionModelJson) => {
-    const restored = {
+    const restored = normalizeModelConditions({
       ...model,
       entityTypes:        versionModelJson.entityTypes        || [],
       stateVariables:     versionModelJson.stateVariables     || [],
@@ -520,7 +522,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       graph:              versionModelJson.graph              ?? null,
       experimentDefaults: versionModelJson.experimentDefaults || {},
       goals:              versionModelJson.goals              || [],
-    };
+    });
     setWholeModel(restored);
   };
 
@@ -578,10 +580,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const setWholeModel=(nextModel)=>{
     setPast(p=>[...p.slice(-19),model]);
     setFuture([]);
-    setModel(nextModel);
+    setModel(normalizeModelConditions(nextModel));
     setDirty(true);
   };
-  const mergeGeneratedModel=(current,nextModel)=>({
+  const mergeGeneratedModel=(current,nextModel)=>normalizeModelConditions({
     ...current,
     ...(nextModel.name ? { name: nextModel.name } : {}),
     ...(nextModel.description ? { description: nextModel.description } : {}),
@@ -674,7 +676,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
 
   const discard=()=>{
     if (!modelData) return;
-    setModel({
+    setModel(normalizeModelConditions({
       ...modelData,
       entityTypes:   modelData.entityTypes   || [],
       stateVariables:modelData.stateVariables || [],
@@ -684,7 +686,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       graph:         modelData.graph          || null,
       experimentDefaults: modelData.experimentDefaults || {},
       access:        modelData.access         || {},
-    });
+    }));
     setDirty(false);
     setPast([]);
     setFuture([]);

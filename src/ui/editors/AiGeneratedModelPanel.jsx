@@ -5,6 +5,7 @@ import { C, FONT } from "../shared/tokens.js";
 import { Btn, Empty, Field, InfoBox, SH } from "../shared/components.jsx";
 import { ModelDiffPreview } from "./ModelDiffPreview.jsx";
 import { validateModel } from "../../engine/validation.js";
+import { predicateToLegacyString, rowsToPredicate, parseConditionString } from "../../model/conditionFormat.js";
 
 const DIST_NAMES = {
   fixed: "Fixed",
@@ -259,17 +260,22 @@ function ensureCompletionEventEffects(cSchedules = [], bEvents = []) {
 function normalizeCEventCondition(condition, effect) {
   const text = conditionToLegacyString(condition);
   const parts = assignParts(effect);
-  if (!parts) return text;
+  if (!parts) return typeof condition === "string" ? rowsToPredicate(parseConditionString(text)) : condition;
 
   const hasQueue = /queue\([^)]+\)\.length\s*(?:>|>=|!=)/i.test(text);
   const hasIdle = /idle\([^)]+\)\.count\s*(?:>|>=|!=)/i.test(text);
   const queueClause = `queue(${parts.queueOrCustomer}).length > 0`;
   const idleClause = `idle(${parts.server}).count > 0`;
 
-  if (hasQueue && hasIdle) return text;
-  if (hasQueue) return `${text} AND ${idleClause}`;
-  if (hasIdle) return `${queueClause} AND ${text}`;
-  return `${queueClause} AND ${idleClause}`;
+  const nextText = hasQueue && hasIdle
+    ? text
+    : hasQueue
+      ? `${text} AND ${idleClause}`
+      : hasIdle
+        ? `${queueClause} AND ${text}`
+        : `${queueClause} AND ${idleClause}`;
+
+  return rowsToPredicate(parseConditionString(nextText));
 }
 
 function formatConditionValue(value) {
@@ -289,22 +295,7 @@ function predicateVariableToToken(variable = "") {
 }
 
 function conditionToLegacyString(condition) {
-  if (!condition) return "";
-  if (typeof condition === "string") return condition;
-  if (typeof condition !== "object" || Array.isArray(condition)) return "";
-
-  const op = String(condition.operator || "AND").toUpperCase();
-  if ((op === "AND" || op === "OR") && Array.isArray(condition.clauses)) {
-    return condition.clauses
-      .map(conditionToLegacyString)
-      .filter(Boolean)
-      .join(` ${op} `);
-  }
-
-  const variable = predicateVariableToToken(condition.variable || condition.token || condition.left);
-  const operator = condition.operator || "==";
-  if (!variable || !operator) return "";
-  return `${variable} ${operator} ${formatConditionValue(condition.value ?? condition.right)}`;
+  return predicateToLegacyString(condition);
 }
 
 function stripTrailingQuestion(text = "") {

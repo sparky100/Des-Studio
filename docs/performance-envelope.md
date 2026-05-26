@@ -1,8 +1,8 @@
 # DES Studio — Engine Performance Envelope
 
-**Last updated:** 2026-05-19
-**Branch:** `claude/add-run-results-immutability-6zSdu`
-**Sprint:** PR-1
+**Last updated:** 2026-05-26
+**Branch:** `main` + local Sprint 72 optimisation worktree
+**Sprint:** 72
 
 ---
 
@@ -118,15 +118,50 @@ the automated test suite — run it manually after significant engine changes an
 
 ### Measured throughput baseline
 
-> Update this table after running `node tests/engine/perf_timing.js` on a representative machine.
+#### Sprint 72 pre-optimisation baseline
 
-| Profile | λ | μ | c | Target customers | Steps/sec (approx) | Customers/sec (approx) |
-|---------|---|---|---|-----------------|-------------------|------------------------|
-| M/M/1 high-util | 0.9 | 1.0 | 1 | 5 000 | — | — |
-| M/M/c | 1.6 | 1.0 | 2 | 5 000 | — | — |
-| Heavy low-util | 0.5 | 1.0 | 1 | 20 000 | — | — |
+Run date: `2026-05-25`  
+Script: `node tests/engine/perf_timing.js`
 
-*Run `node tests/engine/perf_timing.js` and paste the results here.*
+| Profile | Target customers | Steps/sec | Customers/sec | C-evals total | C-evals/sec | Phase C passes total | Max Phase C passes / step | Notes |
+|---------|------------------|----------:|--------------:|--------------:|------------:|---------------------:|--------------------------:|-------|
+| M/M/1 high-util | 250 | 523 | 259 | 898 | 783 | 898 | 2 | Baseline single-queue reference |
+| M/M/c | 250 | 543 | 269 | 899 | 813 | 899 | 2 | Baseline multi-server reference |
+| Heavy low-util | 1 000 | 167 | 84 | 3 150 | 251 | 3 150 | 2 | Long-run throughput reference |
+| many-c-events-mostly-false | 300 | 153 | 73 | 42 394 | 9 279 | 1 034 | 2 | One active queue plus 40 false decoy C-events |
+| many-c-events-high-churn | 400 | 259 | 132 | 14 508 | 4 702 | 1 209 | 3 | 12 active queues sharing 2 servers; frequent restart skips |
+
+**Observation:** the Sprint 72 hot path is clearly Phase C scan cost, not basic B-event throughput. The `many-c-events-mostly-false` profile is the key baseline for measuring wins from removing legacy condition execution and adding dependency-aware filtering.
+
+#### Sprint 72 interim optimisation snapshot
+
+Run date: `2026-05-25`  
+Script: `node tests/engine/perf_timing.js`
+
+| Profile | Target customers | Steps/sec | Customers/sec | C-evals total | C-evals/sec | Phase C passes total | Max Phase C passes / step | Delta vs pre-optimisation |
+|---------|------------------|----------:|--------------:|--------------:|------------:|---------------------:|--------------------------:|---------------------------|
+| M/M/1 high-util | 250 | 227 | 112 | 898 | 339 | 898 | 2 | Slower; no Phase C pruning opportunity |
+| M/M/c | 250 | 158 | 78 | 899 | 236 | 899 | 2 | Slower; no Phase C pruning opportunity |
+| Heavy low-util | 1 000 | 100 | 50 | 3 150 | 150 | 3 150 | 2 | Slower; dominated by non-Phase-C work |
+| many-c-events-mostly-false | 300 | 251 | 119 | 1 034 | 370 | 1 034 | 2 | Major win: C-evals cut from 42 394 to 1 034 |
+| many-c-events-high-churn | 400 | 265 | 135 | 5 026 | 1 665 | 1 209 | 3 | Strong win: C-evals cut from 14 508 to 5 026 |
+
+**Interim read:** the new dependency-aware Phase C filter is doing its job on C-heavy models, especially when many conditions are false because unrelated queues are empty. General baseline profiles are not faster yet, so the next optimisation slice should target evaluator overhead and helper/state reuse outside the filtered candidate path.
+
+#### Sprint 72 adaptive-filter snapshot
+
+Run date: `2026-05-26`  
+Script: `node tests/engine/perf_timing.js`
+
+| Profile | Target customers | Steps/sec | Customers/sec | C-evals total | C-evals/sec | Phase C passes total | Max Phase C passes / step | Delta vs pre-optimisation |
+|---------|------------------|----------:|--------------:|--------------:|------------:|---------------------:|--------------------------:|---------------------------|
+| M/M/1 high-util | 250 | 682 | 337 | 898 | 1,020 | 898 | 2 | Faster than baseline after skipping dirty-tracking on non-filtered paths |
+| M/M/c | 250 | 630 | 312 | 899 | 944 | 899 | 2 | Faster than baseline after skipping dirty-tracking on non-filtered paths |
+| Heavy low-util | 1 000 | 237 | 118 | 3 150 | 355 | 3 150 | 2 | Recovered broad throughput while preserving compiled predicate runtime |
+| many-c-events-mostly-false | 300 | 408 | 194 | 1 034 | 602 | 1 034 | 2 | Keeps the major Phase C win: C-evals still down from 42 394 to 1 034 |
+| many-c-events-high-churn | 400 | 417 | 212 | 5 026 | 2,622 | 1 209 | 3 | Keeps the high-churn win: C-evals still down from 14 508 to 5 026 |
+
+**Current read:** the broad baseline recovered once dirty-impact bookkeeping was limited to the filtered Phase C path, and the C-heavy models retained their evaluation-count gains. The next safe milestone is a wider regression/stabilisation pass before deciding whether any further filtering complexity is justified.
 
 ---
 
@@ -167,3 +202,5 @@ with the same seed and model always produces bit-identical results (verified by 
 |------|--------|--------|
 | 2026-05-14 | 29 | Initial document created. M/M/1 and M/M/c baselines recorded. Performance timing script added. |
 | 2026-05-19 | PR-1 | Added Benchmarks 3–8 (M/G/1, M/M/1/K, priority ordering, LP wait, warmup, reproducibility). Tightened M/M/1 tolerance from 5% to 2%. Added `npm run bench` script. |
+| 2026-05-25 | 72 | Refreshed `tests/engine/perf_timing.js` for Sprint 72. Added `many-c-events-mostly-false` and `many-c-events-high-churn` Phase C stress scenarios plus C-evaluation/pass counters. Recorded pre-optimisation baseline metrics. |
+| 2026-05-26 | 72 | Recorded the adaptive-filter snapshot showing recovered broad baseline throughput while preserving the new C-heavy Phase C wins. |

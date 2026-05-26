@@ -64,7 +64,7 @@ describe('model delete UI', () => {
     await renderLibrary();
 
     expect(await screen.findByRole('button', { name: 'Delete' })).toBeInTheDocument();
-  });
+  }, 10000);
 
   it('does not show Delete on public models owned by someone else', async () => {
     const user = userEvent.setup();

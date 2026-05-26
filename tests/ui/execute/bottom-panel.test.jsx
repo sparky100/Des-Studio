@@ -84,10 +84,10 @@ describe("BottomPanel — F9C.8", () => {
     expect(screen.getByRole("separator", { name: /resize bottom panel/i })).toBeInTheDocument();
   });
 
-  test("shows an Open Analysis action when run results are available", () => {
+  test("shows an Open Results action when run results are available", () => {
     const onOpenResults = vi.fn();
     render(<BottomPanel log={log} snap={snap} model={model} hasResults onOpenResults={onOpenResults} />);
-    fireEvent.click(screen.getByRole("button", { name: /open analysis/i }));
+    fireEvent.click(screen.getByRole("button", { name: /open results/i }));
     expect(onOpenResults).toHaveBeenCalledOnce();
   });
 });

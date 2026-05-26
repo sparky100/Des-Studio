@@ -11,6 +11,38 @@
 //   1. Add a replacement rule in evalCondition below
 //   2. Add it to the token list in ConditionBuilder.jsx UI component
 
+import { migrateLegacyCondition } from "../model/conditionFormat.js";
+
+const COMPILED_PREDICATE = Symbol("compiledPredicate");
+const PREDICATE_DEPS = Symbol("predicateDependencies");
+
+function createDependencySet() {
+  return {
+    queues: new Set(),
+    resources: new Set(),
+    stateVars: new Set(),
+    builtins: new Set(),
+    entityAttrs: new Set(),
+    unknown: false,
+    clock: false,
+  };
+}
+
+function mergeDependencySets(target, source) {
+  for (const value of source.queues) target.queues.add(value);
+  for (const value of source.resources) target.resources.add(value);
+  for (const value of source.stateVars) target.stateVars.add(value);
+  for (const value of source.builtins) target.builtins.add(value);
+  for (const value of source.entityAttrs) target.entityAttrs.add(value);
+  target.unknown = target.unknown || source.unknown;
+  target.clock = target.clock || source.clock;
+  return target;
+}
+
+function normalizeDependencyName(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 // ── Safe helpers for legacy string evaluator ─────────────────────────────────
 
 function parseVal(s) {
@@ -70,25 +102,102 @@ function safeEvalExpr(expr) {
 
 // ── Safe evaluator for Addition 1 §4 predicate JSON ──────────────────────────
 
+function resolveQueueValue(queueName, property, state) {
+  const normalizedProperty = String(property || "length").toLowerCase();
+  if (state.queues?.[queueName]?.[property] != null) return state.queues[queueName][property];
+  if (state.queues?.[queueName]?.[normalizedProperty] != null) return state.queues[queueName][normalizedProperty];
+
+  const queueDef = state.model?.queues?.find(q =>
+    String(q.name || "").trim().toLowerCase() === String(queueName || "").trim().toLowerCase()
+  );
+  const explicitQueueCount = Array.isArray(state.entities)
+    ? state.entities.filter(entity =>
+        String(entity.queue || "").trim().toLowerCase() === String(queueName || "").trim().toLowerCase() &&
+        entity.status === "waiting"
+      ).length
+    : 0;
+
+  if (queueDef || explicitQueueCount > 0) {
+    const discipline = queueDef?.discipline || "FIFO";
+    const inQueueCount = state.helpers?.waitingInQueue?.(queueName, discipline)?.length;
+    if (inQueueCount != null) return inQueueCount;
+    if (explicitQueueCount > 0) return explicitQueueCount;
+    return state.helpers?.waitingOf?.(queueName, discipline)?.length ?? 0;
+  }
+
+  if (normalizedProperty === "length" || normalizedProperty === "count" || normalizedProperty === "size") {
+    return state.helpers?.waitingOf?.(queueName, "FIFO")?.length ?? 0;
+  }
+  return undefined;
+}
+
+function resolveResourceValue(resourceName, property, state) {
+  if (state.resources?.[resourceName]?.[property] != null) return state.resources[resourceName][property];
+  const normalizedProperty = String(property || "").toLowerCase();
+  if (normalizedProperty === "idle" || normalizedProperty === "idlecount" || normalizedProperty === "available" || normalizedProperty === "availablecount") {
+    return state.helpers?.idleOf?.(resourceName)?.length ?? 0;
+  }
+  if (normalizedProperty === "busy" || normalizedProperty === "busycount") {
+    return state.helpers?.busyOf?.(resourceName)?.length ?? 0;
+  }
+  return state.resources?.[resourceName]?.[normalizedProperty];
+}
+
+function resolveAttrValue(resourceName, attrName, state) {
+  const entity = state.helpers?.idleOf?.(resourceName)?.[0];
+  return entity?.attrs?.[attrName];
+}
+
 function resolveVariable(ref, state) {
+  if (typeof ref !== "string" || !ref.trim()) return undefined;
+  const text = ref.trim();
+
+  const queueToken = text.match(/^queue\(([^)]+)\)\.(length|count|size)$/i);
+  if (queueToken) {
+    return resolveQueueValue(queueToken[1].trim(), queueToken[2], state);
+  }
+
+  const idleToken = text.match(/^idle\(([^)]+)\)\.count$/i);
+  if (idleToken) {
+    return state.helpers?.idleOf?.(idleToken[1].trim())?.length ?? 0;
+  }
+
+  const busyToken = text.match(/^busy\(([^)]+)\)\.count$/i);
+  if (busyToken) {
+    return state.helpers?.busyOf?.(busyToken[1].trim())?.length ?? 0;
+  }
+
+  const attrToken = text.match(/^attr\(([^,]+)\s*,\s*([^)]+)\)$/i);
+  if (attrToken) {
+    return resolveAttrValue(attrToken[1].trim(), attrToken[2].trim(), state);
+  }
+
+  if (text === "served") return state.__served ?? state.served ?? 0;
+  if (text === "reneged") return state.__reneged ?? state.reneged ?? 0;
+  if (text === "loopCount") return state.__loopCount ?? state.loopCount ?? state.currentEntity?.loopCount ?? 0;
+  if (text === "clock") return state.clock ?? 0;
+
   const parts = ref.split('.');
   if (parts[0] === 'Entity') {
     if (parts[1] === 'loopCount') {
       return state.currentEntity?.loopCount ?? 0;
     }
     // Entity.<attributeName>
-    return state.currentEntity?.attrs?.[parts[1]];
+    return state.currentEntity?.attrs?.[parts[1]] ?? state.currentEntity?.[parts[1]];
   }
   if (parts[0] === 'Resource') {
     // Resource.<id>.<property>
-    return state.resources?.[parts[1]]?.[parts[2]];
+    return resolveResourceValue(parts[1], parts[2], state);
   }
   if (parts[0] === 'Queue') {
     // Queue.<id>.<property>
-    return state.queues?.[parts[1]]?.[parts[2]];
+    return resolveQueueValue(parts[1], parts[2], state);
   }
   if (parts.length === 1) {
     // Plain user-defined state variable
+    if (state.scalars && Object.prototype.hasOwnProperty.call(state.scalars, ref)) {
+      return state.scalars[ref];
+    }
     return state[ref];
   }
   throw new Error(`Unknown variable namespace in predicate: '${ref}'`);
@@ -116,14 +225,118 @@ function applyOperator(left, operator, right) {
  */
 export function evaluatePredicate(predicate, state) {
   if (!predicate) return false;
-  if (predicate.operator === 'AND') {
-    return (predicate.clauses || []).every(c => evaluatePredicate(c, state));
+  return compilePredicate(predicate)(state);
+}
+
+export function getPredicateDependencies(predicate) {
+  if (predicate && typeof predicate === "object" && predicate[PREDICATE_DEPS]) {
+    return predicate[PREDICATE_DEPS];
   }
-  if (predicate.operator === 'OR') {
-    return (predicate.clauses || []).some(c => evaluatePredicate(c, state));
+
+  const normalized = migrateLegacyCondition(predicate);
+  const deps = createDependencySet();
+  if (!normalized) return deps;
+
+  if (normalized.operator === "AND" || normalized.operator === "OR") {
+    for (const clause of normalized.clauses || []) {
+      mergeDependencySets(deps, getPredicateDependencies(clause));
+    }
+  } else {
+    const variable = String(normalized.variable || "").trim();
+    const queueToken = variable.match(/^queue\(([^)]+)\)\.(length|count|size)$/i);
+    const idleToken = variable.match(/^idle\(([^)]+)\)\.count$/i);
+    const busyToken = variable.match(/^busy\(([^)]+)\)\.count$/i);
+    const attrToken = variable.match(/^attr\(([^,]+)\s*,\s*([^)]+)\)$/i);
+    if (queueToken) {
+      deps.queues.add(normalizeDependencyName(queueToken[1]));
+    } else if (idleToken || busyToken) {
+      deps.resources.add(normalizeDependencyName((idleToken || busyToken)[1]));
+    } else if (attrToken) {
+      deps.resources.add(normalizeDependencyName(attrToken[1]));
+      deps.entityAttrs.add(attrToken[2].trim());
+    } else if (variable === "served" || variable === "reneged" || variable === "loopCount") {
+      deps.builtins.add(variable);
+    } else if (variable === "clock") {
+      deps.clock = true;
+      deps.builtins.add("clock");
+    } else if (variable.startsWith("Entity.")) {
+      deps.entityAttrs.add(variable.slice("Entity.".length));
+    } else if (variable.startsWith("Queue.")) {
+      const parts = variable.split(".");
+      deps.queues.add(normalizeDependencyName(parts[1]));
+    } else if (variable.startsWith("Resource.")) {
+      const parts = variable.split(".");
+      deps.resources.add(normalizeDependencyName(parts[1]));
+    } else if (variable && !variable.includes(".")) {
+      deps.stateVars.add(variable);
+    } else {
+      deps.unknown = true;
+    }
   }
-  const left = resolveVariable(predicate.variable, state);
-  return !!applyOperator(left, predicate.operator, predicate.value);
+
+  if (predicate && typeof predicate === "object") {
+    Object.defineProperty(predicate, PREDICATE_DEPS, {
+      value: deps,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  if (normalized && typeof normalized === "object") {
+    Object.defineProperty(normalized, PREDICATE_DEPS, {
+      value: deps,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return deps;
+}
+
+export function compilePredicate(predicate) {
+  if (predicate && typeof predicate === "object" && predicate[COMPILED_PREDICATE]) {
+    return predicate[COMPILED_PREDICATE];
+  }
+
+  const normalized = migrateLegacyCondition(predicate);
+  if (!normalized) return () => false;
+  const deps = getPredicateDependencies(normalized);
+
+  let compiled;
+  if (normalized.operator === 'AND') {
+    const clauses = (normalized.clauses || []).map(compilePredicate);
+    compiled = (state) => clauses.every(evaluate => evaluate(state));
+  } else if (normalized.operator === 'OR') {
+    const clauses = (normalized.clauses || []).map(compilePredicate);
+    compiled = (state) => clauses.some(evaluate => evaluate(state));
+  } else {
+    const variable = normalized.variable;
+    const operator = normalized.operator;
+    const value = normalized.value;
+    compiled = (state) => {
+      const left = resolveVariable(variable, state || {});
+      return !!applyOperator(left, operator, value);
+    };
+  }
+
+  if (predicate && typeof predicate === "object") {
+    Object.defineProperty(predicate, COMPILED_PREDICATE, {
+      value: compiled,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  if (normalized && typeof normalized === "object") {
+    Object.defineProperty(normalized, COMPILED_PREDICATE, {
+      value: compiled,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  Object.defineProperty(compiled, "dependencies", {
+    value: deps,
+    enumerable: false,
+    configurable: true,
+  });
+  return compiled;
 }
 
 /**

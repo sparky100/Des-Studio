@@ -1,5 +1,6 @@
 // LocalStorage CRUD backend for anonymous/local mode.
 // Mirrors the models.js API shape so callers can swap backends.
+import { normalizeModelConditions } from "../model/conditionFormat.js";
 
 const STORAGE_KEY = "des_studio_models";
 const RUNS_KEY = "des_studio_runs";
@@ -19,19 +20,20 @@ function genId() {
 }
 
 export function fetchLocalModels() {
-  return readAll();
+  return readAll().map(model => normalizeModelConditions(model));
 }
 
 export function saveLocalModel(model) {
+  const normalizedModel = normalizeModelConditions(model);
   const models = readAll();
-  const idx = models.findIndex(m => m.id === model.id);
+  const idx = models.findIndex(m => m.id === normalizedModel.id);
   const now = new Date().toISOString();
   if (idx >= 0) {
-    models[idx] = { ...models[idx], ...model, updatedAt: now };
+    models[idx] = { ...models[idx], ...normalizedModel, updatedAt: now };
     writeAll(models);
     return models[idx];
   }
-  const saved = { ...model, id: genId(), createdAt: now, updatedAt: now };
+  const saved = { ...normalizedModel, id: genId(), createdAt: now, updatedAt: now };
   writeAll([...models, saved]);
   return saved;
 }

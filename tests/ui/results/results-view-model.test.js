@@ -95,8 +95,8 @@ describe("results view model", () => {
       "server-utilization",
       "wait-distribution",
     ]);
-    expect(sections[0].question).toBe("Where are queues forming?");
-    expect(sections[1].method).toMatch(/busy resource counts/i);
+    expect(sections[0].question).toBe("Where do queues build up?");
+    expect(sections[1].method).toMatch(/busy over time/i);
     expect(sections[2].question).toMatch(/waiting time/i);
   });
 });

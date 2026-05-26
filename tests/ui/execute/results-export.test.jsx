@@ -36,6 +36,13 @@ const validModel = {
       effect: 'ARRIVE(Customer)',
       schedules: [],
     },
+    {
+      id: 'b_complete',
+      name: 'Complete',
+      scheduledTime: '9999',
+      effect: 'COMPLETE()',
+      schedules: [],
+    },
   ],
   cEvents: [],
   queues: [],
@@ -121,13 +128,12 @@ describe('ExecutePanel results export buttons', () => {
   it('disables result exports before a run and enables them after completion', async () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    expect(screen.getByRole('button', { name: 'Export Results' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Export Results CSV' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export…' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: /run all/i }));
 
-    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
-    expect(screen.getByRole('button', { name: 'Export Results' })).not.toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Export Results CSV' })).not.toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Export…' })).not.toBeDisabled()
+    );
   });
 });

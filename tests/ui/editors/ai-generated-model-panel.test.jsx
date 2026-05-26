@@ -148,7 +148,13 @@ describe("AiGeneratedModelPanel", () => {
 
     expect(handleApply).toHaveBeenCalledOnce();
     expect(handleApply.mock.calls[0][0].cEvents[0].condition)
-      .toBe("queue(Main Queue).length > 0 AND idle(Clerk).count > 0");
+      .toEqual({
+        operator: "AND",
+        clauses: [
+          { variable: "queue(Main Queue).length", operator: ">", value: 0 },
+          { variable: "idle(Clerk).count", operator: ">", value: 0 },
+        ],
+      });
   });
 
   it("normalizes AI timing answers into schedule and service-time distributions", async () => {
@@ -217,7 +223,13 @@ describe("AiGeneratedModelPanel", () => {
       effect: ["COMPLETE()"],
     }));
     expect(applied.cEvents[0]).toEqual(expect.objectContaining({
-      condition: "queue(Main Queue).length > 0 AND idle(Clerk).count > 0",
+      condition: {
+        operator: "AND",
+        clauses: [
+          { variable: "queue(Main Queue).length", operator: ">", value: 0 },
+          { variable: "idle(Clerk).count", operator: ">", value: 0 },
+        ],
+      },
       effect: ["ASSIGN(Main Queue, Clerk)"],
     }));
     expect(applied.cEvents[0].cSchedules[0]).toEqual(expect.objectContaining({
@@ -286,7 +298,13 @@ describe("AiGeneratedModelPanel", () => {
     }));
     expect(applied.cEvents[0]).toEqual(expect.objectContaining({
       effect: "ASSIGN(Waiting, Clerk)",
-      condition: "queue(Waiting).length > 0 AND idle(Clerk).count > 0",
+      condition: {
+        operator: "AND",
+        clauses: [
+          { variable: "queue(Waiting).length", operator: ">", value: 0 },
+          { variable: "idle(Clerk).count", operator: ">", value: 0 },
+        ],
+      },
     }));
     expect(applied.cEvents[0].cSchedules[0]).toEqual(expect.objectContaining({
       eventId: "complete",

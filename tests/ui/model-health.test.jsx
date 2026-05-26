@@ -56,9 +56,9 @@ describe("ModelDetail Model Health panel", () => {
       entityTypes: [{ id: "bad-customer", name: "", role: "customer", attrDefs: [] }],
     });
 
-    expect(screen.getByRole("region", { name: /model health/i })).toHaveTextContent(/blocker/i);
-    expect(screen.getByRole("button", { name: /\[V1\] Entity Types/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /run model/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /model health/i })).toHaveTextContent(/fixes before it can run/i);
+    expect(screen.getByRole("button", { name: /2 errors/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open run/i })).not.toBeInTheDocument();
   });
 
   test("opens the editor tab attached to a health issue", () => {
@@ -67,7 +67,8 @@ describe("ModelDetail Model Health panel", () => {
       entityTypes: [{ id: "bad-customer", name: "", role: "customer", attrDefs: [] }],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /\[V1\] Entity Types/i }));
+    fireEvent.click(screen.getByRole("button", { name: /model health →/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Entity Types: Entity class at position 1 has an empty name/i }));
 
     expect(screen.getByRole("tab", { name: /entity types/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("alert")).toHaveTextContent(/Entity class at position 1 has an empty name/i);
@@ -126,10 +127,11 @@ describe("ModelDetail Model Health panel", () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: /open execute/i }));
+    fireEvent.click(screen.getByRole("button", { name: /open run/i }));
 
-    expect(screen.getByRole("button", { name: /^execute$/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /^run$/i })).toBeInTheDocument();
+    const workflow = screen.getByLabelText(/model workflow/i);
+    expect(within(workflow).getByRole("button", { name: /^run$/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /reset/i })).toBeInTheDocument();
   });
 
   test("uses a mobile read/run/results workflow at phone width", () => {
@@ -141,7 +143,7 @@ describe("ModelDetail Model Health panel", () => {
       entityTypes: [{ id: "customer", name: "Customer", role: "customer", attrDefs: [] }],
     });
 
-    expect(screen.getByLabelText(/mobile model workflow/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/model workflow/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^overview$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^design$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^run$/i })).toBeInTheDocument();
@@ -151,19 +153,19 @@ describe("ModelDetail Model Health panel", () => {
     expect(screen.getByRole("tab", { name: /ai designer/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /entity types/i })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /execute/i })).not.toBeInTheDocument();
-    const mobileWorkflow = screen.getByLabelText(/mobile model workflow/i);
+    const mobileWorkflow = screen.getByLabelText(/model workflow/i);
     fireEvent.click(within(mobileWorkflow).getByRole("button", { name: /^run$/i }));
     expect(within(mobileWorkflow).getByRole("button", { name: /^run$/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: /^setup$/i })).toBeInTheDocument();
-    fireEvent.click(within(mobileWorkflow).getByRole("button", { name: /analysis/i }));
-    expect(within(mobileWorkflow).getByRole("button", { name: /analysis/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText(/ANALYSIS WORKSPACE/i)).toBeInTheDocument();
+    fireEvent.click(within(mobileWorkflow).getByRole("button", { name: /^results$/i }));
+    expect(within(mobileWorkflow).getByRole("button", { name: /^results$/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /^summary$/i })).toBeInTheDocument();
   });
 
   test("treats a fresh blank model as getting started instead of blocked", () => {
     renderDetail(baseModel);
 
-    expect(screen.getByRole("region", { name: /model health/i })).toHaveTextContent(/getting started/i);
+    expect(screen.getByRole("region", { name: /model health/i })).toHaveTextContent(/start with a template, the visual designer, ai designer, or forms/i);
     expect(screen.queryByText(/fix blocking validation issues/i)).not.toBeInTheDocument();
     expect(screen.getByText(/choose a build path below to start defining your model/i)).toBeInTheDocument();
   });

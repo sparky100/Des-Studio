@@ -39,10 +39,10 @@ describe('DistPicker — CSV import (F2.9)', () => {
     vi.restoreAllMocks();
   });
 
-  it('"Import from CSV…" option is present in the distribution dropdown', () => {
+  it('the From data family exposes imported-data distributions and the CSV file input', () => {
     render(<DistPicker value={{ dist: 'Exponential', distParams: { mean: '3' } }} onChange={vi.fn()} />);
-    const options = Array.from(screen.getByRole('combobox').querySelectorAll('option')).map(o => o.textContent);
-    expect(options.some(t => t.includes('Import from CSV'))).toBe(true);
+    expect(screen.getByRole('button', { name: /from data/i })).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"][accept=".csv"]')).not.toBeNull();
   });
 
   it('column picker appears after a CSV file is selected', async () => {

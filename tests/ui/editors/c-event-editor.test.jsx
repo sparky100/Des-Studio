@@ -192,7 +192,13 @@ describe('CEventEditor — ConditionBuilder token list staleness (C8)', () => {
     expect(screen.getAllByRole('combobox')[0]).toHaveValue('queue(Waiting).length');
     await waitFor(() => {
       expect(handleChange).toHaveBeenCalledWith([
-        expect.objectContaining({ condition: 'queue(Waiting).length > 0' }),
+        expect.objectContaining({
+          condition: expect.objectContaining({
+            variable: 'queue(Waiting).length',
+            operator: '>',
+            value: 0,
+          }),
+        }),
       ]);
     });
   });
