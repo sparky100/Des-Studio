@@ -138,9 +138,188 @@ describe("validateModel", () => {
     ]));
   });
 
+  it("passes V4 when a PRIORITY queue uses an entity type with numeric priority", () => {
+    const model = {
+      entityTypes: [
+        {
+          id: "et_customer",
+          name: "Customer",
+          attrDefs: [{ name: "priority", valueType: "number", defaultValue: "1" }],
+        },
+      ],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Priority Queue", discipline: "PRIORITY", customerType: "Customer" }],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors.filter(error => error.code === "V4")).toEqual([]);
+  });
+
+  it("fails V4 when a PRIORITY queue uses a string priority attribute", () => {
+    const model = {
+      entityTypes: [
+        {
+          id: "et_customer",
+          name: "Customer",
+          attrDefs: [{ name: "priority", valueType: "string", defaultValue: "high" }],
+        },
+      ],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Priority Queue", discipline: "PRIORITY", customerType: "Customer" }],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "V4",
+        tab: "queues",
+        message: expect.stringContaining("must define 'priority' as a number"),
+      }),
+    ]));
+  });
+
+  it("fails V4 when a PRIORITY queue entity type is missing priority", () => {
+    const model = {
+      entityTypes: [
+        {
+          id: "et_customer",
+          name: "Customer",
+          attrDefs: [{ name: "severity", valueType: "number", defaultValue: "1" }],
+        },
+      ],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Priority Queue", discipline: "PRIORITY", customerType: "Customer" }],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "V4",
+        tab: "queues",
+        message: expect.stringContaining("has no 'priority' attribute"),
+      }),
+    ]));
+  });
+
+  it("passes when a server has a complete MTBF/MTTR failure model", () => {
+    const model = {
+      entityTypes: [
+        {
+          id: "et_server",
+          name: "Machine",
+          role: "server",
+          attrDefs: [],
+          mtbfDist: "Exponential",
+          mtbfDistParams: { mean: "120" },
+          mttrDist: "Exponential",
+          mttrDistParams: { mean: "20" },
+        },
+      ],
+      stateVariables: [],
+      queues: [],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors.filter(error => error.code === "V36" || error.code === "V37" || error.code === "V5")).toEqual([]);
+  });
+
+  it("fails when a server has MTBF without MTTR", () => {
+    const model = {
+      entityTypes: [
+        {
+          id: "et_server",
+          name: "Machine",
+          role: "server",
+          attrDefs: [],
+          mtbfDist: "Exponential",
+          mtbfDistParams: { mean: "120" },
+        },
+      ],
+      stateVariables: [],
+      queues: [],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "V37",
+        tab: "entities",
+        message: expect.stringContaining("MTTR distribution and MTTR parameters"),
+      }),
+    ]));
+  });
+
+  it("fails when a server has MTTR without MTBF", () => {
+    const model = {
+      entityTypes: [
+        {
+          id: "et_server",
+          name: "Machine",
+          role: "server",
+          attrDefs: [],
+          mttrDist: "Exponential",
+          mttrDistParams: { mean: "20" },
+        },
+      ],
+      stateVariables: [],
+      queues: [],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "V37",
+        tab: "entities",
+        message: expect.stringContaining("MTBF distribution and MTBF parameters"),
+      }),
+    ]));
+  });
+
+  it("fails when a non-server entity defines failure-model fields", () => {
+    const model = {
+      entityTypes: [
+        {
+          id: "et_customer",
+          name: "Customer",
+          role: "customer",
+          attrDefs: [],
+          mtbfDist: "Exponential",
+          mtbfDistParams: { mean: "120" },
+          mttrDist: "Exponential",
+          mttrDistParams: { mean: "20" },
+        },
+      ],
+      stateVariables: [],
+      queues: [],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "V36",
+        tab: "entities",
+        message: expect.stringContaining("only server entity types"),
+      }),
+    ]));
+  });
+
   // ── V25: RENEGE argument validation ──────────────────────────────────────
 
-  it("warns when RENEGE() argument is a type name instead of 'ctx'", () => {
+  it("errors when RENEGE() argument is a type name instead of 'ctx'", () => {
     const model = {
       entityTypes: [{ id: "et_caller", name: "Caller", attrDefs: [] }],
       stateVariables: [],
@@ -152,7 +331,7 @@ describe("validateModel", () => {
     };
 
     const result = validateModel(model);
-    expect(result.warnings).toEqual(
+    expect(result.errors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: "V25",
@@ -192,7 +371,7 @@ describe("validateModel", () => {
     expect(result.warnings.filter(w => w.code === "V25")).toEqual([]);
   });
 
-  it("warns when C-Event uses RENEGE() with a non-ctx argument", () => {
+  it("errors when C-Event uses RENEGE() with a non-ctx argument", () => {
     const model = {
       entityTypes: [],
       stateVariables: [],
@@ -209,7 +388,7 @@ describe("validateModel", () => {
     };
 
     const result = validateModel(model);
-    expect(result.warnings).toEqual(
+    expect(result.errors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           code: "V25",
@@ -281,6 +460,74 @@ describe("validateModel", () => {
 
     const result = validateModel(model);
     expect(result.warnings.filter(w => w.code === "V16")).toEqual([]);
+  });
+
+  it("errors when replication count is not a positive integer", () => {
+    const model = {
+      experimentDefaults: { replications: 0 },
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [] },
+        { id: "complete", name: "Complete", effect: "COMPLETE()", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "V34",
+        tab: "execute",
+        message: expect.stringContaining("Replication count"),
+      }),
+    ]));
+  });
+
+  it("errors when warm-up time is not shorter than the run duration in time mode", () => {
+    const model = {
+      experimentDefaults: { terminationMode: "time", warmupPeriod: 500, maxSimTime: 500 },
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [] },
+        { id: "complete", name: "Complete", effect: "COMPLETE()", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "V35",
+        tab: "execute",
+        message: expect.stringContaining("Warm-up time"),
+      }),
+    ]));
+  });
+
+  it("does not error on warm-up length when using condition-based stopping", () => {
+    const model = {
+      experimentDefaults: {
+        terminationMode: "condition",
+        warmupPeriod: 500,
+        replications: 2,
+      },
+      terminationCondition: { metric: "served", operator: ">=", value: 10 },
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [
+        { id: "arrival", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [] },
+        { id: "complete", name: "Complete", effect: "COMPLETE()", schedules: [] },
+      ],
+      cEvents: [],
+    };
+
+    const result = validateModel(model);
+    expect(result.errors.filter(error => error.code === "V35")).toEqual([]);
   });
 
   it("blocks non-numeric B-event scheduled times", () => {
@@ -606,7 +853,7 @@ describe("V5 — EntityAttr skips dist validation", () => {
     expect(errors.filter(e => e.code === "V30")).toHaveLength(0);
   });
 
-  it("does not emit V30 when probabilisticRouting has null queue AND RENEGE() effect", () => {
+  it("does not emit V30 when probabilisticRouting has null queue AND RENEGE(ctx) effect", () => {
     const model = {
       entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
       stateVariables: [],
@@ -630,6 +877,138 @@ describe("V5 — EntityAttr skips dist validation", () => {
     };
     const { errors } = validateModel(model);
     expect(errors.filter(e => e.code === "V30")).toHaveLength(0);
+  });
+
+  it("still emits V30 when probabilisticRouting has null queue AND invalid RENEGE effect", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" }],
+      bEvents: [
+        {
+          id: "b1",
+          name: "Arrival",
+          effect: ["ARRIVE(Customer)"],
+          schedules: [{ dist: "Exponential", distParams: { mean: "5" } }],
+        },
+        {
+          id: "b_exit",
+          name: "Exit",
+          effect: ["RENEGE(Customer)"],
+          schedules: [],
+          probabilisticRouting: [{ queueName: null, probability: 1 }],
+        },
+      ],
+      cEvents: [],
+    };
+    const { errors } = validateModel(model);
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V25", tab: "bevents" }),
+      expect.objectContaining({ code: "V30", tab: "bevents" }),
+    ]));
+  });
+
+  it("warns when a single 100% null probabilistic exit is used with COMPLETE()", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" }],
+      bEvents: [
+        {
+          id: "b1",
+          name: "Arrival",
+          effect: ["ARRIVE(Customer)"],
+          schedules: [{ dist: "Exponential", distParams: { mean: "5" } }],
+        },
+        {
+          id: "b_exit",
+          name: "Exit",
+          effect: ["RELEASE(Server)", "COMPLETE()"],
+          schedules: [],
+          probabilisticRouting: [{ queueName: null, probability: 1 }],
+        },
+      ],
+      cEvents: [],
+    };
+    const { warnings } = validateModel(model);
+    expect(warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V33", tab: "bevents" }),
+    ]));
+  });
+
+  it("errors when conditional routing exits to null without COMPLETE() or RENEGE(ctx)", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [{ name: "severity", valueType: "number" }] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" }],
+      bEvents: [
+        {
+          id: "b1",
+          name: "Arrival",
+          effect: ["ARRIVE(Customer)"],
+          schedules: [{ dist: "Exponential", distParams: { mean: "5" } }],
+        },
+        {
+          id: "b_exit",
+          name: "Exit",
+          effect: ["RELEASE(Server)"],
+          schedules: [],
+          routing: [{ condition: { variable: "Entity.severity", operator: ">", value: 1 }, queueName: null }],
+        },
+      ],
+      cEvents: [],
+    };
+    const { errors } = validateModel(model);
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V31", tab: "bevents" }),
+    ]));
+  });
+
+  it("errors when a terminal B-event uses both COMPLETE() and RENEGE(ctx)", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" }],
+      bEvents: [
+        {
+          id: "b_exit",
+          name: "Exit",
+          effect: ["COMPLETE()", "RENEGE(ctx)"],
+          schedules: [],
+          probabilisticRouting: [{ queueName: null, probability: 1 }],
+        },
+      ],
+      cEvents: [],
+    };
+    const { errors } = validateModel(model);
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V32", tab: "bevents" }),
+    ]));
+  });
+
+  it("errors when routing is combined with RELEASE(Server, Queue)", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [{ name: "severity", valueType: "number" }] }],
+      stateVariables: [],
+      queues: [
+        { id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" },
+        { id: "q2", name: "Queue2", discipline: "FIFO", customerType: "Customer" },
+      ],
+      bEvents: [
+        {
+          id: "b_route",
+          name: "Route",
+          effect: "RELEASE(Server, Queue2)",
+          schedules: [],
+          routing: [{ condition: { variable: "Entity.severity", operator: ">", value: 1 }, queueName: "Queue1" }],
+        },
+      ],
+      cEvents: [],
+    };
+    const { errors } = validateModel(model);
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "V17", tab: "bevents" }),
+    ]));
   });
 
   it("does not emit V30 when probabilisticRouting all point to defined queues", () => {

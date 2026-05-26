@@ -3,6 +3,7 @@ import {
   buildChartSections,
   buildQueueDepthSeries,
   buildResultsViewModel,
+  buildRuntimeMetricsModel,
   buildServerUtilizationSeries,
   buildWaitDistributions,
 } from "../../../src/ui/results/resultsViewModel.js";
@@ -82,6 +83,36 @@ describe("results view model", () => {
     expect(vm.hasTimeSeries).toBe(true);
     expect(vm.queueDepthSeries).toHaveLength(2);
     expect(vm.serverUtilizationSeries).toHaveLength(1);
+  });
+
+  test("buildRuntimeMetricsModel normalises runtime metrics for the results UI", () => {
+    const runtime = buildRuntimeMetricsModel({
+      runtimeMetrics: {
+        wall_clock_ms: 42,
+        replications: 3,
+        events_processed: 900,
+        c_event_scans: 1200,
+        c_events_fired: 450,
+        entities_created: 220,
+        entities_completed: 200,
+        max_queue_length_by_queue: { "Queue B": 2, "Queue A": 5 },
+      },
+    });
+
+    expect(runtime.hasMetrics).toBe(true);
+    expect(runtime.metrics.wallClockMs).toBe(42);
+    expect(runtime.metrics.replications).toBe(3);
+    expect(runtime.metrics.maxQueueLengthByQueue).toEqual([
+      { queueName: "Queue A", depth: 5 },
+      { queueName: "Queue B", depth: 2 },
+    ]);
+  });
+
+  test("buildRuntimeMetricsModel tolerates older runs with no runtime metrics", () => {
+    const runtime = buildRuntimeMetricsModel({});
+
+    expect(runtime.hasMetrics).toBe(false);
+    expect(runtime.metrics.maxQueueLengthByQueue).toEqual([]);
   });
 
   test("buildChartSections describes the modelling question and data method", () => {

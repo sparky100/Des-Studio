@@ -208,7 +208,7 @@ export const MACROS = [
     apply(match, ctx) {
       const typeName  = match[1].trim();
       const queueName = match[2]?.trim() || (typeName + "Queue");
-      const { entities, model, clock, helpers, setLastCustId, msgs, incQueueMetric, felRef } = ctx;
+      const { entities, model, clock, helpers, setLastCustId, msgs, incQueueMetric, felRef, noteEntityCreated } = ctx;
       const et = (model.entityTypes || []).find(
         e => e.name.trim().toLowerCase() === typeName.trim().toLowerCase()
       );
@@ -240,6 +240,7 @@ export const MACROS = [
                 arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
               markEntityWaiting(rerouted, clock, dest);
               entities.push(rerouted);
+              noteEntityCreated?.(rerouted);
               setLastCustId(id);
               msgs.push(`#${id} (${typeName}) balked → rerouted to "${dest}"`);
             } else {
@@ -259,6 +260,7 @@ export const MACROS = [
               arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
             markEntityWaiting(rerouted, clock, dest);
             entities.push(rerouted);
+            noteEntityCreated?.(rerouted);
             setLastCustId(id);
             msgs.push(`#${id} (${typeName}) balked (p) → rerouted to "${dest}"`);
           } else {
@@ -285,6 +287,7 @@ export const MACROS = [
               arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
             markEntityWaiting(rerouted, clock, dest);
             entities.push(rerouted);
+            noteEntityCreated?.(rerouted);
             setLastCustId(id);
             msgs.push(`#${id} (${typeName}) blocked (capacity ${cap}) → overflow to "${dest}"`);
           } else {
@@ -312,6 +315,7 @@ export const MACROS = [
       };
       markEntityWaiting(ent, clock, queueName);
       entities.push(ent);
+      noteEntityCreated?.(ent);
       setLastCustId(id);
       msgs.push(`#${id} (${typeName}) arrived → waiting [queue: ${queueName}, depth: ${helpers.waitingOf(typeName).length}]`);
     },
@@ -455,7 +459,7 @@ export const MACROS = [
     apply(match, ctx) {
       const srvType     = match[1].trim();
       const targetQueue = match[2]?.trim() || null;
-      const { entities, clock, getLastCustId, getLastSrvId, felRef, msgs } = ctx;
+      const { entities, clock, getLastCustId, getLastSrvId, felRef, msgs, noteQueueDepth } = ctx;
       const custId = felRef?._contextCustId ?? getLastCustId();
       const srvId  = felRef?._contextSrvId  ?? getLastSrvId();
       const srv    = entities.find(e => e.id === srvId && e.role === "server")
@@ -473,6 +477,7 @@ export const MACROS = [
         cust.stages.push(buildStageRecord(cust, srv, clock));
         cust.lastStageStart = clock;
         markEntityWaiting(cust, clock, targetQueue || cust.lastQueue || cust.queue);
+        noteQueueDepth?.(cust.queue);
         delete cust.serviceStart;
         releaseServerClaim(cust, srv, clock);
         const retired = retireIdleExcessServers(ctx, srv.type);
@@ -519,7 +524,7 @@ export const MACROS = [
     apply(match, ctx) {
       const queueName = match[1].trim();
       const batchSizeArg = match[2].trim();
-      const { entities, model, clock, msgs, setLastCustId, helpers, nextId } = ctx;
+      const { entities, model, clock, msgs, setLastCustId, helpers, nextId, noteEntityCreated } = ctx;
 
       const qDef = (model.queues || []).find(
         q => q.name?.trim().toLowerCase() === queueName.trim().toLowerCase()
@@ -596,6 +601,7 @@ export const MACROS = [
       };
       markEntityWaiting(parent, clock, queueName);
       entities.push(parent);
+      noteEntityCreated?.(parent);
       setLastCustId(parentId);
       msgs.push(`BATCH: #${ids.join(', #')} → batch #${parentId} in "${queueName}" (size=${batchSize})`);
     },
@@ -607,7 +613,7 @@ export const MACROS = [
     pattern: /^UNBATCH\(([^,)]+)\)$/i,
     apply(match, ctx) {
       const targetQueue = match[1].trim();
-      const { entities, clock, felRef, getLastCustId, msgs } = ctx;
+      const { entities, clock, felRef, getLastCustId, msgs, noteQueueDepth } = ctx;
 
       const parentId = felRef?._contextCustId ?? getLastCustId();
       const parent = entities.find(e => e.id === parentId);
@@ -627,6 +633,7 @@ export const MACROS = [
         };
         markEntityWaiting(restored, clock, targetQueue);
         entities.push(restored);
+        noteQueueDepth?.(targetQueue);
         childIds.push(child.id);
       }
 
@@ -736,7 +743,7 @@ export const MACROS = [
     pattern: /^PREEMPT\(([^,)]+)\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
-      const { entities, clock, helpers, msgs, _arbitration } = ctx;
+      const { entities, clock, helpers, msgs, _arbitration, noteQueueDepth } = ctx;
       const key = normName(sType);
 
       const busyServers = entities.filter(e =>
@@ -764,6 +771,7 @@ export const MACROS = [
       releaseServerClaim(cust, srv, clock);
       clearWaitingState(cust);
       markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
+      noteQueueDepth?.(cust.queue);
 
       if (_arbitration && typeof _arbitration === "object") {
         Object.assign(_arbitration, {
@@ -789,7 +797,7 @@ export const MACROS = [
     pattern: /^FAIL\(([^,)]+)\)$/i,
     apply(match, ctx) {
       const sType = match[1].trim();
-      const { entities, clock, helpers, msgs } = ctx;
+      const { entities, clock, helpers, msgs, noteQueueDepth } = ctx;
       const key = normName(sType);
 
       const servers = entities.filter(e =>
@@ -808,6 +816,7 @@ export const MACROS = [
             releaseServerClaim(cust, srv, clock);
             clearWaitingState(cust);
             markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
+            noteQueueDepth?.(cust.queue);
             msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
           }
         }
@@ -864,7 +873,7 @@ export const MACROS = [
       const entityType = match[1].trim();
       const n = parseInt(match[2], 10);
       const targetQueue = match[3].trim();
-      const { entities, clock, nextId, msgs, setLastCustId } = ctx;
+      const { entities, clock, nextId, msgs, setLastCustId, noteEntityCreated } = ctx;
 
       const custId = ctx.felRef?._contextCustId ?? ctx.getLastCustId?.();
       const cust = entities.find(e => e.id === custId);
@@ -898,6 +907,7 @@ export const MACROS = [
         };
         markEntityWaiting(child, clock, targetQueue);
         entities.push(child);
+        noteEntityCreated?.(child);
         childIds.push(childId);
       }
 
@@ -989,7 +999,7 @@ export const MACROS = [
       const typeB = match[3].trim();
       const queueB = match[4].trim();
       const targetQueue = match[5].trim();
-      const { entities, helpers, clock, msgs, nextId } = ctx;
+      const { entities, helpers, clock, msgs, nextId, noteEntityCreated } = ctx;
 
       const disciplineA = helpers.findQueueConfig?.(queueA)?.discipline || "FIFO";
       const disciplineB = helpers.findQueueConfig?.(queueB)?.discipline || "FIFO";
@@ -1020,6 +1030,7 @@ export const MACROS = [
         _matchedFrom: [entityA.id, entityB.id],
       };
       entities.push(parent);
+      noteEntityCreated?.(parent);
 
       clearWaitingState(entityA);
       entityA.status = "done";

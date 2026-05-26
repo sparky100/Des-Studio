@@ -88,6 +88,8 @@ export function applyEffect(effect, ctx) {
     entityFilter: ctx.entityFilter ?? null,
     ceventName: ctx.ceventName ?? null,
     incQueueMetric: ctx.incQueueMetric ?? null,
+    noteEntityCreated: ctx.noteEntityCreated ?? null,
+    noteQueueDepth: ctx.noteQueueDepth ?? null,
     _arbitration: ctx._arbitration ?? null,
     getLastCustId: () => lastCustId,
     getLastSrvId:  () => lastSrvId,
@@ -184,6 +186,7 @@ export function fireBEvent(ev, ctx) {
       msgs.push(`Routing: #${cust.id} → exit system (${note})`);
     } else {
       markEntityWaiting(cust, clock, queueName);
+      ctx.noteQueueDepth?.(queueName);
       msgs.push(`Routing: #${cust.id} → "${queueName}" (${note})`);
     }
   };
@@ -241,6 +244,7 @@ export function fireBEvent(ev, ctx) {
         const exitQ = ev.loopConfig.exitQueueName;
         if (exitQ) {
           markEntityWaiting(cust, clock, exitQ);
+          ctx.noteQueueDepth?.(exitQ);
           msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → "${exitQ}"`);
         } else {
           const previousQueue = cust.queue ?? cust.lastQueue ?? null;

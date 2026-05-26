@@ -78,6 +78,8 @@ describe('ExecutePanel', () => {
     expect(screen.getByRole('button', { name: /^setup$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^studies$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /run all/i })).toBeInTheDocument();
+    expect(screen.getByText('RUN SIZE ESTIMATE')).toBeInTheDocument();
+    expect(screen.getByText('Conservative preview of likely workload before execution.')).toBeInTheDocument();
     expect(screen.getByText('Run or step the simulation to see the visual view.')).toBeInTheDocument();
   });
 
@@ -116,6 +118,33 @@ describe('ExecutePanel', () => {
     expect(screen.queryByRole('button', { name: /view results/i })).not.toBeInTheDocument();
   });
 
+  it('blocks runs through shared validation when replication count is invalid', async () => {
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+    openSetup();
+    fireEvent.change(screen.getByLabelText(/replication count/i), { target: { value: '0' } });
+
+    expect(screen.getAllByRole('button', { name: /blocker/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole('button', { name: /run all/i })).not.toBeInTheDocument();
+
+    await waitFor(() => expect(mockSaveSimulationRun).not.toHaveBeenCalled());
+    expect(mockRunReplications).not.toHaveBeenCalled();
+  });
+
+  it('blocks runs through shared validation when warm-up reaches the run duration in time mode', async () => {
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+    openSetup();
+    fireEvent.change(screen.getByLabelText(/warm-up period/i), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText(/run duration/i), { target: { value: '500' } });
+
+    expect(screen.getAllByRole('button', { name: /blocker/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole('button', { name: /run all/i })).not.toBeInTheDocument();
+
+    await waitFor(() => expect(mockSaveSimulationRun).not.toHaveBeenCalled());
+    expect(mockRunReplications).not.toHaveBeenCalled();
+  });
+
   it('runs one replication through the existing single-run path', async () => {
     const onRunSaved = vi.fn();
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
@@ -126,8 +155,27 @@ describe('ExecutePanel', () => {
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
     expect(mockRunReplications).not.toHaveBeenCalled();
+    expect(mockSaveSimulationRun.mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        runtimeMetrics: expect.objectContaining({
+          replications: 1,
+          wall_clock_ms: expect.any(Number),
+          events_processed: expect.any(Number),
+          c_event_scans: expect.any(Number),
+          c_events_fired: expect.any(Number),
+          entities_created: expect.any(Number),
+          entities_completed: expect.any(Number),
+        }),
+      })
+    );
     expect(mockSaveSimulationRun.mock.calls[0][3]).toEqual(
-      expect.objectContaining({ replications: 1, runLabel: 'Baseline' })
+      expect.objectContaining({
+        replications: 1,
+        runLabel: 'Baseline',
+        durationMs: expect.any(Number),
+        requestedCollectTimeSeries: true,
+        effectiveCollectTimeSeries: true,
+      })
     );
     expect(onRunSaved).toHaveBeenCalledOnce();
   });
@@ -192,8 +240,26 @@ describe('ExecutePanel', () => {
 
     // The batch save must fire exactly once with replications=N
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+    expect(mockSaveSimulationRun.mock.calls[0][2]).toEqual(
+      expect.objectContaining({
+        runtimeMetrics: expect.objectContaining({
+          replications: N,
+          wall_clock_ms: expect.any(Number),
+          events_processed: expect.any(Number),
+          c_event_scans: expect.any(Number),
+          c_events_fired: expect.any(Number),
+          entities_created: expect.any(Number),
+          entities_completed: expect.any(Number),
+        }),
+      })
+    );
     expect(mockSaveSimulationRun.mock.calls[0][3]).toEqual(
-      expect.objectContaining({ replications: N })
+      expect.objectContaining({
+        replications: N,
+        durationMs: expect.any(Number),
+        requestedCollectTimeSeries: true,
+        effectiveCollectTimeSeries: true,
+      })
     );
     await waitFor(() => expect(onRunSaved).toHaveBeenCalledOnce());
 
@@ -299,6 +365,8 @@ describe('ExecutePanel', () => {
         batchId: expect.any(String),
         replicationResults: expect.any(Array),
         aggregateStats: expect.any(Object),
+        requestedCollectTimeSeries: true,
+        effectiveCollectTimeSeries: true,
       })
     );
   });

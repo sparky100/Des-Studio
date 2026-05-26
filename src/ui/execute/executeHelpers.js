@@ -24,6 +24,32 @@ export const makeBatchId = () => {
   return `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 };
 
+export function makeBatchRuntimeMetrics(replicationPayloads, replications, wallClockMs = null) {
+  const runtimeRows = replicationPayloads
+    .map(payload => payload?.result?.runtimeMetrics)
+    .filter(Boolean);
+  const maxQueueLengthByQueue = {};
+
+  for (const row of runtimeRows) {
+    for (const [queueName, depth] of Object.entries(row.max_queue_length_by_queue || {})) {
+      const numericDepth = Number(depth);
+      if (!Number.isFinite(numericDepth)) continue;
+      maxQueueLengthByQueue[queueName] = Math.max(maxQueueLengthByQueue[queueName] || 0, numericDepth);
+    }
+  }
+
+  return {
+    wall_clock_ms: wallClockMs,
+    replications: replications ?? runtimeRows.length,
+    events_processed: runtimeRows.reduce((sum, row) => sum + (Number(row.events_processed) || 0), 0),
+    c_event_scans: runtimeRows.reduce((sum, row) => sum + (Number(row.c_event_scans) || 0), 0),
+    c_events_fired: runtimeRows.reduce((sum, row) => sum + (Number(row.c_events_fired) || 0), 0),
+    entities_created: runtimeRows.reduce((sum, row) => sum + (Number(row.entities_created) || 0), 0),
+    entities_completed: runtimeRows.reduce((sum, row) => sum + (Number(row.entities_completed) || 0), 0),
+    max_queue_length_by_queue: Object.keys(maxQueueLengthByQueue).length ? maxQueueLengthByQueue : undefined,
+  };
+}
+
 export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, warmupPeriod) {
   const summaries = replicationPayloads.map(payload => payload.result?.summary || {});
   const total = summaries.reduce((sum, summary) => sum + (summary.total || 0), 0);

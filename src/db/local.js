@@ -54,6 +54,14 @@ function readLocalRuns() {
   } catch { return {}; }
 }
 
+function withResultsPayloadSize(resultsJson) {
+  const payloadSizeBytes = JSON.stringify(resultsJson).length;
+  return {
+    ...resultsJson,
+    _results_payload_size_bytes: payloadSizeBytes,
+  };
+}
+
 function buildLocalResultsJson(result, config = {}) {
   const summary = result?.summary || {};
   const resultsJson = {
@@ -65,7 +73,9 @@ function buildLocalResultsJson(result, config = {}) {
   if (config?.aggregateStats) resultsJson.aggregateStats = config.aggregateStats;
   if (config?.replicationResults) resultsJson.replications = config.replicationResults;
   if (config?.runLabel) resultsJson.runLabel = config.runLabel;
-  return resultsJson;
+  if (config?.requestedCollectTimeSeries !== undefined) resultsJson._requested_collect_time_series = !!config.requestedCollectTimeSeries;
+  if (config?.effectiveCollectTimeSeries !== undefined) resultsJson._effective_collect_time_series = !!config.effectiveCollectTimeSeries;
+  return withResultsPayloadSize(resultsJson);
 }
 
 function preferSummaryValue(primary, summaryValue) {

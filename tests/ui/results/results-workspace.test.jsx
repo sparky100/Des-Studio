@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import {
   ResultsWorkspace,
@@ -29,6 +29,16 @@ const results = {
   ],
   waitDist: {
     "Queue A": { n: 3, mean: 4, p50: 4, p90: 8, p95: 8, p99: 8, values: [1, 4, 8] },
+  },
+  runtimeMetrics: {
+    wall_clock_ms: 42,
+    replications: 1,
+    events_processed: 15,
+    c_event_scans: 9,
+    c_events_fired: 4,
+    entities_created: 6,
+    entities_completed: 5,
+    max_queue_length_by_queue: { "Queue A": 3 },
   },
 };
 
@@ -70,6 +80,20 @@ describe("ResultsWorkspace", () => {
     expect(screen.getByText("t=5 -> 3")).toBeInTheDocument();
     expect(screen.getByText("PEAK DEPTH")).toBeInTheDocument();
     expect(screen.getByText("MAX WAIT")).toBeInTheDocument();
+  });
+
+  test("renders runtime metrics when present", () => {
+    render(<ResultsWorkspace results={results} model={model} />);
+    const runtimeSection = screen.getByRole("region", { name: /runtime metrics/i });
+
+    expect(screen.getByText(/run effort/i)).toBeInTheDocument();
+    expect(within(runtimeSection).getByText(/wall-clock time/i)).toBeInTheDocument();
+    expect(within(runtimeSection).getByText("42 ms")).toBeInTheDocument();
+    expect(within(runtimeSection).getByText(/events processed/i)).toBeInTheDocument();
+    expect(within(runtimeSection).getByText("15")).toBeInTheDocument();
+    expect(within(runtimeSection).getByText(/peak queue length by queue/i)).toBeInTheDocument();
+    expect(within(runtimeSection).getByText("Queue A")).toBeInTheDocument();
+    expect(within(runtimeSection).getByText("3")).toBeInTheDocument();
   });
 
   test("uses responsive chart grids", () => {
@@ -114,6 +138,12 @@ describe("ResultsWorkspace", () => {
     render(<ResultsWorkspace results={{}} model={model} />);
 
     expect(screen.getByText(/Keep chart data during the run/i)).toBeInTheDocument();
+  });
+
+  test("shows runtime-metrics fallback for older runs", () => {
+    render(<ResultsWorkspace results={{ summary: { served: 4 } }} model={model} />);
+
+    expect(screen.getByText(/runtime metrics are not available for this saved run/i)).toBeInTheDocument();
   });
 
   test("hosts statistical analysis with warm-up and batch-means controls", () => {
@@ -172,5 +202,32 @@ describe("ResultsWorkspace", () => {
 
     expect(screen.getByText(/How reliable are these results/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /assess/i })).not.toBeDisabled();
+  });
+
+  test("renders batch runtime metrics from aggregate batch results", () => {
+    render(
+      <ResultsWorkspace
+        results={{
+          summary: { avgWait: 10, avgSojourn: 16, served: 210, reneged: 0 },
+          runtimeMetrics: {
+            wall_clock_ms: 125,
+            replications: 3,
+            events_processed: 300,
+            c_event_scans: 420,
+            c_events_fired: 180,
+            entities_created: 90,
+            entities_completed: 75,
+            max_queue_length_by_queue: { "Queue A": 7 },
+          },
+        }}
+        model={model}
+      />
+    );
+    const runtimeSection = screen.getByRole("region", { name: /runtime metrics/i });
+
+    expect(within(runtimeSection).getByText("125 ms")).toBeInTheDocument();
+    expect(within(runtimeSection).getByText(/replications/i)).toBeInTheDocument();
+    expect(within(runtimeSection).getByText("300")).toBeInTheDocument();
+    expect(within(runtimeSection).getByText("7")).toBeInTheDocument();
   });
 });

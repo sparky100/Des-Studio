@@ -28,7 +28,7 @@ function slugify(value = "") {
 function formatNumber(value, digits = 2) {
   if (!Number.isFinite(Number(value))) return "0";
   const rounded = Number(value).toFixed(digits);
-  return rounded.replace(/\.?0+$/, "");
+  return rounded.includes(".") ? rounded.replace(/\.?0+$/, "") : rounded;
 }
 
 function formatMetricValue(value, digits = 2, suffix = "") {
@@ -204,6 +204,66 @@ function WaitDataSummary({ dist }) {
         { label: "mean wait", value: formatNumber(dist.mean), color: C.accent },
       ]}
     />
+  );
+}
+
+function RuntimeMetricsSection({ runtimeMetrics }) {
+  const metrics = runtimeMetrics?.metrics || {};
+  const queuePeaks = Array.isArray(metrics.maxQueueLengthByQueue) ? metrics.maxQueueLengthByQueue : [];
+  const items = [
+    { label: "Wall-clock time", value: metrics.wallClockMs != null ? `${formatNumber(metrics.wallClockMs, 0)} ms` : "—", color: C.accent },
+    { label: "Replications", value: metrics.replications != null ? formatNumber(metrics.replications, 0) : "—" },
+    { label: "Events processed", value: metrics.eventsProcessed != null ? formatNumber(metrics.eventsProcessed, 0) : "—" },
+    { label: "C-event scans", value: metrics.cEventScans != null ? formatNumber(metrics.cEventScans, 0) : "—" },
+    { label: "C-events fired", value: metrics.cEventsFired != null ? formatNumber(metrics.cEventsFired, 0) : "—" },
+    { label: "Entities created", value: metrics.entitiesCreated != null ? formatNumber(metrics.entitiesCreated, 0) : "—" },
+    { label: "Entities completed", value: metrics.entitiesCompleted != null ? formatNumber(metrics.entitiesCompleted, 0) : "—" },
+  ];
+
+  return (
+    <section aria-label="Runtime metrics" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+          RUN EFFORT
+        </div>
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
+          See how much simulation work this result took, without opening raw JSON.
+        </div>
+      </div>
+
+      {runtimeMetrics?.hasMetrics ? (
+        <>
+          <MetricStrip items={items} />
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1 }}>
+              Peak queue length by queue
+            </div>
+            {queuePeaks.length ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+                {queuePeaks.map(entry => (
+                  <div key={entry.queueName} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, fontWeight: 700, marginBottom: 4 }}>
+                      {entry.queueName}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, fontWeight: 700 }}>
+                      {formatNumber(entry.depth, 0)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                No queue peaks were recorded for this run.
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
+          Runtime metrics are not available for this saved run.
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -699,6 +759,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
         <SummaryCardGrid results={results} />
+        <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
         <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
           Turn on <strong style={{ color: C.accent }}>Keep chart data during the run</strong> in Run setup, then run the model to see charts.
         </div>
@@ -709,6 +770,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
       <SummaryCardGrid results={results} />
+      <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
 
       {(chartModel.hasTimeSeries || hasWaitDistributions) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

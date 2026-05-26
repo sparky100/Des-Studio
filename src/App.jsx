@@ -537,7 +537,7 @@ export default function App(){
             overrides={{
               autoRun: openModelOptions.autoRun,
               showStarterGuide: openModelOptions.showStarterGuide,
-              isOwner: true, canEdit: true, profiles, userId: isLocal ? null : uid, isAdmin,
+              isOwner: true, canEdit: true, profiles, userId: isLocal ? null : uid, isAdmin, plan: profile?.plan || 'free',
               onHelpOpen: () => setHelpOpen(true),
               onSave: isLocal
                 ? async (m) => saveLocalModel(m)

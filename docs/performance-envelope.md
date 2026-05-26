@@ -116,6 +116,24 @@ This script runs three load profiles and reports steps/sec and customers/sec. It
 the automated test suite — run it manually after significant engine changes and update the
 "Measured throughput" section below.
 
+The local timing runner now also includes a `queue-growth` scenario family:
+
+- `queue-depth-scaling-light`
+- `queue-depth-scaling-medium`
+- `queue-depth-scaling-heavy`
+
+These scenarios hold the structure constant and tighten arrival pressure against a single server so
+we can compare runtime and queue-depth growth using the existing metrics:
+
+- `wall_clock_ms`
+- `events_processed`
+- `c_event_scans`
+- `max_queue_length`
+- `events_per_second`
+- `max_future_event_list_size`
+
+They remain local timing only for now and are not part of the CI benchmark gate.
+
 ### Measured throughput baseline
 
 #### Sprint 72 pre-optimisation baseline

@@ -348,9 +348,17 @@ export async function setAccess(id, access, userId) {
 
 // ── Simulation run history ────────────────────────────────────────────────────
 
+function withResultsPayloadSize(resultsJson) {
+  const payloadSizeBytes = JSON.stringify(resultsJson).length;
+  return {
+    ...resultsJson,
+    _results_payload_size_bytes: payloadSizeBytes,
+  };
+}
+
 export async function saveSimulationRun(modelId, userId, result, config = {}) {
   const s = result.summary || {};
-  const resultsJson = config.resultsJson ? { ...config.resultsJson } : {
+  let resultsJson = config.resultsJson ? { ...config.resultsJson } : {
     ...result,
     summary: s,
     clock: result.snap?.clock ?? result.clock ?? null,
@@ -384,6 +392,16 @@ export async function saveSimulationRun(modelId, userId, result, config = {}) {
     resultsJson._prng_algorithm  = config.runRecord.prng_algorithm;
     resultsJson._base_seed       = config.runRecord.base_seed;
   }
+  if (config.requestedCollectTimeSeries !== undefined) {
+    resultsJson._requested_collect_time_series = !!config.requestedCollectTimeSeries;
+  }
+  if (config.effectiveCollectTimeSeries !== undefined) {
+    resultsJson._effective_collect_time_series = !!config.effectiveCollectTimeSeries;
+  }
+  if (result.runtimeMetrics) {
+    resultsJson.runtimeMetrics = result.runtimeMetrics;
+  }
+  resultsJson = withResultsPayloadSize(resultsJson);
 
   const runPayload = {
     model_id:            modelId,

@@ -61,6 +61,45 @@ describe('Phase B', () => {
     expect(result.snap.scalars.countX).toBe(1);
     expect(result.snap.scalars.countY).toBe(1);
   });
+
+  test('captures minimal runtime metrics for event workload and queue peaks', () => {
+    const model = {
+      entityTypes: [
+        { id: 'et_job', name: 'Job', role: 'customer', count: 0, attrDefs: [] },
+        { id: 'et_server', name: 'Server', role: 'server', count: 1, attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [{ id: 'q_main', name: 'Main', discipline: 'FIFO' }],
+      bEvents: [
+        { id: 'b_arrive_1', name: 'Arrive 1', scheduledTime: '0', effect: 'ARRIVE(Job, Main)', schedules: [] },
+        { id: 'b_arrive_2', name: 'Arrive 2', scheduledTime: '0', effect: 'ARRIVE(Job, Main)', schedules: [] },
+        { id: 'b_done', name: 'Done', scheduledTime: '999', effect: 'COMPLETE()', schedules: [] },
+      ],
+      cEvents: [
+        {
+          id: 'c_assign',
+          name: 'Assign',
+          priority: 1,
+          condition: 'queue(Main).length > 0 AND idle(Server).count > 0',
+          effect: 'ASSIGN(Main, Server)',
+          cSchedules: [{ eventId: 'b_done', dist: 'Fixed', distParams: { value: 1 }, useEntityCtx: true }],
+        },
+      ],
+    };
+
+    const result = buildEngine(model, 123).runAll();
+
+    expect(result.runtimeMetrics).toEqual(expect.objectContaining({
+      wall_clock_ms: null,
+      replications: 1,
+      events_processed: 7,
+      c_event_scans: 6,
+      c_events_fired: 2,
+      entities_created: 3,
+      entities_completed: 2,
+      max_queue_length_by_queue: { Main: 2 },
+    }));
+  });
 });
 
 // ── FEL termination ───────────────────────────────────────────────────────────

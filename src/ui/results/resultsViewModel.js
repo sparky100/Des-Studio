@@ -17,6 +17,47 @@ function maxPointValue(series) {
   return Math.max(0, ...((series?.points || []).map(p => finiteNumber(p.value))));
 }
 
+function finiteOrNull(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function buildRuntimeMetricsModel(results = {}) {
+  const runtimeMetrics = results?.runtimeMetrics && typeof results.runtimeMetrics === "object"
+    ? results.runtimeMetrics
+    : {};
+  const maxQueueLengthByQueue = runtimeMetrics?.max_queue_length_by_queue
+    && typeof runtimeMetrics.max_queue_length_by_queue === "object"
+    ? Object.entries(runtimeMetrics.max_queue_length_by_queue)
+      .map(([queueName, depth]) => ({
+        queueName,
+        depth: finiteOrNull(depth),
+      }))
+      .filter(row => row.depth != null)
+      .sort((a, b) => b.depth - a.depth || a.queueName.localeCompare(b.queueName))
+    : [];
+
+  const metrics = {
+    wallClockMs: finiteOrNull(runtimeMetrics.wall_clock_ms),
+    replications: finiteOrNull(runtimeMetrics.replications),
+    eventsProcessed: finiteOrNull(runtimeMetrics.events_processed),
+    cEventScans: finiteOrNull(runtimeMetrics.c_event_scans),
+    cEventsFired: finiteOrNull(runtimeMetrics.c_events_fired),
+    entitiesCreated: finiteOrNull(runtimeMetrics.entities_created),
+    entitiesCompleted: finiteOrNull(runtimeMetrics.entities_completed),
+    maxQueueLengthByQueue,
+  };
+
+  const hasMetrics = Object.values(metrics).some(value => (
+    Array.isArray(value) ? value.length > 0 : value != null
+  ));
+
+  return {
+    hasMetrics,
+    metrics,
+  };
+}
+
 export function buildQueueDepthSeries(results = {}, model = {}) {
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
   const queues = Array.isArray(model?.queues) ? model.queues : [];
@@ -119,11 +160,13 @@ export function buildChartSections(results = {}, model = {}) {
 export function buildResultsViewModel(results = {}, model = {}) {
   const timeSeries = Array.isArray(results?.timeSeries) ? results.timeSeries : [];
   const chartSections = buildChartSections(results, model);
+  const runtimeMetrics = buildRuntimeMetricsModel(results);
   return {
     hasTimeSeries: timeSeries.length > 0,
     queueDepthSeries: chartSections.find(s => s.id === "queue-depth")?.series || [],
     serverUtilizationSeries: chartSections.find(s => s.id === "server-utilization")?.series || [],
     waitDistributions: chartSections.find(s => s.id === "wait-distribution")?.distributions || [],
     chartSections,
+    runtimeMetrics,
   };
 }

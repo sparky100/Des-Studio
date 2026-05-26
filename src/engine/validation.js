@@ -5,7 +5,7 @@
 // warnings — non-blocking: run proceeds with a visible banner
 //
 // Each item: { code, message, tab }
-// tab maps to ModelDetail tab IDs: 'entities' | 'state' | 'bevents' | 'cevents' | 'queues'
+// tab maps to ModelDetail tab IDs: 'entities' | 'state' | 'bevents' | 'cevents' | 'queues' | 'execute'
 
 import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
 
@@ -45,6 +45,16 @@ export function validateModel(model) {
   const isMeaningfulRoutingBranch = branch => {
     if (!branch || typeof branch !== 'object') return false;
     return hasConditionDefinition(branch.condition);
+  };
+  const hasCompleteEffect = text => /COMPLETE\s*\(/i.test(text);
+  const hasAnyRenegeEffect = text => /\bRENEGE\(\s*([^)]+)\s*\)/i.test(text);
+  const hasExactRenegeCtxEffect = text => /\bRENEGE\(\s*ctx\s*\)/i.test(text);
+  const hasReleaseTargetQueue = text => /RELEASE\s*\([^,)]+,\s*[^)]+\)/i.test(text);
+  const countTerminalSinkEffects = text => {
+    let sinks = 0;
+    if (hasCompleteEffect(text)) sinks += 1;
+    if (hasExactRenegeCtxEffect(text)) sinks += 1;
+    return sinks;
   };
 
   // ── V1: Entity class unique non-empty name ──────────────────────────────────
@@ -93,7 +103,7 @@ export function validateModel(model) {
     });
   });
 
-  // ── V4: PRIORITY queue discipline requires a 'priority' attribute ───────────
+  // ── V4: PRIORITY queue discipline requires a numeric 'priority' attribute ──
   queues.forEach(q => {
     if ((q.discipline || 'FIFO').toUpperCase() !== 'PRIORITY') return;
     const ct = entityTypes.find(et =>
@@ -104,10 +114,14 @@ export function validateModel(model) {
         `Queue '${q.name}' uses PRIORITY discipline but entity class '${q.customerType || '?'}' was not found.`,
         'queues');
     } else {
-      const hasPriority = (ct.attrDefs || []).some(a => (a.name || '').trim().toLowerCase() === 'priority');
-      if (!hasPriority) {
+      const priorityAttr = (ct.attrDefs || []).find(a => (a.name || '').trim().toLowerCase() === 'priority');
+      if (!priorityAttr) {
         err('V4',
           `Queue '${q.name}' uses PRIORITY discipline but entity class '${ct.name}' has no 'priority' attribute.`,
+          'queues');
+      } else if (priorityAttr.valueType !== 'number') {
+        err('V4',
+          `Queue '${q.name}' uses PRIORITY discipline but entity class '${ct.name}' must define 'priority' as a number.`,
           'queues');
       }
     }
@@ -237,6 +251,26 @@ export function validateModel(model) {
   const maxSimTime = maxSimTimeRaw === undefined || maxSimTimeRaw === null || maxSimTimeRaw === ""
     ? DEFAULT_MAX_SIM_TIME
     : parseFloat(maxSimTimeRaw);
+  const terminationMode = model.terminationMode ?? model.experimentDefaults?.terminationMode ?? 'time';
+  const warmupPeriodRaw = model.warmupPeriod ?? model.experimentDefaults?.warmupPeriod;
+  const warmupPeriod = warmupPeriodRaw === undefined || warmupPeriodRaw === null || warmupPeriodRaw === ""
+    ? 0
+    : parseFloat(warmupPeriodRaw);
+  const replicationsRaw = model.replications ?? model.experimentDefaults?.replications;
+  const replications = replicationsRaw === undefined || replicationsRaw === null || replicationsRaw === ""
+    ? 1
+    : Number(replicationsRaw);
+
+  // ── V34: Replication count must be a positive integer ─────────────────────
+  if (!Number.isInteger(replications) || replications < 1) {
+    err('V34', 'Replication count must be a whole number of 1 or more.', 'execute');
+  }
+
+  // ── V35: Warm-up must be shorter than the run duration in time mode ───────
+  if (terminationMode === 'time' && Number.isFinite(warmupPeriod) && Number.isFinite(maxSimTime) && warmupPeriod >= maxSimTime) {
+    err('V35', 'Warm-up time must be shorter than the run duration.', 'execute');
+  }
+
   entityTypes.forEach(et => {
     if (et.role !== 'server' || !Array.isArray(et.shiftSchedule) || et.shiftSchedule.length === 0) return;
     let previous = -Infinity;
@@ -268,6 +302,41 @@ export function validateModel(model) {
       checkDist(s.dist, s.distParams,
         `C-Event '${c.name || c.id}' schedule ${j + 1}`, 'cevents');
     });
+  });
+
+  // ── V36 / V37: Server failure model validation ────────────────────────────
+  const hasField = value => value !== undefined && value !== null;
+  entityTypes.forEach(et => {
+    const mtbfDist = et.mtbfDist ?? et.failureDist;
+    const mtbfParams = et.mtbfDistParams ?? et.failureDistParams;
+    const mttrDist = et.mttrDist ?? et.repairDist;
+    const mttrParams = et.mttrDistParams ?? et.repairDistParams;
+    const hasFailureFields = [mtbfDist, mtbfParams, mttrDist, mttrParams].some(hasField);
+
+    if (!hasFailureFields) return;
+
+    if (et.role !== 'server') {
+      err('V36',
+        `Entity class '${et.name || '?'}' defines server failure settings, but only server entity types can use MTBF/MTTR.`,
+        'entities');
+      return;
+    }
+
+    if (!hasField(mtbfDist) || !hasField(mtbfParams)) {
+      err('V37',
+        `Server '${et.name || '?'}' must include both MTBF distribution and MTBF parameters.`,
+        'entities');
+    } else {
+      checkDist(mtbfDist, mtbfParams, `Server '${et.name || '?'}' MTBF`, 'entities');
+    }
+
+    if (!hasField(mttrDist) || !hasField(mttrParams)) {
+      err('V37',
+        `Server '${et.name || '?'}' must include both MTTR distribution and MTTR parameters.`,
+        'entities');
+    } else {
+      checkDist(mttrDist, mttrParams, `Server '${et.name || '?'}' MTTR`, 'entities');
+    }
   });
 
   // ── V6: B-Event schedule references must point to existing event IDs ────────
@@ -373,7 +442,7 @@ export function validateModel(model) {
 
     // queueName (in effect string) and routing are mutually exclusive
     const effectStr = effectText(b.effect);
-    const releaseHasQueue = /RELEASE\s*\([^,)]+,\s*[^)]+\)/i.test(effectStr);
+    const releaseHasQueue = hasReleaseTargetQueue(effectStr);
     if (releaseHasQueue) {
       err('V17',
         `${bLabel} specifies both a RELEASE target queue (in effect) and a routing table — they are mutually exclusive.`,
@@ -399,6 +468,21 @@ export function validateModel(model) {
           `${bLabel} defaultQueueName '${defQ}' does not match any defined queue.`,
           'bevents');
       }
+    }
+
+    const hasNullRoutingBranch = routingBranches.some(branch => {
+      const qName = branch.queueName == null ? null : String(branch.queueName).trim();
+      return qName === null || qName === '';
+    });
+    if (hasNullRoutingBranch && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr))) {
+      err('V31',
+        `${bLabel} routes entities to exit (null queue) but does not explicitly end the lifecycle with COMPLETE() or RENEGE(ctx).`,
+        'bevents');
+    }
+    if (countTerminalSinkEffects(effectStr) > 1) {
+      err('V32',
+        `${bLabel} has multiple terminal lifecycle sinks. Choose one clear terminal action: COMPLETE() or RENEGE(ctx).`,
+        'bevents');
     }
   });
 
@@ -427,7 +511,7 @@ export function validateModel(model) {
       err('V18', `${bLabel} has both routing and probabilisticRouting — they are mutually exclusive.`, 'bevents');
     }
     const effectStr = effectText(b.effect);
-    if (/RELEASE\s*\([^,)]+,\s*[^)]+\)/i.test(effectStr)) {
+    if (hasReleaseTargetQueue(effectStr)) {
       err('V18', `${bLabel} specifies a RELEASE target queue and probabilisticRouting — mutually exclusive.`, 'bevents');
     }
 
@@ -448,10 +532,23 @@ export function validateModel(model) {
       }
     });
 
-    // V30: If probabilisticRouting has null queue, effect must include COMPLETE() or RENEGE()
-    if (hasNullRouting && !/COMPLETE\s*\(|RENEGE\s*\(/i.test(effectStr)) {
+    // V30: If probabilisticRouting has null queue, effect must include COMPLETE() or exact RENEGE(ctx)
+    if (hasNullRouting && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr))) {
       err('V30',
-        `${bLabel} routes entities to exit (null queue) but has no COMPLETE() or RENEGE() effect — entities will not be counted as served. Add COMPLETE() to the effect list.`,
+        `${bLabel} routes entities to exit (null queue) but has no COMPLETE() or RENEGE(ctx) effect — entities will not be counted as served. Add COMPLETE() or use RENEGE(ctx).`,
+        'bevents');
+    }
+    const isSingleNullExit = b.probabilisticRouting.length === 1 && Math.abs((parseFloat(b.probabilisticRouting[0]?.probability) || 0) - 1) <= 0.001;
+    const onlyRoute = b.probabilisticRouting[0];
+    const onlyRouteQueue = onlyRoute?.queueName == null ? null : String(onlyRoute.queueName).trim();
+    if (isSingleNullExit && (onlyRouteQueue === null || onlyRouteQueue === '') && hasCompleteEffect(effectStr) && !hasExactRenegeCtxEffect(effectStr)) {
+      warn('V33',
+        `${bLabel} uses probabilisticRouting with a single 100% null exit. Prefer explicit COMPLETE() without routing for a simple terminal completion.`,
+        'bevents');
+    }
+    if (countTerminalSinkEffects(effectStr) > 1) {
+      err('V32',
+        `${bLabel} has multiple terminal lifecycle sinks. Choose one clear terminal action: COMPLETE() or RENEGE(ctx).`,
         'bevents');
     }
   });
@@ -550,7 +647,7 @@ export function validateModel(model) {
   }
 
 
-  // ── V25: RENEGE() argument must be 'ctx' (not a type name) ────────────────
+  // ── V25: RENEGE() argument must be exactly 'ctx' ───────────────────────────
   // RENEGE(TypeName) silently fails because parseInt("TypeName") = NaN.
   // The correct form is always RENEGE(ctx), which uses the context entity ID from the FEL.
   bEvents.forEach(b => {
@@ -559,9 +656,9 @@ export function validateModel(model) {
     if (m) {
       const arg = m[1].trim();
       if (arg.toLowerCase() !== 'ctx') {
-        warn('V25',
-          `B-Event '${b.name || b.id}' uses RENEGE('${arg}') which will silently fail. ` +
-          `Use RENEGE(ctx) to reference the current entity instead.`,
+        err('V25',
+          `B-Event '${b.name || b.id}' uses RENEGE('${arg}') which is invalid. ` +
+          `Use exactly RENEGE(ctx) to reference the current entity.`,
           'bevents');
       }
     }
@@ -572,9 +669,9 @@ export function validateModel(model) {
     if (m) {
       const arg = m[1].trim();
       if (arg.toLowerCase() !== 'ctx') {
-        warn('V25',
-          `C-Event '${c.name || c.id}' uses RENEGE('${arg}') which will silently fail. ` +
-          `Use RENEGE(ctx) to reference the current entity instead.`,
+        err('V25',
+          `C-Event '${c.name || c.id}' uses RENEGE('${arg}') which is invalid. ` +
+          `Use exactly RENEGE(ctx) to reference the current entity.`,
           'cevents');
       }
     }
