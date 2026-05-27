@@ -44,6 +44,25 @@ describe("saveSimulationRun payload metadata", () => {
     expect(insertPayload.results_json._results_payload_size_bytes).toEqual(expect.any(Number));
   });
 
+  it("persists ordinary saved runs in compact form by default", async () => {
+    await saveSimulationRun("model-1", "user-1", {
+      summary: { total: 3, served: 2, reneged: 1, avgWait: 4, avgSvc: 2 },
+      snap: { clock: 25 },
+      log: [{ phase: "END", time: 25, message: "Run finished" }],
+      entitySummary: [{ type: "Customer", status: "done", count: 2 }],
+    });
+
+    const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
+    expect(insertPayload.results_json).toEqual(expect.objectContaining({
+      _result_detail_level: "compact",
+      _trimmed_fields: expect.arrayContaining(["log", "entitySummary"]),
+      logSummary: expect.objectContaining({ entries: 1, finalMessage: "Run finished" }),
+      entitySummaryCompact: expect.objectContaining({ totalEntities: 1 }),
+    }));
+    expect(insertPayload.results_json.log).toBeUndefined();
+    expect(insertPayload.results_json.entitySummary).toBeUndefined();
+  });
+
   it("stores requested and effective chart-data settings in saved results metadata", async () => {
     await saveSimulationRun("model-1", "user-1", {
       summary: { served: 1 },
@@ -57,6 +76,66 @@ describe("saveSimulationRun payload metadata", () => {
       _requested_collect_time_series: true,
       _effective_collect_time_series: false,
     }));
+  });
+
+  it("stores lightweight provenance by default without embedding a full model snapshot", async () => {
+    await saveSimulationRun("model-1", "user-1", {
+      summary: { served: 1 },
+    }, {
+      runRecord: {
+        model_snapshot: null,
+        engine_version: "test-engine",
+        prng_algorithm: "mulberry32",
+        base_seed: 321,
+        experiment_config: {
+          maxSimTime: 500,
+          warmupPeriod: 25,
+          replications: 1,
+          seed: 321,
+          terminationMode: "time",
+          terminationCondition: null,
+        },
+      },
+    });
+
+    const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
+    expect(insertPayload.results_json).toEqual(expect.objectContaining({
+      _engine_version: "test-engine",
+      _prng_algorithm: "mulberry32",
+      _base_seed: 321,
+      _experiment_config: expect.objectContaining({
+        maxSimTime: 500,
+        warmupPeriod: 25,
+        replications: 1,
+        seed: 321,
+      }),
+    }));
+    expect(insertPayload.results_json._model_snapshot).toBeUndefined();
+  });
+
+  it("stores a full model snapshot for archival or reproducibility saves when requested", async () => {
+    await saveSimulationRun("model-1", "user-1", {
+      summary: { served: 1 },
+    }, {
+      runRecord: {
+        model_snapshot: { id: "model-1", name: "Snapshot Model" },
+        engine_version: "test-engine",
+        prng_algorithm: "mulberry32",
+        base_seed: 654,
+        experiment_config: {
+          maxSimTime: 750,
+          warmupPeriod: 0,
+          replications: 2,
+          seed: 654,
+          terminationMode: "time",
+          terminationCondition: null,
+        },
+      },
+    });
+
+    const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
+    expect(insertPayload.results_json._model_snapshot).toEqual({ id: "model-1", name: "Snapshot Model" });
+    expect(insertPayload.results_json._experiment_config).toEqual(expect.objectContaining({ replications: 2, seed: 654 }));
   });
 
   it("persists large runs in compact form by default when requested", async () => {

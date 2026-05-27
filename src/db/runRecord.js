@@ -7,10 +7,9 @@ export function compareResults(newResult, storedResult) {
   );
 }
 
-export const buildRunRecord = (model, results, experimentConfig, resolvedSeed) => {
-  // Deep clone at this exact moment — snapshot must never reference the live model.
-  // Any subsequent edit to the model must NOT affect this snapshot.
-  const snapshot = JSON.parse(JSON.stringify(model));
+export const buildRunRecord = (model, results, experimentConfig, resolvedSeed, options = {}) => {
+  const includeModelSnapshot = options.includeModelSnapshot === true;
+  const snapshot = includeModelSnapshot ? JSON.parse(JSON.stringify(model)) : null;
 
   return {
     model_id:         model.id,

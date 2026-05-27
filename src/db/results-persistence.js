@@ -57,7 +57,7 @@ export function resolveResultDetailLevel(config = {}) {
   if (LARGE_RUN_RISK_LEVELS.has(String(config.riskLevel || "").trim().toLowerCase())) {
     return "compact";
   }
-  return "full";
+  return "compact";
 }
 
 export function withResultsPayloadSize(resultsJson) {
@@ -100,10 +100,15 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     resultsJson.runLabel = runLabel;
   }
   if (config.runRecord) {
-    resultsJson._model_snapshot  = config.runRecord.model_snapshot;
+    if (config.runRecord.model_snapshot) {
+      resultsJson._model_snapshot = config.runRecord.model_snapshot;
+    }
     resultsJson._engine_version  = config.runRecord.engine_version;
     resultsJson._prng_algorithm  = config.runRecord.prng_algorithm;
     resultsJson._base_seed       = config.runRecord.base_seed;
+    if (config.runRecord.experiment_config) {
+      resultsJson._experiment_config = config.runRecord.experiment_config;
+    }
   }
   if (config.requestedCollectTimeSeries !== undefined) {
     resultsJson._requested_collect_time_series = !!config.requestedCollectTimeSeries;

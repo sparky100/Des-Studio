@@ -2,9 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { buildRunRecord, compareResults } from '../../src/db/runRecord.js';
 
 describe('buildRunRecord', () => {
-  it('model_snapshot is a deep clone independent of the live model', () => {
+  it('omits model_snapshot by default for lightweight run saves', () => {
     const model = { id: '1', name: 'Test', entityTypes: [{ name: 'A' }] };
     const record = buildRunRecord(model, { summary: {} }, {}, 42);
+    expect(record.model_snapshot).toBeNull();
+  });
+
+  it('model_snapshot is a deep clone when archival snapshot storage is requested', () => {
+    const model = { id: '1', name: 'Test', entityTypes: [{ name: 'A' }] };
+    const record = buildRunRecord(model, { summary: {} }, {}, 42, { includeModelSnapshot: true });
     // Mutate the live model after snapshot is taken
     model.name = 'MUTATED';
     model.entityTypes[0].name = 'MUTATED';
@@ -34,9 +40,9 @@ describe('buildRunRecord', () => {
     expect(record.run_label).toBe('');
   });
 
-  it('snapshot does not share references with live model arrays or objects', () => {
+  it('snapshot does not share references with live model arrays or objects when enabled', () => {
     const model = { id: '2', name: 'N', queues: [{ id: 'q1', capacity: 5 }] };
-    const record = buildRunRecord(model, {}, {}, 0);
+    const record = buildRunRecord(model, {}, {}, 0, { includeModelSnapshot: true });
     model.queues[0].capacity = 999;
     expect(record.model_snapshot.queues[0].capacity).toBe(5);
   });

@@ -497,7 +497,7 @@ export async function getRun(runId) {
     model_snapshot: rj._model_snapshot  ?? null,
     base_seed:      rj._base_seed       ?? data.seed ?? null,
     engine_version: rj._engine_version  ?? null,
-    experiment_config: {
+    experiment_config: rj._experiment_config ?? {
       maxSimTime:           data.max_simulation_time ?? 500,
       warmupPeriod:         data.warmup_period       ?? 0,
       replications:         data.replications        ?? 1,

@@ -493,7 +493,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       );
     });
 
-    it('persists chart and log payloads for saved run results by default', async () => {
+    it('persists saved run results in compact form by default', async () => {
       supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-3b' }, error: null });
 
       await saveSimulationRun('m1', 'u1', {
@@ -516,6 +516,8 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
           duration_ms: 42,
           results_json: expect.objectContaining({
             _results_payload_size_bytes: expect.any(Number),
+            _result_detail_level: 'compact',
+            _trimmed_fields: expect.arrayContaining(['log', 'entitySummary']),
             runtimeMetrics: expect.objectContaining({
               wall_clock_ms: 42,
               events_processed: 9,
@@ -525,13 +527,15 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
             waitDist: expect.objectContaining({
               Main: expect.objectContaining({ n: 2, values: [2, 4] }),
             }),
-            log: [{ phase: 'END', time: 25, message: 'Run finished' }],
-            entitySummary: [{ type: 'Customer', status: 'done', count: 2 }],
+            logSummary: expect.objectContaining({ entries: 1, finalMessage: 'Run finished' }),
+            entitySummaryCompact: expect.objectContaining({ totalEntities: 1 }),
           }),
         })
       );
 
       const insertedPayload = supabase.from('simulation_runs').insert.mock.calls.at(-1)[0];
+      expect(insertedPayload.results_json.log).toBeUndefined();
+      expect(insertedPayload.results_json.entitySummary).toBeUndefined();
       const { _results_payload_size_bytes: storedSize, ...resultsJsonWithoutSize } = insertedPayload.results_json;
       expect(storedSize).toBe(JSON.stringify(resultsJsonWithoutSize).length);
     });
@@ -1046,6 +1050,45 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(run.summary).toEqual(storedResultsJson.summary);
       expect(run.model_snapshot).toEqual(storedResultsJson._model_snapshot);
       expect(run.base_seed).toBe(42);
+    });
+
+    it('uses stored experiment_config metadata when present in results_json', async () => {
+      const storedResultsJson = {
+        summary: { served: 4 },
+        _base_seed: 7,
+        _engine_version: '55a',
+        _experiment_config: {
+          maxSimTime: 1440,
+          warmupPeriod: 30,
+          replications: 3,
+          seed: 7,
+          terminationMode: 'condition',
+          terminationCondition: { variable: 'served.count', operator: '>=', value: 4 },
+        },
+      };
+      supabase.from.mockReturnValue({
+        select: () => ({
+          eq: () => ({
+            single: () => Promise.resolve({
+              data: {
+                id: 'run-1b',
+                results_json: storedResultsJson,
+                max_simulation_time: 500,
+                warmup_period: 0,
+                replications: 1,
+                seed: 7,
+                ran_at: '2026-05-01T12:00:00Z',
+              },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const run = await getRun('run-1b');
+
+      expect(run.experiment_config).toEqual(storedResultsJson._experiment_config);
+      expect(run.model_snapshot).toBeNull();
     });
 
     it('returns null results_json when not stored', async () => {
