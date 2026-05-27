@@ -5,6 +5,7 @@
 
 import { supabase } from "./supabase.js";
 import { normalizeModelConditions } from "../model/conditionFormat.js";
+import { buildPersistedResultsJson } from "./results-persistence.js";
 
 // Every column that this module reads or writes. Used by validateDbSchema().
 export const EXPECTED_COLUMNS = [
@@ -348,60 +349,10 @@ export async function setAccess(id, access, userId) {
 
 // ── Simulation run history ────────────────────────────────────────────────────
 
-function withResultsPayloadSize(resultsJson) {
-  const payloadSizeBytes = JSON.stringify(resultsJson).length;
-  return {
-    ...resultsJson,
-    _results_payload_size_bytes: payloadSizeBytes,
-  };
-}
-
 export async function saveSimulationRun(modelId, userId, result, config = {}) {
   const s = result.summary || {};
-  let resultsJson = config.resultsJson ? { ...config.resultsJson } : {
-    ...result,
-    summary: s,
-    clock: result.snap?.clock ?? result.clock ?? null,
-  };
-  if (!resultsJson.summary) {
-    resultsJson.summary = s;
-  }
-  if (result.phaseCTruncated || s.phaseCTruncated) {
-    resultsJson.phaseCTruncated = true;
-    resultsJson.summary = { ...resultsJson.summary, phaseCTruncated: true };
-  }
-  if (Array.isArray(result.warnings) && result.warnings.length) {
-    resultsJson.warnings = result.warnings;
-  }
-  if (config.batchId) {
-    resultsJson.batch_id = config.batchId;
-  }
-  if (config.aggregateStats) {
-    resultsJson.aggregateStats = config.aggregateStats;
-  }
-  if (config.replicationResults) {
-    resultsJson.replications = config.replicationResults;
-  }
   const runLabel = typeof config.runLabel === "string" ? config.runLabel.trim() : "";
-  if (runLabel) {
-    resultsJson.runLabel = runLabel;
-  }
-  if (config.runRecord) {
-    resultsJson._model_snapshot  = config.runRecord.model_snapshot;
-    resultsJson._engine_version  = config.runRecord.engine_version;
-    resultsJson._prng_algorithm  = config.runRecord.prng_algorithm;
-    resultsJson._base_seed       = config.runRecord.base_seed;
-  }
-  if (config.requestedCollectTimeSeries !== undefined) {
-    resultsJson._requested_collect_time_series = !!config.requestedCollectTimeSeries;
-  }
-  if (config.effectiveCollectTimeSeries !== undefined) {
-    resultsJson._effective_collect_time_series = !!config.effectiveCollectTimeSeries;
-  }
-  if (result.runtimeMetrics) {
-    resultsJson.runtimeMetrics = result.runtimeMetrics;
-  }
-  resultsJson = withResultsPayloadSize(resultsJson);
+  const resultsJson = buildPersistedResultsJson(result, config);
 
   const runPayload = {
     model_id:            modelId,

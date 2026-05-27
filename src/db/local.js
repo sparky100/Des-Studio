@@ -1,6 +1,7 @@
 // LocalStorage CRUD backend for anonymous/local mode.
 // Mirrors the models.js API shape so callers can swap backends.
 import { normalizeModelConditions } from "../model/conditionFormat.js";
+import { buildPersistedResultsJson } from "./results-persistence.js";
 
 const STORAGE_KEY = "des_studio_models";
 const RUNS_KEY = "des_studio_runs";
@@ -54,28 +55,8 @@ function readLocalRuns() {
   } catch { return {}; }
 }
 
-function withResultsPayloadSize(resultsJson) {
-  const payloadSizeBytes = JSON.stringify(resultsJson).length;
-  return {
-    ...resultsJson,
-    _results_payload_size_bytes: payloadSizeBytes,
-  };
-}
-
 function buildLocalResultsJson(result, config = {}) {
-  const summary = result?.summary || {};
-  const resultsJson = {
-    ...result,
-    summary,
-    clock: result?.snap?.clock ?? result?.clock ?? null,
-  };
-  if (config?.batchId) resultsJson.batch_id = config.batchId;
-  if (config?.aggregateStats) resultsJson.aggregateStats = config.aggregateStats;
-  if (config?.replicationResults) resultsJson.replications = config.replicationResults;
-  if (config?.runLabel) resultsJson.runLabel = config.runLabel;
-  if (config?.requestedCollectTimeSeries !== undefined) resultsJson._requested_collect_time_series = !!config.requestedCollectTimeSeries;
-  if (config?.effectiveCollectTimeSeries !== undefined) resultsJson._effective_collect_time_series = !!config.effectiveCollectTimeSeries;
-  return withResultsPayloadSize(resultsJson);
+  return buildPersistedResultsJson(result, config);
 }
 
 function preferSummaryValue(primary, summaryValue) {

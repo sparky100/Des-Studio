@@ -536,6 +536,44 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(storedSize).toBe(JSON.stringify(resultsJsonWithoutSize).length);
     });
 
+    it('persists large runs in compact form when compact detail is requested', async () => {
+      supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-3c' }, error: null });
+
+      await saveSimulationRun('m1', 'u1', {
+        summary: { total: 3000, served: 2500, reneged: 500, avgWait: 4, avgSvc: 2 },
+        snap: { clock: 1000 },
+        runtimeMetrics: { wall_clock_ms: 100, replications: 1, events_processed: 10000, c_event_scans: 8000, c_events_fired: 3000, entities_created: 3000, entities_completed: 2500, max_queue_length_by_queue: { Main: 25 } },
+        timeSeries: Array.from({ length: 500 }, (_, index) => ({ t: index, byQueue: { Main: { waiting: index % 6, total: index % 9 } }, byType: {} })),
+        waitDist: { Main: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4, values: [2, 4] } },
+        log: Array.from({ length: 40 }, (_, index) => ({ phase: 'END', time: index, message: `message ${index}` })),
+        entitySummary: Array.from({ length: 400 }, (_, index) => ({ type: 'Customer', status: index % 2 === 0 ? 'done' : 'waiting' })),
+        trace: Array.from({ length: 40 }, (_, index) => ({ seq: index, phase: 'A' })),
+      }, {
+        resultDetailLevel: 'compact',
+        riskLevel: 'large',
+      });
+
+      expect(supabase.from('simulation_runs').insert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          results_json: expect.objectContaining({
+            _result_detail_level: 'compact',
+            _result_risk_level: 'large',
+            _trimmed_fields: expect.arrayContaining(['log', 'entitySummary', 'timeSeries', 'trace']),
+            logSummary: expect.objectContaining({ entries: 40 }),
+            entitySummaryCompact: expect.objectContaining({ totalEntities: 400 }),
+            timeSeries: expect.any(Array),
+            waitDist: expect.objectContaining({ Main: expect.objectContaining({ n: 2 }) }),
+          }),
+        })
+      );
+
+      const compactPayload = supabase.from('simulation_runs').insert.mock.calls.at(-1)[0].results_json;
+      expect(compactPayload.log).toBeUndefined();
+      expect(compactPayload.entitySummary).toBeUndefined();
+      expect(compactPayload.trace).toBeUndefined();
+      expect(compactPayload.timeSeries.length).toBeLessThanOrEqual(200);
+    });
+
     it('persists Phase C truncation metadata in results_json', async () => {
       supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-4' }, error: null });
 

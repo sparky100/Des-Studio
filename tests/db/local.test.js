@@ -54,4 +54,32 @@ describe("local DB run history", () => {
     expect(run.results_json.summary).toEqual({ served: 1 });
     expect(run.results_json._results_payload_size_bytes).toEqual(expect.any(Number));
   });
+
+  it("stores large local runs in compact form when requested", () => {
+    saveLocalRun("model-1", {
+      summary: { total: 4000, served: 3900, reneged: 100, avgWait: 5, avgSvc: 2 },
+      snap: { clock: 2500 },
+      log: Array.from({ length: 25 }, (_, index) => ({ phase: "STEP", time: index, message: `local ${index}` })),
+      entitySummary: Array.from({ length: 300 }, (_, index) => ({ type: "Customer", status: index % 2 === 0 ? "done" : "waiting" })),
+      timeSeries: Array.from({ length: 260 }, (_, index) => ({ t: index, byQueue: { Main: { waiting: index % 5, total: index % 9 } }, byType: {} })),
+      trace: Array.from({ length: 20 }, (_, index) => ({ seq: index, phase: "B" })),
+      runtimeMetrics: { wall_clock_ms: 200, replications: 1, events_processed: 7000, c_event_scans: 6000, c_events_fired: 2000, entities_created: 4000, entities_completed: 3900 },
+    }, {
+      resultDetailLevel: "compact",
+      riskLevel: "large",
+    });
+
+    const [run] = fetchLocalRunHistory("model-1");
+    expect(run.results_json).toEqual(expect.objectContaining({
+      _result_detail_level: "compact",
+      _result_risk_level: "large",
+      _trimmed_fields: expect.arrayContaining(["log", "entitySummary", "timeSeries", "trace"]),
+      logSummary: expect.objectContaining({ entries: 25 }),
+      entitySummaryCompact: expect.objectContaining({ totalEntities: 300 }),
+    }));
+    expect(run.results_json.log).toBeUndefined();
+    expect(run.results_json.entitySummary).toBeUndefined();
+    expect(run.results_json.trace).toBeUndefined();
+    expect(run.results_json.timeSeries).toHaveLength(200);
+  });
 });

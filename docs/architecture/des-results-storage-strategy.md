@@ -73,6 +73,20 @@ Two important issues exist today:
 
 That means storage is larger than necessary and provenance is duplicated.
 
+### Current compact-first behaviour
+
+As of the large-run persistence update:
+
+- runs classified as `large` or `too_large` by the admission sizing path now save with `results_json._result_detail_level = "compact"`
+- compact saves keep summary, runtime metrics, wait summaries, and batch metadata
+- compact saves trim the bulkiest default fields first:
+  - raw `log`
+  - full `trace`
+  - oversized `entitySummary`
+  - overlong `timeSeries` arrays (sampled down rather than fully dropped)
+
+This keeps run history and results loading compatible while avoiding the richest payload by default on heavy runs.
+
 ## Recommended Storage Model
 
 Use a two-tier model:

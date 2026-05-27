@@ -141,6 +141,9 @@ describe("ExecutePanel single-run progress", () => {
     expect(screen.getByRole("button", { name: /cancel run/i })).toBeInTheDocument();
     expect(screen.getByText((text) => text.includes("Cycle ") && text.includes("FEL"))).toBeInTheDocument();
     expect(screen.getByText(/Events processed:/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel run/i }));
+    await waitFor(() => expect(screen.getByText("cancelled")).toBeInTheDocument());
   });
 
   it("labels cancelled runs clearly and skips persistence", async () => {

@@ -223,6 +223,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }), [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, plan, isAdmin, validation, complexityEstimate]);
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
+  const effectiveResultDetailLevel = runAdmission.complexityEstimate.riskLevel === "large" || runAdmission.complexityEstimate.riskLevel === "too_large"
+    ? "compact"
+    : "full";
   const readinessTagColor = hasAdmissionErrors ? C.red : C.green;
   const readinessTagBg = hasAdmissionErrors ? C.errorBg : `${C.green}18`;
   const readinessBorder = hasAdmissionErrors ? C.danger : `${C.green}66`;
@@ -376,6 +379,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           durationMs: wallClockMs,
           requestedCollectTimeSeries: collectTimeSeries,
           effectiveCollectTimeSeries: collectTimeSeries,
+          resultDetailLevel: effectiveResultDetailLevel,
+          riskLevel: runAdmission.complexityEstimate.riskLevel,
         };
         const save = userId
           ? saveSimulationRun(modelId, userId, fullResult, config)
@@ -397,7 +402,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           });
       }
     }
-  }, [userId, modelId, model, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, stopAuto, onRunSaved, onResultsReady, refreshRunHistory]);
+  }, [userId, modelId, model, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -569,6 +574,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 versionId: currentVersionId || null,
                 requestedCollectTimeSeries: collectTimeSeries,
                 effectiveCollectTimeSeries: effectiveCollectTimeSeries,
+                resultDetailLevel: effectiveResultDetailLevel,
+                riskLevel: runAdmission.complexityEstimate.riskLevel,
               };
               if (userId) {
                 const runId = await saveSimulationRun(modelId, userId, batchResult, batchConfig);
@@ -716,6 +723,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         durationMs: wallClockMs,
         requestedCollectTimeSeries: collectTimeSeries,
         effectiveCollectTimeSeries: effectiveCollectTimeSeries,
+        resultDetailLevel: effectiveResultDetailLevel,
+        riskLevel: runAdmission.complexityEstimate.riskLevel,
       };
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
       let runId;
@@ -747,7 +756,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     } finally {
       saveInProgressRef.current = false;
     }
-  }, [model, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, stopAuto, onRunSaved, onResultsReady, refreshRunHistory]);
+  }, [model, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
