@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.80 | Created: 2026-04-30 | Updated: 2026-05-25 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.81 | Created: 2026-04-30 | Updated: 2026-05-27 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -123,6 +123,7 @@ flowchart LR
 | Advanced scheduling and analytics | ✅ Complete | Sprint 33: SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
 | Model versioning | ✅ Complete | Sprint 68: explicit milestone versioning, `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. |
 | Plain-English UX and Results clarity | ✅ Complete | Sprint 67 baseline plus later refinements: Results sub-tabs now group Summary, Log, Entities, History, and Explain; compare lives in Results → History; Describe/Results wording is standardized. |
+| Timetable schedule data separation | ✅ Complete | Sprint 73: ADR-016 — `model_schedules` Supabase table, `resolveInlineSchedules` engine function, `ScheduleManager` UI, Execute panel schedule selector, model export re-inline, `includeModelSnapshot` explicit flag. Glasgow Central `model_json` reduced from ~290 KB to ~14 KB. |
 | Performance optimisation | 🔄 Planned | Sprint 72 will remove legacy runtime condition evaluation, migrate old models to predicate JSON, and optimise the Phase C hot path with benchmarks and correctness gates. |
 
 ### Key Issues and Watchpoints
@@ -295,6 +296,7 @@ flowchart LR
 | Sprint 32 | ✅ Complete | 2026-05-14 | Resource Reliability & Preemption. | Focused | N/A | Success | PREEMPT macro, FAIL/REPAIR macros, MTBF/MTTR scheduling, remaining service time preservation, trace entries for preemption/failure. |
 | Sprint 33 | ✅ Complete | 2026-05-14 | Advanced Scheduling & Analytics. | 695 (695) | N/A | Success | SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
 | Sprint 69 | ✅ Complete | 2026-05-21 | AI Model Debugging: trace emission, structural checker, AI diagnosis panel, conversational debugger. | 23 passing (new) | N/A | N/A |
+| Sprint 73 | ✅ Complete | 2026-05-27 | ADR-016: Separate timetable schedule data from core model JSON — `model_schedules` Supabase table, `resolveInlineSchedules(model, schedulesMap)` engine function, ScheduleManager UI (list/detail/CSV export), Execute panel schedule selector dropdown, model export re-inlines rows, `includeModelSnapshot` explicit flag, save-timeout feedback banners. | 45 new tests (14+22+9) | N/A | N/A |
 
 ---
 

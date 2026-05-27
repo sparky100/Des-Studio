@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.19.0 (Sprints 1–71)
+Version: 1.20.0 (Sprints 1–73)
 
 ---
 
@@ -28,6 +28,7 @@ Version: 1.19.0 (Sprints 1–71)
 | v1.17.0 | 70 | Macro syntax corrections — fixed COMPLETE(), ASSIGN(QueueName, ServerType), RENEGE(ctx), BATCH(QueueName, N), PREEMPT(ServerType), SPLIT(EntityType, N, TargetQueue); added missing v1.14.0 version entry |
 | v1.18.0 | 71 | In-app Feedback widget and About panel — toolbar Feedback button (speech-bubble icon) opens a Supabase-backed submission form; Info button (ⓘ icon) opens the About panel showing version and contact details; Supabase `feedback` table with RLS policies for authenticated and anonymous submission |
 | v1.19.0 | 71 | Results workflow refinement — Results now groups Summary, Log, Entities, History, and Explain; run comparison moved into Results → History; saved run records retain chart/log payloads; default run names use `Model Name DD/MM/YYYY HH:mm` |
+| v1.20.0 | 73 | Schedule Manager — timetable data separated from core model. New **Schedules** tab in the model editor to view, create, edit, and delete named timetables (e.g. Weekday, Weekend, Engineering blockade). Schedule selector dropdown in the Execute panel when a model has more than one schedule. CSV export of schedule rows. Model JSON export re-inlines schedule rows for portability. |
 
 ---
 
@@ -1038,3 +1039,72 @@ Magic links work regardless of authentication state. Sharing a link with a colle
 - Magic links encode the full model JSON client-side — no server round-trip is made until the user clicks **Save**.
 - Never embed credentials (API keys, passwords) in a model JSON shared via magic link.
 - The `sessionStorage` key (`des.pendingImport`) is cleared immediately after the model is restored post sign-in.
+
+---
+
+## 15. Schedule Manager (Timetables)
+
+The **Schedules** tab in the model editor lets you manage named timetables independently from the core DES logic. This is most useful for models that run against real operational data — for example, a station model with hundreds of train-movement rows.
+
+### Why schedules are separate
+
+Timetable data is stored separately from the model's DES logic so that:
+- The core model (entity types, queues, arrival events, service events) stays small and loads quickly
+- You can maintain multiple timetables for the same model (weekday, weekend, engineering blockade) and switch between them at run time
+- Editing a timetable does not create a new model version
+
+### Accessing the Schedule Manager
+
+Open a model, then click the **Schedules** tab (between C-Events and State Variables in the editor tab bar).
+
+### Schedule list view
+
+The list shows all schedules for this model:
+
+| Column | Meaning |
+|---|---|
+| ★ | Default schedule — used when no explicit selection is made in the Execute panel |
+| Name | User-defined name (e.g. "Weekday May 2026", "Weekend May 2026") |
+| Rows | Total number of arrival rows across all events in this schedule |
+| Used by | Which B-Events reference this schedule |
+
+Click a schedule name to open the detail view. Click **+ New Schedule** to create a new one.
+
+### Schedule detail view
+
+The detail view shows all arrival rows in a paginated table (50 rows per page). Columns depend on the data your schedule contains (e.g. time, train ID, platform group, route).
+
+**Times** are shown in `HH:MM` format (converted from simulation minutes).
+
+**CSV export** — click **Export CSV** to download all rows for editing in a spreadsheet tool. After editing, create a new schedule via the import flow.
+
+### Creating a schedule
+
+Click **+ New Schedule**, enter a name and optional description, then save. The new schedule starts empty. To populate it with data, use the CSV import flow (the schedule editor accepts pasted JSON or CSV data depending on your model's schedule format).
+
+### Setting a default schedule
+
+In the schedule list, click **Set as default** (★) next to the schedule you want to use by default. The default schedule is pre-selected in the Execute panel.
+
+### Deleting a schedule
+
+Click the delete button (✕) next to a schedule in the list. You cannot delete the only schedule for a model; at least one must remain. If a B-Event references the deleted schedule, it will produce zero arrivals until a new schedule is linked.
+
+### Selecting a schedule before running
+
+When a model has **more than one schedule**, a **Timetable:** dropdown appears in the Execute panel above the Run button. Select the schedule you want to use for this run before clicking Run.
+
+The selected schedule is passed to the simulation engine; arrivals fire at the times defined in that schedule.
+
+### Exporting a model with schedules
+
+When you export a model as JSON (**Export Model** in the toolbar), schedule rows are automatically re-inlined into the exported JSON. The exported file is self-contained and can be imported into another DES Studio instance without needing the original schedule records.
+
+### Typical workflow — multiple timetables
+
+1. Create the core model (entity types, queues, arrival events) with a placeholder schedule
+2. Import your weekday timetable data as the **Default** schedule
+3. Import your weekend timetable as a second schedule named "Weekend"
+4. Run with the weekday schedule; note the results
+5. Switch to the weekend schedule in the Execute panel; run again
+6. Compare the two runs in the **Results → History** view

@@ -122,6 +122,9 @@ function extractBEvents(model = {}, results = {}) {
     if (Array.isArray(ev.schedules) && ev.schedules.length > 0) {
       entry.arrivalStreams = ev.schedules.length;
       if (ev.schedules.some(s => s.isRenege)) entry.hasReneging = true;
+      // ADR-016: flag when arrival rows are stored in a separate model_schedules record
+      const externalCount = ev.schedules.filter(s => s.scheduleRef && (!Array.isArray(s.rows) || s.rows.length === 0)).length;
+      if (externalCount > 0) entry.externalSchedule = true;
     }
     if (eventCounts[ev.id]) entry.fireCount = eventCounts[ev.id];
     return entry;
