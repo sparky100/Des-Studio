@@ -106,7 +106,7 @@ export function AboutModal({ isOpen, onClose }) {
               DES Studio
             </div>
             <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
-              Browser-native discrete-event simulation
+              Browser-native simulation modelling for everyone
             </div>
           </div>
 
