@@ -163,7 +163,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [qrToken, setQrToken] = useState(null);
   const qrRef = useRef(null);
   const [latestRunId, setLatestRunId] = useState(null);
-  const [pendingCloudSave, setPendingCloudSave] = useState(null);
   const [showExportPopover, setShowExportPopover] = useState(false);
   const [exportFormats, setExportFormats] = useState({ json: true, csv: false, html: false });
   const effectiveAutoSpeed = useMemo(
@@ -279,7 +278,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSaveStatus(null);
     setPhaseCTruncated(false);
     setResults(null);
-    setPendingCloudSave(null);
     setLatestRunId(null);
     setLiveWaitDist(null);
     liveHistThrottleRef.current = 0;
@@ -319,14 +317,24 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     }
   }, [modelId, userId]);
 
-  const queuePendingCloudSave = useCallback((result, config, runRecord) => {
-    setPendingCloudSave({
-      result,
-      config,
-      runRecord,
-    });
-    setLatestRunId(null);
-  }, []);
+  // Store LLM-generated narrative and model description in the run record.
+  // Called after a run saves successfully — fire-and-forget, never blocks the UI.
+  const storeRunNarrative = useCallback(async (runId, model, results) => {
+    if (!runId || !userId) return;
+    try {
+      const [narrative, description] = await Promise.allSettled([
+        callLLMOnce(buildNarrativePrompt(model, { warmupPeriod, maxSimTime, replications, terminationMode }, results)).catch(() => null),
+        callLLMOnce(buildModelDescriptionPrompt(model)).catch(() => null),
+      ]);
+      const narrativeText = narrative.status === 'fulfilled' ? narrative.value : null;
+      const descriptionText = description.status === 'fulfilled' ? description.value : null;
+      if (narrativeText || descriptionText) {
+        await updateRunNarrative(runId, narrativeText, descriptionText);
+      }
+    } catch {
+      // Silently ignore — narrative is optional enhancement
+    }
+  }, [userId, warmupPeriod, maxSimTime, replications, terminationMode]);
 
   const doStep = useCallback(async () => {
     if (!engineRef.current) return;
@@ -404,10 +412,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           riskLevel: runAdmission.complexityEstimate.riskLevel,
         };
         if (userId) {
-          saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
-          queuePendingCloudSave(fullResult, config, runRecord);
-          setSaveStatus({ state: 'success', message: `✓ Results saved in this browser! Prep ${formatDurationMs(prepareDurationMs)}. Save to cloud when ready.` });
-          setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ Results saved locally in this browser. Cloud save is optional." }]);
+          setSaveStatus({ state: 'saving', message: `Saving results... (prepared in ${formatDurationMs(prepareDurationMs)})` });
+          const saveStartedAt = nowPerf();
+          const runId = await saveSimulationRun(modelId, userId, fullResult, { ...config, runRecord });
+          if (runId) {
+            setLatestRunId(runId);
+            storeRunNarrative(runId, model, fullResult);
+          }
+          void refreshRunHistory();
+          const saveDurationMs = nowPerf() - saveStartedAt;
+          setSaveStatus({ state: 'success', message: `✓ History saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
+          setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ Cloud history record completed." }]);
           onRunSaved?.();
         } else {
           saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
@@ -418,7 +433,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         }
       }
     }
-  }, [userId, modelId, model, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory, queuePendingCloudSave]);
+  }, [userId, modelId, model, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory, storeRunNarrative]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -465,7 +480,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
     setHideRunReadiness(true);
     setExecuteSection("run");
-    setPendingCloudSave(null);
     setLatestRunId(null);
 
     const runSeed = seed;
@@ -595,10 +609,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               riskLevel: runAdmission.complexityEstimate.riskLevel,
             };
             if (userId) {
-              saveLocalRun(modelId, batchResult, { ...batchConfig, runRecord: batchRunRecord, resultDetailLevel: "full" });
-              queuePendingCloudSave(batchResult, batchConfig, batchRunRecord);
-              setSaveStatus({ state: 'success', message: `✓ Batch results saved in this browser! Prep ${formatDurationMs(prepareDurationMs)}. Save to cloud when ready.` });
-              setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "✅ Batch results saved locally in this browser. Cloud save is optional." }]);
+              setSaveStatus({ state: 'saving', message: `Saving replication batch... (prepared in ${formatDurationMs(prepareDurationMs)})` });
+              const saveStartedAt = nowPerf();
+              const runId = await saveSimulationRun(modelId, userId, batchResult, { ...batchConfig, runRecord: batchRunRecord });
+              if (runId) {
+                setLatestRunId(runId);
+                storeRunNarrative(runId, model, batchResult);
+              }
+              void refreshRunHistory();
+              const saveDurationMs = nowPerf() - saveStartedAt;
+              setSaveStatus({ state: 'success', message: `✓ Batch history saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
+              setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Cloud history record completed for replication batch." }]);
               onRunSaved?.();
             } else {
               saveLocalRun(modelId, batchResult, { ...batchConfig, runRecord: batchRunRecord, resultDetailLevel: "full" });
@@ -733,10 +754,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       riskLevel: runAdmission.complexityEstimate.riskLevel,
     };
     if (userId) {
-      saveLocalRun(modelId, result, { ...config, runRecord: singleRunRecord, resultDetailLevel: "full" });
-      queuePendingCloudSave(result, config, singleRunRecord);
-      setSaveStatus({ state: 'success', message: `✓ Results saved in this browser! Prep ${formatDurationMs(prepareDurationMs)}. Save to cloud when ready.` });
-      setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Results saved locally in this browser. Cloud save is optional." }]);
+      setSaveStatus({ state: 'saving', message: `Saving results... (prepared in ${formatDurationMs(prepareDurationMs)})` });
+      const saveStartedAt = nowPerf();
+      const runId = await saveSimulationRun(modelId, userId, result, { ...config, runRecord: singleRunRecord });
+      if (runId) {
+        setLatestRunId(runId);
+        storeRunNarrative(runId, model, result);
+      }
+      void refreshRunHistory();
+      const saveDurationMs = nowPerf() - saveStartedAt;
+      setSaveStatus({ state: 'success', message: `✓ History saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
+      setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Cloud history record completed." }]);
       onRunSaved?.();
     } else {
       saveLocalRun(modelId, result, { ...config, runRecord: singleRunRecord, resultDetailLevel: "full" });
@@ -745,7 +773,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Local history record completed." }]);
       onRunSaved?.();
     }
-  }, [model, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory, queuePendingCloudSave]);
+  }, [model, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory, storeRunNarrative]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -758,56 +786,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     singleRunCancelRef.current = true;
     setSingleRunStatus("cancelling");
   }, [singleRunStatus]);
-
-  // Store LLM-generated narrative and model description in the run record.
-  // Called after a run saves successfully — fire-and-forget, never blocks the UI.
-  const storeRunNarrative = useCallback(async (runId, model, results) => {
-    if (!runId || !userId) return;
-    try {
-      const [narrative, description] = await Promise.allSettled([
-        callLLMOnce(buildNarrativePrompt(model, { warmupPeriod, maxSimTime, replications, terminationMode }, results)).catch(() => null),
-        callLLMOnce(buildModelDescriptionPrompt(model)).catch(() => null),
-      ]);
-      const narrativeText = narrative.status === 'fulfilled' ? narrative.value : null;
-      const descriptionText = description.status === 'fulfilled' ? description.value : null;
-      if (narrativeText || descriptionText) {
-        await updateRunNarrative(runId, narrativeText, descriptionText);
-      }
-    } catch {
-      // Silently ignore — narrative is optional enhancement
-    }
-  }, [userId, warmupPeriod, maxSimTime, replications, terminationMode]);
-
-  const savePendingRunToCloud = useCallback(async (detailLevelOverride = null) => {
-    if (!userId || !modelId || !pendingCloudSave) return;
-    saveInProgressRef.current = true;
-    const detailLevel = detailLevelOverride || effectiveResultDetailLevel;
-    setSaveStatus({ state: 'saving', message: `Saving ${detailLevel === "full" ? "full archival" : "fast history"} record to cloud...` });
-    const saveStartedAt = nowPerf();
-    try {
-      const runRecord = detailLevel === "full"
-        ? pendingCloudSave.runRecord
-        : { ...pendingCloudSave.runRecord, model_snapshot: null };
-      const config = {
-        ...pendingCloudSave.config,
-        resultDetailLevel: detailLevel,
-        runRecord,
-      };
-      const runId = await saveSimulationRun(modelId, userId, pendingCloudSave.result, config);
-      if (runId) {
-        setLatestRunId(runId);
-        storeRunNarrative(runId, model, pendingCloudSave.result);
-      }
-      setPendingCloudSave(null);
-      void refreshRunHistory();
-      const saveDurationMs = nowPerf() - saveStartedAt;
-      setSaveStatus({ state: 'success', message: `✓ Cloud history saved successfully! Save ${formatDurationMs(saveDurationMs)}.` });
-    } catch (e) {
-      setSaveStatus({ state: 'error', message: `✗ Cloud save failed: ${e.message}` });
-    } finally {
-      saveInProgressRef.current = false;
-    }
-  }, [userId, modelId, pendingCloudSave, effectiveResultDetailLevel, storeRunNarrative, model, refreshRunHistory]);
 
   const toggleAuto = () => {
     if (autoRunning) {
@@ -2367,77 +2345,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           fontSize: 12, fontFamily: FONT,
         }}>
           {saveStatus.message}
-        </div>
-      )}
-
-      {canOpenResultsView && userId && pendingCloudSave && (
-        <div style={{
-          background: C.cardBg,
-          border: `1px solid ${C.border}`,
-          borderRadius: 6,
-          padding: 12,
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-        }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
-            <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
-              SAVE THIS RESULT TO CLOUD
-            </div>
-            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5, maxWidth: 420 }}>
-              This result is already saved in this browser. Choose the cloud save style you want for this reviewed run.
-            </div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 12, color: saveDetailLevel === "minimal" ? C.text : C.label, fontFamily: FONT }}>
-              <input
-                aria-label="Fast history save"
-                type="radio"
-                name="review-save-detail-level"
-                checked={saveDetailLevel === "minimal"}
-                onChange={() => {
-                  setSaveDetailLevel("minimal");
-                  persistExperimentDefaults({ resultDetailLevel: "minimal" });
-                }}
-                style={{ accentColor: C.accent, marginTop: 1 }}
-              />
-              <span>
-                <strong>Fast history save</strong>
-                <span style={{ display: "block", color: C.muted, fontWeight: 400, marginTop: 2 }}>
-                  Keeps the headline results and runtime cost, with the lightest cloud payload.
-                </span>
-              </span>
-            </label>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 12, color: saveDetailLevel === "full" ? C.text : C.label, fontFamily: FONT }}>
-              <input
-                aria-label="Full archival save"
-                type="radio"
-                name="review-save-detail-level"
-                checked={saveDetailLevel === "full"}
-                onChange={() => {
-                  setSaveDetailLevel("full");
-                  persistExperimentDefaults({ resultDetailLevel: "full" });
-                }}
-                style={{ accentColor: C.accent, marginTop: 1 }}
-              />
-              <span>
-                <strong>Full archival save</strong>
-                <span style={{ display: "block", color: C.muted, fontWeight: 400, marginTop: 2 }}>
-                  Keeps the richer reproducibility detail, but can take much longer on larger models.
-                </span>
-              </span>
-            </label>
-          </div>
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <Btn
-              small
-              variant="primary"
-              onClick={() => savePendingRunToCloud(saveDetailLevel)}
-              disabled={saveInProgressRef.current}
-            >
-              {saveDetailLevel === "full" ? "Save Full Record to Cloud" : "Save Fast History to Cloud"}
-            </Btn>
-          </div>
         </div>
       )}
 

@@ -6,8 +6,6 @@ const mockRunReplications = vi.hoisted(() => vi.fn());
 const mockSaveSimulationRun = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockFetchRunHistory = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
 const mockFetchUserSettings = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
-const mockSaveLocalRun = vi.hoisted(() => vi.fn());
-const mockFetchLocalRunHistory = vi.hoisted(() => vi.fn(() => []));
 
 vi.mock("../../../src/engine/replication-runner.js", () => ({
   runReplications: mockRunReplications,
@@ -23,11 +21,6 @@ vi.mock("../../../src/db/models.js", () => ({
   updateExperiment: vi.fn().mockResolvedValue({}),
   cloneExperiment: vi.fn().mockResolvedValue({}),
   deleteExperiment: vi.fn().mockResolvedValue({ ok: true }),
-}));
-
-vi.mock("../../../src/db/local.js", () => ({
-  saveLocalRun: mockSaveLocalRun,
-  fetchLocalRunHistory: mockFetchLocalRunHistory,
 }));
 
 const validModel = {
@@ -78,9 +71,6 @@ describe("ExecutePanel run admission", () => {
     mockSaveSimulationRun.mockResolvedValue(undefined);
     mockFetchRunHistory.mockImplementation(() => new Promise(() => {}));
     mockFetchUserSettings.mockImplementation(() => new Promise(() => {}));
-    mockSaveLocalRun.mockReset();
-    mockFetchLocalRunHistory.mockReset();
-    mockFetchLocalRunHistory.mockImplementation(() => []);
     vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
@@ -136,10 +126,7 @@ describe("ExecutePanel run admission", () => {
     expect(mockRunReplications.mock.calls[0][0]).toEqual(
       expect.objectContaining({ collectTimeSeries: false, replications: 2 })
     );
-    await screen.findByText(/batch results saved in this browser/i);
-    expect(mockSaveSimulationRun).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /save fast history to cloud/i }));
-    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledWith(
+    expect(mockSaveSimulationRun).toHaveBeenCalledWith(
       "model-1",
       "user-1",
       expect.any(Object),
@@ -147,7 +134,7 @@ describe("ExecutePanel run admission", () => {
         requestedCollectTimeSeries: true,
         effectiveCollectTimeSeries: false,
       })
-    ));
+    );
     expect(window.confirm).toHaveBeenCalled();
   });
 });

@@ -6,8 +6,6 @@ const mockRunReplications = vi.hoisted(() => vi.fn());
 const mockSaveSimulationRun = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockFetchRunHistory = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
 const mockFetchUserSettings = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
-const mockSaveLocalRun = vi.hoisted(() => vi.fn());
-const mockFetchLocalRunHistory = vi.hoisted(() => vi.fn(() => []));
 const mockStreamNarrative = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../src/engine/replication-runner.js', () => ({
@@ -28,11 +26,6 @@ vi.mock('../../../src/db/models.js', () => ({
 
 vi.mock('../../../src/llm/apiClient.js', () => ({
   streamNarrative: mockStreamNarrative,
-}));
-
-vi.mock('../../../src/db/local.js', () => ({
-  saveLocalRun: mockSaveLocalRun,
-  fetchLocalRunHistory: mockFetchLocalRunHistory,
 }));
 
 const validModel = {
@@ -76,9 +69,6 @@ describe('ExecutePanel', () => {
     mockSaveSimulationRun.mockResolvedValue(undefined);
     mockFetchRunHistory.mockImplementation(() => new Promise(() => {}));
     mockFetchUserSettings.mockImplementation(() => new Promise(() => {}));
-    mockSaveLocalRun.mockReset();
-    mockFetchLocalRunHistory.mockReset();
-    mockFetchLocalRunHistory.mockImplementation(() => []);
   });
 
   it('renders the execute controls without crashing', () => {
@@ -155,7 +145,7 @@ describe('ExecutePanel', () => {
     expect(mockRunReplications).not.toHaveBeenCalled();
   });
 
-  it('runs one replication locally first, then saves to cloud on demand', async () => {
+  it('runs one replication through the existing single-run path', async () => {
     const onRunSaved = vi.fn();
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
 
@@ -163,14 +153,8 @@ describe('ExecutePanel', () => {
     fireEvent.change(screen.getByLabelText(/run label/i), { target: { value: 'Baseline' } });
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
-    await screen.findByText(/results saved in this browser/i);
-    expect(mockSaveLocalRun).toHaveBeenCalledTimes(1);
-    expect(mockSaveSimulationRun).not.toHaveBeenCalled();
-    expect(mockRunReplications).not.toHaveBeenCalled();
-    expect(screen.getByRole('radio', { name: /fast history save/i })).toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: /save fast history to cloud/i }));
-
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+    expect(mockRunReplications).not.toHaveBeenCalled();
     expect(mockSaveSimulationRun.mock.calls[0][2]).toEqual(
       expect.objectContaining({
         runtimeMetrics: expect.objectContaining({
@@ -204,10 +188,6 @@ describe('ExecutePanel', () => {
     fireEvent.click(screen.getByLabelText(/save full archival details to cloud/i));
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
-    await screen.findByText(/results saved in this browser/i);
-    expect(screen.getByRole('radio', { name: /full archival save/i })).toBeChecked();
-    fireEvent.click(screen.getByRole('button', { name: /save full record to cloud/i }));
-
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
     expect(mockSaveSimulationRun.mock.calls[0][3]).toEqual(
       expect.objectContaining({
@@ -221,11 +201,11 @@ describe('ExecutePanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
-    await screen.findByText(/results saved in this browser/i);
+    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
     expect(screen.getByRole('button', { name: /view results/i })).toBeInTheDocument();
   });
 
-  it('queues all 10 sequential single-replication runs locally, then each manual save triggers one Supabase insert', async () => {
+  it('saves all 10 sequential single-replication runs — each click triggers one Supabase insert', async () => {
     // Each iteration runs a real engine.runAll(); allow 30 s for the full loop under load.
     const onRunSaved = vi.fn();
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
@@ -233,8 +213,6 @@ describe('ExecutePanel', () => {
     openSetup();
     for (let i = 0; i < 10; i++) {
       fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
-      await screen.findByText(/results saved in this browser/i);
-      fireEvent.click(screen.getByRole('button', { name: /save fast history to cloud/i }));
       await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(i + 1));
       await waitFor(() => expect(onRunSaved).toHaveBeenCalledTimes(i + 1));
     }
@@ -248,7 +226,7 @@ describe('ExecutePanel', () => {
     });
   }, 30000);
 
-  it('displays batch results locally first, then saves one cloud record on demand', async () => {
+  it('displays batch results and saves one record when a multi-replication batch completes', async () => {
     const N = 3;
     const onRunSaved = vi.fn();
 
@@ -274,10 +252,6 @@ describe('ExecutePanel', () => {
     const spinButtons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinButtons[1], { target: { value: String(N) } });
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
-
-    await screen.findByText(/batch results saved in this browser/i);
-    expect(mockSaveSimulationRun).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: /save fast history to cloud/i }));
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
     expect(mockSaveSimulationRun.mock.calls[0][2]).toEqual(
@@ -337,7 +311,7 @@ describe('ExecutePanel', () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onGoToResults={onGoToResults} />);
 
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
-    await screen.findByText(/results saved in this browser/i);
+    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole('button', { name: /view results/i }));
     expect(onGoToResults).toHaveBeenCalledOnce();
@@ -372,7 +346,7 @@ describe('ExecutePanel', () => {
     expect(screen.getAllByText('11')[0]).toBeInTheDocument();
   });
 
-  it('saves one row after a completed multi-replication batch when cloud save is requested', async () => {
+  it('saves one row after a completed multi-replication batch', async () => {
     mockRunReplications.mockImplementation(({ onReplicationComplete, onComplete }) => {
       const payloads = [
         {
@@ -398,8 +372,6 @@ describe('ExecutePanel', () => {
     fireEvent.change(spinButtons[1], { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
-    await screen.findByText(/batch results saved in this browser/i);
-    fireEvent.click(screen.getByRole('button', { name: /save fast history to cloud/i }));
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
     expect(mockSaveSimulationRun.mock.calls[0][3]).toEqual(
       expect.objectContaining({
