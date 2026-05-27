@@ -64,38 +64,74 @@ const formatDurationMs = value => {
   return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)} s`;
 };
 
+// ── Cloud-save timeout thresholds ────────────────────────────────────────────
+/** Show "taking longer than usual" after this many ms with no Supabase response. */
+const SAVE_SLOW_WARN_MS     = 5_000;
+/** Show "still saving — Supabase may be waking up" after this many ms. */
+const SAVE_CRITICAL_WARN_MS = 15_000;
 /**
- * Runs a cloud save function with live elapsed-time feedback and escalating
- * slow-save warnings, and wraps the call in try/catch.
- *
- * @param {Function} saveFn       - async () => runId
- * @param {object}   opts
- * @param {Function} opts.setSaveStatus  - React state setter
- * @param {Function} opts.setLog         - React state setter
- * @param {number}   opts.prepareDurationMs
- * @param {number}   opts.snapClock      - simulation clock value for the log entry
- * @returns {Promise<string|null>}  runId on success, null on error
+ * Hard timeout (ms): abandon the save attempt and surface an error.
+ * The underlying fetch may still complete in the background but the result
+ * will be ignored.  Raise this value if your Supabase project is on a plan
+ * that keeps compute warm and 30 s is genuinely too tight.
  */
-async function doCloudSave(saveFn, { setSaveStatus, setLog, prepareDurationMs, snapClock }) {
+const SAVE_TIMEOUT_MS       = 30_000;
+
+/**
+ * Runs a cloud save function with live elapsed-time feedback, escalating
+ * slow-save warnings, a hard timeout, and unified try/catch error surfacing.
+ *
+ * Thresholds are controlled by the module-level constants above
+ * (SAVE_SLOW_WARN_MS, SAVE_CRITICAL_WARN_MS, SAVE_TIMEOUT_MS) and can be
+ * overridden per-call via opts.slowWarnMs / opts.criticalWarnMs / opts.timeoutMs.
+ *
+ * @param {Function} saveFn  - async () => runId
+ * @param {object}   opts
+ * @param {Function} opts.setSaveStatus    - React state setter for the status banner
+ * @param {Function} opts.setLog           - React state setter for the run log
+ * @param {number}   opts.prepareDurationMs
+ * @param {number}   opts.snapClock        - simulation clock value for the log entry
+ * @param {number}  [opts.slowWarnMs]      - override SAVE_SLOW_WARN_MS
+ * @param {number}  [opts.criticalWarnMs]  - override SAVE_CRITICAL_WARN_MS
+ * @param {number}  [opts.timeoutMs]       - override SAVE_TIMEOUT_MS
+ * @returns {Promise<string|null>}  runId on success, null on error / timeout
+ */
+async function doCloudSave(saveFn, {
+  setSaveStatus,
+  setLog,
+  prepareDurationMs,
+  snapClock,
+  slowWarnMs     = SAVE_SLOW_WARN_MS,
+  criticalWarnMs = SAVE_CRITICAL_WARN_MS,
+  timeoutMs      = SAVE_TIMEOUT_MS,
+}) {
   const saveStartedAt = nowPerf();
 
-  const buildMessage = () => {
+  const buildTickMessage = () => {
     const elapsed = nowPerf() - saveStartedAt;
-    if (elapsed >= 15_000) {
+    if (elapsed >= criticalWarnMs) {
       return `⏳ Still saving… ${formatDurationMs(elapsed)} — Supabase may be starting up`;
     }
-    if (elapsed >= 5_000) {
+    if (elapsed >= slowWarnMs) {
       return `Saving results… ${formatDurationMs(elapsed)} (taking longer than usual)`;
     }
     return `Saving results… ${formatDurationMs(elapsed)} (prepared in ${formatDurationMs(prepareDurationMs)})`;
   };
 
   const intervalId = setInterval(() => {
-    setSaveStatus({ state: 'saving', message: buildMessage() });
-  }, 1000);
+    setSaveStatus({ state: 'saving', message: buildTickMessage() });
+  }, 1_000);
+
+  // Race the actual save against a hard timeout.
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(
+      () => reject(Object.assign(new Error(`Supabase did not respond within ${formatDurationMs(timeoutMs)}`), { isSaveTimeout: true })),
+      timeoutMs,
+    )
+  );
 
   try {
-    const runId = await saveFn();
+    const runId = await Promise.race([saveFn(), timeoutPromise]);
     const saveDurationMs = nowPerf() - saveStartedAt;
     clearInterval(intervalId);
     setSaveStatus({
@@ -106,8 +142,15 @@ async function doCloudSave(saveFn, { setSaveStatus, setLog, prepareDurationMs, s
     return runId;
   } catch (err) {
     clearInterval(intervalId);
-    setSaveStatus({ state: 'error', message: `✗ Save failed: ${err.message || "unknown error"}` });
-    setLog(prev => [...prev, { phase: "ERROR", time: snapClock, message: `Save failed: ${err.message || "unknown error"}` }]);
+    const detail  = err.message || "unknown error";
+    const bannerMsg = err.isSaveTimeout
+      ? `✗ Save timed out after ${formatDurationMs(timeoutMs)} — Supabase did not respond. Try running again in a moment.`
+      : `✗ Save failed: ${detail}`;
+    const logMsg = err.isSaveTimeout
+      ? `Save timed out (${formatDurationMs(timeoutMs)}) — result not stored`
+      : `Save failed: ${detail}`;
+    setSaveStatus({ state: 'error', message: bannerMsg });
+    setLog(prev => [...prev, { phase: "ERROR", time: snapClock, message: logMsg }]);
     return null;
   }
 }
