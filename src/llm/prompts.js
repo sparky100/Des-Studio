@@ -580,6 +580,12 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
 }
 
 export function parseSuggestionResponse(text = "") {
+  const stripStructuredBlock = (value = "") => value
+    .replace(/<json>[\s\S]*?(?:<\/json>|$)/gi, "")
+    .replace(/```json[\s\S]*?(?:```|$)/gi, "")
+    .replace(/```[\s\S]*?(?:```|$)/g, "")
+    .trim();
+
   // Support multiple JSON wrapper formats:
   //   1. ```json ... ```  (markdown fences — original prompt format)
   //   2. <json> ... </json>  (Claude 4.x XML-style tags)
@@ -613,11 +619,9 @@ export function parseSuggestionResponse(text = "") {
       : [];
     return { analysis, suggestions };
   } catch {
-    // JSON parse failed — strip any leftover wrapper tags and return raw text
-    const cleaned = text
-      .replace(/<json>[\s\S]*?<\/json>/gi, "")
-      .replace(/```json[\s\S]*?```/g, "")
-      .trim();
+    // JSON parse failed — keep any plain-English narrative, but strip the
+    // structured JSON block even if the closing fence/tag is missing.
+    const cleaned = stripStructuredBlock(text);
     return { analysis: cleaned || text, suggestions: [] };
   }
 }

@@ -547,6 +547,21 @@ describe("Sprint 46 — AI apply & verify", () => {
       expect(result.analysis).toBeTruthy();
       expect(result.suggestions).toHaveLength(0);
     });
+
+    it("keeps the narrative and strips an incomplete trailing json fence", () => {
+      const text = `## What Happened
+
+Queues are overloaded and throughput is below target.
+
+\`\`\`json
+{"analysis":"summary","suggestions":[{"rank":1,"goalImpact":"Mean train time": "moderate"}]}`;
+      const result = parseSuggestionResponse(text);
+      expect(result.analysis).toContain("## What Happened");
+      expect(result.analysis).toContain("Queues are overloaded");
+      expect(result.analysis).not.toContain("```json");
+      expect(result.analysis).not.toContain('"suggestions"');
+      expect(result.suggestions).toHaveLength(0);
+    });
   });
 
   describe("applySuggestionPatch", () => {
