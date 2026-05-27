@@ -58,6 +58,11 @@ const intDefault = (value, fallback) => {
   return Number.isInteger(n) && n > 0 ? n : fallback;
 };
 const nowPerf = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
+const formatDurationMs = value => {
+  if (!Number.isFinite(value)) return "0 ms";
+  if (value < 1000) return `${Math.max(0, Math.round(value))} ms`;
+  return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)} s`;
+};
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
@@ -332,6 +337,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setMode("done");
       setLiveWaitDist(null);
       stopAuto();
+      const prepareStartedAt = nowPerf();
       setSaveStatus({ state: 'saving', message: 'Preparing results...' });
       await yieldToBrowser();
       const summary = engineRef.current.getSummary();
@@ -361,7 +367,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       onResultsReady?.(fullResult);
       onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
       if (modelId) {
-        setSaveStatus({ state: 'saving', message: 'Saving results...' });
+        const prepareDurationMs = nowPerf() - prepareStartedAt;
+        setSaveStatus({ state: 'saving', message: `Saving results... (prepared in ${formatDurationMs(prepareDurationMs)})` });
         setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
         const stepSeed = runSeedRef.current;
         const runRecord = buildRunRecord(model, fullResult, {
@@ -387,6 +394,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         const save = userId
           ? saveSimulationRun(modelId, userId, fullResult, config)
           : Promise.resolve(saveLocalRun(modelId, fullResult, config));
+        const saveStartedAt = nowPerf();
         save
           .then((runId) => {
             if (runId) {
@@ -394,7 +402,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               storeRunNarrative(runId, model, fullResult);
             }
             void refreshRunHistory();
-            setSaveStatus({ state: 'success', message: '✓ Saved successfully!' });
+            const saveDurationMs = nowPerf() - saveStartedAt;
+            setSaveStatus({ state: 'success', message: `✓ Saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
             setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
             onRunSaved?.();
           })
@@ -542,6 +551,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           saveInProgressRef.current = true;
           try {
             const ordered = payloads.filter(Boolean);
+            const prepareStartedAt = nowPerf();
             setSaveStatus({ state: 'saving', message: 'Preparing results...' });
             await yieldToBrowser();
             const stats = summarizeReplicationResults(ordered, CI_METRICS);
@@ -556,7 +566,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             onResultsReady?.(batchResult);
             onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log: logRef.current });
             setAggregateStats(stats);
-            setSaveStatus({ state: 'saving', message: 'Saving replication batch...' });
+            const prepareDurationMs = nowPerf() - prepareStartedAt;
+            setSaveStatus({ state: 'saving', message: `Saving replication batch... (prepared in ${formatDurationMs(prepareDurationMs)})` });
 
             try {
               const batchRunRecord = buildRunRecord(model, batchResult, {
@@ -581,6 +592,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 resultDetailLevel: effectiveResultDetailLevel,
                 riskLevel: runAdmission.complexityEstimate.riskLevel,
               };
+              const saveStartedAt = nowPerf();
               if (userId) {
                 const runId = await saveSimulationRun(modelId, userId, batchResult, batchConfig);
                 if (runId) {
@@ -591,7 +603,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 saveLocalRun(modelId, batchResult, batchConfig);
               }
               void refreshRunHistory();
-              setSaveStatus({ state: 'success', message: '✓ Replication batch saved successfully!' });
+              const saveDurationMs = nowPerf() - saveStartedAt;
+              setSaveStatus({ state: 'success', message: `✓ Replication batch saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
               setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved." }]);
               onRunSaved?.();
             } catch (saveError) {
@@ -675,6 +688,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       }
     }
 
+    const prepareStartedAt = nowPerf();
     setSaveStatus({ state: 'saving', message: 'Preparing results...' });
     await yieldToBrowser();
     const rawResult = singleRunCancelRef.current
@@ -707,7 +721,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     }
 
     saveInProgressRef.current = true;
-    setSaveStatus({ state: 'saving', message: 'Saving results...' });
+    const prepareDurationMs = nowPerf() - prepareStartedAt;
+    setSaveStatus({ state: 'saving', message: `Saving results... (prepared in ${formatDurationMs(prepareDurationMs)})` });
     setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing simulation history to database..." }]);
 
     try {
@@ -732,6 +747,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         resultDetailLevel: effectiveResultDetailLevel,
         riskLevel: runAdmission.complexityEstimate.riskLevel,
       };
+      const saveStartedAt = nowPerf();
       const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
       let runId;
       try {
@@ -753,7 +769,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         storeRunNarrative(runId, model, result);
       }
       void refreshRunHistory();
-      setSaveStatus({ state: 'success', message: '✓ History saved successfully!' });
+      const saveDurationMs = nowPerf() - saveStartedAt;
+      setSaveStatus({ state: 'success', message: `✓ History saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
       onRunSaved?.();
     } catch (e) {
