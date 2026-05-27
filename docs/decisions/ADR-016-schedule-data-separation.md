@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-27
 **Status:** Accepted
-**Sprint:** TBD (see Migration Plan)
+**Sprint:** Sprint 73 (2026-05-27)
 **Decided by:** Architecture review
 
 ---

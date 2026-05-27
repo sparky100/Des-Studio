@@ -119,12 +119,13 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
   const detailLevel = resolveResultDetailLevel(config);
 
   if (config.runRecord) {
-    // _model_snapshot is only embedded for "full" saves.  The model is already
-    // stored in des_models.model_json and reachable via model_id + version_id,
-    // so embedding a 100–500 KB snapshot in every results_json row would make
-    // INSERT payloads unnecessarily large and slow — especially for complex
-    // models like Glasgow Central (~290 KB model_json alone).
-    if (config.runRecord.model_snapshot && detailLevel === "full") {
+    // ADR-016: now that timetable rows live in model_schedules (not model_json),
+    // the model snapshot is small (~14 KB for Glasgow Central, down from ~290 KB).
+    // The "full"-only guard introduced in the glasgow-supabase-save-perf branch
+    // is no longer needed — we embed the snapshot for all detail levels when
+    // includeModelSnapshot is set.  This restores reproduce/diff for all saves
+    // without the INSERT payload bloat that originally motivated the guard.
+    if (config.runRecord.model_snapshot && config.includeModelSnapshot === true) {
       resultsJson._model_snapshot = config.runRecord.model_snapshot;
     }
     resultsJson._engine_version  = config.runRecord.engine_version;

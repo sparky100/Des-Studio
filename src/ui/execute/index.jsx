@@ -10,7 +10,7 @@ import { AdapterRegistry } from "../../engine/adapters/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun } from "../../db/models.js";
+import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun, fetchModelSchedules, buildSchedulesMap } from "../../db/models.js";
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
 import { callLLMOnce } from "../../llm/apiClient.js";
 import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
@@ -53,6 +53,12 @@ const numberDefault = (value, fallback) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
+
+/** ADR-016: count total rows across all events in a schedule record (local copy). */
+function scheduleRowCount(sched) {
+  if (!sched || !Array.isArray(sched.scheduleJson)) return 0;
+  return sched.scheduleJson.reduce((sum, e) => sum + (Array.isArray(e.rows) ? e.rows.length : 0), 0);
+}
 const intDefault = (value, fallback) => {
   const n = parseInt(value, 10);
   return Number.isInteger(n) && n > 0 ? n : fallback;
@@ -225,6 +231,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [modelCheckerIssues, setModelCheckerIssues] = useState(null);
   const [modelCheckerOpen, setModelCheckerOpen] = useState(false);
 
+  // ── ADR-016: Schedule selection ──────────────────────────────────────────────
+  // modelSchedules: all schedules for this model (fetched on mount when modelId is set)
+  // selectedScheduleId: the schedule to use for the next run (null = use inline rows / default)
+  const [modelSchedules, setModelSchedules] = useState([]);
+  const [selectedScheduleId, setSelectedScheduleId] = useState(null);
+  const [schedulesLoading, setSchedulesLoading] = useState(false);
+
   const sweepRunnerRef = useRef(null);
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
@@ -280,6 +293,29 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   useEffect(() => {
     setSaveDetailLevel(model?.experimentDefaults?.resultDetailLevel === "full" ? "full" : "minimal");
   }, [model?.experimentDefaults?.resultDetailLevel]);
+
+  // Fetch model_schedules when modelId changes (ADR-016)
+  useEffect(() => {
+    if (!modelId || !userId) {
+      setModelSchedules([]);
+      setSelectedScheduleId(null);
+      return;
+    }
+    setSchedulesLoading(true);
+    fetchModelSchedules(modelId)
+      .then(schedules => {
+        setModelSchedules(schedules);
+        // Pre-select the default schedule if one exists
+        const defaultSched = schedules.find(s => s.isDefault);
+        setSelectedScheduleId(defaultSched?.id ?? (schedules[0]?.id ?? null));
+      })
+      .catch(err => {
+        console.warn('[ExecutePanel] Failed to load model schedules:', err?.message || err);
+        setModelSchedules([]);
+        setSelectedScheduleId(null);
+      })
+      .finally(() => setSchedulesLoading(false));
+  }, [modelId, userId]);
   const persistExperimentDefaults = useCallback((patch) => {
     if (!onExperimentDefaultsChange) return;
     onExperimentDefaultsChange({
@@ -325,6 +361,15 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
   const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : "minimal";
+
+  // Build schedulesMap for the selected schedule (ADR-016).
+  // Passed to buildEngine via options.schedulesMap so resolveInlineSchedules()
+  // can populate bEvent.schedules[].rows[] before the FEL is initialised.
+  const activeSchedulesMap = useMemo(() => {
+    if (!selectedScheduleId || modelSchedules.length === 0) return {};
+    const active = modelSchedules.filter(s => s.id === selectedScheduleId);
+    return buildSchedulesMap(active);
+  }, [modelSchedules, selectedScheduleId]);
   const readinessTagColor = hasAdmissionErrors ? C.red : C.green;
   const readinessTagBg = hasAdmissionErrors ? C.errorBg : `${C.green}18`;
   const readinessBorder = hasAdmissionErrors ? C.danger : `${C.green}66`;
@@ -359,7 +404,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       terminationMode === 'time' ? maxSimTime : null,
       terminationMode === 'condition' ? terminationCondition : null,
       5000, 500,
-      collectTimeSeries
+      collectTimeSeries,
+      undefined,
+      { schedulesMap: activeSchedulesMap }
     );
     setCurrentSnap(engineRef.current.getSnap());
     const initLog = [{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }];
@@ -489,7 +536,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           replications: 1,
           terminationMode,
           terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
-        }, stepSeed, { includeModelSnapshot: effectiveResultDetailLevel === "full" });
+        }, stepSeed, { includeModelSnapshot: true });
         const config = {
           seed: stepSeed,
           runLabel: effectiveRunLabel,
@@ -635,6 +682,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: maxTimeForRun,
         terminationCondition: stopConditionForRun,
         collectTimeSeries: effectiveCollectTimeSeries,
+        schedulesMap: activeSchedulesMap,
         onProgress: progress => setBatchProgress(progress),
         onReplicationComplete: payload => {
           completedPayloads[payload.replicationIndex] = payload;
@@ -683,7 +731,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               replications,
               terminationMode,
               terminationCondition: stopConditionForRun,
-            }, runSeed, { includeModelSnapshot: effectiveResultDetailLevel === "full" });
+            }, runSeed, { includeModelSnapshot: true });
             const batchConfig = {
               seed: runSeed, runLabel: effectiveRunLabel, replications, warmupPeriod, maxTime: maxTimeForRun, batchId,
               aggregateStats: stats,
@@ -768,7 +816,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       maxTimeForRun,
       stopConditionForRun,
       5000, 500,
-      effectiveCollectTimeSeries
+      effectiveCollectTimeSeries,
+      undefined,
+      { schedulesMap: activeSchedulesMap }
     );
     setSingleRunProgress(engine.getProgress());
 
@@ -828,7 +878,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       replications: 1,
       terminationMode,
       terminationCondition: stopConditionForRun,
-    }, runSeed, { includeModelSnapshot: effectiveResultDetailLevel === "full" });
+    }, runSeed, { includeModelSnapshot: true });
     const config = {
       seed: runSeed,
       runLabel: effectiveRunLabel,
@@ -1045,6 +1095,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: terminationMode === 'time' ? maxSimTime : null,
         terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
         collectTimeSeries: false,
+        schedulesMap: activeSchedulesMap,
         onReplicationComplete: payload => {
           completedPayloads[payload.replicationIndex] = payload;
         },
@@ -1215,6 +1266,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: terminationMode === "time" ? maxSimTime : null,
         terminationCondition: terminationMode === "condition" ? terminationCondition : null,
         collectTimeSeries: runAdmission.effectiveSettings.collectTimeSeries,
+        schedulesMap: activeSchedulesMap,
         onProgress(progress) {
           setSweepProgress(progress);
         },
@@ -1249,6 +1301,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: terminationMode === "time" ? maxSimTime : null,
         terminationCondition: terminationMode === "condition" ? terminationCondition : null,
         collectTimeSeries: runAdmission.effectiveSettings.collectTimeSeries,
+        schedulesMap: activeSchedulesMap,
         onProgress(progress) {
           setSweepProgress(progress);
         },
@@ -2093,6 +2146,25 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           </div>
         )}
       </div>
+      )}
+
+      {/* ADR-016: Schedule selector — shown when model has more than one schedule */}
+      {modelSchedules.length > 1 && (
+        <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>Timetable:</span>
+          <select
+            value={selectedScheduleId ?? ""}
+            onChange={e => setSelectedScheduleId(e.target.value || null)}
+            style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 12, background: C.surface, color: C.text, cursor: "pointer" }}
+          >
+            {modelSchedules.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.isDefault ? "★ " : ""}{s.name} ({scheduleRowCount(s).toLocaleString()} rows)
+              </option>
+            ))}
+          </select>
+          {schedulesLoading && <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Loading…</span>}
+        </div>
       )}
 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>

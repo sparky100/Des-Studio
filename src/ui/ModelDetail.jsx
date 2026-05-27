@@ -7,6 +7,7 @@ import { useToast } from "./shared/ToastContext.jsx";
 import { useViewport } from "./shared/hooks.js";
 import { SkeletonPanel } from "./shared/SkeletonPanel.jsx";
 import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
+import { ScheduleManager } from "./editors/ScheduleManager.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
 import { GoalsEditor } from "./editors/GoalsEditor.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
@@ -27,7 +28,7 @@ import { ModelDetailHeader } from "./ModelDetailHeader.jsx";
 import { ModelTabBar }       from "./ModelTabBar.jsx";
 import { SaveBanner }        from "./SaveBanner.jsx";
 import { VersionHistoryPanel } from "./VersionHistoryPanel.jsx";
-import { fetchRunHistory, listShareLinks } from "../db/models.js";
+import { fetchRunHistory, listShareLinks, fetchModelSchedules } from "../db/models.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
 import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
@@ -95,15 +96,53 @@ function modelJsonFromModel(model = {}) {
   return json;
 }
 
-function buildModelExportPayload(model, exportedAt = new Date().toISOString()) {
+// buildModelExportPayload — creates a self-contained JSON export of the model.
+// Per ADR-016: if the model has bEvents with scheduleRef + empty rows[], we
+// re-inline the schedule rows so the exported file is portable and does not
+// require access to the model_schedules table.
+// schedules: array of model_schedules rows (from fetchModelSchedules)
+function buildModelExportPayload(model, exportedAt = new Date().toISOString(), schedules = []) {
+  // Re-inline schedule rows into bEvents for portability
+  const inlinedModel = inlineSchedulesForExport(model, schedules);
   const payload = {
-    name: model.name || "Untitled model",
-    model_json: modelJsonFromModel(model),
+    name: inlinedModel.name || "Untitled model",
+    model_json: modelJsonFromModel(inlinedModel),
     exportedAt,
     appVersion: pkg.version,
   };
-  if (model.description) payload.description = model.description;
+  if (inlinedModel.description) payload.description = inlinedModel.description;
   return payload;
+}
+
+// inlineSchedulesForExport — merges model_schedules rows back into bEvent.schedules[].rows[]
+// so the exported JSON is self-contained (no scheduleRef dependency).
+// This is the inverse of extractInlineSchedule() (ADR-016).
+function inlineSchedulesForExport(model, schedules = []) {
+  if (!schedules || schedules.length === 0) return model;
+  // Build a lookup: scheduleId → scheduleJson entries
+  const scheduleEntries = {};
+  for (const sched of schedules) {
+    for (const entry of sched.scheduleJson || []) {
+      scheduleEntries[sched.id] = scheduleEntries[sched.id] || {};
+      scheduleEntries[sched.id][entry.eventId] = entry.rows ?? [];
+    }
+  }
+  if (Object.keys(scheduleEntries).length === 0) return model;
+  return {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => ({
+      ...be,
+      schedules: (be.schedules || []).map(s => {
+        if (!s.scheduleRef) return s;
+        const entryMap = scheduleEntries[s.scheduleRef];
+        if (!entryMap) return s;
+        const rows = entryMap[s.eventId ?? be.id] ?? entryMap[be.id] ?? [];
+        // Re-inline: populate rows and remove scheduleRef for portability
+        const { scheduleRef: _removed, ...rest } = s;
+        return { ...rest, rows };
+      }),
+    })),
+  };
 }
 
 function downloadJsonFile(payload, filename) {
@@ -741,12 +780,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     // which sets loading=true and unmounts ModelDetail, resetting the execute panel.
   };
 
-  const exportJson = () => {
+  const exportJson = async () => {
     const currentValidation = validateModel(model);
     if (currentValidation.errors.length > 0 && !window.confirm("This model has validation errors. Export anyway?")) {
       return;
     }
-    const payload = buildModelExportPayload(model);
+    // ADR-016: re-inline schedule rows so the export is self-contained
+    let schedules = [];
+    if (model.id) {
+      try { schedules = await fetchModelSchedules(model.id); }
+      catch { /* no schedule table yet — export inline rows as-is */ }
+    }
+    const payload = buildModelExportPayload(model, new Date().toISOString(), schedules);
     downloadJsonFile(payload, `des-studio-${slugifyModelName(model.name)}.json`);
   };
 
@@ -784,6 +829,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     {id:"queues",label:"Queues"},
     {id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},
+    {id:"schedules",label:"Schedules"},
     {id:"state",label:"Model Data"},
     {id:"validate",label:"Model Health"},
     {id:"execute",label:"Run"},
@@ -794,7 +840,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const selectableTabs = TABS.filter(t => !t.disabled);
   const NAV_MODES=[
     {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
-    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
+    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","schedules","state","validate"]},
     {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
     {id:"results",label:"Results",primaryTab:"results",tabs:["results"]},
     ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
@@ -805,7 +851,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const DISPLAY_MODES = isMobileLayout
       ? [
         {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
-        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","state","validate"]},
+        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","schedules","state","validate"]},
         {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
         {id:"results",label:"Results",primaryTab:"results",tabs:["results"]},
       ]
@@ -813,7 +859,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
   const contextualTabs = useMemo(() => {
     if (activeMode?.id === "overview") return ["overview"];
-    if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "state", "validate"];
+    if (activeMode?.id === "design") return ["visual", "ai", "entities", "queues", "bevents", "cevents", "schedules", "state", "validate"];
     if (activeMode?.id === "execute") return ["execute"];
     if (activeMode?.id === "results") return ["results"];
     if (activeMode?.id === "access") return ["access"];
@@ -1048,6 +1094,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         )}
         {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'}/></div>)}
         {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
+        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'}/></div>)}
         {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues" validation={validation}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
           const oldQueues = model.queues || [];
           let updated = { ...model, queues: newQueues };

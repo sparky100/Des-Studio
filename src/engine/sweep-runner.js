@@ -45,6 +45,7 @@ export function runSweep({
   maxSimTime = null,
   terminationCondition = null,
   collectTimeSeries = false,
+  schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
   onProgress,
   onPointComplete,
   onError,
@@ -100,6 +101,7 @@ export function runSweep({
         maxSimTime,
         terminationCondition,
         collectTimeSeries,
+        schedulesMap,
         _cancelRef: pointCancelRef,
         onProgress(progress) {
           onProgress?.({
@@ -173,6 +175,7 @@ export function run2DSweep({
   maxSimTime = null,
   terminationCondition = null,
   collectTimeSeries = false,
+  schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
   onProgress,
   onPointComplete,
   onError,
@@ -240,6 +243,7 @@ export function run2DSweep({
         maxSimTime,
         terminationCondition,
         collectTimeSeries,
+        schedulesMap,
         _cancelRef: pointCancelRef,
         onProgress(progress) {
           onProgress?.({
