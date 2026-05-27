@@ -66,7 +66,8 @@ project root
 │   │       └── types.js             ← JSDoc: DataSource, ParamSource, SystemSnapshot
 │   ├── ui/
 │   │   ├── editors/                 ← EntityTypeEditor, BEventEditor, CEventEditor, QueueEditor
-│   │   │   └── index.jsx
+│   │   │   ├── index.jsx
+│   │   │   └── ScheduleManager.jsx  ← ADR-016 schedule list, detail view, new-schedule form
 │   │   ├── execute/                 ← Run panel, VisualView, StepLog, EntityTable
 │   │   │   └── index.jsx
 │   │   └── shared/
@@ -84,7 +85,8 @@ project root
 │   │   ├── reportGenerator.js       ← 7-section .docx generator (docx v9, LLM narrative, html2canvas)
 │   │   └── index.js                 ← Barrel: re-exports generateReport
 │   ├── db/
-│   │   ├── models.js                ← Supabase CRUD wrappers
+│   │   ├── models.js                ← Supabase CRUD wrappers (incl. ADR-016 model_schedules functions)
+│   │   ├── results-persistence.js   ← buildPersistedResultsJson, withResultsPayloadSize, resolveResultDetailLevel
 │   │   └── supabase.js              ← Client singleton
 │   └── App.jsx                      ← Auth listener + model library shell only. No sim logic.
 ├── tests/                           ← All tests. Mirrors src/ structure.
@@ -360,6 +362,11 @@ ModelDetail (parent)
 - Each B-Event has an ordered list of schedule rows. Each schedule row specifies: a macro action (from the permitted vocabulary — ARRIVE, COMPLETE, ASSIGN, RENEGE), the target resource/queue/variable depending on the macro, and a delay distribution (selected via `DistPicker`).
 - B-Event names must be unique within the model.
 - Deleting a B-Event must detect and warn about any C-Event schedules that reference it by ID (audit finding C6 — stale references currently become silent no-ops).
+
+**ADR-016 Schedule Rules (Sprint 73):**
+- A B-Event's timetable schedule rows are stored in `model_schedules` and referenced by `bEvent.schedules[].scheduleRef` (UUID). Inline `rows[]` in `model_json` are migration artefacts only.
+- The `ScheduleManager` tab in ModelDetail allows the modeller to view, create, edit, and delete schedules for a model. `ScheduleDetail` shows paginated rows with CSV export.
+- The Execute panel shows a "Timetable:" dropdown when `modelSchedules.length > 1`, letting the modeller choose which schedule to apply for the next run.
 
 **Known gaps:**
 - No stale reference detection on deletion (C6) — fix in Sprint 1 Task 5.
@@ -1158,11 +1165,15 @@ Key tables in Supabase. Do not change column names without updating `src/db/mode
 | `model_versions` | `id`, `model_id`, `version`, `name`, `notes`, `model_json`, `is_structural`, `created_at`, `created_by` | Owner-only write via RLS. `version` is an auto-incrementing integer per model, not global. Full model snapshot stored as JSONB. |
 | `des_models.latest_version` | Integer column on `des_models`, denormalised for library display | Kept in sync by `createVersion()` and `deleteVersion()`. |
 | `des_models.parent_model_id` | UUID FK to `des_models(id)` ON DELETE SET NULL | Set by "Save as scenario baseline" flow only. Copy operations do NOT set this field. |
+| `model_schedules` | `id`, `model_id`, `name`, `description`, `schedule_json`, `is_default`, `created_at`, `updated_at`, `created_by` | ADR-016. Stores timetable/schedule rows separately from `model_json`. `schedule_json` is an array of `{ eventId, rows[] }` entries. One `is_default` schedule per model enforced by partial unique index. |
 
 **Schema rules:**
 - Never add columns without adding a corresponding entry to the relevant CRUD wrapper in `src/db/models.js`.
 - `model_json` must always conform to the entity schema defined in `docs/addition1_entity_model.md`. Do not store ad-hoc fields.
 - `avg_service_time` maps engine `summary.avgSvc`; `results_json.summary` remains the source of detailed service/sojourn metrics.
+- **ADR-016 schedule rule:** Timetable/schedule row data for B-Events lives in `model_schedules`, not in `model_json`. B-Events reference schedules by UUID via `bEvent.schedules[].scheduleRef`. Inline `rows[]` in `model_json` are only a migration transitional form or export artefact — they must not be the primary storage location for large timetables.
+- **ADR-016 `resolveInlineSchedules` contract:** `buildEngine(model, seed, ...)` accepts `schedulesMap` via `options.schedulesMap`. The engine calls `resolveInlineSchedules(model, schedulesMap)` before FEL initialisation to merge external rows into `bEvent.schedules[]`. This function is pure (no mutations, no side effects) and backward-compatible (empty schedulesMap returns model unchanged).
+- **ADR-016 `includeModelSnapshot` flag:** Embedding `model_snapshot` in `results_json` now requires an explicit `includeModelSnapshot: true` in the `saveSimulationRun` config. The model is small (~14 KB post-ADR-016 for large models) so this flag should default to `true` in the execute panel for all detail levels.
 
 ---
 
@@ -1326,6 +1337,7 @@ This prevents silent architectural drift — the most common way AI-assisted pro
 | ADR-008 | Platform roles and user settings, with SaaS/LLM follow-ons | Accepted | Sprint 7A | §21 |
 | ADR-009 | Reassess JavaScript-only implementation and TypeScript adoption | Accepted | Sprint 7A | §2, §21 |
 | ADR-015 | Model versioning as explicit milestones | Accepted | Sprint 68 | §21, §23 |
+| ADR-016 | Separate timetable schedule data from core model JSON | Accepted | Sprint 73 | §15, §7.4 |
 
 ---
 
@@ -1349,6 +1361,23 @@ Full ADR files: `docs/decisions/ADR-003`, `ADR-004`, `ADR-005`.
 
 SEIZE macro resolves queue discipline by matching `model.queues` against the customer entity type name. This avoids a model schema change (adding `queueId` to C-event actions).
 - **Consequence:** a queue named differently from the entity type it serves silently falls back to FIFO. Sprint 2 must formalise queue-to-event binding via `queueId`. See G1/G2 in Known Issues.
+
+### ADR-016 — Separate timetable schedule data from core model JSON (Sprint 73)
+
+Large models (e.g. Glasgow Central) were storing hundreds of timetable rows inline in `model_json.bEvents[].schedules[].rows`, causing `model_json` to exceed 290 KB. This bloated Supabase INSERT payloads for `simulation_runs.results_json._model_snapshot`, causing save latencies > 30 s and Supabase warm-up warnings.
+
+**Decision:** Extract timetable rows to a separate `model_schedules` table. B-Events reference schedules by UUID (`scheduleRef`). The engine resolves references at run time via `resolveInlineSchedules(model, schedulesMap)` before FEL initialisation.
+
+**Key rules produced:**
+- `model_json` bEvent schedules must use `scheduleRef` UUID (not inline `rows[]`) for timetables.
+- `src/db/models.js` exports: `fetchModelSchedules`, `fetchModelSchedule`, `saveModelSchedule`, `deleteModelSchedule`, `setDefaultSchedule`, `buildSchedulesMap`, `extractInlineSchedule`.
+- `src/engine/index.js` exports `resolveInlineSchedules` (pure function). `buildEngine` accepts `options.schedulesMap`.
+- `src/ui/execute/index.jsx` fetches schedules on mount, exposes a dropdown when `modelSchedules.length > 1`, and passes `schedulesMap` to all run entry points (`buildEngine`, `runReplications`, `runSweep`, `run2DSweep`).
+- `src/ui/editors/ScheduleManager.jsx` provides `ScheduleManager`, `ScheduleDetail` (paginated, CSV-export), and `NewScheduleForm` components; exposed as the "schedules" tab in `ModelDetail`.
+- `ModelDetail.jsx` re-inlines schedules on JSON export via `inlineSchedulesForExport`.
+- `includeModelSnapshot: true` must be passed explicitly to embed a snapshot in `results_json`; the guard on `detailLevel === "full"` was removed (model is now small).
+- Migration script: `scripts/migrate-schedules.js` with `--dry-run` and `--model-id` flags.
+- Supabase migration: `supabase/migrations/20260527100000_create_model_schedules.sql`.
 
 ---
 
@@ -1411,6 +1440,7 @@ UI / UX
 | Queue discipline lookup (interim) | `docs/decisions/ADR-005-queue-discipline-lookup.md` | Sprint 2 Task 1 — must be read before touching SEIZE or waitingOf |
 | Platform roles and user settings, with SaaS/LLM follow-ons | `docs/decisions/ADR-008-platform-roles-saas-llm-configuration.md` | Before adding admin features, user settings, tenancy/workspace logic, or LLM provider configuration |
 | Incremental TypeScript adoption | `docs/decisions/ADR-009-typescript-reassessment.md` | Before adding TypeScript tooling or beginning schema-heavy/domain-boundary refactors |
+| Schedule data separation | `docs/decisions/ADR-016-schedule-data-separation.md` | Before touching `model_schedules`, `resolveInlineSchedules`, or `buildEngine` schedule options |
 | Build plan with sprint features and prompts | `docs/DES_Studio_Build_Plan.md` | Start of every sprint — read current sprint section |
 | Full codebase audit findings | `docs/AUDIT.md` | When investigating a known issue — check audit ref before changing |
 
@@ -1468,10 +1498,11 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 68 | ✅ Complete | 2026-05-20 | Model versioning as explicit milestones: `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version |
 | Sprint 69 | ✅ Complete | 2026-05-22 | AI debugging — structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, entity inspector panel, canvas node overlays, magic-link model import |
 | Sprint 70 | ✅ Complete | 2026-05-23 | Help Assistant — in-app contextual help, suggested questions, `src/ui/HelpAssistant.jsx`, `buildHelpAssistantSystemPrompt` prompt builder; documentation accuracy fixes across all docs |
+| Sprint 73 | ✅ Complete | 2026-05-27 | ADR-016: Separate timetable schedule data from core model JSON — `model_schedules` Supabase table, `resolveInlineSchedules` engine function, `ScheduleManager` UI, schedule selector in Execute panel, re-inline on export, save-timeout feedback, `includeModelSnapshot` explicit flag |
 
 ---
 
-## 21. Current Sprint — Sprint 72 planned
+## 21. Current Sprint — Sprint 73 Complete / Sprint 72 Queued
 
 **Goal:** Performance Optimisation — reduce execution cost for models with many C-events by removing legacy runtime condition-string execution, migrating old models to canonical predicate JSON, and optimising the Phase C hot path through compilation, caching, and dependency-aware scans.
 

@@ -338,9 +338,41 @@ function makeFailureEvents(model, rng) {
   return events;
 }
 
+// ── resolveInlineSchedules ────────────────────────────────────────────────────
+//
+// Merges external schedule data (from the model_schedules table) into bEvent
+// schedule entries that carry a scheduleRef UUID.
+//
+// This is a pure function — no mutations, no side-effects.
+// Backward-compatible: when schedulesMap is empty / not provided the model is
+// returned unchanged and all existing callers continue to work.
+//
+// schedulesMap shape:
+//   { "<uuid>": { eventId: "b_wcml_train_arrives", rows: [...] }, ... }
+export function resolveInlineSchedules(model, schedulesMap = {}) {
+  if (!schedulesMap || Object.keys(schedulesMap).length === 0) return model;
+  return {
+    ...model,
+    bEvents: (model.bEvents || []).map(be => ({
+      ...be,
+      schedules: (be.schedules || []).map(s => {
+        if (!s.scheduleRef) return s;                              // no ref — leave as-is
+        if (Array.isArray(s.rows) && s.rows.length > 0) return s; // already resolved
+        const resolved = schedulesMap[s.scheduleRef];
+        if (!resolved) return s;                                   // ref not found — 0 arrivals
+        return { ...s, rows: resolved.rows ?? [] };
+      }),
+    })),
+  };
+}
+
 export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500, collectTimeSeries = false, registry = nullRegistry, options = {}) {
-  const runtimeModel = modelWithShiftInitialCapacity(model);
   const engineOptions = options || {};
+  // Resolve external schedule references before any processing.
+  // When options.schedulesMap is provided, inline rows[] are merged from the
+  // model_schedules table. Falls back to inline rows if no map is provided.
+  const resolvedModel = resolveInlineSchedules(model, engineOptions.schedulesMap);
+  const runtimeModel = modelWithShiftInitialCapacity(resolvedModel);
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
   const rng = mulberry32(seed);
   let _warmupComplete = false;

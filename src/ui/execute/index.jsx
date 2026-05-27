@@ -10,7 +10,7 @@ import { AdapterRegistry } from "../../engine/adapters/index.js";
 import { mulberry32 } from "../../engine/distributions.js";
 import { runReplications } from "../../engine/replication-runner.js";
 import { compareScenarios, detectWarmupWelch, summarizeReplicationResults, relativePrecision, sampleSizeGuidance, cumulativeMean, detectOutliers } from "../../engine/statistics.js";
-import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun } from "../../db/models.js";
+import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings, createShareLink, listShareLinks, revokeShareLink, fetchExperiments, saveExperiment, updateExperiment, cloneExperiment, deleteExperiment, getRun, fetchModelSchedules, buildSchedulesMap } from "../../db/models.js";
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
 import { callLLMOnce } from "../../llm/apiClient.js";
 import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
@@ -53,6 +53,12 @@ const numberDefault = (value, fallback) => {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 };
+
+/** ADR-016: count total rows across all events in a schedule record (local copy). */
+function scheduleRowCount(sched) {
+  if (!sched || !Array.isArray(sched.scheduleJson)) return 0;
+  return sched.scheduleJson.reduce((sum, e) => sum + (Array.isArray(e.rows) ? e.rows.length : 0), 0);
+}
 const intDefault = (value, fallback) => {
   const n = parseInt(value, 10);
   return Number.isInteger(n) && n > 0 ? n : fallback;
@@ -63,6 +69,97 @@ const formatDurationMs = value => {
   if (value < 1000) return `${Math.max(0, Math.round(value))} ms`;
   return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)} s`;
 };
+
+// ── Cloud-save timeout thresholds ────────────────────────────────────────────
+/** Show "taking longer than usual" after this many ms with no Supabase response. */
+const SAVE_SLOW_WARN_MS     = 5_000;
+/** Show "still saving — Supabase may be waking up" after this many ms. */
+const SAVE_CRITICAL_WARN_MS = 15_000;
+/**
+ * Hard timeout (ms): abandon the save attempt and surface an error.
+ * The underlying fetch may still complete in the background but the result
+ * will be ignored.  Raise this value if your Supabase project is on a plan
+ * that keeps compute warm and 30 s is genuinely too tight.
+ */
+const SAVE_TIMEOUT_MS       = 30_000;
+
+/**
+ * Runs a cloud save function with live elapsed-time feedback, escalating
+ * slow-save warnings, a hard timeout, and unified try/catch error surfacing.
+ *
+ * Thresholds are controlled by the module-level constants above
+ * (SAVE_SLOW_WARN_MS, SAVE_CRITICAL_WARN_MS, SAVE_TIMEOUT_MS) and can be
+ * overridden per-call via opts.slowWarnMs / opts.criticalWarnMs / opts.timeoutMs.
+ *
+ * @param {Function} saveFn  - async () => runId
+ * @param {object}   opts
+ * @param {Function} opts.setSaveStatus    - React state setter for the status banner
+ * @param {Function} opts.setLog           - React state setter for the run log
+ * @param {number}   opts.prepareDurationMs
+ * @param {number}   opts.snapClock        - simulation clock value for the log entry
+ * @param {number}  [opts.slowWarnMs]      - override SAVE_SLOW_WARN_MS
+ * @param {number}  [opts.criticalWarnMs]  - override SAVE_CRITICAL_WARN_MS
+ * @param {number}  [opts.timeoutMs]       - override SAVE_TIMEOUT_MS
+ * @returns {Promise<string|null>}  runId on success, null on error / timeout
+ */
+async function doCloudSave(saveFn, {
+  setSaveStatus,
+  setLog,
+  prepareDurationMs,
+  snapClock,
+  slowWarnMs     = SAVE_SLOW_WARN_MS,
+  criticalWarnMs = SAVE_CRITICAL_WARN_MS,
+  timeoutMs      = SAVE_TIMEOUT_MS,
+}) {
+  const saveStartedAt = nowPerf();
+
+  const buildTickMessage = () => {
+    const elapsed = nowPerf() - saveStartedAt;
+    if (elapsed >= criticalWarnMs) {
+      return `⏳ Still saving… ${formatDurationMs(elapsed)} — Supabase may be starting up`;
+    }
+    if (elapsed >= slowWarnMs) {
+      return `Saving results… ${formatDurationMs(elapsed)} (taking longer than usual)`;
+    }
+    return `Saving results… ${formatDurationMs(elapsed)} (prepared in ${formatDurationMs(prepareDurationMs)})`;
+  };
+
+  const intervalId = setInterval(() => {
+    setSaveStatus({ state: 'saving', message: buildTickMessage() });
+  }, 1_000);
+
+  // Race the actual save against a hard timeout.
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(
+      () => reject(Object.assign(new Error(`Supabase did not respond within ${formatDurationMs(timeoutMs)}`), { isSaveTimeout: true })),
+      timeoutMs,
+    )
+  );
+
+  try {
+    const runId = await Promise.race([saveFn(), timeoutPromise]);
+    const saveDurationMs = nowPerf() - saveStartedAt;
+    clearInterval(intervalId);
+    setSaveStatus({
+      state: 'success',
+      message: `✓ History saved! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.`,
+    });
+    setLog(prev => [...prev, { phase: "SAVE", time: snapClock, message: "✅ Cloud history record completed." }]);
+    return runId;
+  } catch (err) {
+    clearInterval(intervalId);
+    const detail  = err.message || "unknown error";
+    const bannerMsg = err.isSaveTimeout
+      ? `✗ Save timed out after ${formatDurationMs(timeoutMs)} — Supabase did not respond. Try running again in a moment.`
+      : `✗ Save failed: ${detail}`;
+    const logMsg = err.isSaveTimeout
+      ? `Save timed out (${formatDurationMs(timeoutMs)}) — result not stored`
+      : `Save failed: ${detail}`;
+    setSaveStatus({ state: 'error', message: bannerMsg });
+    setLog(prev => [...prev, { phase: "ERROR", time: snapClock, message: logMsg }]);
+    return null;
+  }
+}
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
@@ -134,6 +231,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [modelCheckerIssues, setModelCheckerIssues] = useState(null);
   const [modelCheckerOpen, setModelCheckerOpen] = useState(false);
 
+  // ── ADR-016: Schedule selection ──────────────────────────────────────────────
+  // modelSchedules: all schedules for this model (fetched on mount when modelId is set)
+  // selectedScheduleId: the schedule to use for the next run (null = use inline rows / default)
+  const [modelSchedules, setModelSchedules] = useState([]);
+  const [selectedScheduleId, setSelectedScheduleId] = useState(null);
+  const [schedulesLoading, setSchedulesLoading] = useState(false);
+
   const sweepRunnerRef = useRef(null);
   const runSeedRef = useRef(seed);
   const engineRef = useRef(null);
@@ -189,6 +293,29 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   useEffect(() => {
     setSaveDetailLevel(model?.experimentDefaults?.resultDetailLevel === "full" ? "full" : "minimal");
   }, [model?.experimentDefaults?.resultDetailLevel]);
+
+  // Fetch model_schedules when modelId changes (ADR-016)
+  useEffect(() => {
+    if (!modelId || !userId) {
+      setModelSchedules([]);
+      setSelectedScheduleId(null);
+      return;
+    }
+    setSchedulesLoading(true);
+    fetchModelSchedules(modelId)
+      .then(schedules => {
+        setModelSchedules(schedules);
+        // Pre-select the default schedule if one exists
+        const defaultSched = schedules.find(s => s.isDefault);
+        setSelectedScheduleId(defaultSched?.id ?? (schedules[0]?.id ?? null));
+      })
+      .catch(err => {
+        console.warn('[ExecutePanel] Failed to load model schedules:', err?.message || err);
+        setModelSchedules([]);
+        setSelectedScheduleId(null);
+      })
+      .finally(() => setSchedulesLoading(false));
+  }, [modelId, userId]);
   const persistExperimentDefaults = useCallback((patch) => {
     if (!onExperimentDefaultsChange) return;
     onExperimentDefaultsChange({
@@ -234,6 +361,15 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
   const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : "minimal";
+
+  // Build schedulesMap for the selected schedule (ADR-016).
+  // Passed to buildEngine via options.schedulesMap so resolveInlineSchedules()
+  // can populate bEvent.schedules[].rows[] before the FEL is initialised.
+  const activeSchedulesMap = useMemo(() => {
+    if (!selectedScheduleId || modelSchedules.length === 0) return {};
+    const active = modelSchedules.filter(s => s.id === selectedScheduleId);
+    return buildSchedulesMap(active);
+  }, [modelSchedules, selectedScheduleId]);
   const readinessTagColor = hasAdmissionErrors ? C.red : C.green;
   const readinessTagBg = hasAdmissionErrors ? C.errorBg : `${C.green}18`;
   const readinessBorder = hasAdmissionErrors ? C.danger : `${C.green}66`;
@@ -268,7 +404,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       terminationMode === 'time' ? maxSimTime : null,
       terminationMode === 'condition' ? terminationCondition : null,
       5000, 500,
-      collectTimeSeries
+      collectTimeSeries,
+      undefined,
+      { schedulesMap: activeSchedulesMap }
     );
     setCurrentSnap(engineRef.current.getSnap());
     const initLog = [{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }];
@@ -412,18 +550,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           riskLevel: runAdmission.complexityEstimate.riskLevel,
         };
         if (userId) {
-          setSaveStatus({ state: 'saving', message: `Saving results... (prepared in ${formatDurationMs(prepareDurationMs)})` });
-          const saveStartedAt = nowPerf();
-          const runId = await saveSimulationRun(modelId, userId, fullResult, { ...config, runRecord });
+          setSaveStatus({ state: 'saving', message: `Saving results… (prepared in ${formatDurationMs(prepareDurationMs)})` });
+          const runId = await doCloudSave(
+            () => saveSimulationRun(modelId, userId, fullResult, { ...config, runRecord }),
+            { setSaveStatus, setLog, prepareDurationMs, snapClock: r.snap.clock },
+          );
           if (runId) {
             setLatestRunId(runId);
             storeRunNarrative(runId, model, fullResult);
+            void refreshRunHistory();
+            onRunSaved?.();
           }
-          void refreshRunHistory();
-          const saveDurationMs = nowPerf() - saveStartedAt;
-          setSaveStatus({ state: 'success', message: `✓ History saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
-          setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ Cloud history record completed." }]);
-          onRunSaved?.();
         } else {
           saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
           void refreshRunHistory();
@@ -545,6 +682,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: maxTimeForRun,
         terminationCondition: stopConditionForRun,
         collectTimeSeries: effectiveCollectTimeSeries,
+        schedulesMap: activeSchedulesMap,
         onProgress: progress => setBatchProgress(progress),
         onReplicationComplete: payload => {
           completedPayloads[payload.replicationIndex] = payload;
@@ -609,18 +747,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               riskLevel: runAdmission.complexityEstimate.riskLevel,
             };
             if (userId) {
-              setSaveStatus({ state: 'saving', message: `Saving replication batch... (prepared in ${formatDurationMs(prepareDurationMs)})` });
-              const saveStartedAt = nowPerf();
-              const runId = await saveSimulationRun(modelId, userId, batchResult, { ...batchConfig, runRecord: batchRunRecord });
+              setSaveStatus({ state: 'saving', message: `Saving replication batch… (prepared in ${formatDurationMs(prepareDurationMs)})` });
+              const runId = await doCloudSave(
+                () => saveSimulationRun(modelId, userId, batchResult, { ...batchConfig, runRecord: batchRunRecord }),
+                { setSaveStatus, setLog, prepareDurationMs, snapClock: batchResult.snap.clock },
+              );
               if (runId) {
                 setLatestRunId(runId);
                 storeRunNarrative(runId, model, batchResult);
+                void refreshRunHistory();
+                onRunSaved?.();
               }
-              void refreshRunHistory();
-              const saveDurationMs = nowPerf() - saveStartedAt;
-              setSaveStatus({ state: 'success', message: `✓ Batch history saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
-              setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Cloud history record completed for replication batch." }]);
-              onRunSaved?.();
             } else {
               saveLocalRun(modelId, batchResult, { ...batchConfig, runRecord: batchRunRecord, resultDetailLevel: "full" });
               void refreshRunHistory();
@@ -679,7 +816,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       maxTimeForRun,
       stopConditionForRun,
       5000, 500,
-      effectiveCollectTimeSeries
+      effectiveCollectTimeSeries,
+      undefined,
+      { schedulesMap: activeSchedulesMap }
     );
     setSingleRunProgress(engine.getProgress());
 
@@ -754,18 +893,17 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       riskLevel: runAdmission.complexityEstimate.riskLevel,
     };
     if (userId) {
-      setSaveStatus({ state: 'saving', message: `Saving results... (prepared in ${formatDurationMs(prepareDurationMs)})` });
-      const saveStartedAt = nowPerf();
-      const runId = await saveSimulationRun(modelId, userId, result, { ...config, runRecord: singleRunRecord });
+      setSaveStatus({ state: 'saving', message: `Saving results… (prepared in ${formatDurationMs(prepareDurationMs)})` });
+      const runId = await doCloudSave(
+        () => saveSimulationRun(modelId, userId, result, { ...config, runRecord: singleRunRecord }),
+        { setSaveStatus, setLog, prepareDurationMs, snapClock: result.snap.clock },
+      );
       if (runId) {
         setLatestRunId(runId);
         storeRunNarrative(runId, model, result);
+        void refreshRunHistory();
+        onRunSaved?.();
       }
-      void refreshRunHistory();
-      const saveDurationMs = nowPerf() - saveStartedAt;
-      setSaveStatus({ state: 'success', message: `✓ History saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
-      setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Cloud history record completed." }]);
-      onRunSaved?.();
     } else {
       saveLocalRun(modelId, result, { ...config, runRecord: singleRunRecord, resultDetailLevel: "full" });
       void refreshRunHistory();
@@ -957,6 +1095,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: terminationMode === 'time' ? maxSimTime : null,
         terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
         collectTimeSeries: false,
+        schedulesMap: activeSchedulesMap,
         onReplicationComplete: payload => {
           completedPayloads[payload.replicationIndex] = payload;
         },
@@ -1127,6 +1266,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: terminationMode === "time" ? maxSimTime : null,
         terminationCondition: terminationMode === "condition" ? terminationCondition : null,
         collectTimeSeries: runAdmission.effectiveSettings.collectTimeSeries,
+        schedulesMap: activeSchedulesMap,
         onProgress(progress) {
           setSweepProgress(progress);
         },
@@ -1161,6 +1301,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         maxSimTime: terminationMode === "time" ? maxSimTime : null,
         terminationCondition: terminationMode === "condition" ? terminationCondition : null,
         collectTimeSeries: runAdmission.effectiveSettings.collectTimeSeries,
+        schedulesMap: activeSchedulesMap,
         onProgress(progress) {
           setSweepProgress(progress);
         },
@@ -2005,6 +2146,25 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           </div>
         )}
       </div>
+      )}
+
+      {/* ADR-016: Schedule selector — shown when model has more than one schedule */}
+      {modelSchedules.length > 1 && (
+        <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>Timetable:</span>
+          <select
+            value={selectedScheduleId ?? ""}
+            onChange={e => setSelectedScheduleId(e.target.value || null)}
+            style={{ padding: "4px 8px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 12, background: C.surface, color: C.text, cursor: "pointer" }}
+          >
+            {modelSchedules.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.isDefault ? "★ " : ""}{s.name} ({scheduleRowCount(s).toLocaleString()} rows)
+              </option>
+            ))}
+          </select>
+          {schedulesLoading && <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Loading…</span>}
+        </div>
       )}
 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>

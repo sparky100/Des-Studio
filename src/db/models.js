@@ -487,14 +487,23 @@ export async function unarchiveRun(runId, userId) {
 export async function getRun(runId) {
   const { data, error } = await supabase
     .from('simulation_runs')
-    .select('id, results_json, max_simulation_time, warmup_period, replications, seed, ran_at')
+    .select('id, results_json, max_simulation_time, warmup_period, replications, seed, ran_at, version_id, model_versions(id, version, name, model_json)')
     .eq('id', runId)
     .single();
   if (error) throw error;
   const rj = data.results_json || {};
+  // Prefer embedded snapshot (set only for "full" detail-level saves).
+  // Fall back to the model_json from the linked model version when the run
+  // recorded a version_id — this gives reproduce/diff full fidelity without
+  // requiring the full model to be embedded in every results row.
+  const mv = data.model_versions ?? null;
   return {
     id:             data.id,
     model_snapshot: rj._model_snapshot  ?? null,
+    version_model:  mv?.model_json      ?? null,
+    version_id:     data.version_id     ?? null,
+    version_number: mv?.version         ?? null,
+    version_name:   mv?.name            ?? null,
     base_seed:      rj._base_seed       ?? data.seed ?? null,
     engine_version: rj._engine_version  ?? null,
     experiment_config: rj._experiment_config ?? {
@@ -1149,6 +1158,221 @@ export async function updateUserPlan(userId, plan) {
     .eq("id", userId);
   if (error) throw error;
   return { ok: true };
+}
+
+// ── Model Schedules (ADR-016) ─────────────────────────────────────────────────
+//
+// model_schedules rows hold the timetable data extracted from bEvent.schedules[].rows[].
+// The engine resolves scheduleRef UUIDs at run initialisation via resolveInlineSchedules().
+
+/**
+ * Normalise a model_schedules row from Supabase into a plain JS object.
+ */
+function normSchedule(row) {
+  return {
+    id:           row.id,
+    modelId:      row.model_id,
+    name:         row.name,
+    description:  row.description ?? null,
+    scheduleJson: row.schedule_json ?? [],
+    isDefault:    row.is_default   ?? false,
+    createdAt:    row.created_at,
+    updatedAt:    row.updated_at,
+    createdBy:    row.created_by   ?? null,
+  };
+}
+
+/**
+ * Fetch all schedules for a given model, ordered by is_default DESC, name ASC.
+ * Returns an empty array when the model has no schedules.
+ */
+export async function fetchModelSchedules(modelId) {
+  const { data, error } = await supabase
+    .from('model_schedules')
+    .select('id, model_id, name, description, schedule_json, is_default, created_at, updated_at, created_by')
+    .eq('model_id', modelId)
+    .order('is_default', { ascending: false })
+    .order('name',       { ascending: true  });
+  if (error) throw error;
+  return (data || []).map(normSchedule);
+}
+
+/**
+ * Fetch a single model_schedule by its UUID.
+ */
+export async function fetchModelSchedule(scheduleId) {
+  const { data, error } = await supabase
+    .from('model_schedules')
+    .select('id, model_id, name, description, schedule_json, is_default, created_at, updated_at, created_by')
+    .eq('id', scheduleId)
+    .single();
+  if (error) throw error;
+  return normSchedule(data);
+}
+
+/**
+ * Build a schedulesMap keyed by schedule id from an array of schedule rows.
+ * Flattens schedule_json entries so the engine can look up rows by scheduleRef UUID.
+ *
+ * Returns: { "<scheduleId>": { eventId, rows } }
+ *
+ * Note: one schedule row may cover multiple bEvents (schedule_json is an array).
+ * Each entry is registered under the SAME schedule id — the engine uses bEvent.schedules[].scheduleRef
+ * which points to the schedule row id, not per-bEvent entry.
+ */
+export function buildSchedulesMap(scheduleRows) {
+  const map = {};
+  for (const sched of scheduleRows) {
+    const entries = Array.isArray(sched.scheduleJson) ? sched.scheduleJson : [];
+    // The schedulesMap key is the schedule row id. The value carries the first matching
+    // entry's rows[] (legacy single-event-per-schedule assumption) OR all entries merged.
+    // The engine selects the entry whose eventId matches the bEvent id.
+    // For simplicity we store each per-event entry keyed by scheduleId:
+    // resolveInlineSchedules() looks up schedulesMap[scheduleRef] → rows[].
+    // We therefore create one map entry per event entry in the schedule.
+    for (const entry of entries) {
+      if (!map[sched.id]) {
+        map[sched.id] = { eventId: entry.eventId, rows: entry.rows ?? [] };
+      }
+    }
+    // Also expose the schedule id directly so single-event schedules work simply.
+    if (!map[sched.id]) {
+      map[sched.id] = { eventId: null, rows: [] };
+    }
+  }
+  return map;
+}
+
+/**
+ * Save (insert or update) a model_schedule row.
+ *
+ * @param {object} schedule  Object with: id? (omit for insert), modelId, name, description?, scheduleJson, isDefault?
+ * @param {string} userId    Authenticated user id (set as created_by on insert)
+ * @returns {object} Normalised schedule row
+ */
+export async function saveModelSchedule(schedule, userId) {
+  const payload = {
+    model_id:      schedule.modelId,
+    name:          schedule.name,
+    description:   schedule.description ?? null,
+    schedule_json: schedule.scheduleJson ?? [],
+    is_default:    schedule.isDefault    ?? false,
+    created_by:    userId,
+  };
+
+  let result;
+  if (schedule.id) {
+    result = await supabase
+      .from('model_schedules')
+      .update({ ...payload, updated_at: new Date().toISOString() })
+      .eq('id', schedule.id)
+      .select()
+      .single();
+  } else {
+    result = await supabase
+      .from('model_schedules')
+      .insert(payload)
+      .select()
+      .single();
+  }
+  if (result.error) throw result.error;
+  return normSchedule(result.data);
+}
+
+/**
+ * Delete a model_schedule row by id.
+ * Returns { ok: true } on success or { ok: false, error: string } on failure.
+ */
+export async function deleteModelSchedule(scheduleId, userId) {
+  // RLS enforces ownership — we still pass userId for belt-and-braces.
+  const { data, error } = await supabase
+    .from('model_schedules')
+    .delete()
+    .eq('id', scheduleId)
+    .select('id');
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return { ok: false, error: 'Schedule not found or you do not have permission to delete it.' };
+  }
+  return { ok: true };
+}
+
+/**
+ * Set a schedule as the default for its model.
+ * Clears the is_default flag on all other schedules for the same model, then
+ * sets it on the target schedule. Uses two separate updates (Supabase does not
+ * support conditional multi-row updates in a single call).
+ */
+export async function setDefaultSchedule(scheduleId, modelId) {
+  // Clear existing default
+  const { error: clearErr } = await supabase
+    .from('model_schedules')
+    .update({ is_default: false })
+    .eq('model_id', modelId)
+    .eq('is_default', true);
+  if (clearErr) throw clearErr;
+
+  // Set new default
+  const { error: setErr } = await supabase
+    .from('model_schedules')
+    .update({ is_default: true })
+    .eq('id', scheduleId);
+  if (setErr) throw setErr;
+}
+
+/**
+ * Extract timetable rows from a model's bEvents and save them as a named schedule.
+ * Used by Phase 2 migration: takes a model with inline rows[] and creates a
+ * model_schedules row for them, then returns updated bEvents with scheduleRef set.
+ *
+ * @param {object} model     Full model object with bEvents
+ * @param {string} userId    Authenticated user id
+ * @param {string} [name]    Schedule name (default: "Default Schedule")
+ * @returns {{ savedSchedule, updatedBEvents }} The saved schedule and bEvents with scheduleRef
+ */
+export async function extractInlineSchedule(model, userId, name = 'Default Schedule') {
+  if (!model.id) throw new Error('extractInlineSchedule: model must have an id');
+
+  // Collect all bEvent schedule entries that have rows[]
+  const scheduleJson = [];
+  const updatedBEvents = (model.bEvents || []).map(be => {
+    const updatedSchedules = (be.schedules || []).map(s => {
+      if (!Array.isArray(s.rows) || s.rows.length === 0) return s;
+      // This entry has inline rows — add to scheduleJson
+      scheduleJson.push({ eventId: s.eventId ?? be.id, rows: s.rows });
+      // Return without rows[] — scheduleRef will be set after save
+      return { ...s, rows: [] };
+    });
+    return { ...be, schedules: updatedSchedules };
+  });
+
+  if (scheduleJson.length === 0) {
+    // No inline rows found — nothing to extract
+    return { savedSchedule: null, updatedBEvents: model.bEvents };
+  }
+
+  // Save the schedule
+  const savedSchedule = await saveModelSchedule({
+    modelId:      model.id,
+    name,
+    scheduleJson,
+    isDefault:    true,
+  }, userId);
+
+  // Patch bEvents with scheduleRef pointing to the saved schedule
+  const patchedBEvents = updatedBEvents.map(be => ({
+    ...be,
+    schedules: (be.schedules || []).map(s => {
+      // Match back: if this entry's eventId was extracted, add scheduleRef
+      const wasExtracted = scheduleJson.some(e => e.eventId === (s.eventId ?? be.id));
+      if (wasExtracted && !s.scheduleRef) {
+        return { ...s, scheduleRef: savedSchedule.id };
+      }
+      return s;
+    }),
+  }));
+
+  return { savedSchedule, updatedBEvents: patchedBEvents };
 }
 
 // ── Dev-only schema probe ─────────────────────────────────────────────────────

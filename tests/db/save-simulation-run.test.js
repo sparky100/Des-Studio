@@ -118,6 +118,74 @@ describe("saveSimulationRun payload metadata", () => {
     expect(insertPayload.results_json._model_snapshot).toBeUndefined();
   });
 
+  it("ADR-016: embeds model_snapshot in minimal/compact saves when includeModelSnapshot=true", async () => {
+    // ADR-016: after extracting timetable rows to model_schedules, the model_json
+    // for Glasgow Central shrinks from ~290 KB to ~14 KB.  The "full"-only guard
+    // introduced in the glasgow-supabase-save-perf branch is no longer needed —
+    // we now embed the snapshot for all detail levels when includeModelSnapshot is set.
+    const smallSnapshot = { id: "model-1", name: "Glasgow Central" };
+
+    for (const detailLevel of ["minimal", "compact"]) {
+      vi.clearAllMocks();
+      supabase.from("simulation_runs").insert.mockReturnThis();
+      supabase.from("simulation_runs").select.mockReturnThis();
+      supabase.from("simulation_runs").single.mockResolvedValue({ data: { id: "run-x" }, error: null });
+
+      await saveSimulationRun("model-1", "user-1", {
+        summary: { served: 1 },
+        log: [{ phase: "END", time: 10, message: "done" }],
+      }, {
+        resultDetailLevel: detailLevel,
+        includeModelSnapshot: true,  // ADR-016: always embed now that model is small
+        runRecord: {
+          model_snapshot: smallSnapshot,
+          engine_version: "test",
+          prng_algorithm: "mulberry32",
+          base_seed: 1,
+          experiment_config: { maxSimTime: 500, warmupPeriod: 0, replications: 1, seed: 1, terminationMode: "time", terminationCondition: null },
+        },
+      });
+
+      const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
+      expect(insertPayload.results_json._model_snapshot, `detailLevel=${detailLevel} should embed snapshot`).toEqual(smallSnapshot);
+      expect(insertPayload.results_json._result_detail_level).toBe(detailLevel);
+    }
+  });
+
+  it("does not embed model_snapshot when includeModelSnapshot is not set (or false)", async () => {
+    // When includeModelSnapshot is omitted, the snapshot is not embedded even
+    // if a runRecord.model_snapshot is present.
+    const snapshot = { id: "model-1", name: "Test Model" };
+
+    for (const includeFlag of [false, undefined]) {
+      vi.clearAllMocks();
+      supabase.from("simulation_runs").insert.mockReturnThis();
+      supabase.from("simulation_runs").select.mockReturnThis();
+      supabase.from("simulation_runs").single.mockResolvedValue({ data: { id: "run-x" }, error: null });
+
+      await saveSimulationRun("model-1", "user-1", {
+        summary: { served: 1 },
+        log: [{ phase: "END", time: 10, message: "done" }],
+      }, {
+        resultDetailLevel: "minimal",
+        includeModelSnapshot: includeFlag,
+        runRecord: {
+          model_snapshot: snapshot,
+          engine_version: "test",
+          prng_algorithm: "mulberry32",
+          base_seed: 1,
+          experiment_config: { maxSimTime: 500 },
+        },
+      });
+
+      const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
+      expect(
+        insertPayload.results_json._model_snapshot,
+        `includeModelSnapshot=${includeFlag} should not embed snapshot`
+      ).toBeUndefined();
+    }
+  });
+
   it("stores a full model snapshot for archival or reproducibility saves when requested", async () => {
     await saveSimulationRun("model-1", "user-1", {
       summary: { served: 1 },
@@ -127,6 +195,7 @@ describe("saveSimulationRun payload metadata", () => {
       waitDist: { Main: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4, values: [2, 4] } },
     }, {
       resultDetailLevel: "full",
+      includeModelSnapshot: true,  // ADR-016: explicit flag required
       runRecord: {
         model_snapshot: { id: "model-1", name: "Snapshot Model" },
         engine_version: "test-engine",

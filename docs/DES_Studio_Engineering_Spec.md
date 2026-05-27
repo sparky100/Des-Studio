@@ -1,8 +1,8 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.12.0
-**Date:** 2026-05-23
-**Sprint baseline:** Sprint 70
+**Version:** 1.14.0
+**Date:** 2026-05-27
+**Sprint baseline:** Sprint 73
 **Status:** Living document — updated at end of each sprint
 
 ---
@@ -25,6 +25,7 @@
 | v1.11.0 | 2026-05-22 | Sprint 8 | AI Model Builder specification — three-phase conversation discipline (Discover/Confirm/Generate), `confirm` intent, `suggestions[]` array, validation retry loop, chip UI behaviour. Added §6.10. (Retroactively documented.) |
 | v1.12.0 | 2026-05-23 | Sprint 70 | Documentation accuracy fixes: corrected v1.11.0 sprint label from "Sprint 8C" to "Sprint 8"; documented previously-undocumented prompt builders (buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildCiResults) in new §6.11 |
 | v1.13.0 | 2026-05-24 | Sprint 71 | In-app Feedback widget and About panel — `public.feedback` Supabase table with RLS; `submitFeedback()` exported from `src/db/supabase.js`; no-op stub in `src/db/local.js`; `FeedbackModal` and `AboutModal` React components in `src/ui/`; `AppNavBar` extended with Feedback and Info icon buttons; `VITE_APP_VERSION` injected via `vite.config.js` define; 26 new UI tests in `src/ui/__tests__/` |
+| v1.14.0 | 2026-05-27 | Sprint 73 | ADR-016: Schedule data separation — `model_schedules` Supabase table stores timetable rows externally from `model_json`; `resolveInlineSchedules(model, schedulesMap)` pure engine function merges external schedule data before FEL initialisation; `buildEngine` accepts `options.schedulesMap`; `src/db/models.js` gains `fetchModelSchedules`, `fetchModelSchedule`, `saveModelSchedule`, `deleteModelSchedule`, `setDefaultSchedule`, `buildSchedulesMap`, `extractInlineSchedule`; `ScheduleManager` UI component with list/detail/CSV-export views; Execute panel schedule selector dropdown; `ModelDetail` export re-inlines rows; `includeModelSnapshot` flag made explicit in `results-persistence.js`; `doCloudSave` wrapper with 5s/15s/30s timeout thresholds. 45 new Vitest tests. |
 
 ---
 
@@ -72,9 +73,25 @@ Supabase provides PostgreSQL-backed persistence via `src/db/supabase.js`. The da
 - Model records (`models` table: id, name, description, model JSON, owner, created_at, updated_at, is_public, tags)
 - Run history (`run_results` table: model_id, run_label, summary, experiment config, tags, archived flag)
 - Saved experiment configurations (`experiments` table)
+- Model schedules (`model_schedules` table: id, model_id, name, description, schedule_json, is_default, created_at, updated_at, created_by — ADR-016; stores timetable rows separately from `model_json`; one default schedule per model enforced by partial unique index; RLS mirrors model ownership)
 - User feedback (`feedback` table: id, created_at, user_id, category, message, app_version, page_context, user_agent, status — see §2.7)
 
 An anonymous mode (no Supabase connection) uses `src/db/local.js` which persists to browser localStorage with the same interface contract.
+
+### 2.3a Schedule Data Separation (ADR-016, Sprint 73)
+
+Large timetable models (e.g. Glasgow Central: 1,100 train-movement rows) previously embedded all schedule rows inline in `model_json.bEvents[*].schedules[*].rows[]`, inflating model JSON to ~290 KB. ADR-016 extracts this to a dedicated table.
+
+**`model_schedules` table schema:** `id`, `model_id` (FK → `des_models`, CASCADE DELETE), `name`, `description`, `schedule_json` (JSONB array of `{ eventId, rows[] }` entries), `is_default` (boolean, partial unique index per model), `created_at`, `updated_at`, `created_by`.
+
+**Engine contract:**
+- `resolveInlineSchedules(model, schedulesMap)` — pure function exported from `src/engine/index.js`. Merges external schedule rows into `bEvent.schedules[]` before FEL initialisation. `schedulesMap` is keyed by schedule UUID (`scheduleRef`). Empty map returns model unchanged (backward-compatible).
+- `buildEngine(model, seed, ...)` accepts `options.schedulesMap`. Always calls `resolveInlineSchedules` before `modelWithShiftInitialCapacity`.
+- `bEvent.schedules[*].rows` may be `[]` when `scheduleRef` is set; the engine treats this as a valid state (0 arrivals if ref cannot be resolved, with log warning).
+
+**DB layer functions** (`src/db/models.js`): `fetchModelSchedules(modelId)`, `fetchModelSchedule(scheduleId)`, `saveModelSchedule(schedule, userId)`, `deleteModelSchedule(scheduleId, userId)`, `setDefaultSchedule(scheduleId, modelId)`, `buildSchedulesMap(rows)`, `extractInlineSchedule(model, userId, name)`.
+
+**Export contract:** `ModelDetail.exportJson()` calls `inlineSchedulesForExport(model, schedules)` to reconstruct `rows[]` inline before download, ensuring exported JSON is self-contained and portable.
 
 ### 2.4 LLM Integration
 

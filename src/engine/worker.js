@@ -17,6 +17,7 @@ export function runReplicationPayload(payload = {}) {
     maxCycles = 5000,
     maxCPasses = 500,
     collectTimeSeries,
+    schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
   } = payload;
 
   const engine = buildEngine(
@@ -27,7 +28,9 @@ export function runReplicationPayload(payload = {}) {
     terminationCondition,
     maxCycles,
     maxCPasses,
-    collectTimeSeries
+    collectTimeSeries,
+    undefined,
+    { schedulesMap }
   );
 
   return {

@@ -78,6 +78,7 @@ export function runReplications(options = {}) {
     maxCycles = 5000,
     maxCPasses = 500,
     collectTimeSeries,
+    schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
     workerCount,
     onProgress,
     onReplicationComplete,
@@ -199,6 +200,7 @@ export function runReplications(options = {}) {
             maxCycles,
             maxCPasses,
             collectTimeSeries,
+            schedulesMap,    // ADR-016: resolved schedule data
           },
         });
       } catch (error) {

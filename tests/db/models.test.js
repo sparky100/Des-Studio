@@ -1117,6 +1117,106 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       expect(run.results_json).toEqual({});
       expect(run.summary).toBeNull();
     });
+
+    it('exposes version_model from joined model_versions when no embedded snapshot', async () => {
+      // Simulate a run saved without _model_snapshot (default minimal detail level)
+      // but with a version_id that joins to a model_versions row.
+      const versionModelJson = { id: 'm1', name: 'Glasgow Central', entityTypes: [], bEvents: [], cEvents: [], queues: [] };
+      supabase.from.mockReturnValue({
+        select: () => ({
+          eq: () => ({
+            single: () => Promise.resolve({
+              data: {
+                id: 'run-v1',
+                results_json: { summary: { served: 5 }, _base_seed: 77 },
+                max_simulation_time: 1440,
+                warmup_period: 0,
+                replications: 1,
+                seed: 77,
+                ran_at: '2026-05-27T09:00:00Z',
+                version_id: 'ver-uuid-001',
+                model_versions: { id: 'ver-uuid-001', version: 3, name: 'Weekday timetable', model_json: versionModelJson },
+              },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const run = await getRun('run-v1');
+
+      expect(run.model_snapshot).toBeNull();
+      expect(run.version_model).toEqual(versionModelJson);
+      expect(run.version_id).toBe('ver-uuid-001');
+      expect(run.version_number).toBe(3);
+      expect(run.version_name).toBe('Weekday timetable');
+    });
+
+    it('returns null version_model and null version_id when no version is linked', async () => {
+      supabase.from.mockReturnValue({
+        select: () => ({
+          eq: () => ({
+            single: () => Promise.resolve({
+              data: {
+                id: 'run-nover',
+                results_json: { summary: { served: 2 } },
+                max_simulation_time: 500,
+                warmup_period: 0,
+                replications: 1,
+                seed: 1,
+                ran_at: '2026-05-27T10:00:00Z',
+                version_id: null,
+                model_versions: null,
+              },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const run = await getRun('run-nover');
+
+      expect(run.model_snapshot).toBeNull();
+      expect(run.version_model).toBeNull();
+      expect(run.version_id).toBeNull();
+      expect(run.version_number).toBeNull();
+      expect(run.version_name).toBeNull();
+    });
+
+    it('prefers embedded snapshot over version_model when both are present', async () => {
+      // Full-detail saves embed _model_snapshot; version_model is also present.
+      // snapshot takes precedence — it is the exact model at run time.
+      const embeddedSnapshot = { id: 'm1', name: 'Snapshot copy', entityTypes: [{ id: 'et1' }] };
+      const versionModel     = { id: 'm1', name: 'Version copy',  entityTypes: [{ id: 'et1' }, { id: 'et2' }] };
+      supabase.from.mockReturnValue({
+        select: () => ({
+          eq: () => ({
+            single: () => Promise.resolve({
+              data: {
+                id: 'run-both',
+                results_json: { summary: { served: 1 }, _model_snapshot: embeddedSnapshot, _base_seed: 5 },
+                max_simulation_time: 500,
+                warmup_period: 0,
+                replications: 1,
+                seed: 5,
+                ran_at: '2026-05-27T11:00:00Z',
+                version_id: 'ver-uuid-002',
+                model_versions: { id: 'ver-uuid-002', version: 1, name: null, model_json: versionModel },
+              },
+              error: null,
+            }),
+          }),
+        }),
+      });
+
+      const run = await getRun('run-both');
+
+      expect(run.model_snapshot).toEqual(embeddedSnapshot);
+      expect(run.version_model).toEqual(versionModel);
+      // The caller (ModelHistoryTab) resolves: model_snapshot ?? version_model
+      // so snapshot wins — confirmed here by both being non-null
+      expect(run.model_snapshot).not.toEqual(run.version_model);
+    });
   });
 });
 

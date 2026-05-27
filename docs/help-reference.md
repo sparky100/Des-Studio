@@ -499,4 +499,42 @@ Create named version snapshots of your model from the **Versions** tab (visible 
 
 ---
 
-<!-- help-reference version: 1.2 | sprint baseline: Sprint 70 | updated: 2026-05-23 | word count: ~3700 -->
+## Schedule Manager (Timetables)
+
+Timetable data for arrival B-events is stored separately from the core model in the **Schedules** tab of the model editor. This keeps the model lightweight and lets you maintain multiple named timetables for the same model.
+
+### Accessing schedules
+
+Open your model and click the **Schedules** tab (between C-Events and State Variables).
+
+### Schedule list
+
+Shows all schedules for the model: name, total row count, which B-events use each schedule. A ★ marks the default schedule.
+
+### Selecting a schedule for a run
+
+When a model has more than one schedule, a **Timetable:** dropdown appears in the Execute panel above the Run button. Select the timetable you want before clicking Run.
+
+### Creating a schedule
+
+Click **+ New Schedule**, enter a name, and save. Populate rows by importing via CSV or entering JSON directly.
+
+### Setting a default
+
+Click **Set as default** (★) next to the schedule to use when no explicit selection is made.
+
+### CSV export
+
+Open a schedule and click **Export CSV** to download all rows for editing externally.
+
+### Export and portability
+
+When you export a model as JSON (toolbar → Export Model), schedule rows are automatically embedded in the exported file. The export is self-contained and can be imported to another DES Studio instance.
+
+### B-event schedule link
+
+Each arrival B-event stores a `scheduleRef` UUID pointing to a schedule record. If the referenced schedule is deleted or unavailable, the B-event produces zero arrivals (a validation warning is shown).
+
+---
+
+<!-- help-reference version: 1.3 | sprint baseline: Sprint 73 | updated: 2026-05-27 | word count: ~3900 -->
