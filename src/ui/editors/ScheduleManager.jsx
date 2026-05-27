@@ -63,8 +63,8 @@ function ScheduleRow({ sched, bEvents, isSelected, onSelect, onSetDefault, onDel
         alignItems: "center",
         gap: 8,
         padding: "10px 12px",
-        background: isSelected ? `${C.blue}18` : "transparent",
-        borderLeft: isSelected ? `3px solid ${C.blue}` : "3px solid transparent",
+        background: isSelected ? `${C.accent}18` : "transparent",
+        borderLeft: isSelected ? `3px solid ${C.accent}` : "3px solid transparent",
         cursor: "pointer",
         borderBottom: `1px solid ${C.border}`,
         transition: "background 0.1s",
@@ -81,23 +81,23 @@ function ScheduleRow({ sched, bEvents, isSelected, onSelect, onSetDefault, onDel
 
       {/* Name + description */}
       <div>
-        <div style={{ fontWeight: 600, fontSize: FONT.sm, color: C.text }}>{sched.name}</div>
+        <div style={{ fontWeight: 600, fontSize: 13, color: C.text }}>{sched.name}</div>
         {sched.description && (
-          <div style={{ fontSize: FONT.xs, color: C.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {sched.description}
           </div>
         )}
       </div>
 
       {/* Row count */}
-      <div style={{ fontSize: FONT.sm, color: C.muted, textAlign: "right" }}>
+      <div style={{ fontSize: 13, color: C.muted, textAlign: "right" }}>
         {rowCount.toLocaleString()} rows
       </div>
 
       {/* Used by */}
-      <div style={{ fontSize: FONT.xs, color: C.muted }}>
+      <div style={{ fontSize: 11, color: C.muted }}>
         {usedByEvents.length === 0
-          ? <span style={{ color: C.warn }}>Not linked</span>
+          ? <span style={{ color: C.amber }}>Not linked</span>
           : `${usedByEvents.length} arrival event${usedByEvents.length === 1 ? "" : "s"}`
         }
       </div>
@@ -182,7 +182,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Btn size="sm" variant="ghost" onClick={onBack}>← Schedules</Btn>
         {sched.isDefault && (
-          <span style={{ fontSize: FONT.xs, color: C.amber, fontWeight: 600 }}>★ Default</span>
+          <span style={{ fontSize: 11, color: C.amber, fontWeight: 600 }}>★ Default</span>
         )}
       </div>
 
@@ -190,20 +190,20 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
       {canEdit ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div>
-            <div style={{ fontSize: FONT.xs, color: C.muted, marginBottom: 4 }}>Name</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Name</div>
             <input
               value={name}
               onChange={e => setName(e.target.value)}
-              style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: FONT.sm, background: C.surface, color: C.text }}
+              style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, background: C.surface, color: C.text }}
             />
           </div>
           <div>
-            <div style={{ fontSize: FONT.xs, color: C.muted, marginBottom: 4 }}>Description</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Description</div>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
               rows={2}
-              style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: FONT.sm, background: C.surface, color: C.text, resize: "vertical" }}
+              style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, background: C.surface, color: C.text, resize: "vertical" }}
             />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
@@ -216,12 +216,12 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
       ) : (
         <div>
           <SH style={{ marginBottom: 4 }}>{sched.name}</SH>
-          {description && <div style={{ fontSize: FONT.sm, color: C.muted }}>{description}</div>}
+          {description && <div style={{ fontSize: 13, color: C.muted }}>{description}</div>}
         </div>
       )}
 
       {/* Stats bar */}
-      <div style={{ display: "flex", gap: 16, padding: "8px 12px", background: C.panelBg || C.surface, borderRadius: 6, fontSize: FONT.sm, color: C.muted, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 16, padding: "8px 12px", background: C.panel, borderRadius: 6, fontSize: 13, color: C.muted, flexWrap: "wrap" }}>
         <span>{totalRows.toLocaleString()} rows</span>
         <span>{(sched.scheduleJson || []).length} event{(sched.scheduleJson || []).length !== 1 ? "s" : ""}</span>
         {totalRows > 0 && (
@@ -242,9 +242,9 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
         <Empty>No schedule rows — this schedule is empty.</Empty>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: FONT.sm }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
-              <tr style={{ background: C.panelBg || C.surface }}>
+              <tr style={{ background: C.panel }}>
                 <th style={thStyle}>Event</th>
                 <th style={thStyle}>Time</th>
                 {attrHeaders.map(h => (
@@ -267,7 +267,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
             </tbody>
           </table>
           {totalPages > 1 && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", fontSize: FONT.sm, color: C.muted }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", fontSize: 13, color: C.muted }}>
               <span>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalRows)} of {totalRows.toLocaleString()}</span>
               <div style={{ display: "flex", gap: 4 }}>
                 <Btn size="xs" variant="ghost" disabled={page === 0} onClick={() => setPage(p => p - 1)}>‹ Prev</Btn>
@@ -328,23 +328,23 @@ function NewScheduleForm({ modelId, userId, onCreated, onCancel }) {
     <div style={{ padding: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, display: "flex", flexDirection: "column", gap: 10 }}>
       <SH>New Schedule</SH>
       <div>
-        <div style={{ fontSize: FONT.xs, color: C.muted, marginBottom: 4 }}>Name</div>
+        <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Name</div>
         <input
           value={name}
           onChange={e => setName(e.target.value)}
           autoFocus
-          style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: FONT.sm, background: C.bg || "#fff", color: C.text }}
+          style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, background: C.bg || "#fff", color: C.text }}
         />
       </div>
       <div>
-        <div style={{ fontSize: FONT.xs, color: C.muted, marginBottom: 4 }}>Description (optional)</div>
+        <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Description (optional)</div>
         <input
           value={description}
           onChange={e => setDescription(e.target.value)}
-          style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: FONT.sm, background: C.bg || "#fff", color: C.text }}
+          style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, background: C.bg || "#fff", color: C.text }}
         />
       </div>
-      {error && <div style={{ color: C.danger, fontSize: FONT.xs }}>{error}</div>}
+      {error && <div style={{ color: C.danger, fontSize: 11 }}>{error}</div>}
       <div style={{ display: "flex", gap: 8 }}>
         <Btn size="sm" onClick={handleCreate} disabled={saving || !name.trim()}>
           {saving ? "Creating…" : "Create"}
@@ -417,10 +417,10 @@ function InlineRowsBanner({ modelId, userId, bEvents, onExtracted }) {
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
         <span style={{ fontSize: 18, lineHeight: 1 }}>⚠️</span>
         <div>
-          <div style={{ fontSize: FONT.sm, fontWeight: 600, color: C.text, marginBottom: 4 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4 }}>
             Timetable rows stored inline
           </div>
-          <div style={{ fontSize: FONT.sm, color: C.muted, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
             {rowCount.toLocaleString()} arrival rows across{" "}
             {affectedEvents.length} event{affectedEvents.length !== 1 ? "s" : ""} (
             {affectedEvents.map(e => e.name || e.id).join(", ")}) are stored
@@ -443,7 +443,7 @@ function InlineRowsBanner({ modelId, userId, bEvents, onExtracted }) {
               padding: "5px 9px",
               border: `1px solid ${C.border}`,
               borderRadius: 4,
-              fontSize: FONT.sm,
+              fontSize: 13,
               background: C.surface,
               color: C.text,
             }}
@@ -462,14 +462,14 @@ function InlineRowsBanner({ modelId, userId, bEvents, onExtracted }) {
           <Btn size="sm" onClick={() => setShowNameInput(true)} disabled={migrating}>
             Move to a named schedule
           </Btn>
-          <span style={{ fontSize: FONT.xs, color: C.muted, alignSelf: "center" }}>
+          <span style={{ fontSize: 11, color: C.muted, alignSelf: "center" }}>
             The model will be saved automatically after moving.
           </span>
         </div>
       )}
 
       {error && (
-        <div style={{ fontSize: FONT.xs, color: C.danger }}>{error}</div>
+        <div style={{ fontSize: 11, color: C.danger }}>{error}</div>
       )}
     </div>
   );
@@ -544,7 +544,7 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch,
   };
 
   if (loading) {
-    return <div style={{ padding: 24, color: C.muted, fontSize: FONT.sm }}>Loading schedules…</div>;
+    return <div style={{ padding: 24, color: C.muted, fontSize: 13 }}>Loading schedules…</div>;
   }
 
   if (error) {
@@ -618,9 +618,9 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch,
           gridTemplateColumns: "1.5rem 1fr 80px 1fr auto",
           gap: 8,
           padding: "6px 12px",
-          background: C.panelBg || C.surface,
+          background: C.panel,
           borderBottom: `1px solid ${C.border}`,
-          fontSize: FONT.xs,
+          fontSize: 11,
           color: C.muted,
           fontWeight: 600,
           textTransform: "uppercase",
@@ -657,7 +657,7 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch,
 
       {/* Footer info */}
       {schedules.length > 0 && (
-        <div style={{ padding: "8px 16px", fontSize: FONT.xs, color: C.muted, borderTop: `1px solid ${C.border}` }}>
+        <div style={{ padding: "8px 16px", fontSize: 11, color: C.muted, borderTop: `1px solid ${C.border}` }}>
           ★ = default schedule (used when none is selected at run time). Click a row to view details.
         </div>
       )}

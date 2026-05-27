@@ -1094,7 +1094,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         )}
         {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'}/></div>)}
         {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
-        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} onBEventsExtracted={async (updatedBEvents) => {
+        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} onBEventsExtracted={async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
           setModel(next);
           try { await overrides.onSave?.(next); setDirty(false); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
