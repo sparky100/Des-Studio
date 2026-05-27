@@ -1098,7 +1098,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           const next = { ...model, bEvents: updatedBEvents };
           setModel(next);
           try { await overrides.onSave?.(next); setDirty(false); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
-        }}/></div>)}
+        }} onUpdateBEvents={canEdit ? async (updatedBEvents) => {
+          const next = { ...model, bEvents: updatedBEvents };
+          setModel(next);
+          try { await overrides.onSave?.(next); setDirty(false); toast.success("Event link updated and model saved"); } catch { toast.error("Link updated but model save failed — please save manually"); }
+        } : undefined}/></div>)}
         {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues" validation={validation}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
           const oldQueues = model.queues || [];
           let updated = { ...model, queues: newQueues };
