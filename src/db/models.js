@@ -487,14 +487,23 @@ export async function unarchiveRun(runId, userId) {
 export async function getRun(runId) {
   const { data, error } = await supabase
     .from('simulation_runs')
-    .select('id, results_json, max_simulation_time, warmup_period, replications, seed, ran_at')
+    .select('id, results_json, max_simulation_time, warmup_period, replications, seed, ran_at, version_id, model_versions(id, version, name, model_json)')
     .eq('id', runId)
     .single();
   if (error) throw error;
   const rj = data.results_json || {};
+  // Prefer embedded snapshot (set only for "full" detail-level saves).
+  // Fall back to the model_json from the linked model version when the run
+  // recorded a version_id — this gives reproduce/diff full fidelity without
+  // requiring the full model to be embedded in every results row.
+  const mv = data.model_versions ?? null;
   return {
     id:             data.id,
     model_snapshot: rj._model_snapshot  ?? null,
+    version_model:  mv?.model_json      ?? null,
+    version_id:     data.version_id     ?? null,
+    version_number: mv?.version         ?? null,
+    version_name:   mv?.name            ?? null,
     base_seed:      rj._base_seed       ?? data.seed ?? null,
     engine_version: rj._engine_version  ?? null,
     experiment_config: rj._experiment_config ?? {

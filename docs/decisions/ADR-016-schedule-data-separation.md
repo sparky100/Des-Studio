@@ -1,7 +1,7 @@
 # ADR-016: Separate Timetable Schedule Data from Core Model JSON
 
 **Date:** 2026-05-27
-**Status:** Proposed
+**Status:** Accepted
 **Sprint:** TBD (see Migration Plan)
 **Decided by:** Architecture review
 
@@ -17,7 +17,7 @@ the breakdown is:
 
 | Section | Size | Share |
 |---|---|---|
-| 5 × arrival bEvent timetables (`schedules[].rows[]`) | 278 KB | 96.5% |
+| 5 × arrival bEvent timetables (`bEvent.schedules[].rows[]`) | 278 KB | 96.5% |
 | Core DES logic (entityTypes, cEvents, queues, graph, completion bEvents) | 14 KB | 3.5% |
 | **Total `model_json`** | **289 KB** | |
 
@@ -48,6 +48,11 @@ This has cascading effects throughout the application:
 5. **Write amplification.** Saving, versioning, or sharing a model with
    only a logic change re-stores the full timetable payload.
 
+6. **No first-class editing.** The timetable rows are buried inside the
+   bEvent editor alongside the DES logic. There is no dedicated view for
+   reading or editing a schedule as a coherent object — a modeller cannot
+   see "what trains run today" without navigating the raw event list.
+
 ### What the data looks like
 
 An arrival bEvent currently stores its timetable inline:
@@ -73,7 +78,7 @@ An arrival bEvent currently stores its timetable inline:
 
 The engine processes `rows[]` in `phases.js` via the `topLevelData`
 merge path (line 272), treating the Schedule distribution as a
-deterministic time-series. This mechanism is sound and is kept.
+deterministic time-series. This mechanism is sound and is kept unchanged.
 
 ### What is NOT timetable data
 
@@ -90,8 +95,9 @@ model logic and are unaffected.
 
 **Extract `rows[]`-based timetable entries from `bEvent.schedules[]` into
 a separate `model_schedules` Supabase table. The bEvent retains a
-`scheduleRef` UUID that the engine resolves at run initialisation. All
-other bEvent fields remain in `model_json`.**
+`scheduleRef` UUID that the engine resolves at run initialisation. Plans
+are first-class objects that users can view, name, and edit independently
+of the DES model logic. All other bEvent fields remain in `model_json`.**
 
 ### Scope boundary
 
@@ -123,8 +129,8 @@ other bEvent fields remain in `model_json`.**
 `scheduleRef` is a UUID pointing to a `model_schedules` row. `rows` is
 set to `[]` in the stored model; the engine populates it from the
 resolved schedule before running. This preserves backward compatibility
-with models that have no `scheduleRef` — the engine falls back to
-inline `rows` as it does today.
+with models that have no `scheduleRef` — the engine falls back to inline
+`rows` as it does today.
 
 ### `model_schedules` table schema
 
@@ -132,11 +138,10 @@ inline `rows` as it does today.
 CREATE TABLE public.model_schedules (
   id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   model_id        uuid        NOT NULL REFERENCES public.des_models(id) ON DELETE CASCADE,
-  name            text        NOT NULL,
-  description     text,
-  schedule_json   jsonb       NOT NULL DEFAULT '[]',
-  -- schedule_json stores: [{ "eventId": "b_wcml_train_arrives", "rows": [...] }]
-  -- one entry per bEvent that uses this schedule; a schedule may serve multiple events
+  name            text        NOT NULL CHECK (char_length(name) <= 200),
+  description     text        CHECK (char_length(description) <= 2000),
+  -- Array of { eventId, rows[] } — one entry per bEvent that uses this schedule.
+  schedule_json   jsonb       NOT NULL DEFAULT '[]'::jsonb,
   is_default      boolean     NOT NULL DEFAULT false,
   created_at      timestamptz NOT NULL DEFAULT now(),
   updated_at      timestamptz NOT NULL DEFAULT now(),
@@ -148,11 +153,95 @@ CREATE TABLE public.model_schedules (
 
 A model may have multiple schedules (weekday, weekend, engineering
 blockade). The `is_default` flag identifies the schedule used when no
-explicit choice is made. The UI selects the active schedule before
-running; the engine receives the resolved schedule map alongside the
-model.
+explicit choice is made. The user selects the active schedule in the
+Execute panel before running; the engine receives the resolved schedule
+map alongside the model.
 
-### Engine interface
+---
+
+## UI Design — Schedule as a First-Class Object
+
+### The core principle
+
+A schedule/plan is a named, standalone entity that a modeller can read and
+edit without touching the DES logic. It is linked *to* a bEvent, not
+embedded *inside* it.
+
+### Schedule Manager panel
+
+A dedicated **Schedules** tab in the model editor shows all schedules for
+the current model:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Schedules                                [+ New Schedule]│
+├────────────────────────┬──────────┬──────────────────────┤
+│  Name                  │  Rows    │  Used by             │
+├────────────────────────┼──────────┼──────────────────────┤
+│  ★ Weekday May 2026    │  1,100   │  5 arrival events    │
+│    Weekend May 2026    │    480   │  5 arrival events    │
+│    Engineering 14 Jun  │    220   │  2 arrival events    │
+└────────────────────────┴──────────┴──────────────────────┘
+```
+
+- **★** marks the default schedule (used when none is selected at run time)
+- "Used by" shows which bEvents hold a `scheduleRef` pointing to this schedule
+- Clicking a schedule opens the Schedule Detail view
+
+### Schedule Detail view
+
+Shows the schedule as a readable table, not raw JSON:
+
+```
+Schedule: Weekday May 2026
+Description: Standard Mon–Fri timetable, Network Rail May 2026 timetable
+
+ Route            │ Time  │ Train ID │ Platform group   │ Operation
+──────────────────┼───────┼──────────┼──────────────────┼───────────
+ WCML Motherwell  │ 05:21 │ HL0001   │ long_distance    │ arrival
+ WCML Motherwell  │ 05:29 │ HL0002   │ long_distance    │ departure
+ Cathcart         │ 05:35 │ CN0001   │ suburban         │ arrival
+ ...              │  ...  │  ...     │  ...             │  ...
+
+                                          Showing 1–50 of 1,100 rows
+[↑ Export CSV]  [↑ Import CSV]  [✎ Edit]  [⧉ Duplicate]  [✕ Delete]
+```
+
+- Times displayed in human-readable HH:MM format (converted from simulation minutes)
+- Sortable and filterable by route, time window, or train ID
+- CSV import/export for bulk editing in a spreadsheet
+
+### bEvent editor — link picker
+
+The arrival bEvent editor replaces the raw `rows[]` editor with a compact
+link picker:
+
+```
+Schedule (plan):  [Weekday May 2026 ▾]  [View]  [Manage schedules →]
+                  1,100 rows · 5 routes · 05:21 – 23:48
+```
+
+- **[View]** opens Schedule Detail in a side panel (read-only inline preview)
+- **[Manage schedules →]** navigates to the Schedules tab
+- The dropdown lists all schedules for this model; selecting one updates `scheduleRef`
+- A bEvent with no `scheduleRef` and empty `rows[]` shows a warning
+
+### Execute panel — schedule selector
+
+A schedule dropdown appears alongside the run controls when the model has
+more than one schedule:
+
+```
+Timetable:  [Weekday May 2026 ▾]
+```
+
+The selected schedule is loaded and passed to the engine as `schedulesMap`.
+The default schedule is pre-selected. Changing the schedule is reflected
+immediately in the run label suggestion.
+
+---
+
+## Engine interface
 
 `buildEngine` gains an optional `schedulesMap` parameter:
 
@@ -160,7 +249,8 @@ model.
 buildEngine(model, seed, warmupPeriod, maxTime, ..., schedulesMap)
 ```
 
-`schedulesMap` is a plain object keyed by `scheduleRef` UUID:
+`schedulesMap` is a plain object keyed by `scheduleRef` UUID. Each value
+is the full schedule entry `{ eventId, rows[] }` from `schedule_json`:
 
 ```js
 {
@@ -173,23 +263,58 @@ Before the main loop starts, the engine merges schedule data into each
 bEvent:
 
 ```js
-function resolveInlineSchedules(model, schedulesMap = {}) {
+export function resolveInlineSchedules(model, schedulesMap = {}) {
+  if (!schedulesMap || Object.keys(schedulesMap).length === 0) return model;
   return {
     ...model,
     bEvents: (model.bEvents || []).map(be => ({
       ...be,
       schedules: (be.schedules || []).map(s => {
-        if (!s.scheduleRef || s.rows?.length) return s;  // already resolved or no ref
+        if (!s.scheduleRef) return s;                        // no ref — leave as-is
+        if (Array.isArray(s.rows) && s.rows.length > 0) return s; // already resolved
         const resolved = schedulesMap[s.scheduleRef];
-        return resolved ? { ...s, rows: resolved.rows ?? [] } : s;
+        if (!resolved) return s;                             // ref not found — 0 arrivals
+        return { ...s, rows: resolved.rows ?? [] };
       }),
     })),
   };
 }
 ```
 
-This function is called once at engine initialisation and is pure
-(no side-effects). The original model object is not mutated.
+This function is pure (no side-effects, no mutations). Backward-compatible:
+`schedulesMap` defaults to `{}` and all existing callers continue to work.
+
+---
+
+## Related decision — reproduce/diff version fallback (Q2)
+
+### Context
+
+`ModelHistoryTab` previously required an embedded `_model_snapshot` in
+`results_json` to enable reproduce-run and model-diff. The glasgow-
+supabase-save-perf fix removed the snapshot from non-full saves, which
+broke both features for default saves.
+
+### Decision
+
+`getRun()` now joins `model_versions` via the `version_id` foreign key
+on `simulation_runs`. The reproduce and diff handlers use:
+
+```js
+const modelForReproduce = run.model_snapshot ?? run.version_model;
+```
+
+Priority order:
+1. `_model_snapshot` from `results_json` (present only in "full" detail saves)
+2. `model_json` from the linked `model_versions` row (present when the
+   run was recorded against a named version milestone)
+3. Neither available → user-facing message: "Tag a version before running
+   to enable reproducibility checking"
+
+This approach means modellers who tag a version before running (the
+recommended workflow per ADR-015) automatically get working reproduce/diff
+with no extra overhead. The snapshot is only needed when a run is made
+without a version tag and exact reproduce fidelity is required.
 
 ---
 
@@ -224,8 +349,9 @@ should use the normalised form. **Rejected.**
 ### E — This decision (selected)
 
 New table, UUID reference, backward-compatible engine fallback. Clean
-separation of concerns, enables multiple schedules, reduces `model_json`
-by ~96% for timetable-heavy models. **Accepted.**
+separation of concerns, enables multiple schedules, first-class UI for
+viewing and editing plans, reduces `model_json` by ~96% for timetable-
+heavy models. **Accepted.**
 
 ---
 
@@ -235,27 +361,43 @@ by ~96% for timetable-heavy models. **Accepted.**
 
 - `model_json` for Glasgow Central: 289 KB → ~14 KB
 - `fetchModels` no longer transfers timetable data when loading the model library
-- Model snapshot (for reproduce/diff) becomes trivially small — snapshot embedding can be re-enabled for all detail levels
+- Model snapshot (for reproduce/diff) becomes trivially small — snapshot embedding
+  can be re-enabled for all detail levels
 - Multiple timetables per model (weekday, weekend, engineering blockade)
 - Timetable and DES logic are versioned independently
 - Supabase INSERT payload for simulation runs returns to a normal size
-- Schedule editor can load/save without touching the core model
+- Schedules are first-class objects with their own editor, name, description,
+  and CSV import/export — modellers do not need to understand bEvent schema
+  to read or change a timetable
+- reproduce/diff now works via version fallback without snapshot overhead
 
 ### Negative
 
-- `buildEngine` callers must supply a `schedulesMap` (or accept that schedule-less runs work — fallback is inline rows)
-- Model export (JSON download) must either inline the schedule back or bundle schedule separately
-- `model_versions` snapshots of `model_json` no longer capture the timetable — a separate schedule version mechanism may be needed
-- Share-link dashboards that load both model and results need to fetch the schedule too
+- `buildEngine` callers must supply a `schedulesMap` (or accept that schedule-
+  less runs work — fallback is inline rows)
+- Model export (JSON download) must inline the schedule back or bundle it separately
+- `model_versions` snapshots of `model_json` no longer capture the timetable —
+  schedule versions are tracked separately
+- Share-link dashboards that load both model and results need to fetch the
+  schedule too
 - Additional Supabase RLS policies required for `model_schedules`
+- reproduce/diff now requires either a full-detail save OR a version tag;
+  untagged minimal-detail saves cannot be reproduced exactly
 
 ### Rules added to AGENTS.md
 
-- `model_json.bEvents[*].schedules[*].rows` MAY be empty `[]` when a `scheduleRef` is present; treat this as valid
-- `buildEngine` MUST call `resolveInlineSchedules(model, schedulesMap)` before processing events when a schedulesMap is provided
-- Do not embed timetable `rows[]` in `model_json` for new models when `model_schedules` is available
-- `model_schedules` rows are owned by the model owner; RLS mirrors `des_models` ownership rules
-- Schedule export must reconstruct inline `rows[]` in the exported JSON so exports are self-contained and portable
+- `model_json.bEvents[*].schedules[*].rows` MAY be empty `[]` when a
+  `scheduleRef` is present; treat this as valid
+- `buildEngine` MUST call `resolveInlineSchedules(model, schedulesMap)` before
+  processing events when a schedulesMap is provided
+- Do not embed timetable `rows[]` in `model_json` for new models when
+  `model_schedules` is available
+- `model_schedules` rows are owned by the model owner; RLS mirrors
+  `des_models` ownership rules
+- Schedule export must reconstruct inline `rows[]` in the exported JSON so
+  exports are self-contained and portable
+- `getRun()` always joins `model_versions`; callers resolve
+  `model_snapshot ?? version_model` to get the model for reproduce/diff
 
 ### Schema contract (per CLAUDE.md)
 
@@ -271,22 +413,19 @@ are not duplicated when a ref is present.
 1. **Schedule versioning.** `model_versions` snapshots of `model_json`
    will no longer include timetable data. Should schedule changes be
    captured as numbered revisions alongside model versions, or is a
-   simple `updated_at` + `created_by` audit trail sufficient?
+   simple `updated_at` + `created_by` audit trail sufficient? For now:
+   `updated_at` trail is sufficient; full versioning deferred.
 
-2. **Schedule sharing.** If a model is made public, should its schedules
-   be readable by anyone (mirroring model visibility) or only by the
-   owner? The simplest rule: schedule visibility follows model visibility.
+2. **Export format.** The JSON export of a model should be self-contained.
+   The exporter inlines `rows[]` back into the bEvent and omits
+   `scheduleRef` so the export is portable to another instance without
+   needing the `model_schedules` table.
 
-3. **Export format.** The JSON export of a model should be self-contained
-   (portable to another instance). Should the exporter inline `rows[]`
-   back into the bEvent, or export a separate `schedules` section at the
-   top level of the export envelope?
+3. **Validation.** When a `scheduleRef` is present but cannot be resolved
+   (schedule deleted, foreign key broken), the engine produces 0 arrivals
+   for that event and emits a log warning. It does not fail to run. A
+   model validator warning (not an error) is added.
 
-4. **Multi-schedule selection UI.** When a model has multiple schedules,
-   where does the user select which one to run? Options: a dropdown on the
-   Execute panel, a separate "Schedule" tab in the model editor, or a
-   run-configuration dialog.
-
-5. **Validation.** Should the model validator warn when a `scheduleRef`
-   is present but the referenced schedule cannot be found, or is this an
-   error that prevents running?
+4. **Multi-user schedules.** If a model is shared (visibility = public),
+   its schedules are readable by anyone (mirroring model visibility). Only
+   the owner may edit or delete schedules.

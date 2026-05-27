@@ -129,15 +129,20 @@ export function ModelHistoryTab({
     setReproduceState(prev => ({ ...prev, [rowId]: { status: 'running', message: '' } }));
     try {
       const run = await getRun(rowId);
-      if (!run.model_snapshot) {
+      // Prefer embedded snapshot (full-detail saves); fall back to linked model version.
+      const modelForReproduce = run.model_snapshot ?? run.version_model;
+      if (!modelForReproduce) {
         setReproduceState(prev => ({ ...prev, [rowId]: {
           status: 'fail',
-          message: '✗ No model snapshot stored for this run. Re-run to enable reproducibility checking.',
+          message: '✗ No model snapshot or saved version linked to this run. Re-run with a version tagged to enable reproducibility checking.',
         } }));
         return;
       }
+      const modelSource = run.model_snapshot
+        ? 'embedded snapshot'
+        : `version ${run.version_number ?? '?'}${run.version_name ? ` "${run.version_name}"` : ''}`;
       const engine = buildEngine(
-        run.model_snapshot,
+        modelForReproduce,
         run.base_seed,
         run.experiment_config.warmupPeriod ?? 0,
         run.experiment_config.maxSimTime   ?? 500,
@@ -151,12 +156,12 @@ export function ModelHistoryTab({
       if (compareResults(newResult, storedResult)) {
         setReproduceState(prev => ({ ...prev, [rowId]: {
           status: 'pass',
-          message: '✓ Reproduce confirmed — results are bit-identical.',
+          message: `✓ Reproduce confirmed — results are bit-identical (using ${modelSource}).`,
         } }));
       } else {
         setReproduceState(prev => ({ ...prev, [rowId]: {
           status: 'fail',
-          message: `✗ Reproduce failed. Stored engine: v${run.engine_version || 'unknown'}, current: v${currentVersion}. Results may differ due to engine changes.`,
+          message: `✗ Reproduce failed (using ${modelSource}). Stored engine: v${run.engine_version || 'unknown'}, current: v${currentVersion}. Results may differ due to engine changes.`,
         } }));
       }
     } catch (e) {
@@ -172,13 +177,18 @@ export function ModelHistoryTab({
     setMoreMenuId(null);
     try {
       const run = await getRun(rowId);
-      if (!run.model_snapshot) {
-        toast.error("No model snapshot stored for this run.");
+      // Prefer embedded snapshot (full-detail saves); fall back to linked model version.
+      const modelForDiff = run.model_snapshot ?? run.version_model;
+      if (!modelForDiff) {
+        toast.error("No model snapshot or saved version linked to this run. Tag a version before running to enable diff.");
         return;
       }
-      setSnapshotDiffRow({ rowId, snapshot: run.model_snapshot });
+      const sourceLabel = run.model_snapshot
+        ? 'snapshot'
+        : `version ${run.version_number ?? '?'}${run.version_name ? ` "${run.version_name}"` : ''}`;
+      setSnapshotDiffRow({ rowId, snapshot: modelForDiff, sourceLabel });
     } catch (e) {
-      toast.error(`Could not load snapshot: ${e.message}`);
+      toast.error(`Could not load model for diff: ${e.message}`);
     } finally {
       setSnapshotDiffLoading(false);
     }
