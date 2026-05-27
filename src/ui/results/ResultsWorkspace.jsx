@@ -227,7 +227,7 @@ function RuntimeMetricsSection({ runtimeMetrics }) {
           RUN EFFORT
         </div>
         <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
-          See how much simulation work this result took, without opening raw JSON.
+          See how much simulation work this result took.
         </div>
       </div>
 

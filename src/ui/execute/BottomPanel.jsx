@@ -56,9 +56,6 @@ function EventCountGroup({ title, color, events, counts }) {
                 <span style={{ color, fontFamily: FONT, fontSize: 11, fontWeight: 700, lineHeight: 1.3 }}>
                   {event.name || event.id}
                 </span>
-                <span style={{ color: C.muted, fontFamily: FONT, fontSize: 9 }}>
-                  {count === 1 ? "1 firing" : `${count} firings`}
-                </span>
               </div>
               <div style={{
                 minWidth: 34,
