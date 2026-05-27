@@ -493,7 +493,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       );
     });
 
-    it('persists saved run results in compact form by default', async () => {
+    it('persists saved run results in minimal form by default', async () => {
       supabase.from('simulation_runs').single.mockResolvedValueOnce({ data: { id: 'run-id-3b' }, error: null });
 
       await saveSimulationRun('m1', 'u1', {
@@ -516,16 +516,15 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
           duration_ms: 42,
           results_json: expect.objectContaining({
             _results_payload_size_bytes: expect.any(Number),
-            _result_detail_level: 'compact',
-            _trimmed_fields: expect.arrayContaining(['log', 'entitySummary']),
+            _result_detail_level: 'minimal',
+            _trimmed_fields: expect.arrayContaining(['log', 'entitySummary', 'timeSeries', 'waitDist.values']),
             runtimeMetrics: expect.objectContaining({
               wall_clock_ms: 42,
               events_processed: 9,
               max_queue_length_by_queue: { Main: 2 },
             }),
-            timeSeries: expect.any(Array),
             waitDist: expect.objectContaining({
-              Main: expect.objectContaining({ n: 2, values: [2, 4] }),
+              Main: expect.objectContaining({ n: 2, mean: 3, p99: 4 }),
             }),
             logSummary: expect.objectContaining({ entries: 1, finalMessage: 'Run finished' }),
             entitySummaryCompact: expect.objectContaining({ totalEntities: 1 }),
@@ -536,6 +535,8 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       const insertedPayload = supabase.from('simulation_runs').insert.mock.calls.at(-1)[0];
       expect(insertedPayload.results_json.log).toBeUndefined();
       expect(insertedPayload.results_json.entitySummary).toBeUndefined();
+      expect(insertedPayload.results_json.timeSeries).toBeUndefined();
+      expect(insertedPayload.results_json.waitDist.Main.values).toBeUndefined();
       const { _results_payload_size_bytes: storedSize, ...resultsJsonWithoutSize } = insertedPayload.results_json;
       expect(storedSize).toBe(JSON.stringify(resultsJsonWithoutSize).length);
     });

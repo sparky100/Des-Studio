@@ -175,9 +175,25 @@ describe('ExecutePanel', () => {
         durationMs: expect.any(Number),
         requestedCollectTimeSeries: true,
         effectiveCollectTimeSeries: true,
+        resultDetailLevel: 'minimal',
       })
     );
     expect(onRunSaved).toHaveBeenCalledOnce();
+  });
+
+  it('allows switching to full archival saves from setup before running', async () => {
+    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+
+    openSetup();
+    fireEvent.change(screen.getByLabelText(/cloud save detail/i), { target: { value: 'full' } });
+    fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+
+    await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
+    expect(mockSaveSimulationRun.mock.calls[0][3]).toEqual(
+      expect.objectContaining({
+        resultDetailLevel: 'full',
+      })
+    );
   });
 
   it('shows the Results entry after a run completes', async () => {

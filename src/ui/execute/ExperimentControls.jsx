@@ -23,6 +23,7 @@ export function ExperimentControls({
   persistExperimentDefaults,
   animationEnabled, setAnimationEnabled,
   collectTimeSeries, setCollectTimeSeries,
+  saveDetailLevel, setSaveDetailLevel,
   speedMultiplier, setSpeedMultiplier,
 }) {
   const helperStyle = { fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.5, maxWidth: 220 };
@@ -272,9 +273,30 @@ export function ExperimentControls({
                 />
                 Keep chart data during the run
               </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 250 }}>
+                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+                  SAVE TO CLOUD AS
+                </span>
+                <select
+                  aria-label="Cloud save detail"
+                  value={saveDetailLevel}
+                  onChange={e => {
+                    const value = e.target.value === "full" ? "full" : "minimal";
+                    setSaveDetailLevel?.(value);
+                    persistExperimentDefaults?.({ resultDetailLevel: value });
+                  }}
+                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }}
+                >
+                  <option value="minimal">Fast history save</option>
+                  <option value="full">Full archival save</option>
+                </select>
+              </div>
             </div>
             <div style={{ ...helperStyle, marginTop: 8, maxWidth: 360 }}>
               Keep chart data on when you want time-based charts. Turn it off for very long runs if you want to save memory.
+            </div>
+            <div style={{ ...helperStyle, maxWidth: 420 }}>
+              Fast history save keeps summary, run effort, and compact queue waits. Full archival save keeps richer detail and may take much longer.
             </div>
           </div>
         </div>

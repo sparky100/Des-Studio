@@ -146,6 +146,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const runStartPerfRef = useRef(null);
   const [animationEnabled, setAnimationEnabled] = useState(true);
   const [collectTimeSeries, setCollectTimeSeries] = useState(true);
+  const [saveDetailLevel, setSaveDetailLevel] = useState(() => model?.experimentDefaults?.resultDetailLevel === "full" ? "full" : "minimal");
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
@@ -185,6 +186,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   useEffect(() => {
     logRef.current = log;
   }, [log]);
+  useEffect(() => {
+    setSaveDetailLevel(model?.experimentDefaults?.resultDetailLevel === "full" ? "full" : "minimal");
+  }, [model?.experimentDefaults?.resultDetailLevel]);
   const persistExperimentDefaults = useCallback((patch) => {
     if (!onExperimentDefaultsChange) return;
     onExperimentDefaultsChange({
@@ -194,9 +198,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       replications,
       terminationMode,
       terminationCondition,
+      resultDetailLevel: saveDetailLevel,
       ...patch,
     });
-  }, [model.experimentDefaults, warmupPeriod, maxSimTime, replications, terminationMode, terminationCondition, onExperimentDefaultsChange]);
+  }, [model.experimentDefaults, warmupPeriod, maxSimTime, replications, terminationMode, terminationCondition, saveDetailLevel, onExperimentDefaultsChange]);
 
   const validation = useMemo(() => {
     return validateModel({
@@ -228,7 +233,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }), [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, plan, isAdmin, validation, complexityEstimate]);
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
-  const effectiveResultDetailLevel = "compact";
+  const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : "minimal";
   const readinessTagColor = hasAdmissionErrors ? C.red : C.green;
   const readinessTagBg = hasAdmissionErrors ? C.errorBg : `${C.green}18`;
   const readinessBorder = hasAdmissionErrors ? C.danger : `${C.green}66`;
@@ -375,7 +380,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           replications: 1,
           terminationMode,
           terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
-        }, stepSeed);
+        }, stepSeed, { includeModelSnapshot: effectiveResultDetailLevel === "full" });
         const config = {
           seed: stepSeed,
           runLabel: effectiveRunLabel,
@@ -574,7 +579,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 replications,
                 terminationMode,
                 terminationCondition: stopConditionForRun,
-              }, runSeed);
+              }, runSeed, { includeModelSnapshot: effectiveResultDetailLevel === "full" });
               const batchConfig = {
                 seed: runSeed, runLabel: effectiveRunLabel, replications, warmupPeriod, maxTime: maxTimeForRun, batchId,
                 aggregateStats: stats,
@@ -730,7 +735,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         replications: 1,
         terminationMode,
         terminationCondition: stopConditionForRun,
-      }, runSeed);
+      }, runSeed, { includeModelSnapshot: effectiveResultDetailLevel === "full" });
       const config = {
         seed: runSeed,
         runLabel: effectiveRunLabel,
@@ -1271,6 +1276,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           persistExperimentDefaults={persistExperimentDefaults}
           animationEnabled={animationEnabled} setAnimationEnabled={setAnimationEnabled}
           collectTimeSeries={collectTimeSeries} setCollectTimeSeries={setCollectTimeSeries}
+          saveDetailLevel={saveDetailLevel} setSaveDetailLevel={setSaveDetailLevel}
           speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}
         />
       )}
@@ -2367,6 +2373,42 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           fontSize: 12, fontFamily: FONT,
         }}>
           {saveStatus.message}
+        </div>
+      )}
+
+      {canOpenResultsView && (
+        <div style={{
+          background: C.cardBg,
+          border: `1px solid ${C.border}`,
+          borderRadius: 6,
+          padding: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+        }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+            <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+              CLOUD SAVE TYPE
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5, maxWidth: 420 }}>
+              Choose how future runs should be saved while you review this result. Fast history saves are much lighter; full archival saves keep richer detail.
+            </div>
+          </div>
+          <select
+            aria-label="Review save detail"
+            value={saveDetailLevel}
+            onChange={e => {
+              const value = e.target.value === "full" ? "full" : "minimal";
+              setSaveDetailLevel(value);
+              persistExperimentDefaults({ resultDetailLevel: value });
+            }}
+            style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", minWidth: 190 }}
+          >
+            <option value="minimal">Fast history save</option>
+            <option value="full">Full archival save</option>
+          </select>
         </div>
       )}
 

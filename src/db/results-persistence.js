@@ -49,15 +49,31 @@ function buildLogSummary(logEntries = []) {
   };
 }
 
+function summarizeWaitDist(waitDist = {}) {
+  const entries = Object.entries(waitDist || {});
+  return Object.fromEntries(entries.map(([queueName, stats]) => [
+    queueName,
+    stats ? {
+      n: stats.n ?? 0,
+      mean: stats.mean ?? null,
+      p50: stats.p50 ?? null,
+      p90: stats.p90 ?? null,
+      p95: stats.p95 ?? null,
+      p99: stats.p99 ?? null,
+    } : null,
+  ]));
+}
+
 export function resolveResultDetailLevel(config = {}) {
-  if (config.resultDetailLevel === "compact" || config.resultDetailLevel === "full") {
+  if (config.resultDetailLevel === "minimal" || config.resultDetailLevel === "compact" || config.resultDetailLevel === "full") {
     return config.resultDetailLevel;
   }
+  if (config.minimalResults === true) return "minimal";
   if (config.compactResults === true) return "compact";
   if (LARGE_RUN_RISK_LEVELS.has(String(config.riskLevel || "").trim().toLowerCase())) {
     return "compact";
   }
-  return "compact";
+  return "minimal";
 }
 
 export function withResultsPayloadSize(resultsJson) {
@@ -127,7 +143,38 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     resultsJson._result_risk_level = config.riskLevel;
   }
 
-  if (detailLevel === "compact") {
+  if (detailLevel === "minimal") {
+    if (Array.isArray(resultsJson.log) && resultsJson.log.length > 0) {
+      resultsJson.logSummary = buildLogSummary(resultsJson.log);
+      delete resultsJson.log;
+      trimmedFields.push("log");
+    }
+    if (Array.isArray(resultsJson.trace) && resultsJson.trace.length > 0) {
+      delete resultsJson.trace;
+      trimmedFields.push("trace");
+    }
+    if (Array.isArray(resultsJson.entitySummary) && resultsJson.entitySummary.length > 0) {
+      resultsJson.entitySummaryCompact = summarizeEntitySummary(resultsJson.entitySummary);
+      delete resultsJson.entitySummary;
+      trimmedFields.push("entitySummary");
+    }
+    if (Array.isArray(resultsJson.timeSeries) && resultsJson.timeSeries.length > 0) {
+      delete resultsJson.timeSeries;
+      trimmedFields.push("timeSeries");
+    }
+    if (resultsJson.waitDist && typeof resultsJson.waitDist === "object") {
+      resultsJson.waitDist = summarizeWaitDist(resultsJson.waitDist);
+      trimmedFields.push("waitDist.values");
+    }
+    if (Array.isArray(resultsJson.replications) && resultsJson.replications.length > 0) {
+      resultsJson.replications = resultsJson.replications.map(replication => ({
+        replicationIndex: replication.replicationIndex,
+        seed: replication.seed,
+        summary: replication.summary,
+        finalTime: replication.finalTime,
+      }));
+    }
+  } else if (detailLevel === "compact") {
     if (Array.isArray(resultsJson.log) && resultsJson.log.length > 0) {
       resultsJson.logSummary = buildLogSummary(resultsJson.log);
       delete resultsJson.log;

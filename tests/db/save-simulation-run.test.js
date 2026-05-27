@@ -44,23 +44,28 @@ describe("saveSimulationRun payload metadata", () => {
     expect(insertPayload.results_json._results_payload_size_bytes).toEqual(expect.any(Number));
   });
 
-  it("persists ordinary saved runs in compact form by default", async () => {
+  it("persists ordinary saved runs in minimal form by default", async () => {
     await saveSimulationRun("model-1", "user-1", {
       summary: { total: 3, served: 2, reneged: 1, avgWait: 4, avgSvc: 2 },
       snap: { clock: 25 },
       log: [{ phase: "END", time: 25, message: "Run finished" }],
       entitySummary: [{ type: "Customer", status: "done", count: 2 }],
+      timeSeries: [{ t: 25, byQueue: { Main: { waiting: 2, total: 3 } }, byType: {} }],
+      waitDist: { Main: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4, values: [2, 4] } },
     });
 
     const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
     expect(insertPayload.results_json).toEqual(expect.objectContaining({
-      _result_detail_level: "compact",
-      _trimmed_fields: expect.arrayContaining(["log", "entitySummary"]),
+      _result_detail_level: "minimal",
+      _trimmed_fields: expect.arrayContaining(["log", "entitySummary", "timeSeries", "waitDist.values"]),
       logSummary: expect.objectContaining({ entries: 1, finalMessage: "Run finished" }),
       entitySummaryCompact: expect.objectContaining({ totalEntities: 1 }),
+      waitDist: expect.objectContaining({ Main: expect.objectContaining({ n: 2, mean: 3, p99: 4 }) }),
     }));
     expect(insertPayload.results_json.log).toBeUndefined();
     expect(insertPayload.results_json.entitySummary).toBeUndefined();
+    expect(insertPayload.results_json.timeSeries).toBeUndefined();
+    expect(insertPayload.results_json.waitDist.Main.values).toBeUndefined();
   });
 
   it("stores requested and effective chart-data settings in saved results metadata", async () => {
@@ -116,7 +121,12 @@ describe("saveSimulationRun payload metadata", () => {
   it("stores a full model snapshot for archival or reproducibility saves when requested", async () => {
     await saveSimulationRun("model-1", "user-1", {
       summary: { served: 1 },
+      log: [{ phase: "END", time: 25, message: "Run finished" }],
+      entitySummary: [{ type: "Customer", status: "done", count: 1 }],
+      timeSeries: [{ t: 25, byQueue: { Main: { waiting: 2, total: 3 } }, byType: {} }],
+      waitDist: { Main: { n: 2, mean: 3, p50: 3, p90: 4, p95: 4, p99: 4, values: [2, 4] } },
     }, {
+      resultDetailLevel: "full",
       runRecord: {
         model_snapshot: { id: "model-1", name: "Snapshot Model" },
         engine_version: "test-engine",
@@ -136,6 +146,11 @@ describe("saveSimulationRun payload metadata", () => {
     const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
     expect(insertPayload.results_json._model_snapshot).toEqual({ id: "model-1", name: "Snapshot Model" });
     expect(insertPayload.results_json._experiment_config).toEqual(expect.objectContaining({ replications: 2, seed: 654 }));
+    expect(insertPayload.results_json._result_detail_level).toBe("full");
+    expect(insertPayload.results_json.log).toEqual([{ phase: "END", time: 25, message: "Run finished" }]);
+    expect(insertPayload.results_json.entitySummary).toEqual([{ type: "Customer", status: "done", count: 1 }]);
+    expect(insertPayload.results_json.timeSeries).toHaveLength(1);
+    expect(insertPayload.results_json.waitDist.Main.values).toEqual([2, 4]);
   });
 
   it("persists large runs in compact form by default when requested", async () => {
