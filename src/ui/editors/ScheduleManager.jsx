@@ -18,6 +18,7 @@ import {
   saveModelSchedule,
   deleteModelSchedule,
   setDefaultSchedule,
+  extractInlineSchedule,
 } from "../../db/models.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -354,9 +355,129 @@ function NewScheduleForm({ modelId, userId, onCreated, onCancel }) {
   );
 }
 
+// ── Inline-rows detection ─────────────────────────────────────────────────────
+
+/** Returns bEvents that have inline rows[] with no scheduleRef set. */
+function bEventsWithInlineRows(bEvents = []) {
+  return bEvents.filter(be =>
+    (be.schedules || []).some(s =>
+      Array.isArray(s.rows) && s.rows.length > 0 && !s.scheduleRef
+    )
+  );
+}
+
+function totalInlineRowCount(bEvents = []) {
+  return bEvents.reduce((sum, be) =>
+    sum + (be.schedules || []).reduce((s2, s) =>
+      s2 + (Array.isArray(s.rows) && !s.scheduleRef ? s.rows.length : 0), 0
+    ), 0
+  );
+}
+
+// ── InlineRowsBanner ──────────────────────────────────────────────────────────
+
+function InlineRowsBanner({ modelId, userId, bEvents, onExtracted }) {
+  const [migrating, setMigrating] = useState(false);
+  const [error, setError] = useState(null);
+  const [scheduleName, setScheduleName] = useState("Default Schedule");
+  const [showNameInput, setShowNameInput] = useState(false);
+
+  const affectedEvents = bEventsWithInlineRows(bEvents);
+  const rowCount = totalInlineRowCount(bEvents);
+
+  const handleExtract = async () => {
+    if (!scheduleName.trim()) return;
+    setMigrating(true);
+    setError(null);
+    try {
+      const { savedSchedule, updatedBEvents } = await extractInlineSchedule(
+        { id: modelId, bEvents },
+        userId,
+        scheduleName.trim()
+      );
+      onExtracted(updatedBEvents, savedSchedule);
+    } catch (err) {
+      setError(err?.message || "Failed to move schedule data");
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  return (
+    <div style={{
+      margin: "12px 16px",
+      padding: "12px 14px",
+      background: `${C.amber}18`,
+      border: `1px solid ${C.amber}`,
+      borderRadius: 6,
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+    }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <span style={{ fontSize: 18, lineHeight: 1 }}>⚠️</span>
+        <div>
+          <div style={{ fontSize: FONT.sm, fontWeight: 600, color: C.text, marginBottom: 4 }}>
+            Timetable rows stored inline
+          </div>
+          <div style={{ fontSize: FONT.sm, color: C.muted, lineHeight: 1.5 }}>
+            {rowCount.toLocaleString()} arrival rows across{" "}
+            {affectedEvents.length} event{affectedEvents.length !== 1 ? "s" : ""} (
+            {affectedEvents.map(e => e.name || e.id).join(", ")}) are stored
+            inside the model. Moving them to a named schedule reduces model size and
+            lets you switch timetables at run time.
+          </div>
+        </div>
+      </div>
+
+      {showNameInput ? (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <input
+            value={scheduleName}
+            onChange={e => setScheduleName(e.target.value)}
+            placeholder="Schedule name"
+            autoFocus
+            style={{
+              flex: 1,
+              minWidth: 160,
+              padding: "5px 9px",
+              border: `1px solid ${C.border}`,
+              borderRadius: 4,
+              fontSize: FONT.sm,
+              background: C.surface,
+              color: C.text,
+            }}
+          />
+          <Btn
+            size="sm"
+            onClick={handleExtract}
+            disabled={migrating || !scheduleName.trim()}
+          >
+            {migrating ? "Moving…" : "Move to schedule"}
+          </Btn>
+          <Btn size="sm" variant="ghost" onClick={() => setShowNameInput(false)}>Cancel</Btn>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn size="sm" onClick={() => setShowNameInput(true)} disabled={migrating}>
+            Move to a named schedule
+          </Btn>
+          <span style={{ fontSize: FONT.xs, color: C.muted, alignSelf: "center" }}>
+            The model will be saved automatically after moving.
+          </span>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ fontSize: FONT.xs, color: C.danger }}>{error}</div>
+      )}
+    </div>
+  );
+}
+
 // ── ScheduleManager (exported) ────────────────────────────────────────────────
 
-export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch, timeUnit = "minutes" }) {
+export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch, timeUnit = "minutes", onBEventsExtracted }) {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -453,8 +574,23 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch,
   }
 
   // Schedule list view
+  const hasInline = canEdit && bEventsWithInlineRows(bEvents).length > 0;
+
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
+      {/* Inline-rows migration banner */}
+      {hasInline && (
+        <InlineRowsBanner
+          modelId={modelId}
+          userId={userId}
+          bEvents={bEvents}
+          onExtracted={(updatedBEvents, savedSchedule) => {
+            onBEventsExtracted?.(updatedBEvents);
+            reload();
+          }}
+        />
+      )}
+
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${C.border}` }}>
         <SH>Schedules</SH>
