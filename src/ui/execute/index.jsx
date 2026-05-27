@@ -308,7 +308,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     }
   }, [modelId, userId]);
 
-  const doStep = useCallback(() => {
+  const doStep = useCallback(async () => {
     if (!engineRef.current) return;
     setHideRunReadiness(true);
     setExecuteSection("run");
@@ -332,6 +332,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setMode("done");
       setLiveWaitDist(null);
       stopAuto();
+      setSaveStatus({ state: 'saving', message: 'Preparing results...' });
+      await yieldToBrowser();
       const summary = engineRef.current.getSummary();
       const wallClockMs = runStartPerfRef.current == null ? null : Math.max(0, Math.round(nowPerf() - runStartPerfRef.current));
       const finalLog = nextLog;
@@ -540,6 +542,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           saveInProgressRef.current = true;
           try {
             const ordered = payloads.filter(Boolean);
+            setSaveStatus({ state: 'saving', message: 'Preparing results...' });
+            await yieldToBrowser();
             const stats = summarizeReplicationResults(ordered, CI_METRICS);
             const wallClockMs = runStartPerfRef.current == null ? null : Math.max(0, Math.round(nowPerf() - runStartPerfRef.current));
             const batchResult = {
@@ -671,6 +675,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       }
     }
 
+    setSaveStatus({ state: 'saving', message: 'Preparing results...' });
+    await yieldToBrowser();
     const rawResult = singleRunCancelRef.current
       ? engine.buildResult({ cancelled: true, message: "Run cancelled at a safe checkpoint. Partial results shown." })
       : engine.buildResult();
