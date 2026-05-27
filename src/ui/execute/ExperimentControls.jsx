@@ -296,7 +296,7 @@ export function ExperimentControls({
               Keep chart data on when you want time-based charts. Turn it off for very long runs if you want to save memory.
             </div>
             <div style={{ ...helperStyle, maxWidth: 420 }}>
-              Fast history save keeps summary, run effort, and compact queue waits. Full archival save keeps richer detail and may take much longer.
+              Fast history save keeps summary, run effort, and compact queue waits. Full archival save keeps richer detail and may take much longer to upload.
             </div>
           </div>
         </div>
