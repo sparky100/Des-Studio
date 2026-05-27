@@ -130,7 +130,7 @@ describe('ExecutePanel results export buttons', () => {
 
     expect(screen.getByRole('button', { name: 'Export…' })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole('button', { name: /run all/i }));
+    fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Export…' })).not.toBeDisabled()

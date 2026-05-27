@@ -273,30 +273,26 @@ export function ExperimentControls({
                 />
                 Keep chart data during the run
               </label>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 250 }}>
-                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
-                  SAVE TO CLOUD AS
-                </span>
-                <select
-                  aria-label="Cloud save detail"
-                  value={saveDetailLevel}
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: saveDetailLevel === "full" ? C.accent : C.label, fontFamily: FONT }}>
+                <input
+                  aria-label="Save full archival details to cloud"
+                  type="checkbox"
+                  checked={saveDetailLevel === "full"}
                   onChange={e => {
-                    const value = e.target.value === "full" ? "full" : "minimal";
+                    const value = e.target.checked ? "full" : "minimal";
                     setSaveDetailLevel?.(value);
                     persistExperimentDefaults?.({ resultDetailLevel: value });
                   }}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none" }}
-                >
-                  <option value="minimal">Fast history save</option>
-                  <option value="full">Full archival save</option>
-                </select>
-              </div>
+                  style={{ accentColor: C.accent }}
+                />
+                Save full archival details to cloud
+              </label>
             </div>
             <div style={{ ...helperStyle, marginTop: 8, maxWidth: 360 }}>
               Keep chart data on when you want time-based charts. Turn it off for very long runs if you want to save memory.
             </div>
             <div style={{ ...helperStyle, maxWidth: 420 }}>
-              Fast history save keeps summary, run effort, and compact queue waits. Full archival save keeps richer detail and may take much longer to upload.
+              Leave this off for the fastest history saves. Turn it on only when you want richer archived detail and are happy for uploads to take longer.
             </div>
           </div>
         </div>

@@ -163,6 +163,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [qrToken, setQrToken] = useState(null);
   const qrRef = useRef(null);
   const [latestRunId, setLatestRunId] = useState(null);
+  const [pendingCloudSave, setPendingCloudSave] = useState(null);
   const [showExportPopover, setShowExportPopover] = useState(false);
   const [exportFormats, setExportFormats] = useState({ json: true, csv: false, html: false });
   const effectiveAutoSpeed = useMemo(
@@ -278,6 +279,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSaveStatus(null);
     setPhaseCTruncated(false);
     setResults(null);
+    setPendingCloudSave(null);
+    setLatestRunId(null);
     setLiveWaitDist(null);
     liveHistThrottleRef.current = 0;
     onResultsReady?.(null);
@@ -315,6 +318,15 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       return [];
     }
   }, [modelId, userId]);
+
+  const queuePendingCloudSave = useCallback((result, config, runRecord) => {
+    setPendingCloudSave({
+      result,
+      config,
+      runRecord,
+    });
+    setLatestRunId(null);
+  }, []);
 
   const doStep = useCallback(async () => {
     if (!engineRef.current) return;
@@ -371,8 +383,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
       if (modelId) {
         const prepareDurationMs = nowPerf() - prepareStartedAt;
-        setSaveStatus({ state: 'saving', message: `Saving results... (prepared in ${formatDurationMs(prepareDurationMs)})` });
-        setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "💾 Auto-saving simulation results..." }]);
         const stepSeed = runSeedRef.current;
         const runRecord = buildRunRecord(model, fullResult, {
           maxSimTime: terminationMode === 'time' ? maxSimTime : null,
@@ -380,13 +390,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           replications: 1,
           terminationMode,
           terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
-        }, stepSeed, { includeModelSnapshot: effectiveResultDetailLevel === "full" });
+        }, stepSeed, { includeModelSnapshot: true });
         const config = {
           seed: stepSeed,
           runLabel: effectiveRunLabel,
           warmupPeriod,
           maxTime: terminationMode === 'time' ? maxSimTime : null,
-          runRecord,
           versionId: currentVersionId || null,
           durationMs: wallClockMs,
           requestedCollectTimeSeries: collectTimeSeries,
@@ -394,29 +403,22 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           resultDetailLevel: effectiveResultDetailLevel,
           riskLevel: runAdmission.complexityEstimate.riskLevel,
         };
-        const save = userId
-          ? saveSimulationRun(modelId, userId, fullResult, config)
-          : Promise.resolve(saveLocalRun(modelId, fullResult, config));
-        const saveStartedAt = nowPerf();
-        save
-          .then((runId) => {
-            if (runId) {
-              setLatestRunId(runId);
-              storeRunNarrative(runId, model, fullResult);
-            }
-            void refreshRunHistory();
-            const saveDurationMs = nowPerf() - saveStartedAt;
-            setSaveStatus({ state: 'success', message: `✓ Saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
-            setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ History record completed." }]);
-            onRunSaved?.();
-          })
-          .catch(e => {
-            setSaveStatus({ state: 'error', message: `✗ Save failed: ${e.message}` });
-            setLog(prev => [...prev, { phase: "ERROR", time: r.snap.clock, message: `❌ Save error: ${e.message}` }]);
-          });
+        if (userId) {
+          saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
+          queuePendingCloudSave(fullResult, config, runRecord);
+          setSaveStatus({ state: 'success', message: `✓ Results saved in this browser! Prep ${formatDurationMs(prepareDurationMs)}. Save to cloud when ready.` });
+          setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ Results saved locally in this browser. Cloud save is optional." }]);
+          onRunSaved?.();
+        } else {
+          saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
+          void refreshRunHistory();
+          setSaveStatus({ state: 'success', message: `✓ Results saved locally! Prep ${formatDurationMs(prepareDurationMs)}.` });
+          setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ Local history record completed." }]);
+          onRunSaved?.();
+        }
       }
     }
-  }, [userId, modelId, model, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory]);
+  }, [userId, modelId, model, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory, queuePendingCloudSave]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -463,6 +465,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
     setHideRunReadiness(true);
     setExecuteSection("run");
+    setPendingCloudSave(null);
+    setLatestRunId(null);
 
     const runSeed = seed;
     setResolvedSeed(runSeed);
@@ -551,7 +555,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           if (payload.result?.phaseCTruncated || payload.result?.summary?.phaseCTruncated) setPhaseCTruncated(true);
         },
         onComplete: async payloads => {
-          saveInProgressRef.current = true;
           try {
             const ordered = payloads.filter(Boolean);
             const prepareStartedAt = nowPerf();
@@ -570,59 +573,44 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log: logRef.current });
             setAggregateStats(stats);
             const prepareDurationMs = nowPerf() - prepareStartedAt;
-            setSaveStatus({ state: 'saving', message: `Saving replication batch... (prepared in ${formatDurationMs(prepareDurationMs)})` });
-
-            try {
-              const batchRunRecord = buildRunRecord(model, batchResult, {
-                maxSimTime: maxTimeForRun,
-                warmupPeriod,
-                replications,
-                terminationMode,
-                terminationCondition: stopConditionForRun,
-              }, runSeed, { includeModelSnapshot: effectiveResultDetailLevel === "full" });
-              const batchConfig = {
-                seed: runSeed, runLabel: effectiveRunLabel, replications, warmupPeriod, maxTime: maxTimeForRun, batchId,
-                aggregateStats: stats,
-                replicationResults: ordered.map(payload => ({
-                  replicationIndex: payload.replicationIndex, seed: payload.seed,
-                  summary: payload.result?.summary || {}, finalTime: payload.result?.finalTime,
-                })),
-                runRecord: batchRunRecord,
-                durationMs: wallClockMs,
-                versionId: currentVersionId || null,
-                requestedCollectTimeSeries: collectTimeSeries,
-                effectiveCollectTimeSeries: effectiveCollectTimeSeries,
-                resultDetailLevel: effectiveResultDetailLevel,
-                riskLevel: runAdmission.complexityEstimate.riskLevel,
-              };
-              const saveStartedAt = nowPerf();
-              if (userId) {
-                const runId = await saveSimulationRun(modelId, userId, batchResult, batchConfig);
-                if (runId) {
-                  setLatestRunId(runId);
-                  storeRunNarrative(runId, model, batchResult);
-                }
-              } else {
-                saveLocalRun(modelId, batchResult, batchConfig);
-              }
-              void refreshRunHistory();
-              const saveDurationMs = nowPerf() - saveStartedAt;
-              setSaveStatus({ state: 'success', message: `✓ Replication batch saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
-              setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved." }]);
+            const batchRunRecord = buildRunRecord(model, batchResult, {
+              maxSimTime: maxTimeForRun,
+              warmupPeriod,
+              replications,
+              terminationMode,
+              terminationCondition: stopConditionForRun,
+            }, runSeed, { includeModelSnapshot: true });
+            const batchConfig = {
+              seed: runSeed, runLabel: effectiveRunLabel, replications, warmupPeriod, maxTime: maxTimeForRun, batchId,
+              aggregateStats: stats,
+              replicationResults: ordered.map(payload => ({
+                replicationIndex: payload.replicationIndex, seed: payload.seed,
+                summary: payload.result?.summary || {}, finalTime: payload.result?.finalTime,
+              })),
+              versionId: currentVersionId || null,
+              durationMs: wallClockMs,
+              requestedCollectTimeSeries: collectTimeSeries,
+              effectiveCollectTimeSeries: effectiveCollectTimeSeries,
+              resultDetailLevel: effectiveResultDetailLevel,
+              riskLevel: runAdmission.complexityEstimate.riskLevel,
+            };
+            if (userId) {
+              saveLocalRun(modelId, batchResult, { ...batchConfig, runRecord: batchRunRecord, resultDetailLevel: "full" });
+              queuePendingCloudSave(batchResult, batchConfig, batchRunRecord);
+              setSaveStatus({ state: 'success', message: `✓ Batch results saved in this browser! Prep ${formatDurationMs(prepareDurationMs)}. Save to cloud when ready.` });
+              setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "✅ Batch results saved locally in this browser. Cloud save is optional." }]);
               onRunSaved?.();
-            } catch (saveError) {
-              const isFkError = saveError.message?.includes('simulation_runs_model_id_fkey') || saveError.code === '23503';
-              const msg = isFkError
-                ? '✗ Save failed: model not yet saved to the database. Save the model first, then re-run.'
-                : `✗ Failed to save batch: ${saveError.message}`;
-              setSaveStatus({ state: 'error', message: msg });
-              setLog(prev => [...prev, { phase: "ERROR", time: batchResult.snap.clock, message: `❌ ${isFkError ? 'Model must be saved before results can be stored.' : `Database error: ${saveError.message}`}` }]);
+            } else {
+              saveLocalRun(modelId, batchResult, { ...batchConfig, runRecord: batchRunRecord, resultDetailLevel: "full" });
+              void refreshRunHistory();
+              setSaveStatus({ state: 'success', message: `✓ Replication batch saved locally! Prep ${formatDurationMs(prepareDurationMs)}.` });
+              setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved locally." }]);
+              onRunSaved?.();
             }
           } catch (setupError) {
             setBatchStatus("complete");
             setSaveStatus({ state: 'error', message: `✗ Batch error: ${setupError.message}` });
           } finally {
-            saveInProgressRef.current = false;
             runnerRef.current = null;
             setMode("done");
           }
@@ -723,66 +711,41 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       return;
     }
 
-    saveInProgressRef.current = true;
     const prepareDurationMs = nowPerf() - prepareStartedAt;
-    setSaveStatus({ state: 'saving', message: `Saving results... (prepared in ${formatDurationMs(prepareDurationMs)})` });
-    setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "💾 Committing simulation history to database..." }]);
-
-    try {
-      const singleRunRecord = buildRunRecord(model, result, {
-        maxSimTime: maxTimeForRun,
-        warmupPeriod,
-        replications: 1,
-        terminationMode,
-        terminationCondition: stopConditionForRun,
-      }, runSeed, { includeModelSnapshot: effectiveResultDetailLevel === "full" });
-      const config = {
-        seed: runSeed,
-        runLabel: effectiveRunLabel,
-        replications: 1,
-        warmupPeriod,
-        maxTime: maxTimeForRun,
-        runRecord: singleRunRecord,
-        versionId: currentVersionId || null,
-        durationMs: wallClockMs,
-        requestedCollectTimeSeries: collectTimeSeries,
-        effectiveCollectTimeSeries: effectiveCollectTimeSeries,
-        resultDetailLevel: effectiveResultDetailLevel,
-        riskLevel: runAdmission.complexityEstimate.riskLevel,
-      };
-      const saveStartedAt = nowPerf();
-      const save = userId ? saveSimulationRun(modelId, userId, result, config) : saveLocalRun(modelId, result, config);
-      let runId;
-      try {
-        runId = await save;
-      } catch (saveErr) {
-        const isFkError = saveErr.message?.includes('simulation_runs_model_id_fkey') ||
-                          saveErr.code === '23503';
-        if (isFkError) {
-          saveLocalRun(modelId, result, config);
-          setSaveStatus({ state: 'error', message: '✗ Save failed: model not yet saved to the database. Results kept locally — save the model first.' });
-          setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: "⚠️ Model must be saved before results can be stored in the database." }]);
-          saveInProgressRef.current = false;
-          return;
-        }
-        throw saveErr;
-      }
-      if (runId) {
-        setLatestRunId(runId);
-        storeRunNarrative(runId, model, result);
-      }
-      void refreshRunHistory();
-      const saveDurationMs = nowPerf() - saveStartedAt;
-      setSaveStatus({ state: 'success', message: `✓ History saved successfully! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.` });
-      setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ History commit complete." }]);
+    const singleRunRecord = buildRunRecord(model, result, {
+      maxSimTime: maxTimeForRun,
+      warmupPeriod,
+      replications: 1,
+      terminationMode,
+      terminationCondition: stopConditionForRun,
+    }, runSeed, { includeModelSnapshot: true });
+    const config = {
+      seed: runSeed,
+      runLabel: effectiveRunLabel,
+      replications: 1,
+      warmupPeriod,
+      maxTime: maxTimeForRun,
+      versionId: currentVersionId || null,
+      durationMs: wallClockMs,
+      requestedCollectTimeSeries: collectTimeSeries,
+      effectiveCollectTimeSeries: effectiveCollectTimeSeries,
+      resultDetailLevel: effectiveResultDetailLevel,
+      riskLevel: runAdmission.complexityEstimate.riskLevel,
+    };
+    if (userId) {
+      saveLocalRun(modelId, result, { ...config, runRecord: singleRunRecord, resultDetailLevel: "full" });
+      queuePendingCloudSave(result, config, singleRunRecord);
+      setSaveStatus({ state: 'success', message: `✓ Results saved in this browser! Prep ${formatDurationMs(prepareDurationMs)}. Save to cloud when ready.` });
+      setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Results saved locally in this browser. Cloud save is optional." }]);
       onRunSaved?.();
-    } catch (e) {
-      setSaveStatus({ state: 'error', message: `✗ Failed to save: ${e.message}` });
-      setLog(prev => [...prev, { phase: "ERROR", time: result.snap.clock, message: `❌ Database error: ${e.message}` }]);
-    } finally {
-      saveInProgressRef.current = false;
+    } else {
+      saveLocalRun(modelId, result, { ...config, runRecord: singleRunRecord, resultDetailLevel: "full" });
+      void refreshRunHistory();
+      setSaveStatus({ state: 'success', message: `✓ Results saved locally! Prep ${formatDurationMs(prepareDurationMs)}.` });
+      setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Local history record completed." }]);
+      onRunSaved?.();
     }
-  }, [model, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory]);
+  }, [model, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory, queuePendingCloudSave]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -814,6 +777,37 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       // Silently ignore — narrative is optional enhancement
     }
   }, [userId, warmupPeriod, maxSimTime, replications, terminationMode]);
+
+  const savePendingRunToCloud = useCallback(async (detailLevelOverride = null) => {
+    if (!userId || !modelId || !pendingCloudSave) return;
+    saveInProgressRef.current = true;
+    const detailLevel = detailLevelOverride || effectiveResultDetailLevel;
+    setSaveStatus({ state: 'saving', message: `Saving ${detailLevel === "full" ? "full archival" : "fast history"} record to cloud...` });
+    const saveStartedAt = nowPerf();
+    try {
+      const runRecord = detailLevel === "full"
+        ? pendingCloudSave.runRecord
+        : { ...pendingCloudSave.runRecord, model_snapshot: null };
+      const config = {
+        ...pendingCloudSave.config,
+        resultDetailLevel: detailLevel,
+        runRecord,
+      };
+      const runId = await saveSimulationRun(modelId, userId, pendingCloudSave.result, config);
+      if (runId) {
+        setLatestRunId(runId);
+        storeRunNarrative(runId, model, pendingCloudSave.result);
+      }
+      setPendingCloudSave(null);
+      void refreshRunHistory();
+      const saveDurationMs = nowPerf() - saveStartedAt;
+      setSaveStatus({ state: 'success', message: `✓ Cloud history saved successfully! Save ${formatDurationMs(saveDurationMs)}.` });
+    } catch (e) {
+      setSaveStatus({ state: 'error', message: `✗ Cloud save failed: ${e.message}` });
+    } finally {
+      saveInProgressRef.current = false;
+    }
+  }, [userId, modelId, pendingCloudSave, effectiveResultDetailLevel, storeRunNarrative, model, refreshRunHistory]);
 
   const toggleAuto = () => {
     if (autoRunning) {
@@ -2075,7 +2069,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           />
         </div>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasAdmissionErrors || runBusy || saveStatus?.state === 'saving' || saveInProgressRef.current}>
-          {hasAdmissionErrors ? `✕ ${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length !== 1 ? "s" : ""}` : "⚡ Run All"}
+          {hasAdmissionErrors ? `✕ ${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length !== 1 ? "s" : ""}` : "⚡ Batch Run"}
         </Btn>
         {canOpenResultsView && (
           <Btn variant="ghost" onClick={() => onGoToResults?.()} title="View results in the Results section">
@@ -2376,39 +2370,74 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         </div>
       )}
 
-      {canOpenResultsView && (
+      {canOpenResultsView && userId && pendingCloudSave && (
         <div style={{
           background: C.cardBg,
           border: `1px solid ${C.border}`,
           borderRadius: 6,
           padding: 12,
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          flexDirection: "column",
           gap: 12,
-          flexWrap: "wrap",
         }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
             <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
-              CLOUD SAVE TYPE
+              SAVE THIS RESULT TO CLOUD
             </div>
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5, maxWidth: 420 }}>
-              Choose how future runs should be saved while you review this result. Fast history saves are much lighter; full archival saves keep richer detail.
+              This result is already saved in this browser. Choose the cloud save style you want for this reviewed run.
             </div>
           </div>
-          <select
-            aria-label="Review save detail"
-            value={saveDetailLevel}
-            onChange={e => {
-              const value = e.target.value === "full" ? "full" : "minimal";
-              setSaveDetailLevel(value);
-              persistExperimentDefaults({ resultDetailLevel: value });
-            }}
-            style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 8px", outline: "none", minWidth: 190 }}
-          >
-            <option value="minimal">Fast history save</option>
-            <option value="full">Full archival save</option>
-          </select>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 12, color: saveDetailLevel === "minimal" ? C.text : C.label, fontFamily: FONT }}>
+              <input
+                aria-label="Fast history save"
+                type="radio"
+                name="review-save-detail-level"
+                checked={saveDetailLevel === "minimal"}
+                onChange={() => {
+                  setSaveDetailLevel("minimal");
+                  persistExperimentDefaults({ resultDetailLevel: "minimal" });
+                }}
+                style={{ accentColor: C.accent, marginTop: 1 }}
+              />
+              <span>
+                <strong>Fast history save</strong>
+                <span style={{ display: "block", color: C.muted, fontWeight: 400, marginTop: 2 }}>
+                  Keeps the headline results and runtime cost, with the lightest cloud payload.
+                </span>
+              </span>
+            </label>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", fontSize: 12, color: saveDetailLevel === "full" ? C.text : C.label, fontFamily: FONT }}>
+              <input
+                aria-label="Full archival save"
+                type="radio"
+                name="review-save-detail-level"
+                checked={saveDetailLevel === "full"}
+                onChange={() => {
+                  setSaveDetailLevel("full");
+                  persistExperimentDefaults({ resultDetailLevel: "full" });
+                }}
+                style={{ accentColor: C.accent, marginTop: 1 }}
+              />
+              <span>
+                <strong>Full archival save</strong>
+                <span style={{ display: "block", color: C.muted, fontWeight: 400, marginTop: 2 }}>
+                  Keeps the richer reproducibility detail, but can take much longer on larger models.
+                </span>
+              </span>
+            </label>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <Btn
+              small
+              variant="primary"
+              onClick={() => savePendingRunToCloud(saveDetailLevel)}
+              disabled={saveInProgressRef.current}
+            >
+              {saveDetailLevel === "full" ? "Save Full Record to Cloud" : "Save Fast History to Cloud"}
+            </Btn>
+          </div>
         </div>
       )}
 

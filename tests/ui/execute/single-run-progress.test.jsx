@@ -135,7 +135,7 @@ describe("ExecutePanel single-run progress", () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /run all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /batch run/i }));
 
     expect(await screen.findByText("SINGLE RUN")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /cancel run/i })).toBeInTheDocument();
@@ -151,7 +151,7 @@ describe("ExecutePanel single-run progress", () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    fireEvent.click(screen.getByRole("button", { name: /run all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /batch run/i }));
     await screen.findByText("SINGLE RUN");
 
     fireEvent.click(screen.getByRole("button", { name: /cancel run/i }));
