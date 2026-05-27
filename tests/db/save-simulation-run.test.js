@@ -118,6 +118,39 @@ describe("saveSimulationRun payload metadata", () => {
     expect(insertPayload.results_json._model_snapshot).toBeUndefined();
   });
 
+  it("does not embed model_snapshot in minimal or compact saves even when one is provided", async () => {
+    // The Glasgow-Central model_json is ~290 KB.  Embedding it in every
+    // results_json INSERT blows up the Supabase payload by ~98% and can push
+    // save times above 30 s.  We guard it behind detailLevel === "full" so
+    // normal runs stay small.
+    const largeSnapshot = { id: "model-1", name: "Glasgow Central", entityTypes: Array.from({ length: 50 }, (_, i) => ({ id: `e${i}` })) };
+
+    for (const detailLevel of ["minimal", "compact"]) {
+      vi.clearAllMocks();
+      supabase.from("simulation_runs").insert.mockReturnThis();
+      supabase.from("simulation_runs").select.mockReturnThis();
+      supabase.from("simulation_runs").single.mockResolvedValue({ data: { id: "run-x" }, error: null });
+
+      await saveSimulationRun("model-1", "user-1", {
+        summary: { served: 1 },
+        log: [{ phase: "END", time: 10, message: "done" }],
+      }, {
+        resultDetailLevel: detailLevel,
+        runRecord: {
+          model_snapshot: largeSnapshot,
+          engine_version: "test",
+          prng_algorithm: "mulberry32",
+          base_seed: 1,
+          experiment_config: { maxSimTime: 500, warmupPeriod: 0, replications: 1, seed: 1, terminationMode: "time", terminationCondition: null },
+        },
+      });
+
+      const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
+      expect(insertPayload.results_json._model_snapshot, `detailLevel=${detailLevel} should not embed snapshot`).toBeUndefined();
+      expect(insertPayload.results_json._result_detail_level).toBe(detailLevel);
+    }
+  });
+
   it("stores a full model snapshot for archival or reproducibility saves when requested", async () => {
     await saveSimulationRun("model-1", "user-1", {
       summary: { served: 1 },

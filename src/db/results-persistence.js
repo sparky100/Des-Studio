@@ -115,8 +115,16 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
   if (runLabel) {
     resultsJson.runLabel = runLabel;
   }
+  // Resolve detail level first so it can gate expensive fields like model_snapshot.
+  const detailLevel = resolveResultDetailLevel(config);
+
   if (config.runRecord) {
-    if (config.runRecord.model_snapshot) {
+    // _model_snapshot is only embedded for "full" saves.  The model is already
+    // stored in des_models.model_json and reachable via model_id + version_id,
+    // so embedding a 100–500 KB snapshot in every results_json row would make
+    // INSERT payloads unnecessarily large and slow — especially for complex
+    // models like Glasgow Central (~290 KB model_json alone).
+    if (config.runRecord.model_snapshot && detailLevel === "full") {
       resultsJson._model_snapshot = config.runRecord.model_snapshot;
     }
     resultsJson._engine_version  = config.runRecord.engine_version;
@@ -135,8 +143,6 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
   if (result.runtimeMetrics) {
     resultsJson.runtimeMetrics = result.runtimeMetrics;
   }
-
-  const detailLevel = resolveResultDetailLevel(config);
   const trimmedFields = [];
   resultsJson._result_detail_level = detailLevel;
   if (config.riskLevel) {
