@@ -517,6 +517,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [latestWarmupDetection,setLatestWarmupDetection]=useState(null);
   const [latestLog,setLatestLog]=useState([]);
   const [resultsView,setResultsView]=useState("summary");
+  const [explainPanelOpen,setExplainPanelOpen]=useState(false);
+  const [aiTrigger,setAiTrigger]=useState({action:null,seq:0});
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
     try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
@@ -815,7 +817,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     const hydratedResults = hydrateResultsFromHistoryRow(row);
     setLatestResults(hydratedResults);
     setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
-    setResultsView(nextSubtab);
+    if (nextSubtab === "explain") {
+      setResultsView("summary");
+      setExplainPanelOpen(true);
+      setAiTrigger(prev => ({ action: "explain", seq: prev.seq + 1 }));
+    } else {
+      setResultsView(nextSubtab);
+      setExplainPanelOpen(false);
+    }
     setTab("results");
   }, []);
 
@@ -1198,25 +1207,47 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 {id:"log",label:"Log"},
                 {id:"entities",label:"Entities"},
                 {id:"history",label:"History"},
-                {id:"explain",label:"Explain"},
               ].map(sub=>(
                 <button
                   key={sub.id}
-                  onClick={()=>setResultsView(sub.id)}
+                  onClick={()=>{setResultsView(sub.id);setExplainPanelOpen(false);}}
                   style={{
-                    background:"none",border:"none",borderBottom:resultsView===sub.id?`2px solid ${C.accent}`:"2px solid transparent",
-                    color:resultsView===sub.id?C.accent:C.muted,cursor:"pointer",
-                    fontFamily:FONT,fontSize:12,fontWeight:resultsView===sub.id?700:400,
+                    background:"none",border:"none",borderBottom:resultsView===sub.id&&!explainPanelOpen?`2px solid ${C.accent}`:"2px solid transparent",
+                    color:resultsView===sub.id&&!explainPanelOpen?C.accent:C.muted,cursor:"pointer",
+                    fontFamily:FONT,fontSize:12,fontWeight:resultsView===sub.id&&!explainPanelOpen?700:400,
                     padding:"8px 14px",marginBottom:-1,whiteSpace:"nowrap",outline:"none",
                     transition:"color 0.15s",
                   }}
-                  aria-current={resultsView===sub.id?"page":undefined}
+                  aria-current={resultsView===sub.id&&!explainPanelOpen?"page":undefined}
                 >
                   {sub.label}
                 </button>
               ))}
               <div style={{flex:1}}/>
-              <Btn small variant="ghost" onClick={()=>setTab("execute")} style={{marginRight:4,flexShrink:0}}>← Run</Btn>
+              <div style={{display:"flex",gap:4,alignItems:"center",paddingRight:4}}>
+                <Btn small variant={explainPanelOpen&&aiTrigger.action==="explain"?"primary":"ghost"}
+                  onClick={()=>{
+                    if(explainPanelOpen&&aiTrigger.action==="explain"){setExplainPanelOpen(false);}
+                    else{setExplainPanelOpen(true);setAiTrigger(prev=>({action:"explain",seq:prev.seq+1}));}
+                  }}
+                  disabled={!latestResults}
+                >Explain</Btn>
+                <Btn small variant={explainPanelOpen&&aiTrigger.action==="compare"?"primary":"ghost"}
+                  onClick={()=>{
+                    if(explainPanelOpen&&aiTrigger.action==="compare"){setExplainPanelOpen(false);}
+                    else{setExplainPanelOpen(true);setAiTrigger(prev=>({action:"compare",seq:prev.seq+1}));}
+                  }}
+                  disabled={!latestResults}
+                >Compare</Btn>
+                <Btn small variant={explainPanelOpen&&aiTrigger.action==="refine"?"primary":"ghost"}
+                  onClick={()=>{
+                    if(explainPanelOpen&&aiTrigger.action==="refine"){setExplainPanelOpen(false);}
+                    else{setExplainPanelOpen(true);setAiTrigger(prev=>({action:"refine",seq:prev.seq+1}));}
+                  }}
+                  disabled={!latestResults}
+                >Refine Plan</Btn>
+                <Btn small variant="ghost" onClick={()=>setTab("execute")} style={{marginLeft:4}}>← Run</Btn>
+              </div>
             </div>
 
             {resultsView==="summary"&&(
@@ -1288,37 +1319,32 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 onViewResults={row=>openResultsForRun(row,"summary")}
               />
             )}
-            {resultsView==="explain"&&(
-              latestResults ? (
-                <AiAssistantPanel
-                  model={model}
-                  results={latestResults}
-                  exportConfig={{
-                    modelId,
-                    runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
-                    replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications || latestResults?.replications || 1,
-                    warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
-                    maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
-                    terminationMode: "time",
-                    terminationCondition: null,
-                  }}
-                  aggregateStats={latestResults?.aggregateStats || {}}
-                  comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
-                    id: `saved-${row.id}`,
-                    label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
-                    payload: row,
-                    source: "saved",
-                  }))}
-                  comparisonLoading={historyLoading}
-                  comparisonError={historyError}
-                  overlay
-                  onClose={()=>setResultsView("summary")}
-                />
-              ) : (
-                <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
-                  Results from the latest run will appear here. Open Run to generate them, or select a saved run when run history is available.
-                </div>
-              )
+            {explainPanelOpen&&latestResults&&(
+              <AiAssistantPanel
+                model={model}
+                results={latestResults}
+                exportConfig={{
+                  modelId,
+                  runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
+                  replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications ?? latestResults?.replications ?? latestResults?.aggregateStats?.replications ?? 1,
+                  warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
+                  maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
+                  terminationMode: "time",
+                  terminationCondition: null,
+                }}
+                aggregateStats={latestResults?.aggregateStats || {}}
+                comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
+                  id: `saved-${row.id}`,
+                  label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
+                  payload: row,
+                  source: "saved",
+                }))}
+                comparisonLoading={historyLoading}
+                comparisonError={historyError}
+                triggerAction={aiTrigger}
+                overlay
+                onClose={()=>setExplainPanelOpen(false)}
+              />
             )}
           </div>
         )}
