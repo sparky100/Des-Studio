@@ -214,5 +214,36 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
     resultsJson._trimmed_fields = trimmedFields;
   }
 
+  // Payload size guard: if the payload still exceeds the safe threshold after
+  // detail-level trimming (e.g. "full" saves for large timetable models), force
+  // the same stripping that "minimal" applies so the INSERT does not time out.
+  const PAYLOAD_SAFE_BYTES = 800_000;
+  if (detailLevel !== "minimal" && JSON.stringify(resultsJson).length > PAYLOAD_SAFE_BYTES) {
+    if (Array.isArray(resultsJson.log) && resultsJson.log.length > 0) {
+      resultsJson.logSummary = buildLogSummary(resultsJson.log);
+      delete resultsJson.log;
+    }
+    delete resultsJson.trace;
+    if (Array.isArray(resultsJson.entitySummary) && resultsJson.entitySummary.length > 0) {
+      resultsJson.entitySummaryCompact = summarizeEntitySummary(resultsJson.entitySummary);
+      delete resultsJson.entitySummary;
+    }
+    delete resultsJson.timeSeries;
+    if (resultsJson.waitDist && typeof resultsJson.waitDist === "object") {
+      resultsJson.waitDist = summarizeWaitDist(resultsJson.waitDist);
+    }
+    if (Array.isArray(resultsJson.replications)) {
+      resultsJson.replications = resultsJson.replications.map(r => ({
+        replicationIndex: r.replicationIndex,
+        seed: r.seed,
+        summary: r.summary,
+        finalTime: r.finalTime,
+      }));
+    }
+    resultsJson._result_detail_level = "minimal";
+    resultsJson._auto_trimmed_from = detailLevel;
+    resultsJson._auto_trim_reason = "payload_size_guard";
+  }
+
   return withResultsPayloadSize(resultsJson);
 }
