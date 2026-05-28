@@ -40,6 +40,40 @@ function getSummary(results = {}) {
   return results.summary || results.results?.summary || {};
 }
 
+// Formats at most 1 decimal place; returns null if not finite
+function formatN(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? (Number.isInteger(n) ? String(n) : n.toFixed(1)) : null;
+}
+
+// Formats financial values in English: £1.24 million, £45.34 thousand, £123
+function formatCurrency(value, symbol = '£') {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${symbol}${(n / 1_000_000).toFixed(2)} million`;
+  if (abs >= 1_000)     return `${symbol}${(n / 1_000).toFixed(2)} thousand`;
+  return `${symbol}${n.toFixed(2)}`;
+}
+
+// For multi-rep runs, use the aggregateStats mean rather than the single-run value.
+// metricPath is the summary field name e.g. 'avgWait', 'served', 'totalCost'.
+function resolveValue(metricPath, summary, aggStats = {}) {
+  const key = `summary.${metricPath}`;
+  const agg = aggStats[key];
+  if (agg && Number.isFinite(agg.mean) && agg.n >= 2) return agg.mean;
+  return summary[metricPath];
+}
+
+const COST_METRICS = new Set(['totalCost', 'costPerServed']);
+
+function formatMetric(metricPath, summary, aggStats, unit) {
+  const val = resolveValue(metricPath, summary, aggStats);
+  if (val == null || !Number.isFinite(Number(val))) return null;
+  if (COST_METRICS.has(metricPath)) return formatCurrency(val);
+  return formatN(val);
+}
+
 // ── SVG Charts ─────────────────────────────────────────────────────────────────
 
 const CHART_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed'];
@@ -202,6 +236,14 @@ function htmlTable(headers, rows) {
   return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+function mdTable(headers, rows) {
+  if (!rows.length) return '_No data available._\n';
+  const head = `| ${headers.join(' | ')} |`;
+  const sep  = `| ${headers.map(() => '---').join(' | ')} |`;
+  const body = rows.map(r => `| ${r.map(c => String(c ?? '—').replace(/\|/g, '\\|')).join(' | ')} |`).join('\n');
+  return `${head}\n${sep}\n${body}\n`;
+}
+
 function buildCover(model, runMeta, experimentConfig) {
   let periodLine = '';
   if (model.epoch) {
@@ -235,17 +277,17 @@ function buildModelImage(modelImageDataUrl) {
   </section>`;
 }
 
-function buildExecutiveSummary(model, results, recommendations) {
+function buildExecutiveSummary(model, results, recommendations, aggStats = {}) {
   const summary = getSummary(results);
   const unit = model.timeUnit || 'minutes';
 
   const kpis = [
-    { lbl: 'Entities served',           val: fin(summary.served, 0) },
-    { lbl: 'Reneged / abandoned',       val: fin(summary.reneged, 0) },
-    { lbl: `Avg wait time (${unit})`,   val: fin(summary.avgWait, 1) },
-    { lbl: `Avg service time (${unit})`,val: fin(summary.avgSvc, 1) },
-    { lbl: `Avg total time (${unit})`,  val: fin(summary.avgSojourn, 1) },
-    { lbl: "Avg WIP",                   val: fin(summary.avgWIP, 1) },
+    { lbl: 'Entities served',           val: formatN(resolveValue('served', summary, aggStats)) },
+    { lbl: 'Reneged / abandoned',       val: formatN(resolveValue('reneged', summary, aggStats)) },
+    { lbl: `Avg wait time (${unit})`,   val: formatN(resolveValue('avgWait', summary, aggStats)) },
+    { lbl: `Avg service time (${unit})`,val: formatN(resolveValue('avgSvc', summary, aggStats)) },
+    { lbl: `Avg total time (${unit})`,  val: formatN(resolveValue('avgSojourn', summary, aggStats)) },
+    { lbl: "Avg WIP",                   val: formatN(resolveValue('avgWIP', summary, aggStats)) },
   ].filter(k => k.val !== null);
 
   const kpiHtml = kpis.length ? `<div class="kpi-grid">${
@@ -300,27 +342,27 @@ function buildExperimentConfig(experimentConfig, runMeta) {
   </section>`;
 }
 
-function buildResults(model, results) {
+function buildResults(model, results, aggStats = {}) {
   const summary  = getSummary(results);
   const waitDist = results.waitDist || {};
-  const aggStats = results.aggregateStats || {};
+  const ciStats  = results.aggregateStats || {};
   const unit     = model.timeUnit || 'minutes';
 
   // Summary stats — only post-warmup, time-averaged or per-entity values
   const metricRows = [
-    [`Entities completed service`,                              fin(summary.served, 0)],
-    [`Entities reneged (abandoned)`,                           fin(summary.reneged, 0)],
-    [`Average waiting time (${unit})`,                         fin(summary.avgWait, 1)],
-    [`Average service time (${unit})`,                         fin(summary.avgSvc, 1)],
-    [`Average total time in system — wait + service (${unit})`,fin(summary.avgSojourn, 1)],
-    [`Longest time in system (${unit})`,                       fin(summary.maxSojourn, 1)],
-    [`Average number in system (WIP)`,                         fin(summary.avgWIP, 1)],
-    [`Total cost`,                                             fin(summary.totalCost, 1)],
-    [`Cost per entity served`,                                 fin(summary.costPerServed, 1)],
+    [`Entities completed service`,                              formatN(resolveValue('served', summary, aggStats))],
+    [`Entities reneged (abandoned)`,                           formatN(resolveValue('reneged', summary, aggStats))],
+    [`Average waiting time (${unit})`,                         formatN(resolveValue('avgWait', summary, aggStats))],
+    [`Average service time (${unit})`,                         formatN(resolveValue('avgSvc', summary, aggStats))],
+    [`Average total time in system — wait + service (${unit})`,formatN(resolveValue('avgSojourn', summary, aggStats))],
+    [`Longest time in system (${unit})`,                       formatN(resolveValue('maxSojourn', summary, aggStats))],
+    [`Average number in system (WIP)`,                         formatN(resolveValue('avgWIP', summary, aggStats))],
+    [`Total cost`,                                             formatCurrency(resolveValue('totalCost', summary, aggStats))],
+    [`Cost per entity served`,                                 formatCurrency(resolveValue('costPerServed', summary, aggStats))],
   ].filter(r => r[1] !== null);
 
   // Journey breakdown chart
-  const journeyChart = journeyBreakdownChart({ avgWait: summary.avgWait, avgSvc: summary.avgSvc, unit });
+  const journeyChart = journeyBreakdownChart({ avgWait: resolveValue('avgWait', summary, aggStats), avgSvc: resolveValue('avgSvc', summary, aggStats), unit });
 
   // Queue wait-time chart + table
   const queueNames = Object.keys(waitDist);
@@ -389,11 +431,11 @@ function buildResults(model, results) {
   }
 
   // Confidence intervals (multi-replication only)
-  const ciKeys = Object.keys(aggStats).filter(k => aggStats[k]?.n >= 2);
+  const ciKeys = Object.keys(ciStats).filter(k => ciStats[k]?.n >= 2);
   let ciHtml = '';
   if (ciKeys.length) {
     const ciRows = ciKeys.map(k => {
-      const s = aggStats[k];
+      const s = ciStats[k];
       return [k, fin(s.mean, 1) ?? '—', fin(s.lower, 1) ?? '—', fin(s.upper, 1) ?? '—', String(s.n || '—')];
     });
     ciHtml = `<h3>Replication Confidence Intervals (95%)</h3>${htmlTable(['Metric', 'Mean', 'CI Lower', 'CI Upper', 'N'], ciRows)}`;
@@ -422,6 +464,15 @@ function buildResults(model, results) {
     ${planVsActualHtml}
     ${goalHtml}
     ${ciHtml}
+  </section>`;
+}
+
+function buildSeniorMgmtAnalysis(narrativeText) {
+  if (!narrativeText) return '';
+  return `
+  <section>
+    <h2>Analysis</h2>
+    <div class="desc">${esc(narrativeText)}</div>
   </section>`;
 }
 
@@ -493,18 +544,23 @@ function buildAppendix(model) {
   return html + '</section>';
 }
 
-// ── Main export ────────────────────────────────────────────────────────────────
+// ── HTML report builder ────────────────────────────────────────────────────────
 
-export async function generateReport(model = {}, results = {}, experimentConfig = {}, runMeta = {}, modelImageDataUrl = null) {
-  let modelDescription = runMeta.modelDescriptionText || model.description || '';
-  let recommendations  = [];
+function buildHtmlReport({ model, results, experimentConfig, runMeta, aggregateStats, type, narrativeText, modelDescription, recommendations }) {
+  const isTechnical = type === 'technical';
+  const title = esc(`${model.name || 'Simulation'} — ${isTechnical ? 'Technical' : 'Management'} Report`);
 
-  // If narrative/description were pre-stored in the run record, use them directly.
-  // Only call LLM for recommendations (which are not stored at run time).
-  const recsResult = await callLLMOnce(buildReportRecommendationsPrompt(model, results)).catch(() => '[]');
-  recommendations = parseReportRecommendations(recsResult);
-
-  const title = esc(`${model.name || 'Simulation'} — Analysis Report`);
+  const body = [
+    buildCover(model, runMeta, experimentConfig),
+    buildModelDescription(modelDescription),
+    buildExecutiveSummary(model, results, recommendations, aggregateStats),
+    buildResults(model, results, aggregateStats),
+    narrativeText ? buildSeniorMgmtAnalysis(narrativeText) : '',
+    buildRecommendations(recommendations),
+    isTechnical ? buildExperimentConfig(experimentConfig, runMeta) : '',
+    isTechnical ? buildRunProvenance(runMeta) : '',
+    isTechnical ? buildAppendix(model) : '',
+  ].join('');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -516,18 +572,250 @@ export async function generateReport(model = {}, results = {}, experimentConfig 
 </head>
 <body>
 <div class="report">
-  ${buildCover(model, runMeta, experimentConfig)}
-  ${buildModelImage(modelImageDataUrl)}
-  ${buildExecutiveSummary(model, results, recommendations)}
-  ${buildModelDescription(modelDescription)}
-  ${buildResults(model, results)}
-  ${buildRecommendations(recommendations)}
-  ${buildRunProvenance(runMeta)}
-  ${buildAppendix(model)}
+  ${body}
   <div class="footer">Generated by DES Studio · ${esc(formatDate(new Date().toISOString()))}</div>
 </div>
 </body>
 </html>`;
+}
+
+// ── Markdown report builder ────────────────────────────────────────────────────
+
+function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggregateStats, type, narrativeText, modelDescription, recommendations }) {
+  const isTechnical = type === 'technical';
+  const summary = getSummary(results);
+  const unit = model.timeUnit || 'minutes';
+  const multiRep = Object.values(aggregateStats).some(s => s?.n >= 2);
+
+  const lines = [];
+
+  // Cover
+  lines.push(`# ${model.name || 'Simulation'} — ${isTechnical ? 'Technical' : 'Management'} Report`);
+  lines.push('');
+  lines.push(`**Run:** ${runMeta.runLabel || runMeta.runId || '—'}  `);
+  lines.push(`**Date:** ${formatDate(runMeta.runTimestamp)}  `);
+  if (multiRep) lines.push(`**Replications:** ${experimentConfig.replications ?? '—'} (values shown are averages across replications)  `);
+  lines.push('');
+  lines.push('---');
+  lines.push('');
+
+  // What was modelled
+  if (modelDescription) {
+    lines.push('## What Was Modelled');
+    lines.push('');
+    lines.push(modelDescription);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
+
+  // Key results
+  lines.push('## Key Results');
+  lines.push('');
+  const kpiRows = [
+    ['Avg wait time', `${formatN(resolveValue('avgWait', summary, aggregateStats)) ?? '—'} ${unit}`],
+    ['Avg service time', `${formatN(resolveValue('avgSvc', summary, aggregateStats)) ?? '—'} ${unit}`],
+    ['Avg total time in system', `${formatN(resolveValue('avgSojourn', summary, aggregateStats)) ?? '—'} ${unit}`],
+    ['Avg entities in system (WIP)', `${formatN(resolveValue('avgWIP', summary, aggregateStats)) ?? '—'}`],
+    [`Entities served${multiRep ? ' (avg per run)' : ''}`, `${formatN(resolveValue('served', summary, aggregateStats)) ?? '—'}`],
+    [`Entities reneged${multiRep ? ' (avg per run)' : ''}`, `${formatN(resolveValue('reneged', summary, aggregateStats)) ?? '—'}`],
+  ].filter(r => r[1] && !r[1].startsWith('—'));
+  const costVal = resolveValue('totalCost', summary, aggregateStats);
+  if (costVal != null && Number.isFinite(Number(costVal))) {
+    kpiRows.push([`Total cost${multiRep ? ' (avg per run)' : ''}`, formatCurrency(costVal) ?? '—']);
+  }
+  lines.push(mdTable(['Metric', 'Value'], kpiRows));
+  lines.push('');
+
+  // Queue wait times
+  const waitDist = results.waitDist || {};
+  const queueNames = Object.keys(waitDist);
+  if (queueNames.length) {
+    lines.push('### Queue Wait-Time Distribution');
+    lines.push('');
+    const qRows = queueNames.map(q => {
+      const w = waitDist[q] || {};
+      return [q, formatN(w.mean) ?? '—', formatN(w.p50) ?? '—', formatN(w.p90) ?? '—', formatN(w.p95) ?? '—', formatN(w.p99) ?? '—'];
+    });
+    lines.push(mdTable([`Queue`, `Mean (${unit})`, `P50`, `P90`, `P95`, `P99`], qRows));
+    lines.push('> P90 = 9 in 10 customers waited less than this. P95 = 19 in 20 waited less than this.');
+    lines.push('');
+  }
+
+  // Resource utilisation
+  const perResource = summary.perResource || {};
+  const resourceTypes = Object.keys(perResource);
+  if (resourceTypes.length) {
+    lines.push('### Resource Utilisation');
+    lines.push('');
+    const utilRows = resourceTypes.map(t => {
+      const r = perResource[t];
+      const pct = Number.isFinite(r.utilisation) ? `${Math.round(r.utilisation * 100)}%` : '—';
+      return [t, String(r.total ?? '—'), pct];
+    });
+    lines.push(mdTable(['Resource', 'Count', '% Busy'], utilRows));
+    lines.push('');
+  }
+
+  // Goal assessment
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  if (Array.isArray(goalGaps) && goalGaps.length) {
+    lines.push('### Performance Goals');
+    lines.push('');
+    const goalRows = goalGaps.map(g => [
+      g.label || g.metric,
+      `${g.operator} ${g.target}`,
+      g.current != null ? (formatN(g.current) ?? '—') : '—',
+      g.met ? '✅ MET' : '❌ MISSED',
+    ]);
+    lines.push(mdTable(['Goal', 'Target', 'Current', 'Status'], goalRows));
+    lines.push('');
+  }
+
+  lines.push('---');
+  lines.push('');
+
+  // Analysis
+  if (narrativeText) {
+    lines.push('## Analysis');
+    lines.push('');
+    lines.push(narrativeText);
+    lines.push('');
+    lines.push('---');
+    lines.push('');
+  }
+
+  // Recommendations
+  lines.push('## Recommended Actions');
+  lines.push('');
+  if (!recommendations.length) {
+    lines.push('_No recommendations could be generated for this run._');
+  } else {
+    recommendations.forEach((rec, idx) => {
+      const num = rec.priority || idx + 1;
+      lines.push(`### ${num}. ${rec.headline || `Recommendation ${num}`}`);
+      if (rec.finding)        lines.push(`**Finding:** ${rec.finding}`);
+      if (rec.action)         lines.push(`**Action:** ${rec.action}`);
+      if (rec.expectedImpact) lines.push(`**Expected impact:** ${rec.expectedImpact}`);
+      if (rec.confidence)     lines.push(`**Confidence:** ${rec.confidence}`);
+      lines.push('');
+    });
+  }
+
+  if (isTechnical) {
+    lines.push('---');
+    lines.push('');
+
+    // CI Analysis
+    const aggStats = results.aggregateStats || {};
+    const ciKeys = Object.keys(aggStats).filter(k => aggStats[k]?.n >= 2);
+    if (ciKeys.length) {
+      lines.push('## Statistical Confidence Analysis');
+      lines.push('');
+      lines.push(`_Based on ${ciKeys[0] ? aggStats[ciKeys[0]].n : '?'} replications. All intervals are 95% confidence intervals._`);
+      lines.push('');
+      const ciRows = ciKeys.map(k => {
+        const s = aggStats[k];
+        return [k, formatN(s.mean) ?? '—', formatN(s.lower) ?? '—', formatN(s.upper) ?? '—', String(s.n || '—')];
+      });
+      lines.push(mdTable(['Metric', 'Mean', '95% CI Lower', '95% CI Upper', 'Replications'], ciRows));
+      lines.push('');
+    }
+
+    // Model specification
+    lines.push('## Model Specification');
+    lines.push('');
+    const entityTypes = model.entityTypes || [];
+    const queues = model.queues || [];
+    const stateVars = (model.stateVariables || []).filter(v => v.name);
+    if (entityTypes.length) {
+      lines.push('### Entity Types');
+      lines.push('');
+      lines.push(mdTable(['Name', 'Role', 'Count'],
+        entityTypes.map(e => [e.name || '—', e.role || '—', e.role === 'server' ? String(e.count ?? '—') : '—'])));
+      lines.push('');
+    }
+    if (queues.length) {
+      lines.push('### Queues');
+      lines.push('');
+      lines.push(mdTable(['Name', 'Discipline', 'Capacity'],
+        queues.map(q => [q.name || '—', q.discipline || 'FIFO', q.capacity != null ? String(q.capacity) : '∞'])));
+      lines.push('');
+    }
+    if (stateVars.length) {
+      lines.push('### State Variables');
+      lines.push('');
+      lines.push(mdTable(['Name', 'Initial Value'],
+        stateVars.map(v => [v.name, String(v.initialValue ?? '0')])));
+      lines.push('');
+    }
+
+    // Experiment config
+    lines.push('## Experiment Configuration');
+    lines.push('');
+    lines.push(mdTable(['Parameter', 'Value'], [
+      ['Run label',      runMeta.runLabel || '—'],
+      ['Warm-up period', String(experimentConfig.warmupPeriod ?? experimentConfig.warmup ?? 0)],
+      ['Run duration',   String(experimentConfig.maxSimTime ?? experimentConfig.runDuration ?? '—')],
+      ['Replications',   String(experimentConfig.replications ?? 1)],
+      ['Termination',    experimentConfig.terminationMode || 'time'],
+      ['Random seed',    String(runMeta.seed ?? '—')],
+      ['PRN algorithm',  runMeta.prnAlgorithm || 'mulberry32'],
+      ['Engine version', runMeta.engineVersion || '1.0'],
+    ]));
+    lines.push('');
+
+    // Provenance
+    lines.push('## Run Provenance');
+    lines.push('');
+    lines.push(mdTable(['Field', 'Value'], [
+      ['Run ID',         runMeta.runId || '—'],
+      ['Run date',       formatDate(runMeta.runTimestamp)],
+      ['Engine version', `v${runMeta.engineVersion || '1.0'}`],
+      ['PRNG algorithm', runMeta.prnAlgorithm || 'mulberry32'],
+      ['Base seed',      String(runMeta.seed ?? '—')],
+    ]));
+    lines.push('');
+  }
+
+  lines.push('---');
+  lines.push('');
+  lines.push(`_Generated by DES Studio · ${formatDate(new Date().toISOString())}_`);
+
+  return lines.join('\n');
+}
+
+// ── Main export ────────────────────────────────────────────────────────────────
+
+export async function generateReport(model = {}, results = {}, experimentConfig = {}, runMeta = {}, options = {}) {
+  // Back-compat: old callers passed modelImageDataUrl as 5th arg (string or null)
+  const opts = (options && typeof options === 'object' && !Array.isArray(options))
+    ? options
+    : {};
+  const {
+    type = 'technical',     // 'seniorMgmt' | 'technical'
+    format = 'html',        // 'html' | 'markdown'
+    aggregateStats = {},
+  } = opts;
+
+  const modelDescription = runMeta.modelDescriptionText || model.description || '';
+  const narrativeText    = runMeta.narrativeText || '';
+
+  // Generate recommendations (not stored at run-time)
+  const recsRaw = await callLLMOnce(buildReportRecommendationsPrompt(model, results)).catch(() => '[]');
+  const recommendations = parseReportRecommendations(recsRaw);
+
+  // Generate model description if not stored
+  let finalDescription = modelDescription;
+  if (!finalDescription) {
+    finalDescription = await callLLMOnce(buildModelDescriptionPrompt(model)).catch(() => '');
+  }
+
+  const ctx = { model, results, experimentConfig, runMeta, aggregateStats, type, narrativeText, modelDescription: finalDescription, recommendations };
+
+  return format === 'markdown'
+    ? buildMarkdownReport(ctx)
+    : buildHtmlReport(ctx);
 }
 
 export { sanitizeFilename, formatDate };
