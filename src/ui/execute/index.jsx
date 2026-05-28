@@ -462,8 +462,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const storeRunNarrative = useCallback(async (runId, model, results) => {
     if (!runId || !userId) return;
     try {
+      // Use the actual executed replication count from runtimeMetrics, not the
+      // UI state variable — they differ when the user runs a step-through single
+      // run while the replications picker is set to > 1.
+      const actualReplications = results?.runtimeMetrics?.replications ?? replications;
       const [narrative, description] = await Promise.allSettled([
-        callLLMOnce(buildNarrativePrompt(model, { warmupPeriod, maxSimTime, replications, terminationMode }, results)).catch(() => null),
+        callLLMOnce(buildNarrativePrompt(model, { warmupPeriod, maxSimTime, replications: actualReplications, terminationMode }, results)).catch(() => null),
         callLLMOnce(buildModelDescriptionPrompt(model)).catch(() => null),
       ]);
       const narrativeText = narrative.status === 'fulfilled' ? narrative.value : null;
