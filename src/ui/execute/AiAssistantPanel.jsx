@@ -276,7 +276,9 @@ export const AiAssistantPanel = ({
   onApplyPatchedModel,
   embedded = false,
   overlay = false,
+  inline = false,
   triggerAction = null, // { action: "explain"|"compare"|"refine", seq: number }
+  activeAction = null,  // for title display
 }) => {
   const toast = useToast();
   const [response, setResponse] = useState("");
@@ -660,6 +662,9 @@ export const AiAssistantPanel = ({
     return "Select Explain, Compare, or Refine Plan to analyse these results.";
   };
 
+  const ACTION_TITLES = { explain: "Explain", compare: "Compare", refine: "Refine Plan" };
+  const panelTitle = (activeAction && ACTION_TITLES[activeAction]) || "AI Analysis";
+
   const overlayStyle = overlay ? {
     position: "fixed",
     right: 16,
@@ -678,6 +683,15 @@ export const AiAssistantPanel = ({
     flexDirection: "column",
     gap: 12,
     boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
+  } : inline ? {
+    width: "100%",
+    background: C.panel,
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
   } : {
     width: embedded ? "min(420px, 100%)" : 320,
     maxWidth: embedded ? 420 : 320,
@@ -698,7 +712,7 @@ export const AiAssistantPanel = ({
   return (
     <aside aria-label="AI assistant" style={overlayStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
-        <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>AI Analysis</div>
+        <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{panelTitle}</div>
         {(overlay || (!embedded && onClose)) && onClose && (
           <button
             type="button"
