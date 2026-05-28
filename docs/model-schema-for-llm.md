@@ -316,6 +316,31 @@ Instead of `dist`/`distParams`, a schedule entry can supply an explicit list of 
 
 > **Developer note:** The conversion from `HH:MM` / ISO timestamps to simulation time is handled by `parsePlanCsv(text, { epoch, timeUnit })` in `src/ui/shared/planCsvParser.js`. Pass the model's `epoch` string and `timeUnit` to this function when building integrations that ingest CSV data.
 
+### Planned Arrival CSV Delivery
+
+When a model uses planned arrivals with `rows[]`, always create a companion CSV alongside the model JSON.
+
+The CSV must:
+- use `time` as the first column
+- include one column for each `attrDefs[].name` on the arriving entity type
+- use column names that **exactly match** the entity attribute names
+- contain one row per planned arrival
+- preserve the same values as the model's `rows[]`
+- use numeric simulation times unless the model has an `epoch`, in which case `HH:MM` or ISO timestamps may be used
+
+Example — a clinic model with `epoch` set and a `Patient` entity with attributes `severity` and `age`:
+
+```
+time,severity,age
+08:00,3,45
+08:15,1,32
+08:30,2,28
+```
+
+**Size guidance:** For schedules with more than 50 rows, keep the model JSON's `rows[]` empty (`"rows": []`) and deliver all arrival data exclusively in the companion CSV. The user imports it via the **Schedules** tab. For 50 rows or fewer, embedding rows inline in the JSON is acceptable.
+
+The companion CSV is returned in the `companionCsv` field of the response envelope (see Response Format). Set `companionCsv` to `null` when the model does not use planned arrivals.
+
 ### Rules
 
 - `id` must be unique across all B-events.
