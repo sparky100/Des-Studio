@@ -304,9 +304,19 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                     </select>
                     <Btn small variant="danger" ariaLabel={`Remove B-event schedule ${j+1}`} onClick={()=>remS(i,j)}>✕</Btn>
                   </div>
-                  <DistPicker value={{dist:s.dist,distParams:s.distParams}} onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams})} compact
-                    attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
-                    epoch={epoch} timeUnit={timeUnit}/>
+                  {s.scheduleRef ? (
+                    <div style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10}}>
+                      <span style={{fontSize:16,lineHeight:1}}>📅</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700}}>Driven by named schedule</div>
+                        <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times come from the timetable linked in the Schedules tab. Edit timing there.</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <DistPicker value={{dist:s.dist,distParams:s.distParams}} onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams})} compact
+                      attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
+                      epoch={epoch} timeUnit={timeUnit}/>
+                  )}
                   <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:s.isRenege?C.reneged:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
                     <input type="checkbox" checked={!!s.isRenege} onChange={e=>updS(i,j,{isRenege:e.target.checked})} style={{accentColor:C.reneged}}/>
                     Reneging timer
