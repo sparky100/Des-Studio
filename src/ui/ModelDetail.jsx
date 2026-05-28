@@ -516,6 +516,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [latestReplicationResults,setLatestReplicationResults]=useState([]);
   const [latestWarmupDetection,setLatestWarmupDetection]=useState(null);
   const [latestLog,setLatestLog]=useState([]);
+  const [namedSchedules,setNamedSchedules]=useState([]);
   const [resultsView,setResultsView]=useState("summary");
   const [aiAction,setAiAction]=useState(null);
   const [aiSeq,setAiSeq]=useState(0);
@@ -737,6 +738,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     if(dirty&&!window.confirm('You have unsaved changes. Leave without saving?'))return;
     onBack();
   };
+
+  useEffect(()=>{
+    if(!modelId)return;
+    fetchModelSchedules(modelId).then(setNamedSchedules).catch(()=>{});
+  },[modelId]);
 
   useEffect(()=>{
     const onBeforeUnload=(e)=>{
@@ -1100,7 +1106,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             </div>
           </div>
         )}
-        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'}/></div>)}
+        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules}/></div>)}
         {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
         {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} onBEventsExtracted={async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };

@@ -2,7 +2,7 @@ import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit,namedSchedules=[]})=>{
   const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:[],schedules:[],description:""}]);
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
   const commitName=(i,v)=>{
@@ -308,8 +308,10 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                     <div style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10}}>
                       <span style={{fontSize:16,lineHeight:1}}>📅</span>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700}}>Driven by named schedule</div>
-                        <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times come from the timetable linked in the Schedules tab. Edit timing there.</div>
+                        <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700}}>
+                          {namedSchedules.find(ns=>ns.id===s.scheduleRef)?.name ?? "Named schedule"}
+                        </div>
+                        <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable. Edit in the Schedules tab.</div>
                       </div>
                     </div>
                   ) : (
