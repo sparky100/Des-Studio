@@ -1311,7 +1311,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                   }))}
                   comparisonLoading={historyLoading}
                   comparisonError={historyError}
-                  embedded
+                  overlay
+                  onClose={()=>setResultsView("summary")}
                 />
               ) : (
                 <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>

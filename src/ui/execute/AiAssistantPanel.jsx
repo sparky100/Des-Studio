@@ -275,6 +275,7 @@ export const AiAssistantPanel = ({
   onRunWithPatch,
   onApplyPatchedModel,
   embedded = false,
+  overlay = false,
 }) => {
   const toast = useToast();
   const [response, setResponse] = useState("");
@@ -584,29 +585,56 @@ export const AiAssistantPanel = ({
     return "Run the model to start asking questions.";
   };
 
+  const overlayStyle = overlay ? {
+    position: "fixed",
+    right: 16,
+    top: 96,
+    zIndex: 60,
+    width: 380,
+    minWidth: 320,
+    maxWidth: 420,
+    maxHeight: "calc(100vh - 120px)",
+    overflowY: "auto",
+    background: C.panel,
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+    boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
+  } : {
+    width: embedded ? "min(420px, 100%)" : 320,
+    maxWidth: embedded ? 420 : 320,
+    flex: embedded ? "0 0 auto" : "0 0 320px",
+    background: C.panel,
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    padding: 14,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+    minHeight: 520,
+    alignSelf: "stretch",
+    marginLeft: embedded ? "auto" : 0,
+    boxShadow: embedded ? "0 10px 28px rgba(0,0,0,0.24)" : "none",
+  };
+
   return (
-    <aside aria-label="AI assistant" style={{
-      width: embedded ? "min(420px, 100%)" : 320,
-      maxWidth: embedded ? 420 : 320,
-      flex: embedded ? "0 0 auto" : "0 0 320px",
-      background: C.panel,
-      border: `1px solid ${C.border}`,
-      borderRadius: 8,
-      padding: 14,
-      display: "flex",
-      flexDirection: "column",
-      gap: 12,
-      minHeight: 520,
-      alignSelf: "stretch",
-      marginLeft: embedded ? "auto" : 0,
-      boxShadow: embedded ? "0 10px 28px rgba(0,0,0,0.24)" : "none",
-    }}>
+    <aside aria-label="AI assistant" style={overlayStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
-          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{embedded ? "Explain Results" : "AI Assistant"}</div>
-          {!embedded && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
+          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{(embedded || overlay) ? "Explain Results" : "AI Assistant"}</div>
+          {!embedded && !overlay && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
         </div>
-        {!embedded && onClose && <Btn small variant="ghost" onClick={onClose} ariaLabel="Close AI assistant">x</Btn>}
+        {(overlay || (!embedded && onClose)) && onClose && (
+          <button
+            type="button"
+            aria-label="Close AI assistant"
+            onClick={onClose}
+            style={{ background: "none", border: "none", color: C.muted, fontSize: 16, cursor: "pointer", padding: "0 4px" }}
+          >✕</button>
+        )}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
