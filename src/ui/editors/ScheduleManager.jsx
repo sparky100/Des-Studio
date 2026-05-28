@@ -22,6 +22,7 @@ import {
 } from "../../db/models.js";
 import { parsePlanCsv } from "../shared/planCsvParser.js";
 import { parseXlsx } from "../shared/xlsxParser.js";
+import { mergeScheduleRows, linkBEventToSchedule, unlinkBEventFromSchedule } from "./scheduleHelpers.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -191,13 +192,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
     setImportError(null);
     try {
       const { rows } = importPreview;
-      const existingJson = sched.scheduleJson || [];
-      let newJson;
-      if (existingJson.some(e => e.eventId === importTargetEventId)) {
-        newJson = existingJson.map(e => e.eventId === importTargetEventId ? { ...e, rows } : e);
-      } else {
-        newJson = [...existingJson, { eventId: importTargetEventId, rows }];
-      }
+      const newJson = mergeScheduleRows(sched.scheduleJson, importTargetEventId, rows);
       await onSave({ ...sched, scheduleJson: newJson });
       setImportPreview(null);
     } catch (err) {
@@ -449,13 +444,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
                 <span style={{ color: C.green }}>●</span>
                 <span style={{ color: C.text, flex: 1 }}>{be.name ?? be.id}</span>
                 <Btn size="xs" variant="ghost" onClick={() => {
-                  const next = bEvents.map(b => b.id !== be.id ? b : {
-                    ...b,
-                    schedules: (b.schedules || []).map(s =>
-                      s.scheduleRef === sched.id ? (({ scheduleRef: _, ...rest }) => rest)(s) : s
-                    ),
-                  });
-                  onUpdateBEvents(next);
+                  onUpdateBEvents(unlinkBEventFromSchedule(bEvents, be.id, sched.id));
                 }}>Unlink</Btn>
               </div>
             ))}
@@ -464,11 +453,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
                 <span style={{ color: C.amber }}>○</span>
                 <span style={{ color: C.muted, flex: 1 }}>{be.name ?? be.id} — not linked</span>
                 <Btn size="xs" onClick={() => {
-                  const next = bEvents.map(b => b.id !== be.id ? b : {
-                    ...b,
-                    schedules: (b.schedules || []).map((s, i) => i === 0 ? { ...s, scheduleRef: sched.id, rows: [] } : s),
-                  });
-                  onUpdateBEvents(next);
+                  onUpdateBEvents(linkBEventToSchedule(bEvents, be.id, sched.id));
                 }}>Link</Btn>
               </div>
             ))}
