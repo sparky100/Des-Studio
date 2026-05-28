@@ -387,6 +387,39 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
         </div>
       )}
 
+      {/* Event links section */}
+      {canEdit && onUpdateBEvents && (() => {
+        const linked = bEvents.filter(be => (be.schedules || []).some(s => s.scheduleRef === sched.id));
+        const unlinked = bEvents.filter(be =>
+          !linked.some(l => l.id === be.id) &&
+          (be.schedules || []).some(s => s.dist === "Schedule" || (Array.isArray(s.rows) && s.rows.length > 0))
+        );
+        if (linked.length === 0 && unlinked.length === 0) return null;
+        return (
+          <div style={{ borderBottom: `1px solid ${C.border}`, paddingBottom: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>Event links</div>
+            {linked.map(be => (
+              <div key={be.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                <span style={{ color: C.green }}>●</span>
+                <span style={{ color: C.text, flex: 1 }}>{be.name ?? be.id}</span>
+                <Btn size="xs" variant="ghost" onClick={() => {
+                  onUpdateBEvents(unlinkBEventFromSchedule(bEvents, be.id, sched.id));
+                }}>Unlink</Btn>
+              </div>
+            ))}
+            {unlinked.map(be => (
+              <div key={be.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                <span style={{ color: C.amber }}>○</span>
+                <span style={{ color: C.muted, flex: 1 }}>{be.name ?? be.id} — not linked</span>
+                <Btn size="xs" onClick={() => {
+                  onUpdateBEvents(linkBEventToSchedule(bEvents, be.id, sched.id));
+                }}>Link</Btn>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Rows table */}
       {totalRows === 0 ? (
         <Empty>No schedule rows — this schedule is empty.</Empty>
@@ -428,38 +461,6 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
         </div>
       )}
 
-      {/* Event links section */}
-      {canEdit && onUpdateBEvents && (() => {
-        const linked = bEvents.filter(be => (be.schedules || []).some(s => s.scheduleRef === sched.id));
-        const unlinked = bEvents.filter(be =>
-          !linked.some(l => l.id === be.id) &&
-          (be.schedules || []).some(s => s.dist === "Schedule" || (Array.isArray(s.rows) && s.rows.length > 0))
-        );
-        if (linked.length === 0 && unlinked.length === 0) return null;
-        return (
-          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ fontSize: 11, color: C.muted, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase" }}>Event links</div>
-            {linked.map(be => (
-              <div key={be.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                <span style={{ color: C.green }}>●</span>
-                <span style={{ color: C.text, flex: 1 }}>{be.name ?? be.id}</span>
-                <Btn size="xs" variant="ghost" onClick={() => {
-                  onUpdateBEvents(unlinkBEventFromSchedule(bEvents, be.id, sched.id));
-                }}>Unlink</Btn>
-              </div>
-            ))}
-            {unlinked.map(be => (
-              <div key={be.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                <span style={{ color: C.amber }}>○</span>
-                <span style={{ color: C.muted, flex: 1 }}>{be.name ?? be.id} — not linked</span>
-                <Btn size="xs" onClick={() => {
-                  onUpdateBEvents(linkBEventToSchedule(bEvents, be.id, sched.id));
-                }}>Link</Btn>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
     </div>
   );
 }
