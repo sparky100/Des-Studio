@@ -35,8 +35,6 @@ The tool is backed by Supabase for authentication, model storage, and run histor
 | Test runner | Vitest | 1.6.0 | Engine layer only. Node environment. |
 | Canvas / DAG | `@xyflow/react` | — | ADR-010. Visual Designer authoring canvas and Execute live flow view, both lazy-loaded. `model_json.graph` drives layout. |
 | Animation | SVG `<animateMotion>` | — | Entity token animation on execute canvas edges. Toggle in `user_settings`. |
-| Report export | `docx` | 9.6.1 | Client-side Word document generation. Used only in `src/reports/reportGenerator.js`. |
-| Canvas capture | `html2canvas` | 1.4.1 | React Flow canvas → PNG for report image section. Dynamically imported. |
 
 **Do not introduce new dependencies without flagging them first.** The dependency list is intentionally minimal.
 
@@ -82,8 +80,8 @@ project root
 │   │   ├── AuthShell.jsx            ← Self-contained auth forms (sign-in, sign-up, password recovery)
 │   │   └── ModelHistoryTab.jsx      ← Run history tab extracted from ModelDetail
 │   ├── reports/
-│   │   ├── reportGenerator.js       ← 7-section .docx generator (docx v9, LLM narrative, html2canvas)
-│   │   └── index.js                 ← Barrel: re-exports generateReport
+│   │   ├── reportGenerator.js       ← Dual-type (Senior Management / Technical) × dual-format (HTML / Markdown) report generator; exports generateReport(model, results, experimentConfig, runMeta, options) and sanitizeFilename
+│   │   └── index.js                 ← Barrel: re-exports generateReport, sanitizeFilename
 │   ├── db/
 │   │   ├── models.js                ← Supabase CRUD wrappers (incl. ADR-016 model_schedules functions)
 │   │   ├── results-persistence.js   ← buildPersistedResultsJson, withResultsPayloadSize, resolveResultDetailLevel
