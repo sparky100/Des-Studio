@@ -1310,34 +1310,32 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               />
             )}
             {aiAction&&latestResults&&(
-              <div style={{marginTop:20,borderTop:`1px solid ${C.border}`,paddingTop:16}}>
-                <AiAssistantPanel
-                  model={model}
-                  results={latestResults}
-                  exportConfig={{
-                    modelId,
-                    runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
-                    replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications ?? latestResults?.replications ?? latestResults?.aggregateStats?.replications ?? 1,
-                    warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
-                    maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
-                    terminationMode: "time",
-                    terminationCondition: null,
-                  }}
-                  aggregateStats={latestResults?.aggregateStats || {}}
-                  comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
-                    id: `saved-${row.id}`,
-                    label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
-                    payload: row,
-                    source: "saved",
-                  }))}
-                  comparisonLoading={historyLoading}
-                  comparisonError={historyError}
-                  triggerAction={{action:aiAction,seq:aiSeq}}
-                  activeAction={aiAction}
-                  inline
-                  onClose={()=>setAiAction(null)}
-                />
-              </div>
+              <AiAssistantPanel
+                model={model}
+                results={latestResults}
+                exportConfig={{
+                  modelId,
+                  runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
+                  replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications ?? latestResults?.replications ?? latestResults?.aggregateStats?.replications ?? 1,
+                  warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
+                  maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
+                  terminationMode: "time",
+                  terminationCondition: null,
+                }}
+                aggregateStats={latestResults?.aggregateStats || {}}
+                comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
+                  id: `saved-${row.id}`,
+                  label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
+                  payload: row,
+                  source: "saved",
+                }))}
+                comparisonLoading={historyLoading}
+                comparisonError={historyError}
+                triggerAction={{action:aiAction,seq:aiSeq}}
+                activeAction={aiAction}
+                overlay
+                onClose={()=>setAiAction(null)}
+              />
             )}
           </div>
         )}
