@@ -46,6 +46,12 @@ function formatN(value) {
   return Number.isFinite(n) ? (Number.isInteger(n) ? String(n) : n.toFixed(1)) : null;
 }
 
+// Always returns a whole-number string — used for entity counts (served, reneged)
+function formatInt(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? String(Math.round(n)) : null;
+}
+
 // Formats financial values in English: £1.24 million, £45.34 thousand, £123
 function formatCurrency(value, symbol = '£') {
   const n = Number(value);
@@ -57,7 +63,6 @@ function formatCurrency(value, symbol = '£') {
 }
 
 // For multi-rep runs, use the aggregateStats mean rather than the single-run value.
-// metricPath is the summary field name e.g. 'avgWait', 'served', 'totalCost'.
 function resolveValue(metricPath, summary, aggStats = {}) {
   const key = `summary.${metricPath}`;
   const agg = aggStats[key];
@@ -74,13 +79,84 @@ function formatMetric(metricPath, summary, aggStats, unit) {
   return formatN(val);
 }
 
+// Returns the display name of the non-resource (customer/train/patient) entity type.
+function getEntityName(model) {
+  const et = (model.entityTypes || []).find(e => e.role === 'customer');
+  return et?.name || 'Entity';
+}
+
+// Detects whether arrivals are plan-based (timetable) or stochastic (distribution).
+function detectArrivalMode(model, summary) {
+  if (summary.avgPlanDeviation != null) return 'plan';
+  const hasTimetable = (model.bEvents || []).some(ev =>
+    (ev.schedules || []).some(s => (s.rows?.length > 0) || (s.times?.length > 0))
+  );
+  return hasTimetable ? 'plan' : 'stochastic';
+}
+
+// Extracts distribution label from the first B-event schedule that names one.
+function getArrivalDistInfo(model) {
+  for (const ev of (model.bEvents || [])) {
+    for (const s of (ev.schedules || [])) {
+      if (s.dist) {
+        const params = s.distParams || {};
+        const parts = Object.entries(params).map(([k, v]) => `${k}=${v}`).join(', ');
+        return parts ? `${s.dist} (${parts})` : s.dist;
+      }
+    }
+  }
+  return null;
+}
+
+// Aggregates mean service time per queue from entitySummary stages.
+function computePerQueueServiceTimes(results) {
+  const entitySummary = results.entitySummary || [];
+  const byQueue = {};
+  entitySummary.forEach(entity => {
+    if (entity.status !== 'done') return;
+    (entity.stages || []).forEach(stage => {
+      const q = stage.queueName;
+      if (!q) return;
+      if (!byQueue[q]) byQueue[q] = [];
+      if (Number.isFinite(stage.stageService) && stage.stageService >= 0) {
+        byQueue[q].push(stage.stageService);
+      }
+    });
+  });
+  const out = {};
+  Object.keys(byQueue).forEach(q => {
+    const vals = byQueue[q];
+    if (!vals.length) return;
+    out[q] = { n: vals.length, mean: vals.reduce((a, b) => a + b, 0) / vals.length };
+  });
+  return out;
+}
+
+// Splits a label into word-wrapped lines for SVG text.
+function wrapSvgLabel(text, maxLen = 20) {
+  const words = String(text).split(' ');
+  const lines = [];
+  let line = '';
+  words.forEach(w => {
+    const candidate = line ? `${line} ${w}` : w;
+    if (candidate.length <= maxLen) {
+      line = candidate;
+    } else {
+      if (line) lines.push(line);
+      line = w.length > maxLen ? w.substring(0, maxLen - 1) + '…' : w;
+    }
+  });
+  if (line) lines.push(line);
+  return lines.slice(0, 3);
+}
+
 // ── SVG Charts ─────────────────────────────────────────────────────────────────
 
 const CHART_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed'];
 
-function groupedBarChart({ groups, series, title, width = 580, height = 260 }) {
+function groupedBarChart({ groups, series, title, width = 580, height = 280 }) {
   if (!groups.length || !series.length) return '';
-  const m = { top: 32, right: 16, bottom: 72, left: 52 };
+  const m = { top: 32, right: 16, bottom: 96, left: 52 };
   const cW = width - m.left - m.right;
   const cH = height - m.top - m.bottom;
   const maxVal = Math.max(1, ...groups.flatMap(g => g.values.map(v => (Number.isFinite(v) ? v : 0))));
@@ -101,9 +177,10 @@ function groupedBarChart({ groups, series, title, width = 580, height = 260 }) {
       bars += `<rect x="${bx}" y="${by}" width="${barW}" height="${bh.toFixed(1)}" fill="${CHART_COLORS[si % CHART_COLORS.length]}" rx="2" opacity="0.88"/>`;
       if (bh > 14) bars += `<text x="${(Number(bx) + barW / 2).toFixed(1)}" y="${(Number(by) - 3).toFixed(1)}" text-anchor="middle" font-size="9" fill="#374151" font-family="sans-serif">${val.toFixed(1)}</text>`;
     });
+    // Rotated x-axis label for legibility
     const lx = (m.left + gi * groupW + groupW / 2).toFixed(1);
-    const lbl = g.label.length > 14 ? g.label.slice(0, 13) + '…' : g.label;
-    xlabels += `<text x="${lx}" y="${(m.top + cH + 15).toFixed(1)}" text-anchor="middle" font-size="10" fill="#6b7280" font-family="sans-serif">${esc(lbl)}</text>`;
+    const ly = (m.top + cH + 10).toFixed(1);
+    xlabels += `<text x="${lx}" y="${ly}" text-anchor="end" font-size="10" fill="#6b7280" font-family="sans-serif" transform="rotate(-40,${lx},${ly})">${esc(g.label)}</text>`;
   });
 
   for (let i = 0; i <= 5; i++) {
@@ -128,23 +205,36 @@ function groupedBarChart({ groups, series, title, width = 580, height = 260 }) {
   </svg>`;
 }
 
-function horizBarChart({ items, title, width = 480 }) {
+function horizBarChart({ items, title, width = 520 }) {
   if (!items.length) return '';
-  const m = { top: 32, right: 64, bottom: 16, left: 110 };
-  const rowH = 30;
-  const height = m.top + m.bottom + items.length * rowH;
+  const m = { top: 32, right: 64, bottom: 16, left: 140 };
   const cW = width - m.left - m.right;
-  let bars = '';
 
-  items.forEach((item, i) => {
-    const y = m.top + i * rowH;
+  // Pre-compute wrapped labels and per-row heights
+  const rowData = items.map(item => {
+    const lines = wrapSvgLabel(item.label, 20);
+    return { ...item, lines, rH: Math.max(32, lines.length * 15 + 12) };
+  });
+  const totalItemH = rowData.reduce((s, r) => s + r.rH, 0);
+  const height = m.top + m.bottom + totalItemH;
+
+  let bars = '';
+  let yOff = m.top;
+  rowData.forEach(item => {
     const pct = Math.min(1, Math.max(0, Number(item.value) || 0));
     const color = pct >= 0.9 ? '#dc2626' : pct >= 0.75 ? '#d97706' : '#16a34a';
-    bars += `<rect x="${m.left}" y="${y + 3}" width="${cW}" height="20" fill="#f3f4f6" rx="3"/>`;
-    if (pct > 0.002) bars += `<rect x="${m.left}" y="${y + 3}" width="${(pct * cW).toFixed(1)}" height="20" fill="${color}" rx="3" opacity="0.85"/>`;
-    const lbl = item.label.length > 16 ? item.label.slice(0, 15) + '…' : item.label;
-    bars += `<text x="${m.left - 6}" y="${y + 17}" text-anchor="end" font-size="11" fill="#374151" font-family="sans-serif">${esc(lbl)}</text>`;
-    bars += `<text x="${m.left + cW + 8}" y="${y + 17}" font-size="11" font-weight="600" fill="${color}" font-family="sans-serif">${(pct * 100).toFixed(1)}%</text>`;
+    const barMidY = yOff + item.rH / 2;
+    bars += `<rect x="${m.left}" y="${(barMidY - 10).toFixed(1)}" width="${cW}" height="20" fill="#f3f4f6" rx="3"/>`;
+    if (pct > 0.002) bars += `<rect x="${m.left}" y="${(barMidY - 10).toFixed(1)}" width="${(pct * cW).toFixed(1)}" height="20" fill="${color}" rx="3" opacity="0.85"/>`;
+    // Multi-line label
+    const lineH = 15;
+    const totalTxtH = item.lines.length * lineH;
+    const startY = barMidY - totalTxtH / 2 + lineH - 3;
+    item.lines.forEach((ln, li) => {
+      bars += `<text x="${m.left - 6}" y="${(startY + li * lineH).toFixed(1)}" text-anchor="end" font-size="11" fill="#374151" font-family="sans-serif">${esc(ln)}</text>`;
+    });
+    bars += `<text x="${m.left + cW + 8}" y="${(barMidY + 4).toFixed(1)}" font-size="11" font-weight="600" fill="${color}" font-family="sans-serif">${(pct * 100).toFixed(1)}%</text>`;
+    yOff += item.rH;
   });
 
   return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
@@ -153,13 +243,43 @@ function horizBarChart({ items, title, width = 480 }) {
   </svg>`;
 }
 
-function journeyBreakdownChart({ avgWait, avgSvc, unit = 'minutes', width = 480 }) {
+function journeyBreakdownChart({ avgWait, avgSvc, unit = 'minutes', stages = null, width = 480 }) {
+  const m = { top: 32, right: 80, bottom: 16, left: 140 };
+  const rowH = 30;
+  const cW = width - m.left - m.right;
+
+  // Per-stage breakdown when multiple stages are provided
+  if (stages && stages.length > 1) {
+    const total = Math.max(1, ...stages.map(s => (Number(s.wait) || 0) + (Number(s.svc) || 0)));
+    const height = m.top + m.bottom + stages.length * rowH * 2;
+    let bars = '';
+    stages.forEach((s, i) => {
+      const waitVal = Number.isFinite(s.wait) ? Math.max(0, s.wait) : 0;
+      const svcVal  = Number.isFinite(s.svc)  ? Math.max(0, s.svc)  : 0;
+      const rows = [
+        { label: `${s.label} — wait`,    val: waitVal, color: '#2563eb' },
+        { label: `${s.label} — service`, val: svcVal,  color: '#16a34a' },
+      ];
+      rows.forEach((r, ri) => {
+        const y = m.top + (i * 2 + ri) * rowH;
+        bars += `<rect x="${m.left}" y="${y + 3}" width="${cW}" height="20" fill="#f3f4f6" rx="3"/>`;
+        if (r.val > 0) bars += `<rect x="${m.left}" y="${y + 3}" width="${((r.val / total) * cW).toFixed(1)}" height="20" fill="${r.color}" rx="3" opacity="0.85"/>`;
+        const lbl = r.label.length > 24 ? r.label.slice(0, 23) + '…' : r.label;
+        bars += `<text x="${m.left - 6}" y="${y + 17}" text-anchor="end" font-size="10" fill="#374151" font-family="sans-serif">${esc(lbl)}</text>`;
+        bars += `<text x="${m.left + cW + 8}" y="${y + 17}" font-size="11" font-weight="600" fill="${r.color}" font-family="sans-serif">${r.val.toFixed(1)}</text>`;
+      });
+    });
+    return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+      <text x="${width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#111827" font-family="sans-serif">Journey Time Breakdown by Stage (${esc(unit)})</text>
+      ${bars}
+    </svg>`;
+  }
+
+  // Single overall breakdown
   const wait = Number.isFinite(Number(avgWait)) ? Math.max(0, Number(avgWait)) : 0;
   const svc  = Number.isFinite(Number(avgSvc))  ? Math.max(0, Number(avgSvc))  : 0;
   if (wait + svc === 0) return '';
-  const m = { top: 32, right: 80, bottom: 16, left: 110 };
-  const height = m.top + m.bottom + 2 * 30;
-  const cW = width - m.left - m.right;
+  const height = m.top + m.bottom + 2 * rowH;
   const total = wait + svc;
   const rows = [
     { label: `Avg wait (${unit})`,    val: wait, color: '#2563eb' },
@@ -167,7 +287,7 @@ function journeyBreakdownChart({ avgWait, avgSvc, unit = 'minutes', width = 480 
   ];
   let bars = '';
   rows.forEach((r, i) => {
-    const y = m.top + i * 30;
+    const y = m.top + i * rowH;
     bars += `<rect x="${m.left}" y="${y + 3}" width="${cW}" height="20" fill="#f3f4f6" rx="3"/>`;
     if (r.val > 0) bars += `<rect x="${m.left}" y="${y + 3}" width="${((r.val / total) * cW).toFixed(1)}" height="20" fill="${r.color}" rx="3" opacity="0.85"/>`;
     bars += `<text x="${m.left - 6}" y="${y + 17}" text-anchor="end" font-size="11" fill="#374151" font-family="sans-serif">${esc(r.label)}</text>`;
@@ -197,6 +317,9 @@ const CSS = `
   .kpi{background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:12px 16px}
   .kpi .lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px}
   .kpi .val{font-size:20px;font-weight:700;color:#1e3a5f}
+  .goal-status{font-size:12px;margin:0 0 16px;padding:8px 12px;background:#f8fafc;border-radius:4px;border:1px solid #e2e8f0}
+  .method-item{font-size:12px;color:#374151;margin-bottom:10px;line-height:1.6}
+  .method-item strong{color:#1e3a5f}
   table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}
   thead th{background:#f1f5f9;color:#374151;font-weight:600;text-align:left;padding:8px 12px;border-bottom:2px solid #e2e8f0}
   tbody td{padding:7px 12px;border-bottom:1px solid #f1f5f9}
@@ -277,22 +400,33 @@ function buildModelImage(modelImageDataUrl) {
   </section>`;
 }
 
-function buildExecutiveSummary(model, results, recommendations, aggStats = {}) {
+function buildExecutiveSummary(model, results, recommendations, aggStats = {}, modelDescription = '') {
   const summary = getSummary(results);
   const unit = model.timeUnit || 'minutes';
+  const entityName = getEntityName(model);
 
   const kpis = [
-    { lbl: 'Entities served',           val: formatN(resolveValue('served', summary, aggStats)) },
-    { lbl: 'Reneged / abandoned',       val: formatN(resolveValue('reneged', summary, aggStats)) },
-    { lbl: `Avg wait time (${unit})`,   val: formatN(resolveValue('avgWait', summary, aggStats)) },
-    { lbl: `Avg service time (${unit})`,val: formatN(resolveValue('avgSvc', summary, aggStats)) },
-    { lbl: `Avg total time (${unit})`,  val: formatN(resolveValue('avgSojourn', summary, aggStats)) },
-    { lbl: "Avg WIP",                   val: formatN(resolveValue('avgWIP', summary, aggStats)) },
+    { lbl: `${entityName}s served`,        val: formatInt(resolveValue('served',      summary, aggStats)) },
+    { lbl: 'Reneged / abandoned',           val: formatInt(resolveValue('reneged',     summary, aggStats)) },
+    { lbl: `Avg wait time (${unit})`,       val: formatN(resolveValue('avgWait',      summary, aggStats)) },
+    { lbl: `Avg service time (${unit})`,    val: formatN(resolveValue('avgSvc',       summary, aggStats)) },
+    { lbl: `Avg total time (${unit})`,      val: formatN(resolveValue('avgSojourn',   summary, aggStats)) },
+    { lbl: 'Avg WIP',                       val: formatN(resolveValue('avgWIP',       summary, aggStats)) },
   ].filter(k => k.val !== null);
 
   const kpiHtml = kpis.length ? `<div class="kpi-grid">${
     kpis.map(k => `<div class="kpi"><div class="lbl">${esc(k.lbl)}</div><div class="val">${esc(k.val)}</div></div>`).join('')
   }</div>` : '';
+
+  // Goal status summary
+  const goalGaps = buildGoalGaps(model, aggStats);
+  let goalStatusHtml = '';
+  if (Array.isArray(goalGaps) && goalGaps.length) {
+    const met   = goalGaps.filter(g => g.met).length;
+    const total = goalGaps.length;
+    const icon  = met === total ? '✅' : met === 0 ? '❌' : '⚠️';
+    goalStatusHtml = `<p class="goal-status"><strong>Goal status:</strong> ${icon} ${met} of ${total} performance target${total !== 1 ? 's' : ''} met</p>`;
+  }
 
   const top = Array.isArray(recommendations) && recommendations.length
     ? (recommendations.find(r => r.priority === 1) || recommendations[0]) : null;
@@ -304,21 +438,80 @@ function buildExecutiveSummary(model, results, recommendations, aggStats = {}) {
       ${top.finding ? `<div class="rec-body">${esc(top.finding)}</div>` : ''}
     </div>` : '';
 
+  const descHtml = modelDescription ? `<div class="desc">${esc(modelDescription)}</div>` : '';
+
   return `
   <section>
     <h2>Executive Summary</h2>
-    ${model.description ? `<div class="desc">${esc(model.description)}</div>` : ''}
+    ${descHtml}
     ${kpiHtml}
+    ${goalStatusHtml}
     ${recHtml}
   </section>`;
 }
 
-function buildModelDescription(descriptionText) {
-  if (!descriptionText) return '';
+function buildMethodology(model, results, experimentConfig, aggStats = {}) {
+  const summary      = getSummary(results);
+  const unit         = model.timeUnit || 'minutes';
+  const entityName   = getEntityName(model);
+  const arrivalMode  = detectArrivalMode(model, summary);
+  const warmup       = Number(experimentConfig.warmupPeriod ?? experimentConfig.warmup ?? 0);
+  const replications = Number(experimentConfig.replications ?? 1);
+  const multiRep     = Object.values(aggStats).some(s => s?.n >= 2);
+  const queueNames   = Object.keys(results.waitDist || {});
+  const resourceTypes = Object.keys(summary.perResource || {});
+  const goals        = model.goals || [];
+
+  const parts = [];
+
+  // Scope sentence
+  const qPart = queueNames.length
+    ? `${queueNames.length} stage${queueNames.length !== 1 ? 's' : ''} (${queueNames.map(q => `<em>${esc(q)}</em>`).join(', ')})`
+    : null;
+  const rPart = resourceTypes.length
+    ? `${resourceTypes.length} resource type${resourceTypes.length !== 1 ? 's' : ''} (${resourceTypes.map(r => `<em>${esc(r)}</em>`).join(', ')})`
+    : null;
+  const scopeBody = [qPart, rPart].filter(Boolean).join(' served by ');
+  if (scopeBody) {
+    parts.push(`<p class="method-item">This analysis examines the flow of <strong>${esc(entityName)}s</strong> through ${scopeBody}.</p>`);
+  }
+
+  // Arrival pattern
+  if (arrivalMode === 'plan') {
+    parts.push(`<p class="method-item"><strong>Arrival pattern:</strong> ${esc(entityName)}s arrive according to a pre-planned timetable. Results reflect how the system performs against that specific schedule.</p>`);
+  } else {
+    const distInfo = getArrivalDistInfo(model);
+    const distText = distInfo
+      ? ` drawn from a <strong>${esc(distInfo)}</strong> distribution`
+      : ' modelled stochastically';
+    parts.push(`<p class="method-item"><strong>Arrival pattern:</strong> ${esc(entityName)} inter-arrival times are${distText}. Each run uses a different random seed to generate a unique sequence of arrivals.</p>`);
+  }
+
+  // Warm-up
+  if (warmup > 0) {
+    parts.push(`<p class="method-item"><strong>Warm-up period:</strong> The first ${warmup} ${esc(unit)} of each run are excluded from statistics to remove start-up transient effects.</p>`);
+  }
+
+  // Replications
+  if (multiRep && replications >= 2) {
+    parts.push(`<p class="method-item"><strong>Replications:</strong> The model was run ${replications} times with different random seeds. Headline figures are averages across all replications; 95% confidence intervals are shown in the results.</p>`);
+  }
+
+  // Performance targets
+  if (goals.length) {
+    const goalItems = goals.map(g => {
+      const lbl = g.label || g.metric;
+      return `<li><strong>${esc(lbl)}:</strong> ${esc(g.operator)} ${esc(String(g.target))}</li>`;
+    }).join('');
+    parts.push(`<h3>What success looks like</h3><ul style="margin:8px 0 8px 18px;font-size:12px;color:#374151;line-height:1.8">${goalItems}</ul>`);
+  }
+
+  if (!parts.length) return '';
+
   return `
   <section>
-    <h2>Model Description</h2>
-    <div class="desc">${esc(descriptionText)}</div>
+    <h2>Scope &amp; Methodology</h2>
+    ${parts.join('\n    ')}
   </section>`;
 }
 
@@ -343,36 +536,71 @@ function buildExperimentConfig(experimentConfig, runMeta) {
 }
 
 function buildResults(model, results, aggStats = {}) {
-  const summary  = getSummary(results);
-  const waitDist = results.waitDist || {};
-  const ciStats  = results.aggregateStats || {};
-  const unit     = model.timeUnit || 'minutes';
+  const summary      = getSummary(results);
+  const waitDist     = results.waitDist || {};
+  const ciStats      = results.aggregateStats || {};
+  const unit         = model.timeUnit || 'minutes';
+  const entityName   = getEntityName(model);
+  const queueNames   = Object.keys(waitDist);
+  const perResource  = summary.perResource || {};
+  const resourceTypes = Object.keys(perResource);
 
-  // Summary stats — only post-warmup, time-averaged or per-entity values
+  // Intro paragraph describing what is covered
+  let introHtml = '';
+  {
+    const qPart = queueNames.length ? `${queueNames.length} queue${queueNames.length !== 1 ? 's' : ''}` : '';
+    const rPart = resourceTypes.length ? `${resourceTypes.length} resource type${resourceTypes.length !== 1 ? 's' : ''}` : '';
+    const coverageDesc = [qPart, rPart].filter(Boolean).join(' and ');
+    const goalGapsPeek = buildGoalGaps(model, results.aggregateStats || {});
+    const goalNote = Array.isArray(goalGapsPeek) && goalGapsPeek.length
+      ? ` Performance against ${goalGapsPeek.length} defined goal${goalGapsPeek.length !== 1 ? 's' : ''} is assessed below.`
+      : '';
+    if (coverageDesc) {
+      introHtml = `<p class="note">The following results cover ${coverageDesc}. All values are post-warmup unless noted.${goalNote}</p>`;
+    }
+  }
+
+  // Summary stats
   const metricRows = [
-    [`Entities completed service`,                              formatN(resolveValue('served', summary, aggStats))],
-    [`Entities reneged (abandoned)`,                           formatN(resolveValue('reneged', summary, aggStats))],
-    [`Average waiting time (${unit})`,                         formatN(resolveValue('avgWait', summary, aggStats))],
-    [`Average service time (${unit})`,                         formatN(resolveValue('avgSvc', summary, aggStats))],
-    [`Average total time in system — wait + service (${unit})`,formatN(resolveValue('avgSojourn', summary, aggStats))],
-    [`Longest time in system (${unit})`,                       formatN(resolveValue('maxSojourn', summary, aggStats))],
-    [`Average number in system (WIP)`,                         formatN(resolveValue('avgWIP', summary, aggStats))],
-    [`Total cost`,                                             formatCurrency(resolveValue('totalCost', summary, aggStats))],
-    [`Cost per entity served`,                                 formatCurrency(resolveValue('costPerServed', summary, aggStats))],
+    [`${entityName}s completed service`,                              formatInt(resolveValue('served',      summary, aggStats))],
+    [`${entityName}s reneged (abandoned)`,                           formatInt(resolveValue('reneged',     summary, aggStats))],
+    [`Average waiting time (${unit})`,                               formatN(resolveValue('avgWait',      summary, aggStats))],
+    [`Average service time (${unit})`,                               formatN(resolveValue('avgSvc',       summary, aggStats))],
+    [`Average total time in system — wait + service (${unit})`,      formatN(resolveValue('avgSojourn',   summary, aggStats))],
+    [`Longest time in system (${unit})`,                             formatN(resolveValue('maxSojourn',   summary, aggStats))],
+    [`Average number in system (WIP)`,                               formatN(resolveValue('avgWIP',       summary, aggStats))],
+    [`Total cost`,                                                   formatCurrency(resolveValue('totalCost',     summary, aggStats))],
+    [`Cost per ${entityName.toLowerCase()} served`,                  formatCurrency(resolveValue('costPerServed', summary, aggStats))],
   ].filter(r => r[1] !== null);
 
-  // Journey breakdown chart
-  const journeyChart = journeyBreakdownChart({ avgWait: resolveValue('avgWait', summary, aggStats), avgSvc: resolveValue('avgSvc', summary, aggStats), unit });
+  // Per-stage service times (computed from entitySummary when available)
+  const perQueueSvc   = computePerQueueServiceTimes(results);
+  const hasMultiStage = queueNames.length > 1;
+
+  // Journey breakdown chart — per-stage when possible, overall otherwise
+  let journeyChart = '';
+  if (hasMultiStage && queueNames.some(q => perQueueSvc[q])) {
+    const stageData = queueNames
+      .map(q => ({ label: q, wait: waitDist[q]?.mean ?? 0, svc: perQueueSvc[q]?.mean ?? 0 }))
+      .filter(s => s.wait > 0 || s.svc > 0);
+    if (stageData.length) journeyChart = journeyBreakdownChart({ stages: stageData, unit });
+  }
+  if (!journeyChart) {
+    journeyChart = journeyBreakdownChart({
+      avgWait: resolveValue('avgWait', summary, aggStats),
+      avgSvc:  resolveValue('avgSvc',  summary, aggStats),
+      unit,
+    });
+  }
 
   // Queue wait-time chart + table
-  const queueNames = Object.keys(waitDist);
   let waitChartHtml = '', waitTableHtml = '';
   if (queueNames.length) {
     const metricKeys   = ['mean', 'p50', 'p90', 'p95'];
     const metricLabels = ['Mean', 'P50', 'P90', 'P95'];
     const groups = queueNames.map(q => ({
       label:  q,
-      values: metricKeys.map(m => { const v = Number(waitDist[q]?.[m]); return Number.isFinite(v) ? v : NaN; }),
+      values: metricKeys.map(mk => { const v = Number(waitDist[q]?.[mk]); return Number.isFinite(v) ? v : NaN; }),
     })).filter(g => g.values.some(v => Number.isFinite(v)));
 
     if (groups.length) {
@@ -383,24 +611,28 @@ function buildResults(model, results, aggStats = {}) {
       })}</div>`;
     }
 
+    const showSvcCol = hasMultiStage && Object.keys(perQueueSvc).length > 0;
+    const tableHeaders = showSvcCol
+      ? ['Queue', 'Count', 'Mean wait', 'P50 wait', 'P90 wait', 'P95 wait', 'P99 wait', 'Mean service']
+      : ['Queue', 'Count', 'Mean wait', 'P50', 'P90', 'P95', 'P99'];
     const tableRows = queueNames.map(q => {
       const w = waitDist[q] || {};
-      return [q, fin(w.n, 0), fin(w.mean, 1), fin(w.p50, 1), fin(w.p90, 1), fin(w.p95, 1), fin(w.p99, 1)].map(v => v ?? '—');
+      const row = [q, fin(w.n, 0), fin(w.mean, 1), fin(w.p50, 1), fin(w.p90, 1), fin(w.p95, 1), fin(w.p99, 1)].map(v => v ?? '—');
+      if (showSvcCol) row.push(fin(perQueueSvc[q]?.mean, 1) ?? '—');
+      return row;
     });
     const percentileNote = `<p class="note">
       <strong>Reading the wait-time columns:</strong>
       <strong>Mean</strong> = average wait across all arrivals.
-      <strong>P50</strong> (median) = half of people waited less than this, half waited more.
-      <strong>P90</strong> = 9 out of 10 people waited less than this; only 1 in 10 waited longer.
-      <strong>P95</strong> = 19 out of 20 people waited less than this.
+      <strong>P50</strong> (median) = half waited less than this.
+      <strong>P90</strong> = 9 in 10 waited less than this; only 1 in 10 waited longer.
+      <strong>P95</strong> = 19 in 20 waited less than this.
       All values in ${unit}.
     </p>`;
-    waitTableHtml = percentileNote + htmlTable([`Queue`, `Count`, `Mean wait`, `P50`, `P90`, `P95`, `P99`], tableRows);
+    waitTableHtml = percentileNote + htmlTable(tableHeaders, tableRows);
   }
 
-  // Resource utilisation chart + table (time-averaged, post-warmup)
-  const perResource = summary.perResource || {};
-  const resourceTypes = Object.keys(perResource);
+  // Resource utilisation chart + table
   let utilChartHtml = '', utilTableHtml = '';
   if (resourceTypes.length) {
     utilChartHtml = `<div class="chart-wrap">${horizBarChart({
@@ -441,7 +673,7 @@ function buildResults(model, results, aggStats = {}) {
     ciHtml = `<h3>Replication Confidence Intervals (95%)</h3>${htmlTable(['Metric', 'Mean', 'CI Lower', 'CI Upper', 'N'], ciRows)}`;
   }
 
-  // Plan vs Actual — only shown when avgPlanDeviation is non-null
+  // Plan vs Actual
   let planVsActualHtml = '';
   if (summary.avgPlanDeviation != null) {
     const sign = summary.avgPlanDeviation >= 0 ? '+' : '';
@@ -457,6 +689,7 @@ function buildResults(model, results, aggStats = {}) {
   return `
   <section>
     <h2>Simulation Results</h2>
+    ${introHtml}
     ${metricRows.length ? `<h3>Summary statistics</h3>${htmlTable(['Metric', 'Value'], metricRows)}` : ''}
     ${journeyChart ? `<div class="chart-wrap">${journeyChart}</div>` : ''}
     ${waitChartHtml || waitTableHtml ? `<h3>Queue wait-time distributions</h3>${waitChartHtml}${waitTableHtml}` : ''}
@@ -484,8 +717,8 @@ function buildRecommendations(recommendations) {
     const num  = rec.priority || idx + 1;
     const conf = rec.confidence ? `<span class="rec-conf">${esc(rec.confidence)}</span>` : '';
     let body = '';
-    if (rec.finding)       body += `<div><strong>Finding:</strong> ${esc(rec.finding)}</div>`;
-    if (rec.action)        body += `<div><strong>Action:</strong> ${esc(rec.action)}</div>`;
+    if (rec.finding)        body += `<div><strong>Finding:</strong> ${esc(rec.finding)}</div>`;
+    if (rec.action)         body += `<div><strong>Action:</strong> ${esc(rec.action)}</div>`;
     if (rec.expectedImpact) body += `<div><strong>Expected impact:</strong> ${esc(rec.expectedImpact)}</div>`;
     return `<div class="rec">
       <div class="rec-head"><span class="rec-num">${num}</span><span class="rec-hl">${esc(rec.headline || `Recommendation ${num}`)}</span>${conf}</div>
@@ -552,8 +785,8 @@ function buildHtmlReport({ model, results, experimentConfig, runMeta, aggregateS
 
   const body = [
     buildCover(model, runMeta, experimentConfig),
-    buildModelDescription(modelDescription),
-    buildExecutiveSummary(model, results, recommendations, aggregateStats),
+    buildExecutiveSummary(model, results, recommendations, aggregateStats, modelDescription),
+    buildMethodology(model, results, experimentConfig, aggregateStats),
     buildResults(model, results, aggregateStats),
     narrativeText ? buildSeniorMgmtAnalysis(narrativeText) : '',
     buildRecommendations(recommendations),
@@ -582,10 +815,14 @@ function buildHtmlReport({ model, results, experimentConfig, runMeta, aggregateS
 // ── Markdown report builder ────────────────────────────────────────────────────
 
 function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggregateStats, type, narrativeText, modelDescription, recommendations }) {
-  const isTechnical = type === 'technical';
-  const summary = getSummary(results);
-  const unit = model.timeUnit || 'minutes';
-  const multiRep = Object.values(aggregateStats).some(s => s?.n >= 2);
+  const isTechnical  = type === 'technical';
+  const summary      = getSummary(results);
+  const unit         = model.timeUnit || 'minutes';
+  const entityName   = getEntityName(model);
+  const multiRep     = Object.values(aggregateStats).some(s => s?.n >= 2);
+  const arrivalMode  = detectArrivalMode(model, summary);
+  const warmup       = Number(experimentConfig.warmupPeriod ?? experimentConfig.warmup ?? 0);
+  const goals        = model.goals || [];
 
   const lines = [];
 
@@ -596,60 +833,95 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
   lines.push(`**Date:** ${formatDate(runMeta.runTimestamp)}  `);
   if (multiRep) lines.push(`**Replications:** ${experimentConfig.replications ?? '—'} (values shown are averages across replications)  `);
   lines.push('');
+  if (modelDescription) {
+    lines.push(`> ${modelDescription}`);
+    lines.push('');
+  }
   lines.push('---');
   lines.push('');
 
-  // What was modelled
-  if (modelDescription) {
-    lines.push('## What Was Modelled');
-    lines.push('');
-    lines.push(modelDescription);
-    lines.push('');
-    lines.push('---');
-    lines.push('');
+  // Scope & Methodology
+  const queueNames   = Object.keys(results.waitDist || {});
+  const resourceTypes = Object.keys(summary.perResource || {});
+  lines.push('## Scope & Methodology');
+  lines.push('');
+  if (queueNames.length || resourceTypes.length) {
+    const qPart = queueNames.length ? `${queueNames.length} queue${queueNames.length !== 1 ? 's' : ''} (${queueNames.join(', ')})` : '';
+    const rPart = resourceTypes.length ? `${resourceTypes.length} resource type${resourceTypes.length !== 1 ? 's' : ''} (${resourceTypes.join(', ')})` : '';
+    lines.push(`**Scope:** This analysis covers ${[qPart, rPart].filter(Boolean).join(' served by ')}.`);
   }
+  if (arrivalMode === 'plan') {
+    lines.push(`**Arrival pattern:** ${entityName}s arrive according to a pre-planned timetable.`);
+  } else {
+    const distInfo = getArrivalDistInfo(model);
+    lines.push(`**Arrival pattern:** ${entityName} inter-arrival times are modelled stochastically${distInfo ? ` (${distInfo})` : ''}.`);
+  }
+  if (warmup > 0) lines.push(`**Warm-up:** First ${warmup} ${unit} excluded from statistics to remove start-up effects.`);
+  if (multiRep && Number(experimentConfig.replications ?? 1) >= 2) {
+    lines.push(`**Replications:** ${experimentConfig.replications} runs averaged; 95% confidence intervals shown in results.`);
+  }
+  if (goals.length) {
+    lines.push('');
+    lines.push('**Performance targets:**');
+    goals.forEach(g => lines.push(`- ${g.label || g.metric}: **${g.operator} ${g.target}**`));
+  }
+  lines.push('');
+  lines.push('---');
+  lines.push('');
 
   // Key results
   lines.push('## Key Results');
   lines.push('');
   const kpiRows = [
-    ['Avg wait time', `${formatN(resolveValue('avgWait', summary, aggregateStats)) ?? '—'} ${unit}`],
-    ['Avg service time', `${formatN(resolveValue('avgSvc', summary, aggregateStats)) ?? '—'} ${unit}`],
-    ['Avg total time in system', `${formatN(resolveValue('avgSojourn', summary, aggregateStats)) ?? '—'} ${unit}`],
-    ['Avg entities in system (WIP)', `${formatN(resolveValue('avgWIP', summary, aggregateStats)) ?? '—'}`],
-    [`Entities served${multiRep ? ' (avg per run)' : ''}`, `${formatN(resolveValue('served', summary, aggregateStats)) ?? '—'}`],
-    [`Entities reneged${multiRep ? ' (avg per run)' : ''}`, `${formatN(resolveValue('reneged', summary, aggregateStats)) ?? '—'}`],
+    ['Avg wait time',                             `${formatN(resolveValue('avgWait',    summary, aggregateStats)) ?? '—'} ${unit}`],
+    ['Avg service time',                           `${formatN(resolveValue('avgSvc',     summary, aggregateStats)) ?? '—'} ${unit}`],
+    ['Avg total time in system',                   `${formatN(resolveValue('avgSojourn', summary, aggregateStats)) ?? '—'} ${unit}`],
+    [`Avg ${entityName.toLowerCase()}s in system (WIP)`, `${formatN(resolveValue('avgWIP', summary, aggregateStats)) ?? '—'}`],
+    [`${entityName}s served${multiRep ? ' (avg per run)' : ''}`,  `${formatInt(resolveValue('served',  summary, aggregateStats)) ?? '—'}`],
+    [`${entityName}s reneged${multiRep ? ' (avg per run)' : ''}`, `${formatInt(resolveValue('reneged', summary, aggregateStats)) ?? '—'}`],
   ].filter(r => r[1] && !r[1].startsWith('—'));
   const costVal = resolveValue('totalCost', summary, aggregateStats);
   if (costVal != null && Number.isFinite(Number(costVal))) {
     kpiRows.push([`Total cost${multiRep ? ' (avg per run)' : ''}`, formatCurrency(costVal) ?? '—']);
   }
+  // Inline goal status
+  const goalGapsForMd = buildGoalGaps(model, results.aggregateStats || {});
+  if (Array.isArray(goalGapsForMd) && goalGapsForMd.length) {
+    const met   = goalGapsForMd.filter(g => g.met).length;
+    const total = goalGapsForMd.length;
+    kpiRows.push(['Goal status', `${met === total ? '✅' : met === 0 ? '❌' : '⚠️'} ${met}/${total} targets met`]);
+  }
   lines.push(mdTable(['Metric', 'Value'], kpiRows));
   lines.push('');
 
-  // Queue wait times
+  // Queue wait times with per-stage service column in multi-stage models
   const waitDist = results.waitDist || {};
-  const queueNames = Object.keys(waitDist);
-  if (queueNames.length) {
+  const waitQueueNames = Object.keys(waitDist);
+  if (waitQueueNames.length) {
     lines.push('### Queue Wait-Time Distribution');
     lines.push('');
-    const qRows = queueNames.map(q => {
+    const perQueueSvc   = computePerQueueServiceTimes(results);
+    const hasMultiStage = waitQueueNames.length > 1 && Object.keys(perQueueSvc).length > 0;
+    const qHeaders = hasMultiStage
+      ? [`Queue`, `Mean wait (${unit})`, `P50`, `P90`, `P95`, `P99`, `Mean service (${unit})`]
+      : [`Queue`, `Mean (${unit})`, `P50`, `P90`, `P95`, `P99`];
+    const qRows = waitQueueNames.map(q => {
       const w = waitDist[q] || {};
-      return [q, formatN(w.mean) ?? '—', formatN(w.p50) ?? '—', formatN(w.p90) ?? '—', formatN(w.p95) ?? '—', formatN(w.p99) ?? '—'];
+      const row = [q, formatN(w.mean) ?? '—', formatN(w.p50) ?? '—', formatN(w.p90) ?? '—', formatN(w.p95) ?? '—', formatN(w.p99) ?? '—'];
+      if (hasMultiStage) row.push(formatN(perQueueSvc[q]?.mean) ?? '—');
+      return row;
     });
-    lines.push(mdTable([`Queue`, `Mean (${unit})`, `P50`, `P90`, `P95`, `P99`], qRows));
-    lines.push('> P90 = 9 in 10 customers waited less than this. P95 = 19 in 20 waited less than this.');
+    lines.push(mdTable(qHeaders, qRows));
+    lines.push('> P90 = 9 in 10 waited less than this. P95 = 19 in 20 waited less than this.');
     lines.push('');
   }
 
   // Resource utilisation
-  const perResource = summary.perResource || {};
-  const resourceTypes = Object.keys(perResource);
   if (resourceTypes.length) {
     lines.push('### Resource Utilisation');
     lines.push('');
     const utilRows = resourceTypes.map(t => {
-      const r = perResource[t];
+      const r = summary.perResource[t];
       const pct = Number.isFinite(r.utilisation) ? `${Math.round(r.utilisation * 100)}%` : '—';
       return [t, String(r.total ?? '—'), pct];
     });
@@ -657,12 +929,11 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     lines.push('');
   }
 
-  // Goal assessment
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
-  if (Array.isArray(goalGaps) && goalGaps.length) {
+  // Goal assessment table
+  if (Array.isArray(goalGapsForMd) && goalGapsForMd.length) {
     lines.push('### Performance Goals');
     lines.push('');
-    const goalRows = goalGaps.map(g => [
+    const goalRows = goalGapsForMd.map(g => [
       g.label || g.metric,
       `${g.operator} ${g.target}`,
       g.current != null ? (formatN(g.current) ?? '—') : '—',
@@ -726,8 +997,8 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     lines.push('## Model Specification');
     lines.push('');
     const entityTypes = model.entityTypes || [];
-    const queues = model.queues || [];
-    const stateVars = (model.stateVariables || []).filter(v => v.name);
+    const queues      = model.queues || [];
+    const stateVars   = (model.stateVariables || []).filter(v => v.name);
     if (entityTypes.length) {
       lines.push('### Entity Types');
       lines.push('');
