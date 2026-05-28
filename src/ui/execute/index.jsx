@@ -414,6 +414,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
   const initEngine = useCallback(() => {
     if (hasValidationErrors) return;
+    // Cancel any in-flight batch or sweep workers before rebuilding
+    if (runnerRef.current) { runnerRef.current.cancel(); runnerRef.current = null; }
+    if (sweepRunnerRef.current) { sweepRunnerRef.current.cancel(); sweepRunnerRef.current = null; }
+    if (autoRef.current) { clearInterval(autoRef.current); autoRef.current = null; }
     setHideRunReadiness(true);
     setExecuteSection("run");
     runSeedRef.current = seed;
@@ -436,6 +440,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     logRef.current = initLog;
     setLog(initLog);
     setMode("stepping");
+    setAutoRunning(false);
     setSaveStatus(null);
     setPhaseCTruncated(false);
     setResults(null);
@@ -443,6 +448,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setLiveWaitDist(null);
     liveHistThrottleRef.current = 0;
     onResultsReady?.(null);
+    onRunComplete?.({ results: null, replicationResults: [], warmupDetection: null, log: [] });
     singleRunCancelRef.current = false;
     setSingleRunStatus("idle");
     setSingleRunProgress(null);
@@ -450,7 +456,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setBatchProgress(null);
     setReplicationResults([]);
     setAggregateStats({});
-  }, [model, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries]);
+    setWarmupDetection(null);
+    setComparisonResult(null);
+    setSweepResults(null);
+    setSweepStatus("idle");
+    setSweepProgress(null);
+  }, [model, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, onRunComplete]);
 
   const stopAuto = useCallback(() => {
     if (autoRef.current) {
@@ -2468,15 +2479,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             </div>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-              <div>
-                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>
-                  RUN SIZE ESTIMATE
-                </div>
-                <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
-                  Conservative preview of likely workload before execution.
-                </div>
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <span
                 style={{
                   background: `${complexityColor}18`,
@@ -2491,6 +2494,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               >
                 {complexityLabel}
               </span>
+              <div>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>
+                  RUN SIZE ESTIMATE
+                </div>
+                <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
+                  Conservative preview of likely workload before execution.
+                </div>
+              </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {[
@@ -2645,19 +2656,22 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
       {singleRunStatus !== "idle" && (
         <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>SINGLE RUN</div>
             <Tag label={singleRunStatus} color={singleRunStatus === "complete" ? C.green : singleRunStatus === "cancelled" ? C.red : C.amber} />
-            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
-              {singleRunStatus === "cancelled"
-                ? `Stopped at t=${fmt(singleRunProgress?.clock)} after ${singleRunProgress?.completed || 0} cycle${(singleRunProgress?.completed || 0) === 1 ? "" : "s"}`
-                : singleRunStatus === "complete"
-                  ? `Finished at t=${fmt(singleRunProgress?.clock)} after ${singleRunProgress?.completed || 0} cycle${(singleRunProgress?.completed || 0) === 1 ? "" : "s"}`
-                  : `Cycle ${singleRunProgress?.completed || 0}/${singleRunProgress?.total || 0} · t=${fmt(singleRunProgress?.clock)} · FEL ${singleRunProgress?.felSize || 0}`}
-            </div>
-            <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT }}>
-              Events processed: {singleRunProgress?.eventsProcessed || 0}
-            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[
+              { label: "Sim time",       value: singleRunProgress?.clock != null ? fmt(singleRunProgress.clock) : "—" },
+              { label: "Cycle",          value: `${singleRunProgress?.completed || 0}${singleRunProgress?.total ? `/${singleRunProgress.total}` : ""}` },
+              { label: "Future Events",  value: String(singleRunProgress?.felSize || 0) },
+              { label: "Events",         value: String(singleRunProgress?.eventsProcessed || 0) },
+            ].map(item => (
+              <div key={item.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, minWidth: 96, padding: "8px 10px" }}>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 3 }}>{item.label}</div>
+                <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{item.value}</div>
+              </div>
+            ))}
           </div>
           {(singleRunStatus === "cancelling" || singleRunStatus === "cancelled") && (
             <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>

@@ -19,7 +19,7 @@ const TABS = [
   { id: "entities",  label: "Entity Details" },
   { id: "charts",    label: "Charts" },
   { id: "stagekpis", label: "Live Metrics" },
-  { id: "fel",       label: "FEL" },
+  { id: "fel",       label: "Future Events" },
 ];
 
 const BOTTOM_PANEL_BODY_HEIGHT = 320;
@@ -219,17 +219,24 @@ function StageKpisTable({ snap, model }) {
 
 function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeSelect, model }) {
   const [expandedSeq, setExpandedSeq] = useState(null);
+  const [searchText, setSearchText]   = useState("");
+  const [phaseFilter, setPhaseFilter] = useState("all");
   const wallTimeFor = (simTime) => (
     model?.epoch && simTime != null
       ? formatSimWallTime(simTime, model.epoch, model.timeUnit || "minutes")
       : null
   );
-  const filtered = useMemo(
-    () => selectedNodeLabel
+  const filtered = useMemo(() => {
+    let result = selectedNodeLabel
       ? log.filter(e => e.message?.includes(selectedNodeLabel))
-      : log,
-    [log, selectedNodeLabel]
-  );
+      : log;
+    if (phaseFilter !== "all") result = result.filter(e => e.phase === phaseFilter);
+    if (searchText.trim()) {
+      const q = searchText.toLowerCase();
+      result = result.filter(e => e.message?.toLowerCase().includes(q));
+    }
+    return result;
+  }, [log, selectedNodeLabel, phaseFilter, searchText]);
 
   const nodeNames = useMemo(() => {
     const names = new Set();
@@ -275,6 +282,28 @@ function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeS
 
   return (
     <div>
+      <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
+        <input
+          placeholder="Search messages…"
+          value={searchText}
+          onChange={ev => setSearchText(ev.target.value)}
+          style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4,
+            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 8px", outline: "none" }}
+        />
+        <select
+          value={phaseFilter}
+          onChange={ev => setPhaseFilter(ev.target.value)}
+          style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4,
+            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+        >
+          <option value="all">All phases</option>
+          <option value="B">B-Events</option>
+          <option value="C">C-Events</option>
+          <option value="A">A-phase</option>
+          <option value="WARMUP">Warmup</option>
+          <option value="ERROR">Errors</option>
+        </select>
+      </div>
       {selectedNodeLabel && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
           <span style={{ fontSize: 10, color: C.accent, fontFamily: FONT }}>
@@ -573,22 +602,58 @@ function EntityInspector({ entity, snap, onClose }) {
 // ── Entities tab (split view) ───────────────────────────────────────────────
 
 function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
+  const [filterText,   setFilterText]   = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+
   if (!snap) {
     return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>No snapshot yet.</div>;
   }
   const entities = (snap.entities || [])
     .filter(e => e.role !== "server" && e.status !== "done" && e.status !== "reneged");
 
+  const displayed = entities.filter(e => {
+    if (filterStatus !== "all" && e.status !== filterStatus) return false;
+    if (filterText.trim()) {
+      const q = filterText.toLowerCase();
+      const loc = e.status === "waiting"
+        ? (e.queue || "")
+        : (e.ceventName || e.lastQueue || e.queue || "");
+      return String(e.id).includes(q) ||
+        (e.type || "").toLowerCase().includes(q) ||
+        loc.toLowerCase().includes(q);
+    }
+    return true;
+  });
+
   return (
     <div style={{ display: "flex", gap: 16, height: "100%" }}>
       {/* Left: Entity List */}
       <div style={{ flex: "0 0 45%", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
-          {entities.length} active {entities.length === 1 ? "entity" : "entities"}
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            placeholder="Filter by ID, type or location…"
+            value={filterText}
+            onChange={ev => setFilterText(ev.target.value)}
+            style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4,
+              color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 8px", outline: "none" }}
+          />
+          <select
+            value={filterStatus}
+            onChange={ev => setFilterStatus(ev.target.value)}
+            style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4,
+              color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+          >
+            <option value="all">All</option>
+            <option value="waiting">Waiting</option>
+            <option value="serving">Serving</option>
+          </select>
         </div>
-        {entities.length === 0 ? (
+        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+          {displayed.length}{displayed.length !== entities.length ? ` of ${entities.length}` : ""} active {entities.length === 1 ? "entity" : "entities"}
+        </div>
+        {displayed.length === 0 ? (
           <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
-            No active customer entities.
+            {entities.length === 0 ? "No active customer entities." : "No entities match the filter."}
           </div>
         ) : (
           <div style={{ overflowY: "auto", flex: 1 }}>
@@ -603,7 +668,7 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
                 </tr>
               </thead>
               <tbody>
-                {entities.map(e => {
+                {displayed.map(e => {
                   const journey = snap.clock != null ? snap.clock - (e.arrivalTime || 0) : null;
                   const location = e.status === "waiting"
                     ? (e.queue || "—")
