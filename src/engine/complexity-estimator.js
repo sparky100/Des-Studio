@@ -85,7 +85,9 @@ function sumCounts(values) {
 
 function countScheduleEntries(schedule = {}, schedulesMap = {}) {
   const distName = normalizeDistributionName(schedule.dist);
-  if (distName !== "Schedule") return 0;
+  const hasRows = Array.isArray(schedule.rows) && schedule.rows.length > 0;
+  const hasRef = !!schedule.scheduleRef;
+  if (distName !== "Schedule" && !hasRows && !hasRef) return 0;
 
   // ADR-016: external schedule referenced by UUID
   if (schedule.scheduleRef) {
@@ -146,7 +148,9 @@ function estimateRecurringArrivals(bEvent, maxSimTime, unknowns, schedulesMap = 
 
   for (const schedule of selfSchedules) {
     const distName = normalizeDistributionName(schedule.dist);
-    if (distName === "Schedule") {
+    const hasInlineRows = Array.isArray(schedule.rows) && schedule.rows.length > 0;
+    const hasRef = !!schedule.scheduleRef;
+    if (distName === "Schedule" || hasInlineRows || hasRef) {
       const rows = resolveScheduleRows(schedule, schedulesMap);
       const times = rows.map(row => Number(row.time ?? row)).filter(Number.isFinite);
       if (maxSimTime == null) {
