@@ -536,13 +536,19 @@ export const AiAssistantPanel = ({
     refine: handleRefinePlan,
   };
 
-  // Fire the requested action when triggerAction.seq changes
+  // Fire the requested action when triggerAction.seq changes.
+  // Compare does NOT auto-fire — user must select a run then click the button.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!triggerAction?.action || !results) return;
     setRefineParsed(null);
     setRefineStatus("idle");
-    actionFnsRef.current[triggerAction.action]?.();
+    setResponse("");
+    setStatus("idle");
+    setParsedSuggestion(null);
+    if (triggerAction.action !== "compare") {
+      actionFnsRef.current[triggerAction.action]?.();
+    }
   }, [triggerAction?.seq]);
 
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
@@ -659,6 +665,7 @@ export const AiAssistantPanel = ({
     }
     if (status === "loading") return "Waiting for analysis...";
     if (response) return response;
+    if (activeAction === "compare") return "Select a saved run above and click Run comparison.";
     return "Select Explain, Compare, or Refine Plan to analyse these results.";
   };
 
@@ -723,18 +730,31 @@ export const AiAssistantPanel = ({
         )}
       </div>
 
-      {comparisonRuns.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, whiteSpace: "nowrap" }}>COMPARE WITH</label>
-          <select
-            id="compare-run"
-            value={selectedRunId}
-            onChange={event => setSelectedRunId(event.target.value)}
-            disabled={isStreaming}
-            style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px" }}
-          >
-            {comparisonRuns.map(run => <option key={run.id} value={run.id}>{run.label}</option>)}
-          </select>
+      {activeAction === "compare" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {comparisonRuns.length === 0 ? (
+            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 }}>
+              {comparisonLoading ? "Loading saved runs…" : "No saved runs to compare with. Save a run from the Run tab first."}
+            </div>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, whiteSpace: "nowrap" }}>COMPARE WITH</label>
+                <select
+                  id="compare-run"
+                  value={selectedRunId}
+                  onChange={event => setSelectedRunId(event.target.value)}
+                  disabled={isStreaming}
+                  style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px" }}
+                >
+                  {comparisonRuns.map(run => <option key={run.id} value={run.id}>{run.label}</option>)}
+                </select>
+              </div>
+              <Btn variant="primary" onClick={compareRuns} disabled={!selectedRun || isStreaming} style={{ width: "100%", justifyContent: "center" }}>
+                Run comparison
+              </Btn>
+            </>
+          )}
         </div>
       )}
 
