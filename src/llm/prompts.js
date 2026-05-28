@@ -238,6 +238,29 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     name: v.name, initialValue: v.initialValue ?? null,
   }));
 
+  const agg = results.aggregateStats || {};
+  const confidenceIntervals = Object.entries(agg)
+    .filter(([, s]) => s && s.n >= 2)
+    .map(([name, s]) => ({
+      metric: name,
+      mean: finiteOrNull(s.mean),
+      ci95Lower: finiteOrNull(s.lower),
+      ci95Upper: finiteOrNull(s.upper),
+      n: s.n,
+    }));
+
+  const experiment = extractExperiment(experimentConfig);
+
+  // Shift schedule digest — extract actual windows so the LLM can reason about
+  // time-varying capacity rather than just a generic "N period(s)" label.
+  const shiftCapacity = (model.entityTypes || [])
+    .filter(et => et.role === "server" && Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0)
+    .map(et => ({
+      resource: et.name || et.id,
+      totalCount: finiteOrNull(et.count),
+      windows: et.shiftSchedule.map(w => ({ time: w.time, capacity: w.capacity })),
+    }));
+
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
@@ -245,14 +268,15 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
       goals: goalsToPrompt(model),
       ...(stateVariables.length ? { stateVariables } : {}),
     },
-    experiment: extractExperiment(experimentConfig),
+    experiment,
     kpis: buildKpis(model, results),
     waitDist: waitDistForPrompt,
     perQueue: Object.keys(perQueue).length ? perQueue : undefined,
-    aggregateStats: results.aggregateStats || {},
+    ...(confidenceIntervals.length ? { confidenceIntervals } : {}),
+    ...(shiftCapacity.length ? { shiftCapacity } : {}),
   };
 
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  const goalGaps = buildGoalGaps(model, agg);
   const goalsInstr = goalGaps?.length
     ? ` Performance goals were set. For each goal use this format: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])". Cite exact numbers from the goalGaps data.`
     : "";
@@ -263,12 +287,20 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     ? " NOTE: Phase C was truncated during this run — some conditional events may not have fired. Mention this caveat."
     : "";
 
+  const repInstr = experiment.replications > 1
+    ? ` This was a ${experiment.replications}-replication study — reference the 95% CI ranges from confidenceIntervals rather than single-run point estimates when available.`
+    : " This was a single-replication run — results are point estimates with no confidence intervals.";
+
+  const planInstr = shiftCapacity.length
+    ? " The model uses a shift-based capacity plan (shiftCapacity). Mention whether the plan appears to be adequately staffed relative to the observed demand."
+    : "";
+
   return {
     kind: "narrative",
     messages: makeMessages(
       system,
       payload,
-      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish typical from extreme waits. If cost or WIP data is present, comment on it briefly." + goalsInstr + warningsInstr
+      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish typical from extreme waits. If cost or WIP data is present, comment on it briefly." + repInstr + planInstr + goalsInstr + warningsInstr
     ),
     max_tokens: 450,
   };

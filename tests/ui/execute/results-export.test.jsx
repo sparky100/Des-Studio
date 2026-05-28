@@ -19,6 +19,8 @@ vi.mock('../../../src/db/models.js', () => ({
   updateExperiment: vi.fn().mockResolvedValue({}),
   cloneExperiment: vi.fn().mockResolvedValue({}),
   deleteExperiment: vi.fn().mockResolvedValue({ ok: true }),
+  fetchModelSchedules: vi.fn().mockResolvedValue([]),
+  buildSchedulesMap: vi.fn().mockReturnValue({}),
 }));
 
 const validModel = {
