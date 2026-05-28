@@ -112,8 +112,8 @@ export function getRunAdmission(model, options = {}) {
   const plannedScheduleRows = Number.isFinite(complexityEstimate.plannedScheduleRows)
     ? complexityEstimate.plannedScheduleRows
     : 0;
-  const totalEstimatedScans = Number.isFinite(complexityEstimate.totalEstimatedScans)
-    ? complexityEstimate.totalEstimatedScans
+  const estimatedCEventScans = Number.isFinite(complexityEstimate.estimatedCEventScans)
+    ? complexityEstimate.estimatedCEventScans
     : 0;
   const nearScanThreshold = tierPolicy.maxScans * 0.8;
   const nearPlannedRowsThreshold = tierPolicy.maxPlannedRows * 0.8;
@@ -148,15 +148,15 @@ export function getRunAdmission(model, options = {}) {
       "This run uses a large planned schedule and may take longer than usual to prepare."
     ));
   }
-  if (totalEstimatedScans > tierPolicy.maxScans) {
+  if (estimatedCEventScans > tierPolicy.maxScans) {
     hardErrors.push(makeDecisionIssue(
       "RA7",
-      `Estimated C-event scans (${Math.round(totalEstimatedScans).toLocaleString()} across ${complexityEstimate.replications} replication${complexityEstimate.replications === 1 ? '' : 's'}) exceed the ${tierPolicy.label.toLowerCase()} tier limit of ${tierPolicy.maxScans.toLocaleString()}.`
+      `Estimated C-event scans per run (${Math.round(estimatedCEventScans).toLocaleString()}) exceed the ${tierPolicy.label.toLowerCase()} tier limit of ${tierPolicy.maxScans.toLocaleString()}.`
     ));
-  } else if (totalEstimatedScans >= nearScanThreshold && totalEstimatedScans > 0) {
+  } else if (estimatedCEventScans >= nearScanThreshold && estimatedCEventScans > 0) {
     warnings.push(makeDecisionIssue(
       "RA8",
-      `Estimated C-event scans are close to the ${tierPolicy.label.toLowerCase()} tier limit (${Math.round(totalEstimatedScans).toLocaleString()} of ${tierPolicy.maxScans.toLocaleString()}).`
+      `Estimated C-event scans are close to the ${tierPolicy.label.toLowerCase()} tier limit (${Math.round(estimatedCEventScans).toLocaleString()} of ${tierPolicy.maxScans.toLocaleString()}).`
     ));
     confirmations.push(makeDecisionIssue(
       "RA9",
