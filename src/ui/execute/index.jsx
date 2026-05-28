@@ -340,11 +340,23 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     });
   }, [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
   const hasValidationErrors = validation.errors.length > 0;
+
+  // Build schedulesMap for the selected schedule (ADR-016).
+  // Passed to buildEngine via options.schedulesMap so resolveInlineSchedules()
+  // can populate bEvent.schedules[].rows[] before the FEL is initialised.
+  // Defined before complexityEstimate so the estimator can count timetable rows.
+  const activeSchedulesMap = useMemo(() => {
+    if (!selectedScheduleId || modelSchedules.length === 0) return {};
+    const active = modelSchedules.filter(s => s.id === selectedScheduleId);
+    return buildSchedulesMap(active);
+  }, [modelSchedules, selectedScheduleId]);
+
   const complexityEstimate = useMemo(() => estimateRunComplexity(model, {
     terminationMode,
     maxSimTime,
     replications,
-  }), [model, terminationMode, maxSimTime, replications]);
+    schedulesMap: activeSchedulesMap,
+  }), [model, terminationMode, maxSimTime, replications, activeSchedulesMap]);
   const runAdmission = useMemo(() => getRunAdmission(model, {
     warmupPeriod,
     maxSimTime,
@@ -360,15 +372,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
   const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : "minimal";
-
-  // Build schedulesMap for the selected schedule (ADR-016).
-  // Passed to buildEngine via options.schedulesMap so resolveInlineSchedules()
-  // can populate bEvent.schedules[].rows[] before the FEL is initialised.
-  const activeSchedulesMap = useMemo(() => {
-    if (!selectedScheduleId || modelSchedules.length === 0) return {};
-    const active = modelSchedules.filter(s => s.id === selectedScheduleId);
-    return buildSchedulesMap(active);
-  }, [modelSchedules, selectedScheduleId]);
   const readinessTagColor = hasAdmissionErrors ? C.red : C.green;
   const readinessTagBg = hasAdmissionErrors ? C.errorBg : `${C.green}18`;
   const readinessBorder = hasAdmissionErrors ? C.danger : `${C.green}66`;

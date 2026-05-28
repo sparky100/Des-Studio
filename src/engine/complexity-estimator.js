@@ -83,30 +83,57 @@ function sumCounts(values) {
   return values.reduce((sum, value) => sum + value, 0);
 }
 
-function countScheduleEntries(schedule = {}) {
+function countScheduleEntries(schedule = {}, schedulesMap = {}) {
   const distName = normalizeDistributionName(schedule.dist);
   if (distName !== "Schedule") return 0;
+
+  // ADR-016: external schedule referenced by UUID
+  if (schedule.scheduleRef) {
+    const external = schedulesMap[schedule.scheduleRef];
+    return Array.isArray(external?.rows) ? external.rows.length : 0;
+  }
+  // ADR-016: inline rows stored at top level of the schedule entry
+  if (Array.isArray(schedule.rows) && schedule.rows.length > 0) {
+    return schedule.rows.length;
+  }
+  // Legacy format: rows/times inside distParams
   const rows = Array.isArray(schedule.distParams?.rows) ? schedule.distParams.rows.length : 0;
   const times = Array.isArray(schedule.distParams?.times) ? schedule.distParams.times.length : 0;
   return rows + times;
 }
 
-export function countPlannedScheduleRows(model) {
+export function countPlannedScheduleRows(model, schedulesMap = {}) {
   let total = 0;
   for (const bEvent of model?.bEvents || []) {
     for (const schedule of bEvent.schedules || []) {
-      total += countScheduleEntries(schedule);
+      total += countScheduleEntries(schedule, schedulesMap);
     }
   }
   for (const cEvent of model?.cEvents || []) {
     for (const schedule of cEvent.cSchedules || []) {
-      total += countScheduleEntries(schedule);
+      total += countScheduleEntries(schedule, schedulesMap);
     }
   }
   return total;
 }
 
-function estimateRecurringArrivals(bEvent, maxSimTime, unknowns) {
+function resolveScheduleRows(schedule, schedulesMap) {
+  // ADR-016 external
+  if (schedule.scheduleRef) {
+    const external = schedulesMap[schedule.scheduleRef];
+    return Array.isArray(external?.rows) ? external.rows : [];
+  }
+  // ADR-016 inline top-level
+  if (Array.isArray(schedule.rows) && schedule.rows.length > 0) {
+    return schedule.rows;
+  }
+  // Legacy distParams.rows or distParams.times
+  if (Array.isArray(schedule.distParams?.rows)) return schedule.distParams.rows;
+  if (Array.isArray(schedule.distParams?.times)) return schedule.distParams.times.map(t => ({ time: t }));
+  return [];
+}
+
+function estimateRecurringArrivals(bEvent, maxSimTime, unknowns, schedulesMap = {}) {
   const calls = parseCalls(bEvent.effect).filter(call => call.macro === "ARRIVE");
   if (!calls.length) return { plannedArrivals: 0, expectedArrivals: 0, meanArrivalRateByQueue: {} };
 
@@ -120,12 +147,8 @@ function estimateRecurringArrivals(bEvent, maxSimTime, unknowns) {
   for (const schedule of selfSchedules) {
     const distName = normalizeDistributionName(schedule.dist);
     if (distName === "Schedule") {
-      const rows = Array.isArray(schedule.distParams?.rows) ? schedule.distParams.rows : [];
-      const times = rows.length
-        ? rows.map(row => Number(row.time)).filter(Number.isFinite)
-        : Array.isArray(schedule.distParams?.times)
-          ? schedule.distParams.times.map(Number).filter(Number.isFinite)
-          : [];
+      const rows = resolveScheduleRows(schedule, schedulesMap);
+      const times = rows.map(row => Number(row.time ?? row)).filter(Number.isFinite);
       if (maxSimTime == null) {
         unknowns.push(`Arrival event '${bEvent.name || bEvent.id}' uses a planned schedule, but the stop rule is not time-bounded.`);
         continue;
@@ -133,6 +156,14 @@ function estimateRecurringArrivals(bEvent, maxSimTime, unknowns) {
       const withinHorizon = times.filter(time => time <= maxSimTime).length * calls.length;
       plannedArrivals += withinHorizon;
       expectedArrivals += withinHorizon;
+      // Derive an effective mean arrival rate so bottleneck detection works for timetable models
+      if (maxSimTime > 0 && withinHorizon > 0) {
+        const effectiveRate = withinHorizon / maxSimTime;
+        for (const call of calls) {
+          const queueName = call.args[1] || call.args[0] || "default";
+          meanArrivalRateByQueue[queueName] = (meanArrivalRateByQueue[queueName] || 0) + effectiveRate;
+        }
+      }
       continue;
     }
 
@@ -220,10 +251,10 @@ function buildBottlenecks(model, arrivalRateByQueue, expectedEntities, maxSimTim
   return bottlenecks.slice(0, 4);
 }
 
-function classifyRisk(totalScans, totalEntities) {
-  if (totalScans > 1000000 || totalEntities > 50000) return "too_large";
-  if (totalScans > 250000 || totalEntities > 10000) return "large";
-  if (totalScans > 50000 || totalEntities > 2000) return "medium";
+function classifyRisk(totalScans, totalEntities, plannedScheduleRows = 0) {
+  if (totalScans > 1000000 || totalEntities > 50000 || plannedScheduleRows > 100000) return "too_large";
+  if (totalScans > 250000 || totalEntities > 10000 || plannedScheduleRows > 10000) return "large";
+  if (totalScans > 50000 || totalEntities > 2000 || plannedScheduleRows > 1000) return "medium";
   return "small";
 }
 
@@ -234,8 +265,9 @@ export function estimateRunComplexity(model, options = {}) {
     ? (Number.isFinite(Number(options.maxSimTime)) ? Number(options.maxSimTime) : Number.isFinite(Number(model?.maxSimTime)) ? Number(model.maxSimTime) : null)
     : null;
   const replications = Math.max(1, parseInt(options.replications ?? experimentDefaults.replications ?? 1, 10) || 1);
+  const schedulesMap = options.schedulesMap || {};
   const unknowns = [];
-  const plannedScheduleRows = countPlannedScheduleRows(model);
+  const plannedScheduleRows = countPlannedScheduleRows(model, schedulesMap);
 
   const initialCustomerEntities = sumCounts(
     (model?.entityTypes || [])
@@ -248,7 +280,7 @@ export function estimateRunComplexity(model, options = {}) {
   const arrivalRateByQueue = {};
 
   for (const bEvent of model?.bEvents || []) {
-    const estimate = estimateRecurringArrivals(bEvent, maxSimTime, unknowns);
+    const estimate = estimateRecurringArrivals(bEvent, maxSimTime, unknowns, schedulesMap);
     plannedArrivals += estimate.plannedArrivals;
     expectedEntities += estimate.expectedArrivals;
     for (const [queueName, rate] of Object.entries(estimate.meanArrivalRateByQueue)) {
@@ -291,7 +323,7 @@ export function estimateRunComplexity(model, options = {}) {
     replications,
     totalEstimatedEntities,
     totalEstimatedScans,
-    riskLevel: classifyRisk(totalEstimatedScans, totalEstimatedEntities),
+    riskLevel: classifyRisk(totalEstimatedScans, totalEstimatedEntities, plannedScheduleRows),
     bottlenecks,
     confidence,
     assumptions: [
