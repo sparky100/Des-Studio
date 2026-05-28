@@ -89,7 +89,14 @@ function getEntityName(model) {
 function detectArrivalMode(model, summary) {
   if (summary.avgPlanDeviation != null) return 'plan';
   const hasTimetable = (model.bEvents || []).some(ev =>
-    (ev.schedules || []).some(s => (s.rows?.length > 0) || (s.times?.length > 0))
+    (ev.schedules || []).some(s =>
+      s.rows?.length > 0 ||
+      s.times?.length > 0 ||
+      s.distParams?.rows?.length > 0 ||
+      s.distParams?.times?.length > 0 ||
+      s.scheduleRef ||
+      s.dist === 'Schedule'
+    )
   );
   return hasTimetable ? 'plan' : 'stochastic';
 }
@@ -148,6 +155,118 @@ function wrapSvgLabel(text, maxLen = 20) {
   });
   if (line) lines.push(line);
   return lines.slice(0, 3);
+}
+
+// Histogram of entity arrival times from entitySummary — used for plan-based models.
+function buildArrivalPatternChart(results, experimentConfig, unit, width = 560) {
+  const entities = results.entitySummary || [];
+  const warmup = Number(experimentConfig.warmupPeriod ?? experimentConfig.warmup ?? 0);
+  const arrivals = entities
+    .filter(e => e.role === 'customer' && Number.isFinite(e.arrivalTime) && e.arrivalTime >= warmup)
+    .map(e => e.arrivalTime);
+  if (arrivals.length < 2) return '';
+
+  const minT = Math.min(...arrivals);
+  const maxT = Math.max(...arrivals);
+  const range = maxT - minT;
+  if (range <= 0) return '';
+
+  const numBuckets = Math.min(30, Math.max(8, Math.ceil(arrivals.length / 8)));
+  const bucketSize = range / numBuckets;
+  const counts = new Array(numBuckets).fill(0);
+  arrivals.forEach(t => {
+    const bucket = Math.min(numBuckets - 1, Math.floor((t - minT) / bucketSize));
+    counts[bucket]++;
+  });
+
+  const m = { top: 32, right: 16, bottom: 48, left: 44 };
+  const height = 180;
+  const cW = width - m.left - m.right;
+  const cH = height - m.top - m.bottom;
+  const maxCount = Math.max(1, ...counts);
+  const barW = cW / numBuckets;
+
+  let bars = '', xLabels = '', yAxis = '';
+  counts.forEach((count, i) => {
+    const bh = (count / maxCount) * cH;
+    const bx = (m.left + i * barW).toFixed(1);
+    const by = (m.top + cH - bh).toFixed(1);
+    if (bh > 0) bars += `<rect x="${bx}" y="${by}" width="${Math.max(1, barW - 1).toFixed(1)}" height="${bh.toFixed(1)}" fill="#2563eb" opacity="0.7" rx="1"/>`;
+  });
+
+  const labelStep = Math.ceil(numBuckets / 6);
+  for (let i = 0; i <= numBuckets; i += labelStep) {
+    const t = (minT + i * bucketSize).toFixed(0);
+    const x = (m.left + i * barW).toFixed(1);
+    xLabels += `<text x="${x}" y="${(m.top + cH + 14).toFixed(1)}" text-anchor="middle" font-size="9" fill="#6b7280" font-family="sans-serif">${t}</text>`;
+  }
+  for (let i = 0; i <= 4; i++) {
+    const v = Math.round(maxCount * i / 4);
+    const ty = (m.top + cH - (v / maxCount) * cH).toFixed(1);
+    yAxis += `<line x1="${m.left - 4}" y1="${ty}" x2="${(m.left + cW).toFixed(1)}" y2="${ty}" stroke="${i === 0 ? '#9ca3af' : '#e5e7eb'}" stroke-width="1"/>`;
+    yAxis += `<text x="${(m.left - 6).toFixed(1)}" y="${(Number(ty) + 4).toFixed(1)}" text-anchor="end" font-size="9" fill="#9ca3af" font-family="sans-serif">${v}</text>`;
+  }
+
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <text x="${width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#111827" font-family="sans-serif">Arrival Pattern (arrivals per ${esc(unit)} period)</text>
+    ${yAxis}
+    <line x1="${m.left}" y1="${m.top}" x2="${m.left}" y2="${m.top + cH}" stroke="#9ca3af" stroke-width="1.5"/>
+    ${bars}${xLabels}
+    <text x="${m.left + cW / 2}" y="${(m.top + cH + 36).toFixed(1)}" text-anchor="middle" font-size="9" fill="#6b7280" font-family="sans-serif">${esc(unit)}</text>
+  </svg>`;
+}
+
+// Line chart of system load (entities waiting) over simulation time from timeSeries.
+function buildTimeSeriesChart(timeSeries, unit, width = 560) {
+  if (!Array.isArray(timeSeries) || timeSeries.length < 2) return '';
+
+  const points = timeSeries.map(pt => {
+    const queueWaiting = Object.values(pt.byQueue || {}).reduce((s, q) => s + (q.waiting || 0), 0);
+    const typeWaiting  = Object.values(pt.byType  || {}).reduce((s, t) => s + (t.waiting || 0), 0);
+    return { t: pt.t, v: queueWaiting || typeWaiting };
+  }).filter(p => Number.isFinite(p.t) && Number.isFinite(p.v));
+  if (points.length < 2) return '';
+
+  const minT   = points[0].t;
+  const maxT   = points[points.length - 1].t;
+  const maxV   = Math.max(1, ...points.map(p => p.v));
+  const tRange = maxT - minT || 1;
+  const m = { top: 32, right: 16, bottom: 48, left: 44 };
+  const height = 180;
+  const cW = width - m.left - m.right;
+  const cH = height - m.top - m.bottom;
+
+  const toX = t => m.left + ((t - minT) / tRange) * cW;
+  const toY = v => m.top + cH - (v / maxV) * cH;
+
+  const pathPts = points.map(p => `${toX(p.t).toFixed(1)},${toY(p.v).toFixed(1)}`).join(' ');
+  // Filled area under the line
+  const areaStart = `${toX(points[0].t).toFixed(1)},${(m.top + cH).toFixed(1)}`;
+  const areaEnd   = `${toX(points[points.length - 1].t).toFixed(1)},${(m.top + cH).toFixed(1)}`;
+  const areaPath  = `${areaStart} ${pathPts} ${areaEnd}`;
+
+  let xLabels = '', yAxis = '';
+  for (let i = 0; i <= 6; i++) {
+    const t = minT + (i / 6) * tRange;
+    const x = toX(t).toFixed(1);
+    xLabels += `<text x="${x}" y="${(m.top + cH + 14).toFixed(1)}" text-anchor="middle" font-size="9" fill="#6b7280" font-family="sans-serif">${t.toFixed(0)}</text>`;
+  }
+  for (let i = 0; i <= 4; i++) {
+    const v  = Math.round(maxV * i / 4);
+    const ty = toY(v).toFixed(1);
+    yAxis += `<line x1="${m.left - 4}" y1="${ty}" x2="${(m.left + cW).toFixed(1)}" y2="${ty}" stroke="${i === 0 ? '#9ca3af' : '#e5e7eb'}" stroke-width="1"/>`;
+    yAxis += `<text x="${(m.left - 6).toFixed(1)}" y="${(Number(ty) + 4).toFixed(1)}" text-anchor="end" font-size="9" fill="#9ca3af" font-family="sans-serif">${v}</text>`;
+  }
+
+  return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <text x="${width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#111827" font-family="sans-serif">System Load Over Time (entities waiting)</text>
+    ${yAxis}
+    <line x1="${m.left}" y1="${m.top}" x2="${m.left}" y2="${m.top + cH}" stroke="#9ca3af" stroke-width="1.5"/>
+    <polygon points="${areaPath}" fill="#2563eb" opacity="0.12"/>
+    <polyline points="${pathPts}" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linejoin="round"/>
+    ${xLabels}
+    <text x="${m.left + cW / 2}" y="${(m.top + cH + 36).toFixed(1)}" text-anchor="middle" font-size="9" fill="#6b7280" font-family="sans-serif">${esc(unit)}</text>
+  </svg>`;
 }
 
 // ── SVG Charts ─────────────────────────────────────────────────────────────────
@@ -463,13 +582,18 @@ function buildMethodology(model, results, experimentConfig, aggStats = {}) {
   const goals        = model.goals || [];
 
   const parts = [];
+  const MAX_LISTED = 3;
 
-  // Scope sentence
+  // Scope sentence — list names only when count is small, summarise otherwise
   const qPart = queueNames.length
-    ? `${queueNames.length} stage${queueNames.length !== 1 ? 's' : ''} (${queueNames.map(q => `<em>${esc(q)}</em>`).join(', ')})`
+    ? queueNames.length <= MAX_LISTED
+      ? `${queueNames.length} stage${queueNames.length !== 1 ? 's' : ''} (${queueNames.map(q => `<em>${esc(q)}</em>`).join(', ')})`
+      : `${queueNames.length}-stage process`
     : null;
   const rPart = resourceTypes.length
-    ? `${resourceTypes.length} resource type${resourceTypes.length !== 1 ? 's' : ''} (${resourceTypes.map(r => `<em>${esc(r)}</em>`).join(', ')})`
+    ? resourceTypes.length <= MAX_LISTED
+      ? `${resourceTypes.length} resource type${resourceTypes.length !== 1 ? 's' : ''} (${resourceTypes.map(r => `<em>${esc(r)}</em>`).join(', ')})`
+      : `${resourceTypes.length} resource types`
     : null;
   const scopeBody = [qPart, rPart].filter(Boolean).join(' served by ');
   if (scopeBody) {
@@ -479,6 +603,8 @@ function buildMethodology(model, results, experimentConfig, aggStats = {}) {
   // Arrival pattern
   if (arrivalMode === 'plan') {
     parts.push(`<p class="method-item"><strong>Arrival pattern:</strong> ${esc(entityName)}s arrive according to a pre-planned timetable. Results reflect how the system performs against that specific schedule.</p>`);
+    const arrivalChart = buildArrivalPatternChart(results, experimentConfig, unit);
+    if (arrivalChart) parts.push(`<div class="chart-wrap">${arrivalChart}</div>`);
   } else {
     const distInfo = getArrivalDistInfo(model);
     const distText = distInfo
@@ -648,6 +774,17 @@ function buildResults(model, results, aggStats = {}) {
     ${htmlTable(['Resource type', 'Count', 'Utilisation'], utilRows)}`;
   }
 
+  // Time-series load chart (shown when timeSeries data was collected)
+  let timeSeriesHtml = '';
+  {
+    const tsChart = buildTimeSeriesChart(results.timeSeries, unit);
+    if (tsChart) {
+      timeSeriesHtml = `<h3>System load over time</h3>
+      <p class="note">Entities waiting in the system at each point in time. Peaks indicate periods of high demand or congestion.</p>
+      <div class="chart-wrap">${tsChart}</div>`;
+    }
+  }
+
   // Goal assessment
   const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
   let goalHtml = '';
@@ -694,6 +831,7 @@ function buildResults(model, results, aggStats = {}) {
     ${journeyChart ? `<div class="chart-wrap">${journeyChart}</div>` : ''}
     ${waitChartHtml || waitTableHtml ? `<h3>Queue wait-time distributions</h3>${waitChartHtml}${waitTableHtml}` : ''}
     ${utilChartHtml || utilTableHtml ? `<h3>Resource utilisation</h3>${utilChartHtml}${utilTableHtml}` : ''}
+    ${timeSeriesHtml}
     ${planVsActualHtml}
     ${goalHtml}
     ${ciHtml}
@@ -845,13 +983,44 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
   const resourceTypes = Object.keys(summary.perResource || {});
   lines.push('## Scope & Methodology');
   lines.push('');
+  const MD_MAX_LISTED = 3;
   if (queueNames.length || resourceTypes.length) {
-    const qPart = queueNames.length ? `${queueNames.length} queue${queueNames.length !== 1 ? 's' : ''} (${queueNames.join(', ')})` : '';
-    const rPart = resourceTypes.length ? `${resourceTypes.length} resource type${resourceTypes.length !== 1 ? 's' : ''} (${resourceTypes.join(', ')})` : '';
+    const qPart = queueNames.length
+      ? queueNames.length <= MD_MAX_LISTED
+        ? `${queueNames.length} queue${queueNames.length !== 1 ? 's' : ''} (${queueNames.join(', ')})`
+        : `${queueNames.length}-stage process`
+      : '';
+    const rPart = resourceTypes.length
+      ? resourceTypes.length <= MD_MAX_LISTED
+        ? `${resourceTypes.length} resource type${resourceTypes.length !== 1 ? 's' : ''} (${resourceTypes.join(', ')})`
+        : `${resourceTypes.length} resource types`
+      : '';
     lines.push(`**Scope:** This analysis covers ${[qPart, rPart].filter(Boolean).join(' served by ')}.`);
   }
   if (arrivalMode === 'plan') {
     lines.push(`**Arrival pattern:** ${entityName}s arrive according to a pre-planned timetable.`);
+    // Arrival counts summary by period
+    const entities = results.entitySummary || [];
+    const mdWarmup = Number(experimentConfig.warmupPeriod ?? experimentConfig.warmup ?? 0);
+    const arrivalTimes = entities
+      .filter(e => e.role === 'customer' && Number.isFinite(e.arrivalTime) && e.arrivalTime >= mdWarmup)
+      .map(e => e.arrivalTime);
+    if (arrivalTimes.length >= 4) {
+      const minT = Math.min(...arrivalTimes);
+      const maxT = Math.max(...arrivalTimes);
+      const range = maxT - minT;
+      const numPeriods = Math.min(8, Math.max(4, Math.ceil(arrivalTimes.length / 10)));
+      const bucketSize = range / numPeriods;
+      const counts = new Array(numPeriods).fill(0);
+      arrivalTimes.forEach(t => {
+        const b = Math.min(numPeriods - 1, Math.floor((t - minT) / bucketSize));
+        counts[b]++;
+      });
+      const peakBucket = counts.indexOf(Math.max(...counts));
+      const peakStart  = (minT + peakBucket * bucketSize).toFixed(0);
+      const peakEnd    = (minT + (peakBucket + 1) * bucketSize).toFixed(0);
+      lines.push(`**Arrival peak:** Busiest period is ${peakStart}–${peakEnd} ${unit} (${Math.max(...counts)} arrivals). Total scheduled arrivals: ${arrivalTimes.length}.`);
+    }
   } else {
     const distInfo = getArrivalDistInfo(model);
     lines.push(`**Arrival pattern:** ${entityName} inter-arrival times are modelled stochastically${distInfo ? ` (${distInfo})` : ''}.`);
