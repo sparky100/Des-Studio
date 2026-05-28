@@ -7,6 +7,7 @@ import { getPlatformConfig, setPlatformConfig, updateUserRole,
          suspendUser, unsuspendUser, logAdminAction, fetchAuditLog,
          fetchAdminUserStats, fetchPlatformStats, fetchSignupCounts,
          updateUserPlan, fetchFeedback, updateFeedbackStatus } from "../db/models.js";
+import { RUN_ADMISSION_TIERS } from "../engine/run-admission.js";
 
 const LLM_PROVIDERS = [
   { value: "anthropic",    label: "Anthropic" },
@@ -263,9 +264,10 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [llmCfg, limitsCfg, allUsers, log, stats, signups, fb] = await Promise.all([
+      const [llmCfg, limitsCfg, tierData, allUsers, log, stats, signups, fb] = await Promise.all([
         getPlatformConfig("llm"),
         getPlatformConfig("limits"),
+        getPlatformConfig("tier_policies"),
         fetchAdminUserStats(),
         fetchAuditLog(100),
         fetchPlatformStats().catch(() => null),
@@ -274,6 +276,10 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       ]);
       setLlmConfig(llmCfg);
       setLimits(limitsCfg);
+      if (tierData) {
+        setTierPoliciesData(tierData);
+        setTierPoliciesDraft(tierData);
+      }
       setUsers(allUsers || []);
       setAuditLog(log || []);
       setPlatformStats(stats);
@@ -296,6 +302,8 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   useEffect(() => { loadData(); }, [loadData]);
 
   // ── Limits form state ──
+  const [tierPoliciesData, setTierPoliciesData] = useState(null);
+  const [tierPoliciesDraft, setTierPoliciesDraft] = useState(null);
   const [maxModels, setMaxModels] = useState(100);
   const [maxRuns, setMaxRuns] = useState(500);
   const [maxReplications, setMaxReplications] = useState(50);
@@ -335,6 +343,19 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       }, userId);
       await logAdminAction("update_config", null, "limits");
       setSaveStatus({ state: "success", message: "Limits saved." });
+    } catch (err) {
+      setSaveStatus({ state: "error", message: err.message });
+    }
+    setSaving(false);
+  };
+
+  const handleSaveTierPolicies = async () => {
+    setSaving(true); setSaveStatus(null);
+    try {
+      await setPlatformConfig("tier_policies", tierPoliciesDraft, userId);
+      await logAdminAction("update_config", null, "tier_policies");
+      setTierPoliciesData(tierPoliciesDraft);
+      setSaveStatus({ state: "success", message: "Tier policies saved." });
     } catch (err) {
       setSaveStatus({ state: "error", message: err.message });
     }

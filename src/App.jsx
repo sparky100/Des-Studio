@@ -9,7 +9,8 @@ import { fetchModels, fetchProfiles,
          saveModel, deleteModel,
          setVisibility, setAccess, forkModel,
          fetchRunStatsForModels,
-         validateDbSchema }               from "./db/models.js";
+         validateDbSchema,
+         getPlatformConfig }              from "./db/models.js";
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
 import { C, FONT, GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
@@ -118,6 +119,7 @@ export default function App(){
   const [showKeyboardShortcuts,setShowKeyboardShortcuts]=useState(false)
   const [pendingImport,setPendingImport]=useState(null)
   const [helpOpen,setHelpOpen]=useState(false)
+  const [tierPolicies,setTierPolicies]=useState(null)
 
   // Dev-only: probe des_models schema on mount to catch drift early.
   useEffect(()=>{
@@ -210,6 +212,13 @@ export default function App(){
   },[session])
 
   useEffect(()=>{loadData()},[loadData])
+
+  useEffect(()=>{
+    if(!session)return
+    getPlatformConfig("tier_policies").then(data=>{
+      if(data)setTierPolicies(data)
+    }).catch(()=>{})
+  },[session])
 
   useEffect(()=>{
     const onKey=e=>{
@@ -537,7 +546,7 @@ export default function App(){
             overrides={{
               autoRun: openModelOptions.autoRun,
               showStarterGuide: openModelOptions.showStarterGuide,
-              isOwner: true, canEdit: true, profiles, userId: isLocal ? null : uid, isAdmin, plan: profile?.plan || 'free',
+              isOwner: true, canEdit: true, profiles, userId: isLocal ? null : uid, isAdmin, plan: profile?.plan || 'free', tierPolicies: tierPolicies || undefined,
               onHelpOpen: () => setHelpOpen(true),
               onSave: isLocal
                 ? async (m) => saveLocalModel(m)

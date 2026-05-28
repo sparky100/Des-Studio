@@ -1170,6 +1170,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               userId={overrides.userId}
               plan={overrides.plan}
               isAdmin={overrides.isAdmin}
+              tierPolicies={overrides.tierPolicies}
               currentVersion={currentVersion}
               currentVersionId={currentVersionId}
               onRunSaved={handleRunSaved}

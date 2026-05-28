@@ -792,6 +792,13 @@ export async function setPlatformConfig(key, value, userId) {
   return { ok: true };
 }
 
+export async function fetchTierPolicies() {
+  return getPlatformConfig("tier_policies");
+}
+export async function saveTierPolicies(policies, userId) {
+  return setPlatformConfig("tier_policies", policies, userId);
+}
+
 export async function fetchAllUsers() {
   const { data, error } = await supabase
     .from("profiles")

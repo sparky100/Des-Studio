@@ -82,8 +82,14 @@ export function resolveRunAdmissionTier(plan, options = {}) {
 }
 
 export function getRunAdmission(model, options = {}) {
-  const tier = RUN_ADMISSION_TIERS[options.tier] ? options.tier : resolveRunAdmissionTier(options.plan, { isAdmin: options.isAdmin });
-  const tierPolicy = RUN_ADMISSION_TIERS[tier];
+  // Merge DB overrides over hardcoded defaults (field-level, per tier)
+  const activePolicies = options.tierPolicies
+    ? Object.fromEntries(
+        Object.entries(RUN_ADMISSION_TIERS).map(([k, v]) => [k, { ...v, ...(options.tierPolicies[k] || {}) }])
+      )
+    : RUN_ADMISSION_TIERS;
+  const tier = activePolicies[options.tier] ? options.tier : resolveRunAdmissionTier(options.plan, { isAdmin: options.isAdmin });
+  const tierPolicy = activePolicies[tier] || RUN_ADMISSION_TIERS.pro;
   const validationInput = normalizeValidationInput(model || {}, options);
   const validation = options.validation || validateModel(validationInput);
   const modelCheckIssues = options.modelCheckIssues || checkModel(model || {});
@@ -180,7 +186,9 @@ export function getRunAdmission(model, options = {}) {
     ));
   }
 
-  const effectiveCollectTimeSeries = requestedCollectTimeSeries && shouldDisableTimeSeries(tier, complexityEstimate.riskLevel)
+  const effectiveCollectTimeSeries = requestedCollectTimeSeries && (
+    (RISK_ORDER[complexityEstimate.riskLevel] ?? 0) >= (RISK_ORDER[tierPolicy.disableTimeSeriesAt || "large"] ?? 2)
+  )
     ? false
     : requestedCollectTimeSeries;
   if (requestedCollectTimeSeries && !effectiveCollectTimeSeries) {
