@@ -432,10 +432,18 @@ export const AiAssistantPanel = ({
       ? makeSavedRunPromptPayload(selectedRun.payload)
       : makeRunPromptPayload(selectedRun.label, selectedRun.payload);
 
+    // Resolve comparison model structure: session reps share the current model;
+    // saved runs may carry a snapshot in results_json._model_snapshot.
+    const modelB = selectedRun.source === "session"
+      ? model
+      : (selectedRun.payload?.results_json?._model_snapshot ?? null);
+
     runPrompt(buildComparisonPrompt(
       model.name,
       makeRunPromptPayload("Current completed run", { results, experiment: exportConfig }),
-      comparisonPayload
+      comparisonPayload,
+      model,
+      modelB
     ), "comparison");
   };
 
