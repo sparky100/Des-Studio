@@ -1191,7 +1191,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           </ErrorBoundary>
         )}
         {tab==="results"&&(
-          <div style={{maxWidth:1200,display:"flex",flexDirection:"column",gap:0}}>
+          <div style={{display:"flex",flexDirection:"column",gap:0,minWidth:0}}>
             <div style={{display:"flex",alignItems:"center",gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:16,overflowX:"auto"}}>
               {[
                 {id:"summary",label:"Summary"},

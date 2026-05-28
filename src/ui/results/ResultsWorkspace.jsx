@@ -758,8 +758,8 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   if (!chartModel.hasTimeSeries && !hasWaitDistributions && !hasAnalysisInputs) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-        <SummaryCardGrid results={results} />
         <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
+        <SummaryCardGrid results={results} />
         <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
           Turn on <strong style={{ color: C.accent }}>Keep chart data during the run</strong> in Run setup, then run the model to see charts.
         </div>
@@ -769,8 +769,8 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-      <SummaryCardGrid results={results} />
       <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
+      <SummaryCardGrid results={results} />
 
       {(chartModel.hasTimeSeries || hasWaitDistributions) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
