@@ -414,6 +414,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
   const initEngine = useCallback(() => {
     if (hasValidationErrors) return;
+    // Cancel any in-flight batch or sweep workers before rebuilding
+    if (runnerRef.current) { runnerRef.current.cancel(); runnerRef.current = null; }
+    if (sweepRunnerRef.current) { sweepRunnerRef.current.cancel(); sweepRunnerRef.current = null; }
+    if (autoRef.current) { clearInterval(autoRef.current); autoRef.current = null; }
     setHideRunReadiness(true);
     setExecuteSection("run");
     runSeedRef.current = seed;
@@ -436,6 +440,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     logRef.current = initLog;
     setLog(initLog);
     setMode("stepping");
+    setAutoRunning(false);
     setSaveStatus(null);
     setPhaseCTruncated(false);
     setResults(null);
@@ -443,6 +448,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setLiveWaitDist(null);
     liveHistThrottleRef.current = 0;
     onResultsReady?.(null);
+    onRunComplete?.({ results: null, replicationResults: [], warmupDetection: null, log: [] });
     singleRunCancelRef.current = false;
     setSingleRunStatus("idle");
     setSingleRunProgress(null);
@@ -450,7 +456,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setBatchProgress(null);
     setReplicationResults([]);
     setAggregateStats({});
-  }, [model, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries]);
+    setWarmupDetection(null);
+    setComparisonResult(null);
+    setSweepResults(null);
+    setSweepStatus("idle");
+    setSweepProgress(null);
+  }, [model, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, onRunComplete]);
 
   const stopAuto = useCallback(() => {
     if (autoRef.current) {
