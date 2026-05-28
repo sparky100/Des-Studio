@@ -78,10 +78,9 @@ const SAVE_CRITICAL_WARN_MS = 15_000;
 /**
  * Hard timeout (ms): abandon the save attempt and surface an error.
  * The underlying fetch may still complete in the background but the result
- * will be ignored.  Raise this value if your Supabase project is on a plan
- * that keeps compute warm and 30 s is genuinely too tight.
+ * will be ignored.
  */
-const SAVE_TIMEOUT_MS       = 30_000;
+const SAVE_TIMEOUT_MS       = 45_000;
 
 /**
  * Runs a cloud save function with live elapsed-time feedback, escalating
