@@ -475,7 +475,8 @@ export const AiAssistantPanel = ({
   const canRefinePlan = !!results && (
     (Array.isArray(model?.schedules) && model.schedules.length > 0) ||
     (Array.isArray(model?.shiftSchedules) && model.shiftSchedules.length > 0) ||
-    (model?.entityTypes || []).some(et => Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0)
+    (model?.entityTypes || []).some(et => Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) ||
+    (model?.bEvents || []).some(be => (be.schedules || []).some(s => s.scheduleRef))
   );
 
   const handleRefinePlan = useCallback(async () => {
@@ -603,9 +604,7 @@ export const AiAssistantPanel = ({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{embedded ? "Explain Results" : "AI Assistant"}</div>
-          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
-            {embedded ? "Ask the AI to explain the current results in plain English." : "Ask questions about the latest run."}
-          </div>
+          {!embedded && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
         </div>
         {!embedded && onClose && <Btn small variant="ghost" onClick={onClose} ariaLabel="Close AI assistant">x</Btn>}
       </div>
