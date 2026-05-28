@@ -130,12 +130,12 @@ describe('ExecutePanel results export buttons', () => {
   it('disables result exports before a run and enables them after completion', async () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
-    expect(screen.getByRole('button', { name: 'Export…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export Data' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Export…' })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Export Data' })).not.toBeDisabled()
     );
   });
 });

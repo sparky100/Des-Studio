@@ -32,7 +32,7 @@ import { LogViewer } from "./LogViewer.jsx";
 import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
-import { generateReport } from '../../reports/index.js';
+import { generateReport, sanitizeFilename } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
 
 /** Collect {{env.VAR}} secrets from sessionStorage for live-data adapters. */
@@ -267,7 +267,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const qrRef = useRef(null);
   const [latestRunId, setLatestRunId] = useState(null);
   const [showExportPopover, setShowExportPopover] = useState(false);
-  const [exportFormats, setExportFormats] = useState({ json: true, csv: false, html: false });
+  const [exportFormats, setExportFormats] = useState({ json: true, csv: false });
+  const [showCreateReportModal, setShowCreateReportModal] = useState(false);
+  const [reportType, setReportType] = useState('seniorMgmt'); // 'seniorMgmt' | 'technical'
+  const [reportFormat, setReportFormat] = useState('html'); // 'html' | 'markdown'
   const effectiveAutoSpeed = useMemo(
     () => Math.max(40, Math.round(400 / speedMultiplier)),
     [speedMultiplier]
@@ -1164,12 +1167,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     };
   };
 
-  const handleExportReport = useCallback(async () => {
+  const handleExportReport = useCallback(async (type = 'technical', format = 'html') => {
     if (!results) return;
     setReportGenerating(true);
+    setShowCreateReportModal(false);
     try {
       const meta = assembleRunMeta(latestRunId);
-      const modelImageDataUrl = await getModelImageDataUrl().catch(() => null);
       let reportModel = model;
       if (latestRunId) {
         try {
@@ -1177,11 +1180,18 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           if (run?.model_snapshot) reportModel = run.model_snapshot;
         } catch {}
       }
-      const html = await generateReport(reportModel, results, exportConfig, meta, modelImageDataUrl);
-      const blob = new Blob([html], { type: 'text/html' });
+      const content = await generateReport(reportModel, results, exportConfig, meta, {
+        type,
+        format,
+        aggregateStats: aggregateStats || {},
+      });
+      const mimeType = format === 'markdown' ? 'text/markdown' : 'text/html';
+      const ext = format === 'markdown' ? 'md' : 'html';
+      const reportTypeSuffix = type === 'seniorMgmt' ? 'Management' : 'Technical';
+      const safeName = `${sanitizeFilename(reportModel.name || 'Model')} — ${sanitizeFilename(meta.runLabel || 'Report')} — ${reportTypeSuffix} Report.${ext}`;
+      const blob = new Blob([content], { type: mimeType });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const safeName = `${(reportModel.name || 'Model').replace(/[/\\:*?"<>|]/g, '-')} — ${meta.runLabel.replace(/[/\\:*?"<>|]/g, '-')} — Report.html`;
       a.href = url;
       a.download = safeName;
       a.click();
@@ -1192,7 +1202,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     } finally {
       setReportGenerating(false);
     }
-  }, [results, latestRunId, model, exportConfig, effectiveRunLabel, seed, savedRunHistory]);
+  }, [results, latestRunId, model, exportConfig, effectiveRunLabel, seed, savedRunHistory, aggregateStats]);
 
   const loadShareLinks = useCallback(async () => {
     if (!modelId) return;
@@ -2221,14 +2231,15 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           </Btn>
         )}
         <Btn variant={diagnosticsPanelOpen ? "primary" : "ghost"} onClick={() => setDiagnosticsPanelOpen(open => !open)}>Diagnostics</Btn>
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative", display: "flex", gap: 6 }}>
+          {/* Export Data popover */}
           {showExportPopover && (
             <div
               style={{ position: "fixed", inset: 0, zIndex: 99 }}
               onClick={() => setShowExportPopover(false)}
             />
           )}
-          <Btn variant="ghost" onClick={() => setShowExportPopover(v => !v)} disabled={!canExportResults}>Export…</Btn>
+          <Btn variant="ghost" onClick={() => setShowExportPopover(v => !v)} disabled={!canExportResults}>Export Data</Btn>
           {showExportPopover && (
             <div style={{
               position: "absolute",
@@ -2242,11 +2253,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               display: "flex",
               flexDirection: "column",
               gap: 8,
-              minWidth: 170,
+              minWidth: 160,
               boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
             }}>
               <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>FORMAT</span>
-              {[["json", "JSON Results"], ["csv", "CSV Results"], ["html", "HTML Report"]].map(([key, label]) => (
+              {[["json", "JSON Results"], ["csv", "CSV Results"]].map(([key, label]) => (
                 <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
                   <input
                     type="checkbox"
@@ -2260,12 +2271,90 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               <Btn variant="primary" small onClick={() => {
                 if (exportFormats.json) exportResultsJson();
                 if (exportFormats.csv) exportResultsCsv();
-                if (exportFormats.html) handleExportReport();
                 setShowExportPopover(false);
-              }} disabled={!Object.values(exportFormats).some(Boolean) || reportGenerating}>
-                {reportGenerating ? "Generating…" : "Download"}
+              }} disabled={!Object.values({ json: exportFormats.json, csv: exportFormats.csv }).some(Boolean)}>
+                Download
               </Btn>
             </div>
+          )}
+
+          {/* Create Report button */}
+          <Btn variant="ghost" onClick={() => setShowCreateReportModal(true)} disabled={!canExportResults || reportGenerating}>
+            {reportGenerating ? "Generating…" : "Create Report"}
+          </Btn>
+
+          {/* Create Report modal */}
+          {showCreateReportModal && (
+            <>
+              <div
+                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200 }}
+                onClick={() => setShowCreateReportModal(false)}
+              />
+              <div style={{
+                position: "fixed",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                zIndex: 201,
+                background: C.cardBg,
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                padding: 24,
+                width: 380,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                fontFamily: FONT,
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Create Report</span>
+                  <Btn small variant="ghost" onClick={() => setShowCreateReportModal(false)} ariaLabel="Close">×</Btn>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+                  {[
+                    ["seniorMgmt", "Senior Management Report", "Results and recommendations in plain English. No statistical or technical detail."],
+                    ["technical",  "Technical Report",          "Full analysis including confidence intervals and model specification appendix."],
+                  ].map(([val, label, desc]) => (
+                    <label key={val} style={{ display: "flex", gap: 10, cursor: "pointer", padding: 10, borderRadius: 6, border: `1px solid ${reportType === val ? C.accent : C.border}`, background: reportType === val ? `${C.accent}11` : "transparent" }}>
+                      <input
+                        type="radio"
+                        name="reportType"
+                        value={val}
+                        checked={reportType === val}
+                        onChange={() => setReportType(val)}
+                        style={{ accentColor: C.accent, marginTop: 2 }}
+                      />
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{label}</div>
+                        <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{desc}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, color: C.muted, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>FORMAT</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {[["html", "HTML"], ["markdown", "Markdown"]].map(([val, label]) => (
+                      <Btn
+                        key={val}
+                        small
+                        variant={reportFormat === val ? "primary" : "ghost"}
+                        onClick={() => setReportFormat(val)}
+                      >
+                        {label}
+                      </Btn>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                  <Btn variant="ghost" onClick={() => setShowCreateReportModal(false)}>Cancel</Btn>
+                  <Btn variant="primary" onClick={() => handleExportReport(reportType, reportFormat)} disabled={reportGenerating}>
+                    Generate Report
+                  </Btn>
+                </div>
+              </div>
+            </>
           )}
         </div>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
