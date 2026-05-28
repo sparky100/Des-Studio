@@ -122,9 +122,15 @@ function extractBEvents(model = {}, results = {}) {
     if (Array.isArray(ev.schedules) && ev.schedules.length > 0) {
       entry.arrivalStreams = ev.schedules.length;
       if (ev.schedules.some(s => s.isRenege)) entry.hasReneging = true;
-      // ADR-016: flag when arrival rows are stored in a separate model_schedules record
+      // ADR-016: timetable rows live in model_schedules, not inline.
+      // externalSchedule: true → the bEvent uses a named schedule (scheduleRef UUID).
+      // The rows are resolved at run-time from the selected model_schedule record.
+      // inlineRows: true → legacy format; rows are still embedded in model JSON
+      //   (user should migrate via the Schedules tab "Move to a named schedule" banner).
       const externalCount = ev.schedules.filter(s => s.scheduleRef && (!Array.isArray(s.rows) || s.rows.length === 0)).length;
+      const inlineCount = ev.schedules.filter(s => Array.isArray(s.rows) && s.rows.length > 0 && !s.scheduleRef).length;
       if (externalCount > 0) entry.externalSchedule = true;
+      if (inlineCount > 0) entry.inlineRows = true;
     }
     if (eventCounts[ev.id]) entry.fireCount = eventCounts[ev.id];
     return entry;
@@ -377,6 +383,9 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "model event structure (B-event/C-event digest with routing types, loop guards, balking modes, arrival streams),",
     "state variables, cost metrics, WIP (Little's Law), container levels, entity anomaly counts,",
     "and when set, performance goals with their current gaps.",
+    "Timetable schedules (Schedule distribution) are stored as named records in model_schedules — referenced via scheduleRef UUID on bEvents.",
+    "When a bEvent shows externalSchedule:true, arrivals follow the named timetable rows loaded at run time.",
+    "When a bEvent shows inlineRows:true, the rows are legacy inline data — advise moving to the Schedules tab.",
     "You MUST follow the 6-step chain-of-thought framework: binding constraint → cause → specific change → predicted effect → goal impact → ranking.",
     "Never give vague advice like 'consider increasing capacity' — always name the exact parameter and specific value.",
     "When the model has a failure/repair model on a resource, factor availability into capacity calculations.",
