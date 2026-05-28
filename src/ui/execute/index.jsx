@@ -2509,7 +2509,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 { label: "Planned schedule rows", value: formatEstimate(complexityEstimate.plannedScheduleRows) },
                 { label: "Expected entities", value: formatEstimate(complexityEstimate.expectedEntities) },
                 { label: "Stage moves", value: formatEstimate(complexityEstimate.estimatedStageTransitions) },
-                { label: "C-event scans", value: formatEstimate(complexityEstimate.estimatedCEventScans) },
+                { label: "C-event scans (total)", value: formatEstimate(complexityEstimate.totalEstimatedScans) },
                 { label: "Replications", value: formatEstimate(complexityEstimate.replications) },
                 { label: "Est. save", value: estSaveLabel },
               ].map(item => (

@@ -151,7 +151,7 @@ export function getRunAdmission(model, options = {}) {
   if (totalEstimatedScans > tierPolicy.maxScans) {
     hardErrors.push(makeDecisionIssue(
       "RA7",
-      `Estimated C-event scans exceed the ${tierPolicy.label.toLowerCase()} tier limit of ${tierPolicy.maxScans.toLocaleString()}.`
+      `Estimated C-event scans (${Math.round(totalEstimatedScans).toLocaleString()} across ${complexityEstimate.replications} replication${complexityEstimate.replications === 1 ? '' : 's'}) exceed the ${tierPolicy.label.toLowerCase()} tier limit of ${tierPolicy.maxScans.toLocaleString()}.`
     ));
   } else if (totalEstimatedScans >= nearScanThreshold && totalEstimatedScans > 0) {
     warnings.push(makeDecisionIssue(
