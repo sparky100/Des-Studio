@@ -585,6 +585,27 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     };
   }
 
+  // ── Lightweight snapshot for time-series collection ───────────────────────
+  // Only computes byType.waiting/busy and byQueue.waiting — the only fields
+  // consumed by the time-series charts — in a single O(N) pass with no cloning.
+  function snapLite() {
+    const byType = {};
+    const byQueue = {};
+    for (const e of entities) {
+      const t = e.type;
+      if (t) {
+        if (!byType[t]) byType[t] = { waiting: 0, busy: 0 };
+        if (e.status === "waiting") byType[t].waiting++;
+        else if (e.status === "busy" || e.status === "serving") byType[t].busy++;
+      }
+      if (e.role !== "server" && e.queue && e.status === "waiting") {
+        if (!byQueue[e.queue]) byQueue[e.queue] = { waiting: 0 };
+        byQueue[e.queue].waiting++;
+      }
+    }
+    return { byType, byQueue };
+  }
+
   // ── Build initial FEL ─────────────────────────────────────────────────────
   let clock = 0;
   const log = [];
@@ -962,8 +983,15 @@ const cycleLog = [];
     }
 
     // Collect time-series snapshot after Phase C stabilises (F10.4a)
-    const stepSnap = (_timeSeries !== null || captureSnap) ? snap(clock) : null;
-    if (_timeSeries !== null && stepSnap) _timeSeries.push({ t: stepSnap.clock, byType: stepSnap.byType, byQueue: stepSnap.byQueue });
+    const stepSnap = captureSnap ? snap(clock) : null;
+    if (_timeSeries !== null) {
+      if (stepSnap) {
+        _timeSeries.push({ t: clock, byType: stepSnap.byType, byQueue: stepSnap.byQueue });
+      } else {
+        const lite = snapLite();
+        _timeSeries.push({ t: clock, byType: lite.byType, byQueue: lite.byQueue });
+      }
+    }
 
     // G11 — WIP time-average: integrate WIP count over time
     const dt = clock - _lastWipSnapTime;
