@@ -252,7 +252,7 @@ export function ModelLibrary({
   const [showPatternsGuide, setShowPatternsGuide] = useState(false);
   const pendingTemplateDraftRef = useRef(null);
 
-  const DOMAIN_COLORS = { Academic: "#7c6fcd", Healthcare: "#3b9e78", "Service Systems": "#c0813a", Manufacturing: "#3a82c0", Logistics: "#9e3b7a", Technology: "#3a9ec0" };
+  const DOMAIN_COLORS = { Academic: "#7c6fcd", Healthcare: "#3b9e78", "Service Systems": "#c0813a", Manufacturing: "#3a82c0", Logistics: "#9e3b7a", Technology: "#3a9ec0", Transport: "#6a8fa0" };
   const allDomains = ["All", ...Array.from(new Set(TEMPLATES.map(t => t.domain)))];
 
   return (

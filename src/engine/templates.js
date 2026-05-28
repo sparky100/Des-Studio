@@ -630,7 +630,7 @@ const MACHINE_SHOP_FAILURES = {
   cEvents: [{
     id: "c_seize", name: "Start Machining", priority: 1,
     condition: "queue(JobQueue).length > 0 AND idle(Machine).count > 0",
-    effect: ["ASSIGN(Job, Machine)"],
+    effect: ["ASSIGN(JobQueue, Machine)"],
     cSchedules: [{ eventId: "b_complete", dist: "Triangular", distParams: { min: "10", mode: "15", max: "25" }, useEntityCtx: true }],
   }],
   queues: [{ id: "q_job", name: "JobQueue", customerType: "Job", capacity: "", discipline: "FIFO" }],
@@ -648,7 +648,7 @@ const PRIORITY_ED_BALKING = {
   },
   entityTypes: [
     { id: "et_patient", name: "Patient", role: "customer", count: 0, attrDefs: [
-      { id: "a_sev", name: "severity", valueType: "number", defaultValue: 3, mutable: false,
+      { id: "a_pri", name: "priority", valueType: "number", defaultValue: 3, mutable: false,
         dist: "Uniform", distParams: { min: "1", max: "5" } },
     ]},
     { id: "et_doctor", name: "Doctor", role: "server", count: 3, attrDefs: [] },
@@ -667,7 +667,7 @@ const PRIORITY_ED_BALKING = {
   cEvents: [{
     id: "c_consult", name: "Start Consultation", priority: 1,
     condition: "queue(Waiting).length > 0 AND idle(Doctor).count > 0",
-    effect: ["ASSIGN(Patient, Doctor)"],
+    effect: ["ASSIGN(Waiting, Doctor)"],
     cSchedules: [{ eventId: "b_complete", dist: "Triangular", distParams: { min: "15", mode: "25", max: "40" }, useEntityCtx: true }],
   }],
   queues: [{ id: "q_wait", name: "Waiting", customerType: "Patient", capacity: "30", discipline: "PRIORITY" }],
@@ -700,7 +700,7 @@ const COST_CALL_CENTRE = {
         { eventId: "b_renege", dist: "Constant",    distParams: { value: "8" }, isRenege: true },
       ]},
     { id: "b_renege",   name: "Call Abandoned",  scheduledTime: "9999",
-      effect: ["RENEGE(Queue)", "COST(2)"],
+      effect: ["RENEGE(ctx)", "COST(2)"],
       schedules: [] },
     { id: "b_complete", name: "Call Handled",    scheduledTime: "9999",
       effect: ["COMPLETE()", "COST(5)"],
@@ -709,7 +709,7 @@ const COST_CALL_CENTRE = {
   cEvents: [{
     id: "c_answer", name: "Answer Call", priority: 1,
     condition: "queue(Queue).length > 0 AND idle(Agent).count > 0",
-    effect: ["ASSIGN(Call, Agent)"],
+    effect: ["ASSIGN(Queue, Agent)"],
     cSchedules: [{ eventId: "b_complete", dist: "Exponential", distParams: { mean: "5" }, useEntityCtx: true }],
   }],
   queues: [{ id: "q_calls", name: "Queue", customerType: "Call", capacity: "20", discipline: "FIFO" }],
@@ -915,7 +915,7 @@ const TFL_STATION_PLAN = {
 const PLANE_ARRIVALS_LIVE = {
   name: "Airport Arrivals — Live (OpenSky)",
   description: "Real-time aircraft arrival and ground-handling model. Arrival inter-arrival times are pulled live from the OpenSky Network for the configured airport (default: London Heathrow, EGLL). Gate controllers assign stands (2–8 min), then ground crews perform turnaround (25–90 min). Run in calibrated_batch mode to use actual traffic data; falls back to 3.5 min mean if the API is unreachable.",
-  domain: "Aviation",
+  domain: "Transport",
   templateMeta: {
     scenarioType: "Real-time two-stage arrival and ground handling with OpenSky live data",
     keyMacros: ["ARRIVE", "ASSIGN", "RELEASE", "COMPLETE"],
