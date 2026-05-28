@@ -134,4 +134,49 @@ describe("model builder prompts", () => {
     const message = buildModelBuilderUserMessage("Build a post office", {});
     expect(message).not.toMatch(/Simulation results/i);
   });
+
+  // ─── Planned Arrival CSV Delivery ───────────────────────────────────────────
+
+  it("includes companionCsv in the response format envelope", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/companionCsv/);
+  });
+
+  it("specifies filename and content fields for companionCsv", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/filename/);
+    expect(prompt).toMatch(/content/);
+  });
+
+  it("instructs the LLM to set companionCsv null when not using planned arrivals", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/null when the model does not use planned arrivals/i);
+  });
+
+  it("instructs the LLM to keep rows[] empty for schedules exceeding 50 rows", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/50 or fewer rows/i);
+    expect(prompt).toMatch(/rows\[\] to \[\]/i);
+  });
+
+  it("specifies that the first CSV column must be 'time'", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/first column is.{0,10}time/i);
+  });
+
+  it("specifies that CSV column names must exactly match attribute names", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/exactly match attribute names/i);
+  });
+
+  it("schema doc includes the Planned Arrival CSV Delivery section", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/Planned Arrival CSV Delivery/i);
+  });
+
+  it("schema doc advises using HH:MM timestamps when epoch is set", () => {
+    const prompt = buildModelBuilderSystemPrompt();
+    expect(prompt).toMatch(/HH:MM/);
+    expect(prompt).toMatch(/epoch/);
+  });
 });
