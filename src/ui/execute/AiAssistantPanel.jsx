@@ -475,7 +475,8 @@ export const AiAssistantPanel = ({
   const canRefinePlan = !!results && (
     (Array.isArray(model?.schedules) && model.schedules.length > 0) ||
     (Array.isArray(model?.shiftSchedules) && model.shiftSchedules.length > 0) ||
-    (model?.entityTypes || []).some(et => Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0)
+    (model?.entityTypes || []).some(et => Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) ||
+    (model?.bEvents || []).some(be => (be.schedules || []).some(s => s.scheduleRef))
   );
 
   const handleRefinePlan = useCallback(async () => {

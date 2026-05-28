@@ -967,3 +967,77 @@ describe("buildComparisonPrompt — structural diff", () => {
     expect(payload.runB.label).toBe("B");
   });
 });
+
+describe("explain prompt token budget", () => {
+  it("buildExplainResultsPrompt max_tokens is at least 1500 to fit narrative + JSON block", () => {
+    const prompt = buildExplainResultsPrompt(
+      { name: "Test", entityTypes: [], queues: [] },
+      { maxSimTime: 480 },
+      { summary: { total: 100, served: 90, avgWait: 5, avgSvc: 2 } }
+    );
+    expect(prompt.max_tokens).toBeGreaterThanOrEqual(1500);
+  });
+
+  it("buildExplainResultsPrompt instruction asks for both PART 1 narrative and PART 2 JSON block", () => {
+    const prompt = buildExplainResultsPrompt(
+      { name: "Test", entityTypes: [], queues: [] },
+      {},
+      {}
+    );
+    const userContent = prompt.messages[1].content;
+    expect(userContent).toMatch(/PART 1/i);
+    expect(userContent).toMatch(/PART 2/i);
+    expect(userContent).toMatch(/json/i);
+  });
+});
+
+describe("ADR-016 plan awareness — extractScheduleDigest and buildPlanRefinementPrompt", () => {
+  const adr016Model = {
+    name: "Timetable Clinic",
+    entityTypes: [{ id: "et-nurse", name: "Nurse", role: "server" }],
+    queues: [{ id: "q-main", name: "Main" }],
+    bEvents: [
+      {
+        id: "be-arrivals",
+        name: "Patient Arrivals",
+        schedules: [
+          { scheduleRef: "uuid-sched-001", rows: [] },
+        ],
+      },
+    ],
+  };
+
+  it("buildPlanRefinementPrompt payload includes ADR-016 arrivalTimetable entry in scheduleDigest", () => {
+    const prompt = buildPlanRefinementPrompt(adr016Model, {}, {});
+    const payload = JSON.parse(prompt.messages[1].content);
+    const timetableEntry = payload.scheduleDigest.find(e => e.type === "arrivalTimetable");
+    expect(timetableEntry).toBeDefined();
+    expect(timetableEntry.scheduleRef).toBe("uuid-sched-001");
+    expect(timetableEntry.eventName).toBe("Patient Arrivals");
+  });
+
+  it("buildPlanRefinementPrompt system prompt mentions arrivalTimetable and timing adjustments", () => {
+    const prompt = buildPlanRefinementPrompt(adr016Model, {}, {});
+    const system = prompt.messages[0].content;
+    expect(system).toMatch(/arrivalTimetable/i);
+    expect(system).toMatch(/timing adjustments/i);
+  });
+
+  it("extractScheduleDigest returns empty array when model has no schedules or bEvents", () => {
+    const prompt = buildPlanRefinementPrompt({ name: "Empty" }, {}, {});
+    const payload = JSON.parse(prompt.messages[1].content);
+    expect(payload.scheduleDigest).toEqual([]);
+  });
+
+  it("extractScheduleDigest skips bEvent schedules without a scheduleRef", () => {
+    const modelNoRef = {
+      bEvents: [
+        { id: "be-1", name: "Arrivals", schedules: [{ rows: [{ time: 0, count: 5 }] }] },
+      ],
+    };
+    const prompt = buildPlanRefinementPrompt(modelNoRef, {}, {});
+    const payload = JSON.parse(prompt.messages[1].content);
+    const timetableEntries = payload.scheduleDigest.filter(e => e.type === "arrivalTimetable");
+    expect(timetableEntries).toHaveLength(0);
+  });
+});

@@ -688,7 +688,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
   return {
     kind: "explainResults",
     messages: makeMessages(system, payload, instruction),
-    max_tokens: 1000,
+    max_tokens: 1600,
   };
 }
 
@@ -865,6 +865,21 @@ function extractScheduleDigest(model = {}) {
       shiftPattern: s.shiftPattern || s.pattern || null,
     });
   }
+  // ADR-016: arrival timetable schedules linked via scheduleRef on bEvents.
+  // Include a digest entry per linked schedule so the LLM knows the event name
+  // and how many timetabled arrivals are defined.
+  for (const be of model.bEvents || []) {
+    for (const s of be.schedules || []) {
+      if (!s.scheduleRef) continue;
+      entries.push({
+        eventId: be.id,
+        eventName: be.name || be.id,
+        type: "arrivalTimetable",
+        scheduleRef: s.scheduleRef,
+        rowCount: Array.isArray(s.rows) && s.rows.length > 0 ? s.rows.length : null,
+      });
+    }
+  }
   return entries;
 }
 
@@ -883,10 +898,11 @@ function extractCapacityEnvelope(model = {}) {
 export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, results = {}) {
   const system = [
     "You are an expert discrete-event simulation analyst specialising in constrained scheduling.",
-    "The user has run a simulation with a fixed resource plan.",
+    "The user has run a simulation with a fixed plan — either a resource capacity plan (shift windows) or an arrival timetable, or both.",
     "Your task is to recommend tactical adjustments to the schedule that improve goal attainment without increasing total resource capacity.",
     "You must not recommend adding servers, increasing staff counts, or any other capacity increase.",
     "Treat resource counts and shift windows as hard constraints.",
+    "When the scheduleDigest contains arrivalTimetable entries, the plan is a fixed arrival timetable — recommend timing adjustments to smooth demand rather than adding capacity.",
     "Distinguish clearly between recommendations that are within current capacity and any constraints that make full goal attainment infeasible.",
   ].join(" ");
 
