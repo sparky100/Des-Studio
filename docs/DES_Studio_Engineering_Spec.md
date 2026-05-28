@@ -1,7 +1,7 @@
 # DES Studio — Engineering Specification
 
-**Version:** 1.14.0
-**Date:** 2026-05-27
+**Version:** 1.15.0
+**Date:** 2026-05-28
 **Sprint baseline:** Sprint 73
 **Status:** Living document — updated at end of each sprint
 
@@ -26,6 +26,7 @@
 | v1.12.0 | 2026-05-23 | Sprint 70 | Documentation accuracy fixes: corrected v1.11.0 sprint label from "Sprint 8C" to "Sprint 8"; documented previously-undocumented prompt builders (buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildCiResults) in new §6.11 |
 | v1.13.0 | 2026-05-24 | Sprint 71 | In-app Feedback widget and About panel — `public.feedback` Supabase table with RLS; `submitFeedback()` exported from `src/db/supabase.js`; no-op stub in `src/db/local.js`; `FeedbackModal` and `AboutModal` React components in `src/ui/`; `AppNavBar` extended with Feedback and Info icon buttons; `VITE_APP_VERSION` injected via `vite.config.js` define; 26 new UI tests in `src/ui/__tests__/` |
 | v1.14.0 | 2026-05-27 | Sprint 73 | ADR-016: Schedule data separation — `model_schedules` Supabase table stores timetable rows externally from `model_json`; `resolveInlineSchedules(model, schedulesMap)` pure engine function merges external schedule data before FEL initialisation; `buildEngine` accepts `options.schedulesMap`; `src/db/models.js` gains `fetchModelSchedules`, `fetchModelSchedule`, `saveModelSchedule`, `deleteModelSchedule`, `setDefaultSchedule`, `buildSchedulesMap`, `extractInlineSchedule`; `ScheduleManager` UI component with list/detail/CSV-export views; Execute panel schedule selector dropdown; `ModelDetail` export re-inlines rows; `includeModelSnapshot` flag made explicit in `results-persistence.js`; `doCloudSave` wrapper with 5s/15s/30s timeout thresholds. 45 new Vitest tests. |
+| v1.15.0 | 2026-05-28 | Sprint 74 | Report system redesign — `generateReport(model, results, experimentConfig, runMeta, options)` replaces single-format Word output with dual-type (Senior Management / Technical) × dual-format (HTML / Markdown) generation. `docx` and `html2canvas` dependencies removed. New utilities: `formatN` (max 1 dp), `formatCurrency` (English word notation), `resolveValue` (uses `aggregateStats.mean` for multi-rep runs), `mdTable`. Comparison explain: `diffModelStructure` helper added to `prompts.js`; structural note injected into comparison prompt payload. `canRefinePlan` extended with ADR-016 `bEvent.schedules[].scheduleRef` condition. `buildExplainResultsPrompt` max_tokens raised to 1600. |
 
 ---
 
@@ -96,7 +97,7 @@ Large timetable models (e.g. Glasgow Central: 1,100 train-movement rows) previou
 ### 2.4 LLM Integration
 
 AI analysis is provided by `src/llm/prompts.js`, which builds structured prompt payloads, and `src/llm/apiClient.js`, which handles the API call. The AI Assistant panel in the Execute workspace calls three prompt builders:
-- `buildExplainResultsPrompt` — comprehensive analysis combining narrative interpretation, sensitivity/uncertainty assessment, and actionable recommendations (300-500 words, max_tokens 800)
+- `buildExplainResultsPrompt` — comprehensive analysis combining narrative interpretation, sensitivity/uncertainty assessment, and actionable recommendations (300-500 words, max_tokens 1600)
 - `buildComparisonPrompt` — two-run side-by-side comparison (200-250 words, max_tokens 550)
 - `buildResultsQueryPrompt` — conversational Q&A against run results
 
@@ -119,29 +120,45 @@ The adapter layer allows live values from external REST sources to be substitute
 
 Live values are fetched via `prefetchAll()` before a run (`calibrated_batch` mode), keeping the FEL loop synchronous.
 
-### 2.6 Report Generation (Sprint 58)
+### 2.6 Report Generation (Sprint 58, revised Sprint 74)
 
-The report generation module produces professional Word documents (`.docx`) from completed simulation runs.
+The report generation module produces simulation reports in two audience variants and two formats.
 
-**Entry point:** `src/reports/reportGenerator.js` → `generateReport(model, results, experimentConfig, runMeta)`  
-**Returns:** `Blob` with MIME type `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+**Entry point:** `src/reports/reportGenerator.js` → `generateReport(model, results, experimentConfig, runMeta, options)`
 
-**Report sections:**
-1. Cover (model name, run label, date, engine version)
-2. Executive Summary (top KPIs, primary recommendation headline)
-3. Model Description (LLM-generated plain-English narrative)
-4. Experiment Configuration (seed, warmup, duration, replications, termination mode)
-5. Model Diagram (React Flow canvas capture via `html2canvas`, or placeholder)
-6. Simulation Results (summary stats, per-queue wait percentiles P50/P90/P95/P99, resource utilisation, goal gaps, CI intervals)
-7. Recommendations (3 LLM-generated structured blocks: headline, finding, action, expected impact, confidence)
-8. Appendix (entity types, queues, B-events, C-events, state variables)
+`options` fields:
+- `type` — `'seniorMgmt'` (default) or `'technical'`
+- `format` — `'html'` (default) or `'markdown'`
+- `aggregateStats` — aggregate CI stats object from the run (used by `resolveValue` for multi-rep averages)
+
+**Returns:** `{ blob: Blob, filename: string }` where MIME type is `text/html` or `text/markdown`.
+
+**Back-compatibility:** Old callers passing `modelImageDataUrl` as a positional 5th argument are handled gracefully (the value is ignored).
+
+**Senior Management Report sections:**
+1. What was modelled (AI-generated plain-English model description)
+2. Key Results (headline KPIs — per-run averages for multi-rep runs)
+3. Analysis ("What Happened" + "What to Change" from `buildExplainResultsPrompt`)
+4. Recommended Actions (3 structured blocks from `buildReportRecommendationsPrompt`)
+
+**Technical Report adds:**
+5. Statistical Confidence Analysis (per-metric CI table: mean, lower, upper, half-width, n)
+6. Model Specification (entity types, queues, B-events, C-events, state variables, performance goals)
+7. Experiment Configuration (warmup, max time, replications, seed, termination mode/condition)
+8. Run Provenance (run ID, label, date, engine version, PRNG algorithm, base seed)
+
+**Formatting utilities:**
+- `formatN(value)` — max 1 decimal place; integers shown without decimal point
+- `formatCurrency(value, symbol)` — English word notation: *£1.24 million* / *£45.34 thousand* / *£123.00*
+- `resolveValue(metricPath, summary, aggStats)` — uses `aggStats[key].mean` when n ≥ 2, otherwise falls back to `summary[key]`
+- `mdTable(headers, rows)` — generates a Markdown pipe table
 
 **Key design decisions:**
-- `Promise.allSettled` wraps both LLM calls and canvas capture — report always completes even if LLM or canvas fails
-- `html2canvas` is dynamically imported to avoid SSR/test environment crashes
-- All generation is client-side — no PII leaves the browser
-- Filename pattern: `<ModelName> — <RunLabel> — Report.docx`
-- `docx` v9 API notes: hex colours without `#` prefix; `PageNumberElement` (not `PageNumber` constructor); `ImageRun` requires `type: 'png'`
+- `Promise.allSettled` wraps LLM calls — report always completes even if LLM is unavailable
+- All generation is client-side — no simulation data leaves the browser
+- Stored `narrative_text` / `model_description_text` on `simulation_runs` are reused when available, avoiding redundant LLM calls
+- Filename pattern: `<ModelName> — <RunLabel> — Senior Management Report.html` (or `.md` / `Technical Report.*`)
+- `sanitizeFilename` exported from `src/reports/index.js` for use in the Execute panel
 
 ### 2.7 In-App Feedback and About Panel (Sprint 71)
 

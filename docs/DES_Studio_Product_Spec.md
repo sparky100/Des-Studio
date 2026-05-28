@@ -263,7 +263,12 @@ The Help Assistant provides contextual, in-app guidance accessible from any scre
 
 **Export model.** The model definition can be downloaded as a JSON file and imported into any DES Studio instance, enabling model portability and sharing of model structures separately from results.
 
-**Export report.** After a completed run, a professional Word document (`.docx`) can be exported containing: cover page, executive summary, AI-generated model description, experiment configuration, model diagram screenshot, simulation results with confidence intervals, AI recommendations, and full model appendix.
+**Create report.** After a completed run, a simulation report can be generated in two formats — HTML or Markdown — in two audience variants:
+
+- **Senior Management Report** — plain-English model description, key results (per-run averages, financial values in English notation), analysis, and prioritised recommendations. No statistical or technical detail.
+- **Technical Report** — everything above, plus confidence interval analysis, full model specification, experiment configuration, and run provenance.
+
+HTML reports are self-contained and suitable for printing or browser-to-PDF export. Markdown reports render natively in Notion, GitHub, Confluence, and Obsidian, and use formatted tables in place of charts. All generation is client-side; no simulation data is sent to any server.
 
 ---
 

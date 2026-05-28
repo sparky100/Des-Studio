@@ -870,42 +870,46 @@ These are set before starting a run. They cannot be changed mid-run.
 
 ## 11. Exporting
 
-### 11.1 Export results
+### 11.1 Export results data
 
-In the Execute panel, click **Export…**. A format selection popover opens:
+In the Execute panel Results area, click **Export Data**. A short dropdown opens:
 
 | Format | Contents |
 |--------|----------|
 | **JSON** | Full results object including all raw statistics, replication data, and confidence intervals. Suitable for programmatic processing or archiving. |
 | **CSV** | KPI summary table, per-queue stats, per-resource utilisation, and the per-entity lifecycle table. Suitable for import into Excel or R. |
-| **HTML** | Standalone report page with charts and tables. Can be opened in any browser without a DES Studio account. |
 
-Select one or more formats and click **Download**. The event log can also be exported as CSV from the Log view.
+Click the format you want to download it immediately. The event log can also be exported as CSV from the Log view.
 
 ### 11.2 Export model as JSON
 
 From the Model Detail view click **Export Model**. DES Studio downloads the model definition as a `.json` file. This file can be imported into any DES Studio instance via **Import** in the Model Library.
 
-### 11.3 Export a simulation report (Markdown)
+### 11.3 Create a simulation report
 
-After running a simulation, click **Export Report** in the Execute panel toolbar.
+In the Execute panel Results area, click **Create Report**. A modal dialog opens with two choices:
 
-DES Studio generates a multi-section Word document (`.docx`) containing:
+**Senior Management Report** — written for non-technical stakeholders. Contains:
+1. What was modelled (AI-generated plain-English description)
+2. Key results — headline KPIs formatted as per-run averages
+3. Analysis — "What Happened" and "What to Change" sections
+4. Recommended actions — three prioritised actions with finding, proposed change, and expected impact
 
-1. **Cover page** — model name, run label, date, engine version
-2. **Executive Summary** — headline KPIs and the primary AI recommendation
-3. **Model Description** — AI-generated plain-English description of what the model represents (written for non-technical readers)
-4. **Experiment Configuration** — full run parameters (seed, warmup period, run duration, replications, termination mode)
-5. **Model Diagram** — a screenshot of the Visual Designer canvas
-6. **Simulation Results** — summary statistics, per-queue wait-time percentiles (P50/P90/P95/P99), resource utilisation table, performance goal assessment, and confidence intervals (for multi-replication runs)
-7. **Recommendations** — up to three AI-generated structured recommendations (finding → action → expected impact)
-8. **Appendix** — full model specification (entity types, queues, events, state variables)
+**Technical Report** — everything in the Senior Management Report, plus:
+5. Statistical confidence analysis — per-metric confidence interval table (mean, 95% lower/upper, half-width, n replications)
+6. Model specification — entity types, queues, arrival events, conditional events, state variables, performance goals
+7. Experiment configuration — warmup period, max time, replications, seed, termination mode
+8. Run provenance — run ID, run label, date, engine version, PRNG algorithm, base seed
+
+**Format options:** Each report type is available as **HTML** (self-contained, suitable for printing or PDF export via the browser) or **Markdown** (portable plain text that renders natively in Notion, GitHub, Confluence, and Obsidian; charts are replaced by formatted tables).
+
+**Number formatting:** All numeric results are shown to at most 1 decimal place. Financial values are expressed in plain English — for example *£1.24 million*, *£45.34 thousand*, or *£123.00*. For multi-replication runs, all figures are per-run averages, not totals.
 
 **The report uses the model snapshot stored with the run record**, not the current model definition. This ensures the report accurately describes what was actually simulated, even if the model has been edited since the run.
 
-**The report file is generated entirely in your browser — no simulation data is sent to any server during report generation.** The AI narrative and recommendations are fetched from the same LLM proxy used by the Explain panel; if the LLM is unavailable the report is still generated without the narrative sections.
+**The report file is generated entirely in your browser — no simulation data is sent to any server during report generation.** The AI narrative and recommendations are fetched from the same LLM proxy used by the Explain panel; if the LLM is unavailable the report is still generated without the AI-generated sections.
 
-The file is saved as `<Model Name> — <Run Label> — Report.docx` and can be opened in Microsoft Word, LibreOffice, or Google Docs.
+Files are saved as `<Model Name> — <Run Label> — Senior Management Report.html` (or `.md` / `Technical Report.*`).
 
 ---
 
