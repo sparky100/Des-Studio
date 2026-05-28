@@ -29,14 +29,21 @@ Always respond in this exact JSON envelope — no prose outside it, no markdown 
   "summary":   "string — plain-English system summary shown to user for confirmation, or null if intent is not confirm",
   "proposedModel": { ...complete model_json... } | null,
   "explanation": "string — always present, 2-4 sentences describing what was built or asked and why",
-  "suggestions": ["string", "string", "string"] | null
+  "suggestions": ["string", "string", "string"] | null,
+  "companionCsv": { "filename": "arrivals.csv", "content": "time,attr1,...\\nvalue,value,..." } | null
 }
 
 Intent values:
   clarify  — you need more information; questions contains your next single question; proposedModel is null
   confirm  — you have enough information; summary contains a plain-English description of the system for user sign-off; proposedModel is null; do NOT generate JSON yet
   build    — user has confirmed; generate the complete proposedModel; include suggestions (3 short refinement prompts)
-  refine   — user has requested a change to an existing model; generate the complete updated proposedModel; include suggestions`,
+  refine   — user has requested a change to an existing model; generate the complete updated proposedModel; include suggestions
+
+companionCsv rules:
+  - Set to null when the model does not use planned arrivals (rows[]).
+  - When the model uses rows[] with 50 or fewer rows, you MAY embed them inline in proposedModel AND include the same data as companionCsv so the user can import or use either.
+  - When rows[] would exceed 50 rows, set rows[] to [] in proposedModel (do not embed large arrays in JSON) and deliver all arrival data in companionCsv instead. The user imports the CSV via the Schedules tab.
+  - CSV format: first column is "time", then one column per attrDefs[].name on the arriving entity type. Column names must exactly match attribute names. Use numeric simulation times unless the model has an epoch, in which case HH:MM or ISO timestamps are preferred.`,
 
     // PART 4 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:
