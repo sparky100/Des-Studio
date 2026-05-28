@@ -1,9 +1,21 @@
+import { useState } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
 
 const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit,namedSchedules=[]})=>{
-  const add=()=>onChange([...events,{id:"b"+Date.now(),name:"",scheduledTime:"0",effect:[],schedules:[],description:""}]);
+  const [filterText,setFilterText]=useState("");
+  const [expandedIds,setExpandedIds]=useState(new Set());
+
+  const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
+  const expandAll=()=>setExpandedIds(new Set(events.map(e=>e.id)));
+  const collapseAll=()=>setExpandedIds(new Set());
+
+  const add=()=>{
+    const id="b"+Date.now();
+    onChange([...events,{id,name:"",scheduledTime:"0",effect:[],schedules:[],description:""}]);
+    setExpandedIds(prev=>new Set([...prev,id]));
+  };
   const upd=(i,f,v)=>{const n=[...events];n[i]={...n[i],[f]:v};onChange(n);};
   const commitName=(i,v)=>{
     if((events[i]?.name||"")===v) return;
@@ -24,16 +36,35 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
   const updS=(i,j,p)=>{const n=[...events];const s=[...n[i].schedules];s[j]={...s[j],...p};n[i]={...n[i],schedules:s};onChange(n);};
   const remS=(i,j)=>{const n=[...events];n[i]={...n[i],schedules:n[i].schedules.filter((_,idx)=>idx!==j)};onChange(n);};
 
+  const lcFilter=filterText.toLowerCase();
+  const filtered=lcFilter?events.filter(ev=>(ev.name||"").toLowerCase().includes(lcFilter)):events;
+  const effectiveExpanded=lcFilter?new Set(filtered.map(e=>e.id)):expandedIds;
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
       <SH label="B-Events (Bound)" color={C.bEvent}><Btn small variant="ghost" onClick={add}>+ Add B-Event</Btn></SH>
+      {events.length>1&&(
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"
+            style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
+          <Btn small variant="ghost" onClick={expandAll}>Expand all</Btn>
+          <Btn small variant="ghost" onClick={collapseAll}>Collapse all</Btn>
+        </div>
+      )}
       <InfoBox color={C.bEvent}>
         <strong style={{color:C.bEvent}}>Arrivals</strong> add an entity to an explicit queue.{" "}
         <strong style={{color:C.bEvent}}>Completion</strong> releases the matched resource and either routes the entity onward or marks it complete.{" "}
         Follow-on completion and reneging events are scheduled by another event, so leave them unticked for simulation start.
       </InfoBox>
       {events.length===0&&<Empty icon="⏰" msg="No timed events yet. Add one to schedule something that happens at a specific time."/>}
-      {events.map((ev,i)=>{
+      {filtered.length===0&&events.length>0&&(
+        <div style={{fontFamily:FONT,fontSize:11,color:C.muted,padding:"8px 0",fontStyle:"italic"}}>No events match "{filterText}"</div>
+      )}
+      {filtered.map((ev)=>{
+        const i=events.findIndex(e=>e.id===ev.id);
+        if(i===-1)return null;
+        const isExpanded=effectiveExpanded.has(ev.id);
+
         const isTmpl=parseFloat(ev.scheduledTime)>=900;
         const isStart=parseFloat(ev.scheduledTime)===0;
         const showTimeInput=!isStart&&!isTmpl;
@@ -63,7 +94,6 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const remProbRow=(j)=>{const n=[...events];n[i]={...n[i],probabilisticRouting:n[i].probabilisticRouting.filter((_,idx)=>idx!==j)};onChange(n);};
         const probTotal=parseFloat(((ev.probabilisticRouting||[]).reduce((s,b)=>s+(parseFloat(b.probability)||0),0)).toFixed(4));
 
-        // loopConfig helpers
         const loopEnabled=!!(ev.loopConfig);
         const toggleLoop=(on)=>{
           const n=[...events];
@@ -72,7 +102,6 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         };
         const updLoop=(f,v)=>{const n=[...events];n[i]={...n[i],loopConfig:{...n[i].loopConfig,[f]:v}};onChange(n);};
 
-        // balking mode
         const hasBalkProb=ev.balkProbability!=null&&ev.balkProbability!==""&&!isNaN(ev.balkProbability);
         const hasBalkCond=!!(ev.balkCondition);
         const balkMode=hasBalkCond?"condition":hasBalkProb?"probability":"none";
@@ -85,11 +114,12 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
           onChange(n);
         };
 
-        // status labels for section badges
         const schedStatus=String((ev.schedules||[]).length||"0");
         const routingStatus=routingMode==="none"?"off":routingMode;
         const balkStatus=balkMode==="none"?"off":balkMode==="probability"?`prob ${Math.round((ev.balkProbability||0)*100)}%`:"condition";
         const loopStatus=loopEnabled?`max ${ev.loopConfig?.maxLoopCount||"?"}x`:"off";
+
+        const effectSummary=effects.length===0?"no effects":effects.length===1?(effects[0].match(/^\w+/)?.[0]||"effect"):`${effects.length} effects`;
 
         return (
           <div key={ev.id} style={{background:C.bg,border:`1px solid ${isTmpl?C.muted+"44":C.bEvent+"33"}`,
@@ -97,9 +127,15 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
 
             {/* Header */}
             <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <button onClick={()=>toggleExpand(ev.id)}
+                style={{background:"none",border:"none",cursor:"pointer",padding:"2px 3px",color:isExpanded?C.bEvent:C.muted,fontFamily:FONT,fontSize:11,lineHeight:1,flexShrink:0}}
+                aria-label={isExpanded?"Collapse":"Expand"}>{isExpanded?"▾":"▸"}</button>
               <Tag label={isTmpl?"scheduled follow-on":"B-event"} color={isTmpl?C.muted:C.bEvent}/>
               <CommitInput value={ev.name} onCommit={value=>commitName(i,value)} placeholder="Event name"
                 style={{flex:1,minWidth:130,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+              {!isExpanded&&(
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,background:`${C.bEvent}18`,borderRadius:3,padding:"2px 6px"}}>{effectSummary}</span>
+              )}
               <div style={{display:"flex",alignItems:"center",gap:5}}>
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Behavior:</span>
                 <select value={isStart?"start":isTmpl?"scheduled":"time"}
@@ -117,223 +153,225 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
               <Btn small variant="danger" ariaLabel={`Remove B-event ${ev.name||i+1}`} onClick={()=>rem(i)}>✕</Btn>
             </div>
 
-            {/* Effects — chip picker */}
-            <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>EFFECTS</span>
-              <EffectPicker
-                effects={effects}
-                options={bEffectOptions(entityTypes,queues,stateVariables)}
-                onChange={updEffects}
-              />
-            </div>
+            {isExpanded&&<>
+              {/* Effects — chip picker */}
+              <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>EFFECTS</span>
+                <EffectPicker
+                  effects={effects}
+                  options={bEffectOptions(entityTypes,queues,stateVariables)}
+                  onChange={updEffects}
+                />
+              </div>
 
-            {/* Routing — collapsible, shown only when a RELEASE effect is present */}
-            {hasRelease&&(
-              <SectionPanel label="Release Routing" status={routingStatus} color={C.bEvent}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Mode:</span>
-                  <select value={routingMode} onChange={e=>setRoutingMode(e.target.value)}
-                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
-                    <option value="none">Single queue (no routing)</option>
-                    <option value="conditional">Conditional routing</option>
-                    <option value="probabilistic">Probabilistic routing</option>
-                  </select>
-                </div>
-                {routingMode==="conditional"&&(<>
-                  {(ev.routing||[]).map((row,j)=>(
-                    <div key={j} style={{background:C.bg,borderRadius:4,padding:"8px 10px",border:`1px solid ${C.border}`,display:"flex",flexDirection:"column",gap:6}}>
-                      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                        <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>IF</span>
-                        <select value={row.condition?.variable||""} onChange={e=>updRoutingRow(j,{condition:{...row.condition,variable:e.target.value}})}
-                          style={{flex:1,minWidth:110,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
-                          <option value="">— attribute —</option>
-                          {routingEntityAttrs.map(a=><option key={a} value={a}>{a}</option>)}
-                        </select>
-                        <select value={row.condition?.operator||"=="} onChange={e=>updRoutingRow(j,{condition:{...row.condition,operator:e.target.value}})}
-                          style={{width:52,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 3px",outline:"none"}}>
-                          {["==","!=","<",">","<=",">="].map(op=><option key={op} value={op}>{op}</option>)}
-                        </select>
-                        <input value={row.condition?.value||""} onChange={e=>updRoutingRow(j,{condition:{...row.condition,value:e.target.value}})} placeholder="value"
-                          style={{width:80,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}/>
+              {/* Routing — collapsible, shown only when a RELEASE effect is present */}
+              {hasRelease&&(
+                <SectionPanel label="Release Routing" status={routingStatus} color={C.bEvent}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Mode:</span>
+                    <select value={routingMode} onChange={e=>setRoutingMode(e.target.value)}
+                      style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                      <option value="none">Single queue (no routing)</option>
+                      <option value="conditional">Conditional routing</option>
+                      <option value="probabilistic">Probabilistic routing</option>
+                    </select>
+                  </div>
+                  {routingMode==="conditional"&&(<>
+                    {(ev.routing||[]).map((row,j)=>(
+                      <div key={j} style={{background:C.bg,borderRadius:4,padding:"8px 10px",border:`1px solid ${C.border}`,display:"flex",flexDirection:"column",gap:6}}>
+                        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                          <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>IF</span>
+                          <select value={row.condition?.variable||""} onChange={e=>updRoutingRow(j,{condition:{...row.condition,variable:e.target.value}})}
+                            style={{flex:1,minWidth:110,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                            <option value="">— attribute —</option>
+                            {routingEntityAttrs.map(a=><option key={a} value={a}>{a}</option>)}
+                          </select>
+                          <select value={row.condition?.operator||"=="} onChange={e=>updRoutingRow(j,{condition:{...row.condition,operator:e.target.value}})}
+                            style={{width:52,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 3px",outline:"none"}}>
+                            {["==","!=","<",">","<=",">="].map(op=><option key={op} value={op}>{op}</option>)}
+                          </select>
+                          <input value={row.condition?.value||""} onChange={e=>updRoutingRow(j,{condition:{...row.condition,value:e.target.value}})} placeholder="value"
+                            style={{width:80,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}/>
+                          <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
+                          <select value={row.queueName||""} onChange={e=>updRoutingRow(j,{queueName:e.target.value})}
+                            style={{flex:1,minWidth:100,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                            <option value="">— queue —</option>
+                            {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
+                          </select>
+                          <Btn small variant="danger" ariaLabel={`Remove routing row ${j+1}`} onClick={()=>remRoutingRow(j)}>✕</Btn>
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT,whiteSpace:"nowrap"}}>FALLBACK →</span>
+                      <select value={ev.defaultQueueName||""} onChange={e=>upd(i,"defaultQueueName",e.target.value)}
+                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                        <option value="">— required fallback queue —</option>
+                        {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
+                      </select>
+                    </div>
+                    <Btn small variant="ghost" onClick={addRoutingRow}>+ Add condition</Btn>
+                  </>)}
+                  {routingMode==="probabilistic"&&(<>
+                    {(ev.probabilisticRouting||[]).map((row,j)=>(
+                      <div key={j} style={{background:C.bg,borderRadius:4,padding:"8px 10px",border:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                        <input value={row.probability} type="number" min="0" max="1" step="0.01" onChange={e=>updProbRow(j,{probability:parseFloat(e.target.value)||0})} aria-label={`Probability for route ${j+1}`}
+                          style={{width:70,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}/>
                         <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
-                        <select value={row.queueName||""} onChange={e=>updRoutingRow(j,{queueName:e.target.value})}
-                          style={{flex:1,minWidth:100,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                        <select value={row.queueName||""} onChange={e=>updProbRow(j,{queueName:e.target.value})}
+                          style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
                           <option value="">— queue —</option>
                           {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
                         </select>
-                        <Btn small variant="danger" ariaLabel={`Remove routing row ${j+1}`} onClick={()=>remRoutingRow(j)}>✕</Btn>
+                        <Btn small variant="danger" ariaLabel={`Remove probabilistic row ${j+1}`} onClick={()=>remProbRow(j)}>✕</Btn>
                       </div>
+                    ))}
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <Btn small variant="ghost" onClick={addProbRow}>+ Add branch</Btn>
+                      <span style={{fontSize:11,fontFamily:FONT,fontWeight:700,color:Math.abs(probTotal-1)>0.001?C.red:C.green}}>
+                        Total: {probTotal.toFixed(3)}{Math.abs(probTotal-1)>0.001?" ≠ 1.0 ✗":" ✓"}
+                      </span>
                     </div>
-                  ))}
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT,whiteSpace:"nowrap"}}>FALLBACK →</span>
-                    <select value={ev.defaultQueueName||""} onChange={e=>upd(i,"defaultQueueName",e.target.value)}
-                      style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
-                      <option value="">— required fallback queue —</option>
+                  </>)}
+                </SectionPanel>
+              )}
+
+              {/* Balking — collapsible, shown only for arrival events */}
+              {hasArriveEffect&&(
+                <SectionPanel label="Balking" status={balkStatus} color={C.amber}>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Mode:</span>
+                    <select value={balkMode} onChange={e=>setBalkMode(e.target.value)}
+                      style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                      <option value="none">No balking</option>
+                      <option value="probability">Probability-based</option>
+                      <option value="condition">Condition-based</option>
+                    </select>
+                  </div>
+                  {balkMode==="probability"&&(<>
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>Balk probability (0–1):</span>
+                      <input aria-label="Balk probability" type="number" min="0" max="1" step="0.01"
+                        value={ev.balkProbability??''} onChange={e=>updBalk('balkProbability',e.target.value===''?null:parseFloat(e.target.value))}
+                        placeholder="e.g. 0.2"
+                        style={{width:100,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
+                    </div>
+                    {ev.balkProbability>0&&(
+                      <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
+                        {Math.round(ev.balkProbability*100)}% of arrivals decline to join the queue.
+                      </div>
+                    )}
+                  </>)}
+                  {balkMode==="condition"&&(()=>{
+                    const bc=typeof ev.balkCondition==='object'&&ev.balkCondition!==null?ev.balkCondition:{variable:'',operator:'>',value:0};
+                    const updBc=(patch)=>updBalk('balkCondition',{...bc,...patch});
+                    const balkVars=[
+                      ...queues.map(q=>({label:`Queue.${q.name}.length`,value:`Queue.${q.name}.length`})),
+                      ...stateVariables.filter(sv=>sv.name).map(sv=>({label:sv.name,value:sv.name})),
+                    ];
+                    const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 6px',outline:'none'};
+                    return(<>
+                    <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>IF</span>
+                      <select value={bc.variable||''} onChange={e=>updBc({variable:e.target.value})} style={{...selSt,flex:1,minWidth:140}}>
+                        <option value=''>— variable —</option>
+                        {balkVars.map(v=><option key={v.value} value={v.value}>{v.label}</option>)}
+                      </select>
+                      <select value={bc.operator||'>'} onChange={e=>updBc({operator:e.target.value})} style={{...selSt,width:52}}>
+                        {['==','!=','<','>','<=','>='].map(op=><option key={op} value={op}>{op}</option>)}
+                      </select>
+                      <input type="number" value={bc.value??''} onChange={e=>updBc({value:e.target.value===''?0:Number(e.target.value)})}
+                        style={{width:70,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 6px',outline:'none'}}/>
+                    </div>
+                    <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
+                      Entity skips the queue on arrival when this condition is true.
+                    </div>
+                    </>);
+                  })()}
+                </SectionPanel>
+              )}
+
+              {/* Loop Guard — collapsible */}
+              <SectionPanel label="Loop Guard" status={loopStatus} color={C.purple}>
+                <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',
+                  fontFamily:FONT,fontSize:11,color:loopEnabled?C.purple:C.muted}}>
+                  <input type="checkbox" checked={loopEnabled} onChange={e=>toggleLoop(e.target.checked)}
+                    style={{accentColor:C.purple}}/>
+                  Limit entity recirculations
+                </label>
+                {loopEnabled&&(<>
+                  <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Max loops:</span>
+                    <input type="number" min="1" step="1"
+                      value={ev.loopConfig?.maxLoopCount||""}
+                      onChange={e=>updLoop('maxLoopCount',parseInt(e.target.value)||1)}
+                      placeholder="3"
+                      style={{width:70,background:'transparent',border:`1px solid ${C.purple}55`,borderRadius:4,color:C.purple,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Exit to:</span>
+                    <select value={ev.loopConfig?.exitQueueName||""}
+                      onChange={e=>updLoop('exitQueueName',e.target.value)}
+                      style={{flex:1,background:C.bg,border:`1px solid ${C.purple}55`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}>
+                      <option value="">exit system (entity discarded)</option>
                       {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
                     </select>
                   </div>
-                  <Btn small variant="ghost" onClick={addRoutingRow}>+ Add condition</Btn>
-                </>)}
-                {routingMode==="probabilistic"&&(<>
-                  {(ev.probabilisticRouting||[]).map((row,j)=>(
-                    <div key={j} style={{background:C.bg,borderRadius:4,padding:"8px 10px",border:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                      <input value={row.probability} type="number" min="0" max="1" step="0.01" onChange={e=>updProbRow(j,{probability:parseFloat(e.target.value)||0})} aria-label={`Probability for route ${j+1}`}
-                        style={{width:70,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}/>
-                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
-                      <select value={row.queueName||""} onChange={e=>updProbRow(j,{queueName:e.target.value})}
-                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
-                        <option value="">— queue —</option>
-                        {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
-                      </select>
-                      <Btn small variant="danger" ariaLabel={`Remove probabilistic row ${j+1}`} onClick={()=>remProbRow(j)}>✕</Btn>
-                    </div>
-                  ))}
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <Btn small variant="ghost" onClick={addProbRow}>+ Add branch</Btn>
-                    <span style={{fontSize:11,fontFamily:FONT,fontWeight:700,color:Math.abs(probTotal-1)>0.001?C.red:C.green}}>
-                      Total: {probTotal.toFixed(3)}{Math.abs(probTotal-1)>0.001?" ≠ 1.0 ✗":" ✓"}
-                    </span>
-                  </div>
-                </>)}
-              </SectionPanel>
-            )}
-
-            {/* Balking — collapsible, shown only for arrival events */}
-            {hasArriveEffect&&(
-              <SectionPanel label="Balking" status={balkStatus} color={C.amber}>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Mode:</span>
-                  <select value={balkMode} onChange={e=>setBalkMode(e.target.value)}
-                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
-                    <option value="none">No balking</option>
-                    <option value="probability">Probability-based</option>
-                    <option value="condition">Condition-based</option>
-                  </select>
-                </div>
-                {balkMode==="probability"&&(<>
-                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                    <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>Balk probability (0–1):</span>
-                    <input aria-label="Balk probability" type="number" min="0" max="1" step="0.01"
-                      value={ev.balkProbability??''} onChange={e=>updBalk('balkProbability',e.target.value===''?null:parseFloat(e.target.value))}
-                      placeholder="e.g. 0.2"
-                      style={{width:100,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
-                  </div>
-                  {ev.balkProbability>0&&(
-                    <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
-                      {Math.round(ev.balkProbability*100)}% of arrivals decline to join the queue.
-                    </div>
-                  )}
-                </>)}
-                {balkMode==="condition"&&(()=>{
-                  const bc=typeof ev.balkCondition==='object'&&ev.balkCondition!==null?ev.balkCondition:{variable:'',operator:'>',value:0};
-                  const updBc=(patch)=>updBalk('balkCondition',{...bc,...patch});
-                  const balkVars=[
-                    ...queues.map(q=>({label:`Queue.${q.name}.length`,value:`Queue.${q.name}.length`})),
-                    ...stateVariables.filter(sv=>sv.name).map(sv=>({label:sv.name,value:sv.name})),
-                  ];
-                  const selSt={background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 6px',outline:'none'};
-                  return(<>
-                  <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>IF</span>
-                    <select value={bc.variable||''} onChange={e=>updBc({variable:e.target.value})} style={{...selSt,flex:1,minWidth:140}}>
-                      <option value=''>— variable —</option>
-                      {balkVars.map(v=><option key={v.value} value={v.value}>{v.label}</option>)}
-                    </select>
-                    <select value={bc.operator||'>'} onChange={e=>updBc({operator:e.target.value})} style={{...selSt,width:52}}>
-                      {['==','!=','<','>','<=','>='].map(op=><option key={op} value={op}>{op}</option>)}
-                    </select>
-                    <input type="number" value={bc.value??''} onChange={e=>updBc({value:e.target.value===''?0:Number(e.target.value)})}
-                      style={{width:70,background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 6px',outline:'none'}}/>
-                  </div>
                   <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
-                    Entity skips the queue on arrival when this condition is true.
+                    After {ev.loopConfig?.maxLoopCount||"N"} loops the entity is routed to the exit queue (or removed) instead of recirculating.
                   </div>
-                  </>);
-                })()}
+                </>)}
               </SectionPanel>
-            )}
 
-            {/* Loop Guard — collapsible */}
-            <SectionPanel label="Loop Guard" status={loopStatus} color={C.purple}>
-              <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',
-                fontFamily:FONT,fontSize:11,color:loopEnabled?C.purple:C.muted}}>
-                <input type="checkbox" checked={loopEnabled} onChange={e=>toggleLoop(e.target.checked)}
-                  style={{accentColor:C.purple}}/>
-                Limit entity recirculations
-              </label>
-              {loopEnabled&&(<>
-                <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Max loops:</span>
-                  <input type="number" min="1" step="1"
-                    value={ev.loopConfig?.maxLoopCount||""}
-                    onChange={e=>updLoop('maxLoopCount',parseInt(e.target.value)||1)}
-                    placeholder="3"
-                    style={{width:70,background:'transparent',border:`1px solid ${C.purple}55`,borderRadius:4,color:C.purple,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}/>
-                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Exit to:</span>
-                  <select value={ev.loopConfig?.exitQueueName||""}
-                    onChange={e=>updLoop('exitQueueName',e.target.value)}
-                    style={{flex:1,background:C.bg,border:`1px solid ${C.purple}55`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:'4px 8px',outline:'none'}}>
-                    <option value="">exit system (entity discarded)</option>
-                    {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
-                  </select>
+              {/* Schedules — collapsible */}
+              <SectionPanel label="Schedules — Follow-on B-Events" status={schedStatus} color={C.bEvent}>
+                <div style={{display:"flex",justifyContent:"flex-end"}}>
+                  <Btn small variant="ghost" onClick={()=>addS(i)}>+ Schedule</Btn>
                 </div>
-                <div style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:'italic'}}>
-                  After {ev.loopConfig?.maxLoopCount||"N"} loops the entity is routed to the exit queue (or removed) instead of recirculating.
-                </div>
-              </>)}
-            </SectionPanel>
-
-            {/* Schedules — collapsible */}
-            <SectionPanel label="Schedules — Follow-on B-Events" status={schedStatus} color={C.bEvent}>
-              <div style={{display:"flex",justifyContent:"flex-end"}}>
-                <Btn small variant="ghost" onClick={()=>addS(i)}>+ Schedule</Btn>
-              </div>
-              {(ev.schedules||[]).length===0&&(
-                <span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
-                  None. Add a schedule to chain a follow-on B-event from this one.
-                </span>
-              )}
-              {(ev.schedules||[]).map((s,j)=>(
-                <div key={j} style={{background:C.bg,borderRadius:5,padding:"10px 12px",border:`1px solid ${s.isRenege?C.reneged+"44":C.border}40`,display:"flex",flexDirection:"column",gap:8}}>
-                  <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                    <select value={s.eventId} onChange={e=>updS(i,j,{eventId:e.target.value})}
-                      style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
-                      <option value="">— select B-event —</option>
-                      {events.map(b=><option key={b.id} value={b.id}>{displayEventName(b.name)||b.id}</option>)}
-                    </select>
-                    <Btn small variant="danger" ariaLabel={`Remove B-event schedule ${j+1}`} onClick={()=>remS(i,j)}>✕</Btn>
-                  </div>
-                  {s.scheduleRef ? (
-                    <div style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10}}>
-                      <span style={{fontSize:16,lineHeight:1}}>📅</span>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700}}>
-                          {namedSchedules.find(ns=>ns.id===s.scheduleRef)?.name ?? "Named schedule"}
+                {(ev.schedules||[]).length===0&&(
+                  <span style={{fontSize:11,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
+                    None. Add a schedule to chain a follow-on B-event from this one.
+                  </span>
+                )}
+                {(ev.schedules||[]).map((s,j)=>(
+                  <div key={j} style={{background:C.bg,borderRadius:5,padding:"10px 12px",border:`1px solid ${s.isRenege?C.reneged+"44":C.border}40`,display:"flex",flexDirection:"column",gap:8}}>
+                    <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                      <select value={s.eventId} onChange={e=>updS(i,j,{eventId:e.target.value})}
+                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                        <option value="">— select B-event —</option>
+                        {events.map(b=><option key={b.id} value={b.id}>{displayEventName(b.name)||b.id}</option>)}
+                      </select>
+                      <Btn small variant="danger" ariaLabel={`Remove B-event schedule ${j+1}`} onClick={()=>remS(i,j)}>✕</Btn>
+                    </div>
+                    {s.scheduleRef ? (
+                      <div style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10}}>
+                        <span style={{fontSize:16,lineHeight:1}}>📅</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700}}>
+                            {namedSchedules.find(ns=>ns.id===s.scheduleRef)?.name ?? "Named schedule"}
+                          </div>
+                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable. Edit in the Schedules tab.</div>
                         </div>
-                        <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable. Edit in the Schedules tab.</div>
                       </div>
-                    </div>
-                  ) : (
-                    <DistPicker value={{dist:s.dist,distParams:s.distParams}} onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams})} compact
-                      attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
-                      epoch={epoch} timeUnit={timeUnit}/>
-                  )}
-                  <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:s.isRenege?C.reneged:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
-                    <input type="checkbox" checked={!!s.isRenege} onChange={e=>updS(i,j,{isRenege:e.target.checked})} style={{accentColor:C.reneged}}/>
-                    Reneging timer
-                  </label>
-                  {s.isRenege&&(
-                    <div style={{background:C.reneged+"0f",border:`1px solid ${C.reneged}33`,borderRadius:4,padding:"6px 10px",fontSize:11,color:C.reneged,fontFamily:FONT}}>
-                      ⚠ Reneging timer — fires for most recently arrived customer. Skipped if already served.
-                    </div>
-                  )}
-                </div>
-              ))}
-            </SectionPanel>
+                    ) : (
+                      <DistPicker value={{dist:s.dist,distParams:s.distParams}} onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams})} compact
+                        attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
+                        epoch={epoch} timeUnit={timeUnit}/>
+                    )}
+                    <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:s.isRenege?C.reneged:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
+                      <input type="checkbox" checked={!!s.isRenege} onChange={e=>updS(i,j,{isRenege:e.target.checked})} style={{accentColor:C.reneged}}/>
+                      Reneging timer
+                    </label>
+                    {s.isRenege&&(
+                      <div style={{background:C.reneged+"0f",border:`1px solid ${C.reneged}33`,borderRadius:4,padding:"6px 10px",fontSize:11,color:C.reneged,fontFamily:FONT}}>
+                        ⚠ Reneging timer — fires for most recently arrived customer. Skipped if already served.
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </SectionPanel>
 
-            <input value={ev.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
-              style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+              <input value={ev.description} onChange={e=>upd(i,"description",e.target.value)} placeholder="Description"
+                style={{background:"transparent",border:`1px solid ${C.border}40`,borderRadius:4,color:C.muted,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+            </>}
           </div>
         );
       })}

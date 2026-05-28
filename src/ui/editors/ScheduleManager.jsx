@@ -276,7 +276,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
       {/* Stats bar */}
       <div style={{ display: "flex", gap: 16, padding: "8px 12px", background: C.panel, borderRadius: 6, fontSize: 13, color: C.muted, flexWrap: "wrap" }}>
         <span>{totalRows.toLocaleString()} rows</span>
-        <span>{(sched.scheduleJson || []).length} event{(sched.scheduleJson || []).length !== 1 ? "s" : ""}</span>
+        <span>{bEvents.filter(be => (be.schedules || []).some(s => s.scheduleRef === sched.id)).length} linked</span>
         {totalRows > 0 && (
           <>
             <span>
