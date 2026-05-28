@@ -265,10 +265,79 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
   };
 }
 
-export function buildComparisonPrompt(modelName = DEFAULT_MODEL_NAME, runA = {}, runB = {}) {
-  const system = "You are an expert simulation analyst. Compare the two simulation runs below and explain the key differences to a non-specialist. Be concise: 200-250 words. Use an Option A / Option B frame.";
+function diffModelStructure(modelA = {}, modelB = {}) {
+  if (!modelA || !modelB) {
+    return { identical: null, note: "Structural data is not available for one or both runs — focus comparison on KPI differences only." };
+  }
+
+  const differences = [];
+
+  // Entity types
+  const etA = (modelA.entityTypes || []).map(e => ({ name: e.name || e.id, role: e.role, count: e.count ?? null }));
+  const etB = (modelB.entityTypes || []).map(e => ({ name: e.name || e.id, role: e.role, count: e.count ?? null }));
+  const etNamesA = new Set(etA.map(e => e.name));
+  const etNamesB = new Set(etB.map(e => e.name));
+  for (const name of etNamesA) {
+    if (!etNamesB.has(name)) { differences.push(`Entity type "${name}" present in Option A only`); continue; }
+    const a = etA.find(e => e.name === name);
+    const b = etB.find(e => e.name === name);
+    if (a.count !== b.count) differences.push(`Entity "${name}" count: ${a.count} → ${b.count}`);
+    if (a.role !== b.role) differences.push(`Entity "${name}" role: ${a.role} → ${b.role}`);
+  }
+  for (const name of etNamesB) {
+    if (!etNamesA.has(name)) differences.push(`Entity type "${name}" present in Option B only`);
+  }
+
+  // Queues
+  const qA = (modelA.queues || []).map(q => ({ name: q.name || q.id, discipline: q.discipline, capacity: q.capacity ?? null }));
+  const qB = (modelB.queues || []).map(q => ({ name: q.name || q.id, discipline: q.discipline, capacity: q.capacity ?? null }));
+  const qNamesA = new Set(qA.map(q => q.name));
+  const qNamesB = new Set(qB.map(q => q.name));
+  for (const name of qNamesA) {
+    if (!qNamesB.has(name)) { differences.push(`Queue "${name}" present in Option A only`); continue; }
+    const a = qA.find(q => q.name === name);
+    const b = qB.find(q => q.name === name);
+    if (a.discipline !== b.discipline) differences.push(`Queue "${name}" discipline: ${a.discipline} → ${b.discipline}`);
+    if (a.capacity !== b.capacity) differences.push(`Queue "${name}" capacity: ${a.capacity} → ${b.capacity}`);
+  }
+  for (const name of qNamesB) {
+    if (!qNamesA.has(name)) differences.push(`Queue "${name}" present in Option B only`);
+  }
+
+  // Arrival events
+  const beCountA = (modelA.bEvents || []).length;
+  const beCountB = (modelB.bEvents || []).length;
+  if (beCountA !== beCountB) differences.push(`Arrival event count: ${beCountA} → ${beCountB}`);
+
+  // Schedules
+  const schedCountA = (modelA.schedules || []).length + (modelA.shiftSchedules || []).length;
+  const schedCountB = (modelB.schedules || []).length + (modelB.shiftSchedules || []).length;
+  if (schedCountA !== schedCountB) differences.push(`Schedule entry count: ${schedCountA} → ${schedCountB}`);
+
+  if (differences.length === 0) {
+    return { identical: true, note: "Both runs use identical model structure — differences reflect parameter or seed variation only." };
+  }
+  return { identical: false, note: `Model structure differs between runs: ${differences.join("; ")}.` };
+}
+
+export function buildComparisonPrompt(modelName = DEFAULT_MODEL_NAME, runA = {}, runB = {}, modelA = null, modelB = null) {
+  const structDiff = diffModelStructure(modelA, modelB);
+  const structNote = structDiff.note;
+
+  const system = [
+    "You are an expert simulation analyst.",
+    "Compare the two simulation runs below and explain the key differences to a non-specialist.",
+    "Be concise: 200-250 words. Use an Option A / Option B frame.",
+    structDiff.identical === true
+      ? "The model structure is identical between runs — do not speculate about structural differences."
+      : structDiff.identical === false
+        ? "The model structure has changed between runs — factor structural differences into your explanation."
+        : "Structural model data is unavailable — focus only on the KPI results provided.",
+  ].join(" ");
+
   const payload = {
     modelName: modelName || DEFAULT_MODEL_NAME,
+    structuralNote: structNote,
     runA,
     runB,
   };
@@ -278,9 +347,9 @@ export function buildComparisonPrompt(modelName = DEFAULT_MODEL_NAME, runA = {},
     messages: makeMessages(
       system,
       payload,
-      "Compare the two runs side by side. Identify meaningful differences, likely tradeoffs, and any result that is too uncertain to interpret confidently."
+      "Compare the two runs side by side. Identify meaningful differences, likely tradeoffs, and any result that is too uncertain to interpret confidently. If the model structure is identical, make that clear and focus on what the results tell us."
     ),
-    max_tokens: 550,
+    max_tokens: 600,
   };
 }
 
