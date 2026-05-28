@@ -162,7 +162,7 @@ async function doCloudSave(saveFn, {
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
@@ -373,9 +373,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     collectTimeSeries,
     plan,
     isAdmin,
+    tierPolicies,
     validation,
     complexityEstimate,
-  }), [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, plan, isAdmin, validation, complexityEstimate]);
+  }), [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, plan, isAdmin, tierPolicies, validation, complexityEstimate]);
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
   const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : "minimal";

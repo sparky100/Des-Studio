@@ -82,8 +82,14 @@ export function resolveRunAdmissionTier(plan, options = {}) {
 }
 
 export function getRunAdmission(model, options = {}) {
-  const tier = RUN_ADMISSION_TIERS[options.tier] ? options.tier : resolveRunAdmissionTier(options.plan, { isAdmin: options.isAdmin });
-  const tierPolicy = RUN_ADMISSION_TIERS[tier];
+  // Merge DB overrides over hardcoded defaults (field-level, per tier)
+  const activePolicies = options.tierPolicies
+    ? Object.fromEntries(
+        Object.entries(RUN_ADMISSION_TIERS).map(([k, v]) => [k, { ...v, ...(options.tierPolicies[k] || {}) }])
+      )
+    : RUN_ADMISSION_TIERS;
+  const tier = activePolicies[options.tier] ? options.tier : resolveRunAdmissionTier(options.plan, { isAdmin: options.isAdmin });
+  const tierPolicy = activePolicies[tier] || RUN_ADMISSION_TIERS.pro;
   const validationInput = normalizeValidationInput(model || {}, options);
   const validation = options.validation || validateModel(validationInput);
   const modelCheckIssues = options.modelCheckIssues || checkModel(model || {});
@@ -112,8 +118,8 @@ export function getRunAdmission(model, options = {}) {
   const plannedScheduleRows = Number.isFinite(complexityEstimate.plannedScheduleRows)
     ? complexityEstimate.plannedScheduleRows
     : 0;
-  const totalEstimatedScans = Number.isFinite(complexityEstimate.totalEstimatedScans)
-    ? complexityEstimate.totalEstimatedScans
+  const estimatedCEventScans = Number.isFinite(complexityEstimate.estimatedCEventScans)
+    ? complexityEstimate.estimatedCEventScans
     : 0;
   const nearScanThreshold = tierPolicy.maxScans * 0.8;
   const nearPlannedRowsThreshold = tierPolicy.maxPlannedRows * 0.8;
@@ -148,15 +154,15 @@ export function getRunAdmission(model, options = {}) {
       "This run uses a large planned schedule and may take longer than usual to prepare."
     ));
   }
-  if (totalEstimatedScans > tierPolicy.maxScans) {
+  if (estimatedCEventScans > tierPolicy.maxScans) {
     hardErrors.push(makeDecisionIssue(
       "RA7",
-      `Estimated C-event scans exceed the ${tierPolicy.label.toLowerCase()} tier limit of ${tierPolicy.maxScans.toLocaleString()}.`
+      `Estimated C-event scans per run (${Math.round(estimatedCEventScans).toLocaleString()}) exceed the ${tierPolicy.label.toLowerCase()} tier limit of ${tierPolicy.maxScans.toLocaleString()}.`
     ));
-  } else if (totalEstimatedScans >= nearScanThreshold && totalEstimatedScans > 0) {
+  } else if (estimatedCEventScans >= nearScanThreshold && estimatedCEventScans > 0) {
     warnings.push(makeDecisionIssue(
       "RA8",
-      `Estimated C-event scans are close to the ${tierPolicy.label.toLowerCase()} tier limit (${Math.round(totalEstimatedScans).toLocaleString()} of ${tierPolicy.maxScans.toLocaleString()}).`
+      `Estimated C-event scans are close to the ${tierPolicy.label.toLowerCase()} tier limit (${Math.round(estimatedCEventScans).toLocaleString()} of ${tierPolicy.maxScans.toLocaleString()}).`
     ));
     confirmations.push(makeDecisionIssue(
       "RA9",
@@ -180,7 +186,9 @@ export function getRunAdmission(model, options = {}) {
     ));
   }
 
-  const effectiveCollectTimeSeries = requestedCollectTimeSeries && shouldDisableTimeSeries(tier, complexityEstimate.riskLevel)
+  const effectiveCollectTimeSeries = requestedCollectTimeSeries && (
+    (RISK_ORDER[complexityEstimate.riskLevel] ?? 0) >= (RISK_ORDER[tierPolicy.disableTimeSeriesAt || "large"] ?? 2)
+  )
     ? false
     : requestedCollectTimeSeries;
   if (requestedCollectTimeSeries && !effectiveCollectTimeSeries) {
