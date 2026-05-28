@@ -276,6 +276,7 @@ export const AiAssistantPanel = ({
   onApplyPatchedModel,
   embedded = false,
   overlay = false,
+  triggerAction = null, // { action: "explain"|"compare"|"refine", seq: number }
 }) => {
   const toast = useToast();
   const [response, setResponse] = useState("");
@@ -296,6 +297,7 @@ export const AiAssistantPanel = ({
   const [refineCardResults, setRefineCardResults] = useState({});
   const abortRef = useRef(null);
   const responseAreaRef = useRef(null);
+  const actionFnsRef = useRef({});
   const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
   const sensitivityReady = ciResults.some(item => item.n >= 5);
   const isStreaming = status === "loading" || status === "streaming";
@@ -473,14 +475,18 @@ export const AiAssistantPanel = ({
     }
   };
 
-  const canRefinePlan = !!results && (
+  const hasSchedule = (
     (Array.isArray(model?.schedules) && model.schedules.length > 0) ||
     (Array.isArray(model?.shiftSchedules) && model.shiftSchedules.length > 0) ||
     (model?.entityTypes || []).some(et => Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) ||
-    (model?.bEvents || []).some(be => (be.schedules || []).some(s => s.scheduleRef))
+    (model?.bEvents || []).some(be => (be.schedules || []).some(s => s.scheduleRef || (s.rows?.length > 0)))
   );
 
   const handleRefinePlan = useCallback(async () => {
+    if (!hasSchedule) {
+      setRefineStatus("no-schedule");
+      return;
+    }
     setRefineStatus("loading");
     setRefineError("");
     setRefineParsed(null);
@@ -520,6 +526,22 @@ export const AiAssistantPanel = ({
       }
     }
   }, [model, onRunWithPatch]);
+
+  // Keep latest action functions in a ref so the trigger effect always has fresh closures
+  actionFnsRef.current = {
+    explain: explainResults,
+    compare: compareRuns,
+    refine: handleRefinePlan,
+  };
+
+  // Fire the requested action when triggerAction.seq changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!triggerAction?.action || !results) return;
+    setRefineParsed(null);
+    setRefineStatus("idle");
+    actionFnsRef.current[triggerAction.action]?.();
+  }, [triggerAction?.seq]);
 
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
 
@@ -561,6 +583,59 @@ export const AiAssistantPanel = ({
         </div>
       );
     }
+    if (refineStatus === "no-schedule") {
+      return (
+        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 }}>
+          No schedule found. Refine Plan analyses timing adjustments to a fixed arrival timetable or shift schedule. Load a schedule in the B-Events or Entity editor and re-run the model first.
+        </div>
+      );
+    }
+    if (refineStatus === "loading") {
+      return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, fontStyle: "italic" }}>Analysing schedule constraints…</div>;
+    }
+    if (refineStatus === "error") {
+      return <div style={{ color: C.red, fontFamily: FONT, fontSize: 11 }}>Plan refinement unavailable — {refineError}</div>;
+    }
+    if (refineParsed) {
+      return (
+        <div>
+          {refineParsed.analysis && (
+            <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, lineHeight: 1.7, marginBottom: 10, whiteSpace: "pre-wrap" }}>
+              {refineParsed.analysis}
+            </div>
+          )}
+          {refineParsed.recommendations.length === 0 && (
+            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>No schedule recommendations returned.</div>
+          )}
+          {refineParsed.recommendations.map(card => (
+            <RefinementCard
+              key={card.rank}
+              card={card}
+              model={model}
+              aggregateStats={aggregateStats}
+              onApplyAndRerun={handleRefineApplyAndRerun}
+              cardStatus={refineCardStatus[card.rank]}
+              cardResult={refineCardResults[card.rank]}
+            />
+          ))}
+          {refineParsed.infeasibleGoals.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10 }}>
+                <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>
+                  The following goals cannot be met within current resource constraints:
+                </div>
+                {refineParsed.infeasibleGoals.map((g, i) => (
+                  <div key={i} style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 700 }}>{g.goalLabel}</span>
+                    {g.reason ? ` — ${g.reason}` : ""}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
     if (conversationHistory.length > 0) {
       return conversationHistory.map((entry, i) => (
         <div key={i} style={{ marginBottom: 10 }}>
@@ -582,7 +657,7 @@ export const AiAssistantPanel = ({
     }
     if (status === "loading") return "Waiting for analysis...";
     if (response) return response;
-    return "Run the model to start asking questions.";
+    return "Select Explain, Compare, or Refine Plan to analyse these results.";
   };
 
   const overlayStyle = overlay ? {
@@ -623,10 +698,7 @@ export const AiAssistantPanel = ({
   return (
     <aside aria-label="AI assistant" style={overlayStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
-        <div>
-          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{(embedded || overlay) ? "Explain Results" : "AI Assistant"}</div>
-          {!embedded && !overlay && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
-        </div>
+        <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>AI Analysis</div>
         {(overlay || (!embedded && onClose)) && onClose && (
           <button
             type="button"
@@ -637,32 +709,20 @@ export const AiAssistantPanel = ({
         )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <Btn variant="primary" onClick={explainResults} disabled={!results || isStreaming} style={panelButtonStyle}>
-          Explain results
-        </Btn>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE WITH</label>
+      {comparisonRuns.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, whiteSpace: "nowrap" }}>COMPARE WITH</label>
           <select
             id="compare-run"
             value={selectedRunId}
             onChange={event => setSelectedRunId(event.target.value)}
-            disabled={!comparisonRuns.length || isStreaming}
-            style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px" }}
+            disabled={isStreaming}
+            style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px" }}
           >
-            {!comparisonRuns.length && <option value="">{comparisonLoading ? "Loading saved runs..." : "No comparison runs"}</option>}
             {comparisonRuns.map(run => <option key={run.id} value={run.id}>{run.label}</option>)}
           </select>
-          {comparisonError && (
-            <div role="status" style={{ color: C.amber, fontFamily: FONT, fontSize: 10 }}>
-              Saved runs unavailable: {comparisonError}
-            </div>
-          )}
-          <Btn variant="ghost" onClick={compareRuns} disabled={!results || !selectedRun || isStreaming} style={panelButtonStyle}>
-            Compare
-          </Btn>
         </div>
-      </div>
+      )}
 
       {status === "error" && (
         <div role="alert" style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
@@ -736,68 +796,6 @@ export const AiAssistantPanel = ({
         </div>
       </div>
 
-      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>REFINE PLAN</div>
-        {!canRefinePlan ? (
-          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 }}>
-            Refine Plan is available after running a model that includes a loaded schedule. Load a schedule in the B-Events or Entity editor, then run the model.
-          </div>
-        ) : (
-          <div>
-            <Btn
-              variant="ghost"
-              onClick={handleRefinePlan}
-              disabled={refineStatus === "loading"}
-              style={panelButtonStyle}
-            >
-              {refineStatus === "loading" ? "Analysing schedule constraints…" : "Refine Plan"}
-            </Btn>
-            {refineStatus === "error" && (
-              <div role="alert" style={{ marginTop: 8, background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
-                Plan refinement unavailable — {refineError}
-              </div>
-            )}
-            {refineParsed && (
-              <div style={{ marginTop: 10 }}>
-                {refineParsed.analysis && (
-                  <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, lineHeight: 1.7, marginBottom: 10, whiteSpace: "pre-wrap" }}>
-                    {refineParsed.analysis}
-                  </div>
-                )}
-                {refineParsed.recommendations.length === 0 && (
-                  <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>No schedule recommendations returned.</div>
-                )}
-                {refineParsed.recommendations.map(card => (
-                  <RefinementCard
-                    key={card.rank}
-                    card={card}
-                    model={model}
-                    aggregateStats={aggregateStats}
-                    onApplyAndRerun={handleRefineApplyAndRerun}
-                    cardStatus={refineCardStatus[card.rank]}
-                    cardResult={refineCardResults[card.rank]}
-                  />
-                ))}
-                {refineParsed.infeasibleGoals.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    <div style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10 }}>
-                      <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>
-                        The following goals cannot be met within current resource constraints:
-                      </div>
-                      {refineParsed.infeasibleGoals.map((g, i) => (
-                        <div key={i} style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
-                          <span style={{ fontWeight: 700 }}>{g.goalLabel}</span>
-                          {g.reason ? ` — ${g.reason}` : ""}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </aside>
   );
 };
