@@ -724,8 +724,29 @@ export function EntitySummaryTable({ entitySummary, meanWait }) {
     ? sorted.filter(r => r._wait != null && r._wait > meanWait * 3)
     : [];
 
+  const waitValues = filtered.map(r => r._wait).filter(v => v != null && Number.isFinite(v));
+  const sojournValues = filtered.map(r => r._sojourn).filter(v => v != null && Number.isFinite(v));
+  const avgWait = waitValues.length > 0 ? waitValues.reduce((s, v) => s + v, 0) / waitValues.length : null;
+  const avgSojourn = sojournValues.length > 0 ? sojournValues.reduce((s, v) => s + v, 0) / sojournValues.length : null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {(avgWait != null || avgSojourn != null) && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {avgWait != null && (
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 12px", minWidth: 100 }}>
+              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 3 }}>AVG WAIT</div>
+              <div style={{ fontSize: 14, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{fmtT(avgWait)}</div>
+            </div>
+          )}
+          {avgSojourn != null && (
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 12px", minWidth: 100 }}>
+              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 3 }}>AVG SOJOURN</div>
+              <div style={{ fontSize: 14, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{fmtT(avgSojourn)}</div>
+            </div>
+          )}
+        </div>
+      )}
       {anomalies.length > 0 && (
         <div style={{ background: C.amber + "12", border: `1px solid ${C.amber}44`, borderRadius: 5,
           padding: "8px 12px", fontSize: 11, fontFamily: FONT, color: C.amber }}>

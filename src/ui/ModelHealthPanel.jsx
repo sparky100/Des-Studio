@@ -2,7 +2,7 @@
 import { C, FONT, alpha } from "./shared/tokens.js";
 import { Btn } from "./shared/components.jsx";
 
-export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTab, latestResults }) {
+export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTab, latestResults, onGoToHistory }) {
   const blockers = validation.errors || [];
   const warnings = validation.warnings || [];
   const issues = [...blockers, ...warnings].slice(0, 5);
@@ -84,7 +84,7 @@ export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTa
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {!isGettingStarted && !hasBlockers && !isExecuteTab && <Btn small variant="primary" onClick={() => setTab("execute")}>Open Run</Btn>}
           {!isGettingStarted && !hasBlockers && latestResults && <Btn small variant="ghost" onClick={() => setTab("results")}>Open Results</Btn>}
-          {!isGettingStarted && !hasBlockers && completedRuns > 0 && <Btn small variant="ghost" onClick={() => setTab("history")}>Run History</Btn>}
+          {!isGettingStarted && !hasBlockers && completedRuns > 0 && <Btn small variant="ghost" onClick={() => onGoToHistory ? onGoToHistory() : setTab("results")}>Run History</Btn>}
         </div>
       </div>
     </section>

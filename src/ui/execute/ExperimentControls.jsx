@@ -25,6 +25,7 @@ export function ExperimentControls({
   collectTimeSeries, setCollectTimeSeries,
   saveDetailLevel, setSaveDetailLevel,
   speedMultiplier, setSpeedMultiplier,
+  onClose,
 }) {
   const helperStyle = { fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.5, maxWidth: 220 };
   return (
@@ -54,7 +55,14 @@ export function ExperimentControls({
             })()}
           </div>
         </div>
-        <Btn small variant="ghost" onClick={() => setShowRunSetup(open => !open)}>
+        <Btn small variant="ghost" onClick={() => {
+          if (showRunSetup) {
+            setShowRunSetup(false);
+            onClose?.();
+          } else {
+            setShowRunSetup(true);
+          }
+        }}>
           {showRunSetup ? "Hide setup" : "Edit setup"}
         </Btn>
       </div>

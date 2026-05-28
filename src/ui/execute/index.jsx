@@ -249,7 +249,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const runStartPerfRef = useRef(null);
   const [animationEnabled, setAnimationEnabled] = useState(true);
   const [collectTimeSeries, setCollectTimeSeries] = useState(true);
-  const [saveDetailLevel, setSaveDetailLevel] = useState(() => model?.experimentDefaults?.resultDetailLevel === "full" ? "full" : "minimal");
+  const [saveDetailLevel, setSaveDetailLevel] = useState("minimal");
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
@@ -293,7 +293,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     logRef.current = log;
   }, [log]);
   useEffect(() => {
-    setSaveDetailLevel(model?.experimentDefaults?.resultDetailLevel === "full" ? "full" : "minimal");
+    setSaveDetailLevel("minimal");
   }, [model?.experimentDefaults?.resultDetailLevel]);
 
   // Fetch model_schedules when modelId changes (ADR-016)
@@ -1425,6 +1425,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           collectTimeSeries={collectTimeSeries} setCollectTimeSeries={setCollectTimeSeries}
           saveDetailLevel={saveDetailLevel} setSaveDetailLevel={setSaveDetailLevel}
           speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}
+          onClose={() => setExecuteSection("run")}
         />
       )}
 
