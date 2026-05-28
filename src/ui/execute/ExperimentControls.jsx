@@ -281,26 +281,29 @@ export function ExperimentControls({
                 />
                 Keep chart data during the run
               </label>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: saveDetailLevel === "full" ? C.accent : C.label, fontFamily: FONT }}>
-                <input
-                  aria-label="Save full archival details to cloud"
-                  type="checkbox"
-                  checked={saveDetailLevel === "full"}
-                  onChange={e => {
-                    const value = e.target.checked ? "full" : "minimal";
-                    setSaveDetailLevel?.(value);
-                    persistExperimentDefaults?.({ resultDetailLevel: value });
-                  }}
-                  style={{ accentColor: C.accent }}
-                />
-                Save full archival details to cloud
-              </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>ARCHIVE DETAIL</span>
+                <div style={{ display: "flex", gap: 2, background: C.bg, borderRadius: 5, padding: 2, width: "fit-content" }}>
+                  {[
+                    { value: "minimal", label: "Minimal" },
+                    { value: "compact", label: "Compact" },
+                    { value: "full",    label: "Full" },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setSaveDetailLevel?.(opt.value); persistExperimentDefaults?.({ resultDetailLevel: opt.value }); }}
+                      style={{ background: saveDetailLevel === opt.value ? C.border : "transparent", border: "none", borderRadius: 4, color: saveDetailLevel === opt.value ? C.text : C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11, padding: "5px 12px" }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div style={{ ...helperStyle, marginTop: 8, maxWidth: 360 }}>
-              Keep chart data on when you want time-based charts. Turn it off for very long runs if you want to save memory.
-            </div>
-            <div style={{ ...helperStyle, maxWidth: 420 }}>
-              Leave this off for the fastest history saves. Turn it on only when you want richer archived detail and are happy for uploads to take longer.
+            <div style={{ ...helperStyle, marginTop: 8, maxWidth: 420 }}>
+              <strong style={{ color: C.text }}>Minimal</strong> — summary stats only, fastest save.{" "}
+              <strong style={{ color: C.text }}>Compact</strong> — adds chart data sampled to 200 points (default).{" "}
+              <strong style={{ color: C.text }}>Full</strong> — keeps per-entity log, trace, and raw wait distributions; slowest save.
             </div>
           </div>
         </div>
