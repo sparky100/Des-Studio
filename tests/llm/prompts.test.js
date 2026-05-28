@@ -443,6 +443,47 @@ describe("LLM prompt builders", () => {
       expect(payload.model.stateVariables[0].name).toBe("shiftMode");
     });
 
+    it("narrative prompt includes shiftCapacity windows when servers have shift schedules", () => {
+      const modelWithShifts = {
+        ...model,
+        entityTypes: [
+          { id: "srv", name: "Nurse", role: "server", count: "4", attrDefs: [],
+            shiftSchedule: [{ time: 0, capacity: 4 }, { time: 480, capacity: 2 }, { time: 960, capacity: 4 }] },
+        ],
+      };
+      const prompt = buildNarrativePrompt(modelWithShifts, { replications: 1, maxSimTime: 1440 }, {
+        summary: { total: 20, served: 18, reneged: 0, avgWait: 5, avgSvc: 2, avgSojourn: 7 },
+      });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(Array.isArray(payload.shiftCapacity)).toBe(true);
+      expect(payload.shiftCapacity[0].resource).toBe("Nurse");
+      expect(payload.shiftCapacity[0].windows).toHaveLength(3);
+      expect(payload.shiftCapacity[0].windows[0]).toEqual({ time: 0, capacity: 4 });
+    });
+
+    it("narrative prompt instruction mentions shift plan when shiftCapacity is present", () => {
+      const modelWithShifts = {
+        ...model,
+        entityTypes: [
+          { id: "srv", name: "Doctor", role: "server", count: "2", attrDefs: [],
+            shiftSchedule: [{ time: 0, capacity: 2 }, { time: 720, capacity: 1 }] },
+        ],
+      };
+      const prompt = buildNarrativePrompt(modelWithShifts, {}, {
+        summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 },
+      });
+      const instruction = prompt.messages[1].content;
+      expect(instruction).toMatch(/shift.*capacity plan|shiftCapacity/i);
+    });
+
+    it("narrative prompt omits shiftCapacity when no server has shift schedule", () => {
+      const prompt = buildNarrativePrompt(model, {}, {
+        summary: { total: 10, served: 10, reneged: 0, avgWait: 1, avgSvc: 1, avgSojourn: 2 },
+      });
+      const payload = JSON.parse(prompt.messages[1].content);
+      expect(payload.shiftCapacity).toBeUndefined();
+    });
+
     it("includes entity anomaly digest when anomalies are present", () => {
       const entitySummary = [
         { id: 1, type: "Patient", stages: [{ stageWait: 50 }] },
