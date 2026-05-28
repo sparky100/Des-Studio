@@ -578,6 +578,66 @@ function AdminPanel({ userId, isAdmin, onClose }) {
               <Btn variant="primary" onClick={handleSaveLimits} disabled={saving}>
                 {saving ? "Saving..." : "Save Limits"}
               </Btn>
+
+              {/* ── Tier Run Limits ── */}
+              <SH label="Tier Run Limits" color={C.accent} />
+              <InfoBox color={C.accent}>
+                Override the per-tier run admission limits (RA7/RA8). Saved values override the hardcoded defaults in run-admission.js on a field-by-field basis. Leave the table empty (no saved value) to use the code defaults.
+              </InfoBox>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                      {["Tier", "Max Replications", "Max C-event Scans", "Max Planned Rows", "Max Sim Time"].map(h => (
+                        <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 10, letterSpacing: 1, whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {["free", "standard", "pro"].map(tierId => {
+                      const defaults = RUN_ADMISSION_TIERS[tierId];
+                      const draft = tierPoliciesDraft?.[tierId] || {};
+                      const fields = [
+                        { key: "maxReplications", def: defaults.maxReplications },
+                        { key: "maxScans",        def: defaults.maxScans },
+                        { key: "maxPlannedRows",  def: defaults.maxPlannedRows },
+                        { key: "maxSimTime",      def: defaults.maxSimTime },
+                      ];
+                      return (
+                        <tr key={tierId} style={{ borderBottom: `1px solid ${C.border}30` }}>
+                          <td style={{ padding: "6px 10px", color: C.text, fontWeight: 700, textTransform: "capitalize" }}>{tierId}</td>
+                          {fields.map(({ key, def }) => (
+                            <td key={key} style={{ padding: "4px 6px" }}>
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={draft[key] ?? def}
+                                onChange={e => {
+                                  const val = parseInt(e.target.value) || def;
+                                  setTierPoliciesDraft(prev => ({
+                                    ...RUN_ADMISSION_TIERS,
+                                    ...(prev || {}),
+                                    [tierId]: {
+                                      ...RUN_ADMISSION_TIERS[tierId],
+                                      ...((prev || {})[tierId] || {}),
+                                      [key]: val,
+                                    },
+                                  }));
+                                }}
+                                style={{ ...inp({ color: C.accent, width: 110 }) }}
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <Btn variant="primary" onClick={handleSaveTierPolicies} disabled={saving}>
+                {saving ? "Saving..." : "Save Tier Limits"}
+              </Btn>
             </div>
           )}
 
