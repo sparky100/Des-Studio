@@ -92,19 +92,22 @@ describe('Specific template properties', () => {
 
   it('Call Center has RENEGE macro for abandonment', () => {
     const t = TEMPLATES.find(t => t.id === 'call-center');
-    const renege = t.bEvents.find(b => b.effect?.startsWith('RENEGE'));
+    const effectText = (e) => Array.isArray(e) ? e.join(';') : (e || '');
+    const renege = t.bEvents.find(b => effectText(b.effect).includes('RENEGE'));
     expect(renege).toBeDefined();
   });
 
   it('Factory uses BATCH macro', () => {
     const t = TEMPLATES.find(t => t.id === 'factory');
-    const batch = t.cEvents.find(c => c.effect?.startsWith('BATCH'));
+    const effectText = (e) => Array.isArray(e) ? e.join(';') : (e || '');
+    const batch = t.cEvents.find(c => effectText(c.effect).includes('BATCH'));
     expect(batch).toBeDefined();
   });
 
   it('Construction uses RELEASE macro with state variables', () => {
     const t = TEMPLATES.find(t => t.id === 'construction');
-    const release = t.bEvents.find(b => b.effect?.includes('RELEASE'));
+    const effectText = (e) => Array.isArray(e) ? e.join(';') : (e || '');
+    const release = t.bEvents.find(b => effectText(b.effect).includes('RELEASE'));
     expect(release).toBeDefined();
     expect(t.stateVariables.length).toBeGreaterThan(0);
   });
@@ -147,7 +150,7 @@ describe('Specific template properties', () => {
   });
 
   it('all templates have a domain field from the expected set', () => {
-    const validDomains = new Set(['Academic', 'Healthcare', 'Service Systems', 'Manufacturing', 'Logistics', 'Technology']);
+    const validDomains = new Set(['Academic', 'Healthcare', 'Service Systems', 'Manufacturing', 'Logistics', 'Technology', 'Transport']);
     TEMPLATES.forEach(t => {
       expect(validDomains.has(t.domain)).toBe(true);
     });

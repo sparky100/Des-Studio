@@ -345,6 +345,13 @@ export function fireCEvent(ev, ctx) {
     const tmpl = (model.bEvents || []).find(b => b.id === cs.eventId);
     if (!tmpl) { msgs.push(`cSchedule: B-event "${cs.eventId}" not found`); continue; }
 
+    // Guard: if this cSchedule requires entity context but the effect produced no match, skip it.
+    // Prevents spurious FEL entries when ASSIGN finds no eligible entity/server pair.
+    if (cs.useEntityCtx && effectCtx._lastCustId == null && effectCtx._lastSrvId == null) {
+      msgs.push(`cSchedule: skipped "${tmpl.name}" — effect produced no entity context`);
+      continue;
+    }
+
     // Resolve delay
     let delay = 0;
     if (cs.dist === "ServerAttr") {
