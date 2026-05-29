@@ -1160,7 +1160,35 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     });
   }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, onResultsReady]);
 
-  useEffect(() => { onExposeRunApi?.(runWithPatch); }, [runWithPatch, onExposeRunApi]);
+  // Verification-only run: same as runWithPatch but does NOT update main results state,
+  // so the baseline aggregateStats stays intact for before/after comparison.
+  const runForVerification = useCallback((patchedModel) => {
+    return new Promise((resolve) => {
+      const completedPayloads = [];
+      runReplications({
+        model: patchedModel,
+        replications,
+        baseSeed: seed,
+        warmupPeriod,
+        maxSimTime: terminationMode === 'time' ? maxSimTime : null,
+        terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+        collectTimeSeries: false,
+        schedulesMap: activeSchedulesMap,
+        onReplicationComplete: payload => {
+          completedPayloads[payload.replicationIndex] = payload;
+        },
+        onComplete: payloads => {
+          const valid = payloads.filter(Boolean);
+          const aggregateStats = summarizeReplicationResults(valid, CI_METRICS);
+          const summary = valid[0]?.result?.summary || {};
+          resolve({ aggregateStats, summary });
+        },
+        onError: () => resolve(null),
+      });
+    });
+  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
+
+  useEffect(() => { onExposeRunApi?.(runForVerification); }, [runForVerification, onExposeRunApi]);
 
   const exportResultsJson = useCallback(() => {
     const payload = buildResultsExportPayload({
