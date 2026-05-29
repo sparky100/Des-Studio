@@ -10,6 +10,7 @@
 //  5. unknown scheduleRef (not in map)                     → 0 arrivals, no crash
 //  6. engine integration: scheduleRef + schedulesMap delivers correct arrivals
 //  7. engine integration: scheduleRef + no schedulesMap delivers 0 arrivals (graceful)
+//  8. multi-event schedule: each bEvent gets its own rows via compound key
 
 import { describe, test, expect, beforeEach } from 'vitest';
 import { resolveInlineSchedules, buildEngine } from '../../src/engine/index.js';
@@ -107,6 +108,41 @@ describe('resolveInlineSchedules — unit', () => {
     const result = resolveInlineSchedules(model, schedulesMap);
 
     expect(result.bEvents).toEqual([]);
+  });
+
+  test('multi-event: each bEvent resolves its own rows via compound key', () => {
+    const ROWS_B = [{ time: 30, attrs: { train_id: 'SW0001' } }];
+    const model = {
+      bEvents: [
+        { id: 'b_arrive_a', schedules: [{ eventId: 'b_arrive_a', scheduleRef: SCHEDULE_UUID, rows: [] }] },
+        { id: 'b_arrive_b', schedules: [{ eventId: 'b_arrive_b', scheduleRef: SCHEDULE_UUID, rows: [] }] },
+      ],
+    };
+    // buildSchedulesMap-style compound keys
+    const schedulesMap = {
+      [SCHEDULE_UUID]: { eventId: 'b_arrive_a', rows: ROWS_A },           // plain key (first event)
+      [`${SCHEDULE_UUID}:b_arrive_a`]: { eventId: 'b_arrive_a', rows: ROWS_A },
+      [`${SCHEDULE_UUID}:b_arrive_b`]: { eventId: 'b_arrive_b', rows: ROWS_B },
+    };
+
+    const result = resolveInlineSchedules(model, schedulesMap);
+
+    expect(result.bEvents[0].schedules[0].rows).toEqual(ROWS_A);
+    expect(result.bEvents[1].schedules[0].rows).toEqual(ROWS_B);
+  });
+
+  test('multi-event: falls back to plain key when compound key absent', () => {
+    const model = {
+      bEvents: [
+        { id: 'b_arrive_a', schedules: [{ eventId: 'b_arrive_a', scheduleRef: SCHEDULE_UUID, rows: [] }] },
+      ],
+    };
+    // Only plain key — old format
+    const schedulesMap = { [SCHEDULE_UUID]: { eventId: 'b_arrive_a', rows: ROWS_A } };
+
+    const result = resolveInlineSchedules(model, schedulesMap);
+
+    expect(result.bEvents[0].schedules[0].rows).toEqual(ROWS_A);
   });
 });
 

@@ -1219,30 +1219,28 @@ export async function fetchModelSchedule(scheduleId) {
 
 /**
  * Build a schedulesMap keyed by schedule id from an array of schedule rows.
- * Flattens schedule_json entries so the engine can look up rows by scheduleRef UUID.
  *
- * Returns: { "<scheduleId>": { eventId, rows } }
+ * For each schedule entry, two kinds of key are written:
+ *   "<scheduleId>"              — first entry only, for single-event backward compat
+ *   "<scheduleId>:<eventId>"    — one per event entry, for multi-event schedules
  *
- * Note: one schedule row may cover multiple bEvents (schedule_json is an array).
- * Each entry is registered under the SAME schedule id — the engine uses bEvent.schedules[].scheduleRef
- * which points to the schedule row id, not per-bEvent entry.
+ * resolveInlineSchedules() prefers the compound key when available so that each
+ * bEvent gets its own rows rather than sharing the first stream's rows.
  */
 export function buildSchedulesMap(scheduleRows) {
   const map = {};
   for (const sched of scheduleRows) {
     const entries = Array.isArray(sched.scheduleJson) ? sched.scheduleJson : [];
-    // The schedulesMap key is the schedule row id. The value carries the first matching
-    // entry's rows[] (legacy single-event-per-schedule assumption) OR all entries merged.
-    // The engine selects the entry whose eventId matches the bEvent id.
-    // For simplicity we store each per-event entry keyed by scheduleId:
-    // resolveInlineSchedules() looks up schedulesMap[scheduleRef] → rows[].
-    // We therefore create one map entry per event entry in the schedule.
     for (const entry of entries) {
+      // Compound key: used by resolveInlineSchedules for multi-event schedules
+      if (entry.eventId) {
+        map[`${sched.id}:${entry.eventId}`] = { eventId: entry.eventId, rows: entry.rows ?? [] };
+      }
+      // Plain key: kept for single-event backward compatibility (first entry wins)
       if (!map[sched.id]) {
         map[sched.id] = { eventId: entry.eventId, rows: entry.rows ?? [] };
       }
     }
-    // Also expose the schedule id directly so single-event schedules work simply.
     if (!map[sched.id]) {
       map[sched.id] = { eventId: null, rows: [] };
     }

@@ -206,11 +206,15 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
     setImportError(null);
     try {
       let newJson = sched.scheduleJson ?? [];
+      let updatedBEvents = [...bEvents];
       const newStubs = [];
       for (const mg of multiImportPreview.matched) {
         const targetId = mg.bEvent?.id ?? mg.eventId;
         newJson = mergeScheduleRows(newJson, targetId, mg.rows);
-        if (!mg.bEvent && createStubs) {
+        if (mg.bEvent) {
+          // Ensure scheduleRef is set so the engine can resolve rows at run time
+          updatedBEvents = linkBEventToSchedule(updatedBEvents, mg.bEvent.id, sched.id);
+        } else if (createStubs) {
           newStubs.push({
             id: 'b' + Date.now() + Math.random().toString(36).slice(2, 6),
             name: mg.eventId,
@@ -222,8 +226,9 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
         }
       }
       await onSave({ ...sched, scheduleJson: newJson });
-      if (newStubs.length > 0 && onUpdateBEvents) {
-        await onUpdateBEvents([...bEvents, ...newStubs]);
+      const bEventsChanged = updatedBEvents !== bEvents || newStubs.length > 0;
+      if (bEventsChanged && onUpdateBEvents) {
+        await onUpdateBEvents([...updatedBEvents, ...newStubs]);
       }
       setMultiImportPreview(null);
     } catch (err) {
