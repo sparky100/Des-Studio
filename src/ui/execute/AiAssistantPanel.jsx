@@ -264,6 +264,10 @@ function RefinementCard({ card, model, aggregateStats, onApplyAndRerun, cardStat
   );
 }
 
+const SIDEBAR_WIDTH_KEY = "aiPanel.sidebarWidth";
+const SIDEBAR_MIN = 260;
+const SIDEBAR_MAX = 640;
+
 export const AiAssistantPanel = ({
   model,
   results,
@@ -284,6 +288,30 @@ export const AiAssistantPanel = ({
   inline = false,
   triggerAction = null, // { action: "explain"|"compare"|"refine", seq: number }
 }) => {
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY), 10);
+    return Number.isFinite(stored) ? Math.min(Math.max(stored, SIDEBAR_MIN), SIDEBAR_MAX) : 320;
+  });
+
+  const startDrag = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    const onMove = (ev) => {
+      const delta = startX - ev.clientX;
+      const next = Math.min(Math.max(startWidth + delta, SIDEBAR_MIN), SIDEBAR_MAX);
+      setSidebarWidth(next);
+    };
+    const onUp = (ev) => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      const delta = startX - ev.clientX;
+      const final = Math.min(Math.max(startWidth + delta, SIDEBAR_MIN), SIDEBAR_MAX);
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(final));
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [sidebarWidth]);
   const isResultsContext = ['results', 'execute'].includes(activeTab);
   const toast = useToast();
   const [activeMode, setActiveMode] = useState(triggerAction?.action || "explain");
@@ -706,13 +734,14 @@ export const AiAssistantPanel = ({
     flexDirection: "column",
     gap: 12,
   } : sidebar ? {
-    width: 320,
-    flex: "0 0 320px",
+    width: sidebarWidth,
+    flex: `0 0 ${sidebarWidth}px`,
     borderLeft: `1px solid ${C.border}`,
     background: C.panel,
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
+    position: "relative",
   } : {
     width: embedded ? "min(420px, 100%)" : 320,
     maxWidth: embedded ? 420 : 320,
@@ -742,6 +771,33 @@ export const AiAssistantPanel = ({
 
   return (
     <aside aria-label="AI assistant" style={overlayStyle}>
+      {sidebar && (
+        <div
+          onMouseDown={startDrag}
+          title="Drag to resize"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 6,
+            cursor: "col-resize",
+            zIndex: 10,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{
+            width: 2,
+            height: 32,
+            borderRadius: 2,
+            background: C.border,
+            opacity: 0.6,
+            transition: "opacity 0.15s",
+          }} />
+        </div>
+      )}
       <div style={innerStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
