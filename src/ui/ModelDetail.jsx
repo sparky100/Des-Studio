@@ -1224,44 +1224,27 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         )}
         {tab==="results"&&(
           <div style={{display:"flex",flexDirection:"column",gap:0,minWidth:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:0,borderBottom:`1px solid ${C.border}`,marginBottom:16,overflowX:"auto"}}>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
               {[
                 {id:"summary",label:"Summary"},
                 {id:"log",label:"Log"},
                 {id:"entities",label:"Entities"},
                 {id:"history",label:"History"},
               ].map(sub=>(
-                <button
+                <Btn
                   key={sub.id}
+                  small
+                  variant={resultsView===sub.id?"primary":"ghost"}
                   onClick={()=>setResultsView(sub.id)}
-                  style={{
-                    background:"none",border:"none",borderBottom:resultsView===sub.id?`2px solid ${C.accent}`:"2px solid transparent",
-                    color:resultsView===sub.id?C.accent:C.muted,cursor:"pointer",
-                    fontFamily:FONT,fontSize:12,fontWeight:resultsView===sub.id?700:400,
-                    padding:"8px 14px",marginBottom:-1,whiteSpace:"nowrap",outline:"none",
-                    transition:"color 0.15s",
-                  }}
-                  aria-current={resultsView===sub.id?"page":undefined}
                 >
                   {sub.label}
-                </button>
+                </Btn>
               ))}
-              <div style={{flex:1}}/>
-              <div style={{display:"flex",gap:4,alignItems:"center",paddingRight:4}}>
-                <Btn small variant={aiAction==="explain"?"primary":"ghost"}
-                  onClick={()=>{if(aiAction==="explain"){setAiAction(null);}else{setAiSidebarOpen(true);setAiAction("explain");setAiSeq(s=>s+1);}}}
-                  disabled={!latestResults}
-                >Explain</Btn>
-                <Btn small variant={aiAction==="compare"?"primary":"ghost"}
-                  onClick={()=>{if(aiAction==="compare"){setAiAction(null);}else{setAiSidebarOpen(true);setAiAction("compare");setAiSeq(s=>s+1);}}}
-                  disabled={!latestResults}
-                >Compare</Btn>
-                <Btn small variant={aiAction==="refine"?"primary":"ghost"}
-                  onClick={()=>{if(aiAction==="refine"){setAiAction(null);}else{setAiSidebarOpen(true);setAiAction("refine");setAiSeq(s=>s+1);}}}
-                  disabled={!latestResults}
-                >Refine Plan</Btn>
-                <Btn small variant="ghost" onClick={()=>setTab("execute")} style={{marginLeft:4}}>← Run</Btn>
-              </div>
+              <Btn
+                small
+                variant={aiSidebarOpen?"primary":"ghost"}
+                onClick={()=>{if(aiSidebarOpen){setAiSidebarOpen(false);setAiAction(null);}else{setAiSidebarOpen(true);setAiAction("explain");setAiSeq(s=>s+1);}}}
+              >Analyse</Btn>
             </div>
 
             {resultsView==="summary"&&(

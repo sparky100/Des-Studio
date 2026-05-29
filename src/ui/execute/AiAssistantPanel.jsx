@@ -284,6 +284,7 @@ export const AiAssistantPanel = ({
 }) => {
   const isResultsContext = ['results', 'execute'].includes(activeTab);
   const toast = useToast();
+  const [activeMode, setActiveMode] = useState(triggerAction?.action || "explain");
   const [response, setResponse] = useState("");
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -553,6 +554,7 @@ export const AiAssistantPanel = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!triggerAction?.action || !results) return;
+    setActiveMode(triggerAction.action);
     setRefineParsed(null);
     setRefineStatus("idle");
     setResponse("");
@@ -690,10 +692,10 @@ export const AiAssistantPanel = ({
     boxShadow: embedded ? "0 10px 28px rgba(0,0,0,0.24)" : "none",
   };
 
-  const focusedAction = (sidebar || mobileFullscreen) && isResultsContext ? (triggerAction?.action || null) : null;
+  const focusedAction = isResultsContext ? activeMode : null;
   const panelTitle = (sidebar || mobileFullscreen)
-    ? (focusedAction ? ACTION_TITLES[focusedAction] : "Model Assistant")
-    : (triggerAction && ACTION_TITLES[triggerAction.action]) || (embedded || overlay ? "Explain Results" : "Model Assistant");
+    ? "Model Assistant"
+    : (embedded || overlay ? "Analyse Results" : "Model Assistant");
   const innerStyle = sidebar
     ? { flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
     : mobileFullscreen
@@ -718,6 +720,19 @@ export const AiAssistantPanel = ({
           >✕</button>
         )}
       </div>
+
+      {/* Mode tabs — shown when in results context */}
+      {isResultsContext && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[
+            { id: "explain", label: "Analyse" },
+            { id: "compare", label: "Compare" },
+            { id: "refine", label: "Refine Plan" },
+          ].map(m => (
+            <Btn key={m.id} small variant={activeMode === m.id ? "primary" : "ghost"} onClick={() => setActiveMode(m.id)}>{m.label}</Btn>
+          ))}
+        </div>
+      )}
 
       {/* Model Q&A — shown in sidebar when not on results/execute tab */}
       {sidebar && !isResultsContext && (
@@ -744,15 +759,15 @@ export const AiAssistantPanel = ({
         </div>
       )}
 
-      {/* Explain — shown when not focused or focused on explain */}
-      {(!sidebar || isResultsContext) && (!focusedAction || focusedAction === 'explain') && (
+      {/* Explain — shown when in results context with analyse mode, or in non-sidebar non-results context */}
+      {(isResultsContext ? activeMode === "explain" : !sidebar) && (
         <Btn variant="primary" onClick={explainResults} disabled={!results || isStreaming} style={panelButtonStyle}>
-          {focusedAction === 'explain' ? 'Re-explain results' : 'Explain results'}
+          {isResultsContext ? 'Analyse results' : 'Explain results'}
         </Btn>
       )}
 
-      {/* Compare — shown when not focused or focused on compare */}
-      {(!sidebar || isResultsContext) && (!focusedAction || focusedAction === 'compare') && (
+      {/* Compare — shown when in results context with compare mode */}
+      {(isResultsContext ? activeMode === "compare" : !sidebar) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE WITH</label>
           <select
@@ -812,7 +827,7 @@ export const AiAssistantPanel = ({
         {(conversationHistory.length > 0 || parsedSuggestion) && !isStreaming && <Btn small variant="ghost" onClick={clearConversation}>Clear</Btn>}
       </div>
 
-      {!focusedAction && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      {!isResultsContext && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         <label htmlFor="query-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
           ASK A QUESTION
         </label>
@@ -848,7 +863,7 @@ export const AiAssistantPanel = ({
         </div>
       </div>}
 
-      {(!sidebar || isResultsContext) && hasSchedule && (!focusedAction || focusedAction === 'refine') && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      {(isResultsContext ? activeMode === "refine" : (!sidebar && hasSchedule)) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>REFINE PLAN</div>
         <div>
           <Btn
