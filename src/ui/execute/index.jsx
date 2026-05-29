@@ -564,6 +564,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         log:           finalLog,
       };
       setResults(fullResult);
+      setHideRunReadiness(false);
       onResultsReady?.(fullResult);
       onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
       if (modelId) {
@@ -760,6 +761,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
             setBatchStatus("complete");
             setResults(batchResult);
+            setHideRunReadiness(false);
             onResultsReady?.(batchResult);
             onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log: logRef.current });
             setAggregateStats(stats);

@@ -124,7 +124,7 @@ describe("getRunAdmission", () => {
 
   it("classifies scan volume near the tier limit as warning plus confirmation", () => {
     const result = getAdmission({
-      complexityEstimate: cleanComplexity({ totalEstimatedScans: 210000 }),
+      complexityEstimate: cleanComplexity({ estimatedCEventScans: 210000 }),
     });
 
     expect(result.hardErrors).toEqual([]);
