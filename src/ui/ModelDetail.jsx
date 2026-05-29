@@ -1249,15 +1249,15 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               <div style={{flex:1}}/>
               <div style={{display:"flex",gap:4,alignItems:"center",paddingRight:4}}>
                 <Btn small variant={aiAction==="explain"?"primary":"ghost"}
-                  onClick={()=>{if(aiAction==="explain"){setAiAction(null);}else{setAiAction("explain");setAiSeq(s=>s+1);}}}
+                  onClick={()=>{if(aiAction==="explain"){setAiAction(null);}else{setAiSidebarOpen(true);setAiAction("explain");setAiSeq(s=>s+1);}}}
                   disabled={!latestResults}
                 >Explain</Btn>
                 <Btn small variant={aiAction==="compare"?"primary":"ghost"}
-                  onClick={()=>{if(aiAction==="compare"){setAiAction(null);}else{setAiAction("compare");setAiSeq(s=>s+1);}}}
+                  onClick={()=>{if(aiAction==="compare"){setAiAction(null);}else{setAiSidebarOpen(true);setAiAction("compare");setAiSeq(s=>s+1);}}}
                   disabled={!latestResults}
                 >Compare</Btn>
                 <Btn small variant={aiAction==="refine"?"primary":"ghost"}
-                  onClick={()=>{if(aiAction==="refine"){setAiAction(null);}else{setAiAction("refine");setAiSeq(s=>s+1);}}}
+                  onClick={()=>{if(aiAction==="refine"){setAiAction(null);}else{setAiSidebarOpen(true);setAiAction("refine");setAiSeq(s=>s+1);}}}
                   disabled={!latestResults}
                 >Refine Plan</Btn>
                 <Btn small variant="ghost" onClick={()=>setTab("execute")} style={{marginLeft:4}}>← Run</Btn>
