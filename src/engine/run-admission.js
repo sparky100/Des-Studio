@@ -66,18 +66,19 @@ function normalizeCheckerIssue(issue) {
 
 export function resolveRunAdmissionTier(plan, options = {}) {
   if (options.isAdmin) return "pro";
-  switch (String(plan || "").trim().toLowerCase()) {
-    case "pro":
-      return "standard";
-    case "standard":
-      return "standard";
+  const key = String(plan || "").trim().toLowerCase();
+  if (options.planTierMap) {
+    const mapped = options.planTierMap[key];
+    if (mapped && RUN_ADMISSION_TIERS[mapped]) return mapped;
+  }
+  switch (key) {
+    case "pro":       return "standard";
+    case "standard":  return "standard";
     case "enterprise":
     case "pro_plus":
-    case "pro-plus":
-      return "pro";
+    case "pro-plus":  return "pro";
     case "free":
-    default:
-      return "free";
+    default:          return "free";
   }
 }
 
@@ -88,7 +89,8 @@ export function getRunAdmission(model, options = {}) {
         Object.entries(RUN_ADMISSION_TIERS).map(([k, v]) => [k, { ...v, ...(options.tierPolicies[k] || {}) }])
       )
     : RUN_ADMISSION_TIERS;
-  const tier = activePolicies[options.tier] ? options.tier : resolveRunAdmissionTier(options.plan, { isAdmin: options.isAdmin });
+  const planTierMap = options.tierPolicies?.plan_tier_map || null;
+  const tier = activePolicies[options.tier] ? options.tier : resolveRunAdmissionTier(options.plan, { isAdmin: options.isAdmin, planTierMap });
   const tierPolicy = activePolicies[tier] || RUN_ADMISSION_TIERS.pro;
   const validationInput = normalizeValidationInput(model || {}, options);
   const validation = options.validation || validateModel(validationInput);

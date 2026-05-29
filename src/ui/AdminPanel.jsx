@@ -190,7 +190,7 @@ function UserDrawer({ user, currentUserId, onClose, onRoleChange, onPlanChange, 
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Change Plan</span>
               <div style={{ display: "flex", gap: 6 }}>
-                {["free", "pro"].map(p => (
+                {["free", "standard", "pro"].map(p => (
                   <Btn key={p} small variant={user.plan === p ? "primary" : "ghost"}
                     onClick={() => onPlanChange(user.id, p)}>
                     {p.toUpperCase()}
@@ -582,13 +582,13 @@ function AdminPanel({ userId, isAdmin, onClose }) {
               {/* ── Tier Run Limits ── */}
               <SH label="Tier Run Limits" color={C.accent} />
               <InfoBox color={C.accent}>
-                Override the per-tier run admission limits (RA7/RA8). Saved values override the hardcoded defaults in run-admission.js on a field-by-field basis. Leave the table empty (no saved value) to use the code defaults.
+                All limits are stored in Supabase (platform_config → tier_policies) and override the code defaults on a field-by-field basis. Changes take effect for new sessions immediately after saving.
               </InfoBox>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, fontFamily: FONT }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                      {["Tier", "Max Replications", "Max C-event Scans", "Max Planned Rows", "Max Sim Time"].map(h => (
+                      {["Tier", "Max Replications", "Max C-event Scans", "Max Planned Rows", "Max Sim Time", "Disable Charts At"].map(h => (
                         <th key={h} style={{ textAlign: "left", padding: "6px 10px", color: C.muted, fontWeight: 700, fontSize: 10, letterSpacing: 1, whiteSpace: "nowrap" }}>{h}</th>
                       ))}
                     </tr>
@@ -597,16 +597,19 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                     {["free", "standard", "pro"].map(tierId => {
                       const defaults = RUN_ADMISSION_TIERS[tierId];
                       const draft = tierPoliciesDraft?.[tierId] || {};
-                      const fields = [
+                      const numFields = [
                         { key: "maxReplications", def: defaults.maxReplications },
                         { key: "maxScans",        def: defaults.maxScans },
                         { key: "maxPlannedRows",  def: defaults.maxPlannedRows },
                         { key: "maxSimTime",      def: defaults.maxSimTime },
                       ];
+                      const tierColors = { free: C.muted, standard: C.accent, pro: C.server };
                       return (
                         <tr key={tierId} style={{ borderBottom: `1px solid ${C.border}30` }}>
-                          <td style={{ padding: "6px 10px", color: C.text, fontWeight: 700, textTransform: "capitalize" }}>{tierId}</td>
-                          {fields.map(({ key, def }) => (
+                          <td style={{ padding: "6px 10px" }}>
+                            <Tag label={tierId} color={tierColors[tierId] || C.muted} />
+                          </td>
+                          {numFields.map(({ key, def }) => (
                             <td key={key} style={{ padding: "4px 6px" }}>
                               <input
                                 type="number"
@@ -625,18 +628,92 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                                     },
                                   }));
                                 }}
-                                style={{ ...inp({ color: C.accent, width: 110 }) }}
+                                style={{ ...inp({ color: C.accent, width: 100 }) }}
                               />
                             </td>
                           ))}
+                          <td style={{ padding: "4px 6px" }}>
+                            <select
+                              value={draft.disableTimeSeriesAt ?? defaults.disableTimeSeriesAt}
+                              onChange={e => {
+                                const val = e.target.value;
+                                setTierPoliciesDraft(prev => ({
+                                  ...RUN_ADMISSION_TIERS,
+                                  ...(prev || {}),
+                                  [tierId]: {
+                                    ...RUN_ADMISSION_TIERS[tierId],
+                                    ...((prev || {})[tierId] || {}),
+                                    disableTimeSeriesAt: val,
+                                  },
+                                }));
+                              }}
+                              style={{ ...inp({ color: C.accent, width: 110 }), cursor: "pointer" }}
+                            >
+                              <option value="medium">medium</option>
+                              <option value="large">large</option>
+                              <option value="too_large">too_large</option>
+                              <option value="never">never</option>
+                            </select>
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
+
+              {/* ── Plan → Tier Mapping ── */}
+              <SH label="Plan → Tier Mapping" color={C.accent} />
+              <InfoBox color={C.muted}>
+                Controls which run tier each user plan receives. Admins always get Pro regardless of this mapping.
+              </InfoBox>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {["free", "standard", "pro", "enterprise", "pro_plus"].map(planKey => {
+                  const defaultMap = { free: "free", standard: "standard", pro: "standard", enterprise: "pro", pro_plus: "pro" };
+                  const currentMap = tierPoliciesDraft?.plan_tier_map || {};
+                  const current = currentMap[planKey] ?? defaultMap[planKey] ?? "free";
+                  const tierColors = { free: C.muted, standard: C.accent, pro: C.server };
+                  return (
+                    <div key={planKey} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 110, fontSize: 11, fontFamily: FONT, color: C.text, fontWeight: 600 }}>
+                        {planKey}
+                      </div>
+                      <div style={{ fontSize: 11, fontFamily: FONT, color: C.muted }}>→</div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {["free", "standard", "pro"].map(tierId => (
+                          <button
+                            key={tierId}
+                            onClick={() => setTierPoliciesDraft(prev => ({
+                              ...(prev || {}),
+                              plan_tier_map: {
+                                free: "free", standard: "standard", pro: "standard", enterprise: "pro", pro_plus: "pro",
+                                ...((prev || {}).plan_tier_map || {}),
+                                [planKey]: tierId,
+                              },
+                            }))}
+                            style={{
+                              padding: "4px 12px",
+                              borderRadius: 6,
+                              border: `1px solid ${current === tierId ? tierColors[tierId] : C.border}`,
+                              background: current === tierId ? `${tierColors[tierId]}20` : "transparent",
+                              color: current === tierId ? tierColors[tierId] : C.muted,
+                              fontFamily: FONT,
+                              fontSize: 11,
+                              fontWeight: current === tierId ? 700 : 400,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {tierId}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
               <Btn variant="primary" onClick={handleSaveTierPolicies} disabled={saving}>
-                {saving ? "Saving..." : "Save Tier Limits"}
+                {saving ? "Saving…" : "Save Tier Policies"}
               </Btn>
             </div>
           )}
