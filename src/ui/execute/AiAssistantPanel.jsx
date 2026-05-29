@@ -315,13 +315,6 @@ export const AiAssistantPanel = ({
   useEffect(() => () => abortRef.current?.abort(), []);
 
   useEffect(() => {
-    if (!triggerAction) return;
-    if (triggerAction.action === 'explain') explainResults();
-    else if (triggerAction.action === 'refine') handleRefinePlan();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [triggerAction?.seq]);
-
-  useEffect(() => {
     if (responseAreaRef.current) {
       responseAreaRef.current.scrollTop = responseAreaRef.current.scrollHeight;
     }
@@ -609,59 +602,6 @@ export const AiAssistantPanel = ({
         </div>
       );
     }
-    if (refineStatus === "no-schedule") {
-      return (
-        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 }}>
-          No schedule found. Refine Plan analyses timing adjustments to a fixed arrival timetable or shift schedule. Load a schedule in the B-Events or Entity editor and re-run the model first.
-        </div>
-      );
-    }
-    if (refineStatus === "loading") {
-      return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, fontStyle: "italic" }}>Analysing schedule constraints…</div>;
-    }
-    if (refineStatus === "error") {
-      return <div style={{ color: C.red, fontFamily: FONT, fontSize: 11 }}>Plan refinement unavailable — {refineError}</div>;
-    }
-    if (refineParsed) {
-      return (
-        <div>
-          {refineParsed.analysis && (
-            <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, lineHeight: 1.7, marginBottom: 10, whiteSpace: "pre-wrap" }}>
-              {refineParsed.analysis}
-            </div>
-          )}
-          {refineParsed.recommendations.length === 0 && (
-            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>No schedule recommendations returned.</div>
-          )}
-          {refineParsed.recommendations.map(card => (
-            <RefinementCard
-              key={card.rank}
-              card={card}
-              model={model}
-              aggregateStats={aggregateStats}
-              onApplyAndRerun={handleRefineApplyAndRerun}
-              cardStatus={refineCardStatus[card.rank]}
-              cardResult={refineCardResults[card.rank]}
-            />
-          ))}
-          {refineParsed.infeasibleGoals.length > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <div style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10 }}>
-                <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>
-                  The following goals cannot be met within current resource constraints:
-                </div>
-                {refineParsed.infeasibleGoals.map((g, i) => (
-                  <div key={i} style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
-                    <span style={{ fontWeight: 700 }}>{g.goalLabel}</span>
-                    {g.reason ? ` — ${g.reason}` : ""}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
     if (conversationHistory.length > 0) {
       return conversationHistory.map((entry, i) => (
         <div key={i} style={{ marginBottom: 10 }}>
@@ -683,7 +623,7 @@ export const AiAssistantPanel = ({
     }
     if (status === "loading") return "Waiting for analysis...";
     if (response) return response;
-    if (activeAction === "compare") return "Select a saved run above and click Run comparison.";
+    if (activeKind === "comparison") return "Select a saved run above and click Compare.";
     return "Select Explain, Compare, or Refine Plan to analyse these results.";
   };
 
@@ -890,28 +830,23 @@ export const AiAssistantPanel = ({
         </div>
       </div>
 
-      {(!sidebar || isResultsContext) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      {(!sidebar || isResultsContext) && hasSchedule && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>REFINE PLAN</div>
-        {!canRefinePlan ? (
-          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 }}>
-            Refine Plan is available after running a model that includes a loaded schedule. Load a schedule in the B-Events or Entity editor, then run the model.
-          </div>
-        ) : (
-          <div>
-            <Btn
-              variant="ghost"
-              onClick={handleRefinePlan}
-              disabled={refineStatus === "loading"}
-              style={panelButtonStyle}
-            >
-              {refineStatus === "loading" ? "Analysing schedule constraints…" : "Refine Plan"}
-            </Btn>
-            {refineStatus === "error" && (
-              <div role="alert" style={{ marginTop: 8, background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
-                Plan refinement unavailable — {refineError}
-              </div>
-            )}
-            {refineParsed && (
+        <div>
+          <Btn
+            variant="ghost"
+            onClick={handleRefinePlan}
+            disabled={refineStatus === "loading"}
+            style={panelButtonStyle}
+          >
+            {refineStatus === "loading" ? "Analysing schedule constraints…" : "Refine Plan"}
+          </Btn>
+          {refineStatus === "error" && (
+            <div role="alert" style={{ marginTop: 8, background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
+              Plan refinement unavailable — {refineError}
+            </div>
+          )}
+          {refineParsed && (
               <div style={{ marginTop: 10 }}>
                 {refineParsed.analysis && (
                   <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, lineHeight: 1.7, marginBottom: 10, whiteSpace: "pre-wrap" }}>
@@ -950,7 +885,6 @@ export const AiAssistantPanel = ({
               </div>
             )}
           </div>
-        )}
       </div>}
       </div>
     </aside>
