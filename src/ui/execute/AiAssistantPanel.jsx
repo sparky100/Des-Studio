@@ -5,7 +5,7 @@ import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative, callLLMOnce } from "../../llm/apiClient.js";
-import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch } from "../../llm/prompts.js";
+import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
 
 function ConfidenceBadge({ confidence }) {
@@ -276,10 +276,12 @@ export const AiAssistantPanel = ({
   onApplyPatchedModel,
   embedded = false,
   overlay = false,
+  sidebar = false,
+  activeTab = null,
   inline = false,
   triggerAction = null, // { action: "explain"|"compare"|"refine", seq: number }
-  activeAction = null,  // for title display
 }) => {
+  const isResultsContext = ['results', 'execute'].includes(activeTab);
   const toast = useToast();
   const [response, setResponse] = useState("");
   const [status, setStatus] = useState("idle");
@@ -297,6 +299,7 @@ export const AiAssistantPanel = ({
   const [refineParsed, setRefineParsed] = useState(null);
   const [refineCardStatus, setRefineCardStatus] = useState({});
   const [refineCardResults, setRefineCardResults] = useState({});
+  const [modelQueryText, setModelQueryText] = useState("");
   const abortRef = useRef(null);
   const responseAreaRef = useRef(null);
   const actionFnsRef = useRef({});
@@ -310,6 +313,13 @@ export const AiAssistantPanel = ({
   }, [comparisonRuns, selectedRunId]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (!triggerAction) return;
+    if (triggerAction.action === 'explain') explainResults();
+    else if (triggerAction.action === 'refine') handleRefinePlan();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [triggerAction?.seq]);
 
   useEffect(() => {
     if (responseAreaRef.current) {
@@ -423,6 +433,14 @@ export const AiAssistantPanel = ({
     setVerifyStatus({});
     setVerifyResults({});
   };
+
+  const runModelQuery = useCallback((question) => {
+    if (!question.trim()) return;
+    const messages = buildModelQueryPrompt(question, model, conversationHistory);
+    setConversationHistory(prev => [...prev, { role: "user", content: question }]);
+    setModelQueryText("");
+    runPrompt(messages, "modelQuery");
+  }, [model, conversationHistory, runPrompt]);
 
   const explainResults = () => {
     runPrompt(buildExplainResultsPrompt(model, exportConfig, {
@@ -669,8 +687,7 @@ export const AiAssistantPanel = ({
     return "Select Explain, Compare, or Refine Plan to analyse these results.";
   };
 
-  const ACTION_TITLES = { explain: "Explain", compare: "Compare", refine: "Refine Plan" };
-  const panelTitle = (activeAction && ACTION_TITLES[activeAction]) || "AI Analysis";
+  const ACTION_TITLES = { explain: "Explain Results", compare: "Compare Runs", refine: "Refine Plan" };
 
   const overlayStyle = overlay ? {
     position: "fixed",
@@ -699,6 +716,14 @@ export const AiAssistantPanel = ({
     display: "flex",
     flexDirection: "column",
     gap: 12,
+  } : sidebar ? {
+    width: 320,
+    flex: "0 0 320px",
+    borderLeft: `1px solid ${C.border}`,
+    background: C.panel,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
   } : {
     width: embedded ? "min(420px, 100%)" : 320,
     maxWidth: embedded ? 420 : 320,
@@ -716,11 +741,21 @@ export const AiAssistantPanel = ({
     boxShadow: embedded ? "0 10px 28px rgba(0,0,0,0.24)" : "none",
   };
 
+  const panelTitle = sidebar ? "AI Assistant" : (triggerAction && ACTION_TITLES[triggerAction.action]) || (embedded || overlay ? "Explain Results" : "AI Assistant");
+  const innerStyle = sidebar
+    ? { flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
+    : { display: "contents" };
+
   return (
     <aside aria-label="AI assistant" style={overlayStyle}>
+      <div style={innerStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
-        <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{panelTitle}</div>
-        {(overlay || (!embedded && onClose)) && onClose && (
+        <div>
+          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{panelTitle}</div>
+          {sidebar && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{isResultsContext ? "Analyse and refine simulation results." : "Ask questions about this model."}</div>}
+          {!embedded && !overlay && !sidebar && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
+        </div>
+        {(overlay || sidebar || (!embedded && onClose)) && onClose && (
           <button
             type="button"
             aria-label="Close AI assistant"
@@ -730,33 +765,58 @@ export const AiAssistantPanel = ({
         )}
       </div>
 
-      {activeAction === "compare" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {comparisonRuns.length === 0 ? (
-            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 }}>
-              {comparisonLoading ? "Loading saved runs…" : "No saved runs to compare with. Save a run from the Run tab first."}
-            </div>
-          ) : (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, whiteSpace: "nowrap" }}>COMPARE WITH</label>
-                <select
-                  id="compare-run"
-                  value={selectedRunId}
-                  onChange={event => setSelectedRunId(event.target.value)}
-                  disabled={isStreaming}
-                  style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px" }}
-                >
-                  {comparisonRuns.map(run => <option key={run.id} value={run.id}>{run.label}</option>)}
-                </select>
-              </div>
-              <Btn variant="primary" onClick={compareRuns} disabled={!selectedRun || isStreaming} style={{ width: "100%", justifyContent: "center" }}>
-                Run comparison
-              </Btn>
-            </>
-          )}
+      {/* Model Q&A — shown in sidebar when not on results/execute tab */}
+      {sidebar && !isResultsContext && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+            ASK ABOUT THIS MODEL
+          </label>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              type="text"
+              value={modelQueryText}
+              onChange={e => setModelQueryText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runModelQuery(modelQueryText); } }}
+              disabled={isStreaming}
+              placeholder="e.g. How many queues does this model have?"
+              style={{
+                flex: 1, background: C.bg, border: `1px solid ${C.border}`,
+                borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px",
+              }}
+            />
+            <Btn small variant="primary" onClick={() => runModelQuery(modelQueryText)}
+              disabled={!modelQueryText.trim() || isStreaming} ariaLabel="Ask">Ask</Btn>
+          </div>
         </div>
       )}
+
+      {/* Results-context actions: Explain / Compare — hidden in sidebar when on design tabs */}
+      {(!sidebar || isResultsContext) && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <Btn variant="primary" onClick={explainResults} disabled={!results || isStreaming} style={panelButtonStyle}>
+          Explain results
+        </Btn>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE WITH</label>
+          <select
+            id="compare-run"
+            value={selectedRunId}
+            onChange={event => setSelectedRunId(event.target.value)}
+            disabled={!comparisonRuns.length || isStreaming}
+            style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px" }}
+          >
+            {!comparisonRuns.length && <option value="">{comparisonLoading ? "Loading saved runs..." : "No comparison runs"}</option>}
+            {comparisonRuns.map(run => <option key={run.id} value={run.id}>{run.label}</option>)}
+          </select>
+          {comparisonError && (
+            <div role="status" style={{ color: C.amber, fontFamily: FONT, fontSize: 10 }}>
+              Saved runs unavailable: {comparisonError}
+            </div>
+          )}
+          <Btn variant="ghost" onClick={compareRuns} disabled={!results || !selectedRun || isStreaming} style={panelButtonStyle}>
+            Compare
+          </Btn>
+        </div>
+      </div>}
 
       {status === "error" && (
         <div role="alert" style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
@@ -830,6 +890,69 @@ export const AiAssistantPanel = ({
         </div>
       </div>
 
+      {(!sidebar || isResultsContext) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>REFINE PLAN</div>
+        {!canRefinePlan ? (
+          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 }}>
+            Refine Plan is available after running a model that includes a loaded schedule. Load a schedule in the B-Events or Entity editor, then run the model.
+          </div>
+        ) : (
+          <div>
+            <Btn
+              variant="ghost"
+              onClick={handleRefinePlan}
+              disabled={refineStatus === "loading"}
+              style={panelButtonStyle}
+            >
+              {refineStatus === "loading" ? "Analysing schedule constraints…" : "Refine Plan"}
+            </Btn>
+            {refineStatus === "error" && (
+              <div role="alert" style={{ marginTop: 8, background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
+                Plan refinement unavailable — {refineError}
+              </div>
+            )}
+            {refineParsed && (
+              <div style={{ marginTop: 10 }}>
+                {refineParsed.analysis && (
+                  <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, lineHeight: 1.7, marginBottom: 10, whiteSpace: "pre-wrap" }}>
+                    {refineParsed.analysis}
+                  </div>
+                )}
+                {refineParsed.recommendations.length === 0 && (
+                  <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>No schedule recommendations returned.</div>
+                )}
+                {refineParsed.recommendations.map(card => (
+                  <RefinementCard
+                    key={card.rank}
+                    card={card}
+                    model={model}
+                    aggregateStats={aggregateStats}
+                    onApplyAndRerun={handleRefineApplyAndRerun}
+                    cardStatus={refineCardStatus[card.rank]}
+                    cardResult={refineCardResults[card.rank]}
+                  />
+                ))}
+                {refineParsed.infeasibleGoals.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10 }}>
+                      <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>
+                        The following goals cannot be met within current resource constraints:
+                      </div>
+                      {refineParsed.infeasibleGoals.map((g, i) => (
+                        <div key={i} style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 4 }}>
+                          <span style={{ fontWeight: 700 }}>{g.goalLabel}</span>
+                          {g.reason ? ` — ${g.reason}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>}
+      </div>
     </aside>
   );
 };

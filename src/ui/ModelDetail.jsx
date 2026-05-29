@@ -523,6 +523,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [aiAction,setAiAction]=useState(null);
   const [aiSeq,setAiSeq]=useState(0);
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
+  const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
     try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
   });
@@ -826,6 +827,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     setLatestResults(hydratedResults);
     setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
     if (nextSubtab === "explain") {
+      setAiSidebarOpen(true);
       setResultsView("summary");
       setAiAction("explain");
       setAiSeq(s => s + 1);
@@ -916,6 +918,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[isMobileLayout, tab]);
 
   useEffect(()=>{
+    if(isMobileLayout) setAiSidebarOpen(false);
+  },[isMobileLayout]);
+
+  useEffect(()=>{
+    const handleEsc = e => { if(e.key==="Escape") setAiSidebarOpen(false); };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  },[]);
+
+  useEffect(()=>{
     if(tab!=="results")return;
     setHistoryLoading(true);setHistoryError("");
     Promise.all([
@@ -962,7 +974,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         validation={validation} tabIssueCounts={tabIssueCounts}
         isCompactLayout={isCompactLayout}
         showMoreTabs={showMoreTabs} setShowMoreTabs={setShowMoreTabs}
+        aiSidebarOpen={aiSidebarOpen}
+        onToggleAiSidebar={isMobileLayout ? null : ()=>setAiSidebarOpen(v=>!v)}
       />
+      <div style={{flex:1,display:"flex",flexDirection:"row",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
         <SaveBanner canEdit={canEdit} dirty={dirty} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
         {saveError&&<div role="alert" style={{background:C.errorBg,border:`1px solid ${C.danger}`,borderRadius:6,padding:'8px 12px',color:C.error,fontFamily:FONT,fontSize:12,marginBottom:8}}>{saveError}</div>}
@@ -1318,34 +1333,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 onViewResults={row=>openResultsForRun(row,"summary")}
               />
             )}
-            {aiAction&&latestResults&&(
-              <AiAssistantPanel
-                model={model}
-                results={latestResults}
-                exportConfig={{
-                  modelId,
-                  runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
-                  replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications ?? latestResults?.replications ?? latestResults?.aggregateStats?.replications ?? 1,
-                  warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
-                  maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
-                  terminationMode: "time",
-                  terminationCondition: null,
-                }}
-                aggregateStats={latestResults?.aggregateStats || {}}
-                comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
-                  id: `saved-${row.id}`,
-                  label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
-                  payload: row,
-                  source: "saved",
-                }))}
-                comparisonLoading={historyLoading}
-                comparisonError={historyError}
-                triggerAction={{action:aiAction,seq:aiSeq}}
-                activeAction={aiAction}
-                overlay
-                onClose={()=>setAiAction(null)}
-              />
-            )}
           </div>
         )}
         {tab==="access"&&isOwner&&(
@@ -1424,6 +1411,36 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           </div>
         )}
         </ErrorBoundary>
+      </div>
+      {aiSidebarOpen && !isMobileLayout && (
+        <AiAssistantPanel
+          sidebar={!isCompactLayout}
+          overlay={isCompactLayout}
+          activeTab={tab}
+          model={model}
+          results={latestResults}
+          exportConfig={{
+            modelId,
+            runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
+            replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications || latestResults?.replications || 1,
+            warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
+            maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
+            terminationMode: "time",
+            terminationCondition: null,
+          }}
+          aggregateStats={latestResults?.aggregateStats || {}}
+          comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
+            id: `saved-${row.id}`,
+            label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
+            payload: row,
+            source: "saved",
+          }))}
+          comparisonLoading={historyLoading}
+          comparisonError={historyError}
+          triggerAction={aiAction ? {action:aiAction,seq:aiSeq} : null}
+          onClose={()=>{setAiSidebarOpen(false);setAiAction(null);}}
+        />
+      )}
       </div>
     </div>
   );

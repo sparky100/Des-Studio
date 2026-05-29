@@ -74,11 +74,11 @@ describe('generateReport', () => {
 
     expect(html).toContain('Test Clinic');
     expect(html).toContain('Executive Summary');
-    expect(html).toContain('Model Description');
+    expect(html).toContain('Scope &amp; Methodology');
     expect(html).toContain('Simulation Results');
     expect(html).toContain('Recommendations');
     expect(html).toContain('Appendix');
-    expect(html).not.toContain('Experiment Configuration');
+    expect(html).toContain('Experiment Configuration'); // default type is 'technical'
   });
 
   test('still returns HTML when callLLMOnce throws (graceful fallback)', async () => {

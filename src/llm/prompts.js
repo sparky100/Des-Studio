@@ -1149,3 +1149,33 @@ export function parseReportRecommendations(text) {
     return [];
   }
 }
+
+// ── AI Sidebar: design-context model Q&A ──────────────────────────────────────
+
+export function buildModelQueryPrompt(question, model = {}, history = []) {
+  const entityTypes = (model.entityTypes || []);
+  const customers   = entityTypes.filter(e => e.role === 'customer').map(e => e.name).join(', ') || 'none';
+  const servers     = entityTypes.filter(e => e.role === 'server').map(e => `${e.name} (×${e.count ?? 1})`).join(', ') || 'none';
+  const queues      = (model.queues || []).map(q => q.name).join(', ') || 'none';
+  const bEvents     = (model.bEvents || []).slice(0, 8).map(ev => ev.name).join(', ') || 'none';
+  const goals       = (model.goals || []).map(g => `${g.label}: target ${g.targetValue} ${g.metric}`).join('; ') || 'none';
+
+  const context = `You are assisting a simulation modeller in DES Studio.
+
+Model: ${model.name || 'Unnamed'}
+${model.description ? `Description: ${model.description}\n` : ''}Entity types (customer): ${customers}
+Resources (server): ${servers}
+Queues: ${queues}
+B-Events (arrivals/inputs): ${bEvents}
+Performance goals: ${goals}
+
+Answer questions about this model concisely and precisely. If a question requires running the simulation to answer definitively, say so. Do not invent data not present in the model definition above.`;
+
+  const messages = [
+    { role: 'system', content: context },
+    ...history.slice(-8),
+    { role: 'user', content: question },
+  ];
+
+  return { kind: 'model_query', messages, max_tokens: 400 };
+}
