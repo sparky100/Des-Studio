@@ -29,7 +29,8 @@
       "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__apply_migration",
       "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__execute_sql",
       "Bash(mv /home/user/Des-Studio/docs/reviews/sprint-73-ai-sidebar-plan.md /home/user/Des-Studio/docs/reviews/sprint-75-ai-sidebar-plan.md)",
-      "Bash(sed -i 's/Sprint 73 — Persistent AI Sidebar/Sprint 75 — Persistent AI Sidebar/g; s/\\\\*\\\\*Sprint:\\\\*\\\\* 73/\\\\*\\\\*Sprint:\\\\*\\\\* 75/g; s/claude\\\\/sprint-73-ai-sidebar/claude\\\\/sprint-75-ai-sidebar/g; s/F73\\\\./F75./g' /home/user/Des-Studio/docs/reviews/sprint-75-ai-sidebar-plan.md)"
+      "Bash(sed -i 's/Sprint 73 — Persistent AI Sidebar/Sprint 75 — Persistent AI Sidebar/g; s/\\\\*\\\\*Sprint:\\\\*\\\\* 73/\\\\*\\\\*Sprint:\\\\*\\\\* 75/g; s/claude\\\\/sprint-73-ai-sidebar/claude\\\\/sprint-75-ai-sidebar/g; s/F73\\\\./F75./g' /home/user/Des-Studio/docs/reviews/sprint-75-ai-sidebar-plan.md)",
+      "Bash(sort -t'|' -k2 -V)"
     ]
   }
 }
