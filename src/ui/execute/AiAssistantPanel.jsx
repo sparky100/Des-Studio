@@ -681,7 +681,10 @@ export const AiAssistantPanel = ({
     boxShadow: embedded ? "0 10px 28px rgba(0,0,0,0.24)" : "none",
   };
 
-  const panelTitle = sidebar ? "AI Assistant" : (triggerAction && ACTION_TITLES[triggerAction.action]) || (embedded || overlay ? "Explain Results" : "AI Assistant");
+  const focusedAction = sidebar && isResultsContext ? (triggerAction?.action || null) : null;
+  const panelTitle = sidebar
+    ? (focusedAction ? ACTION_TITLES[focusedAction] : "Model Assistant")
+    : (triggerAction && ACTION_TITLES[triggerAction.action]) || (embedded || overlay ? "Explain Results" : "Model Assistant");
   const innerStyle = sidebar
     ? { flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
     : { display: "contents" };
@@ -692,7 +695,7 @@ export const AiAssistantPanel = ({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{panelTitle}</div>
-          {sidebar && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{isResultsContext ? "Analyse and refine simulation results." : "Ask questions about this model."}</div>}
+          {sidebar && !focusedAction && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{isResultsContext ? "Analyse and refine simulation results." : "Ask questions about this model."}</div>}
           {!embedded && !overlay && !sidebar && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
         </div>
         {(overlay || sidebar || (!embedded && onClose)) && onClose && (
@@ -730,11 +733,15 @@ export const AiAssistantPanel = ({
         </div>
       )}
 
-      {/* Results-context actions: Explain / Compare — hidden in sidebar when on design tabs */}
-      {(!sidebar || isResultsContext) && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {/* Explain — shown when not focused or focused on explain */}
+      {(!sidebar || isResultsContext) && (!focusedAction || focusedAction === 'explain') && (
         <Btn variant="primary" onClick={explainResults} disabled={!results || isStreaming} style={panelButtonStyle}>
-          Explain results
+          {focusedAction === 'explain' ? 'Re-explain results' : 'Explain results'}
         </Btn>
+      )}
+
+      {/* Compare — shown when not focused or focused on compare */}
+      {(!sidebar || isResultsContext) && (!focusedAction || focusedAction === 'compare') && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE WITH</label>
           <select
@@ -756,7 +763,7 @@ export const AiAssistantPanel = ({
             Compare
           </Btn>
         </div>
-      </div>}
+      )}
 
       {status === "error" && (
         <div role="alert" style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
@@ -794,7 +801,7 @@ export const AiAssistantPanel = ({
         {(conversationHistory.length > 0 || parsedSuggestion) && !isStreaming && <Btn small variant="ghost" onClick={clearConversation}>Clear</Btn>}
       </div>
 
-      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      {!focusedAction && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         <label htmlFor="query-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
           ASK A QUESTION
         </label>
@@ -828,9 +835,9 @@ export const AiAssistantPanel = ({
             Ask
           </Btn>
         </div>
-      </div>
+      </div>}
 
-      {(!sidebar || isResultsContext) && hasSchedule && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      {(!sidebar || isResultsContext) && hasSchedule && (!focusedAction || focusedAction === 'refine') && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>REFINE PLAN</div>
         <div>
           <Btn
