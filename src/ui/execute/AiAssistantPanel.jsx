@@ -277,6 +277,7 @@ export const AiAssistantPanel = ({
   embedded = false,
   overlay = false,
   sidebar = false,
+  mobileFullscreen = false,
   activeTab = null,
   inline = false,
   triggerAction = null, // { action: "explain"|"compare"|"refine", seq: number }
@@ -629,7 +630,15 @@ export const AiAssistantPanel = ({
 
   const ACTION_TITLES = { explain: "Explain Results", compare: "Compare Runs", refine: "Refine Plan" };
 
-  const overlayStyle = overlay ? {
+  const overlayStyle = mobileFullscreen ? {
+    position: "fixed",
+    inset: 0,
+    zIndex: 200,
+    background: C.panel,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  } : overlay ? {
     position: "fixed",
     right: 16,
     top: 96,
@@ -681,12 +690,14 @@ export const AiAssistantPanel = ({
     boxShadow: embedded ? "0 10px 28px rgba(0,0,0,0.24)" : "none",
   };
 
-  const focusedAction = sidebar && isResultsContext ? (triggerAction?.action || null) : null;
-  const panelTitle = sidebar
+  const focusedAction = (sidebar || mobileFullscreen) && isResultsContext ? (triggerAction?.action || null) : null;
+  const panelTitle = (sidebar || mobileFullscreen)
     ? (focusedAction ? ACTION_TITLES[focusedAction] : "Model Assistant")
     : (triggerAction && ACTION_TITLES[triggerAction.action]) || (embedded || overlay ? "Explain Results" : "Model Assistant");
   const innerStyle = sidebar
     ? { flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
+    : mobileFullscreen
+    ? { flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }
     : { display: "contents" };
 
   return (
@@ -695,10 +706,10 @@ export const AiAssistantPanel = ({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{panelTitle}</div>
-          {sidebar && !focusedAction && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{isResultsContext ? "Analyse and refine simulation results." : "Ask questions about this model."}</div>}
-          {!embedded && !overlay && !sidebar && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
+          {(sidebar || mobileFullscreen) && !focusedAction && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{isResultsContext ? "Analyse and refine simulation results." : "Ask questions about this model."}</div>}
+          {!embedded && !overlay && !sidebar && !mobileFullscreen && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
         </div>
-        {(overlay || sidebar || (!embedded && onClose)) && onClose && (
+        {(overlay || sidebar || mobileFullscreen || (!embedded && onClose)) && onClose && (
           <button
             type="button"
             aria-label="Close AI assistant"
