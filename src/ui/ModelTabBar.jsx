@@ -143,7 +143,7 @@ export function ModelTabBar({
           <button
             type="button"
             onClick={onToggleAiSidebar}
-            title={aiSidebarOpen ? "Close AI assistant" : "Open AI assistant"}
+            title={aiSidebarOpen ? "Close Model Assistant" : "Open Model Assistant"}
             style={{
               marginLeft: "auto", flexShrink: 0,
               background: aiSidebarOpen ? C.accent : "transparent",
