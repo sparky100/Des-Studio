@@ -1,11 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit,namedSchedules=[]})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
+  const cardRefs=useRef({});
+
+  useEffect(()=>{
+    if(!focusBEventId)return;
+    setExpandedIds(prev=>new Set([...prev,focusBEventId]));
+    setFilterText("");
+    setTimeout(()=>{
+      cardRefs.current[focusBEventId]?.scrollIntoView({behavior:"smooth",block:"start"});
+      onFocusHandled?.();
+    },80);
+  },[focusBEventId]);
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(events.map(e=>e.id)));
@@ -122,7 +133,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const effectSummary=effects.length===0?"no effects":effects.length===1?(effects[0].match(/^\w+/)?.[0]||"effect"):`${effects.length} effects`;
 
         return (
-          <div key={ev.id} style={{background:C.bg,border:`1px solid ${isTmpl?C.muted+"44":C.bEvent+"33"}`,
+          <div key={ev.id} ref={el=>cardRefs.current[ev.id]=el} style={{background:C.bg,border:`1px solid ${isTmpl?C.muted+"44":C.bEvent+"33"}`,
             borderLeft:`3px solid ${isTmpl?C.muted:C.bEvent}`,borderRadius:6,padding:12,display:"flex",flexDirection:"column",gap:8}}>
 
             {/* Header */}
@@ -342,14 +353,19 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                       <Btn small variant="danger" ariaLabel={`Remove B-event schedule ${j+1}`} onClick={()=>remS(i,j)}>✕</Btn>
                     </div>
                     {s.scheduleRef ? (
-                      <div style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10}}>
+                      <div
+                        onClick={()=>onGoToSchedule?.(s.scheduleRef)}
+                        style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,cursor:onGoToSchedule?"pointer":"default"}}
+                        title={onGoToSchedule?"Go to schedule":""}
+                      >
                         <span style={{fontSize:16,lineHeight:1}}>📅</span>
                         <div style={{flex:1}}>
-                          <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700}}>
+                          <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700,textDecoration:onGoToSchedule?"underline dotted":"none"}}>
                             {namedSchedules.find(ns=>ns.id===s.scheduleRef)?.name ?? "Named schedule"}
                           </div>
-                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable. Edit in the Schedules tab.</div>
+                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable.{onGoToSchedule?" Click to open in Schedules tab.":""}</div>
                         </div>
+                        {onGoToSchedule&&<span style={{fontSize:14,color:C.green,opacity:0.7}}>→</span>}
                       </div>
                     ) : (
                       <DistPicker

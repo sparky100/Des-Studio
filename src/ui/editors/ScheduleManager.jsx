@@ -122,7 +122,7 @@ function ScheduleRow({ sched, bEvents, isSelected, onSelect, onSetDefault, onDel
 
 // ── ScheduleDetail: view/edit a single schedule ───────────────────────────────
 
-function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUnit, onUpdateBEvents }) {
+function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUnit, onUpdateBEvents, onGoToBEvent }) {
   const [name, setName] = useState(sched.name);
   const [description, setDescription] = useState(sched.description || "");
   const [saving, setSaving] = useState(false);
@@ -401,7 +401,12 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
             {linked.map(be => (
               <div key={be.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
                 <span style={{ color: C.green }}>●</span>
-                <span style={{ color: C.text, flex: 1 }}>{be.name ?? be.id}</span>
+                <span
+                  style={{ color: C.text, flex: 1, cursor: onGoToBEvent ? "pointer" : "default", textDecoration: onGoToBEvent ? "underline dotted" : "none" }}
+                  title={onGoToBEvent ? "Go to B-event" : ""}
+                  onClick={() => onGoToBEvent?.(be.id)}
+                >{be.name ?? be.id}</span>
+                <span style={{ fontSize: 11, color: C.muted }}>→</span>
                 <Btn size="xs" variant="ghost" onClick={() => {
                   onUpdateBEvents(unlinkBEventFromSchedule(bEvents, be.id, sched.id));
                 }}>Unlink</Btn>
@@ -663,7 +668,7 @@ function InlineRowsBanner({ modelId, userId, bEvents, onExtracted }) {
 
 // ── ScheduleManager (exported) ────────────────────────────────────────────────
 
-export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch, timeUnit = "minutes", onBEventsExtracted, onUpdateBEvents }) {
+export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch, timeUnit = "minutes", onBEventsExtracted, onUpdateBEvents, focusScheduleId, onFocusHandled, onGoToBEvent }) {
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -686,6 +691,13 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch,
   }, [modelId]);
 
   useEffect(() => { reload(); }, [reload]);
+
+  useEffect(()=>{
+    if(!focusScheduleId)return;
+    setSelectedId(focusScheduleId);
+    setShowNewForm(false);
+    onFocusHandled?.();
+  },[focusScheduleId]);
 
   const selectedSched = schedules.find(s => s.id === selectedId) ?? null;
 
@@ -755,6 +767,7 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch,
           onBack={() => setSelectedId(null)}
           onSave={handleSaveDetail}
           onUpdateBEvents={onUpdateBEvents}
+          onGoToBEvent={onGoToBEvent}
         />
       </div>
     );
