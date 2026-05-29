@@ -1498,10 +1498,11 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 70 | ✅ Complete | 2026-05-23 | Help Assistant — in-app contextual help, suggested questions, `src/ui/HelpAssistant.jsx`, `buildHelpAssistantSystemPrompt` prompt builder; documentation accuracy fixes across all docs |
 | Sprint 73 | ✅ Complete | 2026-05-27 | ADR-016: Separate timetable schedule data from core model JSON — `model_schedules` Supabase table, `resolveInlineSchedules` engine function, `ScheduleManager` UI, schedule selector in Execute panel, re-inline on export, save-timeout feedback, `includeModelSnapshot` explicit flag |
 | Sprint 76 | ✅ Complete | 2026-05-29 | Report Amendments: entity name substitution (`getEntityName`), integer counts (`formatInt`), per-stage service breakdown (`computePerQueueServiceTimes`), angled queue chart labels, wrapped resource chart labels (`wrapSvgLabel`), Scope & Methodology section (`buildMethodology`, `detectArrivalMode`), results intro paragraph, goal status badge in executive summary, model diagram wired through `generateReport` |
+| Sprint 75 | ✅ Complete | 2026-05-29 | Persistent AI Sidebar: `✦ AI` toggle in tab bar, flex-row sidebar layout, `AiAssistantPanel` sidebar mode, context-aware view (results vs design tabs), model Q&A via `buildModelQueryPrompt`, Explain button opens sidebar, overlay path retired, Esc dismiss, mobile auto-close |
 
 ---
 
-## 21. Current Sprint — Sprint 76 Complete / Sprint 72 Queued
+## 21. Current Sprint — Sprint 75 & 76 Complete / Sprint 72 Queued
 
 **Goal:** Performance Optimisation — reduce execution cost for models with many C-events by removing legacy runtime condition-string execution, migrating old models to canonical predicate JSON, and optimising the Phase C hot path through compilation, caching, and dependency-aware scans.
 
