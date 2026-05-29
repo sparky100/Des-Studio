@@ -518,6 +518,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [latestLog,setLatestLog]=useState([]);
   const [resultsView,setResultsView]=useState("summary");
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
+  const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
     try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
   });
@@ -815,7 +816,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     const hydratedResults = hydrateResultsFromHistoryRow(row);
     setLatestResults(hydratedResults);
     setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
-    setResultsView(nextSubtab);
+    if (nextSubtab === "explain") {
+      setAiSidebarOpen(true);
+      setResultsView("summary");
+    } else {
+      setResultsView(nextSubtab);
+    }
     setTab("results");
   }, []);
 
@@ -900,6 +906,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[isMobileLayout, tab]);
 
   useEffect(()=>{
+    if(isMobileLayout) setAiSidebarOpen(false);
+  },[isMobileLayout]);
+
+  useEffect(()=>{
+    const handleEsc = e => { if(e.key==="Escape") setAiSidebarOpen(false); };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  },[]);
+
+  useEffect(()=>{
     if(tab!=="results")return;
     setHistoryLoading(true);setHistoryError("");
     Promise.all([
@@ -946,7 +962,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         validation={validation} tabIssueCounts={tabIssueCounts}
         isCompactLayout={isCompactLayout}
         showMoreTabs={showMoreTabs} setShowMoreTabs={setShowMoreTabs}
+        aiSidebarOpen={aiSidebarOpen}
+        onToggleAiSidebar={isMobileLayout ? null : ()=>setAiSidebarOpen(v=>!v)}
       />
+      <div style={{flex:1,display:"flex",flexDirection:"row",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
         <SaveBanner canEdit={canEdit} dirty={dirty} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
         {saveError&&<div role="alert" style={{background:C.errorBg,border:`1px solid ${C.danger}`,borderRadius:6,padding:'8px 12px',color:C.error,fontFamily:FONT,fontSize:12,marginBottom:8}}>{saveError}</div>}
@@ -1289,38 +1308,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 onViewResults={row=>openResultsForRun(row,"summary")}
               />
             )}
-            {resultsView==="explain"&&(
-              latestResults ? (
-                <AiAssistantPanel
-                  model={model}
-                  results={latestResults}
-                  exportConfig={{
-                    modelId,
-                    runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
-                    replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications || latestResults?.replications || 1,
-                    warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
-                    maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
-                    terminationMode: "time",
-                    terminationCondition: null,
-                  }}
-                  aggregateStats={latestResults?.aggregateStats || {}}
-                  comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
-                    id: `saved-${row.id}`,
-                    label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
-                    payload: row,
-                    source: "saved",
-                  }))}
-                  comparisonLoading={historyLoading}
-                  comparisonError={historyError}
-                  overlay
-                  onClose={()=>setResultsView("summary")}
-                />
-              ) : (
-                <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
-                  Results from the latest run will appear here. Open Run to generate them, or select a saved run when run history is available.
-                </div>
-              )
-            )}
           </div>
         )}
         {tab==="access"&&isOwner&&(
@@ -1399,6 +1386,35 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           </div>
         )}
         </ErrorBoundary>
+      </div>
+      {aiSidebarOpen && !isMobileLayout && (
+        <AiAssistantPanel
+          sidebar={!isCompactLayout}
+          overlay={isCompactLayout}
+          activeTab={tab}
+          model={model}
+          results={latestResults}
+          exportConfig={{
+            modelId,
+            runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
+            replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications || latestResults?.replications || 1,
+            warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
+            maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
+            terminationMode: "time",
+            terminationCondition: null,
+          }}
+          aggregateStats={latestResults?.aggregateStats || {}}
+          comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
+            id: `saved-${row.id}`,
+            label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
+            payload: row,
+            source: "saved",
+          }))}
+          comparisonLoading={historyLoading}
+          comparisonError={historyError}
+          onClose={()=>setAiSidebarOpen(false)}
+        />
+      )}
       </div>
     </div>
   );

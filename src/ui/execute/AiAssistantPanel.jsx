@@ -5,7 +5,7 @@ import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative, callLLMOnce } from "../../llm/apiClient.js";
-import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch } from "../../llm/prompts.js";
+import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
 
 function ConfidenceBadge({ confidence }) {
@@ -276,7 +276,10 @@ export const AiAssistantPanel = ({
   onApplyPatchedModel,
   embedded = false,
   overlay = false,
+  sidebar = false,
+  activeTab = null,
 }) => {
+  const isResultsContext = ['results', 'execute'].includes(activeTab);
   const toast = useToast();
   const [response, setResponse] = useState("");
   const [status, setStatus] = useState("idle");
@@ -294,6 +297,7 @@ export const AiAssistantPanel = ({
   const [refineParsed, setRefineParsed] = useState(null);
   const [refineCardStatus, setRefineCardStatus] = useState({});
   const [refineCardResults, setRefineCardResults] = useState({});
+  const [modelQueryText, setModelQueryText] = useState("");
   const abortRef = useRef(null);
   const responseAreaRef = useRef(null);
   const ciResults = useMemo(() => buildCiResults(aggregateStats), [aggregateStats]);
@@ -419,6 +423,14 @@ export const AiAssistantPanel = ({
     setVerifyStatus({});
     setVerifyResults({});
   };
+
+  const runModelQuery = useCallback((question) => {
+    if (!question.trim()) return;
+    const messages = buildModelQueryPrompt(question, model, conversationHistory);
+    setConversationHistory(prev => [...prev, { role: "user", content: question }]);
+    setModelQueryText("");
+    runPrompt(messages, "modelQuery");
+  }, [model, conversationHistory, runPrompt]);
 
   const explainResults = () => {
     runPrompt(buildExplainResultsPrompt(model, exportConfig, {
@@ -603,6 +615,14 @@ export const AiAssistantPanel = ({
     flexDirection: "column",
     gap: 12,
     boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
+  } : sidebar ? {
+    width: 320,
+    flex: "0 0 320px",
+    borderLeft: `1px solid ${C.border}`,
+    background: C.panel,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
   } : {
     width: embedded ? "min(420px, 100%)" : 320,
     maxWidth: embedded ? 420 : 320,
@@ -620,14 +640,21 @@ export const AiAssistantPanel = ({
     boxShadow: embedded ? "0 10px 28px rgba(0,0,0,0.24)" : "none",
   };
 
+  const panelTitle = (embedded || overlay) ? "Explain Results" : sidebar ? "AI Assistant" : "AI Assistant";
+  const innerStyle = sidebar
+    ? { flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
+    : { display: "contents" };
+
   return (
     <aside aria-label="AI assistant" style={overlayStyle}>
+      <div style={innerStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
-          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{(embedded || overlay) ? "Explain Results" : "AI Assistant"}</div>
-          {!embedded && !overlay && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
+          <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{panelTitle}</div>
+          {sidebar && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{isResultsContext ? "Analyse and refine simulation results." : "Ask questions about this model."}</div>}
+          {!embedded && !overlay && !sidebar && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
         </div>
-        {(overlay || (!embedded && onClose)) && onClose && (
+        {(overlay || sidebar || (!embedded && onClose)) && onClose && (
           <button
             type="button"
             aria-label="Close AI assistant"
@@ -637,7 +664,33 @@ export const AiAssistantPanel = ({
         )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {/* Model Q&A — shown in sidebar when not on results/execute tab */}
+      {sidebar && !isResultsContext && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+            ASK ABOUT THIS MODEL
+          </label>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              type="text"
+              value={modelQueryText}
+              onChange={e => setModelQueryText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runModelQuery(modelQueryText); } }}
+              disabled={isStreaming}
+              placeholder="e.g. How many queues does this model have?"
+              style={{
+                flex: 1, background: C.bg, border: `1px solid ${C.border}`,
+                borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px",
+              }}
+            />
+            <Btn small variant="primary" onClick={() => runModelQuery(modelQueryText)}
+              disabled={!modelQueryText.trim() || isStreaming} ariaLabel="Ask">Ask</Btn>
+          </div>
+        </div>
+      )}
+
+      {/* Results-context actions: Explain / Compare — hidden in sidebar when on design tabs */}
+      {(!sidebar || isResultsContext) && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <Btn variant="primary" onClick={explainResults} disabled={!results || isStreaming} style={panelButtonStyle}>
           Explain results
         </Btn>
@@ -662,7 +715,7 @@ export const AiAssistantPanel = ({
             Compare
           </Btn>
         </div>
-      </div>
+      </div>}
 
       {status === "error" && (
         <div role="alert" style={{ background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
@@ -736,7 +789,7 @@ export const AiAssistantPanel = ({
         </div>
       </div>
 
-      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      {(!sidebar || isResultsContext) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>REFINE PLAN</div>
         {!canRefinePlan ? (
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.6 }}>
@@ -797,6 +850,7 @@ export const AiAssistantPanel = ({
             )}
           </div>
         )}
+      </div>}
       </div>
     </aside>
   );

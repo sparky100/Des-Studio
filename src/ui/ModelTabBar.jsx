@@ -7,6 +7,7 @@ export function ModelTabBar({
   validation, tabIssueCounts,
   isCompactLayout,
   showMoreTabs, setShowMoreTabs,
+  aiSidebarOpen = false, onToggleAiSidebar = null,
 }) {
   const tabIssueLabel = tabId => {
     const counts = tabIssueCounts[tabId];
@@ -138,6 +139,24 @@ export function ModelTabBar({
             </button>
           );
         })}
+        {onToggleAiSidebar && (
+          <button
+            type="button"
+            onClick={onToggleAiSidebar}
+            title={aiSidebarOpen ? "Close AI assistant" : "Open AI assistant"}
+            style={{
+              marginLeft: "auto", flexShrink: 0,
+              background: aiSidebarOpen ? C.accent : "transparent",
+              border: `1px solid ${aiSidebarOpen ? C.accent : C.border}`,
+              borderRadius: 6, padding: "5px 12px",
+              fontFamily: FONT, fontSize: 11, fontWeight: 700,
+              color: aiSidebarOpen ? "#fff" : C.muted,
+              cursor: "pointer", whiteSpace: "nowrap",
+            }}
+          >
+            ✦ AI
+          </button>
+        )}
       </div>
 
       {/* Contextual sub-tab bar */}
