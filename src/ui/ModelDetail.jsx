@@ -519,6 +519,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [namedSchedules,setNamedSchedules]=useState([]);
   const [focusBEventId,setFocusBEventId]=useState(null);
   const [focusScheduleId,setFocusScheduleId]=useState(null);
+  const [schedulesVersion,setSchedulesVersion]=useState(0);
   const [resultsView,setResultsView]=useState("summary");
   const [aiAction,setAiAction]=useState(null);
   const [aiSeq,setAiSeq]=useState(0);
@@ -759,6 +760,28 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[dirty]);
 
   const validation = useMemo(() => model ? validateModel(model) : { errors: [], warnings: [] }, [model]);
+
+  // Build aggregateStats for the AI panel. New runs store it directly on latestResults;
+  // for older saved runs that predate this field, synthesise it from summary so the
+  // Before/After table always has baseline values to display.
+  const aggregateStatsForPanel = useMemo(() => {
+    const stored = latestResults?.aggregateStats;
+    if (stored && Object.values(stored).some(ci => ci?.mean != null)) {
+      return stored;
+    }
+    const s = latestResults?.summary;
+    if (!s) return {};
+    const toCI = v => Number.isFinite(v) ? { n: 1, mean: v, lower: null, upper: null, halfWidth: null } : { n: 0, mean: null, lower: null, upper: null, halfWidth: null };
+    return {
+      "summary.avgWait":      toCI(s.avgWait),
+      "summary.avgSvc":       toCI(s.avgSvc),
+      "summary.avgSojourn":   toCI(s.avgSojourn),
+      "summary.served":       toCI(s.served),
+      "summary.reneged":      toCI(s.reneged),
+      "summary.totalCost":    toCI(s.totalCost),
+      "summary.costPerServed": toCI(s.costPerServed),
+    };
+  }, [latestResults]);
   const isStarterBlank = useMemo(() => isStarterBlankModel(model), [model]);
   const runHistoryFetcher = useMemo(
     () => (overrides.userId ? (filters => fetchRunHistory(modelId, filters)) : () => Promise.resolve(fetchLocalRunHistory(modelId))),
@@ -1129,11 +1152,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
           setModel(next);
-          try { await overrides.onSave?.(next); setDirty(false); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
+          try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
         }} onUpdateBEvents={canEdit ? async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
           setModel(next);
-          try { await overrides.onSave?.(next); setDirty(false); toast.success("Event link updated and model saved"); } catch { toast.error("Link updated but model save failed — please save manually"); }
+          try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Event link updated and model saved"); } catch { toast.error("Link updated but model save failed — please save manually"); }
         } : undefined}/></div>)}
         {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues" validation={validation}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
           const oldQueues = model.queues || [];
@@ -1221,6 +1244,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 toast.success(`Applied: ${suggestion.change?.target} → ${suggestion.change?.to}`);
               } : null}
               onExposeRunApi={fn => { runWithPatchRef.current = fn; }}
+              schedulesVersion={schedulesVersion}
             />
           </ErrorBoundary>
         )}
@@ -1414,7 +1438,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             terminationMode: "time",
             terminationCondition: null,
           }}
-          aggregateStats={latestResults?.aggregateStats || {}}
+          aggregateStats={aggregateStatsForPanel}
           comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
             id: `saved-${row.id}`,
             label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),

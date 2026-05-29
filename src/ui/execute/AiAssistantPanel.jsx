@@ -97,7 +97,7 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
   );
 }
 
-function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult }) {
+function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult, onSaved }) {
   const isManual = suggestion.change?.type === "manual";
   const canApply = !isManual && typeof onRunWithPatch === "function";
   const canSave = !isManual && typeof onApplyPatchedModel === "function" && verifyResult;
@@ -112,7 +112,7 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
     if (!canSave) return;
     const patched = applySuggestionPatch(model, suggestion.change);
     onApplyPatchedModel(patched, suggestion);
-    setVerifyStatus(prev => ({ ...prev, [suggestion.rank]: "saved" }));
+    onSaved?.();
   };
 
   return (
@@ -159,7 +159,7 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BEFORE / AFTER</div>
           <BeforeAfterTable
             goals={model?.goals || []}
-            baselineStats={aggregateStats}
+            baselineStats={verifyResult._baselineStats || aggregateStats}
             afterStats={verifyResult.aggregateStats}
           />
           <div style={{ marginTop: 8, padding: "8px 10px", background: `${C.accent}11`, borderRadius: 4, border: `1px solid ${C.accent}33` }}>
@@ -255,7 +255,7 @@ function RefinementCard({ card, model, aggregateStats, onApplyAndRerun, cardStat
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BEFORE / AFTER</div>
           <BeforeAfterTable
             goals={model?.goals || []}
-            baselineStats={aggregateStats}
+            baselineStats={cardResult._baselineStats || aggregateStats}
             afterStats={cardResult.aggregateStats}
           />
         </div>
@@ -482,9 +482,14 @@ export const AiAssistantPanel = ({
     setVerifyStatus(prev => ({ ...prev, [rank]: "running" }));
     try {
       const patched = applySuggestionPatch(model, suggestion.change);
+
+      // Snapshot the baseline at click-time so Before/After always compares
+      // against the last run the user initiated, not whatever state arrives later.
+      const capturedBaseline = aggregateStats;
+
       const result = await onRunWithPatch(patched);
       if (result) {
-        setVerifyResults(prev => ({ ...prev, [rank]: result }));
+        setVerifyResults(prev => ({ ...prev, [rank]: { ...result, _baselineStats: capturedBaseline } }));
         setVerifyStatus(prev => ({ ...prev, [rank]: "done" }));
       } else {
         setVerifyStatus(prev => ({ ...prev, [rank]: "error" }));
@@ -492,7 +497,7 @@ export const AiAssistantPanel = ({
     } catch {
       setVerifyStatus(prev => ({ ...prev, [rank]: "error" }));
     }
-  }, [model, onRunWithPatch]);
+  }, [model, onRunWithPatch, aggregateStats]);
 
   const handleQueryKeyDown = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -536,9 +541,12 @@ export const AiAssistantPanel = ({
     setRefineCardStatus(prev => ({ ...prev, [rank]: "running" }));
     try {
       const patchedModel = applySchedulePatch(model, card);
+
+      const capturedBaseline = aggregateStats;
+
       const result = await onRunWithPatch(patchedModel);
       if (result) {
-        setRefineCardResults(prev => ({ ...prev, [rank]: result }));
+        setRefineCardResults(prev => ({ ...prev, [rank]: { ...result, _baselineStats: capturedBaseline } }));
         setRefineCardStatus(prev => ({ ...prev, [rank]: "done" }));
       } else {
         setRefineCardStatus(prev => ({ ...prev, [rank]: "error" }));
@@ -551,7 +559,7 @@ export const AiAssistantPanel = ({
         setRefineCardStatus(prev => ({ ...prev, [rank]: "error" }));
       }
     }
-  }, [model, onRunWithPatch]);
+  }, [model, onRunWithPatch, aggregateStats]);
 
   // Keep latest action functions in a ref so the trigger effect always has fresh closures
   actionFnsRef.current = {
@@ -621,6 +629,7 @@ export const AiAssistantPanel = ({
               onApplyPatchedModel={onApplyPatchedModel}
               verifyStatus={verifyStatus[s.rank]}
               verifyResult={verifyResults[s.rank]}
+              onSaved={() => setVerifyStatus(prev => ({ ...prev, [s.rank]: "saved" }))}
             />
           ))}
         </div>

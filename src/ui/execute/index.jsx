@@ -162,7 +162,7 @@ async function doCloudSave(saveFn, {
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, schedulesVersion = 0 }) => {
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
@@ -317,7 +317,21 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         setSelectedScheduleId(null);
       })
       .finally(() => setSchedulesLoading(false));
+  }, [modelId, userId, schedulesVersion]);
+
+  const reloadSchedules = useCallback(() => {
+    if (!modelId || !userId) return;
+    setSchedulesLoading(true);
+    fetchModelSchedules(modelId)
+      .then(schedules => {
+        setModelSchedules(schedules);
+        const defaultSched = schedules.find(s => s.isDefault);
+        setSelectedScheduleId(defaultSched?.id ?? (schedules[0]?.id ?? null));
+      })
+      .catch(err => console.warn('[ExecutePanel] reload schedules failed:', err?.message || err))
+      .finally(() => setSchedulesLoading(false));
   }, [modelId, userId]);
+
   const persistExperimentDefaults = useCallback((patch) => {
     if (!onExperimentDefaultsChange) return;
     onExperimentDefaultsChange({
@@ -357,6 +371,18 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     const active = modelSchedules.filter(s => s.id === resolvedId);
     return buildSchedulesMap(active);
   }, [modelSchedules, selectedScheduleId]);
+
+  // True when bEvents reference scheduleRef UUIDs not covered by activeSchedulesMap.
+  // This means resolveInlineSchedules() will produce empty rows → 0 arrivals.
+  const hasUnresolvedScheduleRefs = useMemo(() => {
+    const bEvents = model?.bEvents || [];
+    return bEvents.some(be =>
+      (be.schedules || []).some(s =>
+        s.scheduleRef &&
+        !(activeSchedulesMap[`${s.scheduleRef}:${be.id}`] ?? activeSchedulesMap[s.scheduleRef])
+      )
+    );
+  }, [model, activeSchedulesMap]);
 
   const complexityEstimate = useMemo(() => estimateRunComplexity(model, {
     terminationMode,
@@ -543,26 +569,29 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       const summary = engineRef.current.getSummary();
       const wallClockMs = runStartPerfRef.current == null ? null : Math.max(0, Math.round(nowPerf() - runStartPerfRef.current));
       const finalLog = nextLog;
+      const finalSummary = {
+        ...summary,
+        phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
+        total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
+        served: r.snap?.served || 0,
+        reneged: r.snap?.reneged || 0,
+      };
       const fullResult = {
         snap: r.snap,
-        summary: {
-          ...summary,
-          phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
-          total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
-          served: r.snap?.served || 0,
-          reneged: r.snap?.reneged || 0,
-        },
-        phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
+        summary: finalSummary,
+        phaseCTruncated: finalSummary.phaseCTruncated,
         timeSeries:    engineRef.current.getTimeSeries?.(),
         waitDist:      engineRef.current.getWaitDist?.(),
         entitySummary: engineRef.current.getEntitySummary?.(),
         runtimeMetrics: {
-          ...engineRef.current.getRuntimeMetrics?.(summary.served),
+          ...engineRef.current.getRuntimeMetrics?.(finalSummary.served),
           wall_clock_ms: wallClockMs,
           replications: 1,
         },
-        log:           finalLog,
+        log: finalLog,
       };
+      // aggregateStats assigned after object is created to avoid self-reference
+      fullResult.aggregateStats = summarizeReplicationResults([fullResult], CI_METRICS);
       setResults(fullResult);
       onResultsReady?.(fullResult);
       onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
@@ -756,6 +785,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             const batchResult = {
               ...makeBatchResult(ordered, stats, maxTimeForRun, warmupPeriod),
               runtimeMetrics: makeBatchRuntimeMetrics(ordered, replications, wallClockMs),
+              aggregateStats: stats,
             };
 
             setBatchStatus("complete");
@@ -2249,6 +2279,18 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             ))}
           </select>
           {schedulesLoading && <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>Loading…</span>}
+        </div>
+      )}
+
+      {/* ADR-016: Unresolved schedule refs warning — shown when bEvents have scheduleRef not in the loaded map */}
+      {hasUnresolvedScheduleRefs && (
+        <div style={{ background: `${C.amber}18`, border: `1px solid ${C.amber}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12, color: C.amber, fontFamily: FONT }}>
+            ⚠ Schedule not loaded — arrivals will be 0. The timetable was linked after this panel opened.
+          </span>
+          <Btn size="sm" variant="ghost" onClick={reloadSchedules} disabled={schedulesLoading}>
+            {schedulesLoading ? "Loading…" : "Reload schedule"}
+          </Btn>
         </div>
       )}
 
