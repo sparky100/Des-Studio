@@ -1,6 +1,6 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-25 | Reflects: Sprint 72 — Performance Optimisation planning.*
+*Last updated: 2026-05-29 | Reflects: Sprint 76 — Report Amendments complete. Sprint 72 queued.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
@@ -1497,10 +1497,11 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 69 | ✅ Complete | 2026-05-22 | AI debugging — structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, entity inspector panel, canvas node overlays, magic-link model import |
 | Sprint 70 | ✅ Complete | 2026-05-23 | Help Assistant — in-app contextual help, suggested questions, `src/ui/HelpAssistant.jsx`, `buildHelpAssistantSystemPrompt` prompt builder; documentation accuracy fixes across all docs |
 | Sprint 73 | ✅ Complete | 2026-05-27 | ADR-016: Separate timetable schedule data from core model JSON — `model_schedules` Supabase table, `resolveInlineSchedules` engine function, `ScheduleManager` UI, schedule selector in Execute panel, re-inline on export, save-timeout feedback, `includeModelSnapshot` explicit flag |
+| Sprint 76 | ✅ Complete | 2026-05-29 | Report Amendments: entity name substitution (`getEntityName`), integer counts (`formatInt`), per-stage service breakdown (`computePerQueueServiceTimes`), angled queue chart labels, wrapped resource chart labels (`wrapSvgLabel`), Scope & Methodology section (`buildMethodology`, `detectArrivalMode`), results intro paragraph, goal status badge in executive summary, model diagram wired through `generateReport` |
 
 ---
 
-## 21. Current Sprint — Sprint 73 Complete / Sprint 72 Queued
+## 21. Current Sprint — Sprint 76 Complete / Sprint 72 Queued
 
 **Goal:** Performance Optimisation — reduce execution cost for models with many C-events by removing legacy runtime condition-string execution, migrating old models to canonical predicate JSON, and optimising the Phase C hot path through compilation, caching, and dependency-aware scans.
 
