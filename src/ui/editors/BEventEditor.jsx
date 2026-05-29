@@ -351,6 +351,16 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                           <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable. Edit in the Schedules tab.</div>
                         </div>
                       </div>
+                    ) : (s.rows?.length > 0) ? (
+                      <div style={{background:`${C.amber}10`,border:`1px solid ${C.amber}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10}}>
+                        <span style={{fontSize:16,lineHeight:1}}>📋</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:11,color:C.amber,fontFamily:FONT,fontWeight:700}}>
+                            Inline timetable · {s.rows.length} row{s.rows.length!==1?"s":""}
+                          </div>
+                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times embedded in this event. Use the Schedules tab to manage as a named timetable.</div>
+                        </div>
+                      </div>
                     ) : (
                       <DistPicker value={{dist:s.dist,distParams:s.distParams}} onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams})} compact
                         attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
