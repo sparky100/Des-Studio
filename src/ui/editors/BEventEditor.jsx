@@ -353,20 +353,52 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                       <Btn small variant="danger" ariaLabel={`Remove B-event schedule ${j+1}`} onClick={()=>remS(i,j)}>✕</Btn>
                     </div>
                     {s.scheduleRef ? (
-                      <div
-                        onClick={()=>onGoToSchedule?.(s.scheduleRef)}
-                        style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,cursor:onGoToSchedule?"pointer":"default"}}
-                        title={onGoToSchedule?"Go to schedule":""}
-                      >
-                        <span style={{fontSize:16,lineHeight:1}}>📅</span>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700,textDecoration:onGoToSchedule?"underline dotted":"none"}}>
-                            {namedSchedules.find(ns=>ns.id===s.scheduleRef)?.name ?? "Named schedule"}
+                      <>
+                        <div
+                          onClick={()=>onGoToSchedule?.(s.scheduleRef)}
+                          style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,cursor:onGoToSchedule?"pointer":"default"}}
+                          title={onGoToSchedule?"Go to schedule":""}
+                        >
+                          <span style={{fontSize:16,lineHeight:1}}>📅</span>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700,textDecoration:onGoToSchedule?"underline dotted":"none"}}>
+                              {namedSchedules.find(ns=>ns.id===s.scheduleRef)?.name ?? "Named schedule"}
+                            </div>
+                            <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable.{onGoToSchedule?" Click to open in Schedules tab.":""}</div>
                           </div>
-                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable.{onGoToSchedule?" Click to open in Schedules tab.":""}</div>
+                          {onGoToSchedule&&<span style={{fontSize:14,color:C.green,opacity:0.7}}>→</span>}
                         </div>
-                        {onGoToSchedule&&<span style={{fontSize:14,color:C.green,opacity:0.7}}>→</span>}
-                      </div>
+                        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:2}}>
+                          <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>JITTER</span>
+                          <select value={s.jitterDist||"none"}
+                            onChange={e=>{const jd=e.target.value;updS(i,j,{jitterDist:jd==="none"?undefined:jd,jitterParams:jd==="none"?undefined:(s.jitterParams||{})});}}
+                            style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}>
+                            <option value="none">None</option>
+                            <option value="Normal">Normal</option>
+                            <option value="Uniform">Uniform</option>
+                          </select>
+                          {s.jitterDist==="Normal"&&(<>
+                            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>mean:</span>
+                            <input type="number" step="0.1" value={s.jitterParams?.mean??0}
+                              onChange={e=>updS(i,j,{jitterParams:{...s.jitterParams,mean:parseFloat(e.target.value)||0}})}
+                              style={{width:55,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}/>
+                            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>σ:</span>
+                            <input type="number" min="0" step="0.1" value={s.jitterParams?.stddev??1}
+                              onChange={e=>updS(i,j,{jitterParams:{...s.jitterParams,stddev:parseFloat(e.target.value)||1}})}
+                              style={{width:55,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}/>
+                          </>)}
+                          {s.jitterDist==="Uniform"&&(<>
+                            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>min:</span>
+                            <input type="number" step="0.1" value={s.jitterParams?.min??0}
+                              onChange={e=>updS(i,j,{jitterParams:{...s.jitterParams,min:parseFloat(e.target.value)||0}})}
+                              style={{width:55,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}/>
+                            <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>max:</span>
+                            <input type="number" step="0.1" value={s.jitterParams?.max??1}
+                              onChange={e=>updS(i,j,{jitterParams:{...s.jitterParams,max:parseFloat(e.target.value)||1}})}
+                              style={{width:55,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"3px 6px",outline:"none"}}/>
+                          </>)}
+                        </div>
+                      </>
                     ) : (
                       <>
                         {s.rows?.length>0&&!s.dist&&onGoToSchedule&&(

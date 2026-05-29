@@ -270,7 +270,10 @@ export function fireBEvent(ev, ctx) {
     const schedCtx = { clock, state: ctx.state, schedKey: sched.eventId };
     // rows[]/times[] may be top-level on the entry (schema doc format) or inside distParams
     const topLevelData = sched.rows ? { rows: sched.rows } : sched.times ? { times: sched.times } : null;
-    const baseParams = topLevelData ? { ...topLevelData, ...(sched.distParams || {}) } : (sched.distParams || {});
+    const jitterOverride = sched.jitterDist ? { jitterDist: sched.jitterDist, jitterParams: sched.jitterParams || {} } : {};
+    const baseParams = topLevelData
+      ? { ...topLevelData, ...(sched.distParams || {}), ...jitterOverride }
+      : { ...(sched.distParams || {}), ...jitterOverride };
     const schedDist = sched.dist || (topLevelData ? "Schedule" : "Fixed");
     const resolvedBParams = ctx.registry
       ? ctx.registry.resolve(baseParams, sched.paramSource)
