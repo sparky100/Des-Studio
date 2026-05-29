@@ -1,13 +1,24 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { C, FONT, normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { ConditionBuilder, buildConditionStr } from "./ConditionBuilder.jsx";
 import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 import { DropField, assignOptions, displayEventName } from "./helpers.jsx";
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[]})=>{
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], focusCEventId=null, onFocusHandled, onGoToBEvent})=>{
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
+  const cardRefs=useRef({});
+
+  useEffect(()=>{
+    if(!focusCEventId)return;
+    setExpandedIds(prev=>new Set([...prev,focusCEventId]));
+    setFilterText("");
+    setTimeout(()=>{
+      cardRefs.current[focusCEventId]?.scrollIntoView({behavior:"smooth",block:"start"});
+      onFocusHandled?.();
+    },80);
+  },[focusCEventId]);
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(events.map(e=>e.id)));
@@ -104,7 +115,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
           :"no condition";
 
         return (
-          <div key={ev.id}
+          <div key={ev.id} ref={el=>cardRefs.current[ev.id]=el}
             style={{background:C.bg,
               border:`1px solid ${dragOverIdx===i?C.cEvent:C.cEvent+'33'}`,
               borderLeft:`3px solid ${C.cEvent}`,borderRadius:6,padding:12,
@@ -212,6 +223,12 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                             </option>
                           ))}
                         </select>
+                        {s.eventId&&onGoToBEvent&&(
+                          <button onClick={()=>onGoToBEvent(s.eventId)}
+                            title="Go to B-event"
+                            style={{background:"none",border:`1px solid ${C.bEvent}44`,borderRadius:4,cursor:"pointer",
+                              padding:"4px 7px",fontFamily:FONT,fontSize:12,color:C.bEvent,lineHeight:1}}>→</button>
+                        )}
                         <Btn small variant="danger" ariaLabel={`Remove C-event schedule ${j + 1}`} onClick={()=>remSched(i,j)}>✕</Btn>
                       </div>
 

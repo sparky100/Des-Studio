@@ -3,7 +3,7 @@ import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],containerTypes=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],containerTypes=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule,onGoToCEvent})=>{
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
   const cardRefs=useRef({});
@@ -174,6 +174,21 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                   onChange={updEffects}
                 />
               </div>
+
+              {/* Triggered by C-events — navigation links */}
+              {(()=>{const linked=cEvents.filter(c=>(c.cSchedules||[]).some(s=>s.eventId===ev.id));if(!linked.length)return null;return(
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1,flexShrink:0}}>TRIGGERED BY</span>
+                  {linked.map(c=>(
+                    <button key={c.id} onClick={()=>onGoToCEvent?.(c.id)}
+                      style={{background:`${C.cEvent}12`,border:`1px solid ${C.cEvent}44`,borderRadius:4,
+                        cursor:onGoToCEvent?"pointer":"default",padding:"2px 8px",fontFamily:FONT,fontSize:11,
+                        color:C.cEvent,textDecoration:onGoToCEvent?"underline dotted":"none",display:"flex",alignItems:"center",gap:4}}>
+                      {c.name||c.id}{onGoToCEvent&&<span style={{opacity:0.7}}>→</span>}
+                    </button>
+                  ))}
+                </div>
+              );})()}
 
               {/* Routing — collapsible, shown only when a RELEASE effect is present */}
               {hasRelease&&(
