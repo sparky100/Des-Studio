@@ -212,3 +212,116 @@ describe("deriveGraphFromModel", () => {
     ]));
   });
 });
+
+describe("dagre layout", () => {
+  it("assigns finite x and y to every node", () => {
+    const graph = deriveGraphFromModel(twoStageModel);
+    graph.nodes.forEach(node => {
+      expect(Number.isFinite(node.x)).toBe(true);
+      expect(Number.isFinite(node.y)).toBe(true);
+    });
+  });
+
+  it("places source nodes to the left of sink nodes (left-to-right flow)", () => {
+    const graph = deriveGraphFromModel(twoStageModel);
+    const sourceX = graph.nodes.find(n => n.type === "source").x;
+    const sinkX   = graph.nodes.find(n => n.type === "sink").x;
+    expect(sourceX).toBeLessThan(sinkX);
+  });
+
+  it("gives parallel nodes at the same rank distinct y positions", () => {
+    // Two separate arrival streams feeding two independent queues — both end up at depth 0.
+    const parallelModel = {
+      entityTypes: [
+        { id: "p", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "s", name: "Server", role: "server", count: 1, attrDefs: [] },
+      ],
+      queues: [
+        { id: "q1", name: "Queue A", customerType: "Patient", discipline: "FIFO" },
+        { id: "q2", name: "Queue B", customerType: "Patient", discipline: "FIFO" },
+      ],
+      stateVariables: [],
+      bEvents: [
+        { id: "arrive1", name: "Arrival A", scheduledTime: "0", effect: "ARRIVE(Patient, Queue A)", schedules: [] },
+        { id: "arrive2", name: "Arrival B", scheduledTime: "0", effect: "ARRIVE(Patient, Queue B)", schedules: [] },
+        { id: "done",    name: "Done",      scheduledTime: "9999", effect: "COMPLETE()",             schedules: [] },
+      ],
+      cEvents: [
+        {
+          id: "svc1", name: "Serve A", priority: 1,
+          condition: "queue(Queue A).length > 0",
+          effect: "ASSIGN(Queue A, Server)",
+          cSchedules: [{ eventId: "done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+        },
+        {
+          id: "svc2", name: "Serve B", priority: 2,
+          condition: "queue(Queue B).length > 0",
+          effect: "ASSIGN(Queue B, Server)",
+          cSchedules: [{ eventId: "done", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+        },
+      ],
+    };
+
+    const graph = deriveGraphFromModel(parallelModel);
+    const sourceNodes = graph.nodes.filter(n => n.type === "source");
+    expect(sourceNodes.length).toBe(2);
+    // Dagre must place them at different y positions, not stacked on top of each other.
+    expect(sourceNodes[0].y).not.toBe(sourceNodes[1].y);
+  });
+
+  it("does not crash when the model contains a rework loop", () => {
+    // Activity routes back to the same queue it consumed from — a cycle.
+    const loopModel = {
+      entityTypes: [
+        { id: "p", name: "Patient", role: "customer", attrDefs: [] },
+        { id: "s", name: "Server",  role: "server",   count: 1, attrDefs: [] },
+      ],
+      queues: [{ id: "q", name: "Rework Queue", customerType: "Patient", discipline: "FIFO" }],
+      stateVariables: [],
+      bEvents: [
+        { id: "arrive",   name: "Arrive",   scheduledTime: "0",    effect: "ARRIVE(Patient, Rework Queue)", schedules: [] },
+        { id: "complete", name: "Complete", scheduledTime: "9999", effect: "RELEASE(Server, Rework Queue)", schedules: [] },
+      ],
+      cEvents: [
+        {
+          id: "serve", name: "Serve", priority: 1,
+          condition: "queue(Rework Queue).length > 0",
+          effect: "ASSIGN(Rework Queue, Server)",
+          cSchedules: [{ eventId: "complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
+        },
+      ],
+    };
+
+    // Must not throw; all nodes must receive valid positions.
+    expect(() => deriveGraphFromModel(loopModel)).not.toThrow();
+    const graph = deriveGraphFromModel(loopModel);
+    graph.nodes.forEach(node => {
+      expect(Number.isFinite(node.x)).toBe(true);
+      expect(Number.isFinite(node.y)).toBe(true);
+    });
+  });
+
+  it("honours persisted positions for some nodes while dagre lays out the rest", () => {
+    const savedX = 500;
+    const savedY = 300;
+    const graph = deriveGraphFromModel({
+      ...twoStageModel,
+      graph: {
+        version: 1,
+        nodes: [{ id: "queue:triage-q", type: "queue", refId: "triage-q", x: savedX, y: savedY }],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
+    });
+
+    const triageQueue = graph.nodes.find(n => n.id === "queue:triage-q");
+    expect(triageQueue.x).toBe(savedX);
+    expect(triageQueue.y).toBe(savedY);
+
+    // Other nodes should still have valid dagre-computed positions.
+    const others = graph.nodes.filter(n => n.id !== "queue:triage-q");
+    others.forEach(node => {
+      expect(Number.isFinite(node.x)).toBe(true);
+      expect(Number.isFinite(node.y)).toBe(true);
+    });
+  });
+});
