@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.20.0 (Sprints 1–73)
+Version: 1.22.0 (Sprints 1–76)
 
 ---
 
@@ -29,6 +29,8 @@ Version: 1.20.0 (Sprints 1–73)
 | v1.18.0 | 71 | In-app Feedback widget and About panel — toolbar Feedback button (speech-bubble icon) opens a Supabase-backed submission form; Info button (ⓘ icon) opens the About panel showing version and contact details; Supabase `feedback` table with RLS policies for authenticated and anonymous submission |
 | v1.19.0 | 71 | Results workflow refinement — Results now groups Summary, Log, Entities, History, and Explain; run comparison moved into Results → History; saved run records retain chart/log payloads; default run names use `Model Name DD/MM/YYYY HH:mm` |
 | v1.20.0 | 73 | Schedule Manager — timetable data separated from core model. New **Schedules** tab in the model editor to view, create, edit, and delete named timetables (e.g. Weekday, Weekend, Engineering blockade). Schedule selector dropdown in the Execute panel when a model has more than one schedule. CSV export of schedule rows. Model JSON export re-inlines schedule rows for portability. |
+| v1.21.0 | 74–76 | Report redesign — Senior Management and Technical report variants in HTML and Markdown format. Improvements: entity name used in KPI labels (e.g. "Trains served" not "Entities served"); served/reneged counts shown as integers; per-stage wait and service time breakdown for multi-stage models; angled x-axis labels in queue wait chart; wrapped labels in resource utilisation chart; Scope & Methodology section (arrival pattern, warm-up, replications, performance goals); intro paragraph before results; goal status summary in executive summary. |
+| v1.22.0 | 75–76 | Model Assistant — AI panel renamed from "AI Assistant" to "Model Assistant". Now persists as a sidebar across tab navigation. Clicking **Explain Results**, **Compare Runs**, or **Refine Plan** opens a focused view showing only that action (not all three at once). On mobile devices, action buttons open a full-screen overlay. Diagnostics panel: "Diagnose with AI" renamed to **Diagnose**; section heading "AI Diagnosis" renamed to **Diagnosis**. |
 
 ---
 

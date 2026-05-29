@@ -518,6 +518,15 @@ Note: V7 does not exist — the numbering jumps from V6 to V8 in both docs and c
 | V26 | Container `id` must be unique and non-empty; `capacity` > 0; `initialLevel` ≥ 0 and ≤ capacity |
 | V27 | FILL/DRAIN must reference a declared container ID |
 | V30 | B-Event with probabilisticRouting to null (exit) must have COMPLETE() or RENEGE() effect |
+| V31 | B-Event routing to a null (exit) destination must end with COMPLETE() or RENEGE() in its effect list |
+| V32 | B-Event or C-event effect list must not contain more than one terminal lifecycle sink (COMPLETE/RENEGE) |
+| V33 | B-Event with a single 100% probabilistic null exit and COMPLETE — warning only (valid but unusual) |
+| V34 | `experimentDefaults.replications` must be a positive integer |
+| V35 | `experimentDefaults.warmupPeriod` must be less than `maxSimTime` |
+| V36 | Server failure settings (`mtbfDist`/`mttrDist`) are only valid on server entity types |
+| V37 | When either `mtbfDist` or `mttrDist` is set, both must be present and valid |
+
+> **Note:** V7 is intentionally skipped. V25 (warning) and V28–V29 (warnings) appear in the Warnings table below.
 
 ### Warnings (run proceeds, banner shown)
 
