@@ -162,7 +162,7 @@ async function doCloudSave(saveFn, {
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null }) => {
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
@@ -1151,6 +1151,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       });
     });
   }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, onResultsReady]);
+
+  useEffect(() => { onExposeRunApi?.(runWithPatch); }, [runWithPatch, onExposeRunApi]);
 
   const exportResultsJson = useCallback(() => {
     const payload = buildResultsExportPayload({

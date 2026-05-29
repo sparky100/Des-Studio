@@ -524,6 +524,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [aiSeq,setAiSeq]=useState(0);
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
+  const runWithPatchRef = useRef(null);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
     try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
   });
@@ -1219,6 +1220,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 setWholeModel(patchedModel);
                 toast.success(`Applied: ${suggestion.change?.target} → ${suggestion.change?.to}`);
               } : null}
+              onExposeRunApi={fn => { runWithPatchRef.current = fn; }}
             />
           </ErrorBoundary>
         )}
@@ -1422,6 +1424,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           comparisonLoading={historyLoading}
           comparisonError={historyError}
           triggerAction={aiAction ? {action:aiAction,seq:aiSeq} : null}
+          onRunWithPatch={runWithPatchRef.current}
+          onApplyPatchedModel={canEdit ? (patchedModel, suggestion) => {
+            setWholeModel(patchedModel);
+            toast.success(`Applied: ${suggestion.change?.target} → ${suggestion.change?.to}`);
+          } : null}
           onClose={()=>{setAiSidebarOpen(false);setAiAction(null);}}
         />
       )}
