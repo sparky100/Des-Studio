@@ -353,20 +353,60 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                       <Btn small variant="danger" ariaLabel={`Remove B-event schedule ${j+1}`} onClick={()=>remS(i,j)}>✕</Btn>
                     </div>
                     {s.scheduleRef ? (
-                      <div
-                        onClick={()=>onGoToSchedule?.(s.scheduleRef)}
-                        style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,cursor:onGoToSchedule?"pointer":"default"}}
-                        title={onGoToSchedule?"Go to schedule":""}
-                      >
-                        <span style={{fontSize:16,lineHeight:1}}>📅</span>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700,textDecoration:onGoToSchedule?"underline dotted":"none"}}>
-                            {namedSchedules.find(ns=>ns.id===s.scheduleRef)?.name ?? "Named schedule"}
+                      <>
+                        <div
+                          onClick={()=>onGoToSchedule?.(s.scheduleRef)}
+                          style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,cursor:onGoToSchedule?"pointer":"default"}}
+                          title={onGoToSchedule?"Go to schedule":""}
+                        >
+                          <span style={{fontSize:16,lineHeight:1}}>📅</span>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700,textDecoration:onGoToSchedule?"underline dotted":"none"}}>
+                              {namedSchedules.find(ns=>ns.id===s.scheduleRef)?.name ?? "Named schedule"}
+                            </div>
+                            <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable.{onGoToSchedule?" Click to open in Schedules tab.":""}</div>
                           </div>
-                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable.{onGoToSchedule?" Click to open in Schedules tab.":""}</div>
+                          {onGoToSchedule&&<span style={{fontSize:14,color:C.green,opacity:0.7}}>→</span>}
                         </div>
-                        {onGoToSchedule&&<span style={{fontSize:14,color:C.green,opacity:0.7}}>→</span>}
-                      </div>
+                        {/* Jitter — applies random offset to each planned arrival time */}
+                        {(()=>{
+                          const jd=s.distParams?.jitterDist||"";
+                          const jp=s.distParams?.jitterParams||{};
+                          const updJitter=p=>updS(i,j,{distParams:{...s.distParams,...p}});
+                          const selSt={fontSize:11,fontFamily:FONT,background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:4,padding:"3px 6px"};
+                          const inpSt={fontSize:11,fontFamily:FONT,background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:4,padding:"3px 5px",width:60};
+                          return (
+                            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginTop:6}}>
+                              <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:36}}>Jitter:</span>
+                              <select value={jd} style={selSt}
+                                onChange={e=>updJitter({jitterDist:e.target.value,jitterParams:{}})}>
+                                <option value="">None</option>
+                                <option value="Normal">Normal (symmetric ±)</option>
+                                <option value="Uniform">Uniform (min to max)</option>
+                              </select>
+                              {jd==="Normal"&&(
+                                <label style={{display:"flex",alignItems:"center",gap:4}}>
+                                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>stddev:</span>
+                                  <input type="number" value={jp.stddev||""} style={inpSt}
+                                    onChange={e=>updJitter({jitterParams:{...jp,stddev:e.target.value}})}/>
+                                </label>
+                              )}
+                              {jd==="Uniform"&&(<>
+                                <label style={{display:"flex",alignItems:"center",gap:4}}>
+                                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>min:</span>
+                                  <input type="number" value={jp.min||""} style={inpSt}
+                                    onChange={e=>updJitter({jitterParams:{...jp,min:e.target.value}})}/>
+                                </label>
+                                <label style={{display:"flex",alignItems:"center",gap:4}}>
+                                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>max:</span>
+                                  <input type="number" value={jp.max||""} style={inpSt}
+                                    onChange={e=>updJitter({jitterParams:{...jp,max:e.target.value}})}/>
+                                </label>
+                              </>)}
+                            </div>
+                          );
+                        })()}
+                      </>
                     ) : (
                       <>
                         {s.rows?.length>0&&!s.dist&&onGoToSchedule&&(
