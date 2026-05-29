@@ -2,7 +2,7 @@
 import { C, FONT } from "./shared/tokens.js";
 import { Tag, Btn } from "./shared/components.jsx";
 
-export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion, onHelpOpen }) {
+export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, padding: "11px 20px",
@@ -39,19 +39,6 @@ export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future,
           <Btn small variant="ghost" onClick={onDiscard} disabled={saving}>Discard</Btn>
         </div>
       )}
-      <button
-        type="button"
-        aria-label="Help"
-        title="Help"
-        onClick={onHelpOpen}
-        style={{
-          background: "#ffffff08", border: `1px solid ${C.border}`, borderRadius: 5,
-          color: C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px",
-          cursor: "pointer", fontWeight: 600,
-        }}
-      >
-        ?
-      </button>
     </div>
   );
 }
