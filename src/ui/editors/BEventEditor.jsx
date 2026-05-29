@@ -352,13 +352,21 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                         </div>
                       </div>
                     ) : (s.rows?.length > 0) ? (
-                      <div style={{background:`${C.amber}10`,border:`1px solid ${C.amber}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10}}>
-                        <span style={{fontSize:16,lineHeight:1}}>📋</span>
+                      <div style={{background:`${C.amber}10`,border:`1px solid ${C.amber}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"flex-start",gap:10}}>
+                        <span style={{fontSize:16,lineHeight:1,marginTop:1}}>📋</span>
                         <div style={{flex:1}}>
                           <div style={{fontSize:11,color:C.amber,fontFamily:FONT,fontWeight:700}}>
                             Inline timetable · {s.rows.length} row{s.rows.length!==1?"s":""}
                           </div>
-                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times embedded in this event. Use the Schedules tab to manage as a named timetable.</div>
+                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:3,fontFamily:"monospace",letterSpacing:0.2}}>
+                            t = {s.rows.slice(0,5).map(r=>r.time).join(", ")}{s.rows.length>5?` … +${s.rows.length-5} more`:""}
+                          </div>
+                          {s.rows[0]?.attrs&&Object.keys(s.rows[0].attrs).length>0&&(
+                            <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>
+                              attrs: {Object.keys(s.rows[0].attrs).join(", ")}
+                            </div>
+                          )}
+                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:4,fontStyle:"italic"}}>Use the Schedules tab to manage as a named timetable.</div>
                         </div>
                       </div>
                     ) : (
