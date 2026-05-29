@@ -325,7 +325,7 @@ export function DiagnosticsTab({ model, results, onGoToNode }) {
 
       {/* ── F69.3: Diagnosis panel ── */}
       <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={labelStyle}>AI Diagnosis</div>
+        <div style={labelStyle}>Diagnosis</div>
 
         {diagnosisState === "idle" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -356,7 +356,7 @@ export function DiagnosticsTab({ model, results, onGoToNode }) {
               />
             </div>
             <Btn variant="primary" onClick={handleDiagnose}>
-              Diagnose with AI
+              Diagnose
             </Btn>
           </div>
         )}
