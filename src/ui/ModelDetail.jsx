@@ -516,7 +516,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [latestReplicationResults,setLatestReplicationResults]=useState([]);
   const [latestWarmupDetection,setLatestWarmupDetection]=useState(null);
   const [latestLog,setLatestLog]=useState([]);
+  const [namedSchedules,setNamedSchedules]=useState([]);
+  const [focusBEventId,setFocusBEventId]=useState(null);
+  const [focusScheduleId,setFocusScheduleId]=useState(null);
   const [resultsView,setResultsView]=useState("summary");
+  const [aiAction,setAiAction]=useState(null);
+  const [aiSeq,setAiSeq]=useState(0);
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
@@ -738,6 +743,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   };
 
   useEffect(()=>{
+    if(!modelId)return;
+    fetchModelSchedules(modelId).then(setNamedSchedules).catch(()=>{});
+  },[modelId]);
+
+  useEffect(()=>{
     const onBeforeUnload=(e)=>{
       if(!dirty)return;
       e.preventDefault();
@@ -819,6 +829,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     if (nextSubtab === "explain") {
       setAiSidebarOpen(true);
       setResultsView("summary");
+      setAiAction("explain");
+      setAiSeq(s => s + 1);
     } else {
       setResultsView(nextSubtab);
     }
@@ -1111,9 +1123,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             </div>
           </div>
         )}
-        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'}/></div>)}
+        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}}/></div>)}
         {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
-        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} onBEventsExtracted={async (updatedBEvents) => {
+        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
           setModel(next);
           try { await overrides.onSave?.(next); setDirty(false); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
@@ -1218,7 +1230,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 {id:"log",label:"Log"},
                 {id:"entities",label:"Entities"},
                 {id:"history",label:"History"},
-                {id:"explain",label:"Explain"},
               ].map(sub=>(
                 <button
                   key={sub.id}
@@ -1236,7 +1247,21 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </button>
               ))}
               <div style={{flex:1}}/>
-              <Btn small variant="ghost" onClick={()=>setTab("execute")} style={{marginRight:4,flexShrink:0}}>← Run</Btn>
+              <div style={{display:"flex",gap:4,alignItems:"center",paddingRight:4}}>
+                <Btn small variant={aiAction==="explain"?"primary":"ghost"}
+                  onClick={()=>{if(aiAction==="explain"){setAiAction(null);}else{setAiAction("explain");setAiSeq(s=>s+1);}}}
+                  disabled={!latestResults}
+                >Explain</Btn>
+                <Btn small variant={aiAction==="compare"?"primary":"ghost"}
+                  onClick={()=>{if(aiAction==="compare"){setAiAction(null);}else{setAiAction("compare");setAiSeq(s=>s+1);}}}
+                  disabled={!latestResults}
+                >Compare</Btn>
+                <Btn small variant={aiAction==="refine"?"primary":"ghost"}
+                  onClick={()=>{if(aiAction==="refine"){setAiAction(null);}else{setAiAction("refine");setAiSeq(s=>s+1);}}}
+                  disabled={!latestResults}
+                >Refine Plan</Btn>
+                <Btn small variant="ghost" onClick={()=>setTab("execute")} style={{marginLeft:4}}>← Run</Btn>
+              </div>
             </div>
 
             {resultsView==="summary"&&(
@@ -1412,7 +1437,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           }))}
           comparisonLoading={historyLoading}
           comparisonError={historyError}
-          onClose={()=>setAiSidebarOpen(false)}
+          triggerAction={aiAction ? {action:aiAction,seq:aiSeq} : null}
+          onClose={()=>{setAiSidebarOpen(false);setAiAction(null);}}
         />
       )}
       </div>
