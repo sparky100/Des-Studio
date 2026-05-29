@@ -366,6 +366,26 @@ ModelDetail (parent)
 - The `ScheduleManager` tab in ModelDetail allows the modeller to view, create, edit, and delete schedules for a model. `ScheduleDetail` shows paginated rows with CSV export.
 - The Execute panel shows a "Timetable:" dropdown when `modelSchedules.length > 1`, letting the modeller choose which schedule to apply for the next run.
 
+**Jitter on named-schedule entries (Sprint 74):**
+- When a B-Event schedule entry uses `scheduleRef`, jitter parameters live directly on the entry: `sched.jitterDist` (`"Normal"` | `"Uniform"`) and `sched.jitterParams` (`{ mean, stddev }` or `{ min, max }`).
+- `phases.js` merges these into `baseParams` via `jitterOverride` before sampling, so the Schedule distribution sampler picks them up identically to inline-rows jitter.
+- `BEventEditor` shows JITTER controls (None / Normal / Uniform select + param inputs) below the green schedule badge whenever `scheduleRef` is set.
+
+**Multi-event CSV format (Sprint 74):**
+- `planCsvParser.js` detects multi-event format when the first column header normalises to one of: `event`, `eventid`, `event_id`, `b_event`, `bevent`, `b-event`.
+- Returns `{ format:'multi', groups:[{eventId, rows}], attrHeaders, skipped }` instead of the single-event `{ format:'single', rows, attrHeaders, skipped }`.
+- `ScheduleManager` import flow: detects `format:'multi'`, shows per-group match table (✓ matched UUID / exact name / case-insensitive; ⚠ unmatched), and offers optional stub B-event creation.
+
+**Import/export key list (Sprint 74):**
+- `MODEL_JSON_KEYS` in **both** `src/ui/ModelDetail.jsx` and `src/ui/shared/utils.js` must stay identical: `["entityTypes","stateVariables","bEvents","cEvents","queues","graph","experimentDefaults","goals","containerTypes"]`.
+- `extractImportedModelPayload()` strips orphan `scheduleRef` values (entry has `scheduleRef` but no `rows[]`) on import to prevent the green badge appearing with no accessible data.
+
+**Bidirectional navigation (Sprint 74):**
+- `ModelDetail` holds focus signals: `focusBEventId`, `focusScheduleId`, `focusCEventId` — each is a one-shot signal cleared by the receiving editor via `onFocusHandled()`.
+- B-Events ↔ Schedules: green badge in `BEventEditor` calls `onGoToSchedule(schedId)`; B-event name in `ScheduleManager` calls `onGoToBEvent(bEventId)`.
+- B-Events ↔ C-Events: "TRIGGERED BY" chips in `BEventEditor` call `onGoToCEvent(cEventId)`; `→` button in each `CEventEditor` cSchedule row calls `onGoToBEvent(eventId)`.
+- All editors implement `cardRefs = useRef({})` and a `useEffect` that expands, clears filter, scrolls, and calls `onFocusHandled()` with an 80 ms delay.
+
 **Known gaps:**
 - No stale reference detection on deletion (C6) — fix in Sprint 1 Task 5.
 - `DistPicker` has a latent `ReferenceError` due to a missing import in `components.jsx` (C11) — fix in Sprint 1 Task 6.
@@ -1497,10 +1517,12 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | Sprint 69 | ✅ Complete | 2026-05-22 | AI debugging — structured TraceEntry schema, event provenance, arbitration trace, Phase C truncation warning, entity inspector panel, canvas node overlays, magic-link model import |
 | Sprint 70 | ✅ Complete | 2026-05-23 | Help Assistant — in-app contextual help, suggested questions, `src/ui/HelpAssistant.jsx`, `buildHelpAssistantSystemPrompt` prompt builder; documentation accuracy fixes across all docs |
 | Sprint 73 | ✅ Complete | 2026-05-27 | ADR-016: Separate timetable schedule data from core model JSON — `model_schedules` Supabase table, `resolveInlineSchedules` engine function, `ScheduleManager` UI, schedule selector in Execute panel, re-inline on export, save-timeout feedback, `includeModelSnapshot` explicit flag |
+| Sprint 74 | ✅ Complete | 2026-05-29 | UI Improvements: editor collapse/search (all four editors), B-events↔Schedules and B-events↔C-events bidirectional navigation, jitter on named-schedule entries, multi-event CSV import, import/export parity (goals + containerTypes), mobile visual designer hidden |
+| Sprint 75 | ⬜ Planned | — | Persistent AI sidebar: context-aware right panel from every tab, chat-bubble rendering, design-context Q&A, keyboard controls |
 
 ---
 
-## 21. Current Sprint — Sprint 73 Complete / Sprint 72 Queued
+## 21. Current Sprint — Sprint 74 Complete / Sprint 75 Planned / Sprint 72 Queued
 
 **Goal:** Performance Optimisation — reduce execution cost for models with many C-events by removing legacy runtime condition-string execution, migrating old models to canonical predicate JSON, and optimising the Phase C hot path through compilation, caching, and dependency-aware scans.
 

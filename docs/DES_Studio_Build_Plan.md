@@ -297,6 +297,8 @@ flowchart LR
 | Sprint 33 | ✅ Complete | 2026-05-14 | Advanced Scheduling & Analytics. | 695 (695) | N/A | Success | SPLIT/COSEIZE/MATCH macros, dynamic BATCH sizing, SPT/EDD/PRIORITY(attrName) queue disciplines, histogram collector, one-way ANOVA with Tukey HSD, resource failure UI. |
 | Sprint 69 | ✅ Complete | 2026-05-21 | AI Model Debugging: trace emission, structural checker, AI diagnosis panel, conversational debugger. | 23 passing (new) | N/A | N/A |
 | Sprint 73 | ✅ Complete | 2026-05-27 | ADR-016: Separate timetable schedule data from core model JSON — `model_schedules` Supabase table, `resolveInlineSchedules(model, schedulesMap)` engine function, ScheduleManager UI (list/detail/CSV export), Execute panel schedule selector dropdown, model export re-inlines rows, `includeModelSnapshot` explicit flag, save-timeout feedback banners. | 45 new tests (14+22+9) | N/A | N/A |
+| Sprint 74 | ✅ Complete | 2026-05-29 | UI Improvements: editor collapse/search (all four editors), bidirectional navigation (B-events↔Schedules, B-events↔C-events), jitter controls for named-schedule entries, multi-event CSV import with stub creation, import/export parity (goals + containerTypes), mobile visual designer hidden. | 317 existing pass | N/A | N/A |
+| Sprint 75 | ⬜ Planned | — | Persistent AI sidebar: replace Results-tab overlay with context-aware right panel accessible from every tab; chat-bubble rendering; design-context Q&A; keyboard controls. | — | — | — |
 
 ---
 
