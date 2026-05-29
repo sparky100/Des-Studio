@@ -129,3 +129,45 @@ describe('parsePlanCsv — timestamp time column', () => {
     expect(r.rows.length).toBe(3);
   });
 });
+
+describe('parsePlanCsv — multi-event format', () => {
+  test('detects "event" first column and returns format:multi', () => {
+    const csv = 'event,time,train_id\nWCML,321,HL0001\nWCML,329,HL0002\nCaledonian,20,CN0001';
+    const r = parsePlanCsv(csv);
+    expect(r.format).toBe('multi');
+    expect(r.groups).toHaveLength(2);
+    expect(r.groups[0].eventId).toBe('WCML');
+    expect(r.groups[0].rows).toHaveLength(2);
+    expect(r.groups[1].eventId).toBe('Caledonian');
+    expect(r.groups[1].rows).toHaveLength(1);
+    expect(r.attrHeaders).toEqual(['train_id']);
+  });
+
+  test('detects "eventId" first column', () => {
+    const csv = 'eventId,time\nb_arrive,10\nb_arrive,20\nb_depart,30';
+    const r = parsePlanCsv(csv);
+    expect(r.format).toBe('multi');
+    expect(r.groups).toHaveLength(2);
+  });
+
+  test('preserves attrs in multi-event rows', () => {
+    const csv = 'event,time,route\nWCML,321,wcml_motherwell\nCaledonian,20,cal_main';
+    const r = parsePlanCsv(csv);
+    expect(r.groups[0].rows[0].attrs).toEqual({ route: 'wcml_motherwell' });
+    expect(r.groups[1].rows[0].time).toBe(20);
+  });
+
+  test('skips multi-event rows with invalid time', () => {
+    const csv = 'event,time\nWCML,321\nWCML,bad\nWCML,329';
+    const r = parsePlanCsv(csv);
+    expect(r.groups[0].rows).toHaveLength(2);
+    expect(r.skipped).toBe(1);
+  });
+
+  test('single-event format still returns format:single', () => {
+    const csv = 'time,sev\n10,3\n20,1';
+    const r = parsePlanCsv(csv);
+    expect(r.format).toBe('single');
+    expect(r.rows).toHaveLength(2);
+  });
+});

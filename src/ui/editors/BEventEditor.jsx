@@ -1,11 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit,namedSchedules=[]})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
+  const cardRefs=useRef({});
+
+  useEffect(()=>{
+    if(!focusBEventId)return;
+    setExpandedIds(prev=>new Set([...prev,focusBEventId]));
+    setFilterText("");
+    setTimeout(()=>{
+      cardRefs.current[focusBEventId]?.scrollIntoView({behavior:"smooth",block:"start"});
+      onFocusHandled?.();
+    },80);
+  },[focusBEventId]);
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(events.map(e=>e.id)));
@@ -122,7 +133,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         const effectSummary=effects.length===0?"no effects":effects.length===1?(effects[0].match(/^\w+/)?.[0]||"effect"):`${effects.length} effects`;
 
         return (
-          <div key={ev.id} style={{background:C.bg,border:`1px solid ${isTmpl?C.muted+"44":C.bEvent+"33"}`,
+          <div key={ev.id} ref={el=>cardRefs.current[ev.id]=el} style={{background:C.bg,border:`1px solid ${isTmpl?C.muted+"44":C.bEvent+"33"}`,
             borderLeft:`3px solid ${isTmpl?C.muted:C.bEvent}`,borderRadius:6,padding:12,display:"flex",flexDirection:"column",gap:8}}>
 
             {/* Header */}
@@ -342,29 +353,38 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                       <Btn small variant="danger" ariaLabel={`Remove B-event schedule ${j+1}`} onClick={()=>remS(i,j)}>✕</Btn>
                     </div>
                     {s.scheduleRef ? (
-                      <div style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10}}>
+                      <div
+                        onClick={()=>onGoToSchedule?.(s.scheduleRef)}
+                        style={{background:`${C.green}12`,border:`1px solid ${C.green}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,cursor:onGoToSchedule?"pointer":"default"}}
+                        title={onGoToSchedule?"Go to schedule":""}
+                      >
                         <span style={{fontSize:16,lineHeight:1}}>📅</span>
                         <div style={{flex:1}}>
-                          <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700}}>
+                          <div style={{fontSize:11,color:C.green,fontFamily:FONT,fontWeight:700,textDecoration:onGoToSchedule?"underline dotted":"none"}}>
                             {namedSchedules.find(ns=>ns.id===s.scheduleRef)?.name ?? "Named schedule"}
                           </div>
-                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable. Edit in the Schedules tab.</div>
+                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times driven by this timetable.{onGoToSchedule?" Click to open in Schedules tab.":""}</div>
                         </div>
-                      </div>
-                    ) : (s.rows?.length > 0) ? (
-                      <div style={{background:`${C.amber}10`,border:`1px solid ${C.amber}44`,borderRadius:5,padding:"8px 12px",display:"flex",alignItems:"center",gap:10}}>
-                        <span style={{fontSize:16,lineHeight:1}}>📋</span>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:11,color:C.amber,fontFamily:FONT,fontWeight:700}}>
-                            Inline timetable · {s.rows.length} row{s.rows.length!==1?"s":""}
-                          </div>
-                          <div style={{fontSize:10,color:C.muted,fontFamily:FONT,marginTop:2}}>Arrival times embedded in this event. Use the Schedules tab to manage as a named timetable.</div>
-                        </div>
+                        {onGoToSchedule&&<span style={{fontSize:14,color:C.green,opacity:0.7}}>→</span>}
                       </div>
                     ) : (
-                      <DistPicker value={{dist:s.dist,distParams:s.distParams}} onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams})} compact
-                        attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
-                        epoch={epoch} timeUnit={timeUnit}/>
+                      <>
+                        {s.rows?.length>0&&!s.dist&&onGoToSchedule&&(
+                          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:2}}>
+                            <button onClick={()=>onGoToSchedule(null)}
+                              style={{background:"none",border:`1px solid ${C.border}`,borderRadius:4,cursor:"pointer",padding:"3px 8px",fontSize:10,color:C.muted,fontFamily:FONT}}>
+                              Move to named schedule →
+                            </button>
+                          </div>
+                        )}
+                        <DistPicker
+                          value={s.rows?.length>0&&!s.dist
+                            ?{dist:"Schedule",distParams:{rows:s.rows}}
+                            :{dist:s.dist,distParams:s.distParams}}
+                          onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams,rows:undefined})} compact
+                          attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
+                          epoch={epoch} timeUnit={timeUnit}/>
+                      </>
                     )}
                     <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:s.isRenege?C.reneged:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
                       <input type="checkbox" checked={!!s.isRenege} onChange={e=>updS(i,j,{isRenege:e.target.checked})} style={{accentColor:C.reneged}}/>
