@@ -224,15 +224,17 @@ function RefinementCard({ card, model, aggregateStats, onApplyAndRerun, cardStat
       <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 6 }}>
         <span style={{ color: C.muted, fontSize: 10 }}>Goal impact: </span>{card.goalImpact}
       </div>
-      <Btn
-        small
-        variant="primary"
-        disabled={!card.feasible || running || hasResult}
-        onClick={() => onApplyAndRerun(card)}
-        style={{ width: "100%", justifyContent: "center" }}
-      >
-        {running ? "Running…" : hasResult ? "Applied" : "Apply & Re-run"}
-      </Btn>
+      {onApplyAndRerun && (
+        <Btn
+          small
+          variant="primary"
+          disabled={!card.feasible || running || hasResult}
+          onClick={() => onApplyAndRerun(card)}
+          style={{ width: "100%", justifyContent: "center" }}
+        >
+          {running ? "Running…" : hasResult ? "Applied" : "Apply & Re-run"}
+        </Btn>
+      )}
       {running && (
         <div style={{ marginTop: 8, fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
           Running revised schedule…
@@ -285,6 +287,15 @@ export const AiAssistantPanel = ({
   const isResultsContext = ['results', 'execute'].includes(activeTab);
   const toast = useToast();
   const [activeMode, setActiveMode] = useState(triggerAction?.action || "explain");
+
+  const handleModeChange = (mode) => {
+    if (mode !== activeMode) {
+      setResponse("");
+      setStatus("idle");
+      setParsedSuggestion(null);
+    }
+    setActiveMode(mode);
+  };
   const [response, setResponse] = useState("");
   const [status, setStatus] = useState("idle");
   const [error, setError] = useState("");
@@ -743,7 +754,7 @@ export const AiAssistantPanel = ({
             { id: "compare", label: "Compare" },
             ...(hasSchedule ? [{ id: "refine", label: "Refine Plan" }] : []),
           ].map(m => (
-            <Btn key={m.id} small variant={activeMode === m.id ? "primary" : "ghost"} onClick={() => setActiveMode(m.id)}>{m.label}</Btn>
+            <Btn key={m.id} small variant={activeMode === m.id ? "primary" : "ghost"} onClick={() => handleModeChange(m.id)}>{m.label}</Btn>
           ))}
         </div>
       )}
@@ -811,7 +822,7 @@ export const AiAssistantPanel = ({
         </div>
       )}
 
-      {!(isResultsContext && activeMode === "refine") && <div ref={responseAreaRef} aria-live="polite" aria-label="AI analysis response" style={{
+      {!(isResultsContext && activeMode === "refine" && refineStatus !== "loading") && <div ref={responseAreaRef} aria-live="polite" aria-label="AI analysis response" style={{
         flex: 1,
         background: C.bg,
         border: `1px solid ${C.border}`,
@@ -903,7 +914,7 @@ export const AiAssistantPanel = ({
                     card={card}
                     model={model}
                     aggregateStats={aggregateStats}
-                    onApplyAndRerun={handleRefineApplyAndRerun}
+                    onApplyAndRerun={onRunWithPatch ? handleRefineApplyAndRerun : null}
                     cardStatus={refineCardStatus[card.rank]}
                     cardResult={refineCardResults[card.rank]}
                   />
@@ -928,8 +939,9 @@ export const AiAssistantPanel = ({
           </div>
       </div>}
 
+      </div>
       {isResultsContext && (
-        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+        <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 14px 14px" }}>
           <label htmlFor="results-followup-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
             FOLLOW-UP QUESTION
           </label>
@@ -965,7 +977,6 @@ export const AiAssistantPanel = ({
           </div>
         </div>
       )}
-      </div>
     </aside>
   );
 };
