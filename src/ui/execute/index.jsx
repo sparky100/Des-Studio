@@ -1141,8 +1141,16 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         onComplete: payloads => {
           const valid = payloads.filter(Boolean);
           const aggregateStats = summarizeReplicationResults(valid, CI_METRICS);
-          const summary = valid[0]?.result?.summary || {};
-          const verifyResult = { aggregateStats, summary };
+          const first = valid[0]?.result || {};
+          const verifyResult = {
+            aggregateStats,
+            summary:       first.summary       || {},
+            waitDist:      first.waitDist      || valid[0]?.waitDist,
+            entitySummary: first.entitySummary || valid[0]?.entitySummary,
+            timeSeries:    first.timeSeries    || valid[0]?.timeSeries,
+            snap:          first.snap,
+            phaseCTruncated: first.phaseCTruncated || false,
+          };
           setResults(verifyResult);
           onResultsReady?.(verifyResult);
           resolve(verifyResult);
