@@ -824,6 +824,7 @@ export const AiAssistantPanel = ({
 
       {!(isResultsContext && activeMode === "refine" && refineStatus !== "loading") && <div ref={responseAreaRef} aria-live="polite" aria-label="AI analysis response" style={{
         flex: 1,
+        minHeight: 0,
         background: C.bg,
         border: `1px solid ${C.border}`,
         borderRadius: 6,
@@ -837,20 +838,6 @@ export const AiAssistantPanel = ({
       }}>
         {renderContent()}
       </div>}
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {isStreaming && <Btn small variant="danger" onClick={stopStream}>Stop</Btn>}
-        {status === "complete" && (response || conversationHistory.length > 0) && <Btn small variant="ghost" onClick={copyResponse}>Copy</Btn>}
-        {status === "complete" && response && !savedSummary && onSaveInsights && (
-          <Btn small variant="primary" onClick={() => {
-            const insights = { summary: response.slice(0, 500), recommendation: "", savedAt: new Date().toISOString() };
-            onSaveInsights(insights);
-            setSavedSummary(insights);
-          }}>Save to run</Btn>
-        )}
-        {savedSummary && <span style={{ fontSize: 10, color: C.green, fontFamily: FONT, fontWeight: 700, alignSelf: "center" }}>Saved</span>}
-        {(conversationHistory.length > 0 || parsedSuggestion) && !isStreaming && <Btn small variant="ghost" onClick={clearConversation}>Clear</Btn>}
-      </div>
 
       {!isResultsContext && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         <label htmlFor="query-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
@@ -940,6 +927,21 @@ export const AiAssistantPanel = ({
       </div>}
 
       </div>
+      {(isStreaming || status === "complete") && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "8px 14px", borderTop: `1px solid ${C.border}` }}>
+          {isStreaming && <Btn small variant="danger" onClick={stopStream}>Stop</Btn>}
+          {status === "complete" && (response || conversationHistory.length > 0) && <Btn small variant="ghost" onClick={copyResponse}>Copy</Btn>}
+          {status === "complete" && response && !savedSummary && onSaveInsights && (
+            <Btn small variant="primary" onClick={() => {
+              const insights = { summary: response.slice(0, 500), recommendation: "", savedAt: new Date().toISOString() };
+              onSaveInsights(insights);
+              setSavedSummary(insights);
+            }}>Save to run</Btn>
+          )}
+          {savedSummary && <span style={{ fontSize: 10, color: C.green, fontFamily: FONT, fontWeight: 700, alignSelf: "center" }}>Saved</span>}
+          {(conversationHistory.length > 0 || parsedSuggestion) && !isStreaming && <Btn small variant="ghost" onClick={clearConversation}>Clear</Btn>}
+        </div>
+      )}
       {isResultsContext && (
         <div style={{ borderTop: `1px solid ${C.border}`, padding: "10px 14px 14px" }}>
           <label htmlFor="results-followup-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
