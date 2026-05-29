@@ -320,12 +320,19 @@ Instead of `dist`/`distParams`, a schedule entry can supply an explicit list of 
 
 When a model uses planned arrivals with `rows[]`, always create a companion CSV alongside the model JSON.
 
+There are **two CSV formats** depending on whether the model has one or multiple arrival B-events.
+
+---
+
+#### Format 1 — Single arrival B-event
+
+Use when the model has exactly one arrival B-event.
+
 The CSV must:
 - use `time` as the first column
 - include one column for each `attrDefs[].name` on the arriving entity type
-- use column names that **exactly match** the entity attribute names
+- use column names that **exactly match** the entity attribute names (case-sensitive)
 - contain one row per planned arrival
-- preserve the same values as the model's `rows[]`
 - use numeric simulation times unless the model has an `epoch`, in which case `HH:MM` or ISO timestamps may be used
 
 Example — a clinic model with `epoch` set and a `Patient` entity with attributes `severity` and `age`:
@@ -336,6 +343,41 @@ time,severity,age
 08:15,1,32
 08:30,2,28
 ```
+
+---
+
+#### Format 2 — Multiple arrival B-events (required when model has more than one arrival B-event)
+
+Use when the model has two or more arrival B-events (e.g. separate arrival streams per route, service type, or entry point). **A single-event CSV cannot represent multiple streams — you must use this format.**
+
+The CSV must:
+- use `event` as the **first column** — this is the trigger that switches the importer to multi-event mode
+- use `time` as the **second column**
+- include one column for each `attrDefs[].name` on the arriving entity type (remaining columns)
+- use column names that **exactly match** the entity attribute names (case-sensitive)
+- contain one row per planned arrival across all streams
+
+The `event` column value must match either the B-event `id` or the B-event `name` (matching is case-insensitive). Using the B-event `id` (e.g. `b_wcml_train_arrives`) is recommended for reliability.
+
+Accepted spellings for the first-column header: `event`, `eventid`, `event_id`, `b_event`, `bevent`, `b-event`.
+
+Example — a Glasgow Central station model with `epoch` set and separate arrival streams per route, `Train` entity with attributes `train_id`, `route_group`, `platform_group`, `operation_type`, `priority`:
+
+```
+event,time,train_id,route_group,platform_group,operation_type,priority
+b_wcml_train_arrives,05:40,HL0001,wcml_motherwell,long_distance,arrival,2
+b_wcml_train_arrives,05:57,HL0002,wcml_motherwell,long_distance,arrival,2
+b_south_western_train_arrives,05:43,SW0001,south_western_barrhead,suburban_regional,arrival,3
+b_cathcart_train_arrives,05:49,CN0001,cathcart_newton_neilston,suburban_regional,arrival,3
+b_ayrshire_train_arrives,05:51,AY0001,ayrshire_inverclyde_paisley,suburban_regional,arrival,3
+b_low_level_train_arrives,05:55,LL0001,low_level,suburban_regional,arrival,4
+```
+
+Rows for different B-events can be interleaved in any order — the importer groups them by the `event` column value.
+
+**When to use Format 2:** Any model where `bEvents` contains more than one entry with a non-empty `schedules[]` array (i.e. more than one arrival generator). If you generate Format 1 for such a model, only one B-event will receive rows and the other arrival streams will produce no arrivals.
+
+---
 
 **Size guidance:** For schedules with more than 50 rows, keep the model JSON's `rows[]` empty (`"rows": []`) and deliver all arrival data exclusively in the companion CSV. The user imports it via the **Schedules** tab. For 50 rows or fewer, embedding rows inline in the JSON is acceptable.
 
