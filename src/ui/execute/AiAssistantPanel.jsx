@@ -927,6 +927,44 @@ export const AiAssistantPanel = ({
             )}
           </div>
       </div>}
+
+      {isResultsContext && (
+        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+          <label htmlFor="results-followup-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
+            FOLLOW-UP QUESTION
+          </label>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              id="results-followup-input"
+              type="text"
+              value={queryText}
+              onChange={event => setQueryText(event.target.value)}
+              onKeyDown={handleQueryKeyDown}
+              disabled={!results || isStreaming}
+              placeholder={results ? "Ask a follow-up question…" : "Run the model first…"}
+              style={{
+                flex: 1,
+                background: C.bg,
+                border: `1px solid ${C.border}`,
+                borderRadius: 5,
+                color: C.text,
+                fontFamily: FONT,
+                fontSize: 12,
+                padding: "7px 8px",
+              }}
+            />
+            <Btn
+              small
+              variant="primary"
+              onClick={() => runQuery(queryText)}
+              disabled={!results || !queryText.trim() || isStreaming}
+              ariaLabel="Ask follow-up question"
+            >
+              Ask
+            </Btn>
+          </div>
+        </div>
+      )}
       </div>
     </aside>
   );
