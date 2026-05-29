@@ -1412,10 +1412,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         )}
         </ErrorBoundary>
       </div>
-      {aiSidebarOpen && !isMobileLayout && (
+      {((aiSidebarOpen && !isMobileLayout) || (isMobileLayout && !!aiAction)) && (
         <AiAssistantPanel
-          sidebar={!isCompactLayout}
-          overlay={isCompactLayout}
+          sidebar={!isCompactLayout && !isMobileLayout}
+          overlay={isCompactLayout && !isMobileLayout}
+          mobileFullscreen={isMobileLayout}
           activeTab={tab}
           model={model}
           results={latestResults}
