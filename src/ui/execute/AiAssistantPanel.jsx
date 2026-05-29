@@ -569,6 +569,9 @@ export const AiAssistantPanel = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (activeMode !== "refine" || !isResultsContext || !hasSchedule || refineStatus === "loading") return;
+    setResponse("");
+    setStatus("idle");
+    setParsedSuggestion(null);
     actionFnsRef.current.refine?.();
   }, [activeMode]);
 
@@ -630,6 +633,10 @@ export const AiAssistantPanel = ({
           </div>
         </div>
       ));
+    }
+    if (isResultsContext && activeMode === "refine") {
+      if (refineStatus === "loading") return "Building plan suggestions…";
+      return "";
     }
     if (status === "loading") return "Waiting for analysis...";
     if (response) return response;
