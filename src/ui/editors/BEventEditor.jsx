@@ -368,13 +368,23 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                         {onGoToSchedule&&<span style={{fontSize:14,color:C.green,opacity:0.7}}>→</span>}
                       </div>
                     ) : (
-                      <DistPicker
-                        value={s.rows?.length>0&&!s.dist
-                          ?{dist:"Schedule",distParams:{rows:s.rows}}
-                          :{dist:s.dist,distParams:s.distParams}}
-                        onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams,rows:undefined})} compact
-                        attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
-                        epoch={epoch} timeUnit={timeUnit}/>
+                      <>
+                        {s.rows?.length>0&&!s.dist&&onGoToSchedule&&(
+                          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:2}}>
+                            <button onClick={()=>onGoToSchedule(null)}
+                              style={{background:"none",border:`1px solid ${C.border}`,borderRadius:4,cursor:"pointer",padding:"3px 8px",fontSize:10,color:C.muted,fontFamily:FONT}}>
+                              Move to named schedule →
+                            </button>
+                          </div>
+                        )}
+                        <DistPicker
+                          value={s.rows?.length>0&&!s.dist
+                            ?{dist:"Schedule",distParams:{rows:s.rows}}
+                            :{dist:s.dist,distParams:s.distParams}}
+                          onChange={v=>updS(i,j,{dist:v.dist,distParams:v.distParams,rows:undefined})} compact
+                          attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
+                          epoch={epoch} timeUnit={timeUnit}/>
+                      </>
                     )}
                     <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:s.isRenege?C.reneged:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
                       <input type="checkbox" checked={!!s.isRenege} onChange={e=>updS(i,j,{isRenege:e.target.checked})} style={{accentColor:C.reneged}}/>

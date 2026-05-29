@@ -131,7 +131,8 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
 
   // Import state
   const importRef = useRef(null);
-  const [importPreview, setImportPreview] = useState(null);
+  const [importPreview, setImportPreview] = useState(null);   // single-event preview
+  const [multiImportPreview, setMultiImportPreview] = useState(null); // multi-event preview
   const [importError, setImportError] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importTargetEventId, setImportTargetEventId] = useState(null);
@@ -159,12 +160,19 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
     }
   };
 
+  const matchBEvent = (eventId) =>
+    bEvents.find(be => be.id === eventId) ??
+    bEvents.find(be => be.name === eventId) ??
+    bEvents.find(be => be.name?.toLowerCase() === eventId?.toLowerCase()) ??
+    null;
+
   const handleImportFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
     setImportError(null);
     setImportPreview(null);
+    setMultiImportPreview(null);
     try {
       let result;
       if (/\.(xlsx|xls|ods)$/i.test(file.name)) {
@@ -175,14 +183,53 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
         result = parsePlanCsv(text, { epoch, timeUnit });
       }
       if (result.error) { setImportError(result.error); return; }
-      if (!result.rows.length) { setImportError("No data rows found in file."); return; }
-      // Determine default target eventId
-      const existing = sched.scheduleJson?.[0];
-      const defaultEventId = importTargetEventId ?? existing?.eventId ?? bEvents[0]?.id ?? null;
-      setImportTargetEventId(defaultEventId);
-      setImportPreview({ rows: result.rows, attrHeaders: result.attrHeaders, skipped: result.skipped, fileName: file.name });
+
+      if (result.format === 'multi') {
+        if (!result.groups.length) { setImportError("No data rows found in file."); return; }
+        const matched = result.groups.map(g => ({ ...g, bEvent: matchBEvent(g.eventId) }));
+        setMultiImportPreview({ matched, attrHeaders: result.attrHeaders, skipped: result.skipped, fileName: file.name });
+      } else {
+        if (!result.rows.length) { setImportError("No data rows found in file."); return; }
+        const existing = sched.scheduleJson?.[0];
+        const defaultEventId = importTargetEventId ?? existing?.eventId ?? bEvents[0]?.id ?? null;
+        setImportTargetEventId(defaultEventId);
+        setImportPreview({ rows: result.rows, attrHeaders: result.attrHeaders, skipped: result.skipped, fileName: file.name });
+      }
     } catch (err) {
       setImportError(err.message || "Failed to parse file");
+    }
+  };
+
+  const handleConfirmMultiImport = async (createStubs) => {
+    if (!multiImportPreview) return;
+    setImporting(true);
+    setImportError(null);
+    try {
+      let newJson = sched.scheduleJson ?? [];
+      const newStubs = [];
+      for (const mg of multiImportPreview.matched) {
+        const targetId = mg.bEvent?.id ?? mg.eventId;
+        newJson = mergeScheduleRows(newJson, targetId, mg.rows);
+        if (!mg.bEvent && createStubs) {
+          newStubs.push({
+            id: 'b' + Date.now() + Math.random().toString(36).slice(2, 6),
+            name: mg.eventId,
+            scheduledTime: '0',
+            effect: [],
+            schedules: [{ scheduleRef: sched.id }],
+            description: 'Created from schedule import — add arrival effect and queue',
+          });
+        }
+      }
+      await onSave({ ...sched, scheduleJson: newJson });
+      if (newStubs.length > 0 && onUpdateBEvents) {
+        await onUpdateBEvents([...bEvents, ...newStubs]);
+      }
+      setMultiImportPreview(null);
+    } catch (err) {
+      setImportError(err.message || "Failed to save imported rows");
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -309,7 +356,65 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
         </div>
       )}
 
-      {/* Import preview */}
+      {/* Multi-event import preview */}
+      {multiImportPreview && (() => {
+        const unmatched = multiImportPreview.matched.filter(mg => !mg.bEvent);
+        const totalRows = multiImportPreview.matched.reduce((s, mg) => s + mg.rows.length, 0);
+        return (
+          <div style={{ border: `1px solid ${C.accent}44`, borderRadius: 6, padding: "12px 14px", background: `${C.accent}08`, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
+              Multi-event import — {multiImportPreview.fileName}
+            </div>
+            <div style={{ fontSize: 12, color: C.muted }}>
+              {multiImportPreview.matched.length} event group{multiImportPreview.matched.length !== 1 ? "s" : ""} · {totalRows.toLocaleString()} rows total
+              {multiImportPreview.skipped > 0 && ` · ${multiImportPreview.skipped} skipped`}
+              {multiImportPreview.attrHeaders.length > 0 && ` · Attrs: ${multiImportPreview.attrHeaders.join(", ")}`}
+            </div>
+            {/* Per-event match table */}
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: C.panel }}>
+                  <th style={thStyle}>Event (from file)</th>
+                  <th style={thStyle}>Rows</th>
+                  <th style={thStyle}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {multiImportPreview.matched.map((mg, idx) => (
+                  <tr key={idx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={tdStyle}>{mg.eventId}</td>
+                    <td style={tdStyle}>{mg.rows.length}</td>
+                    <td style={tdStyle}>
+                      {mg.bEvent
+                        ? <span style={{ color: C.green }}>✓ {mg.bEvent.name}</span>
+                        : <span style={{ color: C.amber }}>⚠ No matching B-event</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {unmatched.length > 0 && (
+              <div style={{ fontSize: 12, color: C.amber, background: `${C.amber}12`, border: `1px solid ${C.amber}33`, borderRadius: 4, padding: "8px 10px" }}>
+                {unmatched.length} event{unmatched.length !== 1 ? "s" : ""} not found in this model.
+                You can skip them, or create stub B-events (fire at start, no effect — add effects after import).
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Btn size="sm" onClick={() => handleConfirmMultiImport(false)} disabled={importing}>
+                {importing ? "Importing…" : unmatched.length > 0 ? `Import (skip ${unmatched.length} unmatched)` : "Confirm import"}
+              </Btn>
+              {unmatched.length > 0 && onUpdateBEvents && (
+                <Btn size="sm" variant="ghost" onClick={() => handleConfirmMultiImport(true)} disabled={importing}>
+                  Import + create {unmatched.length} stub B-event{unmatched.length !== 1 ? "s" : ""}
+                </Btn>
+              )}
+              <Btn size="sm" variant="ghost" onClick={() => setMultiImportPreview(null)}>Cancel</Btn>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Single-event import preview */}
       {importPreview && (
         <div style={{ border: `1px solid ${C.accent}44`, borderRadius: 6, padding: "12px 14px", background: `${C.accent}08`, display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>
