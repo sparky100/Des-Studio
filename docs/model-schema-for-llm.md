@@ -339,6 +339,8 @@ time,severity,age
 
 **Size guidance:** For schedules with more than 50 rows, keep the model JSON's `rows[]` empty (`"rows": []`) and deliver all arrival data exclusively in the companion CSV. The user imports it via the **Schedules** tab. For 50 rows or fewer, embedding rows inline in the JSON is acceptable.
 
+> **ADR-016 note (Sprint 73+):** In production models, timetable rows are stored externally in the `model_schedules` Supabase table rather than inline in `model_json`. A B-event schedule entry may carry a `scheduleRef` UUID instead of `rows[]`. The engine merges external rows at run-time via `resolveInlineSchedules()`. When generating a model JSON for import, leave `rows[]` empty and note in the companion CSV; users load schedule data via the **Schedules** tab. You do not need to emit `scheduleRef` — the platform assigns it.
+
 The companion CSV is returned in the `companionCsv` field of the response envelope (see Response Format). Set `companionCsv` to `null` when the model does not use planned arrivals.
 
 ### Rules

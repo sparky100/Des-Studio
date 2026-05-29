@@ -633,6 +633,16 @@ The engine must validate the complete model before `buildEngine()` proceeds. Any
 | V27 | FILL and DRAIN macros must reference a container declared in `containerTypes`. | Blocking | `B-Event 'X' FILL references undeclared container 'Y'.` / similar for DRAIN and C-Events. |
 | V28 | `model.epoch`, when set, must be a valid ISO 8601 datetime string. | Blocking | `Model epoch 'X' is not a valid ISO 8601 datetime. Use the Settings tab to correct it.` |
 | V29 | A C-event with `cSchedules` entries that all have a `when` condition must also have a fallback entry (one without `when`). Without a fallback, entities that match no condition receive no service. | Warning only | `C-event 'X' has attribute-conditional cSchedules but no fallback entry (one without a 'when' condition). Entities that don't match any condition will receive no service.` |
+| V30 | A B-event with `probabilisticRouting` that includes a null-destination branch must have `COMPLETE()` or `RENEGE()` in its effect list. | Blocking | `B-Event 'X' has a null probabilistic routing branch but no terminal lifecycle macro (COMPLETE/RENEGE).` |
+| V31 | A B-event using routing (conditional or probabilistic) to a null exit must include `COMPLETE()` or `RENEGE()` in its effect. | Blocking | `B-Event 'X' routes to exit but has no terminal macro.` |
+| V32 | A B-event or C-event effect list must not contain more than one terminal lifecycle sink (`COMPLETE` or `RENEGE`). | Blocking | `B-Event/C-Event 'X' has multiple terminal macros (COMPLETE/RENEGE).` |
+| V33 | A B-event with a single 100% probabilistic null exit and `COMPLETE()` — valid but unusual pattern. | Warning only | `B-Event 'X' routes 100% to exit — no entity ever joins a queue from this event.` |
+| V34 | `experimentDefaults.replications` must be a positive integer. | Blocking | `Replication count must be a positive integer.` |
+| V35 | `experimentDefaults.warmupPeriod` must be less than `experimentDefaults.maxSimTime`. | Blocking | `Warm-up period (X) must be shorter than run duration (Y).` |
+| V36 | Server failure distribution fields (`mtbfDist`, `mttrDist`, `mtbfDistParams`, `mttrDistParams`) are only valid on entity types with `role: "server"`. | Blocking | `Entity type 'X' is not a server — failure settings are not applicable.` |
+| V37 | When either `mtbfDist` or `mttrDist` is set, both must be present and point to valid distributions. | Blocking | `Server 'X': both MTBF and MTTR distributions must be set together.` |
+
+> **Note:** V7 is intentionally skipped (reserved for future activity-edge validation).
 
 ---
 

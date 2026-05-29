@@ -535,6 +535,46 @@ When you export a model as JSON (toolbar → Export Model), schedule rows are au
 
 Each arrival B-event stores a `scheduleRef` UUID pointing to a schedule record. If the referenced schedule is deleted or unavailable, the B-event produces zero arrivals (a validation warning is shown).
 
+### Bidirectional navigation
+
+In the **B-Events** editor, a green badge appears next to each event that is linked to a named schedule (showing the schedule name). Clicking the badge switches to the Schedules tab with that schedule selected.
+
+In the **Schedules** editor, the Event Links panel lists every B-event that uses the current schedule. Clicking a B-event name switches to the B-Events tab and scrolls to that event.
+
+### Migrating inline rows to a named schedule
+
+If a B-event still has rows embedded directly in the model JSON (legacy format), a **Move to named schedule →** button appears in the B-Events editor above the schedule picker. Clicking it creates a new named schedule from the inline rows and links the B-event to it, removing the embedded data from model JSON.
+
+### CSV import — single-event and multi-event formats
+
+**Single-event:** First column is `time`; subsequent columns are entity attribute names. Import a single schedule's rows.
+
+**Multi-event:** First column is `event` or `eventId` containing B-event IDs or names; second column is `time`; subsequent columns are attributes. Imports rows for multiple B-events at once. The importer shows a per-event match status; unmatched events are flagged. The **Import + create stubs** option auto-creates fire-at-start B-events for any B-event IDs in the CSV that don't yet exist in the model.
+
 ---
 
-<!-- help-reference version: 1.3 | sprint baseline: Sprint 73 | updated: 2026-05-27 | word count: ~3900 -->
+## Model Assistant
+
+The Model Assistant is an AI panel available from any model editing or results view. It provides results analysis, run comparison, plan refinement, and model Q&A.
+
+### Opening the Model Assistant
+
+Click the **✦ AI** button in the top-right of the mode bar to toggle the Model Assistant sidebar. On compact layouts (720–1024px wide) the panel floats as an overlay. On mobile (<720px), use the action buttons directly — they open a full-screen view.
+
+### Focused actions (Results and Execute tabs)
+
+| Button | What it does |
+|--------|-------------|
+| **Explain Results** | Streams a plain-language narrative of the latest run KPIs, queue waits, and resource utilisation |
+| **Compare Runs** | Selects a saved run from the dropdown and streams a structural comparison with the current run |
+| **Refine Plan** | Analyses the current schedule against results and suggests timetable adjustments (only shown when the model has a schedule) |
+
+Each button opens a focused view showing only that action — the other actions are hidden. Click the ✕ close button to dismiss.
+
+### Model Q&A (Design tabs)
+
+When the Model Assistant is open on a non-results tab (entities, queues, B-events, etc.), a free-text input appears. Ask questions about the current model structure, e.g. "How many queues does this model have?" or "What does the Triage C-event do?"
+
+### Diagnostics
+
+The **Diagnosis** section (in the Execute panel) uses the same LLM backend. Click **Diagnose** to stream an analysis of validation errors and warnings for the current model configuration.

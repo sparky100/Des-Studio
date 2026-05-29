@@ -27,6 +27,7 @@
 | v1.13.0 | 2026-05-24 | Sprint 71 | In-app Feedback widget and About panel — `public.feedback` Supabase table with RLS; `submitFeedback()` exported from `src/db/supabase.js`; no-op stub in `src/db/local.js`; `FeedbackModal` and `AboutModal` React components in `src/ui/`; `AppNavBar` extended with Feedback and Info icon buttons; `VITE_APP_VERSION` injected via `vite.config.js` define; 26 new UI tests in `src/ui/__tests__/` |
 | v1.14.0 | 2026-05-27 | Sprint 73 | ADR-016: Schedule data separation — `model_schedules` Supabase table stores timetable rows externally from `model_json`; `resolveInlineSchedules(model, schedulesMap)` pure engine function merges external schedule data before FEL initialisation; `buildEngine` accepts `options.schedulesMap`; `src/db/models.js` gains `fetchModelSchedules`, `fetchModelSchedule`, `saveModelSchedule`, `deleteModelSchedule`, `setDefaultSchedule`, `buildSchedulesMap`, `extractInlineSchedule`; `ScheduleManager` UI component with list/detail/CSV-export views; Execute panel schedule selector dropdown; `ModelDetail` export re-inlines rows; `includeModelSnapshot` flag made explicit in `results-persistence.js`; `doCloudSave` wrapper with 5s/15s/30s timeout thresholds. 45 new Vitest tests. |
 | v1.15.0 | 2026-05-28 | Sprint 74 | Report system redesign — `generateReport(model, results, experimentConfig, runMeta, options)` replaces single-format Word output with dual-type (Senior Management / Technical) × dual-format (HTML / Markdown) generation. `docx` and `html2canvas` dependencies removed. New utilities: `formatN` (max 1 dp), `formatCurrency` (English word notation), `resolveValue` (uses `aggregateStats.mean` for multi-rep runs), `mdTable`. Comparison explain: `diffModelStructure` helper added to `prompts.js`; structural note injected into comparison prompt payload. `canRefinePlan` extended with ADR-016 `bEvent.schedules[].scheduleRef` condition. `buildExplainResultsPrompt` max_tokens raised to 1600. |
+| v1.16.0 | 2026-05-29 | Sprint 75–76 | **Sprint 75** — Persistent AI sidebar: `AiAssistantPanel` gains `sidebar`, `activeTab`, `mobileFullscreen`, and `triggerAction` props; `✦ AI` toggle button in `ModelTabBar`; `buildModelQueryPrompt` added to `prompts.js`; compact layout (720–1024px) renders as overlay; viewport <720px auto-closes. **Sprint 76** — Report enhancements: `getEntityName()`, `formatInt()`, `computePerQueueServiceTimes()`, `detectArrivalMode()`, `wrapSvgLabel()`; per-stage service breakdown; angled queue chart labels; wrapped resource chart labels; `buildMethodology()` Scope & Methodology section; results intro paragraph; goal status badge in executive summary; model image wired through `generateReport`. AI panel renamed "Model Assistant"; focused views (Explain/Compare/Refine each show only their own section); `DiagnosticsTab` labels renamed Diagnosis/Diagnose; mobile fullscreen overlay; schedule UI enhancements: multi-event CSV import, bidirectional B-event↔schedule navigation, named-schedule badge in B-Events editor, inline→named migration button. |
 
 ---
 
@@ -160,6 +161,24 @@ The report generation module produces simulation reports in two audience variant
 - Filename pattern: `<ModelName> — <RunLabel> — Senior Management Report.html` (or `.md` / `Technical Report.*`)
 - `sanitizeFilename` exported from `src/reports/index.js` for use in the Execute panel
 
+### 2.6a Report Enhancements (Sprint 76)
+
+Nine improvements applied to `src/reports/reportGenerator.js`:
+
+| # | Enhancement | Implementation |
+|---|---|---|
+| 1 | Entity name in KPI labels | `getEntityName(model)` — finds first entity type with `role === "customer"`; substitutes "Entities" with the entity's `name` field throughout KPI cards and Markdown tables |
+| 2 | Integer served/reneged counts | `formatInt(value)` — `String(Math.round(Number(value)))` applied everywhere `served` and `reneged` are formatted |
+| 3 | Per-stage service time breakdown | `computePerQueueServiceTimes(results)` — aggregates `entitySummary[].stages[].stageService` by queue name; adds "Mean service" column to the queue wait table for multi-stage models |
+| 4 | Angled x-axis labels in queue chart | `groupedBarChart` bottom margin 72 → 96; label rotate `-40°` with `text-anchor="end"` |
+| 5 | Wrapped resource utilisation labels | `wrapSvgLabel(text, maxLen=18)` splits on word boundaries into ≤3 `<tspan>` lines; `horizBarChart` left margin 110 → 140, row height 30 → 36 |
+| 6 | Scope & Methodology section | `buildMethodology(model, results, experimentConfig)` — `detectArrivalMode()` classifies arrivals as plan-based or stochastic; outputs arrival pattern, warm-up, replications, and performance goals sub-sections |
+| 7 | Results intro paragraph | `buildResults` prepends a `<p class="note">` summarising queues analysed, resource types, and goal status |
+| 8 | Goal status in executive summary | `buildExecutiveSummary` appends a badge: "N of M performance targets met" using `buildGoalGaps()` |
+| 9 | Model diagram in report | `generateReport` accepts `modelImageDataUrl` option; inserted as `<img>` in the senior management report above the executive summary |
+
+Version note: update the Engineering Spec header to v1.16.0 once this section is merged.
+
 ### 2.7 In-App Feedback and About Panel (Sprint 71)
 
 #### Database schema
@@ -256,6 +275,55 @@ Key AboutModal assertions:
 - `mailto:support@simmodlr.app` link rendered with correct `href`
 - Three-Phase method text present
 - Escape key calls `onClose`; backdrop click calls `onClose`
+
+### 2.8a Model Assistant / AI Sidebar (Sprint 75–76)
+
+**Component:** `src/ui/execute/AiAssistantPanel.jsx`
+
+The Model Assistant is a multi-mode AI panel that provides results analysis, run comparison, plan refinement, and model Q&A. It is surfaced via the `✦ AI` toggle button in `ModelTabBar` (right end of the mode bar, hidden on mobile).
+
+#### Props
+
+| Prop | Type | Purpose |
+|---|---|---|
+| `sidebar` | bool | Right-column sidebar mode (full-height, 320px wide); used on desktop ≥1024px |
+| `overlay` | bool | Floating fixed panel (top-right); used on compact layout 720–1024px |
+| `mobileFullscreen` | bool | Full-screen fixed overlay (inset:0); triggered on mobile <720px when an action button is tapped |
+| `embedded` | bool | Inline panel (legacy execute-tab usage) |
+| `activeTab` | string | Current tab id; drives `isResultsContext = ['results','execute'].includes(activeTab)` |
+| `triggerAction` | `{action, seq}` or null | Auto-fires an action when `seq` changes; action is `"explain"` / `"compare"` / `"refine"` |
+| `onClose` | fn | Called when the ✕ button is pressed |
+
+#### Focused views
+
+When `sidebar || mobileFullscreen` and `isResultsContext`, a `focusedAction` is derived from `triggerAction?.action`. When a focused action is set:
+- Only the section for that action is rendered (Explain, Compare, or Refine Plan)
+- Panel title changes to the action name ("Explain Results", "Compare Runs", "Refine Plan")
+- The general Q&A input and other sections are hidden
+
+#### Context-aware sections
+
+| `isResultsContext` | Section shown |
+|---|---|
+| true | Explain Results button, Compare Runs selector+button, Refine Plan section (if model has schedule), response area, Q&A input |
+| false | Model Q&A input (asks about model structure using `buildModelQueryPrompt`) |
+
+#### Viewport breakpoints
+
+| Viewport | Panel mode |
+|---|---|
+| ≥1024px | `sidebar=true` — right column, shifts main content |
+| 720–1024px | `overlay=true` — floats fixed top-right |
+| <720px | Hidden by default; action buttons open `mobileFullscreen=true` full-screen overlay |
+
+#### Schedule Manager enhancements (Sprint 75–76)
+
+`src/ui/editors/ScheduleManager.jsx` and `src/ui/editors/BEventEditor.jsx` received post-Sprint 74 additions:
+
+- **Named schedule badge in BEventEditor:** When a B-event has a `scheduleRef`, a green badge shows the actual schedule name (fetched via `fetchModelSchedules`). Clicking the badge navigates to the Schedules tab.
+- **Bidirectional navigation:** ScheduleManager Event Links panel lists B-events using the current schedule; clicking a name navigates to the B-Events tab and scrolls to that event.
+- **Inline→named migration:** BEventEditor shows "Move to named schedule →" when a B-event has inline `rows[]` without a `scheduleRef`.
+- **Multi-event CSV import:** `planCsvParser.js` detects a leading `event`/`eventId` column and parses rows grouped by B-event ID. ScheduleManager shows per-group match status and offers auto-stub creation for unmatched event IDs.
 
 ### 2.8 Clock Utilities (Sprint 62)
 
@@ -387,7 +455,7 @@ Entity types are defined in the `entityTypes` array. Each entry has `role: "cust
 |-------|------|-------------|
 | `id` | string | Unique within the model |
 | `name` | string | Display name; referenced in macro calls and conditions |
-| `discipline` | `"FIFO"` / `"LIFO"` / `"PRIORITY"` / `"SPT"` / `"EDD"` | Queue service discipline; defaults to `"FIFO"` |
+| `discipline` | `"FIFO"` / `"LIFO"` / `"PRIORITY"` / `"PRIORITY(attrName)"` / `"SPT"` / `"EDD"` | Queue service discipline; defaults to `"FIFO"`. `PRIORITY(attrName)` uses a named entity attribute for ordering. `SPT` = Shortest Processing Time; `EDD` = Earliest Due Date. |
 | `capacity` | integer >= 1 or null | Maximum waiting entities; `null` means unlimited |
 | `customerType` | string | Name of the entity type expected to wait in this queue |
 | `overflowDestination` | string or null | Queue name to route blocked/balked entities to; `null` means exit system |
@@ -404,7 +472,7 @@ B-events (bound events) are pre-scheduled occurrences on the Future Event List. 
 | `name` | string | Display name |
 | `scheduledTime` | number | Initial scheduled time for the event in the FEL |
 | `effect` | string[] | Array of macro call strings, executed in order when the event fires |
-| `schedules` | Schedule[] | Re-scheduling rules: `[{dist, distParams, isRenege}]`; each fires a new instance of this B-event after the sampled inter-event time. When `dist === "Schedule"`, `distParams` may carry either `times: number[]` (flat absolute clock times) or `rows: [{time: number, attrs: {}}]` (per-arrival times with entity attributes injected at arrival via ARRIVE). |
+| `schedules` | Schedule[] | Re-scheduling rules: `[{dist, distParams, isRenege}]`; each fires a new instance of this B-event after the sampled inter-event time. When `dist === "Schedule"`, `distParams` may carry either `times: number[]` (flat absolute clock times) or `rows: [{time: number, attrs: {}}]` (per-arrival times with entity attributes). Per ADR-016 (Sprint 73), large schedules are stored externally — a `scheduleRef: string (UUID)` field references a row in the `model_schedules` table; `rows[]` will be empty when `scheduleRef` is set and the engine merges rows at run-time via `resolveInlineSchedules()`. |
 | `routing` | RoutingBranch[] | Conditional routing table: `[{condition, queueName}]`; mutually exclusive with `probabilisticRouting` |
 | `probabilisticRouting` | ProbBranch[] | Probabilistic routing: `[{probability, queueName}]`; probabilities must sum to 1.0 +/- 0.001 |
 | `defaultQueueName` | string or null | Fallback queue name when no routing branch matches |
