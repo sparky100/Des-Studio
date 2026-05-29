@@ -964,38 +964,57 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
         content: truncateWords(JSON.stringify({ ...payload, instruction }, null, 2)),
       },
     ],
-    max_tokens: 700,
+    max_tokens: 1800,
   };
 }
 
 export function parsePlanRefinementResponse(text = "") {
+  // Match complete fenced block, or an incomplete one (truncated before closing ```)
   const fenceMatch = text.match(/```json\s*([\s\S]*?)```/);
-  const tagMatch   = !fenceMatch && text.match(/<json>\s*([\s\S]*?)<\/json>/i);
-  const rawJson    = fenceMatch ? fenceMatch[1].trim() : tagMatch ? tagMatch[1].trim() : text.trim();
+  const incompleteFence = !fenceMatch && text.match(/```json\s*([\s\S]+)$/);
+  const tagMatch = !fenceMatch && !incompleteFence && text.match(/<json>\s*([\s\S]*?)<\/json>/i);
+  const rawJson = fenceMatch ? fenceMatch[1].trim()
+    : incompleteFence ? incompleteFence[1].trim()
+    : tagMatch ? tagMatch[1].trim()
+    : text.trim();
+
+  const mapRecommendations = (arr) => Array.isArray(arr)
+    ? arr.filter(r => r && typeof r === "object").map(r => ({
+        rank: r.rank ?? 1,
+        targetScheduleId: r.targetScheduleId || null,
+        change: r.change || "",
+        rationale: r.rationale || "",
+        goalImpact: r.goalImpact || "",
+        feasible: Boolean(r.feasible),
+        revisedEntry: r.revisedEntry || null,
+      }))
+    : [];
+
   try {
     const parsed = JSON.parse(rawJson);
-    const analysis = typeof parsed.analysis === "string" ? parsed.analysis : "";
-    const recommendations = Array.isArray(parsed.recommendations)
-      ? parsed.recommendations.map(r => ({
-          rank: r.rank,
-          targetScheduleId: r.targetScheduleId,
-          change: r.change,
-          rationale: r.rationale,
-          goalImpact: r.goalImpact,
-          feasible: Boolean(r.feasible),
-          revisedEntry: r.revisedEntry || null,
-        }))
-      : [];
-    const infeasibleGoals = Array.isArray(parsed.infeasibleGoals)
-      ? parsed.infeasibleGoals.map(g => ({ goalLabel: g.goalLabel, reason: g.reason }))
-      : [];
-    return { analysis, recommendations, infeasibleGoals };
+    return {
+      analysis: typeof parsed.analysis === "string" ? parsed.analysis : "",
+      recommendations: mapRecommendations(parsed.recommendations),
+      infeasibleGoals: Array.isArray(parsed.infeasibleGoals)
+        ? parsed.infeasibleGoals.map(g => ({ goalLabel: g.goalLabel || "", reason: g.reason || "" }))
+        : [],
+    };
   } catch {
-    const cleaned = text
-      .replace(/<json>[\s\S]*?<\/json>/gi, "")
-      .replace(/```json[\s\S]*?```/g, "")
-      .trim();
-    return { analysis: cleaned || text, recommendations: [], infeasibleGoals: [] };
+    // Truncated JSON — try to salvage the analysis field and any complete recommendation objects
+    const analysisMatch = rawJson.match(/"analysis"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    const analysis = analysisMatch
+      ? analysisMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"')
+      : "";
+
+    // Attempt to extract complete recommendation objects from partial JSON
+    const recs = [];
+    const recPattern = /\{[^{}]*"rank"\s*:\s*(\d+)[^{}]*"change"\s*:\s*"((?:[^"\\]|\\.)*)"/g;
+    let m;
+    while ((m = recPattern.exec(rawJson)) !== null) {
+      recs.push({ rank: Number(m[1]), targetScheduleId: null, change: m[2].replace(/\\n/g, "\n"), rationale: "", goalImpact: "", feasible: true, revisedEntry: null });
+    }
+
+    return { analysis: analysis || "Analysis incomplete — response was truncated. Try again.", recommendations: recs, infeasibleGoals: [] };
   }
 }
 
@@ -1129,4 +1148,34 @@ export function parseReportRecommendations(text) {
   } catch {
     return [];
   }
+}
+
+// ── AI Sidebar: design-context model Q&A ──────────────────────────────────────
+
+export function buildModelQueryPrompt(question, model = {}, history = []) {
+  const entityTypes = (model.entityTypes || []);
+  const customers   = entityTypes.filter(e => e.role === 'customer').map(e => e.name).join(', ') || 'none';
+  const servers     = entityTypes.filter(e => e.role === 'server').map(e => `${e.name} (×${e.count ?? 1})`).join(', ') || 'none';
+  const queues      = (model.queues || []).map(q => q.name).join(', ') || 'none';
+  const bEvents     = (model.bEvents || []).slice(0, 8).map(ev => ev.name).join(', ') || 'none';
+  const goals       = (model.goals || []).map(g => `${g.label}: target ${g.targetValue} ${g.metric}`).join('; ') || 'none';
+
+  const context = `You are assisting a simulation modeller in DES Studio.
+
+Model: ${model.name || 'Unnamed'}
+${model.description ? `Description: ${model.description}\n` : ''}Entity types (customer): ${customers}
+Resources (server): ${servers}
+Queues: ${queues}
+B-Events (arrivals/inputs): ${bEvents}
+Performance goals: ${goals}
+
+Answer questions about this model concisely and precisely. If a question requires running the simulation to answer definitively, say so. Do not invent data not present in the model definition above.`;
+
+  const messages = [
+    { role: 'system', content: context },
+    ...history.slice(-8),
+    { role: 'user', content: question },
+  ];
+
+  return { kind: 'model_query', messages, max_tokens: 400 };
 }

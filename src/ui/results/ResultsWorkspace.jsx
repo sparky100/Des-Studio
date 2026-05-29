@@ -232,32 +232,7 @@ function RuntimeMetricsSection({ runtimeMetrics }) {
       </div>
 
       {runtimeMetrics?.hasMetrics ? (
-        <>
-          <MetricStrip items={items} />
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1 }}>
-              Peak queue length by queue
-            </div>
-            {queuePeaks.length ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
-                {queuePeaks.map(entry => (
-                  <div key={entry.queueName} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "8px 10px" }}>
-                    <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, fontWeight: 700, marginBottom: 4 }}>
-                      {entry.queueName}
-                    </div>
-                    <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, fontWeight: 700 }}>
-                      {formatNumber(entry.depth, 0)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
-                No queue peaks were recorded for this run.
-              </div>
-            )}
-          </div>
-        </>
+        <MetricStrip items={items} />
       ) : (
         <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
           Runtime metrics are not available for this saved run.
@@ -752,6 +727,9 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const serverSection = chartModel.chartSections.find(section => section.id === "server-utilization");
   const waitSection = chartModel.chartSections.find(section => section.id === "wait-distribution");
   const hasWaitDistributions = (waitSection?.distributions || []).length > 0;
+  const queuePeaks = Array.isArray(chartModel.runtimeMetrics?.metrics?.maxQueueLengthByQueue)
+    ? chartModel.runtimeMetrics.metrics.maxQueueLengthByQueue
+    : [];
   const analysisInputs = normaliseReplicationResults(replicationResults, results);
   const hasAnalysisInputs = analysisInputs.length > 0 || (warmupDetection?.series || []).length > 0 || results?.aggregateStats;
 
@@ -772,14 +750,34 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
       <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
       <SummaryCardGrid results={results} />
 
-      {(chartModel.hasTimeSeries || hasWaitDistributions) && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
-            WHERE ARE THE BOTTLENECKS?
+      {(chartModel.hasTimeSeries || hasWaitDistributions || queuePeaks.length > 0) && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+              WHERE ARE THE BOTTLENECKS?
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
+              Use these charts to see where queues build up, how busy resources are, and how uneven waiting times become.
+            </div>
           </div>
-          <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
-            Use these charts to see where queues build up, how busy resources are, and how uneven waiting times become.
-          </div>
+
+          {queuePeaks.length > 0 && (
+            <section aria-label="Peak queue lengths" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+              <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>PEAK QUEUE LENGTH BY QUEUE</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
+                {queuePeaks.map(entry => (
+                  <div key={entry.queueName} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "8px 10px" }}>
+                    <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {entry.queueName}
+                    </div>
+                    <div style={{ fontSize: 18, color: C.amber, fontFamily: FONT, fontWeight: 700, lineHeight: 1 }}>
+                      {formatNumber(entry.depth, 0)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       )}
 

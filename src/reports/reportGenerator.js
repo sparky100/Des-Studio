@@ -917,13 +917,14 @@ function buildAppendix(model) {
 
 // ── HTML report builder ────────────────────────────────────────────────────────
 
-function buildHtmlReport({ model, results, experimentConfig, runMeta, aggregateStats, type, narrativeText, modelDescription, recommendations }) {
+function buildHtmlReport({ model, results, experimentConfig, runMeta, aggregateStats, type, narrativeText, modelDescription, recommendations, modelImageDataUrl }) {
   const isTechnical = type === 'technical';
   const title = esc(`${model.name || 'Simulation'} — ${isTechnical ? 'Technical' : 'Management'} Report`);
 
   const body = [
     buildCover(model, runMeta, experimentConfig),
     buildExecutiveSummary(model, results, recommendations, aggregateStats, modelDescription),
+    buildModelImage(modelImageDataUrl),
     buildMethodology(model, results, experimentConfig, aggregateStats),
     buildResults(model, results, aggregateStats),
     narrativeText ? buildSeniorMgmtAnalysis(narrativeText) : '',
@@ -1229,9 +1230,9 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
 
 export async function generateReport(model = {}, results = {}, experimentConfig = {}, runMeta = {}, options = {}) {
   // Back-compat: old callers passed modelImageDataUrl as 5th arg (string or null)
-  const opts = (options && typeof options === 'object' && !Array.isArray(options))
-    ? options
-    : {};
+  const isLegacyImageArg = typeof options === 'string' || options === null;
+  const modelImageDataUrl = isLegacyImageArg ? options : (options?.modelImageDataUrl ?? null);
+  const opts = (!isLegacyImageArg && options && typeof options === 'object') ? options : {};
   const {
     type = 'technical',     // 'seniorMgmt' | 'technical'
     format = 'html',        // 'html' | 'markdown'
@@ -1251,7 +1252,7 @@ export async function generateReport(model = {}, results = {}, experimentConfig 
     finalDescription = await callLLMOnce(buildModelDescriptionPrompt(model)).catch(() => '');
   }
 
-  const ctx = { model, results, experimentConfig, runMeta, aggregateStats, type, narrativeText, modelDescription: finalDescription, recommendations };
+  const ctx = { model, results, experimentConfig, runMeta, aggregateStats, type, narrativeText, modelDescription: finalDescription, recommendations, modelImageDataUrl };
 
   return format === 'markdown'
     ? buildMarkdownReport(ctx)

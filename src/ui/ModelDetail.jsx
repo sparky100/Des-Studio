@@ -516,8 +516,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [latestReplicationResults,setLatestReplicationResults]=useState([]);
   const [latestWarmupDetection,setLatestWarmupDetection]=useState(null);
   const [latestLog,setLatestLog]=useState([]);
+  const [namedSchedules,setNamedSchedules]=useState([]);
+  const [focusBEventId,setFocusBEventId]=useState(null);
+  const [focusScheduleId,setFocusScheduleId]=useState(null);
   const [resultsView,setResultsView]=useState("summary");
+  const [aiAction,setAiAction]=useState(null);
+  const [aiSeq,setAiSeq]=useState(0);
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
+  const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
     try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
   });
@@ -737,6 +743,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   };
 
   useEffect(()=>{
+    if(!modelId)return;
+    fetchModelSchedules(modelId).then(setNamedSchedules).catch(()=>{});
+  },[modelId]);
+
+  useEffect(()=>{
     const onBeforeUnload=(e)=>{
       if(!dirty)return;
       e.preventDefault();
@@ -815,7 +826,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     const hydratedResults = hydrateResultsFromHistoryRow(row);
     setLatestResults(hydratedResults);
     setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
-    setResultsView(nextSubtab);
+    if (nextSubtab === "explain") {
+      setAiSidebarOpen(true);
+      setResultsView("summary");
+      setAiAction("explain");
+      setAiSeq(s => s + 1);
+    } else {
+      setResultsView(nextSubtab);
+    }
     setTab("results");
   }, []);
 
@@ -900,6 +918,16 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[isMobileLayout, tab]);
 
   useEffect(()=>{
+    if(isMobileLayout) setAiSidebarOpen(false);
+  },[isMobileLayout]);
+
+  useEffect(()=>{
+    const handleEsc = e => { if(e.key==="Escape") setAiSidebarOpen(false); };
+    window.addEventListener("keydown", handleEsc);
+    return () => window.removeEventListener("keydown", handleEsc);
+  },[]);
+
+  useEffect(()=>{
     if(tab!=="results")return;
     setHistoryLoading(true);setHistoryError("");
     Promise.all([
@@ -946,7 +974,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         validation={validation} tabIssueCounts={tabIssueCounts}
         isCompactLayout={isCompactLayout}
         showMoreTabs={showMoreTabs} setShowMoreTabs={setShowMoreTabs}
+        aiSidebarOpen={aiSidebarOpen}
+        onToggleAiSidebar={isMobileLayout ? null : ()=>setAiSidebarOpen(v=>!v)}
       />
+      <div style={{flex:1,display:"flex",flexDirection:"row",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
         <SaveBanner canEdit={canEdit} dirty={dirty} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
         {saveError&&<div role="alert" style={{background:C.errorBg,border:`1px solid ${C.danger}`,borderRadius:6,padding:'8px 12px',color:C.error,fontFamily:FONT,fontSize:12,marginBottom:8}}>{saveError}</div>}
@@ -1092,9 +1123,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             </div>
           </div>
         )}
-        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'}/></div>)}
+        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}}/></div>)}
         {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
-        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} onBEventsExtracted={async (updatedBEvents) => {
+        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
           setModel(next);
           try { await overrides.onSave?.(next); setDirty(false); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
@@ -1199,7 +1230,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 {id:"log",label:"Log"},
                 {id:"entities",label:"Entities"},
                 {id:"history",label:"History"},
-                {id:"explain",label:"Explain"},
               ].map(sub=>(
                 <button
                   key={sub.id}
@@ -1217,7 +1247,21 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </button>
               ))}
               <div style={{flex:1}}/>
-              <Btn small variant="ghost" onClick={()=>setTab("execute")} style={{marginRight:4,flexShrink:0}}>← Run</Btn>
+              <div style={{display:"flex",gap:4,alignItems:"center",paddingRight:4}}>
+                <Btn small variant={aiAction==="explain"?"primary":"ghost"}
+                  onClick={()=>{if(aiAction==="explain"){setAiAction(null);}else{setAiAction("explain");setAiSeq(s=>s+1);}}}
+                  disabled={!latestResults}
+                >Explain</Btn>
+                <Btn small variant={aiAction==="compare"?"primary":"ghost"}
+                  onClick={()=>{if(aiAction==="compare"){setAiAction(null);}else{setAiAction("compare");setAiSeq(s=>s+1);}}}
+                  disabled={!latestResults}
+                >Compare</Btn>
+                <Btn small variant={aiAction==="refine"?"primary":"ghost"}
+                  onClick={()=>{if(aiAction==="refine"){setAiAction(null);}else{setAiAction("refine");setAiSeq(s=>s+1);}}}
+                  disabled={!latestResults}
+                >Refine Plan</Btn>
+                <Btn small variant="ghost" onClick={()=>setTab("execute")} style={{marginLeft:4}}>← Run</Btn>
+              </div>
             </div>
 
             {resultsView==="summary"&&(
@@ -1288,37 +1332,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 onExplainRun={row=>openResultsForRun(row,"explain")}
                 onViewResults={row=>openResultsForRun(row,"summary")}
               />
-            )}
-            {resultsView==="explain"&&(
-              latestResults ? (
-                <AiAssistantPanel
-                  model={model}
-                  results={latestResults}
-                  exportConfig={{
-                    modelId,
-                    runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
-                    replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications || latestResults?.replications || 1,
-                    warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
-                    maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
-                    terminationMode: "time",
-                    terminationCondition: null,
-                  }}
-                  aggregateStats={latestResults?.aggregateStats || {}}
-                  comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
-                    id: `saved-${row.id}`,
-                    label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
-                    payload: row,
-                    source: "saved",
-                  }))}
-                  comparisonLoading={historyLoading}
-                  comparisonError={historyError}
-                  embedded
-                />
-              ) : (
-                <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
-                  Results from the latest run will appear here. Open Run to generate them, or select a saved run when run history is available.
-                </div>
-              )
             )}
           </div>
         )}
@@ -1398,6 +1411,36 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           </div>
         )}
         </ErrorBoundary>
+      </div>
+      {aiSidebarOpen && !isMobileLayout && (
+        <AiAssistantPanel
+          sidebar={!isCompactLayout}
+          overlay={isCompactLayout}
+          activeTab={tab}
+          model={model}
+          results={latestResults}
+          exportConfig={{
+            modelId,
+            runLabel: historyRows.find(row => row.id === selectedResultsRunId)?.run_label || latestResults?.runLabel || null,
+            replications: historyRows.find(row => row.id === selectedResultsRunId)?.replications || latestResults?.replications || 1,
+            warmupPeriod: historyRows.find(row => row.id === selectedResultsRunId)?.warmup_period || null,
+            maxSimTime: historyRows.find(row => row.id === selectedResultsRunId)?.max_simulation_time || null,
+            terminationMode: "time",
+            terminationCondition: null,
+          }}
+          aggregateStats={latestResults?.aggregateStats || {}}
+          comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
+            id: `saved-${row.id}`,
+            label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),
+            payload: row,
+            source: "saved",
+          }))}
+          comparisonLoading={historyLoading}
+          comparisonError={historyError}
+          triggerAction={aiAction ? {action:aiAction,seq:aiSeq} : null}
+          onClose={()=>{setAiSidebarOpen(false);setAiAction(null);}}
+        />
+      )}
       </div>
     </div>
   );
