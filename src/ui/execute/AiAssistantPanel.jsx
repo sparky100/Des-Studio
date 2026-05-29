@@ -811,7 +811,7 @@ export const AiAssistantPanel = ({
         </div>
       )}
 
-      <div ref={responseAreaRef} aria-live="polite" aria-label="AI analysis response" style={{
+      {!(isResultsContext && activeMode === "refine") && <div ref={responseAreaRef} aria-live="polite" aria-label="AI analysis response" style={{
         flex: 1,
         background: C.bg,
         border: `1px solid ${C.border}`,
@@ -825,7 +825,7 @@ export const AiAssistantPanel = ({
         whiteSpace: parsedSuggestion ? "normal" : "pre-wrap",
       }}>
         {renderContent()}
-      </div>
+      </div>}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {isStreaming && <Btn small variant="danger" onClick={stopStream}>Stop</Btn>}
