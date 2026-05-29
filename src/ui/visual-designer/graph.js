@@ -3,10 +3,14 @@
 // Graph topology is derived from the canonical DES model. Persisted
 // model.graph data is used only for layout metadata such as node positions.
 
-const NODE_SPACING_X = 200;
-const NODE_SPACING_Y = 112;
-const ORIGIN_X = 40;
-const ORIGIN_Y = 96;
+import dagre from "@dagrejs/dagre";
+
+const NODE_WIDTH = 142;
+const NODE_HEIGHT = 68;
+const DAGRE_RANK_SEP = 50;   // gap between right edge of one rank and left edge of next
+const DAGRE_NODE_SEP = 36;   // gap between nodes within the same rank
+const DAGRE_MARGIN_X = 40;
+const DAGRE_MARGIN_Y = 80;
 
 export const VISUAL_NODE_TYPES = {
   SOURCE: "source",
@@ -74,46 +78,41 @@ function layoutById(graph = {}) {
 
 function withLayout(nodes, edges, graph = {}) {
   const stored = layoutById(graph);
-  const byId = new Map(nodes.map(node => [node.id, node]));
-  const incoming = new Map(nodes.map(node => [node.id, 0]));
-  const outgoing = new Map(nodes.map(node => [node.id, []]));
 
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({
+    rankdir: "LR",
+    ranksep: DAGRE_RANK_SEP,
+    nodesep: DAGRE_NODE_SEP,
+    marginx: DAGRE_MARGIN_X,
+    marginy: DAGRE_MARGIN_Y,
+    acyclicer: "greedy",
+    ranker: "network-simplex",
+  });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  nodes.forEach(node => g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT }));
+
+  // Exclude loop (back) edges — dagre handles them poorly and they're
+  // already styled separately in the renderer.
   edges.forEach(edge => {
-    if (!byId.has(edge.from) || !byId.has(edge.to)) return;
-    incoming.set(edge.to, (incoming.get(edge.to) || 0) + 1);
-    outgoing.get(edge.from).push(edge.to);
+    if (!edge.loop && g.hasNode(edge.from) && g.hasNode(edge.to)) {
+      g.setEdge(edge.from, edge.to);
+    }
   });
 
-  const roots = nodes
-    .filter(node => node.type === VISUAL_NODE_TYPES.SOURCE || (incoming.get(node.id) || 0) === 0)
-    .map(node => node.id);
-  const queue = roots.length ? roots.map(id => ({ id, depth: 0 })) : nodes.slice(0, 1).map(node => ({ id: node.id, depth: 0 }));
-  const depth = new Map();
+  dagre.layout(g);
 
-  while (queue.length) {
-    const current = queue.shift();
-    if (depth.has(current.id) && depth.get(current.id) <= current.depth) continue;
-    depth.set(current.id, current.depth);
-    (outgoing.get(current.id) || []).forEach(nextId => queue.push({ id: nextId, depth: current.depth + 1 }));
-  }
-
-  nodes.forEach(node => {
-    if (!depth.has(node.id)) depth.set(node.id, 0);
-  });
-
-  const rowsByDepth = new Map();
   return nodes.map(node => {
     const saved = stored.get(node.id);
     if (Number.isFinite(saved?.x) && Number.isFinite(saved?.y)) {
       return { ...node, x: saved.x, y: saved.y };
     }
-    const d = depth.get(node.id) || 0;
-    const row = rowsByDepth.get(d) || 0;
-    rowsByDepth.set(d, row + 1);
+    const pos = g.node(node.id);
     return {
       ...node,
-      x: ORIGIN_X + d * NODE_SPACING_X,
-      y: ORIGIN_Y + row * NODE_SPACING_Y,
+      x: pos ? Math.round(pos.x - NODE_WIDTH / 2) : DAGRE_MARGIN_X,
+      y: pos ? Math.round(pos.y - NODE_HEIGHT / 2) : DAGRE_MARGIN_Y,
     };
   });
 }

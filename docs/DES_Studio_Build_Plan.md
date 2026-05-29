@@ -126,6 +126,7 @@ flowchart LR
 | Timetable schedule data separation | ✅ Complete | Sprint 73: ADR-016 — `model_schedules` Supabase table, `resolveInlineSchedules` engine function, `ScheduleManager` UI, Execute panel schedule selector, model export re-inline, `includeModelSnapshot` explicit flag. Glasgow Central `model_json` reduced from ~290 KB to ~14 KB. |
 | Report presentation improvements | ✅ Complete | Sprint 76: entity name substitution, integer counts, per-stage service breakdown, angled/wrapped chart labels, Scope & Methodology section, goal status in executive summary, model diagram wired. |
 | Persistent AI sidebar | ✅ Complete | Sprint 75: `✦ AI` toggle, flex-row sidebar layout, context-aware view (results vs design), model Q&A via `buildModelQueryPrompt`, overlay pattern retired. |
+| Visual Designer layout engine | ✅ Complete | Sprint 77: replaced BFS grid layout with `@dagrejs/dagre` (Sugiyama framework, network-simplex ranker). Eliminates edge crossings on parallel branches; adapts spacing to graph density; loop edges excluded from traversal. 12/12 tests. |
 | Performance optimisation | 🔄 Planned | Sprint 72 will remove legacy runtime condition evaluation, migrate old models to predicate JSON, and optimise the Phase C hot path with benchmarks and correctness gates. |
 
 ### Key Issues and Watchpoints
