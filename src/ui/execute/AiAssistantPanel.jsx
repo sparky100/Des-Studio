@@ -565,6 +565,13 @@ export const AiAssistantPanel = ({
     }
   }, [triggerAction?.seq]);
 
+  // Auto-trigger refinement when the Refine Plan tab is selected
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (activeMode !== "refine" || !isResultsContext || !hasSchedule || refineStatus === "loading") return;
+    actionFnsRef.current.refine?.();
+  }, [activeMode]);
+
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
 
   const renderContent = () => {
@@ -627,7 +634,7 @@ export const AiAssistantPanel = ({
     if (status === "loading") return "Waiting for analysis...";
     if (response) return response;
     if (activeKind === "comparison") return "Select a saved run above and click Compare.";
-    return "Select Explain, Compare, or Refine Plan to analyse these results.";
+    return "";
   };
 
   const ACTION_TITLES = { explain: "Explain Results", compare: "Compare Runs", refine: "Refine Plan" };
@@ -727,7 +734,7 @@ export const AiAssistantPanel = ({
           {[
             { id: "explain", label: "Analyse" },
             { id: "compare", label: "Compare" },
-            { id: "refine", label: "Refine Plan" },
+            ...(hasSchedule ? [{ id: "refine", label: "Refine Plan" }] : []),
           ].map(m => (
             <Btn key={m.id} small variant={activeMode === m.id ? "primary" : "ghost"} onClick={() => setActiveMode(m.id)}>{m.label}</Btn>
           ))}
@@ -864,16 +871,10 @@ export const AiAssistantPanel = ({
       </div>}
 
       {(isResultsContext ? activeMode === "refine" : (!sidebar && hasSchedule)) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-        <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>REFINE PLAN</div>
+        {refineStatus === "loading" && (
+          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, marginBottom: 8 }}>Analysing schedule constraints…</div>
+        )}
         <div>
-          <Btn
-            variant="ghost"
-            onClick={handleRefinePlan}
-            disabled={refineStatus === "loading"}
-            style={panelButtonStyle}
-          >
-            {refineStatus === "loading" ? "Analysing schedule constraints…" : "Refine Plan"}
-          </Btn>
           {refineStatus === "error" && (
             <div role="alert" style={{ marginTop: 8, background: C.amber + "18", border: `1px solid ${C.amber}44`, borderRadius: 6, padding: 10, color: C.amber, fontFamily: FONT, fontSize: 11 }}>
               Plan refinement unavailable — {refineError}
