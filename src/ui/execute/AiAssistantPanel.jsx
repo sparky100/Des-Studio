@@ -159,7 +159,7 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BEFORE / AFTER</div>
           <BeforeAfterTable
             goals={model?.goals || []}
-            baselineStats={verifyResult._baselineStats || aggregateStats}
+            baselineStats={verifyResult._baselineStats ?? aggregateStats}
             afterStats={verifyResult.aggregateStats}
           />
           <div style={{ marginTop: 8, padding: "8px 10px", background: `${C.accent}11`, borderRadius: 4, border: `1px solid ${C.accent}33` }}>
@@ -255,7 +255,7 @@ function RefinementCard({ card, model, aggregateStats, onApplyAndRerun, cardStat
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BEFORE / AFTER</div>
           <BeforeAfterTable
             goals={model?.goals || []}
-            baselineStats={cardResult._baselineStats || aggregateStats}
+            baselineStats={cardResult._baselineStats ?? aggregateStats}
             afterStats={cardResult.aggregateStats}
           />
         </div>
@@ -483,9 +483,11 @@ export const AiAssistantPanel = ({
     try {
       const patched = applySuggestionPatch(model, suggestion.change);
 
-      // Snapshot the baseline at click-time so Before/After always compares
-      // against the last run the user initiated, not whatever state arrives later.
-      const capturedBaseline = aggregateStats;
+      // Snapshot the baseline at click-time (null if no valid prior run exists).
+      // Must be null not {} when empty so the ?? fallback in BeforeAfterTable works.
+      const capturedBaseline = Object.values(aggregateStats).some(ci => ci?.mean != null)
+        ? aggregateStats
+        : null;
 
       const result = await onRunWithPatch(patched);
       if (result) {
@@ -542,7 +544,9 @@ export const AiAssistantPanel = ({
     try {
       const patchedModel = applySchedulePatch(model, card);
 
-      const capturedBaseline = aggregateStats;
+      const capturedBaseline = Object.values(aggregateStats).some(ci => ci?.mean != null)
+        ? aggregateStats
+        : null;
 
       const result = await onRunWithPatch(patchedModel);
       if (result) {
