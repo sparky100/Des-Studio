@@ -3,7 +3,7 @@ import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],containerTypes=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
   const cardRefs=useRef({});
@@ -170,7 +170,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>EFFECTS</span>
                 <EffectPicker
                   effects={effects}
-                  options={bEffectOptions(entityTypes,queues,stateVariables)}
+                  options={bEffectOptions(entityTypes,queues,stateVariables,containerTypes)}
                   onChange={updEffects}
                 />
               </div>

@@ -30,6 +30,22 @@ export function extractImportedModelPayload(payload) {
       model[key] = Array.isArray(source[key]) ? source[key] : [];
     }
   }
+  // Strip unresolvable scheduleRef entries: if an exported file was produced while
+  // the named-schedule fetch failed, schedule entries may carry a scheduleRef UUID
+  // that has no rows and no dist — the green badge would show with no data visible.
+  // Remove the orphan ref so DistPicker renders correctly on first open.
+  if (Array.isArray(model.bEvents)) {
+    model.bEvents = model.bEvents.map(be => ({
+      ...be,
+      schedules: (be.schedules || []).map(s => {
+        if (!s.scheduleRef) return s;
+        const hasRows = Array.isArray(s.rows) && s.rows.length > 0;
+        if (hasRows) return s; // Properly inlined — keep as-is
+        const { scheduleRef: _dropped, ...rest } = s;
+        return rest; // Orphan ref — strip it so DistPicker shows the dist picker
+      }),
+    }));
+  }
   // Preserve scalar settings that are not array-valued model keys
   if (source.timeUnit) model.timeUnit = source.timeUnit;
   if (source.epoch)    model.epoch    = source.epoch;
