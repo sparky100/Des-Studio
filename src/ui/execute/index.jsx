@@ -1166,6 +1166,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   useEffect(() => { onExposeRunApi?.(runWithPatch); }, [runWithPatch, onExposeRunApi]);
 
   const exportResultsJson = useCallback((metricsOnly = false) => {
+    setSaveStatus({ state: 'saving', message: 'Preparing export…' });
     const payload = buildResultsExportPayload({
       model,
       results,
@@ -1181,9 +1182,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       `${resultFilenameBase}${suffix}.json`,
       "application/json"
     );
+    setSaveStatus({ state: 'success', message: '✓ Export complete' });
+    setTimeout(() => setSaveStatus(null), 4000);
   }, [model, results, replicationResults, aggregateStats, exportConfig, batchStatus, resultFilenameBase]);
 
   const exportResultsCsv = useCallback(() => {
+    setSaveStatus({ state: 'saving', message: 'Preparing export…' });
     const csv = buildResultsCsv({
       results,
       replicationResults,
@@ -1195,6 +1199,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       `${resultFilenameBase}.csv`,
       "text/csv;charset=utf-8"
     );
+    setSaveStatus({ state: 'success', message: '✓ Export complete' });
+    setTimeout(() => setSaveStatus(null), 4000);
   }, [results, replicationResults, aggregateStats, exportConfig, resultFilenameBase]);
 
   const assembleRunMeta = (runId) => {
@@ -1216,6 +1222,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (!results) return;
     setReportGenerating(true);
     setShowCreateReportModal(false);
+    setSaveStatus({ state: 'saving', message: 'Preparing report…' });
     try {
       const meta = assembleRunMeta(latestRunId);
       let reportModel = model;
@@ -1241,9 +1248,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       a.download = safeName;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setSaveStatus({ state: 'success', message: '✓ Report complete' });
+      setTimeout(() => setSaveStatus(null), 4000);
     } catch (err) {
       console.error('Report generation failed:', err);
-      setSaveStatus({ state: 'error', message: 'Report generation failed. Please try again.' });
+      setSaveStatus({ state: 'error', message: '✗ Report generation failed. Please try again.' });
     } finally {
       setReportGenerating(false);
     }
