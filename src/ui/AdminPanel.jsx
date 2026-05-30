@@ -235,7 +235,6 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const narrowLayout = isMobile || isCompact;
   const [tab, setTab] = useState("llm");
   const [llmConfig, setLlmConfig] = useState(null);
-  const [limits, setLimits] = useState(null);
   const [users, setUsers] = useState([]);
   const [auditLog, setAuditLog] = useState([]);
   const [platformStats, setPlatformStats] = useState(null);
@@ -264,9 +263,8 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [llmCfg, limitsCfg, tierData, allUsers, log, stats, signups, fb] = await Promise.all([
+      const [llmCfg, tierData, allUsers, log, stats, signups, fb] = await Promise.all([
         getPlatformConfig("llm"),
-        getPlatformConfig("limits"),
         getPlatformConfig("tier_policies"),
         fetchAdminUserStats(),
         fetchAuditLog(100),
@@ -275,7 +273,6 @@ function AdminPanel({ userId, isAdmin, onClose }) {
         fetchFeedback({ limit: 200 }).catch(() => []),
       ]);
       setLlmConfig(llmCfg);
-      setLimits(limitsCfg);
       if (tierData) {
         setTierPoliciesData(tierData);
         setTierPoliciesDraft(tierData);
@@ -301,24 +298,9 @@ function AdminPanel({ userId, isAdmin, onClose }) {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Limits form state ──
+  // ── Tier policies state ──
   const [tierPoliciesData, setTierPoliciesData] = useState(null);
   const [tierPoliciesDraft, setTierPoliciesDraft] = useState(null);
-  const [maxModels, setMaxModels] = useState(100);
-  const [maxRuns, setMaxRuns] = useState(500);
-  const [maxReplications, setMaxReplications] = useState(50);
-  const [maxSweepPoints, setMaxSweepPoints] = useState(50);
-  const [maxSimTime, setMaxSimTime] = useState(100000);
-
-  useEffect(() => {
-    if (limits) {
-      setMaxModels(limits.maxModelsPerUser ?? 100);
-      setMaxRuns(limits.maxRunsPerModel ?? 500);
-      setMaxReplications(limits.maxReplications ?? 50);
-      setMaxSweepPoints(limits.maxSweepPoints ?? 50);
-      setMaxSimTime(limits.maxSimTime ?? 100000);
-    }
-  }, [limits]);
 
   const handleSaveLlm = async () => {
     setSaving(true); setSaveStatus(null);
@@ -328,21 +310,6 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       await setPlatformConfig("llm", value, userId);
       await logAdminAction("update_config", null, "llm");
       setSaveStatus({ state: "success", message: "LLM configuration saved." });
-    } catch (err) {
-      setSaveStatus({ state: "error", message: err.message });
-    }
-    setSaving(false);
-  };
-
-  const handleSaveLimits = async () => {
-    setSaving(true); setSaveStatus(null);
-    try {
-      await setPlatformConfig("limits", {
-        maxModelsPerUser: maxModels, maxRunsPerModel: maxRuns,
-        maxReplications, maxSweepPoints, maxSimTime,
-      }, userId);
-      await logAdminAction("update_config", null, "limits");
-      setSaveStatus({ state: "success", message: "Limits saved." });
     } catch (err) {
       setSaveStatus({ state: "error", message: err.message });
     }
@@ -417,7 +384,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const newFeedbackCount = feedback.filter(f => f.status === "new").length;
   const TABS = [
     { id: "llm",      label: "LLM Provider" },
-    { id: "limits",   label: "Platform Limits" },
+    { id: "limits",   label: "Tier Policies" },
     { id: "users",    label: "Users" },
     { id: "usage",    label: "Usage" },
     { id: "feedback", label: `Feedback${newFeedbackCount ? ` (${newFeedbackCount})` : ""}` },
@@ -554,31 +521,6 @@ function AdminPanel({ userId, isAdmin, onClose }) {
           {/* ── LIMITS ── */}
           {tab === "limits" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <SH label="Platform Limits" color={C.amber} />
-              <InfoBox color={C.amber}>
-                Set maximum usage limits per user. Current enforcement is informational (UI-level; hard limits require edge function updates).
-              </InfoBox>
-              <div style={{ display: "grid", gridTemplateColumns: narrowLayout ? "1fr" : "200px 1fr", gap: narrowLayout ? 8 : 12, alignItems: narrowLayout ? "stretch" : "center" }}>
-                {[
-                  { l: "Max models per user", v: maxModels, s: setMaxModels },
-                  { l: "Max runs per model", v: maxRuns, s: setMaxRuns },
-                  { l: "Max replications", v: maxReplications, s: setMaxReplications },
-                  { l: "Max sweep points", v: maxSweepPoints, s: setMaxSweepPoints },
-                  { l: "Max simulation time", v: maxSimTime, s: setMaxSimTime },
-                ].map(item => (
-                  <Fragment key={item.l}>
-                    <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>{item.l}</span>
-                    <input type="number" min="1" step="1" value={item.v}
-                      onChange={e => item.s(parseInt(e.target.value) || 1)}
-                      style={{ ...inp({ color: C.amber, width: 120 })}}
-                    />
-                  </Fragment>
-                ))}
-              </div>
-              <Btn variant="primary" onClick={handleSaveLimits} disabled={saving}>
-                {saving ? "Saving..." : "Save Limits"}
-              </Btn>
-
               {/* ── Tier Run Limits ── */}
               <SH label="Tier Run Limits" color={C.accent} />
               <InfoBox color={C.accent}>
