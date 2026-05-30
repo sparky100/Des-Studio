@@ -405,8 +405,8 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | Macro | Syntax | Meaning |
 |-------|--------|---------|
 | `ARRIVE` | `ARRIVE(EntityType, QueueName)` | Creates an entity of type `EntityType` and places it in `QueueName`. |
-| `RELEASE` | `RELEASE(ServerType, QueueName)` | Releases a server of type `ServerType`, moves served entity to `QueueName`. |
-| `COMPLETE` | `COMPLETE()` | Marks current entity as served. Removes it from the system. |
+| `RELEASE` | `RELEASE(ServerType, QueueName)` | **Intermediate stage only.** Releases a server of type `ServerType`, moves served entity to `QueueName` for the next stage. Sets entity status to `"waiting"`. **Do NOT follow with `COMPLETE()` in the same effect — use `COMPLETE()` alone for terminal events.** |
+| `COMPLETE` | `COMPLETE()` | Marks current entity as served and removes it from the system. Also releases the server automatically — no preceding `RELEASE()` needed. Use this alone as the terminal effect on the final service B-event. |
 | `RENEGE` | `RENEGE(ctx)` | Marks current entity as reneged (abandoned). Always use `ctx` as the argument. |
 | `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch, sends each member to `QueueName`. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level. `containerId` must match a declared container `id`. |
@@ -464,18 +464,41 @@ Predicate object fields:
 
 | Pattern | When to Use | Example |
 |---|---|---|
-| **✓ Preferred: Explicit COMPLETE** | Simple terminal completion — all entities exit after this event | `"effect": ["RELEASE(Server)", "COMPLETE()"], "schedules": []` |
-| **✗ Anti-Pattern: Null routing with prob 1.0** | (Avoid) Redundant — adds unnecessary complexity | `"effect": ["RELEASE(Server)", "COMPLETE()"], "probabilisticRouting": [{ "queueName": null, "probability": 1 }]` |
+| **✓ Preferred: Explicit COMPLETE** | Simple terminal completion — all entities exit after this event | `"effect": ["COMPLETE()"], "schedules": []` |
+| **✗ Anti-Pattern: RELEASE then COMPLETE** | **(Broken — never use)** `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped; entities loop forever | `"effect": ["RELEASE(Server)", "COMPLETE()"]` |
+| **✗ Anti-Pattern: Null routing with prob 1.0** | (Avoid) Redundant — adds unnecessary complexity | `"effect": ["COMPLETE()"], "probabilisticRouting": [{ "queueName": null, "probability": 1 }]` |
 | **✓ Valid: Probabilistic exit** | Genuine branching — some entities exit, some continue | `"probabilisticRouting": [{ "queueName": "Next Queue", "probability": 0.7 }, { "queueName": null, "probability": 0.3 }]` |
 
 **Validation guidance (V30):** If `probabilisticRouting` contains only a single route with `probability: 1` and `queueName: null`, prefer replacing it with explicit `COMPLETE()` in the effect array and no routing table. This reduces model complexity and makes the terminal intent explicit.
+
+> **Critical rule (V38): Never write `RELEASE(Server)` immediately before `COMPLETE()` in the same effect.** `RELEASE` sets the entity to `"waiting"` state. `COMPLETE` requires `"serving"` state and will silently skip, leaving the entity stuck in the departure queue forever. `COMPLETE()` releases the server automatically — no preceding `RELEASE` is needed on a terminal B-event.
 
 **Correct pattern for simple terminal completion:**
 ```json
 {
   "id": "b_departure_done",
   "name": "Departure Complete",
+  "effect": ["COMPLETE()"],
+  "schedules": []
+}
+```
+
+**Wrong pattern — entities will never complete (validation warning V38):**
+```json
+{
+  "id": "b_departure_done",
+  "name": "Departure Complete",
   "effect": ["RELEASE(Server)", "COMPLETE()"],
+  "schedules": []
+}
+```
+
+**Correct pattern for intermediate stage (hand entity to next queue):**
+```json
+{
+  "id": "b_stage1_done",
+  "name": "Stage 1 Complete",
+  "effect": ["RELEASE(Nurse, Treatment Queue)"],
   "schedules": []
 }
 ```
@@ -760,6 +783,7 @@ The engine rejects models that violate these rules. All generated models must co
 | V27 | `FILL`/`DRAIN` must reference a declared container `id` |
 | V28 | `epoch`, when set, must be a valid ISO 8601 datetime string (e.g. `"2026-05-18T08:00:00"`) |
 | V29 | A C-event whose `cSchedules` entries all have a `when` predicate must also include a fallback entry (one without `when`); otherwise entities matching no condition receive no service (warning) |
+| V38 | **`RELEASE()` immediately followed by `COMPLETE()` in the same B-event effect (warning).** `RELEASE` sets entity status to `"waiting"`; `COMPLETE` then skips because it requires `"serving"` status. Entities enter an infinite loop and are never counted as served. Fix: use `COMPLETE()` alone — it releases the server automatically. |
 | W-CAP-01 | Multi-class resource contention detected — multiple customer types competing for the same server type may cause unexpected priority inversion (warning) |
 | W-CAP-02 | Very high arrival rate detected — arrival rate exceeds service capacity by more than 20%; queue growth and long wait times expected (warning) |
 
@@ -1273,15 +1297,16 @@ Bind a specific distribution parameter to a field from a live source:
 
 Common modelling patterns and the mistakes to avoid when generating DES Studio models.
 
-### 16.1 Terminal Completion (V30)
+### 16.1 Terminal Completion (V30, V38)
 
 | Pattern | When to Use | Example |
 |---|---|---|
-| **✓ Preferred: Explicit COMPLETE** | Simple terminal completion — all entities exit after this event | `"effect": ["RELEASE(Server)", "COMPLETE()"], "schedules": []` |
-| **✗ Anti-Pattern: Null routing with prob 1.0** | (Avoid) Redundant — adds unnecessary complexity | `"effect": ["RELEASE(Server)", "COMPLETE()"], "probabilisticRouting": [{ "queueName": null, "probability": 1 }]` |
+| **✓ Preferred: Explicit COMPLETE** | Simple terminal completion — all entities exit after this event | `"effect": ["COMPLETE()"], "schedules": []` |
+| **✗ Anti-Pattern: RELEASE then COMPLETE** | **(Broken — never use)** `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped; entities loop forever (validation warning V38) | `"effect": ["RELEASE(Server)", "COMPLETE()"]` |
+| **✗ Anti-Pattern: Null routing with prob 1.0** | (Avoid) Redundant — adds unnecessary complexity | `"effect": ["COMPLETE()"], "probabilisticRouting": [{ "queueName": null, "probability": 1 }]` |
 | **✓ Valid: Probabilistic exit** | Genuine branching — some entities exit, some continue | `"probabilisticRouting": [{ "queueName": "Next Queue", "probability": 0.7 }, { "queueName": null, "probability": 0.3 }]` |
 
-**Rule:** If `probabilisticRouting` contains only a single route with `probability: 1` and `queueName: null`, prefer replacing it with explicit `COMPLETE()` in the effect array and no routing table.
+**Rule:** `COMPLETE()` releases the server automatically. On a terminal B-event, write `"effect": ["COMPLETE()"]` alone — no preceding `RELEASE()`. If `probabilisticRouting` contains only a single route with `probability: 1` and `queueName: null`, prefer replacing it with explicit `COMPLETE()` and no routing table.
 
 ---
 

@@ -145,8 +145,9 @@ describe('Schedule distribution — engine integration', () => {
   test('zero arrivals when times[] is empty (no plan, no phantom)', () => {
     const engine = buildEngine(makeScheduleModel([]), 1, 0, 1000);
     const { summary } = engine.runAll();
-    // Empty times[] — phantom fix does not apply, initial fire at t=0
-    expect(summary.served).toBe(1);
+    // Empty times[] — phantom suppressed: engine pushes initial FEL entry to 1e9
+    expect(summary.served).toBe(0);
+    expect(summary.total).toBe(0);
   });
 
   test('jitter produces arrival times spread around planned times', () => {

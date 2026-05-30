@@ -642,6 +642,11 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
           _scheduleRowAttrs = rows?.[0]?.attrs ?? null;
           state[`__schedRowAttrs_${schedKey}`] = _scheduleRowAttrs;
           scheduledTime = rawTimes[0];
+        } else if (isScheduleDist) {
+          // Schedule distribution detected but rows/times are empty (e.g. companion CSV not yet
+          // imported). Push the event beyond any realistic sim horizon so no phantom arrival fires
+          // at the model's default scheduledTime (often 0).
+          scheduledTime = 1e9;
         }
         break;
       }

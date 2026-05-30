@@ -617,6 +617,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           effectiveCollectTimeSeries: collectTimeSeries,
           resultDetailLevel: effectiveResultDetailLevel,
           riskLevel: runAdmission.complexityEstimate.riskLevel,
+          includeModelSnapshot: true,
         };
         if (userId) {
           setSaveStatus({ state: 'saving', message: `Saving results… (prepared in ${formatDurationMs(prepareDurationMs)})` });
@@ -816,6 +817,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               effectiveCollectTimeSeries: effectiveCollectTimeSeries,
               resultDetailLevel: effectiveResultDetailLevel,
               riskLevel: runAdmission.complexityEstimate.riskLevel,
+              includeModelSnapshot: true,
             };
             if (userId) {
               setSaveStatus({ state: 'saving', message: `Saving replication batch… (prepared in ${formatDurationMs(prepareDurationMs)})` });
@@ -962,6 +964,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       effectiveCollectTimeSeries: effectiveCollectTimeSeries,
       resultDetailLevel: effectiveResultDetailLevel,
       riskLevel: runAdmission.complexityEstimate.riskLevel,
+      includeModelSnapshot: true,
     };
     if (userId) {
       setSaveStatus({ state: 'saving', message: `Saving results… (prepared in ${formatDurationMs(prepareDurationMs)})` });
