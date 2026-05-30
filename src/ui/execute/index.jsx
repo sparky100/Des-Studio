@@ -260,6 +260,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [latestRunId, setLatestRunId] = useState(null);
   const [showExportPopover, setShowExportPopover] = useState(false);
   const [exportFormats, setExportFormats] = useState({ json: true, csv: false });
+  const [exportMetricsOnly, setExportMetricsOnly] = useState(false);
   const [showCreateReportModal, setShowCreateReportModal] = useState(false);
   const [reportType, setReportType] = useState('seniorMgmt'); // 'seniorMgmt' | 'technical'
   const [reportFormat, setReportFormat] = useState('html'); // 'html' | 'markdown'
@@ -574,7 +575,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       // aggregateStats assigned after object is created to avoid self-reference
       fullResult.aggregateStats = summarizeReplicationResults([fullResult], CI_METRICS);
       setResults(fullResult);
-      setHideRunReadiness(false);
       onResultsReady?.(fullResult);
       onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
       if (modelId) {
@@ -773,7 +773,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
             setBatchStatus("complete");
             setResults(batchResult);
-            setHideRunReadiness(false);
             onResultsReady?.(batchResult);
             onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log: logRef.current });
             setAggregateStats(stats);
@@ -1206,7 +1205,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
   useEffect(() => { onExposeRunApi?.(runForVerification); }, [runForVerification, onExposeRunApi]);
 
-  const exportResultsJson = useCallback(() => {
+  const exportResultsJson = useCallback((metricsOnly = false) => {
+    setSaveStatus({ state: 'saving', message: 'Preparing export…' });
     const payload = buildResultsExportPayload({
       model,
       results,
@@ -1214,15 +1214,20 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       aggregateStats,
       config: exportConfig,
       batchStatus,
+      metricsOnly,
     });
+    const suffix = metricsOnly ? "-metrics" : "";
     downloadTextFile(
       JSON.stringify(payload, null, 2),
-      `${resultFilenameBase}.json`,
+      `${resultFilenameBase}${suffix}.json`,
       "application/json"
     );
+    setSaveStatus({ state: 'success', message: '✓ Export complete' });
+    setTimeout(() => setSaveStatus(null), 4000);
   }, [model, results, replicationResults, aggregateStats, exportConfig, batchStatus, resultFilenameBase]);
 
   const exportResultsCsv = useCallback(() => {
+    setSaveStatus({ state: 'saving', message: 'Preparing export…' });
     const csv = buildResultsCsv({
       results,
       replicationResults,
@@ -1234,6 +1239,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       `${resultFilenameBase}.csv`,
       "text/csv;charset=utf-8"
     );
+    setSaveStatus({ state: 'success', message: '✓ Export complete' });
+    setTimeout(() => setSaveStatus(null), 4000);
   }, [results, replicationResults, aggregateStats, exportConfig, resultFilenameBase]);
 
   const assembleRunMeta = (runId) => {
@@ -1255,6 +1262,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (!results) return;
     setReportGenerating(true);
     setShowCreateReportModal(false);
+    setSaveStatus({ state: 'saving', message: 'Preparing report…' });
     try {
       const meta = assembleRunMeta(latestRunId);
       let reportModel = model;
@@ -1280,9 +1288,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       a.download = safeName;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setSaveStatus({ state: 'success', message: '✓ Report complete' });
+      setTimeout(() => setSaveStatus(null), 4000);
     } catch (err) {
       console.error('Report generation failed:', err);
-      setSaveStatus({ state: 'error', message: 'Report generation failed. Please try again.' });
+      setSaveStatus({ state: 'error', message: '✗ Report generation failed. Please try again.' });
     } finally {
       setReportGenerating(false);
     }
@@ -1463,6 +1473,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             variant={executeSection === section.id ? "primary" : "ghost"}
             onClick={() => {
               if (section.id === "experiments" && !sweepOpen) setSweepParams(enumerateSweepableParams(model));
+              if (section.id === "run") setHideRunReadiness(false);
               setExecuteSection(section.id);
             }}
           >
@@ -2354,8 +2365,28 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   {label}
                 </label>
               ))}
+              {exportFormats.json && (
+                <>
+                  <div style={{ height: 1, background: C.border, margin: "2px 0" }} />
+                  <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>JSON CONTENT</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
+                    <input
+                      type="checkbox"
+                      checked={exportMetricsOnly}
+                      onChange={e => setExportMetricsOnly(e.target.checked)}
+                      style={{ accentColor: C.accent }}
+                    />
+                    Metrics only
+                  </label>
+                  {exportMetricsOnly && (
+                    <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.4, paddingLeft: 18 }}>
+                      KPIs only — excludes time series, wait distributions, and entity details.
+                    </div>
+                  )}
+                </>
+              )}
               <Btn variant="primary" small onClick={() => {
-                if (exportFormats.json) exportResultsJson();
+                if (exportFormats.json) exportResultsJson(exportMetricsOnly);
                 if (exportFormats.csv) exportResultsCsv();
                 setShowExportPopover(false);
               }} disabled={!Object.values({ json: exportFormats.json, csv: exportFormats.csv }).some(Boolean)}>
