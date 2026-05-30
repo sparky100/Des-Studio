@@ -114,13 +114,8 @@ async function doCloudSave(saveFn, {
 
   const buildTickMessage = () => {
     const elapsed = nowPerf() - saveStartedAt;
-    if (elapsed >= criticalWarnMs) {
-      return `⏳ Still saving… ${formatDurationMs(elapsed)} — Supabase may be starting up`;
-    }
-    if (elapsed >= slowWarnMs) {
-      return `Saving results… ${formatDurationMs(elapsed)} (taking longer than usual)`;
-    }
-    return `Saving results… ${formatDurationMs(elapsed)} (prepared in ${formatDurationMs(prepareDurationMs)})`;
+    if (elapsed >= criticalWarnMs) return `⏳ Still saving — this is taking longer than usual`;
+    return `Saving results…`;
   };
 
   const intervalId = setInterval(() => {
@@ -139,20 +134,17 @@ async function doCloudSave(saveFn, {
     const runId = await Promise.race([saveFn(), timeoutPromise]);
     const saveDurationMs = nowPerf() - saveStartedAt;
     clearInterval(intervalId);
-    setSaveStatus({
-      state: 'success',
-      message: `✓ History saved! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.`,
-    });
+    setSaveStatus({ state: 'success', message: `✓ Results saved` });
     setLog(prev => [...prev, { phase: "SAVE", time: snapClock, message: "✅ Cloud history record completed." }]);
     return runId;
   } catch (err) {
     clearInterval(intervalId);
     const detail  = err.message || "unknown error";
     const bannerMsg = err.isSaveTimeout
-      ? `✗ Save timed out after ${formatDurationMs(timeoutMs)} — Supabase did not respond. Try running again in a moment.`
+      ? `✗ Save timed out — Supabase did not respond. Try running again in a moment.`
       : `✗ Save failed: ${detail}`;
     const logMsg = err.isSaveTimeout
-      ? `Save timed out (${formatDurationMs(timeoutMs)}) — result not stored`
+      ? `Save timed out — result not stored`
       : `Save failed: ${detail}`;
     setSaveStatus({ state: 'error', message: bannerMsg });
     setLog(prev => [...prev, { phase: "ERROR", time: snapClock, message: logMsg }]);
@@ -609,7 +601,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           includeModelSnapshot: true,
         };
         if (userId) {
-          setSaveStatus({ state: 'saving', message: `Saving results… (prepared in ${formatDurationMs(prepareDurationMs)})` });
+          setSaveStatus({ state: 'saving', message: 'Saving results…' });
           const runId = await doCloudSave(
             () => saveSimulationRun(modelId, userId, fullResult, { ...config, runRecord }),
             { setSaveStatus, setLog, prepareDurationMs, snapClock: r.snap.clock },
@@ -623,7 +615,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         } else {
           saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
           void refreshRunHistory();
-          setSaveStatus({ state: 'success', message: `✓ Results saved locally! Prep ${formatDurationMs(prepareDurationMs)}.` });
+          setSaveStatus({ state: 'success', message: '✓ Results saved' });
           setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ Local history record completed." }]);
           onRunSaved?.();
         }
@@ -809,7 +801,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               includeModelSnapshot: true,
             };
             if (userId) {
-              setSaveStatus({ state: 'saving', message: `Saving replication batch… (prepared in ${formatDurationMs(prepareDurationMs)})` });
+              setSaveStatus({ state: 'saving', message: 'Saving results…' });
               const runId = await doCloudSave(
                 () => saveSimulationRun(modelId, userId, batchResult, { ...batchConfig, runRecord: batchRunRecord }),
                 { setSaveStatus, setLog, prepareDurationMs, snapClock: batchResult.snap.clock },
@@ -823,7 +815,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             } else {
               saveLocalRun(modelId, batchResult, { ...batchConfig, runRecord: batchRunRecord, resultDetailLevel: "full" });
               void refreshRunHistory();
-              setSaveStatus({ state: 'success', message: `✓ Replication batch saved locally! Prep ${formatDurationMs(prepareDurationMs)}.` });
+              setSaveStatus({ state: 'success', message: '✓ Results saved' });
               setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved locally." }]);
               onRunSaved?.();
             }
@@ -956,7 +948,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       includeModelSnapshot: true,
     };
     if (userId) {
-      setSaveStatus({ state: 'saving', message: `Saving results… (prepared in ${formatDurationMs(prepareDurationMs)})` });
+      setSaveStatus({ state: 'saving', message: 'Saving results…' });
       const runId = await doCloudSave(
         () => saveSimulationRun(modelId, userId, result, { ...config, runRecord: singleRunRecord }),
         { setSaveStatus, setLog, prepareDurationMs, snapClock: result.snap.clock },
@@ -970,7 +962,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     } else {
       saveLocalRun(modelId, result, { ...config, runRecord: singleRunRecord, resultDetailLevel: "full" });
       void refreshRunHistory();
-      setSaveStatus({ state: 'success', message: `✓ Results saved locally! Prep ${formatDurationMs(prepareDurationMs)}.` });
+      setSaveStatus({ state: 'success', message: '✓ Results saved' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Local history record completed." }]);
       onRunSaved?.();
     }
