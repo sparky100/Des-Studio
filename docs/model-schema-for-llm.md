@@ -445,6 +445,8 @@ Predicate object fields:
 
 ### Optional: Probabilistic Routing
 
+> **Constraint: `probabilisticRouting` is only valid on B-events whose `effect` contains a `RELEASE` statement.** It must NOT be placed on arrival B-events (those whose effect contains `ARRIVE`). For arrival-time splitting (e.g. 30% high-acuity, 70% low-acuity), use two separate arrival B-events with appropriately scaled inter-arrival times (Poisson splitting) rather than probabilistic routing on a single arrival event.
+
 ```json
 "probabilisticRouting": [
   { "probability": 0.7, "queueName": "Ward Queue" },
