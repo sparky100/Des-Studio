@@ -565,7 +565,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         log:           finalLog,
       };
       setResults(fullResult);
-      setHideRunReadiness(false);
       onResultsReady?.(fullResult);
       onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
       if (modelId) {
@@ -762,7 +761,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
             setBatchStatus("complete");
             setResults(batchResult);
-            setHideRunReadiness(false);
             onResultsReady?.(batchResult);
             onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log: logRef.current });
             setAggregateStats(stats);
@@ -1433,6 +1431,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             variant={executeSection === section.id ? "primary" : "ghost"}
             onClick={() => {
               if (section.id === "experiments" && !sweepOpen) setSweepParams(enumerateSweepableParams(model));
+              if (section.id === "run") setHideRunReadiness(false);
               setExecuteSection(section.id);
             }}
           >
