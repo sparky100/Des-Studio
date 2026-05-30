@@ -221,12 +221,9 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
   const reneged = Number(summary.reneged ?? summary.totalReneged ?? 0);
   const leftRate = totalArrived > 0 ? (reneged / totalArrived) * 100 : null;
 
-  // Build a note string that shows total + avg/run for multi-rep runs.
-  const countNote = (total, label) => {
-    if (!isMultiRep || total === 0) return label;
-    const avg = (total / repCount).toFixed(1);
-    return `${label}  ·  avg ${avg}/run across ${repCount} replications`;
-  };
+  // For count metrics, compute the per-run average when running multi-rep.
+  const avgPerRun = (total) =>
+    isMultiRep && total > 0 ? (total / repCount).toFixed(1) : null;
 
   const cards = [
     {
@@ -244,17 +241,15 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
     {
       label: "Customers arriving",
       value: totalArrived > 0 ? formatMetricValue(totalArrived, 0) : "—",
-      note: totalArrived > 0
-        ? countNote(totalArrived, "Total arrivals across all runs.")
-        : "No arrivals recorded.",
+      avg: avgPerRun(totalArrived),
+      note: totalArrived > 0 ? "Total across all runs." : "No arrivals recorded.",
       color: C.text,
     },
     {
       label: "Customers served",
       value: formatMetricValue(served, 0),
-      note: served > 0
-        ? countNote(served, "Completed successfully.")
-        : "No completed entities yet.",
+      avg: avgPerRun(served),
+      note: served > 0 ? "Total across all runs." : "No completed entities yet.",
       color: C.served,
     },
     {
@@ -283,9 +278,23 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
               {card.label.toUpperCase()}
             </div>
-            <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
-              {card.value}
-            </div>
+            {card.avg != null ? (
+              /* Multi-rep count card: show total + avg per run side by side */
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 5, flexWrap: "wrap" }}>
+                <div>
+                  <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700 }}>{card.value}</span>
+                  <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginLeft: 3 }}>total</span>
+                </div>
+                <div>
+                  <span style={{ fontSize: 16, color: card.color, fontFamily: FONT, fontWeight: 700, opacity: 0.75 }}>{card.avg}</span>
+                  <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginLeft: 3 }}>avg/run</span>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
+                {card.value}
+              </div>
+            )}
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
               {card.note}
             </div>
