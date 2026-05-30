@@ -123,7 +123,7 @@ export function buildResultsExportPayload({
       terminationMode: config.terminationMode ?? "time",
       terminationCondition: config.terminationCondition ?? null,
     },
-    results: results ?? null,
+    results: results ? (({ log, ...rest }) => rest)(results) : null,
     replications: replicationResults.map(payload => ({
       replicationIndex: payload.replicationIndex,
       seed: payload.seed,
