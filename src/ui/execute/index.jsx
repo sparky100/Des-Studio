@@ -268,6 +268,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [latestRunId, setLatestRunId] = useState(null);
   const [showExportPopover, setShowExportPopover] = useState(false);
   const [exportFormats, setExportFormats] = useState({ json: true, csv: false });
+  const [exportMetricsOnly, setExportMetricsOnly] = useState(false);
   const [showCreateReportModal, setShowCreateReportModal] = useState(false);
   const [reportType, setReportType] = useState('seniorMgmt'); // 'seniorMgmt' | 'technical'
   const [reportFormat, setReportFormat] = useState('html'); // 'html' | 'markdown'
@@ -1164,7 +1165,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
   useEffect(() => { onExposeRunApi?.(runWithPatch); }, [runWithPatch, onExposeRunApi]);
 
-  const exportResultsJson = useCallback(() => {
+  const exportResultsJson = useCallback((metricsOnly = false) => {
     const payload = buildResultsExportPayload({
       model,
       results,
@@ -1172,10 +1173,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       aggregateStats,
       config: exportConfig,
       batchStatus,
+      metricsOnly,
     });
+    const suffix = metricsOnly ? "-metrics" : "";
     downloadTextFile(
       JSON.stringify(payload, null, 2),
-      `${resultFilenameBase}.json`,
+      `${resultFilenameBase}${suffix}.json`,
       "application/json"
     );
   }, [model, results, replicationResults, aggregateStats, exportConfig, batchStatus, resultFilenameBase]);
@@ -2311,8 +2314,28 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   {label}
                 </label>
               ))}
+              {exportFormats.json && (
+                <>
+                  <div style={{ height: 1, background: C.border, margin: "2px 0" }} />
+                  <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>JSON CONTENT</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: C.text, fontFamily: FONT }}>
+                    <input
+                      type="checkbox"
+                      checked={exportMetricsOnly}
+                      onChange={e => setExportMetricsOnly(e.target.checked)}
+                      style={{ accentColor: C.accent }}
+                    />
+                    Metrics only
+                  </label>
+                  {exportMetricsOnly && (
+                    <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.4, paddingLeft: 18 }}>
+                      KPIs only — excludes time series, wait distributions, and entity details.
+                    </div>
+                  )}
+                </>
+              )}
               <Btn variant="primary" small onClick={() => {
-                if (exportFormats.json) exportResultsJson();
+                if (exportFormats.json) exportResultsJson(exportMetricsOnly);
                 if (exportFormats.csv) exportResultsCsv();
                 setShowExportPopover(false);
               }} disabled={!Object.values({ json: exportFormats.json, csv: exportFormats.csv }).some(Boolean)}>

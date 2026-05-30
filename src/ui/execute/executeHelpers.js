@@ -103,13 +103,25 @@ export function buildResultsExportPayload({
   aggregateStats = {},
   config = {},
   batchStatus = "idle",
+  metricsOnly = false,
   exportedAt = new Date().toISOString(),
 } = {}) {
+  function stripResults(r) {
+    if (!r) return null;
+    // Always drop the event log — too large, not useful outside the app.
+    const { log, ...rest } = r;
+    if (!metricsOnly) return rest;
+    // Metrics-only: keep just summary KPIs; drop time series, distributions, entity details, and snapshot.
+    const { summary, phaseCTruncated, runtimeMetrics } = rest;
+    return { summary, phaseCTruncated, runtimeMetrics };
+  }
+
   return {
     schema: "des-studio.results.v1",
     exportedAt,
     status: results ? "complete" : "partial",
     batchStatus,
+    metricsOnly,
     model: {
       id: config.modelId ?? null,
       name: model?.name ?? "Untitled model",
@@ -123,7 +135,7 @@ export function buildResultsExportPayload({
       terminationMode: config.terminationMode ?? "time",
       terminationCondition: config.terminationCondition ?? null,
     },
-    results: results ? (({ log, ...rest }) => rest)(results) : null,
+    results: stripResults(results),
     replications: replicationResults.map(payload => ({
       replicationIndex: payload.replicationIndex,
       seed: payload.seed,
