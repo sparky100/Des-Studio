@@ -17,6 +17,7 @@ vi.mock('../../src/db/models.js', () => ({
   setVisibility: vi.fn(),
   setAccess: vi.fn(),
   forkModel: mockForkModel,
+  getPlatformConfig: vi.fn(() => Promise.resolve(null)),
 }));
 
 const session = { user: { id: 'user-1' } };

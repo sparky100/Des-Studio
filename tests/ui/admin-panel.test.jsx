@@ -54,11 +54,11 @@ const defaultProps = { userId: 'admin-1', isAdmin: true, onClose: vi.fn() };
 describe('AdminPanel', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it('renders all six tabs (LLM, Limits, Users, Usage, Feedback, Audit Log)', async () => {
+  it('renders all six tabs (LLM, Tier Policies, Users, Usage, Feedback, Audit Log)', async () => {
     render(<AdminPanel {...defaultProps} />);
     await waitFor(() => expect(screen.queryByText('Loading...')).not.toBeInTheDocument());
     expect(screen.getByRole('tab', { name: /LLM Provider/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /Platform Limits/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Tier Policies/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Users/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Usage/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Feedback/i })).toBeInTheDocument();
