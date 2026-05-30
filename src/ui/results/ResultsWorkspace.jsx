@@ -209,12 +209,25 @@ function lineSeriesStats(series, yLabel, color) {
   ];
 }
 
-function SummaryCardGrid({ results }) {
+function SummaryCardGrid({ results, replicationResults = [] }) {
   const summary = results?.summary || {};
-  const arrived = Number(summary.arrived ?? summary.totalArrived ?? 0);
+  // Derive replication count: prefer explicit replicationResults array length,
+  // fall back to single run (1). Used to show per-run averages alongside totals.
+  const repCount = replicationResults.length > 0 ? replicationResults.length : 1;
+  const isMultiRep = repCount > 1;
+
+  const totalArrived = Number(summary.total ?? summary.arrived ?? summary.totalArrived ?? 0);
   const served = Number(summary.served ?? 0);
   const reneged = Number(summary.reneged ?? summary.totalReneged ?? 0);
-  const leftRate = arrived > 0 ? (reneged / arrived) * 100 : null;
+  const leftRate = totalArrived > 0 ? (reneged / totalArrived) * 100 : null;
+
+  // Build a note string that shows total + avg/run for multi-rep runs.
+  const countNote = (total, label) => {
+    if (!isMultiRep || total === 0) return label;
+    const avg = (total / repCount).toFixed(1);
+    return `${label}  ·  avg ${avg}/run across ${repCount} replications`;
+  };
+
   const cards = [
     {
       label: "Average wait",
@@ -229,9 +242,19 @@ function SummaryCardGrid({ results }) {
       color: C.accent,
     },
     {
+      label: "Customers arriving",
+      value: totalArrived > 0 ? formatMetricValue(totalArrived, 0) : "—",
+      note: totalArrived > 0
+        ? countNote(totalArrived, "Total arrivals across all runs.")
+        : "No arrivals recorded.",
+      color: C.text,
+    },
+    {
       label: "Customers served",
       value: formatMetricValue(served, 0),
-      note: served > 0 ? "Completed successfully." : "No completed entities yet.",
+      note: served > 0
+        ? countNote(served, "Completed successfully.")
+        : "No completed entities yet.",
       color: C.served,
     },
     {
@@ -845,7 +868,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   if (!chartModel.hasTimeSeries && !hasWaitDistributions && !hasAnalysisInputs) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-        <SummaryCardGrid results={results} />
+        <SummaryCardGrid results={results} replicationResults={replicationResults} />
         <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
           Turn on <strong style={{ color: C.accent }}>Keep chart data during the run</strong> in Run setup, then run the model to see charts.
         </div>
