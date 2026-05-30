@@ -20,33 +20,30 @@ const SIM_TIME     = 60 + 480;  // min (warmup + 8 hr steady-state)
 const REPLICATIONS = 30;
 const MAX_CYCLES   = 50000;
 
+// Two-queue model matching the app UI:
+// - Priority Queue (FIFO) for high-acuity patients
+// - Secondary Queue (FIFO) for low-acuity patients
+// - C-event priority ordering ensures Priority Queue is always served first
 const aeModel = {
   entityTypes: [
-    {
-      id: 'et-high', name: 'HighAcuityPatient', role: 'customer', count: '',
-      attrDefs: [{ id: 'a-prio-h', name: 'priority', dist: 'Fixed', distParams: { value: '1' } }],
-    },
-    {
-      id: 'et-low', name: 'LowAcuityPatient', role: 'customer', count: '',
-      attrDefs: [{ id: 'a-prio-l', name: 'priority', dist: 'Fixed', distParams: { value: '2' } }],
-    },
-    {
-      id: 'et-clin', name: 'Clinician', role: 'server', count: '3', attrDefs: [],
-    },
+    { id: 'et-high', name: 'HighAcuityPatient', role: 'customer', count: '', attrDefs: [] },
+    { id: 'et-low',  name: 'LowAcuityPatient',  role: 'customer', count: '', attrDefs: [] },
+    { id: 'et-clin', name: 'Clinician',          role: 'server',   count: '3', attrDefs: [] },
   ],
   queues: [
-    { id: 'q-main', name: 'PatientQueue', customerType: 'Patient', discipline: 'PRIORITY' },
+    { id: 'q-high', name: 'Priority Queue',   customerType: 'HighAcuityPatient', discipline: 'FIFO' },
+    { id: 'q-low',  name: 'Secondary Queue',  customerType: 'LowAcuityPatient',  discipline: 'FIFO' },
   ],
   stateVariables: [],
   bEvents: [
     {
       id: 'be-high-arrive', name: 'High Acuity Arrives', scheduledTime: '0',
-      effect: 'ARRIVE(HighAcuityPatient, PatientQueue)',
+      effect: 'ARRIVE(HighAcuityPatient, Priority Queue)',
       schedules: [{ eventId: 'be-high-arrive', dist: 'Exponential', distParams: { mean: String(MEAN_IA_HIGH) } }],
     },
     {
       id: 'be-low-arrive', name: 'Low Acuity Arrives', scheduledTime: '0',
-      effect: 'ARRIVE(LowAcuityPatient, PatientQueue)',
+      effect: 'ARRIVE(LowAcuityPatient, Secondary Queue)',
       schedules: [{ eventId: 'be-low-arrive', dist: 'Exponential', distParams: { mean: String(MEAN_IA_LOW) } }],
     },
     {
@@ -56,11 +53,22 @@ const aeModel = {
   ],
   cEvents: [
     {
-      id: 'ce-start', name: 'Start Consultation', priority: 1,
-      condition: 'queue(PatientQueue).length > 0 AND idle(Clinician).count > 0',
-      effect: 'ASSIGN(PatientQueue, Clinician)',
+      // Priority 1 = checked first — always serve high-acuity before low-acuity
+      id: 'ce-high', name: 'Start High-Acuity Consult', priority: 1,
+      condition: 'queue(Priority Queue).length > 0 AND idle(Clinician).count > 0',
+      effect: 'ASSIGN(Priority Queue, Clinician)',
       cSchedules: [{
-        id: 'cs-consult', eventId: 'be-consult-done',
+        id: 'cs-high', eventId: 'be-consult-done',
+        dist: 'Exponential', distParams: { mean: String(MEAN_SVC) }, useEntityCtx: true,
+      }],
+    },
+    {
+      // Priority 2 = only fires when Priority Queue is empty
+      id: 'ce-low', name: 'Start Low-Acuity Consult', priority: 2,
+      condition: 'queue(Secondary Queue).length > 0 AND idle(Clinician).count > 0',
+      effect: 'ASSIGN(Secondary Queue, Clinician)',
+      cSchedules: [{
+        id: 'cs-low', eventId: 'be-consult-done',
         dist: 'Exponential', distParams: { mean: String(MEAN_SVC) }, useEntityCtx: true,
       }],
     },
@@ -98,6 +106,7 @@ for (let i = 0; i < REPLICATIONS; i++) {
 
   const highDone = entities.filter(e => e.type === 'HighAcuityPatient' && e.status === 'done' && (e.arrivalTime ?? 0) >= WARMUP);
   const lowDone  = entities.filter(e => e.type === 'LowAcuityPatient'  && e.status === 'done' && (e.arrivalTime ?? 0) >= WARMUP);
+
 
   const hWaits = highDone.map(e => waitTime(e, WARMUP)).filter(v => v != null);
   const lWaits = lowDone.map(e  => waitTime(e, WARMUP)).filter(v => v != null);
