@@ -242,14 +242,18 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
       label: "Customers arriving",
       value: totalArrived > 0 ? formatMetricValue(totalArrived, 0) : "—",
       avg: avgPerRun(totalArrived),
-      note: totalArrived > 0 ? "Total across all runs." : "No arrivals recorded.",
+      note: totalArrived > 0
+        ? isMultiRep ? `Total — avg per run across ${repCount} replications.` : "Total arrivals."
+        : "No arrivals recorded.",
       color: C.text,
     },
     {
       label: "Customers served",
       value: formatMetricValue(served, 0),
       avg: avgPerRun(served),
-      note: served > 0 ? "Total across all runs." : "No completed entities yet.",
+      note: served > 0
+        ? isMultiRep ? `Total — avg per run across ${repCount} replications.` : "Completed successfully."
+        : "No completed entities yet.",
       color: C.served,
     },
     {
@@ -279,16 +283,12 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
               {card.label.toUpperCase()}
             </div>
             {card.avg != null ? (
-              /* Multi-rep count card: show total + avg per run side by side */
-              <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 5, flexWrap: "wrap" }}>
-                <div>
-                  <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700 }}>{card.value}</span>
-                  <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginLeft: 3 }}>total</span>
-                </div>
-                <div>
-                  <span style={{ fontSize: 16, color: card.color, fontFamily: FONT, fontWeight: 700, opacity: 0.75 }}>{card.avg}</span>
-                  <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginLeft: 3 }}>avg/run</span>
-                </div>
+              /* Multi-rep: "11000 — 1100 per run" */
+              <div style={{ marginBottom: 5 }}>
+                <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700 }}>{card.value}</span>
+                <span style={{ fontSize: 13, color: C.muted, fontFamily: FONT, fontWeight: 400, margin: "0 5px" }}>—</span>
+                <span style={{ fontSize: 16, color: card.color, fontFamily: FONT, fontWeight: 700, opacity: 0.75 }}>{card.avg}</span>
+                <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginLeft: 3 }}>per run</span>
               </div>
             ) : (
               <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
