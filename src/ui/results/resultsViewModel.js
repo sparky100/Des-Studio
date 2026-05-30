@@ -91,15 +91,19 @@ export function buildServerUtilizationSeries(results = {}, model = {}) {
 
   return serverTypes.map(server => {
     const capacity = Math.max(1, parseInt(server.count || "1", 10) || 1);
+    const hasShiftSchedule = Array.isArray(server.shiftSchedule) && server.shiftSchedule.length > 0;
+    const capacityNote = `${capacity} resource${capacity !== 1 ? "s" : ""}${hasShiftSchedule ? " (shift schedule applies — capacity varies over time)" : ""}`;
     return {
       id: server.id || server.name,
       label: server.name,
       capacity,
+      hasShiftSchedule,
+      isPercent: true,
       points: timeSeries.map(entry => ({
         t: finiteNumber(entry?.t),
-        value: finiteNumber(entry?.byType?.[server.name]?.busy) / capacity,
+        value: (finiteNumber(entry?.byType?.[server.name]?.busy) / capacity) * 100,
       })),
-      sourceLabel: `Busy ${server.name} resources measured during the run, divided by capacity ${capacity}`,
+      sourceLabel: `${server.name}: ${capacityNote}. Values show % of capacity in use at each simulation time step.`,
     };
   });
 }
@@ -140,7 +144,7 @@ export function buildChartSections(results = {}, model = {}) {
       id: "server-utilization",
       title: "How busy each resource was over time",
       question: "How busy are resources?",
-      method: "Shows the share of each resource pool that was busy over time.",
+      method: "Shows the percentage of each resource pool that was busy over time. 100% means all resources were in use simultaneously. Capacity and any shift patterns are noted below each chart.",
       emptyMessage: "Add a server/resource type and run with Detailed output enabled to see utilisation.",
       series: serverUtilizationSeries,
       maxValue: Math.max(0, ...serverUtilizationSeries.map(maxPointValue)),

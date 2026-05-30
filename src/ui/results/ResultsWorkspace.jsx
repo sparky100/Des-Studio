@@ -150,6 +150,13 @@ function SummaryCardGrid({ results }) {
       color: C.purple,
     });
   }
+  const perResourceEntries = Object.entries(summary.perResource || {});
+  const utilPct = v => `${formatNumber(v * 100, 1)}%`;
+  const utilColor = v => v > 0.9 ? C.red : v > 0.7 ? C.amber : C.green;
+  const avgUtil = perResourceEntries.length > 0
+    ? perResourceEntries.reduce((sum, [, r]) => sum + (r.utilisation ?? 0), 0) / perResourceEntries.length
+    : null;
+
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
@@ -170,11 +177,46 @@ function SummaryCardGrid({ results }) {
           </div>
         ))}
       </div>
+      {perResourceEntries.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+            RESOURCE UTILISATION
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+            {perResourceEntries.map(([name, r]) => (
+              <div key={name} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
+                  {name.toUpperCase()}
+                </div>
+                <div style={{ fontSize: 18, color: utilColor(r.utilisation ?? 0), fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
+                  {utilPct(r.utilisation ?? 0)}
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                  {r.total ?? 1} resource{(r.total ?? 1) !== 1 ? "s" : ""}. Average % of capacity in use.
+                </div>
+              </div>
+            ))}
+            {perResourceEntries.length > 1 && avgUtil != null && (
+              <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
+                  AVERAGE UTILISATION
+                </div>
+                <div style={{ fontSize: 18, color: utilColor(avgUtil), fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
+                  {utilPct(avgUtil)}
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                  Averaged across {perResourceEntries.length} resource types.
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </section>
   );
 }
 
-function SeriesDataSummary({ series, valueLabel }) {
+function SeriesDataSummary({ series, valueLabel, formatValue = v => formatNumber(v) }) {
   const points = Array.isArray(series?.points) ? series.points : [];
   if (!points.length) return null;
   const first = points[0];
@@ -184,9 +226,9 @@ function SeriesDataSummary({ series, valueLabel }) {
     <MetricStrip
       items={[
         { label: "points", value: points.length },
-        { label: "first", value: `t=${formatNumber(first.t)} -> ${formatNumber(first.value)}` },
-        { label: "last", value: `t=${formatNumber(last.t)} -> ${formatNumber(last.value)}` },
-        { label: `peak ${valueLabel}`, value: formatNumber(peak), color: C.accent },
+        { label: "first", value: `t=${formatNumber(first.t)} → ${formatValue(first.value)}` },
+        { label: "last", value: `t=${formatNumber(last.t)} → ${formatValue(last.value)}` },
+        { label: `peak ${valueLabel}`, value: formatValue(peak), color: C.accent },
       ]}
     />
   );
@@ -473,14 +515,14 @@ function ChartSectionShell({ section, children }) {
   );
 }
 
-export function MiniLineChart({ title, points, color, yLabel }) {
+export function MiniLineChart({ title, points, color, yLabel, formatY = v => formatNumber(v) }) {
   const [tip, setTip] = useState(null);
   if (!points || points.length < 2) return null;
   const maxY = Math.max(...points.map(p => p.value), 1);
   const minY = Math.min(...points.map(p => p.value), 0);
   const maxT = points[points.length - 1].t || 1;
   const minT = points[0].t || 0;
-  const PAD = { top: 14, right: 16, bottom: 28, left: 46 };
+  const PAD = { top: 14, right: 16, bottom: 38, left: 46 };
   const w = CHART_W - PAD.left - PAD.right;
   const h = CHART_H - PAD.top - PAD.bottom;
   const tSpan = Math.max(maxT - minT, 1);
@@ -500,7 +542,7 @@ export function MiniLineChart({ title, points, color, yLabel }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11, color, fontFamily: FONT, fontWeight: 700 }}>{title}</span>
-        <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{yLabel} · latest {formatNumber(lastPoint.value)} · peak {formatNumber(peakPoint.value)}</span>
+        <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{yLabel} · latest {formatY(lastPoint.value)} · peak {formatY(peakPoint.value)}</span>
       </div>
       <svg width={CHART_W} height={CHART_H} style={{ display: "block", width: "100%", minWidth: 0, minHeight: 110 }}
         viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`${title} ${yLabel} trend chart`}
@@ -513,13 +555,13 @@ export function MiniLineChart({ title, points, color, yLabel }) {
               <line x1={PAD.left} y1={y} x2={PAD.left + w} y2={y}
                 stroke={C.chartGrid} strokeWidth={1} />
               <text x={PAD.left - 4} y={y + 4} textAnchor="end" fontSize={11}
-                fill={C.muted} fontFamily="monospace">{formatNumber(t)}</text>
+                fill={C.muted} fontFamily="monospace">{formatY(t)}</text>
             </g>
           );
         })}
         {/* X axis tick labels (no vertical grid lines) */}
         {xTicks.map((t, i) => (
-          <text key={`xl-${i}`} x={toX(t)} y={CHART_H - 6} textAnchor="middle" fontSize={11}
+          <text key={`xl-${i}`} x={toX(t)} y={CHART_H - 22} textAnchor="middle" fontSize={11}
             fill={C.muted} fontFamily="monospace">{formatNumber(t)}</text>
         ))}
         <polygon points={fillPts} fill={color} fillOpacity={0.12} />
@@ -529,11 +571,11 @@ export function MiniLineChart({ title, points, color, yLabel }) {
         {points.map((p, i) => (
           <circle key={i} cx={toX(p.t)} cy={toY(p.value)} r={5} fill="transparent"
             style={{ cursor: "crosshair" }}
-            onMouseEnter={() => setTip({ x: toX(p.t), y: toY(p.value), label: `t = ${formatNumber(p.t)}`, value: `${yLabel}: ${formatNumber(p.value)}` })} />
+            onMouseEnter={() => setTip({ x: toX(p.t), y: toY(p.value), label: `t = ${formatNumber(p.t)}`, value: `${yLabel}: ${formatY(p.value)}` })} />
         ))}
         <circle cx={toX(lastPoint.t)} cy={toY(lastPoint.value)} r={3} fill={color} stroke={C.bg} strokeWidth={1.5} style={{ pointerEvents: "none" }} />
         <circle cx={toX(peakPoint.t)} cy={toY(peakPoint.value)} r={3} fill={C.amber} stroke={C.bg} strokeWidth={1.5} style={{ pointerEvents: "none" }} />
-        <text x={PAD.left + w / 2} y={CHART_H - 1} textAnchor="middle" fontSize={11}
+        <text x={PAD.left + w / 2} y={CHART_H - 7} textAnchor="middle" fontSize={11}
           fill={C.muted} fontFamily="monospace">simulation time</text>
         <text x={11} y={PAD.top + h / 2} textAnchor="middle" fontSize={11}
           fill={C.muted} fontFamily="monospace" transform={`rotate(-90 11 ${PAD.top + h / 2})`}>{yLabel}</text>
@@ -812,12 +854,13 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                   title={series.label}
                   points={series.points}
                   color={CHART_COLORS[(idx + 3) % CHART_COLORS.length]}
-                  yLabel="utilisation"
+                  yLabel="% busy"
+                  formatY={v => `${formatNumber(v, 1)}%`}
                 />
                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>
-                  Source: {series.sourceLabel}
+                  {series.sourceLabel}
                 </div>
-                <SeriesDataSummary series={series} valueLabel="utilisation" />
+                <SeriesDataSummary series={series} valueLabel="% busy" formatValue={v => `${formatNumber(v, 1)}%`} />
                 <SeriesDataPreview series={series} />
               </div>
             ))}
