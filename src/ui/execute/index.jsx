@@ -383,6 +383,24 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       )
     );
   }, [model, activeSchedulesMap]);
+  const scheduleReadinessIssues = useMemo(() => {
+    const issues = [];
+    if (schedulesLoading) {
+      issues.push({
+        code: "RA-S1",
+        message: "Timetable data is still loading. Wait for the linked schedule to finish loading before running.",
+        source: "schedule",
+      });
+    }
+    if (hasUnresolvedScheduleRefs) {
+      issues.push({
+        code: "RA-S2",
+        message: "Linked timetable data is not resolved in this panel yet. Reload the schedule before running.",
+        source: "schedule",
+      });
+    }
+    return issues;
+  }, [schedulesLoading, hasUnresolvedScheduleRefs]);
 
   const complexityEstimate = useMemo(() => estimateRunComplexity(model, {
     terminationMode,
@@ -403,7 +421,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     validation,
     complexityEstimate,
   }), [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, plan, isAdmin, tierPolicies, validation, complexityEstimate]);
-  const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
+  const readinessIssues = useMemo(
+    () => [...runAdmission.hardErrors, ...scheduleReadinessIssues],
+    [runAdmission.hardErrors, scheduleReadinessIssues]
+  );
+  const hasAdmissionErrors = readinessIssues.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
   const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : "minimal";
   const readinessTagColor = hasAdmissionErrors ? C.red : C.green;
@@ -413,9 +435,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     ? "Needs attention"
     : "Ready to run";
   const readinessSummary = hasAdmissionErrors
-    ? `${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length === 1 ? "" : "s"} to resolve before running.`
+    ? `${readinessIssues.length} blocker${readinessIssues.length === 1 ? "" : "s"} to resolve before running.`
     : "No blocking issues found for this scenario.";
-  const readinessIssues = runAdmission.hardErrors;
   const complexityColor = complexityEstimate.riskLevel === "too_large"
     ? C.red
     : complexityEstimate.riskLevel === "large"
@@ -440,7 +461,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const estSaveLabel = estSaveKB >= 1000 ? `~${(estSaveKB / 1000).toFixed(1)} MB` : `~${estSaveKB} KB`;
 
   const initEngine = useCallback(() => {
-    if (hasValidationErrors) return;
+    if (hasValidationErrors || hasAdmissionErrors) return;
     // Cancel any in-flight batch or sweep workers before rebuilding
     if (runnerRef.current) { runnerRef.current.cancel(); runnerRef.current = null; }
     if (sweepRunnerRef.current) { sweepRunnerRef.current.cancel(); sweepRunnerRef.current = null; }
@@ -488,7 +509,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setSweepResults(null);
     setSweepStatus("idle");
     setSweepProgress(null);
-  }, [model, seed, hasValidationErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, onRunComplete]);
+  }, [model, seed, hasValidationErrors, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, collectTimeSeries, onRunComplete]);
 
   const stopAuto = useCallback(() => {
     if (autoRef.current) {
@@ -2299,8 +2320,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {/* Validation status indicator — informational only, positioned first */}
         {hasAdmissionErrors ? (
-          <Btn variant="danger" disabled={true} title={`${runAdmission.hardErrors.length} blocker(s) must be resolved before running`}>
-             {runAdmission.hardErrors.length} blocker{runAdmission.hardErrors.length !== 1 ? "s" : ""}
+          <Btn variant="danger" disabled={true} title={`${readinessIssues.length} blocker(s) must be resolved before running`}>
+             {readinessIssues.length} blocker{readinessIssues.length !== 1 ? "s" : ""}
           </Btn>
         ) : hasAdmissionWarnings ? (
           <Btn variant="ghost" disabled={true} title={`${runAdmission.warnings.length} warning(s) — model can run but worth checking`}>
@@ -2319,9 +2340,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         title="Run structural checks on this model">
           Check Model
         </Btn>
-        <Btn variant="primary" onClick={initEngine} disabled={hasValidationErrors || runBusy} title="Reset simulation to initial state">⟳ Reset</Btn>
-        <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasValidationErrors || runBusy}> Step</Btn>
-        <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || runBusy}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
+        <Btn variant="primary" onClick={initEngine} disabled={hasValidationErrors || hasAdmissionErrors || runBusy} title="Reset simulation to initial state">⟳ Reset</Btn>
+        <Btn variant="success" onClick={doStep} disabled={mode === "done" || hasValidationErrors || hasAdmissionErrors || runBusy}> Step</Btn>
+        <Btn variant={autoRunning ? "danger" : "amber"} onClick={toggleAuto} disabled={hasValidationErrors || hasAdmissionErrors || runBusy}>{autoRunning ? "Stop Auto" : "Auto Run"}</Btn>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
             {speedMultiplier.toFixed(1)}×
@@ -2336,7 +2357,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           />
         </div>
         <Btn variant="ghost" onClick={doRunAll} disabled={hasAdmissionErrors || runBusy || saveStatus?.state === 'saving' || saveInProgressRef.current}>
-          {hasAdmissionErrors ? `✕ ${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length !== 1 ? "s" : ""}` : "⚡ Batch Run"}
+          {hasAdmissionErrors ? `✕ ${readinessIssues.length} blocker${readinessIssues.length !== 1 ? "s" : ""}` : "⚡ Batch Run"}
         </Btn>
         {canOpenResultsView && (
           <Btn variant="ghost" onClick={() => onGoToResults?.()} title="View results in the Results section">
