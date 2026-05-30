@@ -450,8 +450,8 @@ footer {
 <div class="proof-bar">
   <div class="proof-inner">
     <div class="proof-item">
-      <div class="proof-n">1,248</div>
-      <div class="proof-l">Engine unit tests</div>
+      <div class="proof-n">1,938</div>
+      <div class="proof-l">Passing tests across the codebase</div>
     </div>
     <div class="proof-item">
       <div class="proof-n">95%</div>
@@ -633,8 +633,8 @@ footer {
       <div class="reveal">
         <div class="scenario-meta">Two-stage emergency pathway</div>
         <p class="scenario-p">An emergency department receives patients at an average rate of <strong>12 per hour</strong>. High-acuity patients (30%) go directly to a priority queue; low-acuity patients (70%) route to a secondary queue.</p>
-        <p class="scenario-p">With <strong>3 clinicians</strong> shared across both queues, the department runs at approximately 87% utilisation. The spreadsheet estimate says mean wait is around 14 minutes.</p>
-        <p class="scenario-p">Running <strong>30 replications with warm-up removal</strong>, the simulation tells a different story — and the AI Insights panel identifies the structural problem driving it.</p>
+        <p class="scenario-p">With <strong>3 clinicians</strong> shared across both queues, the department runs at approximately 87% utilisation. The Erlang-C formula (treating all patients equally) estimates mean wait at around 25 minutes — but tells you nothing about how that wait splits by acuity.</p>
+        <p class="scenario-p">Running <strong>30 replications with warm-up removal</strong>, the simulation reveals something the formula cannot: a 5× difference in experience between patient groups — and the AI Insights panel identifies the structural problem driving it.</p>
       </div>
       <div class="reveal d2">
         <div class="result-card">
@@ -645,16 +645,16 @@ footer {
             <span class="rc-title">Simmodlr — Run results</span>
           </div>
           <div class="rc-body">
-            <div class="rc-row"><span class="rc-k">High-acuity mean wait</span><span class="rc-v g">4.2 min (CI: 3.1–5.3)</span></div>
-            <div class="rc-row"><span class="rc-k">Low-acuity mean wait</span><span class="rc-v w">31.4 min (CI: 22–41)</span></div>
-            <div class="rc-row"><span class="rc-k">Clinician utilisation</span><span class="rc-v w">87.3%</span></div>
-            <div class="rc-row"><span class="rc-k">Throughput</span><span class="rc-v">11.6 / hr (CI: 11.2–12.0)</span></div>
+            <div class="rc-row"><span class="rc-k">High-acuity mean wait</span><span class="rc-v g">4.2 min (CI: 3.4–5.0)</span></div>
+            <div class="rc-row"><span class="rc-k">Low-acuity mean wait</span><span class="rc-v w">22.5 min (CI: 16.3–28.8)</span></div>
+            <div class="rc-row"><span class="rc-k">Clinician utilisation</span><span class="rc-v w">85.8% (CI: 81.8%–89.7%)</span></div>
+            <div class="rc-row"><span class="rc-k">Throughput</span><span class="rc-v">11.3 / hr (CI: 11.0–11.7)</span></div>
             <div class="rc-row"><span class="rc-k">Warm-up excluded</span><span class="rc-v g">First 60 min</span></div>
-            <div class="rc-row"><span class="rc-k">Replications</span><span class="rc-v">30 (2 flagged anomalous)</span></div>
+            <div class="rc-row"><span class="rc-k">Replications</span><span class="rc-v">30</span></div>
           </div>
           <div class="ai-box">
             <div class="ai-box-label">AI Insight</div>
-            <p class="ai-box-text">"Low-acuity wait variance is high — the CI spans 19 minutes. The shared queue is creating instability under load. Recommend modelling a dedicated low-acuity stream before committing to current staffing."</p>
+            <p class="ai-box-text">"Low-acuity wait variance is high — the CI spans 12 minutes. The priority mechanism strongly protects high-acuity patients (4.2 min) but pushes significant delay onto low-acuity patients (22.5 min). Recommend modelling a dedicated low-acuity stream or capacity uplift before committing to current staffing."</p>
           </div>
         </div>
       </div>
