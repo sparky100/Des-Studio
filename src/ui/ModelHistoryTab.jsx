@@ -108,7 +108,7 @@ export function ModelHistoryTab({
   historyShowArchived, setHistoryShowArchived,
   shareLinksMap, setShareLinksMap,
   modelId, userId, model, baseUrl,
-  onExplainRun, onViewResults,
+  onExplainRun, onViewResults, onCreateReport,
 }) {
   const toast = useToast();
   const [historySearch, setHistorySearch] = useState("");
@@ -580,6 +580,12 @@ export function ModelHistoryTab({
                             onClick={() => onExplainRun?.(row)}
                             style={{ background: C.purple + "22", color: C.purple, border: `1px solid ${C.purple}44`, borderRadius: 999, padding: "4px 12px", fontSize: 11, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}
                           >Explain</button>
+                          {onCreateReport && hasResultsPayload(row) && (
+                            <button
+                              onClick={() => onCreateReport(row)}
+                              style={{ background: C.accent + "22", color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: "4px 12px", fontSize: 11, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}
+                            >Create Report</button>
+                          )}
                           <div style={{ position: "relative" }}>
                             <button
                               onClick={(e) => {
@@ -606,34 +612,6 @@ export function ModelHistoryTab({
                                     disabled={reproduceState[row.id]?.status === 'running'}
                                     style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
                                   >{reproduceState[row.id]?.status === 'running' ? 'Running…' : 'Reproduce'}</button>
-                                  {shareLinksMap[row.id] ? (
-                                    <button
-                                      onClick={() => { navigator.clipboard.writeText(`${baseUrl}/#share/${shareLinksMap[row.id].token}`); toast.success("Link copied"); setMoreMenuId(null); }}
-                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
-                                    >📋 Copy share link</button>
-                                  ) : userId && (
-                                    <button
-                                      onClick={async () => {
-                                        try {
-                                          const link = await createShareLink(row.id, userId);
-                                          setShareLinksMap(prev => ({ ...prev, [row.id]: link }));
-                                          toast.success("Share link created");
-                                        } catch { toast.error("Failed to create share link"); }
-                                        setMoreMenuId(null);
-                                      }}
-                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
-                                    >Share</button>
-                                  )}
-                                  {shareLinksMap[row.id] && userId && (
-                                    <button
-                                      onClick={async () => {
-                                        if (!window.confirm("Revoke this share link?")) return;
-                                        try { await revokeShareLink(shareLinksMap[row.id].id, userId); setShareLinksMap(prev => { const next = { ...prev }; delete next[row.id]; return next; }); toast.success("Share link revoked"); } catch { toast.error("Failed to revoke"); }
-                                        setMoreMenuId(null);
-                                      }}
-                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.red, cursor: "pointer", borderRadius: 4 }}
-                                    >✕ Unshare</button>
-                                  )}
                                   {userId && (
                                     <button
                                       onClick={async () => {
