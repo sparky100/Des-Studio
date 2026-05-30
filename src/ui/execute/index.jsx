@@ -2634,26 +2634,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 ))}
               </div>
             )}
-            {complexityEstimate.bottlenecks.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {complexityEstimate.bottlenecks.map(item => (
-                  <div
-                    key={`${item.queueName}-${item.resourceNames.join("-")}`}
-                    style={{
-                      background: `${C.amber}12`,
-                      border: `1px solid ${C.amber}44`,
-                      borderRadius: 6,
-                      color: C.text,
-                      fontFamily: FONT,
-                      fontSize: 11,
-                      padding: "8px 10px",
-                    }}
-                  >
-                    {item.queueName}: {item.reason}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}
