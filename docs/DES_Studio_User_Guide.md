@@ -1,6 +1,6 @@
 # DES Studio — User Guide
 
-Version: 1.22.0 (Sprints 1–76)
+Version: 1.23.0 (Sprints 1–77)
 
 ---
 
@@ -31,6 +31,7 @@ Version: 1.22.0 (Sprints 1–76)
 | v1.20.0 | 73 | Schedule Manager — timetable data separated from core model. New **Schedules** tab in the model editor to view, create, edit, and delete named timetables (e.g. Weekday, Weekend, Engineering blockade). Schedule selector dropdown in the Execute panel when a model has more than one schedule. CSV export of schedule rows. Model JSON export re-inlines schedule rows for portability. |
 | v1.21.0 | 74–76 | Report redesign — Senior Management and Technical report variants in HTML and Markdown format. Improvements: entity name used in KPI labels (e.g. "Trains served" not "Entities served"); served/reneged counts shown as integers; per-stage wait and service time breakdown for multi-stage models; angled x-axis labels in queue wait chart; wrapped labels in resource utilisation chart; Scope & Methodology section (arrival pattern, warm-up, replications, performance goals); intro paragraph before results; goal status summary in executive summary. |
 | v1.22.0 | 75–76 | Model Assistant — AI panel renamed from "AI Assistant" to "Model Assistant". Now persists as a sidebar across tab navigation. Clicking **Explain Results**, **Compare Runs**, or **Refine Plan** opens a focused view showing only that action (not all three at once). On mobile devices, action buttons open a full-screen overlay. Diagnostics panel: "Diagnose with AI" renamed to **Diagnose**; section heading "AI Diagnosis" renamed to **Diagnosis**. |
+| v1.23.0 | 77 | **Results view** — Unified chart panels (all charts use the same bordered card with two-row header; long queue names wrap to two lines instead of truncating mid-word). Customers Arriving card added to the KPI summary. For multi-replication runs, Customers Arriving and Customers Served display as e.g. `11000 — 1100 per run`. Section order: Summary → Bottlenecks → Analysis → Run Effort. **Export Results** and **Create Report** buttons added after Analyse in the Results tab. **Run History** — Share link removed from the ⋯ menu. **Create Report** button added next to Explain. **View model at this run** now works correctly (model snapshot saved on every run). **Reproduce** fixed for multi-replication runs and timetable models. **Reports** — Senior Management report executive summary is always written in plain English by the AI (the technical model description field is no longer used). Queue chart labels strip verbose suffixes (e.g. shows "Cathcart Newton Neilston" not "Cathcart Newton Neilston Approach Queue"). Confidence is shown as High/Medium/Low instead of a CI table in the management report. **Validation** — V38 warning: writing `RELEASE(Server)` immediately before `COMPLETE()` in the same B-event silently skips completion; the engine now warns before the run. |
 
 ---
 
@@ -388,8 +389,8 @@ Effect macros are the action vocabulary of DES Studio. They appear in the Effect
 | Macro | Syntax | What it does | When to use |
 |-------|--------|--------------|-------------|
 | ARRIVE | `ARRIVE(entityType)` | Creates a new entity instance of the given type and injects it into the model | The arrival B-Event that generates new customers |
-| COMPLETE | `COMPLETE()` | Marks the entity as served and removes it from active service | End of service B-Event; pairs with RELEASE |
-| RELEASE | `RELEASE(ServerType)` | Frees one unit of the server resource | End of service, after COMPLETE |
+| COMPLETE | `COMPLETE()` | Marks the entity as served and removes it from active service. **Also releases the server automatically** — no preceding `RELEASE()` is needed on a terminal B-event. | Final B-Event when service ends and entity exits the system |
+| RELEASE | `RELEASE(ServerType, NextQueue)` | Frees the server and moves the entity to the next queue (intermediate stage). **Do not follow with `COMPLETE()` in the same effect** — `RELEASE` sets the entity to `"waiting"` state so `COMPLETE` will silently skip (V38 warning). | Intermediate stage handoff — not the final stage |
 | ASSIGN | `ASSIGN(QueueName, ServerType)` | Removes the next entity from the queue, binds it to a free server unit | Start-of-service C-Event |
 | RENEGE | `RENEGE(ctx)` | Removes a waiting entity from a queue after a timeout (reneging) | Modelling impatient customers |
 | RENEGE_OLDEST | `RENEGE_OLDEST(entityType)` | Removes the oldest entity of the specified type from its queue | Max-queue-length policies, timeout eviction |

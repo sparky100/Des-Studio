@@ -1,6 +1,6 @@
 # DES Studio — Product Specification
-**Version:** 1.4.0
-**Date:** 2026-05-24
+**Version:** 1.5.0
+**Date:** 2026-05-30
 **Sprint baseline:** Sprint 71
 **Status:** Living document — reviewed and updated at end of each sprint
 
@@ -16,6 +16,7 @@
 | v1.2.0 | 2026-05-23 | Sprints 68–70 | Model versioning (explicit milestones, version history panel, structural change detection); AI debugging (trace emission, model checker); Help Assistant (in-app contextual help with suggested questions); documentation accuracy fixes |
 | v1.3.0 | 2026-05-23 | Sprint 70 | Added RENEGE_OLDEST to §3.3 macro table (was missing from all four macro category tables) |
 | v1.4.0 | 2026-05-24 | Sprint 71 | In-app Feedback widget and About panel — toolbar Feedback button opens a Supabase-backed submission form (category, message, user agent, page context, app version); toolbar Info button opens a static About modal (version, copyright, contact, method attribution); `feedback` table in Supabase with RLS for authenticated and anonymous submission |
+| v1.5.0 | 2026-05-30 | Sprint 77 | **Results view** — Unified ChartCard borders for all chart panels; Customers Arriving card added to KPI summary; Customers Served and Customers Arriving display as `"11000 — 1100 per run"` for multi-replication runs; section order changed to Summary → Bottlenecks → Analysis → Run Effort; "Export Results" and "Create Report" buttons added after Analyse in the Results tab. **Run History** — Share link removed from ⋯ menu; "Create Report" button added next to Explain; "View model at this run" and "Reproduce" now work correctly (model snapshot embedded on all save paths; Reproduce fetches schedule data and handles multi-rep comparison). **Reports** — Executive summary always plain-English LLM-generated; queue chart labels stripped of verbose suffixes; Management report uses High/Medium/Low confidence language instead of full CI table. **Validation** — V38 warning: RELEASE→COMPLETE pattern silently skips COMPLETE (anti-pattern now flagged before run). |
 
 ---
 
@@ -255,7 +256,7 @@ The Help Assistant provides contextual, in-app guidance accessible from any scre
 
 ### 3.8 Sharing and Exporting
 
-**Share link.** From any model or saved run, a unique shareable URL can be generated. The share modal lets the modeller configure which widgets are visible to the recipient — for example, showing only the KPI summary and queue stats but not the full event log. Recipients can view results in read-only mode without signing in.
+**Share link.** From a model, a shareable URL can be generated via the Access tab. The share modal lets the modeller configure which widgets are visible to the recipient. Recipients can view results in read-only mode without signing in. (Note: the share link option was removed from the Run History ⋯ menu in Sprint 77 to reduce clutter; model-level sharing is still available.)
 
 **QR code.** The share modal also generates a QR code alongside the URL, suitable for display in presentations or printed reports. Scanning the code opens the same read-only results view.
 
