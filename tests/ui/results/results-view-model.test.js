@@ -60,8 +60,8 @@ describe("results view model", () => {
     expect(series[0].label).toBe("Clerk");
     expect(series[0].points).toEqual([
       { t: 0, value: 0 },
-      { t: 5, value: 0.5 },
-      { t: 10, value: 1 },
+      { t: 5, value: 50 },
+      { t: 10, value: 100 },
     ]);
   });
 

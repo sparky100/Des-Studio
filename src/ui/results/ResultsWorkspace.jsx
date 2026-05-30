@@ -646,9 +646,10 @@ function ChartSectionShell({ section, children }) {
   );
 }
 
-export function MiniLineChart({ title, points, color, yLabel, formatY = v => formatNumber(v) }) {
+export function MiniLineChart({ title, ariaTitle, points, color, yLabel, formatY = v => formatNumber(v) }) {
   const [tip, setTip] = useState(null);
   if (!points || points.length < 2) return null;
+  const accessibleName = ariaTitle ?? title;
   const maxY = Math.max(...points.map(p => p.value), 1);
   const minY = Math.min(...points.map(p => p.value), 0);
   const maxT = points[points.length - 1].t || 1;
@@ -678,7 +679,7 @@ export function MiniLineChart({ title, points, color, yLabel, formatY = v => for
         </div>
       )}
       <svg width={CHART_W} height={CHART_H} style={{ display: "block", width: "100%", minWidth: 0, minHeight: 110 }}
-        viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`${title} ${yLabel} trend chart`}
+        viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`${accessibleName} ${yLabel} trend chart`}
         onMouseLeave={() => setTip(null)}>
         {/* Horizontal grid lines only — no vertical lines */}
         {yTicks.map((t, i) => {
@@ -723,7 +724,7 @@ export function MiniLineChart({ title, points, color, yLabel, formatY = v => for
           );
         })()}
       </svg>
-      <div aria-label={`${title} chart legend`} style={{ display: "flex", gap: 10, flexWrap: "wrap", fontFamily: FONT, fontSize: 9, color: C.muted }}>
+      <div aria-label={`${accessibleName} chart legend`} style={{ display: "flex", gap: 10, flexWrap: "wrap", fontFamily: FONT, fontSize: 9, color: C.muted }}>
         <span><span aria-hidden="true" style={{ color }}>●</span> latest t={formatNumber(lastPoint.t)}</span>
         <span><span aria-hidden="true" style={{ color: C.amber }}>●</span> peak t={formatNumber(peakPoint.t)}</span>
       </div>
@@ -995,7 +996,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                       statItems={lineSeriesStats(series, "depth", color)}
                       dataPreview={<SeriesDataPreview series={series} />}
                     >
-                      <MiniLineChart title="" points={series.points} color={color} yLabel="depth" />
+                      <MiniLineChart title="" ariaTitle={title} points={series.points} color={color} yLabel="depth" />
                     </ChartCard>
                   );
                 })}
@@ -1019,7 +1020,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                       statItems={lineSeriesStats(series, "% busy", color, fmtPct)}
                       dataPreview={<SeriesDataPreview series={series} />}
                     >
-                      <MiniLineChart title="" points={series.points} color={color} yLabel="% busy" formatY={fmtPct} />
+                      <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="% busy" formatY={fmtPct} />
                     </ChartCard>
                   );
                 })}

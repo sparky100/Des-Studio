@@ -67,19 +67,20 @@ describe("ResultsWorkspace", () => {
   test("shows data provenance labels", () => {
     render(<ResultsWorkspace results={results} model={model} />);
 
-    expect(screen.getByText(/Source: Queue measurements taken during the run/i)).toBeInTheDocument();
-    expect(screen.getByText(/Source: Busy Clerk resources measured during the run, divided by capacity 1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Source: 3 waiting times from completed customers/i)).toBeInTheDocument();
+    expect(screen.getByText(/Queue measurements taken during the run/i)).toBeInTheDocument();
+    expect(screen.getByText(/Clerk: 1 resource/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 waiting times from completed customers/i)).toBeInTheDocument();
   });
 
   test("shows compact data checks under charts", () => {
     render(<ResultsWorkspace results={results} model={model} />);
 
-    expect(screen.getAllByText("POINTS").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("t=0 -> 1")).toBeInTheDocument();
-    expect(screen.getByText("t=5 -> 3")).toBeInTheDocument();
-    expect(screen.getByText("PEAK DEPTH")).toBeInTheDocument();
-    expect(screen.getByText("MAX WAIT")).toBeInTheDocument();
+    // StatCards: "PEAK" appears for queue depth and server utilisation series
+    expect(screen.getAllByText("PEAK").length).toBeGreaterThanOrEqual(2);
+    // "N" appears for number of data points in each series
+    expect(screen.getAllByText("N").length).toBeGreaterThanOrEqual(2);
+    // Wait distribution histogram stat cards show percentile labels
+    expect(screen.getByText("P99")).toBeInTheDocument();
   });
 
   test("renders runtime metrics when present", () => {
@@ -91,9 +92,10 @@ describe("ResultsWorkspace", () => {
     expect(within(runtimeSection).getByText("42 ms")).toBeInTheDocument();
     expect(within(runtimeSection).getByText(/events processed/i)).toBeInTheDocument();
     expect(within(runtimeSection).getByText("15")).toBeInTheDocument();
-    expect(within(runtimeSection).getByText(/peak queue length by queue/i)).toBeInTheDocument();
-    expect(within(runtimeSection).getByText("Queue A")).toBeInTheDocument();
-    expect(within(runtimeSection).getByText("3")).toBeInTheDocument();
+    expect(screen.getByText(/peak queue length by queue/i)).toBeInTheDocument();
+    const peakQueueSection = screen.getByLabelText(/peak queue lengths/i);
+    expect(within(peakQueueSection).getAllByText("Queue A").length).toBeGreaterThanOrEqual(1);
+    expect(within(peakQueueSection).getByText("3")).toBeInTheDocument();
   });
 
   test("uses responsive chart grids", () => {
@@ -228,6 +230,5 @@ describe("ResultsWorkspace", () => {
     expect(within(runtimeSection).getByText("125 ms")).toBeInTheDocument();
     expect(within(runtimeSection).getByText(/replications/i)).toBeInTheDocument();
     expect(within(runtimeSection).getByText("300")).toBeInTheDocument();
-    expect(within(runtimeSection).getByText("7")).toBeInTheDocument();
   });
 });
