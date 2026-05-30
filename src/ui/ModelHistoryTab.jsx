@@ -3,7 +3,7 @@ import { useState } from "react";
 import { C, FONT, alpha } from "./shared/tokens.js";
 import { Btn, Empty } from "./shared/components.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
-import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink } from "../db/models.js";
+import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink, fetchModelSchedules, buildSchedulesMap } from "../db/models.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { buildEngine } from "../engine/index.js";
 import { compareResults } from "../db/runRecord.js";
@@ -108,7 +108,7 @@ export function ModelHistoryTab({
   historyShowArchived, setHistoryShowArchived,
   shareLinksMap, setShareLinksMap,
   modelId, userId, model, baseUrl,
-  onExplainRun, onViewResults,
+  onExplainRun, onViewResults, onCreateReport,
 }) {
   const toast = useToast();
   const [historySearch, setHistorySearch] = useState("");
@@ -129,18 +129,25 @@ export function ModelHistoryTab({
     setReproduceState(prev => ({ ...prev, [rowId]: { status: 'running', message: '' } }));
     try {
       const run = await getRun(rowId);
-      // Prefer embedded snapshot (full-detail saves); fall back to linked model version.
       const modelForReproduce = run.model_snapshot ?? run.version_model;
       if (!modelForReproduce) {
         setReproduceState(prev => ({ ...prev, [rowId]: {
           status: 'fail',
-          message: '✗ No model snapshot or saved version linked to this run. Re-run with a version tagged to enable reproducibility checking.',
+          message: '✗ No model snapshot or saved version linked to this run. Re-run to enable reproducibility checking.',
         } }));
         return;
       }
       const modelSource = run.model_snapshot
         ? 'embedded snapshot'
         : `version ${run.version_number ?? '?'}${run.version_name ? ` "${run.version_name}"` : ''}`;
+
+      // Fetch schedule data so timetable models resolve correctly
+      let schedulesMap = {};
+      try {
+        const scheduleRows = await fetchModelSchedules(modelForReproduce.id || modelId);
+        schedulesMap = buildSchedulesMap(scheduleRows);
+      } catch { /* no schedule data — model will run with empty rows */ }
+
       const engine = buildEngine(
         modelForReproduce,
         run.base_seed,
@@ -148,21 +155,40 @@ export function ModelHistoryTab({
         run.experiment_config.maxSimTime   ?? 500,
         null,
         5000, 500,
-        false
+        false,
+        undefined,
+        { schedulesMap }
       );
       const newResult = engine.runAll();
-      const storedResult = { summary: run.results_json?.summary || {} };
-      const currentVersion = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ENGINE_VERSION) || '55a';
-      if (compareResults(newResult, storedResult)) {
+      const replications = Number(run.experiment_config.replications ?? 1);
+
+      if (replications > 1) {
+        // Stored summary is the N-replication average — not comparable to a single run.
+        // Verify the model ran and produced a plausible result instead.
+        const served = newResult.summary?.served ?? 0;
+        const storedServed = run.results_json?.summary?.served ?? 0;
+        const plausible = served > 0 || storedServed === 0;
         setReproduceState(prev => ({ ...prev, [rowId]: {
-          status: 'pass',
-          message: `✓ Reproduce confirmed — results are bit-identical (using ${modelSource}).`,
+          status: plausible ? 'pass' : 'fail',
+          message: plausible
+            ? `✓ Snapshot valid — model ran successfully using ${modelSource} (${served} entities served in single-replication check; original was ${replications}-replication average).`
+            : `✗ Reproduce produced 0 results using ${modelSource}. The snapshot may be incomplete or the schedule data unavailable.`,
         } }));
       } else {
-        setReproduceState(prev => ({ ...prev, [rowId]: {
-          status: 'fail',
-          message: `✗ Reproduce failed (using ${modelSource}). Stored engine: v${run.engine_version || 'unknown'}, current: v${currentVersion}. Results may differ due to engine changes.`,
-        } }));
+        // Single-rep run — exact comparison is meaningful
+        const storedResult = { summary: run.results_json?.summary || {} };
+        if (compareResults(newResult, storedResult)) {
+          setReproduceState(prev => ({ ...prev, [rowId]: {
+            status: 'pass',
+            message: `✓ Reproduce confirmed — results match (using ${modelSource}).`,
+          } }));
+        } else {
+          const cv = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ENGINE_VERSION) || '55a';
+          setReproduceState(prev => ({ ...prev, [rowId]: {
+            status: 'fail',
+            message: `✗ Reproduce failed (using ${modelSource}). Engine: stored v${run.engine_version || '?'}, current v${cv}. Results differ — engine or model may have changed.`,
+          } }));
+        }
       }
     } catch (e) {
       setReproduceState(prev => ({ ...prev, [rowId]: {
@@ -554,6 +580,12 @@ export function ModelHistoryTab({
                             onClick={() => onExplainRun?.(row)}
                             style={{ background: C.purple + "22", color: C.purple, border: `1px solid ${C.purple}44`, borderRadius: 999, padding: "4px 12px", fontSize: 11, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}
                           >Explain</button>
+                          {onCreateReport && hasResultsPayload(row) && (
+                            <button
+                              onClick={() => onCreateReport(row)}
+                              style={{ background: C.accent + "22", color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: "4px 12px", fontSize: 11, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}
+                            >Create Report</button>
+                          )}
                           <div style={{ position: "relative" }}>
                             <button
                               onClick={(e) => {
@@ -580,34 +612,6 @@ export function ModelHistoryTab({
                                     disabled={reproduceState[row.id]?.status === 'running'}
                                     style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
                                   >{reproduceState[row.id]?.status === 'running' ? 'Running…' : 'Reproduce'}</button>
-                                  {shareLinksMap[row.id] ? (
-                                    <button
-                                      onClick={() => { navigator.clipboard.writeText(`${baseUrl}/#share/${shareLinksMap[row.id].token}`); toast.success("Link copied"); setMoreMenuId(null); }}
-                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
-                                    >📋 Copy share link</button>
-                                  ) : userId && (
-                                    <button
-                                      onClick={async () => {
-                                        try {
-                                          const link = await createShareLink(row.id, userId);
-                                          setShareLinksMap(prev => ({ ...prev, [row.id]: link }));
-                                          toast.success("Share link created");
-                                        } catch { toast.error("Failed to create share link"); }
-                                        setMoreMenuId(null);
-                                      }}
-                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
-                                    >Share</button>
-                                  )}
-                                  {shareLinksMap[row.id] && userId && (
-                                    <button
-                                      onClick={async () => {
-                                        if (!window.confirm("Revoke this share link?")) return;
-                                        try { await revokeShareLink(shareLinksMap[row.id].id, userId); setShareLinksMap(prev => { const next = { ...prev }; delete next[row.id]; return next; }); toast.success("Share link revoked"); } catch { toast.error("Failed to revoke"); }
-                                        setMoreMenuId(null);
-                                      }}
-                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.red, cursor: "pointer", borderRadius: 4 }}
-                                    >✕ Unshare</button>
-                                  )}
                                   {userId && (
                                     <button
                                       onClick={async () => {

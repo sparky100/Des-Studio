@@ -5,10 +5,10 @@ import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../eng
 import { buildResultsViewModel } from "./resultsViewModel.js";
 
 const HIST_W = 360;
-const HIST_H = 160;
+const HIST_H = 140;
 const HIST_BINS = 20;
 const CHART_W = 400;
-const CHART_H = 120;
+const CHART_H = 140;
 const CHART_COLORS = [C.accent, C.bEvent, C.purple, C.green, C.red, C.server];
 
 function csvEscape(value) {
@@ -110,12 +110,121 @@ function MetricStrip({ items }) {
   );
 }
 
-function SummaryCardGrid({ results }) {
+// ── StatCards ─────────────────────────────────────────────────────────────────
+// Unified stat footer used by both line-chart panels and histogram panels.
+// Replaces the ad-hoc MetricStrip that appeared below time-series charts.
+function StatCards({ items }) {
+  const cols = Math.min(items.length, 6);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 5 }}>
+      {items.map(item => (
+        <div key={item.label} style={{
+          background: C.bg,
+          border: `1px solid ${item.color ? alpha(item.color, 0.28) : C.border}`,
+          borderRadius: 5,
+          padding: "5px 6px",
+          textAlign: "center",
+        }}>
+          <div style={{ fontSize: 8, fontWeight: 700, color: item.color || C.muted, fontFamily: FONT, letterSpacing: 1, marginBottom: 2 }}>
+            {item.label.toUpperCase()}
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.text, fontFamily: FONT, lineHeight: 1.2 }}>
+            {item.value}
+          </div>
+          {item.desc && (
+            <div style={{ fontSize: 8, color: C.muted, fontFamily: FONT, marginTop: 1 }}>{item.desc}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── ChartCard ─────────────────────────────────────────────────────────────────
+// Consistent bordered card wrapper for every chart panel — line charts and
+// histograms alike. Provides the colour-dot title row, source label, chart
+// body slot, optional stat footer, and optional data-preview slot.
+function ChartCard({ title, color, sourceLabel, statItems, dataPreview, children }) {
+  return (
+    <div style={{
+      background: C.surface,
+      border: `1px solid ${C.border}`,
+      borderRadius: 8,
+      padding: 14,
+      display: "flex",
+      flexDirection: "column",
+      gap: 10,
+      minWidth: 0,
+    }}>
+      {/* Two-row header so long queue names never get truncated mid-word.
+          Row 1: colour dot + name (wraps up to 2 lines, tooltip shows full name).
+          Row 2: source label indented to align with the name text. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 7, minWidth: 0 }}>
+          <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, flexShrink: 0, marginTop: 3, display: "inline-block" }} />
+          <span
+            title={title}
+            style={{
+              fontSize: 12,
+              color: C.text,
+              fontFamily: FONT,
+              fontWeight: 700,
+              lineHeight: 1.4,
+              // Allow up to 2 lines before clipping — eliminates mid-word
+              // truncation for all realistic queue names while keeping panels compact.
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              minWidth: 0,
+            }}
+          >
+            {title}
+          </span>
+        </div>
+        {sourceLabel && (
+          <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, paddingLeft: 16 }}>
+            {sourceLabel}
+          </span>
+        )}
+      </div>
+      {children}
+      {statItems?.length > 0 && <StatCards items={statItems} />}
+      {dataPreview}
+    </div>
+  );
+}
+
+// Returns the four stat-card items for a time-series panel.
+function lineSeriesStats(series, yLabel, color, formatValue = v => formatNumber(v)) {
+  const pts = Array.isArray(series?.points) ? series.points : [];
+  if (pts.length < 2) return [];
+  const peak = pts.reduce((b, p) => Number(p.value) > Number(b.value) ? p : b, pts[0]);
+  const last = pts[pts.length - 1];
+  return [
+    { label: "peak", value: formatValue(peak.value), color, desc: yLabel },
+    { label: "at t", value: formatNumber(peak.t, 0), desc: "peak time" },
+    { label: "final", value: formatValue(last.value), desc: `t = ${formatNumber(last.t, 0)}` },
+    { label: "n", value: pts.length.toLocaleString(), desc: "data points" },
+  ];
+}
+
+function SummaryCardGrid({ results, replicationResults = [] }) {
   const summary = results?.summary || {};
-  const arrived = Number(summary.arrived ?? summary.totalArrived ?? 0);
+  // Derive replication count: prefer explicit replicationResults array length,
+  // fall back to single run (1). Used to show per-run averages alongside totals.
+  const repCount = replicationResults.length > 0 ? replicationResults.length : 1;
+  const isMultiRep = repCount > 1;
+
+  const totalArrived = Number(summary.total ?? summary.arrived ?? summary.totalArrived ?? 0);
   const served = Number(summary.served ?? 0);
   const reneged = Number(summary.reneged ?? summary.totalReneged ?? 0);
-  const leftRate = arrived > 0 ? (reneged / arrived) * 100 : null;
+  const leftRate = totalArrived > 0 ? (reneged / totalArrived) * 100 : null;
+
+  // For count metrics, compute the per-run average when running multi-rep.
+  const avgPerRun = (total) =>
+    isMultiRep && total > 0 ? (total / repCount).toFixed(1) : null;
+
   const cards = [
     {
       label: "Average wait",
@@ -130,9 +239,21 @@ function SummaryCardGrid({ results }) {
       color: C.accent,
     },
     {
+      label: "Customers arriving",
+      value: totalArrived > 0 ? formatMetricValue(totalArrived, 0) : "—",
+      avg: avgPerRun(totalArrived),
+      note: totalArrived > 0
+        ? isMultiRep ? `Total — avg per run across ${repCount} replications.` : "Total arrivals."
+        : "No arrivals recorded.",
+      color: C.text,
+    },
+    {
       label: "Customers served",
       value: formatMetricValue(served, 0),
-      note: served > 0 ? "Completed successfully." : "No completed entities yet.",
+      avg: avgPerRun(served),
+      note: served > 0
+        ? isMultiRep ? `Total — avg per run across ${repCount} replications.` : "Completed successfully."
+        : "No completed entities yet.",
       color: C.served,
     },
     {
@@ -168,9 +289,19 @@ function SummaryCardGrid({ results }) {
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
               {card.label.toUpperCase()}
             </div>
-            <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
-              {card.value}
-            </div>
+            {card.avg != null ? (
+              /* Multi-rep: "11000 — 1100 per run" */
+              <div style={{ marginBottom: 5 }}>
+                <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700 }}>{card.value}</span>
+                <span style={{ fontSize: 13, color: C.muted, fontFamily: FONT, fontWeight: 400, margin: "0 5px" }}>—</span>
+                <span style={{ fontSize: 16, color: card.color, fontFamily: FONT, fontWeight: 700, opacity: 0.75 }}>{card.avg}</span>
+                <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginLeft: 3 }}>per run</span>
+              </div>
+            ) : (
+              <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
+                {card.value}
+              </div>
+            )}
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
               {card.note}
             </div>
@@ -540,10 +671,12 @@ export function MiniLineChart({ title, points, color, yLabel, formatY = v => for
   const peakPoint = points.reduce((best, point) => Number(point.value) > Number(best.value) ? point : best, points[0]);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 11, color, fontFamily: FONT, fontWeight: 700 }}>{title}</span>
-        <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{yLabel} · latest {formatY(lastPoint.value)} · peak {formatY(peakPoint.value)}</span>
-      </div>
+      {title && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color, fontFamily: FONT, fontWeight: 700 }}>{title}</span>
+          <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{yLabel} · latest {formatY(lastPoint.value)} · peak {formatY(peakPoint.value)}</span>
+        </div>
+      )}
       <svg width={CHART_W} height={CHART_H} style={{ display: "block", width: "100%", minWidth: 0, minHeight: 110 }}
         viewBox={`0 0 ${CHART_W} ${CHART_H}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={`${title} ${yLabel} trend chart`}
         onMouseLeave={() => setTip(null)}>
@@ -775,25 +908,37 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const analysisInputs = normaliseReplicationResults(replicationResults, results);
   const hasAnalysisInputs = analysisInputs.length > 0 || (warmupDetection?.series || []).length > 0 || results?.aggregateStats;
 
+  // ── Shared responsive grid style used by all three chart sections ───────────
+  const CHART_GRID = {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))",
+    gap: 16,
+    minWidth: 0,
+  };
+
   if (!chartModel.hasTimeSeries && !hasWaitDistributions && !hasAnalysisInputs) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-        <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
-        <SummaryCardGrid results={results} />
+        <SummaryCardGrid results={results} replicationResults={replicationResults} />
         <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
           Turn on <strong style={{ color: C.accent }}>Keep chart data during the run</strong> in Run setup, then run the model to see charts.
         </div>
+        <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
       </div>
     );
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-      <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
+
+      {/* ── 1. Headline KPIs ───────────────────────────────────────────────── */}
       <SummaryCardGrid results={results} />
 
+      {/* ── 2. Bottleneck section — header + peak-queue strip + charts ──────── */}
       {(chartModel.hasTimeSeries || hasWaitDistributions || queuePeaks.length > 0) && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Section label */}
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
               WHERE ARE THE BOTTLENECKS?
@@ -803,105 +948,127 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
             </div>
           </div>
 
+          {/* Peak queue strip — embedded in the bottleneck section, not a separate panel */}
           {queuePeaks.length > 0 && (
-            <section aria-label="Peak queue lengths" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
-              <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>PEAK QUEUE LENGTH BY QUEUE</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
-                {queuePeaks.map(entry => (
-                  <div key={entry.queueName} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "8px 10px" }}>
-                    <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {entry.queueName}
-                    </div>
-                    <div style={{ fontSize: 18, color: C.amber, fontFamily: FONT, fontWeight: 700, lineHeight: 1 }}>
-                      {formatNumber(entry.depth, 0)}
-                    </div>
-                  </div>
-                ))}
+            <div aria-label="Peak queue lengths" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>
+                PEAK QUEUE LENGTH BY QUEUE
               </div>
-            </section>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 6 }}>
+                {queuePeaks.map(entry => {
+                  const high = entry.depth > 20;
+                  return (
+                    <div key={entry.queueName} style={{
+                      background: C.bg,
+                      border: `1px solid ${high ? alpha(C.amber, 0.35) : C.border}`,
+                      borderRadius: 6,
+                      padding: "7px 10px",
+                    }}>
+                      <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {entry.queueName}
+                      </div>
+                      <div style={{ fontSize: 17, color: high ? C.amber : C.text, fontFamily: FONT, fontWeight: 700, lineHeight: 1 }}>
+                        {formatNumber(entry.depth, 0)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Queue depth charts ──────────────────────────────────────────── */}
+          {chartModel.hasTimeSeries && queueSection?.series.length > 0 && (
+            <ChartSectionShell section={queueSection}>
+              <div aria-label="Queue depth chart grid" style={CHART_GRID}>
+                {queueSection.series.map((series, idx) => {
+                  const color = CHART_COLORS[idx % CHART_COLORS.length];
+                  const title = series.source === "type-fallback"
+                    ? `${series.label} (type-level)`
+                    : series.label;
+                  return (
+                    <ChartCard
+                      key={series.id}
+                      title={title}
+                      color={color}
+                      sourceLabel={series.sourceLabel}
+                      statItems={lineSeriesStats(series, "depth", color)}
+                      dataPreview={<SeriesDataPreview series={series} />}
+                    >
+                      <MiniLineChart title="" points={series.points} color={color} yLabel="depth" />
+                    </ChartCard>
+                  );
+                })}
+              </div>
+            </ChartSectionShell>
+          )}
+
+          {/* ── Server utilisation charts ───────────────────────────────────── */}
+          {chartModel.hasTimeSeries && serverSection?.series.length > 0 && (
+            <ChartSectionShell section={serverSection}>
+              <div aria-label="Server utilisation chart grid" style={CHART_GRID}>
+                {serverSection.series.map((series, idx) => {
+                  const color = CHART_COLORS[(idx + 3) % CHART_COLORS.length];
+                  const fmtPct = v => `${formatNumber(v, 1)}%`;
+                  return (
+                    <ChartCard
+                      key={series.id}
+                      title={series.label}
+                      color={color}
+                      sourceLabel={series.sourceLabel}
+                      statItems={lineSeriesStats(series, "% busy", color, fmtPct)}
+                      dataPreview={<SeriesDataPreview series={series} />}
+                    >
+                      <MiniLineChart title="" points={series.points} color={color} yLabel="% busy" formatY={fmtPct} />
+                    </ChartCard>
+                  );
+                })}
+              </div>
+            </ChartSectionShell>
+          )}
+
+          {/* ── Wait-time distributions ─────────────────────────────────────── */}
+          {hasWaitDistributions && (
+            <ChartSectionShell section={waitSection}>
+              <div aria-label="Wait-time distribution grid" style={CHART_GRID}>
+                {waitSection.distributions.map((dist, idx) => {
+                  const color = CHART_COLORS[idx % CHART_COLORS.length];
+                  return (
+                    <ChartCard
+                      key={dist.label}
+                      title={dist.label}
+                      color={color}
+                      sourceLabel={dist.sourceLabel}
+                      dataPreview={<WaitValuesPreview dist={dist} />}
+                    >
+                      {/* WaitHistogram renders its own stat cards internally */}
+                      <WaitHistogram dist={dist} color={color} />
+                    </ChartCard>
+                  );
+                })}
+              </div>
+            </ChartSectionShell>
           )}
         </div>
       )}
 
-      {chartModel.hasTimeSeries && queueSection?.series.length > 0 && (
-        <ChartSectionShell section={queueSection}>
-          <div aria-label="Queue depth chart grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 16, minWidth: 0 }}>
-            {queueSection.series.map((series, idx) => (
-              <div key={series.id} style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
-                <MiniLineChart
-                  title={series.source === "type-fallback" ? `${series.label} (type-level)` : series.label}
-                  points={series.points}
-                  color={CHART_COLORS[idx % CHART_COLORS.length]}
-                  yLabel="depth"
-                />
-                <div style={{ fontSize: 9, color: series.source === "type-fallback" ? C.amber : C.muted, fontFamily: FONT }}>
-                  Source: {series.sourceLabel}
-                </div>
-                <SeriesDataSummary series={series} valueLabel="depth" />
-                <SeriesDataPreview series={series} />
-              </div>
-            ))}
-          </div>
-        </ChartSectionShell>
-      )}
-
-      {chartModel.hasTimeSeries && serverSection?.series.length > 0 && (
-        <ChartSectionShell section={serverSection}>
-          <div aria-label="Server utilisation chart grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: 16, minWidth: 0 }}>
-            {serverSection.series.map((series, idx) => (
-              <div key={series.id} style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
-                <MiniLineChart
-                  title={series.label}
-                  points={series.points}
-                  color={CHART_COLORS[(idx + 3) % CHART_COLORS.length]}
-                  yLabel="% busy"
-                  formatY={v => `${formatNumber(v, 1)}%`}
-                />
-                <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>
-                  {series.sourceLabel}
-                </div>
-                <SeriesDataSummary series={series} valueLabel="% busy" formatValue={v => `${formatNumber(v, 1)}%`} />
-                <SeriesDataPreview series={series} />
-              </div>
-            ))}
-          </div>
-        </ChartSectionShell>
-      )}
-
-      {hasWaitDistributions && (
-        <ChartSectionShell section={waitSection}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
-            {waitSection.distributions.map(dist => (
-              <div key={dist.label} style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 11, color: C.cEvent, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>{dist.label}</div>
-                <WaitHistogram dist={dist} color={C.amber} />
-                <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginTop: 5 }}>
-                  Source: {dist.sourceLabel}
-                </div>
-                <div style={{ marginTop: 8 }}>
-                  <WaitDataSummary dist={dist} />
-                </div>
-                <WaitValuesPreview dist={dist} />
-              </div>
-            ))}
-          </div>
-        </ChartSectionShell>
-      )}
-
+      {/* ── 3. Cost summary (only when model tracks costs) ──────────────────── */}
       {Number.isFinite(results?.summary?.totalCost) && results.summary.totalCost > 0 && (
-        <section aria-label="Cost summary" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+        <section aria-label="Cost summary" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COST SUMMARY</div>
-          <MetricStrip
-            items={[
-              { label: "Total cost", value: formatNumber(results.summary.totalCost), color: C.accent },
-              { label: "Cost / served", value: results.summary.costPerServed != null ? formatNumber(results.summary.costPerServed) : "—", color: C.amber },
-              { label: "Served", value: results.summary.served ?? "—" },
-            ]}
-          />
+          <StatCards items={[
+            { label: "Total cost", value: formatNumber(results.summary.totalCost), color: C.accent },
+            { label: "Cost / served", value: results.summary.costPerServed != null ? formatNumber(results.summary.costPerServed) : "—", color: C.amber },
+            { label: "Served", value: formatNumber(results.summary.served ?? 0, 0) },
+          ]} />
         </section>
       )}
 
+      {/* ── 4. Reliability analysis ─────────────────────────────────────────── */}
       <ResultsAnalysisPanel results={results} replicationResults={replicationResults} warmupDetection={warmupDetection} />
+
+      {/* ── 5. Run effort — computational stats, least urgent for the user ───── */}
+      <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
     </div>
   );
 }

@@ -390,6 +390,24 @@ export function validateModel(model) {
       'bevents');
   }
 
+  // ── V38: RELEASE immediately followed by COMPLETE in same effect ─────────────
+  // RELEASE puts the entity into "waiting" state. If COMPLETE follows in the same
+  // effect string, it will always be skipped (COMPLETE requires "serving" status).
+  // COMPLETE already releases the server internally — the RELEASE is redundant and
+  // breaks the completion. Flag as a warning so the user can remove the RELEASE.
+  bEvents.forEach(b => {
+    const text = effectText(b.effect);
+    const parts = text.split(';').map(s => s.trim()).filter(Boolean);
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (/^RELEASE\s*\(/i.test(parts[i]) && /^COMPLETE\s*\(\s*\)/i.test(parts[i + 1])) {
+        warn('V38',
+          `B-Event '${b.name || b.id}': RELEASE() followed immediately by COMPLETE() — COMPLETE will always be skipped because RELEASE sets the entity to "waiting" state. Remove the RELEASE(); COMPLETE() releases the server automatically.`,
+          'bevents');
+        break;
+      }
+    }
+  });
+
   const queueRefsFromCondition = (condition) => {
     if (!condition) return [];
     if (typeof condition === 'string') {

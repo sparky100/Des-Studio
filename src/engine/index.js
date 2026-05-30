@@ -348,7 +348,9 @@ function makeFailureEvents(model, rng) {
 // returned unchanged and all existing callers continue to work.
 //
 // schedulesMap shape:
-//   { "<uuid>": { eventId: "b_wcml_train_arrives", rows: [...] }, ... }
+//   { "<uuid>": { eventId, rows }, "<uuid>:<eventId>": { eventId, rows }, ... }
+// The compound "<uuid>:<eventId>" key is preferred for multi-event schedules so
+// each bEvent gets its own rows; the plain "<uuid>" key is the single-event fallback.
 export function resolveInlineSchedules(model, schedulesMap = {}) {
   if (!schedulesMap || Object.keys(schedulesMap).length === 0) return model;
   return {
@@ -358,7 +360,8 @@ export function resolveInlineSchedules(model, schedulesMap = {}) {
       schedules: (be.schedules || []).map(s => {
         if (!s.scheduleRef) return s;                              // no ref — leave as-is
         if (Array.isArray(s.rows) && s.rows.length > 0) return s; // already resolved
-        const resolved = schedulesMap[s.scheduleRef];
+        // Prefer compound key (multi-event schedule), fall back to plain uuid
+        const resolved = schedulesMap[`${s.scheduleRef}:${be.id}`] ?? schedulesMap[s.scheduleRef];
         if (!resolved) return s;                                   // ref not found — 0 arrivals
         return { ...s, rows: resolved.rows ?? [] };
       }),
@@ -639,6 +642,11 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
           _scheduleRowAttrs = rows?.[0]?.attrs ?? null;
           state[`__schedRowAttrs_${schedKey}`] = _scheduleRowAttrs;
           scheduledTime = rawTimes[0];
+        } else if (isScheduleDist) {
+          // Schedule distribution detected but rows/times are empty (e.g. companion CSV not yet
+          // imported). Push the event beyond any realistic sim horizon so no phantom arrival fires
+          // at the model's default scheduledTime (often 0).
+          scheduledTime = 1e9;
         }
         break;
       }

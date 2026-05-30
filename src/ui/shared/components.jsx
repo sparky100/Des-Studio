@@ -259,7 +259,18 @@ const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
       const result=isXlsx
         ? parseXlsx(ev.target.result,opts)
         : parsePlanCsv(ev.target.result,opts);
-      setCsvPreview({fileName:file.name,...result});
+      if (result.format === 'multi') {
+        setCsvPreview({
+          fileName: file.name,
+          format: 'multi',
+          error: 'This file contains multiple arrival streams (multi-event format). Import it via the Schedules tab instead — it supports multi-stream CSV files.',
+          rows: [],
+          attrHeaders: [],
+          skipped: 0,
+        });
+      } else {
+        setCsvPreview({fileName:file.name,...result});
+      }
       setPreviewExpanded(false);
     };
     if(isXlsx) reader.readAsArrayBuffer(file);

@@ -22,7 +22,7 @@ import {
 } from "../../db/models.js";
 import { parsePlanCsv } from "../shared/planCsvParser.js";
 import { parseXlsx } from "../shared/xlsxParser.js";
-import { mergeScheduleRows, linkBEventToSchedule, unlinkBEventFromSchedule } from "./scheduleHelpers.js";
+import { mergeScheduleRows, linkBEventToSchedule, unlinkBEventFromSchedule, partitionScheduleBEvents } from "./scheduleHelpers.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -206,11 +206,15 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
     setImportError(null);
     try {
       let newJson = sched.scheduleJson ?? [];
+      let updatedBEvents = [...bEvents];
       const newStubs = [];
       for (const mg of multiImportPreview.matched) {
         const targetId = mg.bEvent?.id ?? mg.eventId;
         newJson = mergeScheduleRows(newJson, targetId, mg.rows);
-        if (!mg.bEvent && createStubs) {
+        if (mg.bEvent) {
+          // Ensure scheduleRef is set so the engine can resolve rows at run time
+          updatedBEvents = linkBEventToSchedule(updatedBEvents, mg.bEvent.id, sched.id);
+        } else if (createStubs) {
           newStubs.push({
             id: 'b' + Date.now() + Math.random().toString(36).slice(2, 6),
             name: mg.eventId,
@@ -222,8 +226,9 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
         }
       }
       await onSave({ ...sched, scheduleJson: newJson });
-      if (newStubs.length > 0 && onUpdateBEvents) {
-        await onUpdateBEvents([...bEvents, ...newStubs]);
+      const bEventsChanged = updatedBEvents !== bEvents || newStubs.length > 0;
+      if (bEventsChanged && onUpdateBEvents) {
+        await onUpdateBEvents([...updatedBEvents, ...newStubs]);
       }
       setMultiImportPreview(null);
     } catch (err) {
@@ -494,11 +499,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
 
       {/* Event links section */}
       {canEdit && onUpdateBEvents && (() => {
-        const linked = bEvents.filter(be => (be.schedules || []).some(s => s.scheduleRef === sched.id));
-        const unlinked = bEvents.filter(be =>
-          !linked.some(l => l.id === be.id) &&
-          (be.schedules || []).some(s => s.dist === "Schedule" || (Array.isArray(s.rows) && s.rows.length > 0))
-        );
+        const { linked, unlinked } = partitionScheduleBEvents(bEvents, sched.id, sched.scheduleJson);
         if (linked.length === 0 && unlinked.length === 0) return null;
         return (
           <div style={{ borderBottom: `1px solid ${C.border}`, paddingBottom: 12, display: "flex", flexDirection: "column", gap: 8 }}>

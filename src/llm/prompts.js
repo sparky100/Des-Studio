@@ -1056,7 +1056,7 @@ export function buildCiResults(aggregateStats = {}) {
     }));
 }
 
-export function buildModelDescriptionPrompt(model = {}) {
+export function buildModelDescriptionPrompt(model = {}, results = {}) {
   const hasCost = [
     ...(model.bEvents || []),
     ...(model.cEvents || []),
@@ -1070,32 +1070,38 @@ export function buildModelDescriptionPrompt(model = {}) {
   const hasContainers = Array.isArray(model.containerTypes) && model.containerTypes.length > 0;
   const hasFailures = (model.entityTypes || []).some(et => et.role === 'server' && et.mtbfDist);
   const hasPriority = (model.queues || []).some(q => q.discipline && q.discipline !== 'FIFO');
+  const summary = getSummary(results);
+  const isPlanBased = summary.avgPlanDeviation != null ||
+    (model.bEvents || []).some(be =>
+      (be.schedules || []).some(s => s.scheduleRef || (Array.isArray(s.rows) && s.rows.length > 0))
+    );
 
   const context = {
     name: model.name || DEFAULT_MODEL_NAME,
-    description: model.description || '',
     entityTypes: (model.entityTypes || []).map(et => ({
       name: et.name,
       role: et.role,
       ...(et.role === 'server' ? { count: et.count } : {}),
     })),
     queues: (model.queues || []).map(q => ({ name: q.name, discipline: q.discipline || 'FIFO' })),
-    bEvents: (model.bEvents || []).map(ev => ev.name),
-    cEvents: (model.cEvents || []).map(ev => ev.name),
     goals: (model.goals || []).filter(g => g.label || g.metric).map(g => ({ label: g.label || g.metric, target: g.target })),
-    features: { hasCost, hasShifts, hasContainers, hasFailures, hasPriority },
+    features: { hasCost, hasShifts, hasContainers, hasFailures, hasPriority, isPlanBased },
   };
 
   const system = [
     "You are writing a plain-English description of a discrete-event simulation model for inclusion in a professional client report.",
     "Your audience is a non-technical reader — a manager or board member, not a simulation practitioner.",
-    "Write 120–180 words.",
-    "Describe what real-world system this model represents (inferred from names and structure).",
-    "Explain what flows through the system, where waiting occurs, and what the key capacity constraints are.",
-    "If notable features are present (priority queuing, server failures, shift patterns, cost tracking), mention them in plain language.",
-    "Do NOT interpret results. Do NOT use technical terms like B-event, C-event, macro, ARRIVE, COMPLETE, ASSIGN, Phase A, Phase B, Phase C, FEL, or DES.",
-    "Tone: professional, clear, suitable for a board-level client report.",
-  ].join(" ");
+    "Write 100–160 words.",
+    "Describe what real-world system this model represents (inferred from the entity and queue names).",
+    "Explain what flows through the system, where congestion or waiting can occur, and what the key capacity constraints are.",
+    isPlanBased
+      ? "The model is driven by a pre-planned timetable or schedule — mention that results are based on the planned service timetable."
+      : "",
+    "If notable features are present (priority queuing, equipment failures, shift patterns, cost tracking), mention them in plain language.",
+    "Do NOT interpret results — this is a description of what is modelled, not what the results show.",
+    "Do NOT use technical simulation terms such as B-event, C-event, macro, ARRIVE, COMPLETE, FEL, DES, or entity.",
+    "Tone: professional, clear, suitable for a board-level management report.",
+  ].filter(Boolean).join(" ");
 
   return {
     kind: "model-description",

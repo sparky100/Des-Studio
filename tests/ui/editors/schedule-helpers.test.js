@@ -6,7 +6,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   mergeScheduleRows,
+  isArrivalBEvent,
   linkBEventToSchedule,
+  partitionScheduleBEvents,
   unlinkBEventFromSchedule,
 } from '../../../src/ui/editors/scheduleHelpers.js';
 
@@ -78,6 +80,52 @@ describe('mergeScheduleRows', () => {
 
 // ── linkBEventToSchedule ──────────────────────────────────────────────────────
 
+describe('isArrivalBEvent', () => {
+  it('returns true when the effect contains ARRIVE()', () => {
+    expect(isArrivalBEvent({ effect: ['ARRIVE(Customer, Queue)'] })).toBe(true);
+  });
+
+  it('returns false for non-arrival B-events', () => {
+    expect(isArrivalBEvent({ effect: ['COMPLETE()'] })).toBe(false);
+  });
+});
+
+describe('partitionScheduleBEvents', () => {
+  it('keeps arrival B-events visible as unlinked candidates', () => {
+    const bEvents = [
+      { id: EVENT_ID, name: 'Patient Arrives', effect: ['ARRIVE(Patient, Queue)'], schedules: [{ eventId: EVENT_ID, rows: [] }] },
+      { id: OTHER_ID, name: 'Other Event', effect: ['COMPLETE()'], schedules: [] },
+    ];
+
+    const result = partitionScheduleBEvents(bEvents, SCHED_ID, []);
+
+    expect(result.linked).toEqual([]);
+    expect(result.unlinked.map(be => be.id)).toEqual([EVENT_ID]);
+  });
+
+  it('treats rows imported into a schedule as a relevant candidate even before link', () => {
+    const bEvents = [
+      { id: EVENT_ID, name: 'Patient Arrives', effect: ['COMPLETE()'], schedules: [{ eventId: EVENT_ID, rows: [] }] },
+    ];
+    const scheduleJson = [{ eventId: EVENT_ID, rows: ROWS_A }];
+
+    const result = partitionScheduleBEvents(bEvents, SCHED_ID, scheduleJson);
+
+    expect(result.unlinked.map(be => be.id)).toEqual([EVENT_ID]);
+  });
+
+  it('places scheduleRef matches in the linked bucket', () => {
+    const bEvents = [
+      { id: EVENT_ID, name: 'Patient Arrives', effect: ['ARRIVE(Patient, Queue)'], schedules: [{ eventId: EVENT_ID, scheduleRef: SCHED_ID, rows: [] }] },
+    ];
+
+    const result = partitionScheduleBEvents(bEvents, SCHED_ID, []);
+
+    expect(result.linked.map(be => be.id)).toEqual([EVENT_ID]);
+    expect(result.unlinked).toEqual([]);
+  });
+});
+
 describe('linkBEventToSchedule', () => {
   const makeBEvents = () => [
     { id: EVENT_ID, schedules: [{ dist: 'Schedule', distParams: {} }] },
@@ -116,10 +164,19 @@ describe('linkBEventToSchedule', () => {
     expect(result[0].schedules[1].scheduleRef).toBeUndefined();
   });
 
-  it('handles bEvent with empty schedules array without crashing', () => {
+  it('creates a schedule entry when bEvent has empty schedules array', () => {
     const empty = [{ id: EVENT_ID, schedules: [] }];
     const result = linkBEventToSchedule(empty, EVENT_ID, SCHED_ID);
-    expect(result[0].schedules).toEqual([]);
+    expect(result[0].schedules).toHaveLength(1);
+    expect(result[0].schedules[0].eventId).toBe(EVENT_ID);
+    expect(result[0].schedules[0].scheduleRef).toBe(SCHED_ID);
+    expect(result[0].schedules[0].rows).toEqual([]);
+  });
+
+  it('stamps eventId onto the first schedule entry when it is missing', () => {
+    const noEventId = [{ id: EVENT_ID, schedules: [{ dist: 'Schedule', distParams: {} }] }];
+    const result = linkBEventToSchedule(noEventId, EVENT_ID, SCHED_ID);
+    expect(result[0].schedules[0].eventId).toBe(EVENT_ID);
   });
 
   it('does not mutate the original bEvents array', () => {

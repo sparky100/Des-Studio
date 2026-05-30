@@ -27,7 +27,11 @@
       "Bash(xargs grep -l \"AI\\\\|aiGenerated\\\\|useAi\")",
       "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__list_projects",
       "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__apply_migration",
-      "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__execute_sql"
+      "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__execute_sql",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\Des-Studio\" -Depth 2 -Directory)",
+      "Bash(Select-Object FullName)",
+      "Bash(awk '{print $NF}')",
+      "Bash(grep -E \"=.*[0-9]{2,}\")"
     ]
   }
 }

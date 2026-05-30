@@ -114,13 +114,8 @@ async function doCloudSave(saveFn, {
 
   const buildTickMessage = () => {
     const elapsed = nowPerf() - saveStartedAt;
-    if (elapsed >= criticalWarnMs) {
-      return `⏳ Still saving… ${formatDurationMs(elapsed)} — Supabase may be starting up`;
-    }
-    if (elapsed >= slowWarnMs) {
-      return `Saving results… ${formatDurationMs(elapsed)} (taking longer than usual)`;
-    }
-    return `Saving results… ${formatDurationMs(elapsed)} (prepared in ${formatDurationMs(prepareDurationMs)})`;
+    if (elapsed >= criticalWarnMs) return `⏳ Still saving — this is taking longer than usual`;
+    return `Saving results…`;
   };
 
   const intervalId = setInterval(() => {
@@ -139,20 +134,17 @@ async function doCloudSave(saveFn, {
     const runId = await Promise.race([saveFn(), timeoutPromise]);
     const saveDurationMs = nowPerf() - saveStartedAt;
     clearInterval(intervalId);
-    setSaveStatus({
-      state: 'success',
-      message: `✓ History saved! Prep ${formatDurationMs(prepareDurationMs)}; save ${formatDurationMs(saveDurationMs)}.`,
-    });
+    setSaveStatus({ state: 'success', message: `✓ Results saved` });
     setLog(prev => [...prev, { phase: "SAVE", time: snapClock, message: "✅ Cloud history record completed." }]);
     return runId;
   } catch (err) {
     clearInterval(intervalId);
     const detail  = err.message || "unknown error";
     const bannerMsg = err.isSaveTimeout
-      ? `✗ Save timed out after ${formatDurationMs(timeoutMs)} — Supabase did not respond. Try running again in a moment.`
+      ? `✗ Save timed out — Supabase did not respond. Try running again in a moment.`
       : `✗ Save failed: ${detail}`;
     const logMsg = err.isSaveTimeout
-      ? `Save timed out (${formatDurationMs(timeoutMs)}) — result not stored`
+      ? `Save timed out — result not stored`
       : `Save failed: ${detail}`;
     setSaveStatus({ state: 'error', message: bannerMsg });
     setLog(prev => [...prev, { phase: "ERROR", time: snapClock, message: logMsg }]);
@@ -162,7 +154,7 @@ async function doCloudSave(saveFn, {
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, schedulesVersion = 0 }) => {
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);
@@ -318,7 +310,21 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         setSelectedScheduleId(null);
       })
       .finally(() => setSchedulesLoading(false));
+  }, [modelId, userId, schedulesVersion]);
+
+  const reloadSchedules = useCallback(() => {
+    if (!modelId || !userId) return;
+    setSchedulesLoading(true);
+    fetchModelSchedules(modelId)
+      .then(schedules => {
+        setModelSchedules(schedules);
+        const defaultSched = schedules.find(s => s.isDefault);
+        setSelectedScheduleId(defaultSched?.id ?? (schedules[0]?.id ?? null));
+      })
+      .catch(err => console.warn('[ExecutePanel] reload schedules failed:', err?.message || err))
+      .finally(() => setSchedulesLoading(false));
   }, [modelId, userId]);
+
   const persistExperimentDefaults = useCallback((patch) => {
     if (!onExperimentDefaultsChange) return;
     onExperimentDefaultsChange({
@@ -358,6 +364,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     const active = modelSchedules.filter(s => s.id === resolvedId);
     return buildSchedulesMap(active);
   }, [modelSchedules, selectedScheduleId]);
+
 
   const complexityEstimate = useMemo(() => estimateRunComplexity(model, {
     terminationMode,
@@ -544,26 +551,29 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       const summary = engineRef.current.getSummary();
       const wallClockMs = runStartPerfRef.current == null ? null : Math.max(0, Math.round(nowPerf() - runStartPerfRef.current));
       const finalLog = nextLog;
+      const finalSummary = {
+        ...summary,
+        phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
+        total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
+        served: r.snap?.served || 0,
+        reneged: r.snap?.reneged || 0,
+      };
       const fullResult = {
         snap: r.snap,
-        summary: {
-          ...summary,
-          phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
-          total: r.snap?.entities?.filter(e => e.role !== 'server').length || 0,
-          served: r.snap?.served || 0,
-          reneged: r.snap?.reneged || 0,
-        },
-        phaseCTruncated: r.phaseCTruncated || summary.phaseCTruncated,
+        summary: finalSummary,
+        phaseCTruncated: finalSummary.phaseCTruncated,
         timeSeries:    engineRef.current.getTimeSeries?.(),
         waitDist:      engineRef.current.getWaitDist?.(),
         entitySummary: engineRef.current.getEntitySummary?.(),
         runtimeMetrics: {
-          ...engineRef.current.getRuntimeMetrics?.(summary.served),
+          ...engineRef.current.getRuntimeMetrics?.(finalSummary.served),
           wall_clock_ms: wallClockMs,
           replications: 1,
         },
-        log:           finalLog,
+        log: finalLog,
       };
+      // aggregateStats assigned after object is created to avoid self-reference
+      fullResult.aggregateStats = summarizeReplicationResults([fullResult], CI_METRICS);
       setResults(fullResult);
       onResultsReady?.(fullResult);
       onRunComplete?.({ results: fullResult, replicationResults: [], warmupDetection: null, log: finalLog });
@@ -588,9 +598,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           effectiveCollectTimeSeries: collectTimeSeries,
           resultDetailLevel: effectiveResultDetailLevel,
           riskLevel: runAdmission.complexityEstimate.riskLevel,
+          includeModelSnapshot: true,
         };
         if (userId) {
-          setSaveStatus({ state: 'saving', message: `Saving results… (prepared in ${formatDurationMs(prepareDurationMs)})` });
+          setSaveStatus({ state: 'saving', message: 'Saving results…' });
           const runId = await doCloudSave(
             () => saveSimulationRun(modelId, userId, fullResult, { ...config, runRecord }),
             { setSaveStatus, setLog, prepareDurationMs, snapClock: r.snap.clock },
@@ -604,7 +615,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         } else {
           saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
           void refreshRunHistory();
-          setSaveStatus({ state: 'success', message: `✓ Results saved locally! Prep ${formatDurationMs(prepareDurationMs)}.` });
+          setSaveStatus({ state: 'success', message: '✓ Results saved' });
           setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ Local history record completed." }]);
           onRunSaved?.();
         }
@@ -757,6 +768,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             const batchResult = {
               ...makeBatchResult(ordered, stats, maxTimeForRun, warmupPeriod),
               runtimeMetrics: makeBatchRuntimeMetrics(ordered, replications, wallClockMs),
+              aggregateStats: stats,
             };
 
             setBatchStatus("complete");
@@ -785,9 +797,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               effectiveCollectTimeSeries: effectiveCollectTimeSeries,
               resultDetailLevel: effectiveResultDetailLevel,
               riskLevel: runAdmission.complexityEstimate.riskLevel,
+              includeModelSnapshot: true,
             };
             if (userId) {
-              setSaveStatus({ state: 'saving', message: `Saving replication batch… (prepared in ${formatDurationMs(prepareDurationMs)})` });
+              setSaveStatus({ state: 'saving', message: 'Saving results…' });
               const runId = await doCloudSave(
                 () => saveSimulationRun(modelId, userId, batchResult, { ...batchConfig, runRecord: batchRunRecord }),
                 { setSaveStatus, setLog, prepareDurationMs, snapClock: batchResult.snap.clock },
@@ -801,7 +814,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             } else {
               saveLocalRun(modelId, batchResult, { ...batchConfig, runRecord: batchRunRecord, resultDetailLevel: "full" });
               void refreshRunHistory();
-              setSaveStatus({ state: 'success', message: `✓ Replication batch saved locally! Prep ${formatDurationMs(prepareDurationMs)}.` });
+              setSaveStatus({ state: 'success', message: '✓ Results saved' });
               setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved locally." }]);
               onRunSaved?.();
             }
@@ -931,9 +944,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       effectiveCollectTimeSeries: effectiveCollectTimeSeries,
       resultDetailLevel: effectiveResultDetailLevel,
       riskLevel: runAdmission.complexityEstimate.riskLevel,
+      includeModelSnapshot: true,
     };
     if (userId) {
-      setSaveStatus({ state: 'saving', message: `Saving results… (prepared in ${formatDurationMs(prepareDurationMs)})` });
+      setSaveStatus({ state: 'saving', message: 'Saving results…' });
       const runId = await doCloudSave(
         () => saveSimulationRun(modelId, userId, result, { ...config, runRecord: singleRunRecord }),
         { setSaveStatus, setLog, prepareDurationMs, snapClock: result.snap.clock },
@@ -947,7 +961,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     } else {
       saveLocalRun(modelId, result, { ...config, runRecord: singleRunRecord, resultDetailLevel: "full" });
       void refreshRunHistory();
-      setSaveStatus({ state: 'success', message: `✓ Results saved locally! Prep ${formatDurationMs(prepareDurationMs)}.` });
+      setSaveStatus({ state: 'success', message: '✓ Results saved' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Local history record completed." }]);
       onRunSaved?.();
     }
@@ -1161,7 +1175,35 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     });
   }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, onResultsReady]);
 
-  useEffect(() => { onExposeRunApi?.(runWithPatch); }, [runWithPatch, onExposeRunApi]);
+  // Verification-only run: same as runWithPatch but does NOT update main results state,
+  // so the baseline aggregateStats stays intact for before/after comparison.
+  const runForVerification = useCallback((patchedModel) => {
+    return new Promise((resolve) => {
+      const completedPayloads = [];
+      runReplications({
+        model: patchedModel,
+        replications,
+        baseSeed: seed,
+        warmupPeriod,
+        maxSimTime: terminationMode === 'time' ? maxSimTime : null,
+        terminationCondition: terminationMode === 'condition' ? terminationCondition : null,
+        collectTimeSeries: false,
+        schedulesMap: activeSchedulesMap,
+        onReplicationComplete: payload => {
+          completedPayloads[payload.replicationIndex] = payload;
+        },
+        onComplete: payloads => {
+          const valid = payloads.filter(Boolean);
+          const aggregateStats = summarizeReplicationResults(valid, CI_METRICS);
+          const summary = valid[0]?.result?.summary || {};
+          resolve({ aggregateStats, summary });
+        },
+        onError: () => resolve(null),
+      });
+    });
+  }, [seed, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
+
+  useEffect(() => { onExposeRunApi?.(runForVerification); }, [runForVerification, onExposeRunApi]);
 
   const exportResultsJson = useCallback((metricsOnly = false) => {
     setSaveStatus({ state: 'saving', message: 'Preparing export…' });
@@ -2237,6 +2279,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         </div>
       )}
 
+
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {/* Validation status indicator — informational only, positioned first */}
         {hasAdmissionErrors ? (
@@ -2595,26 +2638,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 ))}
               </div>
             )}
-            {complexityEstimate.bottlenecks.length > 0 && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {complexityEstimate.bottlenecks.map(item => (
-                  <div
-                    key={`${item.queueName}-${item.resourceNames.join("-")}`}
-                    style={{
-                      background: `${C.amber}12`,
-                      border: `1px solid ${C.amber}44`,
-                      borderRadius: 6,
-                      color: C.text,
-                      fontFamily: FONT,
-                      fontSize: 11,
-                      padding: "8px 10px",
-                    }}
-                  >
-                    {item.queueName}: {item.reason}
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -2788,10 +2811,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                           {goalMet === false && <span style={{ marginLeft: 5, color: C.red }}>✗</span>}
                         </div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: C.accent, fontFamily: FONT }}>
-                          {fmt(stat.mean)}
+                          {fmt(stat.mean, 2)}
                         </div>
                         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>
-                          ±{fmt(stat.halfWidth)} (95% CI)
+                          ±{fmt(stat.halfWidth, 2)} (95% CI)
                         </div>
                       </div>
                     );
@@ -2847,8 +2870,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       const isServedOutlier = sei >= 0 && outlierServed.outlierIndices.includes(sei);
                       const isOutlier = isWaitOutlier || isSvcOutlier || isServedOutlier;
                       const outlierMsg = [
-                        isWaitOutlier && `Avg wait outside fence [${fmt(outlierWait.lowerFence)}, ${fmt(outlierWait.upperFence)}]`,
-                        isSvcOutlier && `Avg service outside fence [${fmt(outlierSvc.lowerFence)}, ${fmt(outlierSvc.upperFence)}]`,
+                        isWaitOutlier && `Avg wait outside fence [${fmt(outlierWait.lowerFence, 2)}, ${fmt(outlierWait.upperFence, 2)}]`,
+                        isSvcOutlier && `Avg service outside fence [${fmt(outlierSvc.lowerFence, 2)}, ${fmt(outlierSvc.upperFence, 2)}]`,
                         isServedOutlier && `Served outside fence [${fmt(outlierServed.lowerFence)}, ${fmt(outlierServed.upperFence)}]`,
                       ].filter(Boolean).join("; ");
                       return (
@@ -2857,9 +2880,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                           <td style={{ padding: 8, color: C.amber }}>{payload.seed}</td>
                           <td style={{ padding: 8 }}>{summary?.served ?? "—"}</td>
                           <td style={{ padding: 8 }}>{summary?.reneged ?? "—"}</td>
-                          <td style={{ padding: 8 }}>{fmt(rowWait)}</td>
-                          <td style={{ padding: 8 }}>{fmt(rowSvc)}</td>
-                          <td style={{ padding: 8 }}>{fmt(summary?.avgSojourn)}</td>
+                          <td style={{ padding: 8 }}>{fmt(rowWait, 2)}</td>
+                          <td style={{ padding: 8 }}>{fmt(rowSvc, 2)}</td>
+                          <td style={{ padding: 8 }}>{fmt(summary?.avgSojourn, 2)}</td>
                           <td style={{ padding: 8 }}>
                             <Tag label="complete" color={C.green} />
                             {isOutlier && (
@@ -2879,8 +2902,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         <td style={{ padding: 8 }} colSpan={2}>Min / Max</td>
                         <td style={{ padding: 8 }}>{minMaxRow.minServed ?? "—"} / {minMaxRow.maxServed ?? "—"}</td>
                         <td style={{ padding: 8 }}>—</td>
-                        <td style={{ padding: 8 }}>{minMaxRow.minWait != null ? fmt(minMaxRow.minWait) : "—"} / {minMaxRow.maxWait != null ? fmt(minMaxRow.maxWait) : "—"}</td>
-                        <td style={{ padding: 8 }}>{minMaxRow.minSvc != null ? fmt(minMaxRow.minSvc) : "—"} / {minMaxRow.maxSvc != null ? fmt(minMaxRow.maxSvc) : "—"}</td>
+                        <td style={{ padding: 8 }}>{minMaxRow.minWait != null ? fmt(minMaxRow.minWait, 2) : "—"} / {minMaxRow.maxWait != null ? fmt(minMaxRow.maxWait, 2) : "—"}</td>
+                        <td style={{ padding: 8 }}>{minMaxRow.minSvc != null ? fmt(minMaxRow.minSvc, 2) : "—"} / {minMaxRow.maxSvc != null ? fmt(minMaxRow.maxSvc, 2) : "—"}</td>
                         <td style={{ padding: 8 }}>—</td>
                         <td style={{ padding: 8 }}>—</td>
                       </tr>
@@ -2920,10 +2943,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       {ciRows.map(({ metric, stat, relPrec, precColor }) => (
                         <tr key={metric} style={{ borderBottom: `1px solid ${C.border}` }}>
                           <td style={{ padding: 8 }}>{METRIC_LABELS[metric]}</td>
-                          <td style={{ padding: 8, color: C.accent }}>{fmt(stat.mean)}</td>
-                          <td style={{ padding: 8 }}>{fmt(stat.lower)}</td>
-                          <td style={{ padding: 8 }}>{fmt(stat.upper)}</td>
-                          <td style={{ padding: 8, color: C.amber }}>{fmt(stat.halfWidth)}</td>
+                          <td style={{ padding: 8, color: C.accent }}>{fmt(stat.mean, 2)}</td>
+                          <td style={{ padding: 8 }}>{fmt(stat.lower, 2)}</td>
+                          <td style={{ padding: 8 }}>{fmt(stat.upper, 2)}</td>
+                          <td style={{ padding: 8, color: C.amber }}>{fmt(stat.halfWidth, 2)}</td>
                           <td style={{ padding: 8 }}>
                             {relPrec != null ? (
                               <span style={{ color: precColor, fontWeight: 700 }}>{relPrec.toFixed(1)}%</span>

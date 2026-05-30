@@ -273,9 +273,21 @@ function buildTimeSeriesChart(timeSeries, unit, width = 560) {
 
 const CHART_COLORS = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed'];
 
+// Shorten a queue name for use as a chart axis label.
+// Strips common suffixes that add length without adding meaning at chart scale.
+function shortChartLabel(name) {
+  return String(name || '')
+    .replace(/\s+Approach\s+Queue$/i, '')
+    .replace(/\s+Queue$/i, '')
+    .replace(/\s+Approach$/i, '')
+    .trim()
+    .substring(0, 26)
+    .trim();
+}
+
 function groupedBarChart({ groups, series, title, width = 580, height = 280 }) {
   if (!groups.length || !series.length) return '';
-  const m = { top: 32, right: 16, bottom: 96, left: 52 };
+  const m = { top: 32, right: 16, bottom: 110, left: 52 };
   const cW = width - m.left - m.right;
   const cH = height - m.top - m.bottom;
   const maxVal = Math.max(1, ...groups.flatMap(g => g.values.map(v => (Number.isFinite(v) ? v : 0))));
@@ -296,10 +308,10 @@ function groupedBarChart({ groups, series, title, width = 580, height = 280 }) {
       bars += `<rect x="${bx}" y="${by}" width="${barW}" height="${bh.toFixed(1)}" fill="${CHART_COLORS[si % CHART_COLORS.length]}" rx="2" opacity="0.88"/>`;
       if (bh > 14) bars += `<text x="${(Number(bx) + barW / 2).toFixed(1)}" y="${(Number(by) - 3).toFixed(1)}" text-anchor="middle" font-size="9" fill="#374151" font-family="sans-serif">${val.toFixed(1)}</text>`;
     });
-    // Rotated x-axis label for legibility
+    // Rotated x-axis label — use shortened name so long queue names remain legible
     const lx = (m.left + gi * groupW + groupW / 2).toFixed(1);
     const ly = (m.top + cH + 10).toFixed(1);
-    xlabels += `<text x="${lx}" y="${ly}" text-anchor="end" font-size="10" fill="#6b7280" font-family="sans-serif" transform="rotate(-40,${lx},${ly})">${esc(g.label)}</text>`;
+    xlabels += `<text x="${lx}" y="${ly}" text-anchor="end" font-size="10" fill="#6b7280" font-family="sans-serif" transform="rotate(-40,${lx},${ly})">${esc(shortChartLabel(g.label))}</text>`;
   });
 
   for (let i = 0; i <= 5; i++) {
@@ -569,7 +581,7 @@ function buildExecutiveSummary(model, results, recommendations, aggStats = {}, m
   </section>`;
 }
 
-function buildMethodology(model, results, experimentConfig, aggStats = {}) {
+function buildMethodology(model, results, experimentConfig, aggStats = {}, type = 'technical') {
   const summary      = getSummary(results);
   const unit         = model.timeUnit || 'minutes';
   const entityName   = getEntityName(model);
@@ -620,7 +632,7 @@ function buildMethodology(model, results, experimentConfig, aggStats = {}) {
 
   // Replications
   if (multiRep && replications >= 2) {
-    parts.push(`<p class="method-item"><strong>Replications:</strong> The model was run ${replications} times with different random seeds. Headline figures are averages across all replications; 95% confidence intervals are shown in the results.</p>`);
+    parts.push(`<p class="method-item"><strong>Replications:</strong> The model was run ${replications} times with different random seeds. Headline figures are averages across all replications${type === 'technical' ? '; 95% confidence intervals are shown in the results' : ''}.</p>`);
   }
 
   // Performance targets
@@ -661,7 +673,8 @@ function buildExperimentConfig(experimentConfig, runMeta) {
   </section>`;
 }
 
-function buildResults(model, results, aggStats = {}) {
+function buildResults(model, results, aggStats = {}, type = 'technical') {
+  const isTechnical = type === 'technical';
   const summary      = getSummary(results);
   const waitDist     = results.waitDist || {};
   const ciStats      = results.aggregateStats || {};
@@ -799,15 +812,28 @@ function buildResults(model, results, aggStats = {}) {
     goalHtml = `<h3>Performance Goal Assessment</h3>${htmlTable(['Goal', 'Target', 'Current', 'Status', 'Gap'], goalRows)}`;
   }
 
-  // Confidence intervals (multi-replication only)
+  // Confidence intervals — full table for technical report; summary sentence for management
   const ciKeys = Object.keys(ciStats).filter(k => ciStats[k]?.n >= 2);
   let ciHtml = '';
   if (ciKeys.length) {
-    const ciRows = ciKeys.map(k => {
-      const s = ciStats[k];
-      return [k, fin(s.mean, 1) ?? '—', fin(s.lower, 1) ?? '—', fin(s.upper, 1) ?? '—', String(s.n || '—')];
-    });
-    ciHtml = `<h3>Replication Confidence Intervals (95%)</h3>${htmlTable(['Metric', 'Mean', 'CI Lower', 'CI Upper', 'N'], ciRows)}`;
+    if (isTechnical) {
+      const ciRows = ciKeys.map(k => {
+        const s = ciStats[k];
+        return [k, fin(s.mean, 1) ?? '—', fin(s.lower, 1) ?? '—', fin(s.upper, 1) ?? '—', String(s.n || '—')];
+      });
+      ciHtml = `<h3>Replication Confidence Intervals (95%)</h3>${htmlTable(['Metric', 'Mean', 'CI Lower', 'CI Upper', 'N'], ciRows)}`;
+    } else {
+      // Management report: derive a simple confidence level from CI half-widths
+      const avgWaitStat = ciStats['summary.avgWait'];
+      let confLevel = 'medium';
+      if (avgWaitStat && Number.isFinite(avgWaitStat.mean) && avgWaitStat.mean > 0) {
+        const halfWidth = ((avgWaitStat.upper ?? avgWaitStat.mean) - (avgWaitStat.lower ?? avgWaitStat.mean)) / 2;
+        const relWidth  = halfWidth / avgWaitStat.mean;
+        confLevel = relWidth < 0.10 ? 'high' : relWidth < 0.25 ? 'medium' : 'low';
+      }
+      const confLabel = { high: 'High — results are stable across replications and can be relied upon for decision-making.', medium: 'Medium — results show some variation across replications; treat headline figures as indicative.', low: 'Low — results vary significantly across replications; more runs or a longer warm-up period is recommended before drawing conclusions.' }[confLevel];
+      ciHtml = `<h3>Result Confidence</h3><p class="note"><strong>${confLevel.charAt(0).toUpperCase() + confLevel.slice(1)} confidence.</strong> ${confLabel}</p>`;
+    }
   }
 
   // Plan vs Actual
@@ -925,8 +951,8 @@ function buildHtmlReport({ model, results, experimentConfig, runMeta, aggregateS
     buildCover(model, runMeta, experimentConfig),
     buildExecutiveSummary(model, results, recommendations, aggregateStats, modelDescription),
     buildModelImage(modelImageDataUrl),
-    buildMethodology(model, results, experimentConfig, aggregateStats),
-    buildResults(model, results, aggregateStats),
+    buildMethodology(model, results, experimentConfig, aggregateStats, type),
+    buildResults(model, results, aggregateStats, type),
     narrativeText ? buildSeniorMgmtAnalysis(narrativeText) : '',
     buildRecommendations(recommendations),
     isTechnical ? buildExperimentConfig(experimentConfig, runMeta) : '',
@@ -1028,7 +1054,7 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
   }
   if (warmup > 0) lines.push(`**Warm-up:** First ${warmup} ${unit} excluded from statistics to remove start-up effects.`);
   if (multiRep && Number(experimentConfig.replications ?? 1) >= 2) {
-    lines.push(`**Replications:** ${experimentConfig.replications} runs averaged; 95% confidence intervals shown in results.`);
+    lines.push(`**Replications:** ${experimentConfig.replications} runs averaged${isTechnical ? '; 95% confidence intervals shown in results' : ''}.`);
   }
   if (goals.length) {
     lines.push('');
@@ -1239,17 +1265,19 @@ export async function generateReport(model = {}, results = {}, experimentConfig 
     aggregateStats = {},
   } = opts;
 
-  const modelDescription = runMeta.modelDescriptionText || model.description || '';
-  const narrativeText    = runMeta.narrativeText || '';
+  const narrativeText = runMeta.narrativeText || '';
 
   // Generate recommendations (not stored at run-time)
   const recsRaw = await callLLMOnce(buildReportRecommendationsPrompt(model, results)).catch(() => '[]');
   const recommendations = parseReportRecommendations(recsRaw);
 
-  // Generate model description if not stored
-  let finalDescription = modelDescription;
+  // Build a plain-English description for the report.
+  // Prefer the stored LLM-generated narrative (already plain English).
+  // If absent, call the LLM — do NOT use model.description directly: it is a
+  // technical spec written for modellers, not suitable for a management report.
+  let finalDescription = runMeta.modelDescriptionText || '';
   if (!finalDescription) {
-    finalDescription = await callLLMOnce(buildModelDescriptionPrompt(model)).catch(() => '');
+    finalDescription = await callLLMOnce(buildModelDescriptionPrompt(model, results)).catch(() => '');
   }
 
   const ctx = { model, results, experimentConfig, runMeta, aggregateStats, type, narrativeText, modelDescription: finalDescription, recommendations, modelImageDataUrl };

@@ -28,7 +28,8 @@ import { ModelDetailHeader } from "./ModelDetailHeader.jsx";
 import { ModelTabBar }       from "./ModelTabBar.jsx";
 import { SaveBanner }        from "./SaveBanner.jsx";
 import { VersionHistoryPanel } from "./VersionHistoryPanel.jsx";
-import { fetchRunHistory, listShareLinks, fetchModelSchedules } from "../db/models.js";
+import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, buildSchedulesMap } from "../db/models.js";
+import { generateReport, sanitizeFilename } from "../reports/index.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
 import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
@@ -519,10 +520,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [namedSchedules,setNamedSchedules]=useState([]);
   const [focusBEventId,setFocusBEventId]=useState(null);
   const [focusScheduleId,setFocusScheduleId]=useState(null);
+  const [schedulesVersion,setSchedulesVersion]=useState(0);
   const [resultsView,setResultsView]=useState("summary");
   const [aiAction,setAiAction]=useState(null);
   const [aiSeq,setAiSeq]=useState(0);
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
+  const [resultsReportGenerating,setResultsReportGenerating]=useState(false);
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const runWithPatchRef = useRef(null);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
@@ -759,6 +762,28 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[dirty]);
 
   const validation = useMemo(() => model ? validateModel(model) : { errors: [], warnings: [] }, [model]);
+
+  // Build aggregateStats for the AI panel. New runs store it directly on latestResults;
+  // for older saved runs that predate this field, synthesise it from summary so the
+  // Before/After table always has baseline values to display.
+  const aggregateStatsForPanel = useMemo(() => {
+    const stored = latestResults?.aggregateStats;
+    if (stored && Object.values(stored).some(ci => ci?.mean != null)) {
+      return stored;
+    }
+    const s = latestResults?.summary;
+    if (!s) return {};
+    const toCI = v => Number.isFinite(v) ? { n: 1, mean: v, lower: null, upper: null, halfWidth: null } : { n: 0, mean: null, lower: null, upper: null, halfWidth: null };
+    return {
+      "summary.avgWait":      toCI(s.avgWait),
+      "summary.avgSvc":       toCI(s.avgSvc),
+      "summary.avgSojourn":   toCI(s.avgSojourn),
+      "summary.served":       toCI(s.served),
+      "summary.reneged":      toCI(s.reneged),
+      "summary.totalCost":    toCI(s.totalCost),
+      "summary.costPerServed": toCI(s.costPerServed),
+    };
+  }, [latestResults]);
   const isStarterBlank = useMemo(() => isStarterBlankModel(model), [model]);
   const runHistoryFetcher = useMemo(
     () => (overrides.userId ? (filters => fetchRunHistory(modelId, filters)) : () => Promise.resolve(fetchLocalRunHistory(modelId))),
@@ -820,6 +845,60 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     setLatestResults(hydratedResults);
     setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
   };
+
+  const handleResultsExportJson = useCallback(() => {
+    if (!latestResults) return;
+    const json = JSON.stringify(latestResults, null, 2);
+    const row = historyRows.find(r => r.id === selectedResultsRunId);
+    const label = row?.run_label || selectedResultsRunId || 'results';
+    downloadTextFile(json, `${sanitizeFilename(model.name || 'model')}-${sanitizeFilename(label)}.json`, 'application/json');
+  }, [latestResults, historyRows, selectedResultsRunId, model.name]);
+
+  const handleResultsReport = useCallback(async (type = 'seniorMgmt') => {
+    if (!latestResults || resultsReportGenerating) return;
+    setResultsReportGenerating(true);
+    try {
+      const row = historyRows.find(r => r.id === selectedResultsRunId);
+      let reportModel = model;
+      let schedulesMap = {};
+      if (selectedResultsRunId) {
+        try {
+          const run = await getRun(selectedResultsRunId);
+          if (run?.model_snapshot) reportModel = run.model_snapshot;
+          const scheduleRows = await fetchModelSchedules(reportModel.id || modelId);
+          schedulesMap = buildSchedulesMap(scheduleRows);
+        } catch {}
+      }
+      const meta = {
+        runId: selectedResultsRunId || null,
+        runLabel: row?.run_label || '',
+        seed: row?.seed ?? null,
+        engineVersion: row?.results_json?._engine_version || '',
+        prnAlgorithm: 'mulberry32',
+        runTimestamp: row?.ran_at || new Date().toISOString(),
+        narrativeText: row?.results_json?.narrative_text ?? null,
+        modelDescriptionText: row?.results_json?.model_description_text ?? null,
+      };
+      const expConfig = row?.results_json?._experiment_config || {
+        maxSimTime: row?.max_simulation_time ?? 500,
+        warmupPeriod: row?.warmup_period ?? 0,
+        replications: row?.replications ?? 1,
+      };
+      const content = await generateReport(reportModel, latestResults, expConfig, meta, {
+        type,
+        format: 'html',
+        aggregateStats: latestResults?.aggregateStats || {},
+        schedulesMap,
+      });
+      const suffix = type === 'seniorMgmt' ? 'Management' : 'Technical';
+      const safeName = `${sanitizeFilename(reportModel.name || 'Model')} — ${sanitizeFilename(meta.runLabel || 'Report')} — ${suffix} Report.html`;
+      downloadTextFile(content, safeName, 'text/html');
+    } catch (err) {
+      console.error('Report generation failed:', err);
+    } finally {
+      setResultsReportGenerating(false);
+    }
+  }, [latestResults, resultsReportGenerating, historyRows, selectedResultsRunId, model, modelId]);
 
   const openResultsForRun = useCallback((row, nextSubtab = "summary") => {
     if (!hasResultsPayload(row)) return;
@@ -1129,11 +1208,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
           setModel(next);
-          try { await overrides.onSave?.(next); setDirty(false); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
+          try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
         }} onUpdateBEvents={canEdit ? async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
           setModel(next);
-          try { await overrides.onSave?.(next); setDirty(false); toast.success("Event link updated and model saved"); } catch { toast.error("Link updated but model save failed — please save manually"); }
+          try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Event link updated and model saved"); } catch { toast.error("Link updated but model save failed — please save manually"); }
         } : undefined}/></div>)}
         {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues" validation={validation}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} onChange={canEdit?newQueues=>{
           const oldQueues = model.queues || [];
@@ -1221,6 +1300,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 toast.success(`Applied: ${suggestion.change?.target} → ${suggestion.change?.to}`);
               } : null}
               onExposeRunApi={fn => { runWithPatchRef.current = fn; }}
+              schedulesVersion={schedulesVersion}
             />
           </ErrorBoundary>
         )}
@@ -1247,6 +1327,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 variant={aiSidebarOpen?"primary":"ghost"}
                 onClick={()=>{if(aiSidebarOpen){setAiSidebarOpen(false);setAiAction(null);}else{setAiSidebarOpen(true);setAiAction("explain");setAiSeq(s=>s+1);}}}
               >Analyse</Btn>
+              {latestResults && (
+                <>
+                  <Btn small variant="ghost" onClick={handleResultsExportJson} title="Download results as JSON">Export Results</Btn>
+                  <Btn small variant="ghost" onClick={() => handleResultsReport('seniorMgmt')} disabled={resultsReportGenerating}>
+                    {resultsReportGenerating ? "Generating…" : "Create Report"}
+                  </Btn>
+                </>
+              )}
             </div>
 
             {resultsView==="summary"&&(
@@ -1316,6 +1404,45 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 modelId={modelId} userId={overrides.userId} model={model} baseUrl={baseUrl}
                 onExplainRun={row=>openResultsForRun(row,"explain")}
                 onViewResults={row=>openResultsForRun(row,"summary")}
+                onCreateReport={async (row) => {
+                  if (!hasResultsPayload(row) || resultsReportGenerating) return;
+                  setResultsReportGenerating(true);
+                  try {
+                    const results = hydrateResultsFromHistoryRow(row);
+                    let reportModel = model;
+                    let schedulesMap = {};
+                    try {
+                      const run = await getRun(row.id);
+                      if (run?.model_snapshot) reportModel = run.model_snapshot;
+                      const scheduleRows = await fetchModelSchedules(reportModel.id || modelId);
+                      schedulesMap = buildSchedulesMap(scheduleRows);
+                    } catch {}
+                    const meta = {
+                      runId: row.id,
+                      runLabel: row.run_label || '',
+                      seed: row.seed ?? null,
+                      engineVersion: row.results_json?._engine_version || '',
+                      prnAlgorithm: 'mulberry32',
+                      runTimestamp: row.ran_at || new Date().toISOString(),
+                      narrativeText: row.results_json?.narrative_text ?? null,
+                      modelDescriptionText: row.results_json?.model_description_text ?? null,
+                    };
+                    const expConfig = row.results_json?._experiment_config || {
+                      maxSimTime: row.max_simulation_time ?? 500,
+                      warmupPeriod: row.warmup_period ?? 0,
+                      replications: row.replications ?? 1,
+                    };
+                    const content = await generateReport(reportModel, results, expConfig, meta, {
+                      type: 'seniorMgmt',
+                      format: 'html',
+                      aggregateStats: results?.aggregateStats || {},
+                      schedulesMap,
+                    });
+                    const safeName = `${sanitizeFilename(reportModel.name || 'Model')} — ${sanitizeFilename(meta.runLabel || 'Report')} — Management Report.html`;
+                    downloadTextFile(content, safeName, 'text/html');
+                  } catch(err) { console.error('Report failed:', err); }
+                  finally { setResultsReportGenerating(false); }
+                }}
               />
             )}
           </div>
@@ -1414,7 +1541,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             terminationMode: "time",
             terminationCondition: null,
           }}
-          aggregateStats={latestResults?.aggregateStats || {}}
+          aggregateStats={aggregateStatsForPanel}
           comparisonRuns={historyRows.filter(hasResultsPayload).map(row => ({
             id: `saved-${row.id}`,
             label: row.run_label || new Date(row.ran_at || Date.now()).toLocaleString("en-GB", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }),

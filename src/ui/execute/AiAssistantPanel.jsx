@@ -97,7 +97,7 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
   );
 }
 
-function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult }) {
+function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult, onSaved }) {
   const isManual = suggestion.change?.type === "manual";
   const canApply = !isManual && typeof onRunWithPatch === "function";
   const canSave = !isManual && typeof onApplyPatchedModel === "function" && verifyResult;
@@ -112,7 +112,7 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
     if (!canSave) return;
     const patched = applySuggestionPatch(model, suggestion.change);
     onApplyPatchedModel(patched, suggestion);
-    setVerifyStatus(prev => ({ ...prev, [suggestion.rank]: "saved" }));
+    onSaved?.();
   };
 
   return (
@@ -159,7 +159,7 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BEFORE / AFTER</div>
           <BeforeAfterTable
             goals={model?.goals || []}
-            baselineStats={aggregateStats}
+            baselineStats={verifyResult._baselineStats ?? aggregateStats}
             afterStats={verifyResult.aggregateStats}
           />
           <div style={{ marginTop: 8, padding: "8px 10px", background: `${C.accent}11`, borderRadius: 4, border: `1px solid ${C.accent}33` }}>
@@ -255,7 +255,7 @@ function RefinementCard({ card, model, aggregateStats, onApplyAndRerun, cardStat
           <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 4 }}>BEFORE / AFTER</div>
           <BeforeAfterTable
             goals={model?.goals || []}
-            baselineStats={aggregateStats}
+            baselineStats={cardResult._baselineStats ?? aggregateStats}
             afterStats={cardResult.aggregateStats}
           />
         </div>
@@ -263,6 +263,10 @@ function RefinementCard({ card, model, aggregateStats, onApplyAndRerun, cardStat
     </div>
   );
 }
+
+const SIDEBAR_WIDTH_KEY = "aiPanel.sidebarWidth";
+const SIDEBAR_MIN = 260;
+const SIDEBAR_MAX = 640;
 
 export const AiAssistantPanel = ({
   model,
@@ -284,6 +288,30 @@ export const AiAssistantPanel = ({
   inline = false,
   triggerAction = null, // { action: "explain"|"compare"|"refine", seq: number }
 }) => {
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY), 10);
+    return Number.isFinite(stored) ? Math.min(Math.max(stored, SIDEBAR_MIN), SIDEBAR_MAX) : 320;
+  });
+
+  const startDrag = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    const onMove = (ev) => {
+      const delta = startX - ev.clientX;
+      const next = Math.min(Math.max(startWidth + delta, SIDEBAR_MIN), SIDEBAR_MAX);
+      setSidebarWidth(next);
+    };
+    const onUp = (ev) => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      const delta = startX - ev.clientX;
+      const final = Math.min(Math.max(startWidth + delta, SIDEBAR_MIN), SIDEBAR_MAX);
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(final));
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  }, [sidebarWidth]);
   const isResultsContext = ['results', 'execute'].includes(activeTab);
   const toast = useToast();
   const [activeMode, setActiveMode] = useState(triggerAction?.action || "explain");
@@ -482,9 +510,16 @@ export const AiAssistantPanel = ({
     setVerifyStatus(prev => ({ ...prev, [rank]: "running" }));
     try {
       const patched = applySuggestionPatch(model, suggestion.change);
+
+      // Snapshot the baseline at click-time (null if no valid prior run exists).
+      // Must be null not {} when empty so the ?? fallback in BeforeAfterTable works.
+      const capturedBaseline = Object.values(aggregateStats).some(ci => ci?.mean != null)
+        ? aggregateStats
+        : null;
+
       const result = await onRunWithPatch(patched);
       if (result) {
-        setVerifyResults(prev => ({ ...prev, [rank]: result }));
+        setVerifyResults(prev => ({ ...prev, [rank]: { ...result, _baselineStats: capturedBaseline } }));
         setVerifyStatus(prev => ({ ...prev, [rank]: "done" }));
       } else {
         setVerifyStatus(prev => ({ ...prev, [rank]: "error" }));
@@ -492,7 +527,7 @@ export const AiAssistantPanel = ({
     } catch {
       setVerifyStatus(prev => ({ ...prev, [rank]: "error" }));
     }
-  }, [model, onRunWithPatch]);
+  }, [model, onRunWithPatch, aggregateStats]);
 
   const handleQueryKeyDown = (event) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -536,9 +571,14 @@ export const AiAssistantPanel = ({
     setRefineCardStatus(prev => ({ ...prev, [rank]: "running" }));
     try {
       const patchedModel = applySchedulePatch(model, card);
+
+      const capturedBaseline = Object.values(aggregateStats).some(ci => ci?.mean != null)
+        ? aggregateStats
+        : null;
+
       const result = await onRunWithPatch(patchedModel);
       if (result) {
-        setRefineCardResults(prev => ({ ...prev, [rank]: result }));
+        setRefineCardResults(prev => ({ ...prev, [rank]: { ...result, _baselineStats: capturedBaseline } }));
         setRefineCardStatus(prev => ({ ...prev, [rank]: "done" }));
       } else {
         setRefineCardStatus(prev => ({ ...prev, [rank]: "error" }));
@@ -551,7 +591,7 @@ export const AiAssistantPanel = ({
         setRefineCardStatus(prev => ({ ...prev, [rank]: "error" }));
       }
     }
-  }, [model, onRunWithPatch]);
+  }, [model, onRunWithPatch, aggregateStats]);
 
   // Keep latest action functions in a ref so the trigger effect always has fresh closures
   actionFnsRef.current = {
@@ -621,6 +661,7 @@ export const AiAssistantPanel = ({
               onApplyPatchedModel={onApplyPatchedModel}
               verifyStatus={verifyStatus[s.rank]}
               verifyResult={verifyResults[s.rank]}
+              onSaved={() => setVerifyStatus(prev => ({ ...prev, [s.rank]: "saved" }))}
             />
           ))}
         </div>
@@ -693,13 +734,14 @@ export const AiAssistantPanel = ({
     flexDirection: "column",
     gap: 12,
   } : sidebar ? {
-    width: 320,
-    flex: "0 0 320px",
+    width: sidebarWidth,
+    flex: `0 0 ${sidebarWidth}px`,
     borderLeft: `1px solid ${C.border}`,
     background: C.panel,
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
+    position: "relative",
   } : {
     width: embedded ? "min(420px, 100%)" : 320,
     maxWidth: embedded ? 420 : 320,
@@ -729,6 +771,33 @@ export const AiAssistantPanel = ({
 
   return (
     <aside aria-label="AI assistant" style={overlayStyle}>
+      {sidebar && (
+        <div
+          onMouseDown={startDrag}
+          title="Drag to resize"
+          style={{
+            position: "absolute",
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 6,
+            cursor: "col-resize",
+            zIndex: 10,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <div style={{
+            width: 2,
+            height: 32,
+            borderRadius: 2,
+            background: C.border,
+            opacity: 0.6,
+            transition: "opacity 0.15s",
+          }} />
+        </div>
+      )}
       <div style={innerStyle}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
