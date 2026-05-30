@@ -78,10 +78,38 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       )
     : undefined;
 
+  // Aggregate waitDist across all replications by pooling raw values per queue
+  const waitDistAcc = {};
+  for (const payload of replicationPayloads) {
+    const wd = payload?.result?.waitDist;
+    if (!wd) continue;
+    for (const [qName, qDist] of Object.entries(wd)) {
+      if (!Array.isArray(qDist.values)) continue;
+      if (!waitDistAcc[qName]) waitDistAcc[qName] = [];
+      for (const v of qDist.values) waitDistAcc[qName].push(v);
+    }
+  }
+  const waitDist = Object.keys(waitDistAcc).length
+    ? Object.fromEntries(Object.entries(waitDistAcc).map(([qName, vals]) => {
+        const sorted = [...vals].sort((a, b) => a - b);
+        const n = sorted.length;
+        const pct = (p) => sorted[Math.min(Math.floor(p * n), n - 1)];
+        return [qName, {
+          n,
+          mean: +(sorted.reduce((s, v) => s + v, 0) / n).toFixed(4),
+          p50:  +pct(0.50).toFixed(4),
+          p90:  +pct(0.90).toFixed(4),
+          p95:  +pct(0.95).toFixed(4),
+          p99:  +pct(0.99).toFixed(4),
+          values: sorted.map(v => +v.toFixed(4)),
+        }];
+      }))
+    : lastResult?.waitDist;
+
   return {
     snap: { clock: finalTime },
     timeSeries: lastResult?.timeSeries,
-    waitDist: lastResult?.waitDist,
+    waitDist,
     summary: {
       total,
       served,
