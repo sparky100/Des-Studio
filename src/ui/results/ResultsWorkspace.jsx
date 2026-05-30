@@ -156,15 +156,34 @@ function ChartCard({ title, color, sourceLabel, statItems, dataPreview, children
       gap: 10,
       minWidth: 0,
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, overflow: "hidden" }}>
-          <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, flexShrink: 0, display: "inline-block" }} />
-          <span style={{ fontSize: 12, color: C.text, fontFamily: FONT, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+      {/* Two-row header so long queue names never get truncated mid-word.
+          Row 1: colour dot + name (wraps up to 2 lines, tooltip shows full name).
+          Row 2: source label indented to align with the name text. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 7, minWidth: 0 }}>
+          <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, flexShrink: 0, marginTop: 3, display: "inline-block" }} />
+          <span
+            title={title}
+            style={{
+              fontSize: 12,
+              color: C.text,
+              fontFamily: FONT,
+              fontWeight: 700,
+              lineHeight: 1.4,
+              // Allow up to 2 lines before clipping — eliminates mid-word
+              // truncation for all realistic queue names while keeping panels compact.
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              minWidth: 0,
+            }}
+          >
             {title}
           </span>
         </div>
         {sourceLabel && (
-          <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, flexShrink: 0 }}>
+          <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, paddingLeft: 16 }}>
             {sourceLabel}
           </span>
         )}
