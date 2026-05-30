@@ -175,9 +175,9 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 />
               </div>
 
-              {/* Routing — collapsible, shown only when a RELEASE effect is present */}
-              {hasRelease&&(
-                <SectionPanel label="Release Routing" status={routingStatus} color={C.bEvent}>
+              {/* Routing — shown for RELEASE and ARRIVE effects */}
+              {(hasRelease||hasArriveEffect)&&(
+                <SectionPanel label={hasRelease?"Release Routing":"Arrival Routing"} status={routingStatus} color={C.bEvent}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>Mode:</span>
                     <select value={routingMode} onChange={e=>setRoutingMode(e.target.value)}
