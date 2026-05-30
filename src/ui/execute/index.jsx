@@ -372,17 +372,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     return buildSchedulesMap(active);
   }, [modelSchedules, selectedScheduleId]);
 
-  // True when bEvents reference scheduleRef UUIDs not covered by activeSchedulesMap.
-  // This means resolveInlineSchedules() will produce empty rows → 0 arrivals.
-  const hasUnresolvedScheduleRefs = useMemo(() => {
-    const bEvents = model?.bEvents || [];
-    return bEvents.some(be =>
-      (be.schedules || []).some(s =>
-        s.scheduleRef &&
-        !(activeSchedulesMap[`${s.scheduleRef}:${be.id}`] ?? activeSchedulesMap[s.scheduleRef])
-      )
-    );
-  }, [model, activeSchedulesMap]);
 
   const complexityEstimate = useMemo(() => estimateRunComplexity(model, {
     terminationMode,
@@ -2287,17 +2276,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         </div>
       )}
 
-      {/* ADR-016: Unresolved schedule refs warning — shown when bEvents have scheduleRef not in the loaded map */}
-      {hasUnresolvedScheduleRefs && (
-        <div style={{ background: `${C.amber}18`, border: `1px solid ${C.amber}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, color: C.amber, fontFamily: FONT }}>
-            ⚠ Schedule not loaded — arrivals will be 0. The timetable was linked after this panel opened.
-          </span>
-          <Btn size="sm" variant="ghost" onClick={reloadSchedules} disabled={schedulesLoading}>
-            {schedulesLoading ? "Loading…" : "Reload schedule"}
-          </Btn>
-        </div>
-      )}
 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {/* Validation status indicator — informational only, positioned first */}
