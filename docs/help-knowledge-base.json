@@ -9,9 +9,10 @@
       "bEvents": "B-Events (Bound events) are scheduled events that fire at specific times. They have: name, scheduledTime, effect (macros like ARRIVE, COMPLETE, ASSIGN), and schedules (distributions for re-scheduling). B-Events represent arrivals, service completions, and other time-based occurrences.",
       "cEvents": "C-Events (Conditional events) fire when their condition is true. They have: name, priority (lower = higher priority), condition (predicate JSON), effect (macros like ASSIGN, BATCH), and cSchedules (distributions for scheduling follow-on B-Events). C-Events represent service starts, batch creation, and other conditional actions.",
       "distributions": "Distributions model randomness in arrivals and service times. Available: Exponential (memoryless, mean=1/rate), Uniform (min to max), Normal (mean, stddev), Triangular (min, mode, max), Fixed (deterministic value), Erlang (k phases), Empirical (from data), Piecewise (time-varying), Schedule (planned times). All distParams values must be strings.",
-      "runningSimulations": "To run: 1) Validate model (no errors). 2) Set seed (for reproducibility) or randomise. 3) Set max simulation time and warm-up period. 4) Set number of replications (typically 10-30 for confidence intervals). 5) Click Run. Results show queue depths, server utilisation, wait times, and throughput.",
+      "runningSimulations": "To run: 1) Validate model (no errors). 2) Set seed (for reproducibility) or randomise. 3) Set max simulation time and warm-up period. 4) Set number of replications (typically 10-30 for confidence intervals). 5) Click Run. Results show queue depths, server utilisation, wait times, and throughput. For a one-click path to statistically robust results, use \u2726 Explore (see below).",
       "results": "Results include: queue time-series (depth over time), server utilisation (% busy), wait time distribution (histogram), and KPIs (avg wait, max wait, served count, renege count). Confidence intervals show statistical precision. Compare runs to see which scenario performs better.",
-      "tips": "Tips: 1) Start with a template for common scenarios. 2) Use exponential inter-arrivals for random arrivals. 3) Set warm-up period to 10-20% of run time. 4) Run 20+ replications for narrow confidence intervals. 5) Check validation before running. 6) Use PRIORITY discipline only when entity has priority attribute."
+      "tips": "Tips: 1) Start with a template for common scenarios. 2) Use exponential inter-arrivals for random arrivals. 3) Set warm-up period to 10-20% of run time. 4) Run 20+ replications for narrow confidence intervals. 5) Check validation before running. 6) Use PRIORITY discipline only when entity has priority attribute.",
+      "explore": "\u2726 Explore is an AI agent accessible from any model view (Overview, Design, or Run mode) via the '\u2726 Explore' button in the model header. It runs an adaptive batch simulation: starting at 5 replications and stepping up until the 95% CI relative half-width drops below 5% of the mean, or the plan replication limit is reached (Free: 10, Standard: 30, Pro: 100). Before running, a pre-flight dialog shows model complexity, run duration, plan limits, and any admission warnings or hard errors. After the batch, results are saved to run history and an LLM-generated report streams four sections: Bottlenecks (top 3 by impact), Quick Wins (3 no-resource changes), Investment Opportunities (2 structural changes), and Confidence Summary (CI, replication count, caveats). A green badge confirms CI convergence; amber indicates the tier limit was reached before the target was met. Click 'View Results' to open the full results workspace."
     },
     "engineeringSpec": {
       "threePhaseMethod": "DES Studio implements Pidd's Three-Phase Method. Phase A: Advance clock to next event time. Phase B: Fire all B-Events at that time. Phase C: Scan C-Events in priority order, firing any whose condition is true, then restart scan from top. This ensures priority ordering and avoids priority inversion.",
@@ -21,10 +22,57 @@
       "validation": "Validation rules: V1: Entity names unique. V2: Attribute names unique within entity. V3: defaultValue matches valueType. V4: PRIORITY queue requires priority attribute. V5: Distribution params valid. V6: No stale B-Event references. V7: Activity nodes have 1 in, 1 out edge. V8: At least one Source and one Sink. V9: No undefined variables in conditions. V10: No namespace collisions (Resource, Queue)."
     },
     "llmSchema": {
-      "bEventMacros": ["ARRIVE", "ASSIGN", "COMPLETE", "RELEASE", "RENEGE", "UNBATCH", "PREEMPT", "FAIL", "REPAIR", "SPLIT", "SET", "SET_ATTR", "COST", "FILL"],
-      "cEventMacros": ["ASSIGN", "BATCH", "COSEIZE", "MATCH", "SET", "SET_ATTR", "COST", "RENEGE_OLDEST", "DRAIN"],
-      "distributions": ["exponential", "uniform", "normal", "triangular", "fixed", "erlang", "empirical", "piecewise", "schedule"],
-      "modelSections": ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults", "epoch", "userSettings", "containerTypes", "dataSources"]
+      "bEventMacros": [
+        "ARRIVE",
+        "ASSIGN",
+        "COMPLETE",
+        "RELEASE",
+        "RENEGE",
+        "UNBATCH",
+        "PREEMPT",
+        "FAIL",
+        "REPAIR",
+        "SPLIT",
+        "SET",
+        "SET_ATTR",
+        "COST",
+        "FILL"
+      ],
+      "cEventMacros": [
+        "ASSIGN",
+        "BATCH",
+        "COSEIZE",
+        "MATCH",
+        "SET",
+        "SET_ATTR",
+        "COST",
+        "RENEGE_OLDEST",
+        "DRAIN"
+      ],
+      "distributions": [
+        "exponential",
+        "uniform",
+        "normal",
+        "triangular",
+        "fixed",
+        "erlang",
+        "empirical",
+        "piecewise",
+        "schedule"
+      ],
+      "modelSections": [
+        "entityTypes",
+        "stateVariables",
+        "bEvents",
+        "cEvents",
+        "queues",
+        "graph",
+        "experimentDefaults",
+        "epoch",
+        "userSettings",
+        "containerTypes",
+        "dataSources"
+      ]
     }
   }
 }

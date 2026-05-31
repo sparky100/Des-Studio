@@ -553,6 +553,73 @@ If a B-event still has rows embedded directly in the model JSON (legacy format),
 
 ---
 
+## ✦ Explore — Adaptive Batch Analysis
+
+**Explore** is an AI agent triggered from any model view. It runs the model through progressively larger replication batches until statistical confidence is achieved, then streams an LLM-generated opportunity report.
+
+### Accessing Explore
+
+Click the **✦ Explore** button in the model header bar. The button is visible when you are in the Overview, Design, or Run mode and the model has no validation errors. If the model has errors, fix them in the **Model Health** tab first.
+
+### Pre-flight confirmation
+
+Before any simulation starts, a confirmation dialog shows:
+- **Replications limit** — your plan's maximum (Free: 10, Standard: 30, Pro: 100)
+- **Model complexity** — Low / Medium / High / Very high based on C-event scan estimate
+- **Run duration and warmup** — taken from the model's experiment defaults
+- **Target CI** — ±5% of the mean (95% confidence)
+- **Hard errors** — if any admission errors are present (e.g. run duration exceeds tier limit), the Proceed button is hidden; fix the issue first
+- **Warnings** — shown in amber; you can still proceed
+
+Click **Proceed** (or **Proceed anyway** if warnings are present) to start. Click **Cancel** to close without running.
+
+### How the adaptive batch works
+
+1. Starts with 5 replications (or fewer if the tier max is lower)
+2. Computes the 95% CI relative half-width: `halfWidth / |mean| × 100`
+3. If half-width < 5% of the mean → **converged**, stops
+4. Otherwise adds another batch (step size = `max(5, tierMax ÷ 5)`) and repeats
+5. Stops unconditionally when the tier replication limit is reached
+
+Each round uses fresh, non-overlapping seeds so all replications are statistically independent.
+
+### Progress display
+
+During the run, a progress bar fills from left to right showing `N / max replications`. The live CI percentage updates after each round (e.g. `15 / 30 replications — CI ±8.2%`). Click **Cancel** at any time to stop and discard.
+
+### Convergence badge
+
+After the batch completes:
+- **Green** `✓ Confidence achieved: ±X.X% with N replications` — CI target met
+- **Amber** `⚠ Tier limit reached (N reps) — CI ±X.X% — results are indicative` — tier max hit before CI converged; results are still useful but less precise. Upgrading your plan increases the replication budget.
+
+### AI opportunity report
+
+Once the batch completes, the results are saved to run history and an LLM analysis streams in four sections:
+
+| Section | Content |
+|---------|---------|
+| **Bottlenecks** | Top 3 bottlenecks ranked by impact — queue or resource name, utilisation or wait metric, reason |
+| **Quick Wins** | 3 improvements achievable without adding resources (scheduling, routing, priority changes) |
+| **Investment Opportunities** | 2 structural improvements requiring extra resources or redesign; quantified where CI supports it |
+| **Confidence Summary** | Statistical robustness statement citing CI, replication count, and any caveats |
+
+### After the report
+
+Click **View Results** to jump directly to the Results › Summary tab for the saved run. All interactive results tools (charts, export, Create Report) are available from there.
+
+### Plan limits
+
+| Plan | Max replications |
+|------|-----------------|
+| Free | 10 |
+| Standard | 30 |
+| Pro | 100 |
+
+If the model is complex or high-variance, the Free tier may not achieve the ±5% CI target. The amber badge tells you the CI achieved within your limit so you can judge whether the results are sufficient for your purpose.
+
+---
+
 ## Model Assistant
 
 The Model Assistant is an AI panel available from any model editing or results view. It provides results analysis, run comparison, plan refinement, and model Q&A.

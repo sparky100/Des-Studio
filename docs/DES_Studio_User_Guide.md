@@ -642,6 +642,35 @@ Long-running models may start in an unrealistic empty state. The Results view ap
 
 You can override the warmup period manually by entering a fixed value in the Run setup settings.
 
+### 7.8 ✦ Explore — AI-powered adaptive batch analysis
+
+**Explore** is an AI agent that automatically determines how many replications your model needs for statistical confidence, runs them, and then delivers a structured improvement report — all in one click.
+
+**How to use it:**
+
+1. Open any model in Overview, Design, or Run mode
+2. Click **✦ Explore** in the model header bar
+3. Review the pre-flight confirmation — it shows your plan's replication limit, model complexity, and any warnings
+4. Click **Proceed** (or **Proceed anyway** if warnings are present) to start
+
+**What the agent does:**
+
+- Starts with an initial batch of replications and checks whether the 95% confidence interval half-width is less than ±5% of the mean
+- If not, adds another batch and checks again — repeating until the CI target is met or your plan's replication limit is reached
+- Saves the results to run history with the label `✦ Explore (N reps)`
+- Streams an AI-generated report covering: **Bottlenecks**, **Quick Wins**, **Investment Opportunities**, and a **Confidence Summary**
+
+**Reading the results:**
+
+| Badge | Meaning |
+|-------|---------|
+| Green `✓ Confidence achieved: ±X.X%` | CI target met — results are statistically robust |
+| Amber `⚠ Tier limit reached` | Plan cap hit before CI converged — results are indicative; consider upgrading your plan for tighter precision |
+
+Click **View Results** after the report completes to open the full results workspace for the saved run.
+
+**Plan limits:** Free (10 reps), Standard (30 reps), Pro (100 reps). You can cancel at any time during the run.
+
 ---
 
 ## 8. Execution Panel Views
