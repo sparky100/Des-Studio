@@ -68,7 +68,7 @@ describe("ResultsWorkspace", () => {
     render(<ResultsWorkspace results={results} model={model} />);
 
     expect(screen.getByText(/Queue measurements taken during the run/i)).toBeInTheDocument();
-    expect(screen.getByText(/Clerk: 1 resource/i)).toBeInTheDocument();
+    expect(screen.getByText(/Busy Clerk resources measured during the run/i)).toBeInTheDocument();
     expect(screen.getByText(/3 waiting times from completed customers/i)).toBeInTheDocument();
   });
 
@@ -79,6 +79,8 @@ describe("ResultsWorkspace", () => {
     expect(screen.getAllByText("PEAK").length).toBeGreaterThanOrEqual(2);
     // "N" appears for number of data points in each series
     expect(screen.getAllByText("N").length).toBeGreaterThanOrEqual(2);
+    // Queue A depth peak value is 3 (at t=5)
+    expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(1);
     // Wait distribution histogram stat cards show percentile labels
     expect(screen.getByText("P99")).toBeInTheDocument();
   });
@@ -92,7 +94,7 @@ describe("ResultsWorkspace", () => {
     expect(within(runtimeSection).getByText("42 ms")).toBeInTheDocument();
     expect(within(runtimeSection).getByText(/events processed/i)).toBeInTheDocument();
     expect(within(runtimeSection).getByText("15")).toBeInTheDocument();
-    expect(screen.getByText(/peak queue length by queue/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/peak queue length by queue/i).length).toBeGreaterThanOrEqual(1);
     const peakQueueSection = screen.getByLabelText(/peak queue lengths/i);
     expect(within(peakQueueSection).getAllByText("Queue A").length).toBeGreaterThanOrEqual(1);
     expect(within(peakQueueSection).getByText("3")).toBeInTheDocument();

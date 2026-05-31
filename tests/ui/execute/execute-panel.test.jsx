@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExecutePanel } from '../../../src/ui/execute/index.jsx';
 
 const mockRunReplications = vi.hoisted(() => vi.fn());
-const mockSaveSimulationRun = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const mockSaveSimulationRun = vi.hoisted(() => vi.fn().mockResolvedValue('saved-run-id'));
 const mockFetchRunHistory = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
 const mockFetchUserSettings = vi.hoisted(() => vi.fn(() => new Promise(() => {})));
 const mockStreamNarrative = vi.hoisted(() => vi.fn());
@@ -68,7 +68,7 @@ describe('ExecutePanel', () => {
     mockFetchRunHistory.mockReset();
     mockFetchUserSettings.mockReset();
     mockStreamNarrative.mockReset();
-    mockSaveSimulationRun.mockResolvedValue(undefined);
+    mockSaveSimulationRun.mockResolvedValue('saved-run-id');
     mockFetchRunHistory.mockImplementation(() => new Promise(() => {}));
     mockFetchUserSettings.mockImplementation(() => new Promise(() => {}));
   });
@@ -187,7 +187,7 @@ describe('ExecutePanel', () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
     openSetup();
-    fireEvent.click(screen.getByLabelText(/save full archival details to cloud/i));
+    fireEvent.click(screen.getByRole('button', { name: /^full$/i }));
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
@@ -343,7 +343,7 @@ describe('ExecutePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
     expect(await screen.findAllByText('Avg wait')).toHaveLength(2);
-    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText('5.00')).toBeInTheDocument();
     expect(screen.getByText('10')).toBeInTheDocument();
     expect(screen.getAllByText('11')[0]).toBeInTheDocument();
   });
