@@ -758,7 +758,7 @@ describe("Sprint 70 — buildPlanRefinementPrompt", () => {
     expect(Array.isArray(prompt.messages)).toBe(true);
     expect(prompt.messages[0].role).toBe("system");
     expect(prompt.messages[1].role).toBe("user");
-    expect(prompt.max_tokens).toBe(700);
+    expect(prompt.max_tokens).toBe(1800);
   });
 
   it("user message includes schedule digest when model has schedules", () => {
