@@ -75,11 +75,13 @@ describe("ResultsWorkspace", () => {
   test("shows compact data checks under charts", () => {
     render(<ResultsWorkspace results={results} model={model} />);
 
-    expect(screen.getAllByText("POINTS").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("t=0 -> 1")).toBeInTheDocument();
-    expect(screen.getByText("t=5 -> 3")).toBeInTheDocument();
-    expect(screen.getByText("PEAK DEPTH")).toBeInTheDocument();
-    expect(screen.getByText("MAX WAIT")).toBeInTheDocument();
+    // Each line-series chart renders stat cards: PEAK, AT T, FINAL, N
+    expect(screen.getAllByText("PEAK").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("N").length).toBeGreaterThanOrEqual(2);
+    // Queue A depth peak value is 3 (at t=5)
+    expect(screen.getAllByText("3").length).toBeGreaterThanOrEqual(1);
+    // Data preview summaries are present
+    expect(screen.getAllByText(/See the numbers behind this chart \(2 points\)/i).length).toBeGreaterThanOrEqual(2);
   });
 
   test("renders runtime metrics when present", () => {

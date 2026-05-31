@@ -20,6 +20,9 @@ describe('BEventEditor — queue-aware effect options', () => {
       />
     );
 
+    // Card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
     // EffectPicker shows the dropdown only after opening it
     fireEvent.click(screen.getByText('+ Add Effect'));
 
@@ -55,6 +58,9 @@ describe('BEventEditor — queue-aware effect options', () => {
         cEvents={[]}
       />
     );
+
+    // Card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
 
     // EffectPicker shows the dropdown only after opening it
     fireEvent.click(screen.getByText('+ Add Effect'));

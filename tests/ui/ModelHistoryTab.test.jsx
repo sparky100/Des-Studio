@@ -499,7 +499,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
-      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/bit-identical/i)
+      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/Reproduce confirmed/i)
     );
     expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent('✓');
   });
@@ -556,7 +556,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
-      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/bit-identical/i)
+      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/Reproduce confirmed/i)
     );
   });
 
@@ -582,7 +582,7 @@ describe('ModelHistoryTab — Run History UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
-      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/bit-identical/i)
+      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/Reproduce confirmed/i)
     );
   });
 
