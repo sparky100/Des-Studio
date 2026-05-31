@@ -2013,6 +2013,34 @@ npm run build
 
 ---
 
+### Sprint 79 — ✦ Explore: AI-Powered Adaptive Batch Analysis ✅
+
+**Goal:** Give modellers a one-click way to get statistically robust simulation results and actionable improvement opportunities from any design view, without manually tuning replication counts or interpreting raw output.
+
+**Status:** ✅ Complete — 2026-05-31
+
+**Branch:** `claude/ai-agent-batch-design-iAp3V`
+
+**Source document:** `docs/reviews/sprint-79-ai-explore-plan.md`
+
+**Scope guardrails:**
+- No new database migrations or `model_json` schema changes; uses existing `simulation_runs.ai_insights` column
+- Engine layer (`adaptive-batch.js`) is pure JS — zero React, zero DOM
+- All DB calls delegated to `db/models.js` wrappers; none in UI components
+- Styling via `tokens.js` exclusively; no hardcoded values or CSS classes
+- One LLM call per user trigger — no change to rate limit exposure
+
+| ID | Feature | Status | Deliverable |
+|---|---|---|---|
+| F79.1 | Adaptive batch engine | ✅ | `src/engine/adaptive-batch.js` — steps up replications until 95% CI relative half-width < 5% of mean, or tier max reached. Non-overlapping seeds across rounds. `_createWorker` injectable for tests. |
+| F79.2 | LLM opportunity prompt | ✅ | `buildBatchAnalysisPrompt()` appended to `src/llm/prompts.js`. Structured four-section output: Bottlenecks / Quick Wins / Investment Opportunities / Confidence Summary. `BATCH_ANALYSIS` added to `LLM_TASKS` in `contracts.js`. |
+| F79.3 | Explore modal panel | ✅ | `src/ui/execute/AdaptiveBatchPanel.jsx` — three-phase modal (Running → Analysing → Done). Live progress bar with CI%, convergence/tier-limit badge, streaming LLM output, cancel support, View Results navigation. |
+| F79.4 | ✦ Explore header button | ✅ | `src/ui/ModelDetailHeader.jsx` — `✦ Explore` button visible in Overview + Design + Run modes; hidden when model has validation errors. |
+| F79.5 | ModelDetail wiring | ✅ | `src/ui/ModelDetail.jsx` — `showExplorePanel` state, `resolvedTier`, `aiSchedulesMap`, DB callback props, modal render. |
+| F79.6 | Tests | ✅ | `tests/engine/adaptive-batch.test.js` — 3 tests: convergence (M/M/1 standard tier), tier cap (free tier), seed non-overlap (stub worker). |
+
+---
+
 *End of build plan. Update after each sprint.*
 *The most important rule: read the existing file before changing it.*
 *Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec — never add a free-text escape hatch.*

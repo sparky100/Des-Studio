@@ -28,11 +28,13 @@ import { ModelDetailHeader } from "./ModelDetailHeader.jsx";
 import { ModelTabBar }       from "./ModelTabBar.jsx";
 import { SaveBanner }        from "./SaveBanner.jsx";
 import { VersionHistoryPanel } from "./VersionHistoryPanel.jsx";
-import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, buildSchedulesMap } from "../db/models.js";
+import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, buildSchedulesMap, saveSimulationRun, saveAiInsights } from "../db/models.js";
 import { generateReport, sanitizeFilename } from "../reports/index.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
 import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
+import { resolveRunAdmissionTier }          from "../engine/run-admission.js";
+import { AdaptiveBatchPanel }               from "./execute/AdaptiveBatchPanel.jsx";
 import { normalizeModelConditions }         from "../model/conditionFormat.js";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
@@ -522,6 +524,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [focusScheduleId,setFocusScheduleId]=useState(null);
   const [schedulesVersion,setSchedulesVersion]=useState(0);
   const [resultsView,setResultsView]=useState("summary");
+  const [showExplorePanel,setShowExplorePanel]=useState(false);
   const [aiAction,setAiAction]=useState(null);
   const [aiSeq,setAiSeq]=useState(0);
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
@@ -965,6 +968,15 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     return ["overview"];
   }, [activeMode?.id]);
   const hasModelIssues = validation.errors.length > 0 || validation.warnings.length > 0;
+  const exploreVisible = useMemo(()=>
+    ["overview","design","execute"].includes(activeMode?.id) && validation.errors.length===0,
+  [activeMode?.id, validation.errors.length]);
+  const resolvedTier = useMemo(()=>
+    resolveRunAdmissionTier(overrides.plan,{isAdmin:overrides.isAdmin}),
+  [overrides.plan,overrides.isAdmin]);
+  const aiSchedulesMap = useMemo(()=>
+    namedSchedules.length ? buildSchedulesMap(namedSchedules) : {},
+  [namedSchedules]);
   const visibleTabs = selectableTabs.filter(t => {
     if (!contextualTabs.includes(t.id)) return false;
     if (t.id === "validate" && !hasModelIssues && tab !== "validate") return false;
@@ -1046,6 +1058,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         past={past} future={future} currentVersion={currentVersion}
         onBack={handleBack} onUndo={undo} onRedo={redo} onSave={save} onDiscard={discard}
         onHelpOpen={overrides.onHelpOpen}
+        onExplore={()=>setShowExplorePanel(true)}
+        exploreVisible={exploreVisible}
       />
       <ModelTabBar
         tab={tab} setTab={setTab}
@@ -1557,6 +1571,20 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             toast.success(`Applied: ${suggestion.change?.target} → ${suggestion.change?.to}`);
           } : null}
           onClose={()=>{setAiSidebarOpen(false);setAiAction(null);}}
+        />
+      )}
+      {showExplorePanel&&(
+        <AdaptiveBatchPanel
+          model={model}
+          tier={resolvedTier}
+          schedulesMap={aiSchedulesMap}
+          experimentConfig={model.experimentDefaults||{}}
+          onSave={overrides.userId
+            ? (result,config)=>saveSimulationRun(modelId,overrides.userId,result,config)
+            : async()=>null}
+          onSaveInsights={saveAiInsights}
+          onGoToResults={()=>{setShowExplorePanel(false);setTab("results");setResultsView("summary");}}
+          onClose={()=>setShowExplorePanel(false)}
         />
       )}
       </div>

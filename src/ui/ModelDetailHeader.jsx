@@ -2,7 +2,7 @@
 import { C, FONT } from "./shared/tokens.js";
 import { Tag, Btn } from "./shared/components.jsx";
 
-export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion }) {
+export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion, onExplore, exploreVisible }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, padding: "11px 20px",
@@ -38,6 +38,11 @@ export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future,
           <Btn small variant="primary" onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Btn>
           <Btn small variant="ghost" onClick={onDiscard} disabled={saving}>Discard</Btn>
         </div>
+      )}
+      {exploreVisible && onExplore && (
+        <Btn small variant="ghost" onClick={onExplore} title="Run adaptive batch and get AI-powered improvement opportunities">
+          ✦ Explore
+        </Btn>
       )}
     </div>
   );
