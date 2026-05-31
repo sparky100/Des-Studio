@@ -106,7 +106,7 @@ describe('Reproduce Run', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
-      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/bit-identical/i)
+      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/Reproduce confirmed/i)
     );
     expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent('✓');
   });
@@ -163,7 +163,7 @@ describe('Reproduce Run', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
-      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/bit-identical/i)
+      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/Reproduce confirmed/i)
     );
   });
 
@@ -189,7 +189,7 @@ describe('Reproduce Run', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reproduce' }));
 
     await waitFor(() =>
-      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/bit-identical/i)
+      expect(screen.getByTestId('reproduce-result-run-1')).toHaveTextContent(/Reproduce confirmed/i)
     );
   });
 
