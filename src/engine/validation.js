@@ -569,6 +569,13 @@ export function validateModel(model) {
         `${bLabel} has multiple terminal lifecycle sinks. Choose one clear terminal action: COMPLETE() or RENEGE(ctx).`,
         'bevents');
     }
+
+    // V39: ARRIVE + probabilisticRouting is invalid — ARRIVE routes via its effect argument
+    if (/ARRIVE\s*\(/i.test(effectStr)) {
+      err('V39',
+        `${bLabel} has an ARRIVE effect and probabilisticRouting — ARRIVE events route entities via their effect argument "ARRIVE(Type, QueueName)". Remove probabilisticRouting. Use separate ARRIVE events with proportional rates to split arrivals.`,
+        'bevents');
+    }
   });
 
   // ── V20: Queue capacity must be integer >= 1 when set (F11.1) ───────────────

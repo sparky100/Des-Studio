@@ -1003,6 +1003,52 @@ Common modelling patterns and the mistakes to avoid when generating DES Studio m
 }
 ```
 
+### Probabilistic acuity splitting (ARRIVE routing anti-pattern)
+
+**Use case:** Arriving entities must be split into high/low priority queues by probability.
+**Anti-pattern:** Adding `probabilisticRouting` to an ARRIVE B-event — ARRIVE routes via its effect argument, so the routing table is silently ignored.
+
+**Correct pattern:** Use two ARRIVE events, each with a rate proportional to the split:
+
+```json
+{
+  "name": "ED Triage — Correct Acuity Split",
+  "entityTypes": [
+    { "id": "et_patient", "name": "Patient", "role": "customer", "count": 0, "attrDefs": [] },
+    { "id": "et_doc",     "name": "Clinician", "role": "server",  "count": 3, "attrDefs": [] }
+  ],
+  "queues": [
+    { "id": "q_high", "name": "High Acuity Queue", "customerType": "Patient", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_low",  "name": "Low Acuity Queue",  "customerType": "Patient", "capacity": "", "discipline": "FIFO" }
+  ],
+  "bEvents": [
+    { "id": "b_arrive_high", "name": "High Acuity Arrival", "scheduledTime": "0",
+      "effect": ["ARRIVE(Patient, High Acuity Queue)"],
+      "schedules": [{ "eventId": "b_arrive_high", "dist": "Exponential", "distParams": { "mean": "16.667" } }] },
+    { "id": "b_arrive_low", "name": "Low Acuity Arrival", "scheduledTime": "0",
+      "effect": ["ARRIVE(Patient, Low Acuity Queue)"],
+      "schedules": [{ "eventId": "b_arrive_low", "dist": "Exponential", "distParams": { "mean": "7.143" } }] },
+    { "id": "b_complete", "name": "Treatment Done", "scheduledTime": "9999",
+      "effect": ["COMPLETE()"], "schedules": [] }
+  ],
+  "cEvents": [
+    { "id": "c_high", "name": "High Acuity Care", "priority": 1,
+      "condition": "queue(High Acuity Queue).length > 0 AND idle(Clinician).count > 0",
+      "effect": ["ASSIGN(High Acuity Queue, Clinician)"],
+      "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "13" }, "useEntityCtx": true }] },
+    { "id": "c_low", "name": "Low Acuity Care", "priority": 2,
+      "condition": "queue(Low Acuity Queue).length > 0 AND idle(Clinician).count > 0",
+      "effect": ["ASSIGN(Low Acuity Queue, Clinician)"],
+      "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "13" }, "useEntityCtx": true }] }
+  ],
+  "experimentDefaults": { "maxSimTime": 500, "warmupPeriod": 50, "replications": 10 }
+}
+```
+
+**Key rule for splitting arrivals:** Base arrival rate = 1 patient per 5 min = 12/hr. High acuity = 30% = 1 per 16.667 min. Low acuity = 70% = 1 per 7.143 min. Create one ARRIVE B-event per acuity group, each with its own schedule and proportional rate. Never use `probabilisticRouting` on an ARRIVE event.
+
+---
+
 ### Two-stage pipeline (RELEASE pattern)
 
 For multi-stage models, use `RELEASE(ServerType, NextQueueName)` at the end of stage 1 to hand the entity to stage 2:

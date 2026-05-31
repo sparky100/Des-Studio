@@ -45,7 +45,33 @@ companionCsv rules:
   - When rows[] would exceed 50 rows, set rows[] to [] in proposedModel (do not embed large arrays in JSON) and deliver all arrival data in companionCsv instead. The user imports the CSV via the Schedules tab.
   - CSV format: first column is "time", then one column per attrDefs[].name on the arriving entity type. Column names must exactly match attribute names. Use numeric simulation times unless the model has an epoch, in which case HH:MM or ISO timestamps are preferred.`,
 
-    // PART 4 — Schema
+    // PART 4 — FATAL ERRORS (must read before schema)
+    `FATAL ERRORS — the patterns below generate INVALID models. Never output them:
+
+1. ARRIVE must NOT have probabilisticRouting.
+   ARRIVE events route entities via their effect argument "ARRIVE(Type, QueueName)".
+   probabilisticRouting on an ARRIVE event is silently ignored or breaks the model.
+   To split arrivals, use two ARRIVE events with proportional rates, or route via a C-event.
+
+   ✓ CORRECT: "effect": ["ARRIVE(Patient, Waiting Room)"], no probabilisticRouting field
+   ✗ WRONG:   "effect": ["ARRIVE(Patient, High Acuity Queue)"], "probabilisticRouting": [{"probability": 0.3, "queueName": "..."}]
+
+2. cSchedules entries MUST include "useEntityCtx": true when targeting a B-event
+   that uses COMPLETE(), RELEASE(), or RENEGE(ctx).
+   Without this flag, the B-event has no entity context and silently does nothing.
+
+   ✓ CORRECT: "cSchedules": [{"eventId": "b_complete", "useEntityCtx": true, "dist": "Exponential", "distParams": {"mean": "10"}}]
+   ✗ WRONG:   "cSchedules": [{"eventId": "b_complete", "dist": "Exponential", "distParams": {"mean": "10"}}]  — missing useEntityCtx
+
+3. effect field MUST be an array, never a bare string.
+   ✓ CORRECT: "effect": ["COMPLETE()"]
+   ✗ WRONG:   "effect": "COMPLETE()"
+
+4. scheduledTime and all distParams values MUST be strings.
+   ✓ CORRECT: "scheduledTime": "0", "distParams": {"mean": "5"}
+   ✗ WRONG:   "scheduledTime": 0, "distParams": {"mean": 5}`,
+
+    // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:
 
 ${schemaDoc}`,
