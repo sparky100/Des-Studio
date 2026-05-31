@@ -463,23 +463,7 @@ function RuntimeMetricsSection({ runtimeMetrics }) {
       </div>
 
       {runtimeMetrics?.hasMetrics ? (
-        <>
-          <MetricStrip items={items} />
-          {queuePeaks.length > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>
-                PEAK QUEUE LENGTH BY QUEUE
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {queuePeaks.map(entry => (
-                  <div key={entry.queueName} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 8px", fontSize: 11, fontFamily: FONT, color: C.text }}>
-                    <span>{entry.queueName}</span>: <span>{formatNumber(entry.depth, 0)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+        <MetricStrip items={items} />
       ) : (
         <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
           Runtime metrics are not available for this saved run.
@@ -1013,6 +997,36 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
             <SummaryCardGrid results={results} replicationResults={replicationResults} />
           </div>
         </div>
+        {queuePeaks.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            <SectionHeader id="bottlenecks" label="Queue Analysis" isOpen={sectionsOpen.bottlenecks} onToggle={toggleSection} />
+            <div id="results-section-bottlenecks" style={{ display: sectionsOpen.bottlenecks ? "flex" : "none", flexDirection: "column", gap: 6, paddingTop: 14 }}>
+              <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>
+                PEAK QUEUE LENGTH BY QUEUE
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 6 }}>
+                {queuePeaks.map(entry => {
+                  const high = entry.depth > 20;
+                  return (
+                    <div key={entry.queueName} style={{
+                      background: C.bg,
+                      border: `1px solid ${high ? alpha(C.amber, 0.35) : C.border}`,
+                      borderRadius: 6,
+                      padding: "7px 10px",
+                    }}>
+                      <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {entry.queueName}
+                      </div>
+                      <div style={{ fontSize: 17, color: high ? C.amber : C.text, fontFamily: FONT, fontWeight: 700, lineHeight: 1 }}>
+                        {formatNumber(entry.depth, 0)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
         <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
           Turn on <strong style={{ color: C.accent }}>Keep chart data during the run</strong> in Run setup, then run the model to see charts.
         </div>

@@ -229,6 +229,12 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   // Ref set by CanvasControls (inside ReactFlow) to expose fitView for specific nodes
   const fitNodeRef = useRef(null);
   const graph = useMemo(() => deriveGraphFromModel(model || {}), [model]);
+  const storedViewport = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem(`des.vp.${model?.id}`) || 'null'); } catch { return null; }
+  }, [model?.id]);
+  const graphWithViewport = useMemo(() =>
+    storedViewport ? { ...graph, viewport: storedViewport } : graph,
+  [graph, storedViewport]);
   const visualIssues = useMemo(() => validateVisualGraph(graph), [graph]);
   const modelValidation = useMemo(() => validateModel(model || {}), [model]);
   // Derived set of canvas node IDs that have active validation issues — never stored in model_json
@@ -347,7 +353,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   };
   const changeViewport = viewport => {
     if (!canEdit || !viewport) return;
-    applyModel(updateGraphLayout(model, graph, { viewport }));
+    try { localStorage.setItem(`des.vp.${model?.id}`, JSON.stringify(viewport)); } catch {}
   };
   const connectNodes = (from, to) => {
     if (!canEdit) return;
@@ -615,7 +621,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
             </div>
           )}
           <FlowDiagramReactFlow
-            graph={graph}
+            graph={graphWithViewport}
             canEdit={canEdit}
             selectedNodeId={selectedNodeId}
             errorNodeIds={errorNodeIds}

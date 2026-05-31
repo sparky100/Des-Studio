@@ -504,6 +504,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const toast = useToast();
   const [tab,setTab]=useState(initialTab||"overview");
   const [dirty,setDirty]=useState(false);
+  const visualPendingRef = useRef(false);
   const [saving,setSaving]=useState(false);
   const [saveError,setSaveError]=useState(null);
   const [discardConfirm,setDiscardConfirm]=useState(false);
@@ -633,7 +634,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     setPast(p=>[...p.slice(-19),model]);
     setFuture([]);
     setModel(normalizeModelConditions(nextModel));
-    setDirty(true);
+    if(tab==="visual"){
+      visualPendingRef.current=true;
+    }else{
+      setDirty(true);
+    }
   };
   const mergeGeneratedModel=(current,nextModel)=>normalizeModelConditions({
     ...current,
@@ -713,6 +718,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     try{
       await overrides.onSave?.(model);
       setDirty(false);
+      visualPendingRef.current=false;
       toast.success("Model saved");
       await onRefresh?.();
     }catch(error){
@@ -740,12 +746,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       access:        modelData.access         || {},
     }));
     setDirty(false);
+    visualPendingRef.current=false;
     setPast([]);
     setFuture([]);
   };
 
   const handleBack=()=>{
-    if(dirty&&!window.confirm('You have unsaved changes. Leave without saving?'))return;
+    if((dirty||visualPendingRef.current)&&!window.confirm('You have unsaved changes. Leave without saving?'))return;
     onBack();
   };
 
@@ -755,8 +762,15 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[modelId]);
 
   useEffect(()=>{
+    if(tab!=="visual"&&visualPendingRef.current){
+      setDirty(true);
+      visualPendingRef.current=false;
+    }
+  },[tab]);
+
+  useEffect(()=>{
     const onBeforeUnload=(e)=>{
-      if(!dirty)return;
+      if(!dirty&&!visualPendingRef.current)return;
       e.preventDefault();
       e.returnValue=''; // Chrome requires this to show the native dialog
     };
