@@ -11,6 +11,64 @@ const CHART_W = 400;
 const CHART_H = 140;
 const CHART_COLORS = [C.accent, C.bEvent, C.purple, C.green, C.red, C.server];
 
+const SECTION_DEFAULTS = { summary: true, bottlenecks: true, cost: true, analysis: true, runtime: true };
+
+function SectionHeader({ id, label, badge, isOpen, onToggle }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={isOpen}
+      aria-controls={`results-section-${id}`}
+      onClick={() => onToggle(id)}
+      style={{
+        alignItems: "center",
+        background: "none",
+        border: "none",
+        borderBottom: `1px solid ${C.border}`,
+        cursor: "pointer",
+        display: "flex",
+        fontFamily: FONT,
+        gap: 8,
+        marginBottom: 0,
+        padding: "8px 0",
+        textAlign: "left",
+        width: "100%",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          color: C.muted,
+          display: "inline-block",
+          fontSize: 9,
+          lineHeight: 1,
+          transition: "transform 160ms cubic-bezier(0.4,0,0.2,1)",
+          transform: isOpen ? "rotate(90deg)" : "rotate(0deg)",
+        }}
+      >▶</span>
+      <span style={{
+        color: C.accent,
+        flex: 1,
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: 1.2,
+      }}>{label.toUpperCase()}</span>
+      {badge != null && badge > 0 && (
+        <span style={{
+          background: C.bg,
+          border: `1px solid ${C.border}`,
+          borderRadius: 10,
+          color: C.muted,
+          fontFamily: FONT,
+          fontSize: 9,
+          fontWeight: 700,
+          padding: "1px 7px",
+        }}>{badge}</span>
+      )}
+    </button>
+  );
+}
+
 function csvEscape(value) {
   if (value == null) return "";
   const text = String(value);
@@ -914,6 +972,19 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
 }
 
 export function ResultsWorkspace({ results, model, replicationResults = [], warmupDetection = null }) {
+  const [sectionsOpen, setSectionsOpen] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("des.results.sections") || "null");
+      if (stored && typeof stored === "object") return { ...SECTION_DEFAULTS, ...stored };
+    } catch {}
+    return { ...SECTION_DEFAULTS };
+  });
+  const toggleSection = id => setSectionsOpen(prev => {
+    const next = { ...prev, [id]: !prev[id] };
+    try { localStorage.setItem("des.results.sections", JSON.stringify(next)); } catch {}
+    return next;
+  });
+
   const chartModel = useMemo(() => buildResultsViewModel(results, model), [results, model]);
   const queueSection = chartModel.chartSections.find(section => section.id === "queue-depth");
   const serverSection = chartModel.chartSections.find(section => section.id === "server-utilization");
@@ -935,157 +1006,185 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
 
   if (!chartModel.hasTimeSeries && !hasWaitDistributions && !hasAnalysisInputs) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-        <SummaryCardGrid results={results} replicationResults={replicationResults} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
+          <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
+            <SummaryCardGrid results={results} replicationResults={replicationResults} />
+          </div>
+        </div>
         <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
           Turn on <strong style={{ color: C.accent }}>Keep chart data during the run</strong> in Run setup, then run the model to see charts.
         </div>
-        <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <SectionHeader id="runtime" label="Run Effort" isOpen={sectionsOpen.runtime} onToggle={toggleSection} />
+          <div id="results-section-runtime" style={{ display: sectionsOpen.runtime ? "block" : "none", paddingTop: 14 }}>
+            <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
+          </div>
+        </div>
       </div>
     );
   }
 
+  const bottleneckBadge = (queueSection?.series.length ?? 0) + (serverSection?.series.length ?? 0) + (waitSection?.distributions.length ?? 0);
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
 
       {/* ── 1. Headline KPIs ───────────────────────────────────────────────── */}
-      <SummaryCardGrid results={results} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
+        <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
+          <SummaryCardGrid results={results} />
+        </div>
+      </div>
 
       {/* ── 2. Bottleneck section — header + peak-queue strip + charts ──────── */}
       {(chartModel.hasTimeSeries || hasWaitDistributions || queuePeaks.length > 0) && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <SectionHeader id="bottlenecks" label="Where Are the Bottlenecks?" badge={bottleneckBadge} isOpen={sectionsOpen.bottlenecks} onToggle={toggleSection} />
+          <div id="results-section-bottlenecks" style={{ display: sectionsOpen.bottlenecks ? "flex" : "none", flexDirection: "column", gap: 14, paddingTop: 14 }}>
 
-          {/* Section label */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
-              WHERE ARE THE BOTTLENECKS?
-            </div>
+            {/* Subtitle */}
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
               Use these charts to see where queues build up, how busy resources are, and how uneven waiting times become.
             </div>
+
+            {/* Peak queue strip */}
+            {queuePeaks.length > 0 && (
+              <div aria-label="Peak queue lengths" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>
+                  PEAK QUEUE LENGTH BY QUEUE
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 6 }}>
+                  {queuePeaks.map(entry => {
+                    const high = entry.depth > 20;
+                    return (
+                      <div key={entry.queueName} style={{
+                        background: C.bg,
+                        border: `1px solid ${high ? alpha(C.amber, 0.35) : C.border}`,
+                        borderRadius: 6,
+                        padding: "7px 10px",
+                      }}>
+                        <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {entry.queueName}
+                        </div>
+                        <div style={{ fontSize: 17, color: high ? C.amber : C.text, fontFamily: FONT, fontWeight: 700, lineHeight: 1 }}>
+                          {formatNumber(entry.depth, 0)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Queue depth charts */}
+            {chartModel.hasTimeSeries && queueSection?.series.length > 0 && (
+              <ChartSectionShell section={queueSection}>
+                <div aria-label="Queue depth chart grid" style={CHART_GRID}>
+                  {queueSection.series.map((series, idx) => {
+                    const color = CHART_COLORS[idx % CHART_COLORS.length];
+                    const title = series.source === "type-fallback"
+                      ? `${series.label} (type-level)`
+                      : series.label;
+                    return (
+                      <ChartCard
+                        key={series.id}
+                        title={title}
+                        color={color}
+                        sourceLabel={series.sourceLabel}
+                        statItems={lineSeriesStats(series, "depth", color)}
+                        dataPreview={<SeriesDataPreview series={series} />}
+                      >
+                        <MiniLineChart title="" ariaTitle={title} points={series.points} color={color} yLabel="depth" />
+                      </ChartCard>
+                    );
+                  })}
+                </div>
+              </ChartSectionShell>
+            )}
+
+            {/* Server utilisation charts */}
+            {chartModel.hasTimeSeries && serverSection?.series.length > 0 && (
+              <ChartSectionShell section={serverSection}>
+                <div aria-label="Server utilisation chart grid" style={CHART_GRID}>
+                  {serverSection.series.map((series, idx) => {
+                    const color = CHART_COLORS[(idx + 3) % CHART_COLORS.length];
+                    const fmtPct = v => `${formatNumber(v, 1)}%`;
+                    return (
+                      <ChartCard
+                        key={series.id}
+                        title={series.label}
+                        color={color}
+                        sourceLabel={series.sourceLabel}
+                        statItems={lineSeriesStats(series, "% busy", color, fmtPct)}
+                        dataPreview={<SeriesDataPreview series={series} />}
+                      >
+                        <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="% busy" formatY={fmtPct} />
+                      </ChartCard>
+                    );
+                  })}
+                </div>
+              </ChartSectionShell>
+            )}
+
+            {/* Wait-time distributions */}
+            {hasWaitDistributions && (
+              <ChartSectionShell section={waitSection}>
+                <div aria-label="Wait-time distribution grid" style={CHART_GRID}>
+                  {waitSection.distributions.map((dist, idx) => {
+                    const color = CHART_COLORS[idx % CHART_COLORS.length];
+                    return (
+                      <ChartCard
+                        key={dist.label}
+                        title={dist.label}
+                        color={color}
+                        sourceLabel={dist.sourceLabel}
+                        dataPreview={<WaitValuesPreview dist={dist} />}
+                      >
+                        <WaitHistogram dist={dist} color={color} />
+                      </ChartCard>
+                    );
+                  })}
+                </div>
+              </ChartSectionShell>
+            )}
           </div>
-
-          {/* Peak queue strip — embedded in the bottleneck section, not a separate panel */}
-          {queuePeaks.length > 0 && (
-            <div aria-label="Peak queue lengths" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>
-                PEAK QUEUE LENGTH BY QUEUE
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 6 }}>
-                {queuePeaks.map(entry => {
-                  const high = entry.depth > 20;
-                  return (
-                    <div key={entry.queueName} style={{
-                      background: C.bg,
-                      border: `1px solid ${high ? alpha(C.amber, 0.35) : C.border}`,
-                      borderRadius: 6,
-                      padding: "7px 10px",
-                    }}>
-                      <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {entry.queueName}
-                      </div>
-                      <div style={{ fontSize: 17, color: high ? C.amber : C.text, fontFamily: FONT, fontWeight: 700, lineHeight: 1 }}>
-                        {formatNumber(entry.depth, 0)}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ── Queue depth charts ──────────────────────────────────────────── */}
-          {chartModel.hasTimeSeries && queueSection?.series.length > 0 && (
-            <ChartSectionShell section={queueSection}>
-              <div aria-label="Queue depth chart grid" style={CHART_GRID}>
-                {queueSection.series.map((series, idx) => {
-                  const color = CHART_COLORS[idx % CHART_COLORS.length];
-                  const title = series.source === "type-fallback"
-                    ? `${series.label} (type-level)`
-                    : series.label;
-                  return (
-                    <ChartCard
-                      key={series.id}
-                      title={title}
-                      color={color}
-                      sourceLabel={series.sourceLabel}
-                      statItems={lineSeriesStats(series, "depth", color)}
-                      dataPreview={<SeriesDataPreview series={series} />}
-                    >
-                      <MiniLineChart title="" ariaTitle={title} points={series.points} color={color} yLabel="depth" />
-                    </ChartCard>
-                  );
-                })}
-              </div>
-            </ChartSectionShell>
-          )}
-
-          {/* ── Server utilisation charts ───────────────────────────────────── */}
-          {chartModel.hasTimeSeries && serverSection?.series.length > 0 && (
-            <ChartSectionShell section={serverSection}>
-              <div aria-label="Server utilisation chart grid" style={CHART_GRID}>
-                {serverSection.series.map((series, idx) => {
-                  const color = CHART_COLORS[(idx + 3) % CHART_COLORS.length];
-                  const fmtPct = v => `${formatNumber(v, 1)}%`;
-                  return (
-                    <ChartCard
-                      key={series.id}
-                      title={series.label}
-                      color={color}
-                      sourceLabel={series.sourceLabel}
-                      statItems={lineSeriesStats(series, "% busy", color, fmtPct)}
-                      dataPreview={<SeriesDataPreview series={series} />}
-                    >
-                      <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="% busy" formatY={fmtPct} />
-                    </ChartCard>
-                  );
-                })}
-              </div>
-            </ChartSectionShell>
-          )}
-
-          {/* ── Wait-time distributions ─────────────────────────────────────── */}
-          {hasWaitDistributions && (
-            <ChartSectionShell section={waitSection}>
-              <div aria-label="Wait-time distribution grid" style={CHART_GRID}>
-                {waitSection.distributions.map((dist, idx) => {
-                  const color = CHART_COLORS[idx % CHART_COLORS.length];
-                  return (
-                    <ChartCard
-                      key={dist.label}
-                      title={dist.label}
-                      color={color}
-                      sourceLabel={dist.sourceLabel}
-                      dataPreview={<WaitValuesPreview dist={dist} />}
-                    >
-                      {/* WaitHistogram renders its own stat cards internally */}
-                      <WaitHistogram dist={dist} color={color} />
-                    </ChartCard>
-                  );
-                })}
-              </div>
-            </ChartSectionShell>
-          )}
         </div>
       )}
 
       {/* ── 3. Cost summary (only when model tracks costs) ──────────────────── */}
       {Number.isFinite(results?.summary?.totalCost) && results.summary.totalCost > 0 && (
-        <section aria-label="Cost summary" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
-          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COST SUMMARY</div>
-          <StatCards items={[
-            { label: "Total cost", value: formatNumber(results.summary.totalCost), color: C.accent },
-            { label: "Cost / served", value: results.summary.costPerServed != null ? formatNumber(results.summary.costPerServed) : "—", color: C.amber },
-            { label: "Served", value: formatNumber(results.summary.served ?? 0, 0) },
-          ]} />
-        </section>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <SectionHeader id="cost" label="Cost Summary" isOpen={sectionsOpen.cost} onToggle={toggleSection} />
+          <div id="results-section-cost" style={{ display: sectionsOpen.cost ? "block" : "none", paddingTop: 14 }}>
+            <section aria-label="Cost summary" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
+              <StatCards items={[
+                { label: "Total cost", value: formatNumber(results.summary.totalCost), color: C.accent },
+                { label: "Cost / served", value: results.summary.costPerServed != null ? formatNumber(results.summary.costPerServed) : "—", color: C.amber },
+                { label: "Served", value: formatNumber(results.summary.served ?? 0, 0) },
+              ]} />
+            </section>
+          </div>
+        </div>
       )}
 
       {/* ── 4. Reliability analysis ─────────────────────────────────────────── */}
-      <ResultsAnalysisPanel results={results} replicationResults={replicationResults} warmupDetection={warmupDetection} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        <SectionHeader id="analysis" label="Statistical Analysis" isOpen={sectionsOpen.analysis} onToggle={toggleSection} />
+        <div id="results-section-analysis" style={{ display: sectionsOpen.analysis ? "block" : "none", paddingTop: 14 }}>
+          <ResultsAnalysisPanel results={results} replicationResults={replicationResults} warmupDetection={warmupDetection} />
+        </div>
+      </div>
 
       {/* ── 5. Run effort — computational stats, least urgent for the user ───── */}
-      <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+        <SectionHeader id="runtime" label="Run Effort" isOpen={sectionsOpen.runtime} onToggle={toggleSection} />
+        <div id="results-section-runtime" style={{ display: sectionsOpen.runtime ? "block" : "none", paddingTop: 14 }}>
+          <RuntimeMetricsSection runtimeMetrics={chartModel.runtimeMetrics} />
+        </div>
+      </div>
     </div>
   );
 }
