@@ -77,7 +77,29 @@ export function parseConditionString(condition = "") {
   const text = String(condition || "").trim();
   if (!text) return [];
 
-  const parts = text.split(/\b(AND|OR)\b/i);
+  // Split on AND/OR at paren-depth 0 only, so queue(OR) is not split on the OR inside.
+  const parts = [];
+  let depth = 0;
+  let current = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "(") { depth++; current += ch; continue; }
+    if (ch === ")") { depth--; current += ch; continue; }
+    if (depth === 0) {
+      const sub = text.slice(i);
+      const prev = current.slice(-1);
+      const atWordBoundary = !prev || /\W/.test(prev);
+      if (atWordBoundary) {
+        const andM = sub.match(/^AND\b/i);
+        const orM  = sub.match(/^OR\b/i);
+        if (andM) { parts.push(current, "AND"); current = ""; i += 2; continue; }
+        if (orM)  { parts.push(current, "OR");  current = ""; i += 1; continue; }
+      }
+    }
+    current += ch;
+  }
+  if (current.trim()) parts.push(current);
+
   const rows = [];
   let join = "AND";
 
