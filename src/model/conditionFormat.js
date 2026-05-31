@@ -168,7 +168,6 @@ export function migrateLegacyCondition(condition) {
   }
   if (isLogicalCondition(condition)) {
     return {
-      ...condition,
       operator: String(condition.operator || "AND").toUpperCase(),
       clauses: condition.clauses
         .map(migrateLegacyCondition)
@@ -176,10 +175,11 @@ export function migrateLegacyCondition(condition) {
     };
   }
   if (isLeafCondition(condition)) {
+    const rawValue = condition.value ?? condition.right;
     return {
       variable: condition.variable || condition.token || condition.left || "",
       operator: condition.operator || "==",
-      value: condition.value ?? condition.right,
+      value: parseScalarValue(String(rawValue ?? "")),
     };
   }
   return condition;
