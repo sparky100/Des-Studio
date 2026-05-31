@@ -303,7 +303,7 @@ export function FlowDiagramReactFlow({
         });
       }}
       style={{
-        height: "clamp(380px, calc(100vh - 360px), 680px)",
+        height: "clamp(400px, calc(100vh - 260px), 900px)",
         minHeight: 380,
         width: "100%",
         background: dragOver ? `${C.accent}06` : C.bg,

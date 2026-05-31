@@ -38,7 +38,7 @@ function SelectField({ label, value, onChange, children, disabled }) {
   );
 }
 
-export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode, onDeleteNode }) {
+export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode, onDeleteNode, onClose }) {
   const node = (graph.nodes || []).find(item => item.id === selectedNodeId);
   const customers = (model.entityTypes || []).filter(type => type.role === "customer");
   const servers = (model.entityTypes || []).filter(type => type.role === "server");
@@ -67,9 +67,30 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
 
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-      <SH label="Inspector" color={C.accent}>
-        <Tag label={node.type} color={node.type === VISUAL_NODE_TYPES.SINK ? C.red : node.type === VISUAL_NODE_TYPES.ACTIVITY ? C.purple : node.type === VISUAL_NODE_TYPES.QUEUE ? C.cEvent : C.green} />
-      </SH>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <SH label="Inspector" color={C.accent}>
+          <Tag label={node.type} color={node.type === VISUAL_NODE_TYPES.SINK ? C.red : node.type === VISUAL_NODE_TYPES.ACTIVITY ? C.purple : node.type === VISUAL_NODE_TYPES.QUEUE ? C.cEvent : C.green} />
+        </SH>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close inspector"
+            aria-label="Close inspector"
+            style={{
+              background: "transparent",
+              border: "none",
+              borderRadius: 3,
+              color: C.muted,
+              cursor: "pointer",
+              fontFamily: FONT,
+              fontSize: 14,
+              lineHeight: 1,
+              padding: "2px 4px",
+            }}
+          >›</button>
+        )}
+      </div>
 
       {node.type === VISUAL_NODE_TYPES.SOURCE && bEvent && (
         <>

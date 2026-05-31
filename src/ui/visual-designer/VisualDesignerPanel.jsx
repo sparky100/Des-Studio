@@ -8,6 +8,25 @@ import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { renameEntityType } from "../../engine/queue-refs.js";
 
+const PALETTE_ITEMS = [
+  { type: VISUAL_NODE_TYPES.SOURCE,   label: "Add Source",   icon: "S", color: C.green },
+  { type: VISUAL_NODE_TYPES.QUEUE,    label: "Add Queue",    icon: "Q", color: C.cEvent },
+  { type: VISUAL_NODE_TYPES.ACTIVITY, label: "Add Activity", icon: "A", color: C.purple },
+  { type: VISUAL_NODE_TYPES.SINK,     label: "Add Sink",     icon: "✕", color: C.red },
+];
+
+const ICON_BTN_BASE = {
+  background: "transparent",
+  border: "none",
+  borderRadius: 3,
+  color: C.muted,
+  cursor: "pointer",
+  fontFamily: FONT,
+  fontSize: 13,
+  lineHeight: 1,
+  padding: "2px 5px",
+};
+
 function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
   return (
     <div
@@ -203,6 +222,10 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [message, setMessage] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(() => {
+    try { return localStorage.getItem("des.palette.collapsed") === "1"; } catch { return false; }
+  });
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   // Ref set by CanvasControls (inside ReactFlow) to expose fitView for specific nodes
   const fitNodeRef = useRef(null);
   const graph = useMemo(() => deriveGraphFromModel(model || {}), [model]);
@@ -218,16 +241,26 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     });
     return ids;
   }, [visualIssues, modelValidation, graph]);
-  const counts = (graph.nodes || []).reduce((acc, node) => ({
-    ...acc,
-    [node.type]: (acc[node.type] || 0) + 1,
-  }), {});
+
   const isStarterBlank = !(model?.queues || []).length &&
     !(model?.bEvents || []).length &&
     !(model?.cEvents || []).length;
   const applyModel = nextModel => {
     setMessage(null);
     onModelChange?.(nextModel);
+  };
+
+  // Auto-open inspector whenever a node is selected
+  useEffect(() => {
+    if (selectedNodeId) setInspectorCollapsed(false);
+  }, [selectedNodeId]);
+
+  const togglePalette = () => {
+    setPaletteCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem("des.palette.collapsed", next ? "1" : "0"); } catch {}
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -282,6 +315,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
   const addNode = (type, position = null) => {
     if (!canEdit) return;
     let next = addVisualNode(model, type, position);
@@ -361,131 +395,212 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     return () => clearTimeout(timer);
   }, [message]);
 
+  const inspectorOpen = Boolean(selectedNodeId) && !inspectorCollapsed;
+
   return (
     <div aria-label="Visual Designer" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "minmax(140px, 160px) minmax(0, 1fr) minmax(240px, 280px)",
-        gap: 12,
-        alignItems: "stretch",
-      }}>
-        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>NODE PALETTE</div>
-          {[
-            { type: VISUAL_NODE_TYPES.SOURCE, label: "Add Source", color: C.green },
-            { type: VISUAL_NODE_TYPES.QUEUE, label: "Add Queue", color: C.cEvent },
-            { type: VISUAL_NODE_TYPES.ACTIVITY, label: "Add Activity", color: C.purple },
-            { type: VISUAL_NODE_TYPES.SINK, label: "Add Sink", color: C.red },
-          ].map(item => (
-            <button
-              key={item.type}
-              type="button"
-              draggable={canEdit}
-              disabled={!canEdit}
-              onDragStart={event => {
-                event.dataTransfer.setData("application/des-studio-node", item.type);
-                event.dataTransfer.effectAllowed = "copy";
-              }}
-              onClick={() => addNode(item.type)}
-              style={{
-                background: "#ffffff08",
-                color: item.color,
-                border: `1px solid ${item.color}66`,
-                borderRadius: 5,
-                padding: "4px 10px",
-                fontSize: 11,
-                fontWeight: 600,
-                fontFamily: FONT,
-                cursor: canEdit ? "grab" : "not-allowed",
-                opacity: canEdit ? 1 : 0.45,
-                textAlign: "left",
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-          {/* Entity Types section */}
-          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>ENTITY TYPES</span>
-              {canEdit && <Btn small variant="ghost" onClick={() => {
-                const next = [...(model.entityTypes || []), { id: "et" + Date.now(), name: "", role: "customer", count: "1", attrDefs: [] }];
-                applyModel({ ...model, entityTypes: next });
-              }}>+ Add</Btn>}
-            </div>
-            {(model.entityTypes || []).length === 0 && (
-              <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, fontStyle: "italic" }}>
-                No entity types defined.
-              </div>
-            )}
-            {(model.entityTypes || []).map((et, i) => (
-              <div key={et.id || i} style={{
-                display: "flex", alignItems: "center", gap: 4, padding: "3px 4px",
-                background: C.bg, borderRadius: 4, marginBottom: 3,
-                border: `1px solid ${et.role === "server" ? C.server + "44" : C.cEvent + "33"}`,
-                borderLeft: `2px solid ${et.role === "server" ? C.server : C.cEvent}`,
-              }}>
-                <CommitInput
-                  value={et.name}
-                  onCommit={value => {
-                    const oldName = et.name || "";
-                    const next = [...(model.entityTypes || [])];
-                    next[i] = { ...next[i], name: value };
-                    const renamed = value && oldName && value !== oldName
-                      ? renameEntityType({ ...model, entityTypes: next }, oldName, value, et.role || "customer")
-                      : { ...model, entityTypes: next };
-                    applyModel(renamed);
-                  }}
-                  placeholder="Name"
-                  maxLength={20}
-                  disabled={!canEdit}
-                  ariaLabel={`Entity type ${i + 1} name`}
-                  style={{ width: 60, background: "transparent", border: "none", color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
-                />
-                <select value={et.role || "customer"} onChange={e => {
-                  const next = [...(model.entityTypes || [])];
-                  next[i] = { ...next[i], role: e.target.value, count: e.target.value === "server" ? (next[i].count || "1") : "" };
-                  applyModel({ ...model, entityTypes: next });
+      <div style={{ display: "flex", gap: 12, alignItems: "stretch", minWidth: 0 }}>
+
+        {/* ── Node Palette ── */}
+        <div style={{
+          flexShrink: 0,
+          width: paletteCollapsed ? 44 : 160,
+          transition: "width 220ms cubic-bezier(0.4,0,0.2,1)",
+          overflow: "hidden",
+        }}>
+          {paletteCollapsed ? (
+            /* Collapsed icon strip */
+            <div style={{
+              width: 44,
+              background: C.panel,
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              padding: "8px 4px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 6,
+            }}>
+              <button
+                type="button"
+                onClick={togglePalette}
+                title="Expand palette"
+                aria-label="Expand node palette"
+                style={{
+                  ...ICON_BTN_BASE,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 4,
+                  padding: "4px 6px",
+                  fontSize: 12,
                 }}
-                  style={{ width: 56, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: et.role === "server" ? C.server : C.cEvent, fontFamily: FONT, fontSize: 9, padding: "1px 3px", outline: "none" }}>
-                  <option value="customer">Entity</option>
-                  <option value="server">Server</option>
-                </select>
-                {et.role === "server" && (
-                  <input type="number" min="1" value={et.count || "1"} onChange={e => {
-                    const next = [...(model.entityTypes || [])];
-                    next[i] = { ...next[i], count: e.target.value };
-                    applyModel({ ...model, entityTypes: next });
+              >›</button>
+              {PALETTE_ITEMS.map(item => (
+                <button
+                  key={item.type}
+                  type="button"
+                  draggable={canEdit}
+                  disabled={!canEdit}
+                  title={item.label}
+                  aria-label={item.label}
+                  onDragStart={e => {
+                    e.dataTransfer.setData("application/des-studio-node", item.type);
+                    e.dataTransfer.effectAllowed = "copy";
                   }}
-                    style={{ width: 30, background: "transparent", border: "none", color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px", outline: "none", textAlign: "center" }}
-                  />
-                )}
-                {canEdit && (
-                  <button type="button" onClick={() => {
-                    const next = (model.entityTypes || []).filter((_, idx) => idx !== i);
-                    applyModel({ ...model, entityTypes: next });
+                  onClick={() => addNode(item.type)}
+                  style={{
+                    background: `${item.color}18`,
+                    border: `1px solid ${item.color}55`,
+                    borderRadius: 4,
+                    color: item.color,
+                    cursor: canEdit ? "grab" : "not-allowed",
+                    fontFamily: FONT,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    opacity: canEdit ? 1 : 0.45,
+                    padding: "6px 0",
+                    textAlign: "center",
+                    width: 32,
                   }}
-                    style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 11, padding: "0 2px", lineHeight: 1 }}>✕</button>
-                )}
+                >{item.icon}</button>
+              ))}
+            </div>
+          ) : (
+            /* Expanded palette */
+            <div style={{
+              width: 160,
+              background: C.panel,
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              padding: 12,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>NODE PALETTE</span>
+                <button
+                  type="button"
+                  onClick={togglePalette}
+                  title="Collapse palette"
+                  aria-label="Collapse node palette"
+                  style={ICON_BTN_BASE}
+                >‹</button>
               </div>
-            ))}
-          </div>
-          {(visualIssues.length > 0 || modelValidation.errors.length > 0 || modelValidation.warnings.length > 0) && (
-            <ValidationChecklist
-              visualIssues={visualIssues}
-              modelErrors={modelValidation.errors}
-              modelWarnings={modelValidation.warnings}
-              graph={graph}
-              onFocusNode={focusNode}
-            />
+
+              {PALETTE_ITEMS.map(item => (
+                <button
+                  key={item.type}
+                  type="button"
+                  draggable={canEdit}
+                  disabled={!canEdit}
+                  onDragStart={e => {
+                    e.dataTransfer.setData("application/des-studio-node", item.type);
+                    e.dataTransfer.effectAllowed = "copy";
+                  }}
+                  onClick={() => addNode(item.type)}
+                  style={{
+                    background: "#ffffff08",
+                    color: item.color,
+                    border: `1px solid ${item.color}66`,
+                    borderRadius: 5,
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    fontFamily: FONT,
+                    cursor: canEdit ? "grab" : "not-allowed",
+                    opacity: canEdit ? 1 : 0.45,
+                    textAlign: "left",
+                  }}
+                >{item.label}</button>
+              ))}
+
+              {/* Entity Types section */}
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>ENTITY TYPES</span>
+                  {canEdit && <Btn small variant="ghost" onClick={() => {
+                    const next = [...(model.entityTypes || []), { id: "et" + Date.now(), name: "", role: "customer", count: "1", attrDefs: [] }];
+                    applyModel({ ...model, entityTypes: next });
+                  }}>+ Add</Btn>}
+                </div>
+                {(model.entityTypes || []).length === 0 && (
+                  <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, fontStyle: "italic" }}>
+                    No entity types defined.
+                  </div>
+                )}
+                {(model.entityTypes || []).map((et, i) => (
+                  <div key={et.id || i} style={{
+                    display: "flex", alignItems: "center", gap: 4, padding: "3px 4px",
+                    background: C.bg, borderRadius: 4, marginBottom: 3,
+                    border: `1px solid ${et.role === "server" ? C.server + "44" : C.cEvent + "33"}`,
+                    borderLeft: `2px solid ${et.role === "server" ? C.server : C.cEvent}`,
+                  }}>
+                    <CommitInput
+                      value={et.name}
+                      onCommit={value => {
+                        const oldName = et.name || "";
+                        const next = [...(model.entityTypes || [])];
+                        next[i] = { ...next[i], name: value };
+                        const renamed = value && oldName && value !== oldName
+                          ? renameEntityType({ ...model, entityTypes: next }, oldName, value, et.role || "customer")
+                          : { ...model, entityTypes: next };
+                        applyModel(renamed);
+                      }}
+                      placeholder="Name"
+                      maxLength={20}
+                      disabled={!canEdit}
+                      ariaLabel={`Entity type ${i + 1} name`}
+                      style={{ width: 60, background: "transparent", border: "none", color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
+                    />
+                    <select value={et.role || "customer"} onChange={e => {
+                      const next = [...(model.entityTypes || [])];
+                      next[i] = { ...next[i], role: e.target.value, count: e.target.value === "server" ? (next[i].count || "1") : "" };
+                      applyModel({ ...model, entityTypes: next });
+                    }}
+                      style={{ width: 56, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: et.role === "server" ? C.server : C.cEvent, fontFamily: FONT, fontSize: 9, padding: "1px 3px", outline: "none" }}>
+                      <option value="customer">Entity</option>
+                      <option value="server">Server</option>
+                    </select>
+                    {et.role === "server" && (
+                      <input type="number" min="1" value={et.count || "1"} onChange={e => {
+                        const next = [...(model.entityTypes || [])];
+                        next[i] = { ...next[i], count: e.target.value };
+                        applyModel({ ...model, entityTypes: next });
+                      }}
+                        style={{ width: 30, background: "transparent", border: "none", color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px", outline: "none", textAlign: "center" }}
+                      />
+                    )}
+                    {canEdit && (
+                      <button type="button" onClick={() => {
+                        const next = (model.entityTypes || []).filter((_, idx) => idx !== i);
+                        applyModel({ ...model, entityTypes: next });
+                      }}
+                        style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 11, padding: "0 2px", lineHeight: 1 }}>✕</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {(visualIssues.length > 0 || modelValidation.errors.length > 0 || modelValidation.warnings.length > 0) && (
+                <ValidationChecklist
+                  visualIssues={visualIssues}
+                  modelErrors={modelValidation.errors}
+                  modelWarnings={modelValidation.warnings}
+                  graph={graph}
+                  onFocusNode={focusNode}
+                />
+              )}
+              <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, lineHeight: 1.5 }}>
+                Click to add quickly, or drag onto the canvas to choose the starting position.
+              </div>
+            </div>
           )}
-          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, lineHeight: 1.5 }}>
-            Click to add quickly, or drag onto the canvas to choose the starting position.
-          </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+        {/* ── Canvas ── */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
           {message && (
             <div role={message.state === "error" ? "alert" : "status"} style={{
               background: message.state === "error" ? C.red + "16" : C.green + "16",
@@ -515,16 +630,58 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
           />
         </div>
 
-        <VisualNodeInspector
-          model={model}
-          graph={graph}
-          selectedNodeId={selectedNodeId}
-          canEdit={canEdit}
-          onPatchNode={patchNode}
-          onDeleteNode={canEdit ? deleteNode : null}
-        />
-      </div>
+        {/* ── Inspector (width-animated, auto-hides when no node selected) ── */}
+        <div style={{
+          flexShrink: 0,
+          width: inspectorOpen ? 280 : 0,
+          transition: "width 220ms cubic-bezier(0.4,0,0.2,1)",
+          overflow: "hidden",
+        }}>
+          {/* Fixed inner width prevents content reflow during the slide animation */}
+          <div style={{ width: 280 }}>
+            <VisualNodeInspector
+              model={model}
+              graph={graph}
+              selectedNodeId={selectedNodeId}
+              canEdit={canEdit}
+              onPatchNode={patchNode}
+              onDeleteNode={canEdit ? deleteNode : null}
+              onClose={() => setInspectorCollapsed(true)}
+            />
+          </div>
+        </div>
 
+        {/* Inspector re-open handle — visible when a node is selected but the inspector is dismissed */}
+        {selectedNodeId && inspectorCollapsed && (
+          <button
+            type="button"
+            onClick={() => setInspectorCollapsed(false)}
+            title="Open inspector"
+            aria-label="Open inspector"
+            style={{
+              alignSelf: "flex-start",
+              background: C.panel,
+              border: `1px solid ${C.border}`,
+              borderLeft: "none",
+              borderRadius: "0 5px 5px 0",
+              color: C.muted,
+              cursor: "pointer",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              fontFamily: FONT,
+              fontSize: 9,
+              fontWeight: 700,
+              gap: 4,
+              letterSpacing: 1,
+              padding: "10px 4px",
+              textTransform: "uppercase",
+              writingMode: "vertical-lr",
+            }}
+          >Inspector ›</button>
+        )}
+
+      </div>
 
       {pendingDelete && (
         <DeleteNodeDialog

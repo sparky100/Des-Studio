@@ -1,6 +1,6 @@
 # DES Studio — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.81 | Created: 2026-04-30 | Updated: 2026-05-27 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.82 | Created: 2026-04-30 | Updated: 2026-05-31 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -127,6 +127,7 @@ flowchart LR
 | Report presentation improvements | ✅ Complete | Sprint 76: entity name substitution, integer counts, per-stage service breakdown, angled/wrapped chart labels, Scope & Methodology section, goal status in executive summary, model diagram wired. |
 | Persistent AI sidebar | ✅ Complete | Sprint 75: `✦ AI` toggle, flex-row sidebar layout, context-aware view (results vs design), model Q&A via `buildModelQueryPrompt`, overlay pattern retired. |
 | Visual Designer layout engine | ✅ Complete | Sprint 77: replaced BFS grid layout with `@dagrejs/dagre` (Sugiyama framework, network-simplex ranker). Eliminates edge crossings on parallel branches; adapts spacing to graph density; loop edges excluded from traversal. 12/12 tests. |
+| Visual Designer canvas visibility | ✅ Complete | Sprint 78: collapsible Node Palette (44 px icon strip, localStorage persistence), auto-hide + dismissible Inspector (slide animation, re-open handle), canvas height uncapped (clamp 400–900 px). No new dependencies. |
 | Performance optimisation | 🔄 Planned | Sprint 72 will remove legacy runtime condition evaluation, migrate old models to predicate JSON, and optimise the Phase C hot path with benchmarks and correctness gates. |
 
 ### Key Issues and Watchpoints
