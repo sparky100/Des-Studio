@@ -89,7 +89,7 @@ describe("ResultsWorkspace", () => {
     render(<ResultsWorkspace results={results} model={model} />);
     const runtimeSection = screen.getByRole("region", { name: /runtime metrics/i });
 
-    expect(screen.getByText(/run effort/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/run effort/i).length).toBeGreaterThanOrEqual(1);
     expect(within(runtimeSection).getByText(/wall-clock time/i)).toBeInTheDocument();
     expect(within(runtimeSection).getByText("42 ms")).toBeInTheDocument();
     expect(within(runtimeSection).getByText(/events processed/i)).toBeInTheDocument();

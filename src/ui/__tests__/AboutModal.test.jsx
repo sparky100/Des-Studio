@@ -50,7 +50,7 @@ describe("AboutModal", () => {
   it("renders the copyright notice", () => {
     render(<AboutModal {...DEFAULT_PROPS} />);
     expect(
-      screen.getByText(/© 2025 SimModlr\. All rights reserved\./i)
+      screen.getByText(/© 2026 SimModlr\. All rights reserved\./i)
     ).toBeInTheDocument();
   });
 
