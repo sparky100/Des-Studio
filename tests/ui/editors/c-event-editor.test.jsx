@@ -117,6 +117,9 @@ describe('CEventEditor — ConditionBuilder token list staleness (C8)', () => {
       />
     );
 
+    // Card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
     // Open a condition clause so the token dropdown is visible
     fireEvent.click(screen.getByRole('button', { name: /Add Clause/i }));
 
@@ -164,6 +167,9 @@ describe('CEventEditor — ConditionBuilder token list staleness (C8)', () => {
       />
     );
 
+    // Card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
     fireEvent.click(screen.getByRole('button', { name: /Add Clause/i }));
 
     const comboboxes = screen.getAllByRole('combobox');
@@ -188,6 +194,9 @@ describe('CEventEditor — ConditionBuilder token list staleness (C8)', () => {
         queues={[{ id: 'waiting', name: 'Waiting', customerType: 'Customer', discipline: 'FIFO' }]}
       />
     );
+
+    // Card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
 
     expect(screen.getAllByRole('combobox')[0]).toHaveValue('queue(Waiting).length');
     await waitFor(() => {
@@ -222,6 +231,9 @@ describe('CEventEditor — ConditionBuilder token list staleness (C8)', () => {
 
     render(<StatefulEditor />);
 
+    // Card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
     fireEvent.click(screen.getByRole('button', { name: /Add Clause/i }));
 
     await waitFor(() => {
@@ -247,6 +259,9 @@ describe('CEventEditor — follow-on B-event labels', () => {
       />
     );
 
+    // Card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
     expect(screen.getByRole('option', {
       name: 'Start Service with Server and Customer from Waiting Queue',
     })).toBeInTheDocument();
@@ -264,6 +279,9 @@ describe('CEventEditor — follow-on B-event labels', () => {
       />
     );
 
+    // Card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
     expect(screen.getByRole('option', { name: 'Service Complete' })).toBeInTheDocument();
     expect(screen.queryByRole('option', { name: /template/i })).not.toBeInTheDocument();
   });
@@ -279,6 +297,9 @@ describe('CEventEditor — follow-on B-event labels', () => {
         queues={[]}
       />
     );
+
+    // Card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
 
     expect(screen.getByText(/Will schedule:/i).textContent).toContain('Will schedule: Service Complete');
     expect(screen.queryByText(/template/i)).not.toBeInTheDocument();

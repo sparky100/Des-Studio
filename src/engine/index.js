@@ -589,21 +589,24 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   }
 
   // ── Lightweight snapshot for time-series collection ───────────────────────
-  // Only computes byType.waiting/busy and byQueue.waiting — the only fields
-  // consumed by the time-series charts — in a single O(N) pass with no cloning.
+  // Single O(N) pass; produces the same shape as snap() byType/byQueue.
   function snapLite() {
     const byType = {};
     const byQueue = {};
     for (const e of entities) {
       const t = e.type;
       if (t) {
-        if (!byType[t]) byType[t] = { waiting: 0, busy: 0 };
+        if (!byType[t]) byType[t] = { waiting: 0, idle: 0, busy: 0, total: 0 };
+        byType[t].total++;
         if (e.status === "waiting") byType[t].waiting++;
+        else if (e.status === "idle") byType[t].idle++;
         else if (e.status === "busy" || e.status === "serving") byType[t].busy++;
       }
-      if (e.role !== "server" && e.queue && e.status === "waiting") {
-        if (!byQueue[e.queue]) byQueue[e.queue] = { waiting: 0 };
-        byQueue[e.queue].waiting++;
+      if (e.role !== "server" && (e.queue || e.lastQueue)) {
+        const qName = e.queue || e.lastQueue;
+        if (!byQueue[qName]) byQueue[qName] = { waiting: 0, total: 0 };
+        byQueue[qName].total++;
+        if (e.status === "waiting") byQueue[qName].waiting++;
       }
     }
     return { byType, byQueue };

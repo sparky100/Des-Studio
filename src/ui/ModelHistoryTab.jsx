@@ -612,6 +612,29 @@ export function ModelHistoryTab({
                                     disabled={reproduceState[row.id]?.status === 'running'}
                                     style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
                                   >{reproduceState[row.id]?.status === 'running' ? 'Running…' : 'Reproduce'}</button>
+                                  {shareLinksMap?.[row.id] && (
+                                    <>
+                                      <button
+                                        onClick={() => {
+                                          const link = shareLinksMap[row.id];
+                                          const url = `${baseUrl}/share/${link.token}`;
+                                          navigator.clipboard?.writeText(url).catch(() => {});
+                                          setMoreMenuId(null);
+                                        }}
+                                        style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
+                                      >📋 Copy share link</button>
+                                      <button
+                                        onClick={async () => {
+                                          if (!confirm("Remove the share link? Anyone with the link will lose access.")) return;
+                                          const link = shareLinksMap[row.id];
+                                          await revokeShareLink(link.id, userId).catch(() => {});
+                                          setShareLinksMap?.(prev => { const next = { ...prev }; delete next[row.id]; return next; });
+                                          setMoreMenuId(null);
+                                        }}
+                                        style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.red, cursor: "pointer", borderRadius: 4 }}
+                                      >✕ Unshare</button>
+                                    </>
+                                  )}
                                   {userId && (
                                     <button
                                       onClick={async () => {

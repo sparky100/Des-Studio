@@ -184,7 +184,7 @@ function ChartCard({ title, color, sourceLabel, statItems, dataPreview, children
         </div>
         {sourceLabel && (
           <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, paddingLeft: 16 }}>
-            {sourceLabel}
+            Source: {sourceLabel}
           </span>
         )}
       </div>
@@ -405,7 +405,23 @@ function RuntimeMetricsSection({ runtimeMetrics }) {
       </div>
 
       {runtimeMetrics?.hasMetrics ? (
-        <MetricStrip items={items} />
+        <>
+          <MetricStrip items={items} />
+          {queuePeaks.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>
+                PEAK QUEUE LENGTH BY QUEUE
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {queuePeaks.map(entry => (
+                  <div key={entry.queueName} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "4px 8px", fontSize: 11, fontFamily: FONT, color: C.text }}>
+                    <span>{entry.queueName}</span>: <span>{formatNumber(entry.depth, 0)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       ) : (
         <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
           Runtime metrics are not available for this saved run.

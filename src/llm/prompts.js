@@ -1000,8 +1000,13 @@ export function parsePlanRefinementResponse(text = "") {
         : [],
     };
   } catch {
+    // No JSON structure detected — treat the whole response as a plain-text analysis
+    if (!fenceMatch && !incompleteFence && !tagMatch) {
+      return { analysis: text.trim(), recommendations: [], infeasibleGoals: [] };
+    }
+
     // Truncated JSON — try to salvage the analysis field and any complete recommendation objects
-    const analysisMatch = rawJson.match(/"analysis"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    const analysisMatch = rawJson.match(/"analysis"\s*:\s*"((?:[^"\\]|\\.)*)"/);;
     const analysis = analysisMatch
       ? analysisMatch[1].replace(/\\n/g, "\n").replace(/\\"/g, '"')
       : "";

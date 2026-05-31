@@ -78,6 +78,13 @@ const validModel = {
         { eventId: 'b_arrive', dist: 'Exponential', distParams: { mean: '1.11' } },
       ],
     },
+    {
+      id: 'b_complete',
+      name: 'Complete',
+      scheduledTime: '9999',
+      effect: 'COMPLETE()',
+      schedules: [],
+    },
   ],
   cEvents: [],
   queues: [

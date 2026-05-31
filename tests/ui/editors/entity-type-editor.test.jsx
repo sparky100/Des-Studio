@@ -15,6 +15,9 @@ describe('EntityTypeEditor — shift schedules (F7.6)', () => {
     const handleChange = vi.fn();
     render(<EntityTypeEditor types={[serverType]} onChange={handleChange} />);
 
+    // Entity type card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
     // Shift Schedule section starts collapsed — open it first, then enable via checkbox
     fireEvent.click(screen.getByText(/Shift Schedule/i));
     fireEvent.click(screen.getByLabelText(/Use shift schedule/i));
@@ -37,6 +40,9 @@ describe('EntityTypeEditor — shift schedules (F7.6)', () => {
       />
     );
 
+    // Entity type card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+
     expect(screen.getByText('+ Add Shift')).toBeInTheDocument();
     // The first shift row's time field is always locked at t=0
     expect(container.querySelector('input[type="number"][disabled]')).toBeInTheDocument();
@@ -52,6 +58,9 @@ describe('EntityTypeEditor — shift schedules (F7.6)', () => {
         onChange={handleChange}
       />
     );
+
+    // Entity type card is collapsed by default — expand it first
+    fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
 
     fireEvent.click(screen.getByText('+ Add Shift'));
 

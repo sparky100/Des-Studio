@@ -103,7 +103,7 @@ export function buildServerUtilizationSeries(results = {}, model = {}) {
         t: finiteNumber(entry?.t),
         value: (finiteNumber(entry?.byType?.[server.name]?.busy) / capacity) * 100,
       })),
-      sourceLabel: `${server.name}: ${capacityNote}. Values show % of capacity in use at each simulation time step.`,
+      sourceLabel: `Busy ${server.name} resources measured during the run, divided by capacity ${capacity}`,
     };
   });
 }
