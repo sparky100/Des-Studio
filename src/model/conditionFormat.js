@@ -190,10 +190,10 @@ function normalizeConditionShape(condition) {
 }
 
 function normalizeEventConditions(events = []) {
-  return events.map(event => ({
-    ...event,
-    condition: normalizeConditionShape(event.condition),
-  }));
+  return events.map(event => {
+    if (event.condition == null) return event;
+    return { ...event, condition: normalizeConditionShape(event.condition) };
+  });
 }
 
 export function normalizeModelConditions(model = {}) {
