@@ -779,11 +779,19 @@ function FelTab({ snap, model }) {
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
 export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries, waitDist }) {
-  const [activeTab,  setActiveTab]  = useState("log");
-  const [collapsed,  setCollapsed]  = useState(false);
-  const [bodyHeight, setBodyHeight] = useState(BOTTOM_PANEL_BODY_HEIGHT);
-  const [maximized,  setMaximized]  = useState(false);
+  const [activeTab, setActiveTab] = useState(() => {
+    try { const t = localStorage.getItem("des.bottomPanel.tab"); return TABS.some(tab => tab.id === t) ? t : "log"; } catch { return "log"; }
+  });
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem("des.bottomPanel.collapsed") === "1"; } catch { return false; }
+  });
+  const [bodyHeight, setBodyHeight] = useState(() => {
+    try { const s = parseInt(localStorage.getItem("des.bottomPanel.height"), 10); return Number.isFinite(s) ? Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, s)) : BOTTOM_PANEL_BODY_HEIGHT; } catch { return BOTTOM_PANEL_BODY_HEIGHT; }
+  });
+  const [maximized, setMaximized] = useState(false);
   const dragStateRef = useRef(null);
+  const bodyHeightRef = useRef(bodyHeight);
+  useEffect(() => { bodyHeightRef.current = bodyHeight; }, [bodyHeight]);
 
   useEffect(() => {
     const handlePointerMove = (event) => {
@@ -792,6 +800,9 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
       setBodyHeight(Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_HEIGHT, nextHeight)));
     };
     const handlePointerUp = () => {
+      if (dragStateRef.current) {
+        try { localStorage.setItem("des.bottomPanel.height", String(bodyHeightRef.current)); } catch {}
+      }
       dragStateRef.current = null;
     };
     window.addEventListener("mousemove", handlePointerMove);
@@ -868,7 +879,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
               aria-selected={activeTab === tab.id}
               aria-disabled={tab.disabled}
               disabled={tab.disabled}
-              onClick={() => { if (!tab.disabled) { setActiveTab(tab.id); setCollapsed(false); } }}
+              onClick={() => { if (!tab.disabled) { setActiveTab(tab.id); setCollapsed(false); try { localStorage.setItem("des.bottomPanel.tab", tab.id); localStorage.setItem("des.bottomPanel.collapsed", "0"); } catch {} } }}
               style={{ ...tabBtnStyle(tab.id), opacity: tab.disabled ? 0.4 : 1, cursor: tab.disabled ? "not-allowed" : "pointer" }}
             >
               {tab.label}
@@ -876,6 +887,39 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
           ))}
         </div>
         <div style={{ flex: 1 }} />
+        {!collapsed && (
+          <div style={{ display: "flex", gap: 3, alignItems: "center", marginRight: 4 }}>
+            {[["S", 220], ["M", 320], ["L", 520]].map(([label, h]) => {
+              const active = Math.abs(bodyHeight - h) <= 4 && !maximized;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  title={`${label === "S" ? "Small" : label === "M" ? "Medium" : "Large"} — ${h}px`}
+                  aria-label={`Set panel height to ${label} (${h}px)`}
+                  onClick={() => {
+                    setBodyHeight(h);
+                    setMaximized(false);
+                    try { localStorage.setItem("des.bottomPanel.height", String(h)); } catch {}
+                  }}
+                  style={{
+                    background: active ? `${C.accent}20` : "none",
+                    border: `1px solid ${active ? C.accent : C.border}`,
+                    borderRadius: 4,
+                    color: active ? C.accent : C.muted,
+                    cursor: "pointer",
+                    fontFamily: FONT,
+                    fontSize: 9,
+                    fontWeight: 700,
+                    lineHeight: 1,
+                    padding: "3px 6px",
+                    transition: "border-color 120ms ease, color 120ms ease, background 120ms ease",
+                  }}
+                >{label}</button>
+              );
+            })}
+          </div>
+        )}
         {hasResults && (
           <button
             type="button"
@@ -895,7 +939,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
         </button>
         <button
           aria-label={collapsed ? "Expand details panel" : "Collapse details panel"}
-          onClick={() => setCollapsed(c => !c)}
+          onClick={() => setCollapsed(c => { const next = !c; try { localStorage.setItem("des.bottomPanel.collapsed", next ? "1" : "0"); } catch {} return next; })}
           style={chevronStyle}
         >
           {collapsed ? "▲" : "▼"}
