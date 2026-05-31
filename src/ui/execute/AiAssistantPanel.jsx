@@ -1,14 +1,16 @@
 // ui/execute/AiAssistantPanel.jsx — AiAssistantPanel
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Btn } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative, callLLMOnce } from "../../llm/apiClient.js";
 import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 function ConfidenceBadge({ confidence }) {
+  const { C, FONT } = useTheme();
   const color = confidence === "high" ? C.green : confidence === "medium" ? C.amber : C.red;
   return (
     <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 700, color, border: `1px solid ${color}44`, borderRadius: 3, padding: "1px 5px", letterSpacing: 1 }}>

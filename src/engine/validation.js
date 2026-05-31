@@ -49,6 +49,7 @@ export function validateModel(model) {
   const hasCompleteEffect = text => /COMPLETE\s*\(/i.test(text);
   const hasAnyRenegeEffect = text => /\bRENEGE\(\s*([^)]+)\s*\)/i.test(text);
   const hasExactRenegeCtxEffect = text => /\bRENEGE\(\s*ctx\s*\)/i.test(text);
+  const hasReleaseEffect = text => /RELEASE\s*\(/i.test(text);
   const hasReleaseTargetQueue = text => /RELEASE\s*\([^,)]+,\s*[^)]+\)/i.test(text);
   const countTerminalSinkEffects = text => {
     let sinks = 0;
@@ -492,9 +493,9 @@ export function validateModel(model) {
       const qName = branch.queueName == null ? null : String(branch.queueName).trim();
       return qName === null || qName === '';
     });
-    if (hasNullRoutingBranch && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr))) {
+    if (hasNullRoutingBranch && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr) || hasReleaseEffect(effectStr))) {
       err('V31',
-        `${bLabel} routes entities to exit (null queue) but does not explicitly end the lifecycle with COMPLETE() or RENEGE(ctx).`,
+        `${bLabel} routes entities to exit (null queue) but does not explicitly end the lifecycle with COMPLETE(), RENEGE(ctx), or RELEASE().`,
         'bevents');
     }
     if (countTerminalSinkEffects(effectStr) > 1) {
@@ -551,9 +552,9 @@ export function validateModel(model) {
     });
 
     // V30: If probabilisticRouting has null queue, effect must include COMPLETE() or exact RENEGE(ctx)
-    if (hasNullRouting && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr))) {
+    if (hasNullRouting && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr) || hasReleaseEffect(effectStr))) {
       err('V30',
-        `${bLabel} routes entities to exit (null queue) but has no COMPLETE() or RENEGE(ctx) effect — entities will not be counted as served. Add COMPLETE() or use RENEGE(ctx).`,
+        `${bLabel} routes entities to exit (null queue) but has no COMPLETE(), RENEGE(ctx), or RELEASE() effect — entities will not be counted as served.`,
         'bevents');
     }
     const isSingleNullExit = b.probabilisticRouting.length === 1 && Math.abs((parseFloat(b.probabilisticRouting[0]?.probability) || 0) - 1) <= 0.001;

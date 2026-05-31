@@ -10,9 +10,11 @@ import { fetchModels, fetchProfiles,
          setVisibility, setAccess, forkModel,
          fetchRunStatsForModels,
          validateDbSchema,
-         getPlatformConfig }              from "./db/models.js";
+         getPlatformConfig,
+         fetchUserSettings }             from "./db/models.js";
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
-import { C, FONT, GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
+import { GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
+import { useTheme } from "./ui/shared/ThemeContext.jsx";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
 import { ToastProvider }                    from "./ui/shared/ToastContext.jsx";
 import { KeyboardShortcutsModal }           from "./ui/shared/KeyboardShortcutsModal.jsx";
@@ -95,7 +97,8 @@ function createSampleMm1Model() {
 export { createSampleMm1Model, extractImportedModelPayload };
 
 // ── App ───────────────────────────────────────────────────────────────────────
-export default function App(){
+export default function App({ onThemeChange }){
+  const { C, FONT } = useTheme();
   const lastActiveTouched=useRef(false)
   const [session,setSession]=useState(null)
   const [profile,setProfile]=useState(null)
@@ -219,6 +222,14 @@ export default function App(){
       if(data)setTierPolicies(data)
     }).catch(()=>{})
   },[session])
+
+  useEffect(()=>{
+    if(!session?.user?.id || !onThemeChange)return
+    fetchUserSettings(session.user.id).then(({ settings })=>{
+      const t = settings?.ui?.theme
+      if(t) onThemeChange(t)
+    }).catch(()=>{})
+  },[session?.user?.id, onThemeChange])
 
   useEffect(()=>{
     const onKey=e=>{
@@ -501,7 +512,7 @@ export default function App(){
           onSignOut={signOut}
           userId={uid ?? null} currentPage="settings"
         />
-        <UserSettingsPanel userId={uid} plan={profile?.plan} onClose={()=>setShowSettings(false)} />
+        <UserSettingsPanel userId={uid} plan={profile?.plan} onClose={()=>setShowSettings(false)} onThemeChange={onThemeChange} />
         {helpOpen && <HelpAssistant isOpen={helpOpen} onClose={() => setHelpOpen(false)} currentModel={null} currentTab={null} currentView="settings" validation={null} />}
       </div>
     );

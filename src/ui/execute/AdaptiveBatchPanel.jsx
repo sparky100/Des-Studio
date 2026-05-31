@@ -8,8 +8,9 @@ import { streamNarrative } from "../../llm/apiClient.js";
 import { makeBatchResult, CI_METRICS } from "./executeHelpers.js";
 import { summarizeReplicationResults } from "../../engine/statistics.js";
 import { RUN_ADMISSION_TIERS, getRunAdmission } from "../../engine/run-admission.js";
-import { C, FONT, RADIUS, Z, SPACE, SHADOW } from "../shared/tokens.js";
+import { RADIUS, Z, SPACE, SHADOW } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const RISK_LABELS = { small: "Low", medium: "Medium", large: "High", too_large: "Very high" };
 const RISK_COLORS = { small: C => C.green, medium: C => C.amber, large: C => C.amber, too_large: C => C.red };
@@ -24,6 +25,7 @@ export function AdaptiveBatchPanel({
   onGoToResults,
   onClose,
 }) {
+  const { C, FONT } = useTheme();
   const [phase, setPhase] = useState("confirming");
   const [roundHistory, setRoundHistory] = useState([]);
   const [totalReps, setTotalReps] = useState(0);

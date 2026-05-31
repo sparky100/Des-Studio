@@ -1,8 +1,10 @@
 // ui/ModelHealthPanel.jsx — Model health summary: status badge, issue chips, action hints
-import { C, FONT, alpha } from "./shared/tokens.js";
+import { alpha } from "./shared/tokens.js";
 import { Btn } from "./shared/components.jsx";
+import { useTheme } from "./shared/ThemeContext.jsx";
 
 export function ModelHealthPanel({ model, validation, isStarterBlank, tab, setTab, latestResults, onGoToHistory }) {
+  const { C, FONT } = useTheme();
   const blockers = validation.errors || [];
   const warnings = validation.warnings || [];
   const issues = [...blockers, ...warnings].slice(0, 5);

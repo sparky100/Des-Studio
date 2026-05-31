@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Btn } from "../shared/components.jsx";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const _parseFilterValue = (s) => {
+  const { C, FONT } = useTheme();
   if (s === 'true') return true;
   if (s === 'false') return false;
   const n = Number(s);

@@ -11,7 +11,7 @@
 //   timeUnit      string — model time unit (e.g. 'minutes')
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import {
   fetchModelSchedules,
@@ -23,10 +23,12 @@ import {
 import { parsePlanCsv } from "../shared/planCsvParser.js";
 import { parseXlsx } from "../shared/xlsxParser.js";
 import { mergeScheduleRows, linkBEventToSchedule, unlinkBEventFromSchedule, partitionScheduleBEvents } from "./scheduleHelpers.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatMinutes(minutes) {
+  const { C, FONT } = useTheme();
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;

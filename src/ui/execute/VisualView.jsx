@@ -1,11 +1,13 @@
 // ui/execute/VisualView.jsx — CustomerToken, ServerBay, VisualView
 
-import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
+import { TOKEN_COLORS } from "../shared/tokens.js";
 import { Tag, PhaseTag, Btn, Empty } from "../shared/components.jsx";
 import { tokenColor } from "./executeHelpers.js";
 import { formatSimWallTime } from "../../engine/clockUtils.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 export const CustomerToken = ({ entity, size = 36, showId = true }) => {
+  const { C, FONT } = useTheme();
   const col = tokenColor(entity.id);
   const statusBorder = { waiting: C.waiting, serving: C.serving, done: C.served, reneged: C.reneged, idle: C.green, busy: C.amber }[entity.status] || C.muted;
   return (
@@ -59,6 +61,7 @@ const ServerBay = ({ server, customers }) => {
 };
 
 export const VisualView = ({ snap, model, summary }) => {
+  const { C, FONT } = useTheme();
   if (!snap) return <Empty icon="▶" msg="Run or step the simulation to see the visual view." />;
 
   const allEntities = snap.entities || [];

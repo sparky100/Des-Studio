@@ -1,11 +1,13 @@
 // ui/CsvImportModal.jsx — Import entity attributes from a CSV file
 import { useState, useRef, useCallback } from "react";
-import { C, FONT, Z } from "./shared/tokens.js";
+import { Z } from "./shared/tokens.js";
 import { Btn } from "./shared/components.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { csvToEntityType } from "../engine/distribution-fitting.js";
+import { useTheme } from "./shared/ThemeContext.jsx";
 
 export function CsvImportModal({ onClose, onApply }) {
+  const { C, FONT } = useTheme();
   const toast = useToast();
   const [step, setStep] = useState("upload"); // upload | preview | error
   const [fileName, setFileName] = useState("");

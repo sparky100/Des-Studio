@@ -2,14 +2,16 @@
 // Tabs: Step Log | Entity Details | Charts | Live Metrics
 // F9C.8 + F9C.9 + F9C.11 node-filtered log
 import { useEffect, useMemo, useRef, useState } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Tag, PhaseTag } from "../shared/components.jsx";
 import { QueueDepthTimePlot, QueueHistogram } from "./SweepViews.jsx";
 import { formatSimWallTime } from "../../engine/clockUtils.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
 function formatStatus(status) {
+  const { C, FONT } = useTheme();
   if (status === "serving") return "In Service";
   return status;
 }

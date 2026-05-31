@@ -1,6 +1,7 @@
 // ui/editors/GoalsEditor.jsx — Performance goals editor
-import { C, FONT, alpha } from "../shared/tokens.js";
+import { alpha } from "../shared/tokens.js";
 import { Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 // Values must match aggregateStats keys used by buildGoalGaps in prompts.js
 const METRICS = [
@@ -35,6 +36,7 @@ const OPERATORS = [
 ];
 
 export function GoalsEditor({ goals = [], onChange }) {
+  const { C, FONT } = useTheme();
   const add = () => onChange([...goals, {
     id: "g" + Date.now(),
     metric: "summary.avgWait",

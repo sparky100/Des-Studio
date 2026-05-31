@@ -1,16 +1,10 @@
 // ui/shared/ToastContext.jsx — lightweight toast notification system
 import { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { C, FONT, alpha, RADIUS } from "./tokens.js";
+import { alpha, RADIUS } from "./tokens.js";
+import { useTheme } from "./ThemeContext.jsx";
 
 const ToastCtx = createContext(null);
-
-const VARIANT_COLORS = {
-  success: C.green,
-  error:   C.red,
-  warning: C.amber,
-  info:    C.accent,
-};
 
 const MAX_TOASTS = 3;
 const DURATION_MS = 4000;
@@ -18,6 +12,8 @@ const DURATION_MS = 4000;
 let _nextId = 1;
 
 function Toast({ id, message, variant, onDismiss }) {
+  const { C, FONT } = useTheme();
+  const VARIANT_COLORS = { success: C.green, error: C.red, warning: C.amber, info: C.accent };
   const color = VARIANT_COLORS[variant] || C.accent;
   const timerRef = useRef(null);
 

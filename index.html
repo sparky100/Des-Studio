@@ -6,9 +6,18 @@
     <title>DES Studio</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { background: #080c10; }
       *:focus-visible { outline: 2px solid #06b6d4; outline-offset: 2px; border-radius: 3px; }
     </style>
+    <script>
+      (function() {
+        var t = (function() { try { return localStorage.getItem('des.themeId') || 'system'; } catch(_) { return 'system'; } })();
+        var resolved = t;
+        if (t === 'system') {
+          resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.body.style.background = ({ 'light': '#f0f4f8', 'high-contrast-dark': '#000000' })[resolved] || '#080c10';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

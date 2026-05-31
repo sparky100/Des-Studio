@@ -412,21 +412,23 @@ Predicate object fields:
 ```
 
 - Probabilities must sum to exactly `1.0` (±0.001).
-- `queueName` must reference a valid queue name, or `null` to exit the system.
-- **When `queueName` is `null` (exit), the B-Event's `effect` array MUST include either `COMPLETE()` or `RENEGE(ctx)`** to mark the entity lifecycle as complete. Without this, entities will exit but not be counted as served (validation error V30).
+- `queueName` must reference a valid queue name, or `null` to exit the system ("Exit system" in the UI).
+- **When `queueName` is `null` (exit), the B-Event's `effect` must include `COMPLETE()`, `RENEGE(ctx)`, or `RELEASE()`** — one of these is required so the entity lifecycle is properly closed (validation V30). For mid-network service events where a nurse or doctor is released, `RELEASE()` is the correct choice.
 
 ### Terminal Completion Pattern — Preferred vs Anti-Pattern
 
-**Use `probabilisticRouting` with `queueName: null` ONLY when the event genuinely has probabilistic branching** — for example, some entities continue to another queue and some exit the system.
+**Use `probabilisticRouting` with `queueName: null` ONLY when the event genuinely has probabilistic branching** — for example, some entities continue to another queue and some exit the system (e.g. A&E triage: 30% discharged, 70% continue to treatment).
 
 **For a simple terminal service completion, do NOT use `probabilisticRouting` with `queueName: null`.** Use explicit `COMPLETE()` with no routing table.
 
 | Pattern | When to Use | Example |
 |---|---|---|
 | **✓ Preferred: Explicit COMPLETE** | Simple terminal completion — all entities exit after this event | `"effect": ["COMPLETE()"], "schedules": []` |
-| **✗ Anti-Pattern: RELEASE then COMPLETE** | **(Broken — never use)** `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped; entities loop forever | `"effect": ["RELEASE(Server)", "COMPLETE()"]` |
+| **✓ Valid: RELEASE + probabilistic exit** | Mid-network service where some entities exit and some continue; server must be freed | `"effect": ["RELEASE(Nurse)"], "probabilisticRouting": [{"queueName": "Treatment Queue", "probability": 0.7}, {"queueName": null, "probability": 0.3}]` |
+| **✗ Anti-Pattern: RELEASE then COMPLETE** | **(Broken — never use)** `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped | `"effect": ["RELEASE(Server)", "COMPLETE()"]` |
 | **✗ Anti-Pattern: Null routing with prob 1.0** | (Avoid) Redundant — adds unnecessary complexity | `"effect": ["COMPLETE()"], "probabilisticRouting": [{ "queueName": null, "probability": 1 }]` |
-| **✓ Valid: Probabilistic exit** | Genuine branching — some entities exit, some continue | `"probabilisticRouting": [{ "queueName": "Next Queue", "probability": 0.7 }, { "queueName": null, "probability": 0.3 }]` |
+
+**Why RELEASE + null routing works:** `RELEASE()` frees the server and sets the entity to `"waiting"`, which triggers the routing block. Entities routed to `null` are then marked as done and counted as served by the engine. Do NOT add `COMPLETE()` after `RELEASE()` — `COMPLETE()` only fires on `"serving"` entities and will be silently skipped after a `RELEASE()`.
 
 **Validation guidance (V30):** If `probabilisticRouting` contains only a single route with `probability: 1` and `queueName: null`, prefer replacing it with explicit `COMPLETE()` in the effect array and no routing table. This reduces model complexity and makes the terminal intent explicit.
 
@@ -474,6 +476,7 @@ Predicate object fields:
   ]
 }
 ```
+`RELEASE(Nurse)` frees the nurse and sets the entity to `"waiting"`, enabling the routing block to fire. The 30% routed to `null` ("Exit system") are counted as served by the engine. Do NOT add `COMPLETE()` here — it would be silently skipped.
 
 ### Optional: Balking
 

@@ -1,6 +1,7 @@
 // ui/AboutModal.jsx — Static About panel for DES Studio
 import { useEffect, useRef } from "react";
-import { C, FONT, SPACE, RADIUS, TYPO, Z, alpha } from "./shared/tokens.js";
+import { SPACE, RADIUS, TYPO, Z, alpha } from "./shared/tokens.js";
+import { useTheme } from "./shared/ThemeContext.jsx";
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION;
 
@@ -12,6 +13,7 @@ const headingId = "about-modal-heading";
  * @param {{ isOpen: boolean, onClose: () => void }} props
  */
 export function AboutModal({ isOpen, onClose }) {
+  const { C, FONT } = useTheme();
   const dialogRef = useRef(null);
 
   // Close on Escape; focus the close button on open

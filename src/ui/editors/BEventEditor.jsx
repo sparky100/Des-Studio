@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
   const [filterText,setFilterText]=useState("");
@@ -9,6 +10,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
   const cardRefs=useRef({});
 
   useEffect(()=>{
+  const { C, FONT } = useTheme();
     if(!focusBEventId)return;
     setExpandedIds(prev=>new Set([...prev,focusBEventId]));
     setFilterText("");
@@ -229,9 +231,12 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                         <input value={row.probability} type="number" min="0" max="1" step="0.01" onChange={e=>updProbRow(j,{probability:parseFloat(e.target.value)||0})} aria-label={`Probability for route ${j+1}`}
                           style={{width:70,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}/>
                         <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>→</span>
-                        <select value={row.queueName||""} onChange={e=>updProbRow(j,{queueName:e.target.value})}
-                          style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
+                        <select
+                          value={row.queueName == null ? "__EXIT__" : (row.queueName || "")}
+                          onChange={e => updProbRow(j, { queueName: e.target.value === "__EXIT__" ? null : e.target.value })}
+                          style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:row.queueName == null ? C.green : C.text,fontFamily:FONT,fontSize:11,padding:"4px 6px",outline:"none"}}>
                           <option value="">— queue —</option>
+                          <option value="__EXIT__">Exit system (discharge)</option>
                           {queues.map(q=><option key={q.id||q.name} value={q.name}>{q.name}</option>)}
                         </select>
                         <Btn small variant="danger" ariaLabel={`Remove probabilistic row ${j+1}`} onClick={()=>remProbRow(j)}>✕</Btn>
@@ -243,6 +248,11 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                         Total: {probTotal.toFixed(3)}{Math.abs(probTotal-1)>0.001?" ≠ 1.0 ✗":" ✓"}
                       </span>
                     </div>
+                    {(ev.probabilisticRouting||[]).some(r=>r.queueName==null)&&(
+                      <div style={{fontSize:10,color:C.muted,fontFamily:FONT,lineHeight:1.6,padding:"4px 2px"}}>
+                        Use <strong style={{color:C.text}}>RELEASE()</strong> in Effects to free the server — the exit branch counts patients as served automatically. Do not add COMPLETE() here; it has no effect after RELEASE().
+                      </div>
+                    )}
                   </>)}
                 </SectionPanel>
               )}

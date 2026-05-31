@@ -1,5 +1,11 @@
 export const USER_SETTINGS_SCHEMA_VERSION = 1;
 
+export type ThemeId = "system" | "dark" | "light" | "high-contrast-dark";
+
+export interface UiSettings {
+  theme?: ThemeId;
+}
+
 export const USER_SETTINGS_NAMESPACES = ["ui", "execute", "ai"] as const;
 
 export type UserSettingsNamespace = (typeof USER_SETTINGS_NAMESPACES)[number];

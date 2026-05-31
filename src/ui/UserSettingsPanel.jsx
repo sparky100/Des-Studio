@@ -1,6 +1,6 @@
 // ui/UserSettingsPanel.jsx — User preferences (stored in user_settings table)
 import { useState, useEffect, useCallback } from "react";
-import { C, FONT } from "./shared/tokens.js";
+import { useTheme } from "./shared/ThemeContext.jsx";
 import { Btn, SH, InfoBox } from "./shared/components.jsx";
 import { fetchUserSettings, saveUserSettings } from "../db/models.js";
 
@@ -11,6 +11,7 @@ const TABS = [
 ];
 
 function PlanBadge({ plan }) {
+  const { C } = useTheme();
   const isPro = plan === "pro";
   return (
     <span style={{
@@ -22,9 +23,9 @@ function PlanBadge({ plan }) {
       letterSpacing: 1.2,
       padding: "2px 7px",
       borderRadius: 3,
-      background: isPro ? "#06b6d422" : "#7a98bb18",
-      color:      isPro ? "#06b6d4"   : "#7a98bb",
-      border:     `1px solid ${isPro ? "#06b6d444" : "#7a98bb33"}`,
+      background: isPro ? C.accent + "22" : C.muted + "18",
+      color:      isPro ? C.accent       : C.muted,
+      border:     `1px solid ${isPro ? C.accent + "44" : C.muted + "33"}`,
       textTransform: "uppercase",
       userSelect: "none",
     }}>
@@ -33,7 +34,8 @@ function PlanBadge({ plan }) {
   );
 }
 
-function UserSettingsPanel({ userId, plan, onClose }) {
+function UserSettingsPanel({ userId, plan, onClose, onThemeChange }) {
+  const { C, FONT } = useTheme();
   const [tab, setTab] = useState("execute");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -182,16 +184,14 @@ function UserSettingsPanel({ userId, plan, onClose }) {
           {tab === "ui" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <SH label="Interface" color={C.accent} />
-              <InfoBox color={C.muted}>
-                Theme preference is stored and will be applied in a future release.
-              </InfoBox>
               <div style={gridRow}>
                 <span style={lbl}>Theme</span>
-                <select value={theme} onChange={e => setTheme(e.target.value)}
-                  style={{ ...inp({ color: C.accent, width: 160 }) }}>
+                <select value={theme} onChange={e => { setTheme(e.target.value); onThemeChange?.(e.target.value); }}
+                  style={{ ...inp({ color: C.accent, width: 200 }) }}>
                   <option value="system">System default</option>
                   <option value="dark">Dark</option>
                   <option value="light">Light</option>
+                  <option value="high-contrast-dark">High Contrast Dark</option>
                 </select>
               </div>
             </div>

@@ -1,7 +1,8 @@
 // ui/FeedbackModal.jsx — In-app feedback submission widget
 import { useState, useEffect, useRef, useCallback } from "react";
 import { submitFeedback } from "../db/supabase.js";
-import { C, FONT, SPACE, RADIUS, TYPO, Z, TRANS, alpha } from "./shared/tokens.js";
+import { SPACE, RADIUS, TYPO, Z, TRANS, alpha } from "./shared/tokens.js";
+import { useTheme } from "./shared/ThemeContext.jsx";
 
 const APP_VERSION = import.meta.env.VITE_APP_VERSION;
 
@@ -18,6 +19,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Collect all focusable elements within a container
 function getFocusable(container) {
+  const { C, FONT } = useTheme();
   return Array.from(
     container.querySelectorAll(
       'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'

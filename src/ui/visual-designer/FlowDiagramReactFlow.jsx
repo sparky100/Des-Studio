@@ -11,8 +11,9 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { validateVisualConnection } from "./graph-operations.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const NODE_COLOR = {
   source: C.green,
@@ -22,6 +23,7 @@ const NODE_COLOR = {
 };
 
 function DesNode({ data, selected }) {
+  const { C, FONT } = useTheme();
   const color = NODE_COLOR[data.type] || C.accent;
   const hasTarget = data.type !== "source";
   const hasSource = data.type !== "sink";

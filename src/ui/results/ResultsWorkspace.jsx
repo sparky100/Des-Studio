@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { C, FONT, alpha } from "../shared/tokens.js";
+import { alpha } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../engine/statistics.js";
 import { buildResultsViewModel } from "./resultsViewModel.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const HIST_W = 360;
 const HIST_H = 140;
@@ -14,6 +15,7 @@ const CHART_COLORS = [C.accent, C.bEvent, C.purple, C.green, C.red, C.server];
 const SECTION_DEFAULTS = { summary: true, bottlenecks: true, cost: true, analysis: true, runtime: true };
 
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
+  const { C, FONT } = useTheme();
   return (
     <button
       type="button"
@@ -136,6 +138,7 @@ function downloadTextFile(content, filename, type = "text/csv;charset=utf-8") {
 }
 
 export function buildSeriesCsv(series = {}) {
+  const { C, FONT } = useTheme();
   const rows = [["index", "time", "value"]];
   (series.points || []).forEach((point, index) => {
     rows.push([index + 1, point.t ?? "", point.value ?? ""]);
@@ -144,6 +147,7 @@ export function buildSeriesCsv(series = {}) {
 }
 
 export function buildWaitValuesCsv(dist = {}) {
+  const { C, FONT } = useTheme();
   const rows = [["rank", "wait"]];
   (dist.values || []).forEach((value, index) => {
     rows.push([index + 1, value]);
@@ -705,6 +709,7 @@ function ChartSectionShell({ section, children }) {
 }
 
 export function MiniLineChart({ title, ariaTitle, points, color, yLabel, formatY = v => formatNumber(v) }) {
+  const { C, FONT } = useTheme();
   const [tip, setTip] = useState(null);
   if (!points || points.length < 2) return null;
   const accessibleName = ariaTitle ?? title;
@@ -791,6 +796,7 @@ export function MiniLineChart({ title, ariaTitle, points, color, yLabel, formatY
 }
 
 export function ResultsAnalysisPanel({ results, replicationResults = [], warmupDetection = null }) {
+  const { C, FONT } = useTheme();
   const [batchMetric, setBatchMetric] = useState("summary.avgWait");
   const [batchResult, setBatchResult] = useState(null);
   const replications = useMemo(
@@ -956,6 +962,7 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
 }
 
 export function ResultsWorkspace({ results, model, replicationResults = [], warmupDetection = null }) {
+  const { C, FONT } = useTheme();
   const [sectionsOpen, setSectionsOpen] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem("des.results.sections") || "null");
