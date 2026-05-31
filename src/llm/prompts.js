@@ -1190,3 +1190,77 @@ Answer questions about this model concisely and precisely. If a question require
 
   return { kind: 'model_query', messages, max_tokens: 400 };
 }
+
+// ── Explore: adaptive batch analysis with opportunity identification ──────────
+
+/**
+ * Builds a prompt that asks the LLM to identify bottlenecks, quick wins, and
+ * investment opportunities from a statistically validated batch result.
+ *
+ * @param {Object} model
+ * @param {Object} combinedResult  - output of makeBatchResult
+ * @param {Object} aggregateStats  - output of summarizeReplicationResults (CI per metric path)
+ * @param {Object} ciSummary       - { kpiPath, ci, converged, finalReps, relativeHalfWidth }
+ * @param {string} tier            - 'free' | 'standard' | 'pro'
+ * @returns {{ kind: string, messages: Array, max_tokens: number }}
+ */
+export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, ciSummary, tier) {
+  const system =
+    "You are an expert discrete-event simulation analyst. You have been given statistically " +
+    "validated batch simulation results. Identify improvement opportunities in a structured format. " +
+    "Be specific: cite queue names, utilisation percentages, and CI ranges from aggregateStats. " +
+    "Keep each point to one sentence. Use only the data provided — do not invent figures.";
+
+  const kpis = buildKpis(model, combinedResult);
+  const goals = goalsToPrompt(model);
+
+  const rwhText = ciSummary.relativeHalfWidth != null
+    ? `±${ciSummary.relativeHalfWidth.toFixed(1)}%`
+    : "unknown";
+
+  const payload = {
+    model: {
+      name: model.name || DEFAULT_MODEL_NAME,
+      description: model.description ? truncateWords(model.description, 60) : undefined,
+      goals,
+    },
+    statisticalContext: {
+      finalReplications: ciSummary.finalReps,
+      converged: ciSummary.converged,
+      relativeHalfWidth: rwhText,
+      tier,
+      primaryKpi: ciSummary.kpiPath,
+      ci: ciSummary.ci
+        ? {
+            mean: finiteOrNull(ciSummary.ci.mean),
+            lower: finiteOrNull(ciSummary.ci.lower),
+            upper: finiteOrNull(ciSummary.ci.upper),
+            halfWidth: finiteOrNull(ciSummary.ci.halfWidth),
+          }
+        : null,
+    },
+    kpis,
+    aggregateStats: Object.fromEntries(
+      Object.entries(aggregateStats || {})
+        .filter(([, v]) => v && v.n > 0)
+        .map(([k, v]) => [k, { n: v.n, mean: finiteOrNull(v.mean), lower: finiteOrNull(v.lower), upper: finiteOrNull(v.upper) }])
+    ),
+  };
+
+  const instruction =
+    "Produce a structured analysis with exactly these four sections:\n" +
+    "### Bottlenecks\nRank the top 3 bottlenecks by impact on throughput or wait time. " +
+    "For each state the queue/resource name, utilisation or wait metric, and why it is a bottleneck.\n" +
+    "### Quick Wins\nList 3 changes achievable without adding resources " +
+    "(e.g. scheduling, routing, priority, warmup). For each give the expected benefit.\n" +
+    "### Investment Opportunities\nList 2 structural improvements requiring additional resources or redesign. " +
+    "Quantify the potential gain where the CI data supports it.\n" +
+    "### Confidence Summary\nOne paragraph: state whether results are statistically robust, " +
+    "cite the CI and replication count, and flag any caveats from non-convergence or warnings.";
+
+  return {
+    kind: "batch_analysis",
+    messages: makeMessages(system, payload, instruction),
+    max_tokens: 800,
+  };
+}
