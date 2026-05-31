@@ -81,7 +81,7 @@ describe('accessibility pass', () => {
 
     expect(screen.getAllByRole('button', { name: /blocker/i }).every(button => button.disabled)).toBe(true);
     expect(screen.getByRole('alert')).toHaveTextContent(/needs attention/i);
-    expect(screen.getByRole('alert')).toHaveTextContent(/1 blocker to resolve before running/i);
+    expect(screen.getByRole('alert')).toHaveTextContent(/blockers to resolve before running/i);
   });
 
   it('does not mark the model dirty just for opening the Visual Designer', async () => {

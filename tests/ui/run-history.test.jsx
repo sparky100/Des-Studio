@@ -5,11 +5,15 @@ const mockFetchRunHistory = vi.hoisted(() => vi.fn());
 const mockSaveSimulationRun = vi.hoisted(() => vi.fn());
 const mockListShareLinks = vi.hoisted(() => vi.fn());
 
-vi.mock('../../src/db/models.js', () => ({
-  fetchRunHistory: mockFetchRunHistory,
-  saveSimulationRun: mockSaveSimulationRun,
-  listShareLinks: mockListShareLinks,
-}));
+vi.mock('../../src/db/models.js', async () => {
+  const actual = await vi.importActual('../../src/db/models.js');
+  return {
+    ...actual,
+    fetchRunHistory: mockFetchRunHistory,
+    saveSimulationRun: mockSaveSimulationRun,
+    listShareLinks: mockListShareLinks,
+  };
+});
 
 import {
   ModelDetail,

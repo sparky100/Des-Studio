@@ -1,7 +1,11 @@
 // F9C.8 + F9C.9 — BottomPanel: tabs, collapse, live metrics
 import { render, screen, fireEvent } from "@testing-library/react";
-import { vi, describe, test, expect } from "vitest";
+import { vi, describe, test, expect, beforeEach } from "vitest";
 import { BottomPanel } from "../../../src/ui/execute/BottomPanel.jsx";
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 vi.mock("../../../src/ui/shared/components.jsx", () => ({
   Tag:      ({ label }) => <span>{label}</span>,

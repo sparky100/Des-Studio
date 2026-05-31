@@ -54,7 +54,7 @@ describe("ModelDetail Results tab", () => {
     expect(screen.getByRole("button", { name: "Log" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "History" })).toBeInTheDocument();
     expect(screen.getByText(/No results yet/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /← Run/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Run$/i })).toBeInTheDocument();
   });
 
   test("loads a saved run directly in Results and shows its log", async () => {

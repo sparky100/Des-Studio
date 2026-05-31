@@ -504,7 +504,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const toast = useToast();
   const [tab,setTab]=useState(initialTab||"overview");
   const [dirty,setDirty]=useState(false);
-  const visualPendingRef = useRef(false);
+  const [visualPending, setVisualPending] = useState(false);
   const [saving,setSaving]=useState(false);
   const [saveError,setSaveError]=useState(null);
   const [discardConfirm,setDiscardConfirm]=useState(false);
@@ -635,7 +635,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     setFuture([]);
     setModel(normalizeModelConditions(nextModel));
     if(tab==="visual"){
-      visualPendingRef.current=true;
+      setVisualPending(true);
     }else{
       setDirty(true);
     }
@@ -718,7 +718,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     try{
       await overrides.onSave?.(model);
       setDirty(false);
-      visualPendingRef.current=false;
+      setVisualPending(false);
       toast.success("Model saved");
       await onRefresh?.();
     }catch(error){
@@ -752,7 +752,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   };
 
   const handleBack=()=>{
-    if((dirty||visualPendingRef.current)&&!window.confirm('You have unsaved changes. Leave without saving?'))return;
+    if((dirty||visualPending)&&!window.confirm('You have unsaved changes. Leave without saving?'))return;
     onBack();
   };
 
@@ -762,15 +762,15 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   },[modelId]);
 
   useEffect(()=>{
-    if(tab!=="visual"&&visualPendingRef.current){
+    if(tab!=="visual"&&visualPending){
       setDirty(true);
-      visualPendingRef.current=false;
+      setVisualPending(false);
     }
   },[tab]);
 
   useEffect(()=>{
     const onBeforeUnload=(e)=>{
-      if(!dirty&&!visualPendingRef.current)return;
+      if(!dirty&&!visualPending)return;
       e.preventDefault();
       e.returnValue=''; // Chrome requires this to show the native dialog
     };
@@ -1087,7 +1087,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       />
       <div style={{flex:1,display:"flex",flexDirection:"row",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
-        <SaveBanner canEdit={canEdit} dirty={dirty} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
+        <SaveBanner canEdit={canEdit} dirty={dirty || visualPending} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
         {saveError&&<div role="alert" style={{background:C.errorBg,border:`1px solid ${C.danger}`,borderRadius:6,padding:'8px 12px',color:C.error,fontFamily:FONT,fontSize:12,marginBottom:8}}>{saveError}</div>}
         {tab==="overview" && <ModelHealthPanel model={model} validation={healthValidation} isStarterBlank={isStarterBlank} tab={tab} setTab={setTab} latestResults={latestResults} onGoToHistory={() => { setTab("results"); setResultsView("history"); }}/>}
         <ErrorBoundary

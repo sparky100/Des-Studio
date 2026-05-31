@@ -59,7 +59,7 @@ describe('buildModelDescriptionPrompt', () => {
     expect(systemContent.toLowerCase()).toContain('do not');
     // And it should NOT ask the LLM to use those terms — verify the context is always a prohibition
     // The terms appear in a "Do NOT use technical terms like …" list, so the phrase "Do NOT" precedes them
-    const doNotIndex = systemContent.toUpperCase().indexOf('DO NOT USE TECHNICAL TERMS');
+    const doNotIndex = systemContent.toUpperCase().indexOf('DO NOT USE TECHNICAL SIMULATION TERMS');
     expect(doNotIndex).toBeGreaterThanOrEqual(0);
   });
 

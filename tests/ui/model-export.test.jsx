@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ModelDetail,
@@ -121,14 +121,16 @@ describe('model JSON export', () => {
     expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 
-  it('downloads and revokes the export object URL', () => {
+  it('downloads and revokes the export object URL', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderDetail();
 
     fireEvent.click(screen.getByRole('button', { name: /access/i }));
     fireEvent.click(screen.getByRole('button', { name: /export model/i }));
 
-    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    await waitFor(() => {
+      expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    });
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:des-studio-export');
   });
 });

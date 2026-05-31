@@ -11,20 +11,24 @@ const mockFetchUserSettings = vi.hoisted(() => vi.fn());
 const mockSaveUserSettings = vi.hoisted(() => vi.fn());
 const mockFetchRunHistory = vi.hoisted(() => vi.fn());
 
-vi.mock('../../src/db/models.js', () => ({
-  fetchModels: mockFetchModels,
-  fetchProfiles: mockFetchProfiles,
-  fetchRunStatsForModels: vi.fn().mockResolvedValue({}),
-  fetchUserSettings: mockFetchUserSettings,
-  saveUserSettings: mockSaveUserSettings,
-  fetchRunHistory: mockFetchRunHistory,
-  saveModel: mockSaveModel,
-  deleteModel: vi.fn(),
-  setVisibility: vi.fn(),
-  setAccess: vi.fn(),
-  forkModel: vi.fn(),
-  getPlatformConfig: vi.fn(() => Promise.resolve(null)),
-}));
+vi.mock('../../src/db/models.js', async () => {
+  const actual = await vi.importActual('../../src/db/models.js');
+  return {
+    ...actual,
+    fetchModels: mockFetchModels,
+    fetchProfiles: mockFetchProfiles,
+    fetchRunStatsForModels: vi.fn().mockResolvedValue({}),
+    fetchUserSettings: mockFetchUserSettings,
+    saveUserSettings: mockSaveUserSettings,
+    fetchRunHistory: mockFetchRunHistory,
+    saveModel: mockSaveModel,
+    deleteModel: vi.fn(),
+    setVisibility: vi.fn(),
+    setAccess: vi.fn(),
+    forkModel: vi.fn(),
+    getPlatformConfig: vi.fn(() => Promise.resolve(null)),
+  };
+});
 
 const session = { user: { id: 'user-1' } };
 const createdModel = {
