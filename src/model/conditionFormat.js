@@ -168,7 +168,6 @@ export function migrateLegacyCondition(condition) {
   }
   if (isLogicalCondition(condition)) {
     return {
-      ...condition,
       operator: String(condition.operator || "AND").toUpperCase(),
       clauses: condition.clauses
         .map(migrateLegacyCondition)
