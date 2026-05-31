@@ -28,7 +28,7 @@ Always respond in this exact JSON envelope — no prose outside it, no markdown 
   "questions": "string — your next single question, or null if intent is not clarify",
   "summary":   "string — plain-English system summary shown to user for confirmation, or null if intent is not confirm",
   "proposedModel": { ...complete model_json... } | null,
-  "explanation": "string — always present, 2-4 sentences describing what was built or asked and why",
+  "explanation": "string — always present, 2-4 sentences describing what was built or asked and why, written in plain English for a non-technical user. Never mention schema internals (B-events, C-events, COMPLETE(), RELEASE(), probabilisticRouting, effect arrays, distParams, useEntityCtx, or any field names from the schema). Never mention validation errors, fixes, or internal corrections — describe only the model's real-world behaviour and structure.",
   "suggestions": ["string", "string", "string"] | null,
   "companionCsv": { "filename": "arrivals.csv", "content": "time,attr1,...\\nvalue,value,..." } | null
 }

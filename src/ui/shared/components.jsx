@@ -29,9 +29,33 @@ class ErrorBoundary extends Component {
   render() {
     if (!this.state.error) return this.props.children;
 
+    const errorMessage = this.state.error?.message || String(this.state.error);
+    const isChunkError = /Failed to fetch dynamically imported module|Loading chunk|dynamically imported module/i.test(errorMessage);
+
+    if (isChunkError) {
+      return (
+        <div role="alert" style={{
+          background: alpha(C.red, 0.07),
+          border: `1px solid ${alpha(C.red, 0.27)}`,
+          borderRadius: 8,
+          padding: 14,
+          color: C.text,
+          fontFamily: FONT,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.red }}>New version available</div>
+          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
+            DES Studio has been updated. Reload the page to get the latest version.
+          </div>
+          <Btn small variant="primary" onClick={() => window.location.reload()}>Reload page</Btn>
+        </div>
+      );
+    }
+
     const title = this.props.title || "Something went wrong";
     const message = this.props.message || "This panel could not render.";
-    const errorMessage = this.state.error?.message || String(this.state.error);
 
     return (
       <div role="alert" style={{

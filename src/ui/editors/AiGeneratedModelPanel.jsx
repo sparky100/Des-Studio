@@ -328,6 +328,26 @@ function Bubble({ role, content }) {
   );
 }
 
+function BuildingIndicator() {
+  return (
+    <div style={{
+      alignSelf: "flex-start",
+      maxWidth: "72%",
+      background: C.bg,
+      border: `1px solid ${C.border}`,
+      borderRadius: 8,
+      padding: "10px 12px",
+      color: C.text,
+      fontFamily: FONT,
+      fontSize: 11,
+      lineHeight: 1.7,
+    }}>
+      <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, marginBottom: 6 }}>Assistant</div>
+      <span style={{ color: C.muted }}>Building your model — this may take a moment…</span>
+    </div>
+  );
+}
+
 function ConfirmBubble({ explanation, onConfirm, onRefute }) {
   return (
     <div
@@ -435,7 +455,12 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   const [correctionMode, setCorrectionMode] = useState(false);
   const recognitionRef = useRef(null);
   const inputAreaRef = useRef(null);
+  const chatBottomRef = useRef(null);
   const systemPrompt = useMemo(() => buildModelBuilderSystemPrompt(), []);
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [history, loading]);
 
   useEffect(() => {
     return () => recognitionRef.current?.stop();
@@ -688,8 +713,10 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           {refinementChips.length > 0 && (
             <RefinementChips suggestions={refinementChips} onChipClick={handleChipClick} />
           )}
+          {loading && <BuildingIndicator />}
           {notice && <Bubble role="system" content={notice} />}
           {error && <div role="alert"><InfoBox color={C.red}>{error}</InfoBox></div>}
+          <div ref={chatBottomRef} />
         </div>
         <div ref={inputAreaRef} style={{ padding: 14, borderTop: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "end" }}>
           <Field
