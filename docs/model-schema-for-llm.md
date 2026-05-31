@@ -18,66 +18,23 @@ Paste it (or reference it) as context when prompting any LLM to create or modify
 
 ---
 
-## How to Use This File
+## TOP 10 LLM MISTAKES
 
-Ask the LLM:
+These are the most common errors LLMs make when generating DES Studio models.
+Read this before writing any model JSON.
 
-> "Using the DES Studio model schema defined in `model-schema-for-llm.md`, generate a JSON model for [your scenario]. Output only the JSON object — no prose, no code fences."
-
-The LLM must produce a single JSON object that passes all validation rules in §5.
-
-### Delivering the model — save JSON file and magic link (recommended)
-
-After generating the model JSON the LLM should do **two things**:
-
-1. **Save the JSON to a file** — e.g. `coffee-shop.json` — so the user has a portable copy they can version-control, edit, or re-encode later.
-2. **Ask the user if they want to Produce a magic-link import URL** — DES Studio decodes the URL and shows a pre-flight preview card directly in the app; the user can save it to their library in one click.
-
-**App URL:** `https://des.simmodlr.app`
-
-**Magic-link URL format:**
-```
-https://des.simmodlr.app/#import?m=<base64url-encoded-json>
-```
-
-**Encoding recipe (Python):**
-```python
-import json, base64
-
-def encode_model_link(model: dict) -> str:
-    json_bytes = json.dumps(model, separators=(',', ':')).encode('utf-8')
-    b64 = base64.urlsafe_b64encode(json_bytes).rstrip(b'=').decode()
-    return f"https://des.simmodlr.app/#import?m={b64}"
-
-# Save the file and print the link
-with open('model.json', 'w') as f:
-    json.dump(model, f, indent=2)
-
-print(encode_model_link(model))
-```
-
-**Encoding recipe (JavaScript / Node):**
-```js
-const fs = require('fs');
-
-function encodeModelLink(model) {
-  const b64 = Buffer.from(JSON.stringify(model), 'utf8').toString('base64url');
-  return `https://des.simmodlr.app/#import?m=${b64}`;
-}
-
-// Save the file and print the link
-fs.writeFileSync('model.json', JSON.stringify(model, null, 2));
-console.log(encodeModelLink(model));
-```
-
-**LLM prompt to use:**
-> Using the DES Studio model schema, generate a JSON model for [your scenario].
-> Then:
-> 1. Save the model as `[name].json`
-> 2. Base64url-encode the JSON (compact, no padding, UTF-8) and output the complete import URL in this format:
->    `https://des.simmodlr.app/#import?m=<encoded>`
-
-When the user opens the magic link they see a review card with the model summary and validation status before saving to their library.
+| # | Mistake | Fix |
+|---|---------|------|
+| 1 | `probabilisticRouting` on ARRIVE B-events | ARRIVE events route entities via their effect macro — never via routing tables. Remove `probabilisticRouting` from arrival events. |
+| 2 | `"effect": ["RELEASE(Server)", "COMPLETE()"]` | `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped. Use `"effect": ["COMPLETE()"]` alone — COMPLETE releases the server automatically. |
+| 3 | Missing `useEntityCtx: true` on cSchedules | Without this, the target B-event can't identify the entity. Always add `"useEntityCtx": true` to every `cSchedules[]` entry. |
+| 4 | `balkCondition` as a string | Must be a predicate object: `{ "variable": "...", "operator": "...", "value": "..." }`. Never a string expression. |
+| 5 | `routing[].condition` as a string | Same as #4 — must be a predicate object, never a string. |
+| 6 | `"effect"` as a bare string | Must be an array: `"effect": ["ARRIVE(Customer)"]` — never `"effect": "ARRIVE(Customer)"`. |
+| 7 | `scheduledTime` as a number | Must be a string: `"scheduledTime": "0"` — never `"scheduledTime": 0`. |
+| 8 | Distribution params as numbers | Must be strings: `"distParams": { "mean": "5" }` — never `{ "mean": 5 }`. |
+| 9 | `RENEGE(Patient)` instead of `RENEGE(ctx)` | Always use `RENEGE(ctx)`. The entity-type form silently fails (validation V25). |
+| 10 | No `COMPLETE()` or `RENEGE()` sink | Every model needs at least one exit path. Missing sinks = entities accumulate forever (validation V8, CHK-002). |
 
 ---
 
@@ -753,41 +710,264 @@ Performance targets for the AI analysis and optimisation features.
 
 ## 10. Validation Rules Summary
 
-The engine rejects models that violate these rules. All generated models must comply.
+DES Studio runs two validation layers before every simulation. Both block the run on errors.
+All generated model JSON MUST pass every blocking rule below.
+
+### Blocking Errors (run prevented)
 
 | Code | Rule |
 |------|------|
 | V1 | All entity type names must be unique and non-empty |
 | V2 | Attribute names must be unique within each entity type |
-| V3 | `defaultValue` must match declared `valueType` |
-| V4 | PRIORITY queue discipline requires a `priority` attribute (type `number`) on the customer entity type |
-| V5 | Distribution parameters must be within valid bounds (see §4) |
-| V6 | All `eventId` references in `schedules` and `cSchedules` must point to existing B-event IDs |
-| V8 | At least one B-event must have an `ARRIVE()` effect |
-| V9 | Queue names in C-event conditions must match a defined queue |
-| V10 | Attribute names must not start with `Resource` or `Queue` |
-| V11 | Warning — Normal distribution where `mean < 2 × stddev`; negative samples are likely (engine clamps to 0) |
-| V12 | Piecewise distribution must start at time 0; periods must be sorted ascending; at least one period required |
+| V3 | `defaultValue` must match declared `valueType` (number → numeric, boolean → `"true"`/`"false"`) |
+| V4 | A queue with `discipline: "PRIORITY"` requires the customer entity type to have a `priority` attribute of type `number` |
+| V5 | Distribution parameters must be within valid bounds (see §4). Exponential: mean > 0. Uniform: max > min. Normal: stddev > 0. Triangular: min ≤ mode ≤ max. Erlang: k ≥ 1 integer and mean > 0. Fixed: value must be numeric. |
+| V6 | Every `eventId` reference in `schedules[]` and `cSchedules[]` must point to an existing B-event `id` |
+| CHK-010 | Every B-event `schedules[]` entry must have an `eventId` field — entries without one are silently skipped and the event will never re-fire |
+| V8 | Model must have at least one B-event with `ARRIVE()` effect **AND** at least one B-event with `COMPLETE()` or `RENEGE(ctx)` effect. Missing both is a blocking error; missing exactly one is a warning (see below). |
+| V9 | Queue names referenced in C-event conditions and `cSchedules[].queueName` must match a defined queue |
+| CHK-003 | C-event `cSchedules[]` entries and condition expressions must not reference undefined queues |
+| CHK-004 | C-event references to server types (in `ASSIGN` effect or schedules) must match a defined server entity type |
+| CHK-001 | Every customer entity type must have at least one arrival B-event that creates it |
+| CHK-002 | Every customer entity type that has an arrival must also have an exit path — at least one B-event with `COMPLETE()` or `RENEGE(ctx)` as its effect |
+| V10 | Attribute names must not start with reserved namespace prefixes `Resource` or `Queue` |
+| V12 | Piecewise distribution must have at least one period, the first period must start at time 0, and nested piecewise distributions within a period are not supported |
 | V13 | Piecewise distribution periods must be sorted ascending by `startTime` |
 | V14 | Server `shiftSchedule` must start at time 0, be sorted ascending, and use positive integer capacities |
-| V15 | Shift times after configured run duration are unreachable (warning) |
-| V16 | Warning — no `maxSimTime` or `terminationCondition` configured; run may execute until the cycle limit |
-| V17 | `routing` table and `RELEASE(Server, Queue)` in the same effect are mutually exclusive |
-| V18 | `probabilisticRouting` probabilities must sum to 1.0 (±0.001) |
-| V19 | Server `count` must be an integer ≥ 1 |
-| V20 | Queue `capacity`, when set, must be an integer ≥ 1 |
-| V21 | `balkProbability` must be between 0 and 1 |
-| V22 | `BATCH` size must be an integer ≥ 2 and queue must exist |
+| V17 | `routing` table entries must reference defined queue names (or `null` for exit). Mutually exclusive with `RELEASE(Server, QueueName)` in the same effect — pick one. |
+| V18 | `probabilisticRouting` probabilities must sum to 1.0 (±0.001). Each branch's `queueName` must reference a defined queue (or `null` for exit). Mutually exclusive with `routing` and `RELEASE(Server, QueueName)`. |
+| V19 | Server entity type `count` must be an integer ≥ 1 |
+| V20 | Queue `capacity`, when set, must be an integer ≥ 1. `overflowDestination`, when set, must reference a defined queue. |
+| V21 | `balkProbability` must be a finite number in [0, 1] |
+| CHK-011 | `balkCondition` **must be a predicate object** `{ variable, operator, value }` — never a string |
+| CHK-012 | `routing[].condition` **must be a predicate object** `{ variable, operator, value }` — never a string |
+| V22 | `BATCH` size must be an integer ≥ 2 and the referenced queue must exist |
 | V23 | `UNBATCH` target queue must reference a defined queue |
-| V24 | `loopConfig.maxLoopCount` must be integer ≥ 1 |
-| V25 | `RENEGE` must always use `ctx` as its argument — never an entity type name |
-| V26 | Container `id` must be unique and non-empty; `capacity` > 0 when set; `initialLevel` ≥ 0 and ≤ `capacity` |
-| V27 | `FILL`/`DRAIN` must reference a declared container `id` |
+| V24 | `loopConfig.maxLoopCount` must be an integer ≥ 1. `loopConfig.exitQueueName`, when set, must reference a defined queue. |
+| V25 | `RENEGE` must always use `(ctx)` as its argument — never an entity type name like `RENEGE(Patient)` |
+| V26 | Container `id` must be unique and non-empty; `capacity` > 0 when set; `initialLevel` ≥ 0 and ≤ `capacity`. Also: B-event `scheduledTime` must be numeric. |
+| V27 | `FILL` and `DRAIN` macros must reference a declared container `id` |
 | V28 | `epoch`, when set, must be a valid ISO 8601 datetime string (e.g. `"2026-05-18T08:00:00"`) |
-| V29 | A C-event whose `cSchedules` entries all have a `when` predicate must also include a fallback entry (one without `when`); otherwise entities matching no condition receive no service (warning) |
-| V38 | **`RELEASE()` immediately followed by `COMPLETE()` in the same B-event effect (warning).** `RELEASE` sets entity status to `"waiting"`; `COMPLETE` then skips because it requires `"serving"` status. Entities enter an infinite loop and are never counted as served. Fix: use `COMPLETE()` alone — it releases the server automatically. |
-| W-CAP-01 | Multi-class resource contention detected — multiple customer types competing for the same server type may cause unexpected priority inversion (warning) |
-| W-CAP-02 | Very high arrival rate detected — arrival rate exceeds service capacity by more than 20%; queue growth and long wait times expected (warning) |
+| V30 | If `probabilisticRouting` contains a `null` (exit) branch, the B-event's effect **must** include `COMPLETE()` or `RENEGE(ctx)` — otherwise entities routed to exit aren't counted as served |
+| V31 | If `routing` (conditional) contains a `null` (exit) branch, the B-event's effect **must** end with `COMPLETE()` or `RENEGE(ctx)` |
+| V32 | A B-event effect list **must not** contain more than one terminal sink (`COMPLETE` or `RENEGE`). Choose one. |
+| V34 | `experimentDefaults.replications` must be a positive integer (≥ 1) |
+| V35 | `warmupPeriod` must be strictly less than `maxSimTime` |
+| V36 | `mtbfDist` and `mttrDist` are only valid on entity types with `role: "server"` |
+| V37 | When either `mtbfDist` or `mttrDist` is set on a server entity type, **both** must be present with valid distribution parameters |
+
+### Warnings (run proceeds, banner shown)
+
+| Code | Rule |
+|------|------|
+| V8-warn | Missing ARRIVE source but sink exists, or missing COMPLETE/RENEGE sink but source exists — the model is runnable but incomplete |
+| V11 | Normal distribution where `mean < 2 × stddev` — negative samples are likely and will be clamped to 0 by the engine |
+| V15 | A shift change time is after the configured run duration — the shift will never fire during the simulation |
+| V16 | No `maxSimTime` or `terminationCondition` configured — the run may continue until the cycle limit |
+| V29 | A C-event whose `cSchedules` entries all have a `when` predicate with no fallback entry — entities not matching any condition receive no service |
+| V33 | `probabilisticRouting` with a single 100% null-exit branch and `COMPLETE()` — valid but unusual. Prefer plain `COMPLETE()` without routing for simple terminal completions. |
+| V38 | `RELEASE()` immediately followed by `COMPLETE()` in the same B-event effect. `RELEASE` sets entity to `"waiting"` so `COMPLETE` skips silently. Use `COMPLETE()` alone — it releases the server automatically. |
+| CHK-005 | Follow-on event chain has no terminal event — may cause infinite scheduling |
+| CHK-006 | A queue is referenced in a C-event condition but no B-event routes entities into it |
+| CHK-007 | Entity types are defined but no events exist — the model will not simulate anything |
+| CHK-008 | A server entity type is defined but never used in any C-event — it will show 0% utilisation |
+| W-CAP-01 | Multi-class resource contention — multiple customer types competing for the same server type may cause unexpected priority inversion |
+| W-CAP-02 | Very high arrival rate — an arrival schedule uses Exponential with mean interval < 0.001, suggesting arrivals beyond discrete-event simulation limits |
+
+---
+
+## 13. IDs and Naming Conventions
+
+- `id` fields are for internal references only. Use a short prefix + descriptive name:
+  - Entity types: `et_` prefix (e.g. `et_patient`, `et_nurse`)
+  - Queues: `q_` prefix (e.g. `q_triage`, `q_treatment`)
+  - B-events: `b_` prefix (e.g. `b_arrive`, `b_complete`)
+  - C-events: `c_` prefix (e.g. `c_start_service`)
+  - State variables: `sv_` prefix (e.g. `sv_shift_active`)
+  - Containers: `ct_` prefix (e.g. `ct_tank`)
+- `name` fields are the human-readable labels shown in the UI. They are also used as references in macro arguments — **they must match exactly including case**.
+- Queue `name` is referenced in: `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `ASSIGN(QueueName, Server)`, condition predicates `queue(QueueName)`, `overflowDestination`, `defaultQueueName`, routing `queueName`.
+- Entity type `name` is referenced in: `ARRIVE(EntityType, ...)`, `ASSIGN(QueueName, ServerType)`, `RELEASE(ServerType, ...)`, condition predicates `idle(ServerType)`, `busy(ServerType)`, queue `customerType`.
+
+---
+
+## 16. Patterns & Anti-Patterns
+
+Common modelling patterns and the mistakes to avoid when generating DES Studio models.
+
+### 16.1 Terminal Completion (V30, V38)
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ Preferred: Explicit COMPLETE** | Simple terminal completion — all entities exit after this event | `"effect": ["COMPLETE()"], "schedules": []` |
+| **✗ Anti-Pattern: RELEASE then COMPLETE** | **(Broken — never use)** `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped; entities loop forever (validation warning V38) | `"effect": ["RELEASE(Server)", "COMPLETE()"]` |
+| **✗ Anti-Pattern: Null routing with prob 1.0** | (Avoid) Redundant — adds unnecessary complexity | `"effect": ["COMPLETE()"], "probabilisticRouting": [{ "queueName": null, "probability": 1 }]` |
+| **✓ Valid: Probabilistic exit** | Genuine branching — some entities exit, some continue | `"probabilisticRouting": [{ "queueName": "Next Queue", "probability": 0.7 }, { "queueName": null, "probability": 0.3 }]` |
+
+**Rule:** `COMPLETE()` releases the server automatically. On a terminal B-event, write `"effect": ["COMPLETE()"]` alone — no preceding `RELEASE()`. If `probabilisticRouting` contains only a single route with `probability: 1` and `queueName: null`, prefer replacing it with explicit `COMPLETE()` and no routing table.
+
+---
+
+### 16.2 Entity Lifecycle Completeness
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ Complete lifecycle** | Every entity type has ARRIVE → service → COMPLETE/RENEGE path | `ARRIVE(Patient)` → `ASSIGN(Triage Queue, Nurse)` → `COMPLETE()` |
+| **✗ Missing sink** | Entities arrive but never complete — queue grows indefinitely | `ARRIVE(Patient)` → `ASSIGN(...)` → no `COMPLETE()` or `RENEGE()` |
+| **✗ Orphaned release** | Server released but entity not completed — not counted as served | `RELEASE(Server)` without `COMPLETE()` on terminal event |
+
+**Rule:** Every model must have at least one ARRIVE source and at least one COMPLETE or RENEGE sink (validation V8).
+
+---
+
+### 16.3 Queue-to-Activity Binding (ADR-005)
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ Matching names** | Queue name matches entity type name — discipline honoured | Queue: `"Patient Queue"`, Entity: `"Patient"`, C-Event: `ASSIGN(Patient Queue, Nurse)` |
+| **✗ Mismatched names** | Queue name differs from entity type — silently falls back to FIFO | Queue: `"Waiting Room"`, Entity: `"Patient"` — PRIORITY discipline ignored |
+
+**Rule:** Name queues as `"<EntityTypeName> Queue"` to ensure queue discipline (FIFO/LIFO/PRIORITY) is correctly applied.
+
+---
+
+### 16.4 C-Event Priority & Restart Rule
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ Explicit priorities** | Multiple C-Events compete for same resources — order matters | `priority: 1` for urgent, `priority: 2` for routine |
+| **✗ All same priority** | C-Events fire in array order — may cause priority inversion | All C-Events at `priority: 1` or no priority field |
+| **✗ Condition always true** | C-Event fires every pass — wastes C-scan cycles | `condition: "true"` or no condition on high-priority C-Event |
+
+**Rule:** Lower priority number = higher priority. When a C-Event fires, the scan restarts from priority 1 (Three-Phase restart rule).
+
+---
+
+### 16.5 Distribution Parameter Types
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ String parameters** | All distribution parameters as strings | `"distParams": { "mean": "5", "stddev": "2" }` |
+| ** Numeric parameters** | (Invalid) Numbers instead of strings | `"distParams": { "mean": 5, "stddev": 2 }` |
+
+**Rule:** All `distParams` values must be strings (e.g., `"5"` not `5`). The engine parses them internally.
+
+---
+
+### 16.6 Warm-up & Termination
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ Valid warm-up** | `warmupPeriod < maxSimTime` — statistics collected after warm-up | `warmupPeriod: 50`, `maxSimTime: 500` |
+| **✗ Warm-up ≥ run time** | (Invalid) All statistics excluded — nothing measured | `warmupPeriod: 500`, `maxSimTime: 500` |
+| **✓ Time termination** | Fixed-duration runs | `maxSimTime: 500` |
+| **✓ Condition termination** | Stop when entity count reached | `terminationCondition: "summary.served >= 100"` |
+| **✗ No termination** | (Warning V16) Run executes until cycle limit | No `maxSimTime` or `terminationCondition` |
+
+**Rule:** Set either `maxSimTime` or `terminationCondition` (or both). Warm-up must be less than run duration.
+
+---
+
+### 16.7 State Variable Namespaces
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ User variables** | Custom state variables with unique names | `name: "arrival_count"`, `name: "shift_active"` |
+| **✗ Reserved namespace** | (Invalid V10) Collides with `Resource.*` or `Queue.*` | `name: "Resource.Nurse"`, `name: "Queue.Triage.length"` |
+
+**Rule:** Do not name state variables with `Resource` or `Queue` prefix — these are reserved for engine-computed values.
+
+---
+
+### 16.8 Replication Configuration
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ Valid replications** | One or more replications for statistical confidence | `replications: 10` |
+| **✗ Zero replications** | (Invalid) No runs executed | `replications: 0` |
+| **✓ Batch mode** | Multiple replications with aggregated CI | `replications: 20`, `liveDataMode: null` |
+| **✓ Rolling mode** | Live data refresh per event — single replication | `replications: 1`, `liveDataMode: "rolling"` |
+
+**Rule:** `replications` must be a positive integer ≥ 1. Use `replications: 1` for rolling live-data mode.
+
+---
+
+### 16.9 Effect Macro Syntax
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ RENEGE(ctx)** | Remove entity from queue with patience timeout | `RENEGE(ctx)` — uses current entity context |
+| **✗ RENEGE(TypeName)** | (Invalid V25) Silently fails — no entity matched | `RENEGE(Patient)` — missing `ctx` |
+| **✓ ASSIGN(queue, server)** | Bind entity from queue to server | `ASSIGN(Triage Queue, Nurse)` |
+| **✗ ASSIGN with entity type** | (Invalid) Second arg must be server type, not entity | `ASSIGN(Patient Queue, Patient)` — should be `Nurse` |
+
+**Rule:** `RENEGE` always takes `(ctx)` argument. `ASSIGN` second argument is the **server type**, not the customer type.
+
+---
+
+### 16.10 Routing Table Completeness (V29)
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ Fallback route** | At least one route has no `when` predicate — catches all | One unconditional route, others conditional |
+| **✗ All conditional** | (Warning V29) Entities matching no condition receive no service | All routes have `when` predicates — gaps possible |
+
+**Rule:** When using conditional routing (`cSchedules[].when`), ensure at least one route has no `when` predicate as a fallback.
+
+---
+
+### 16.11 ARRIVE + probabilisticRouting Anti-Pattern
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ Plain ARRIVE** | ARRIVE always routes to a queue via its effect syntax | `"effect": ["ARRIVE(Patient, Waiting Room)"]` — no `probabilisticRouting` |
+| **✗ ARRIVE with probabilisticRouting** | (Invalid) ARRIVE creates entities and places them in a queue — routing tables are for B-events that already have an entity, not arrival events | `"effect": ["ARRIVE(Patient)"], "probabilisticRouting": [{"queueName": "A", "probability": 0.5}]` |
+
+**Rule:** Never add `probabilisticRouting` to a B-event whose effect is `ARRIVE()`. ARRIVE events route via their effect argument `ARRIVE(Type, QueueName)`. If you need probabilistic splitting, use a single `ARRIVE()` to a buffer queue, then let a C-event with probabilistic routing handle the split.
+
+---
+
+### 16.12 Missing `useEntityCtx` on C-Event Schedules
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ useEntityCtx: true** | Always include when the target B-event operates on an entity | `"cSchedules": [{ "eventId": "b_complete", "useEntityCtx": true, "dist": "Exponential", "distParams": { "mean": "10" } }]` |
+| **✗ Missing useEntityCtx** | (Common error) Without this flag, the B-event has no entity context — `COMPLETE()`, `RELEASE()`, and `RENEGE(ctx)` silently do nothing | `"cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "10" } }]` — no `useEntityCtx` |
+
+**Rule:** Every `cSchedules[]` entry whose target B-event uses `COMPLETE()`, `RELEASE()`, `RENEGE(ctx)`, `SPLIT()`, `SET_ATTR()`, or `COST()` must have `"useEntityCtx": true`. Omitting it is the single most common LLM error.
+
+---
+
+### 16.13 Predicate Objects vs. Strings
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ Predicate objects** | Always encode conditions as JSON predicate objects | `"balkCondition": { "variable": "queue(Waiting Room).length", "operator": ">", "value": "5" }` |
+| **✗ String expressions** | (Invalid CHK-011, CHK-012) Strings are not parsed as conditions — silently ignored or crash | `"balkCondition": "queue(Waiting Room).length > 5"` |
+
+**Rule:** `balkCondition` and `routing[].condition` must be predicate objects `{ "variable": "...", "operator": "...", "value": "..." }`, never string expressions. Valid operators: `==`, `!=`, `<`, `>`, `<=`, `>=`. Valid variable formats: `queue(Name).length`, `idle(Name).count`, `busy(Name).count`, `Entity.attrName`.
+
+---
+
+### 16.14 `effect` as Array vs. Bare String
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ effect as array** | Always use a JSON array even for a single effect | `"effect": ["COMPLETE()"]` |
+| **✗ effect as bare string** | (Invalid) The engine expects an array — a bare string breaks parsing | `"effect": "COMPLETE()"` |
+
+**Rule:** The `effect` field must always be an array of strings, even when it contains only one macro. Use `"effect": ["COMPLETE()"]`, never `"effect": "COMPLETE()"`.
+
+---
+
+### 16.15 `scheduledTime` as String vs. Number
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ scheduledTime as string** | Always use a string value | `"scheduledTime": "0"`, `"scheduledTime": "9999"` |
+| **✗ scheduledTime as number** | (Invalid V26) The engine expects string-encoded numeric values | `"scheduledTime": 0`, `"scheduledTime": 9999` |
+
+**Rule:** Every `scheduledTime` field must be a string representation of a number (e.g., `"0"`, `"10.5"`). Engine validation V26 enforces this.
 
 ---
 
@@ -908,42 +1088,6 @@ And the renege B-event:
 ```json
 { "id": "b_renege", "name": "Renege", "scheduledTime": "9999", "effect": ["RENEGE(ctx)"], "schedules": [] }
 ```
-
----
-
-## 12. Ready-to-Use LLM Prompt Template
-
-```
-You are a discrete-event simulation modeller using DES Studio.
-
-Using the schema and rules defined below, generate a valid DES Studio model JSON for the following scenario:
-
-[DESCRIBE YOUR SCENARIO HERE]
-
-Requirements:
-- Output only the JSON object — no prose, no markdown fences
-- All validation rules in §10 must be satisfied
-- Use realistic parameter values for the domain
-- Include experimentDefaults appropriate for the scenario
-- Add goals if the scenario has obvious performance targets
-
-[PASTE THE FULL CONTENTS OF model-schema-for-llm.md HERE]
-```
-
----
-
-## 13. IDs and Naming Conventions
-
-- `id` fields are for internal references only. Use a short prefix + descriptive name:
-  - Entity types: `et_` prefix (e.g. `et_patient`, `et_nurse`)
-  - Queues: `q_` prefix (e.g. `q_triage`, `q_treatment`)
-  - B-events: `b_` prefix (e.g. `b_arrive`, `b_complete`)
-  - C-events: `c_` prefix (e.g. `c_start_service`)
-  - State variables: `sv_` prefix (e.g. `sv_shift_active`)
-  - Containers: `ct_` prefix (e.g. `ct_tank`)
-- `name` fields are the human-readable labels shown in the UI. They are also used as references in macro arguments — **they must match exactly including case**.
-- Queue `name` is referenced in: `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `ASSIGN(QueueName, Server)`, condition predicates `queue(QueueName)`, `overflowDestination`, `defaultQueueName`, routing `queueName`.
-- Entity type `name` is referenced in: `ARRIVE(EntityType, ...)`, `ASSIGN(QueueName, ServerType)`, `RELEASE(ServerType, ...)`, condition predicates `idle(ServerType)`, `busy(ServerType)`, queue `customerType`.
 
 ---
 
@@ -1295,128 +1439,7 @@ Bind a specific distribution parameter to a field from a live source:
 
 ---
 
-## 16. Patterns & Anti-Patterns
 
-Common modelling patterns and the mistakes to avoid when generating DES Studio models.
-
-### 16.1 Terminal Completion (V30, V38)
-
-| Pattern | When to Use | Example |
-|---|---|---|
-| **✓ Preferred: Explicit COMPLETE** | Simple terminal completion — all entities exit after this event | `"effect": ["COMPLETE()"], "schedules": []` |
-| **✗ Anti-Pattern: RELEASE then COMPLETE** | **(Broken — never use)** `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped; entities loop forever (validation warning V38) | `"effect": ["RELEASE(Server)", "COMPLETE()"]` |
-| **✗ Anti-Pattern: Null routing with prob 1.0** | (Avoid) Redundant — adds unnecessary complexity | `"effect": ["COMPLETE()"], "probabilisticRouting": [{ "queueName": null, "probability": 1 }]` |
-| **✓ Valid: Probabilistic exit** | Genuine branching — some entities exit, some continue | `"probabilisticRouting": [{ "queueName": "Next Queue", "probability": 0.7 }, { "queueName": null, "probability": 0.3 }]` |
-
-**Rule:** `COMPLETE()` releases the server automatically. On a terminal B-event, write `"effect": ["COMPLETE()"]` alone — no preceding `RELEASE()`. If `probabilisticRouting` contains only a single route with `probability: 1` and `queueName: null`, prefer replacing it with explicit `COMPLETE()` and no routing table.
-
----
-
-### 16.2 Entity Lifecycle Completeness
-
-| Pattern | When to Use | Example |
-|---|---|---|
-| **✓ Complete lifecycle** | Every entity type has ARRIVE → service → COMPLETE/RENEGE path | `ARRIVE(Patient)` → `ASSIGN(Triage Queue, Nurse)` → `COMPLETE()` |
-| **✗ Missing sink** | Entities arrive but never complete — queue grows indefinitely | `ARRIVE(Patient)` → `ASSIGN(...)` → no `COMPLETE()` or `RENEGE()` |
-| **✗ Orphaned release** | Server released but entity not completed — not counted as served | `RELEASE(Server)` without `COMPLETE()` on terminal event |
-
-**Rule:** Every model must have at least one ARRIVE source and at least one COMPLETE or RENEGE sink (validation V8).
-
----
-
-### 16.3 Queue-to-Activity Binding (ADR-005)
-
-| Pattern | When to Use | Example |
-|---|---|---|
-| **✓ Matching names** | Queue name matches entity type name — discipline honoured | Queue: `"Patient Queue"`, Entity: `"Patient"`, C-Event: `ASSIGN(Patient Queue, Nurse)` |
-| **✗ Mismatched names** | Queue name differs from entity type — silently falls back to FIFO | Queue: `"Waiting Room"`, Entity: `"Patient"` — PRIORITY discipline ignored |
-
-**Rule:** Name queues as `"<EntityTypeName> Queue"` to ensure queue discipline (FIFO/LIFO/PRIORITY) is correctly applied.
-
----
-
-### 16.4 C-Event Priority & Restart Rule
-
-| Pattern | When to Use | Example |
-|---|---|---|
-| **✓ Explicit priorities** | Multiple C-Events compete for same resources — order matters | `priority: 1` for urgent, `priority: 2` for routine |
-| **✗ All same priority** | C-Events fire in array order — may cause priority inversion | All C-Events at `priority: 1` or no priority field |
-| **✗ Condition always true** | C-Event fires every pass — wastes C-scan cycles | `condition: "true"` or no condition on high-priority C-Event |
-
-**Rule:** Lower priority number = higher priority. When a C-Event fires, the scan restarts from priority 1 (Three-Phase restart rule).
-
----
-
-### 16.5 Distribution Parameter Types
-
-| Pattern | When to Use | Example |
-|---|---|---|
-| **✓ String parameters** | All distribution parameters as strings | `"distParams": { "mean": "5", "stddev": "2" }` |
-| ** Numeric parameters** | (Invalid) Numbers instead of strings | `"distParams": { "mean": 5, "stddev": 2 }` |
-
-**Rule:** All `distParams` values must be strings (e.g., `"5"` not `5`). The engine parses them internally.
-
----
-
-### 16.6 Warm-up & Termination
-
-| Pattern | When to Use | Example |
-|---|---|---|
-| **✓ Valid warm-up** | `warmupPeriod < maxSimTime` — statistics collected after warm-up | `warmupPeriod: 50`, `maxSimTime: 500` |
-| **✗ Warm-up ≥ run time** | (Invalid) All statistics excluded — nothing measured | `warmupPeriod: 500`, `maxSimTime: 500` |
-| **✓ Time termination** | Fixed-duration runs | `maxSimTime: 500` |
-| **✓ Condition termination** | Stop when entity count reached | `terminationCondition: "summary.served >= 100"` |
-| **✗ No termination** | (Warning V16) Run executes until cycle limit | No `maxSimTime` or `terminationCondition` |
-
-**Rule:** Set either `maxSimTime` or `terminationCondition` (or both). Warm-up must be less than run duration.
-
----
-
-### 16.7 State Variable Namespaces
-
-| Pattern | When to Use | Example |
-|---|---|---|
-| **✓ User variables** | Custom state variables with unique names | `name: "arrival_count"`, `name: "shift_active"` |
-| **✗ Reserved namespace** | (Invalid V10) Collides with `Resource.*` or `Queue.*` | `name: "Resource.Nurse"`, `name: "Queue.Triage.length"` |
-
-**Rule:** Do not name state variables with `Resource` or `Queue` prefix — these are reserved for engine-computed values.
-
----
-
-### 16.8 Replication Configuration
-
-| Pattern | When to Use | Example |
-|---|---|---|
-| **✓ Valid replications** | One or more replications for statistical confidence | `replications: 10` |
-| **✗ Zero replications** | (Invalid) No runs executed | `replications: 0` |
-| **✓ Batch mode** | Multiple replications with aggregated CI | `replications: 20`, `liveDataMode: null` |
-| **✓ Rolling mode** | Live data refresh per event — single replication | `replications: 1`, `liveDataMode: "rolling"` |
-
-**Rule:** `replications` must be a positive integer ≥ 1. Use `replications: 1` for rolling live-data mode.
-
----
-
-### 16.9 Effect Macro Syntax
-
-| Pattern | When to Use | Example |
-|---|---|---|
-| **✓ RENEGE(ctx)** | Remove entity from queue with patience timeout | `RENEGE(ctx)` — uses current entity context |
-| **✗ RENEGE(TypeName)** | (Invalid V25) Silently fails — no entity matched | `RENEGE(Patient)` — missing `ctx` |
-| **✓ ASSIGN(queue, server)** | Bind entity from queue to server | `ASSIGN(Triage Queue, Nurse)` |
-| **✗ ASSIGN with entity type** | (Invalid) Second arg must be server type, not entity | `ASSIGN(Patient Queue, Patient)` — should be `Nurse` |
-
-**Rule:** `RENEGE` always takes `(ctx)` argument. `ASSIGN` second argument is the **server type**, not the customer type.
-
----
-
-### 16.10 Routing Table Completeness (V29)
-
-| Pattern | When to Use | Example |
-|---|---|---|
-| **✓ Fallback route** | At least one route has no `when` predicate — catches all | One unconditional route, others conditional |
-| **✗ All conditional** | (Warning V29) Entities matching no condition receive no service | All routes have `when` predicates — gaps possible |
-
-**Rule:** When using conditional routing (`cSchedules[].when`), ensure at least one route has no `when` predicate as a fallback.
 | `"lookahead"` | Inject live system snapshot; skip warm-up; simulate forward N minutes (Sprint 60+) |
 
 > **Security note:** `authSecret` fields must always contain `{{env.VAR}}` placeholders, never literal tokens or passwords. The actual credential is entered by the user in the browser at session time and is never stored in the database or included in model exports.
