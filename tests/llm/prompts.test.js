@@ -209,7 +209,19 @@ describe("LLM prompt builders", () => {
     };
 
     const queryResults = {
-      summary: { total: 50, served: 45, reneged: 5, avgWait: 8.2, avgSvc: 4.1, avgSojourn: 12.3, warmupPeriod: 10, maxSimTime: 500 },
+      summary: {
+        total: 50,
+        served: 45,
+        reneged: 5,
+        avgWait: 8.2,
+        avgSvc: 4.1,
+        avgSojourn: 12.3,
+        warmupPeriod: 10,
+        maxSimTime: 500,
+        outcomes: {
+          "route-exit:triage": { routeId: "route-exit:triage", routeLabel: "Exit", status: "completed", endedBy: "direct-routing", count: 12 },
+        },
+      },
     };
 
     it("builds a query prompt with kind 'query'", () => {
@@ -224,6 +236,7 @@ describe("LLM prompt builders", () => {
       expect(parsed.data.model.name).toBe("Clinic");
       expect(parsed.data.kpis.avgWait).toBe(8.2);
       expect(parsed.data.kpis.served).toBe(45);
+      expect(parsed.data.kpis.outcomes[0]).toEqual(expect.objectContaining({ routeLabel: "Exit", count: 12 }));
     });
 
     it("includes model structure: entity types, queues, state variables", () => {

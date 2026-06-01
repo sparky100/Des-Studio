@@ -60,6 +60,9 @@ const singleResult = {
     avgWait: 2.5,
     avgSvc: 1.25,
     avgSojourn: 3.75,
+    outcomes: {
+      "route-exit:triage": { routeId: "route-exit:triage", routeLabel: "Exit", status: "completed", endedBy: "direct-routing", count: 2 },
+    },
   },
 };
 

@@ -20,17 +20,32 @@ function sampleEvenly(items, maxPoints) {
 function summarizeEntitySummary(entitySummary = []) {
   const byStatus = {};
   const byType = {};
+  const byOutcome = {};
 
   for (const entity of entitySummary) {
     const status = entity?.status || "unknown";
     const type = entity?.type || entity?.role || "unknown";
     byStatus[status] = (byStatus[status] || 0) + 1;
     byType[type] = (byType[type] || 0) + 1;
+    if (entity?.outcome?.routeId) {
+      const routeId = entity.outcome.routeId;
+      if (!byOutcome[routeId]) {
+        byOutcome[routeId] = {
+          routeId,
+          routeLabel: entity.outcome.routeLabel || routeId,
+          status: entity.outcome.status || status,
+          endedBy: entity.outcome.endedBy || "unknown",
+          count: 0,
+        };
+      }
+      byOutcome[routeId].count++;
+    }
   }
 
   return {
     totalEntities: entitySummary.length,
     byStatus,
+    ...(Object.keys(byOutcome).length ? { byOutcome } : {}),
     byType: Object.fromEntries(
       Object.entries(byType)
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))

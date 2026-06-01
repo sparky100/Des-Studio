@@ -2,6 +2,13 @@ export interface SimulationSummary {
   total?: number;
   served?: number;
   reneged?: number;
+  outcomes?: Record<string, {
+    routeId: string;
+    routeLabel: string;
+    status: string;
+    endedBy: string;
+    count: number;
+  }>;
   avgWait?: number | null;
   avgSvc?: number | null;
   avgSojourn?: number | null;

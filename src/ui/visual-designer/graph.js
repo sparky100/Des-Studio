@@ -231,11 +231,12 @@ export function deriveGraphFromModel(model = {}) {
       // Helper: get or create a synthetic Sink node for null-queueName routing branches
       const getExitSinkId = () => {
         const syntheticId = `sink:exit-${bEvent.id}`;
+        const routeExitRefId = `route-exit:${bEvent.id || bEvent.name || "unknown"}`;
         if (!nodes.find(n => n.id === syntheticId)) {
           nodes.push({
             id: syntheticId,
             type: VISUAL_NODE_TYPES.SINK,
-            refId: null,
+            refId: routeExitRefId,
             label: "Exit",
             sublabel: "Direct exit",
           });

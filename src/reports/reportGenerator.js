@@ -79,6 +79,19 @@ function formatMetric(metricPath, summary, aggStats, unit) {
   return formatN(val);
 }
 
+function outcomeRows(summary = {}) {
+  return Object.entries(summary.outcomes || {})
+    .map(([routeId, outcome]) => ({
+      routeId,
+      routeLabel: outcome.routeLabel || routeId,
+      status: outcome.status || '',
+      endedBy: outcome.endedBy || '',
+      count: Number(outcome.count) || 0,
+    }))
+    .filter(row => row.count > 0)
+    .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
+}
+
 // Returns the display name of the non-resource (customer/train/patient) entity type.
 function getEntityName(model) {
   const et = (model.entityTypes || []).find(e => e.role === 'customer');
@@ -683,6 +696,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
   const queueNames   = Object.keys(waitDist);
   const perResource  = summary.perResource || {};
   const resourceTypes = Object.keys(perResource);
+  const outcomes = outcomeRows(summary);
 
   // Intro paragraph describing what is covered
   let introHtml = '';
@@ -787,6 +801,17 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     ${htmlTable(['Resource type', 'Count', 'Utilisation'], utilRows)}`;
   }
 
+  const outcomesHtml = outcomes.length
+    ? `<h3>Journey outcomes</h3>
+    <p class="note">How each entity concluded its journey through the model.</p>
+    ${htmlTable(['Outcome', 'Status', 'Source', 'Count'], outcomes.map(row => [
+      row.routeLabel,
+      row.status || '—',
+      row.endedBy || '—',
+      formatInt(row.count) || '0',
+    ]))}`
+    : '';
+
   // Time-series load chart (shown when timeSeries data was collected)
   let timeSeriesHtml = '';
   {
@@ -856,6 +881,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     ${metricRows.length ? `<h3>Summary statistics</h3>${htmlTable(['Metric', 'Value'], metricRows)}` : ''}
     ${journeyChart ? `<div class="chart-wrap">${journeyChart}</div>` : ''}
     ${waitChartHtml || waitTableHtml ? `<h3>Queue wait-time distributions</h3>${waitChartHtml}${waitTableHtml}` : ''}
+    ${outcomesHtml}
     ${utilChartHtml || utilTableHtml ? `<h3>Resource utilisation</h3>${utilChartHtml}${utilTableHtml}` : ''}
     ${timeSeriesHtml}
     ${planVsActualHtml}
@@ -1089,6 +1115,19 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
   }
   lines.push(mdTable(['Metric', 'Value'], kpiRows));
   lines.push('');
+
+  const outcomesForMd = outcomeRows(summary);
+  if (outcomesForMd.length) {
+    lines.push('### Journey Outcomes');
+    lines.push('');
+    lines.push(mdTable(['Outcome', 'Status', 'Source', 'Count'], outcomesForMd.map(row => [
+      row.routeLabel,
+      row.status || '—',
+      row.endedBy || '—',
+      formatInt(row.count) || '0',
+    ])));
+    lines.push('');
+  }
 
   // Queue wait times with per-stage service column in multi-stage models
   const waitDist = results.waitDist || {};

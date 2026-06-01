@@ -59,6 +59,22 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
 
   const lastResult = replicationPayloads.filter(Boolean).pop()?.result;
 
+  const outcomeAcc = {};
+  for (const summary of summaries) {
+    for (const [routeId, outcome] of Object.entries(summary.outcomes || {})) {
+      if (!outcomeAcc[routeId]) {
+        outcomeAcc[routeId] = {
+          routeId,
+          routeLabel: outcome.routeLabel || routeId,
+          status: outcome.status || "completed",
+          endedBy: outcome.endedBy || "unknown",
+          count: 0,
+        };
+      }
+      outcomeAcc[routeId].count += Number(outcome.count) || 0;
+    }
+  }
+
   // Average perResource utilisation across replications
   const perResourceAcc = {};
   for (const s of summaries) {
@@ -119,6 +135,7 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       avgSojourn: aggregateStats["summary.avgSojourn"]?.mean ?? null,
       warmupPeriod,
       maxSimTime: maxTime,
+      outcomes: Object.keys(outcomeAcc).length ? outcomeAcc : undefined,
       perResource,
     },
   };

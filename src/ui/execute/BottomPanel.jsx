@@ -118,6 +118,23 @@ function StageKpisTable({ snap, model }) {
   const entities    = snap.entities || [];
   const queues      = model.queues || [];
   const serverTypes = (model.entityTypes || []).filter(et => et.role === "server");
+  const outcomes = {};
+  for (const entity of entities) {
+    const outcome = entity?.outcome;
+    if (!outcome?.routeId) continue;
+    if (!outcomes[outcome.routeId]) {
+      outcomes[outcome.routeId] = {
+        routeId: outcome.routeId,
+        routeLabel: outcome.routeLabel || outcome.routeId,
+        status: outcome.status || entity.status,
+        endedBy: outcome.endedBy || "unknown",
+        count: 0,
+      };
+    }
+    outcomes[outcome.routeId].count++;
+  }
+  const outcomeRows = Object.values(outcomes)
+    .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
 
   const panelStyle = {
     background: C.bg,
@@ -213,6 +230,28 @@ function StageKpisTable({ snap, model }) {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {outcomeRows.length > 0 && (
+        <div style={panelStyle}>
+          <div style={{ fontSize: 10, color: C.served, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
+            JOURNEY OUTCOMES
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {outcomeRows.map(outcome => (
+              <div key={outcome.routeId} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ color: outcome.status === "reneged" ? C.reneged : C.served, fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>
+                  {outcome.routeLabel}
+                </div>
+                <div style={metricGridStyle}>
+                  {metricCard("Count", outcome.count, outcome.status === "reneged" ? C.reneged : C.served)}
+                  {metricCard("Status", outcome.status || "—")}
+                  {metricCard("Source", outcome.endedBy || "—")}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

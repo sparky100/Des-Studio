@@ -181,8 +181,18 @@ export function fireBEvent(ev, ctx) {
       cust.completionTime = clock;
       cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
       cust.lastQueue = previousQueue;
+      cust.outcome = {
+        status: "completed",
+        routeId: `route-exit:${ev.id || ev.name || "unknown"}`,
+        routeLabel: "Exit",
+        endedBy: "direct-routing",
+        endedAt: clock,
+        ...(ev.id ? { sourceEventId: ev.id } : {}),
+        ...(ev.name ? { sourceEventName: ev.name } : {}),
+      };
       delete cust.queue;
       ctx.state.__served  = (ctx.state.__served || 0) + 1;
+      ctx.incEventCount?.(`route-exit:${ev.id || ev.name || "unknown"}`);
       msgs.push(`Routing: #${cust.id} → exit system (${note})`);
     } else {
       markEntityWaiting(cust, clock, queueName);
@@ -253,6 +263,15 @@ export function fireBEvent(ev, ctx) {
           cust.completionTime = clock;
           cust.sojournTime = +(clock - cust.arrivalTime).toFixed(4);
           cust.lastQueue = previousQueue;
+          cust.outcome = {
+            status: "completed",
+            routeId: `loop-exit:${ev.id || ev.name || "unknown"}`,
+            routeLabel: "Loop guard exit",
+            endedBy: "loop-guard",
+            endedAt: clock,
+            ...(ev.id ? { sourceEventId: ev.id } : {}),
+            ...(ev.name ? { sourceEventName: ev.name } : {}),
+          };
           delete cust.queue;
           ctx.state.__served = (ctx.state.__served || 0) + 1;
           msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → exit system`);

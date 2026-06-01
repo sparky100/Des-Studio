@@ -123,6 +123,26 @@ describe("RELEASE — engine integration", () => {
     expect(result.entitySummary.find(e => e.role === "customer")?.queue).toBe("Ward Queue");
   });
 
+  test("direct exit route records a per-sink count for the Execute canvas", () => {
+    const result = buildEngine(onePatientModel([{ probability: 1.0, queueName: null }]), 3, 0, 5).runAll();
+    const patient = result.entitySummary.find(e => e.role === "customer");
+    expect(patient?.status).toBe("done");
+    expect(patient?.outcome).toEqual(expect.objectContaining({
+      status: "completed",
+      routeId: "route-exit:be-release",
+      routeLabel: "Exit",
+      endedBy: "direct-routing",
+    }));
+    expect(result.summary.outcomes["route-exit:be-release"]).toEqual(expect.objectContaining({
+      routeLabel: "Exit",
+      status: "completed",
+      endedBy: "direct-routing",
+      count: 1,
+    }));
+    expect(result.snap.eventCounts["be-release"]).toBe(1);
+    expect(result.snap.eventCounts["route-exit:be-release"]).toBe(1);
+  });
+
   test("same seed reproduces identical routing", () => {
     const branches = [{ probability: 0.5, queueName: "Ward Queue" }, { probability: 0.5, queueName: "ICU Queue" }];
     const q1 = buildEngine(onePatientModel(branches), 42, 0, 5).runAll().entitySummary.find(e => e.role === "customer")?.queue;

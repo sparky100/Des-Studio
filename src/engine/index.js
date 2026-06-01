@@ -1188,6 +1188,35 @@ const cycleLog = [];
       ? Math.max(...sojournSamples)
       : null;
 
+    const outcomes = {};
+    const ensureOutcome = (entity) => {
+      const fallbackStatus = entity.status === "reneged" ? "reneged" : "completed";
+      const fallbackRoute = entity.status === "reneged" ? "status:reneged" : "status:done";
+      return entity.outcome || {
+        status: fallbackStatus,
+        routeId: fallbackRoute,
+        routeLabel: entity.status === "reneged" ? "Reneged" : "Completed",
+        endedBy: entity.status === "reneged" ? "status" : "status",
+        endedAt: entity.renegeTime ?? entity.completionTime ?? null,
+      };
+    };
+    for (const entity of customers) {
+      if (entity.status !== "done" && entity.status !== "reneged") continue;
+      const outcome = ensureOutcome(entity);
+      if (outcome.endedAt != null && outcome.endedAt < _statsResetTime) continue;
+      const routeId = outcome.routeId || `${outcome.status || entity.status}:unknown`;
+      if (!outcomes[routeId]) {
+        outcomes[routeId] = {
+          routeId,
+          routeLabel: outcome.routeLabel || routeId,
+          status: outcome.status || (entity.status === "reneged" ? "reneged" : "completed"),
+          endedBy: outcome.endedBy || "unknown",
+          count: 0,
+        };
+      }
+      outcomes[routeId].count++;
+    }
+
     const elapsed = clock - _statsResetTime;
     const perResource = {};
     for (const srv of servers) {
@@ -1245,6 +1274,7 @@ const cycleLog = [];
       totalCost:         +totalCost.toFixed(4),
       costPerServed,
       avgPlanDeviation,
+      outcomes:       Object.keys(outcomes).length ? outcomes : undefined,
       perResource:       Object.keys(perResource).length ? perResource : undefined,
       containerLevels:   Object.keys(containerLevels).length ? containerLevels : undefined,
       warmupPeriod,

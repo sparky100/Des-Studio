@@ -328,6 +328,33 @@ Every entity carries a `loopCount` field initialized to `0`. This counter is inc
 
 `Entity.loopCount` is readable in Predicate Builder conditions, enabling conditional early exit from rework loops.
 
+### Entity.outcome and Journey Conclusions
+
+When an entity leaves the model through a terminal path, the engine records how the journey ended:
+
+```json
+{
+  "outcome": {
+    "status": "completed",
+    "routeId": "route-exit:b_triage_done",
+    "routeLabel": "Exit",
+    "endedBy": "direct-routing",
+    "endedAt": 42.5,
+    "sourceEventId": "b_triage_done",
+    "sourceEventName": "Triage Done"
+  }
+}
+```
+
+Terminal macros and routes set this field as follows:
+
+- `COMPLETE()` sets `status: "completed"` with an `event:<BEventId>` route.
+- `RENEGE(ctx)` and `RENEGE_OLDEST(...)` set `status: "reneged"`.
+- A conditional or probabilistic `RELEASE(...)` route with `queueName: null` sets `status: "completed"` with a `route-exit:<BEventId>` route.
+- A loop guard with no `exitQueueName` sets `status: "completed"` with a `loop-exit:<BEventId>` route.
+
+Run summaries aggregate these into `summary.outcomes`, keyed by `routeId`, so Results, reports, exports, and AI analysis can distinguish "completed via consultation" from "discharged at triage" even when both count toward `summary.served`.
+
 ### Loop Guard (Sprint 12)
 
 The loop guard is configured via `loopConfig` on a B-Event:

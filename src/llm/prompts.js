@@ -86,6 +86,23 @@ function extractResources(model = {}, summary = {}) {
   });
 }
 
+function extractOutcomes(summary = {}) {
+  const outcomes = summary.outcomes && typeof summary.outcomes === "object"
+    ? summary.outcomes
+    : {};
+  const rows = Object.entries(outcomes)
+    .map(([routeId, outcome]) => ({
+      routeId,
+      routeLabel: outcome.routeLabel || routeId,
+      status: outcome.status || null,
+      endedBy: outcome.endedBy || null,
+      count: finiteOrNull(outcome.count),
+    }))
+    .filter(row => row.count != null && row.count > 0)
+    .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
+  return rows.length ? rows : undefined;
+}
+
 function extractExperiment(experimentConfig = {}) {
   return {
     warmup: experimentConfig.warmupPeriod ?? experimentConfig.warmup ?? 0,
@@ -185,6 +202,7 @@ function extractEntityAnomalies(results = {}) {
 
 function buildKpis(model = {}, results = {}) {
   const summary = getSummary(results);
+  const outcomes = extractOutcomes(summary);
   const kpis = {
     queues: extractQueues(model, results),
     resources: extractResources(model, summary),
@@ -198,6 +216,7 @@ function buildKpis(model = {}, results = {}) {
     maxSojourn: finiteOrNull(summary.maxSojourn),
     avgWIP: finiteOrNull(summary.avgWIP),
   };
+  if (outcomes) kpis.outcomes = outcomes;
   if (summary.totalCost) kpis.totalCost = finiteOrNull(summary.totalCost);
   if (summary.costPerServed) kpis.costPerServed = finiteOrNull(summary.costPerServed);
   if (summary.containerLevels) kpis.containerLevels = summary.containerLevels;
@@ -1129,10 +1148,11 @@ export function buildReportRecommendationsPrompt(model = {}, results = {}) {
   const entityAnomalies = extractEntityAnomalies(results);
   const queues = extractQueues(model, results);
   const resources = extractResources(model, summary);
+  const outcomes = extractOutcomes(summary);
 
   const payload = {
     model: { name: model.name || DEFAULT_MODEL_NAME, goals: goalsToPrompt(model) },
-    kpis: { avgWait: finiteOrNull(summary.avgWait), avgSvc: finiteOrNull(summary.avgSvc), served: finiteOrNull(summary.served), reneged: finiteOrNull(summary.reneged), avgWIP: finiteOrNull(summary.avgWIP) },
+    kpis: { avgWait: finiteOrNull(summary.avgWait), avgSvc: finiteOrNull(summary.avgSvc), served: finiteOrNull(summary.served), reneged: finiteOrNull(summary.reneged), avgWIP: finiteOrNull(summary.avgWIP), ...(outcomes ? { outcomes } : {}) },
     queues,
     resources,
     aggregateStats: results.aggregateStats || {},

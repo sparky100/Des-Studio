@@ -29,6 +29,9 @@ const minimalResults = {
     avgSvc: 5.0,
     avgSojourn: 8.2,
     avgWIP: 2.1,
+    outcomes: {
+      'route-exit:triage': { routeId: 'route-exit:triage', routeLabel: 'Exit', status: 'completed', endedBy: 'direct-routing', count: 12 },
+    },
   },
   aggregateStats: {},
   waitDist: {},
@@ -116,6 +119,16 @@ describe('generateReport', () => {
 
     expect(html).toContain('195');  // served
     expect(html).toContain('3.2'); // avgWait (1 dp)
+  });
+
+  test('includes journey outcome breakdowns', async () => {
+    callLLMOnce.mockResolvedValue('');
+
+    const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
+
+    expect(html).toContain('Journey outcomes');
+    expect(html).toContain('Exit');
+    expect(html).toContain('direct-routing');
   });
 
   test('includes entity types in appendix', async () => {

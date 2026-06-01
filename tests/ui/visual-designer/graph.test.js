@@ -117,6 +117,34 @@ describe("deriveGraphFromModel", () => {
     expect(edgePairs).toContain("activity:start-consult->sink:consult-complete");
   });
 
+  it("binds direct-exit routing sinks to the matching route count key", () => {
+    const graph = deriveGraphFromModel({
+      ...twoStageModel,
+      bEvents: twoStageModel.bEvents.map(event =>
+        event.id === "triage-complete"
+          ? {
+              ...event,
+              effect: "RELEASE(Triage Nurse)",
+              probabilisticRouting: [
+                { probability: 0.25, queueName: null },
+                { probability: 0.75, queueName: "Consultant Queue" },
+              ],
+            }
+          : event
+      ),
+    });
+
+    expect(graph.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "sink:exit-triage-complete",
+        type: "sink",
+        refId: "route-exit:triage-complete",
+      }),
+    ]));
+    expect(graph.edges.map(edge => `${edge.from}->${edge.to}`))
+      .toContain("activity:start-triage->sink:exit-triage-complete");
+  });
+
   it("preserves persisted layout metadata while deriving topology from the model", () => {
     const graph = deriveGraphFromModel({
       ...twoStageModel,

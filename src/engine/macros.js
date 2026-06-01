@@ -199,6 +199,19 @@ function claimMatchesPair(customer, server) {
   return true;
 }
 
+function setOutcome(entity, { status, routeId, routeLabel, endedBy, endedAt, sourceEventId = null, sourceEventName = null }) {
+  if (!entity) return;
+  entity.outcome = {
+    status,
+    routeId,
+    routeLabel,
+    endedBy,
+    endedAt,
+    ...(sourceEventId ? { sourceEventId } : {}),
+    ...(sourceEventName ? { sourceEventName } : {}),
+  };
+}
+
 export const MACROS = [
 
   // ── ARRIVE(Type[, QueueName]) ──────────────────────────────────────────────
@@ -424,6 +437,15 @@ export const MACROS = [
         cust.status        = "done";
         cust.completionTime = clock;
         cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
+        setOutcome(cust, {
+          status: "completed",
+          routeId: `event:${felRef?.id || felRef?.name || "complete"}`,
+          routeLabel: felRef?.name || "Complete",
+          endedBy: "COMPLETE",
+          endedAt: clock,
+          sourceEventId: felRef?.id || null,
+          sourceEventName: felRef?.name || null,
+        });
         state.__served      = (state.__served || 0) + 1;
         msgs.push(`#${cust.id} done [sojourn ${cust.sojournTime.toFixed(2)} t, ${cust.stages.length} stage(s)]`);
       }
@@ -505,6 +527,15 @@ export const MACROS = [
         clearWaitingState(ent);
         ent.status     = "reneged";
         ent.renegeTime = clock;
+        setOutcome(ent, {
+          status: "reneged",
+          routeId: `event:${felRef?.id || felRef?.name || "renege"}`,
+          routeLabel: felRef?.name || "Reneged",
+          endedBy: "RENEGE",
+          endedAt: clock,
+          sourceEventId: felRef?.id || null,
+          sourceEventName: felRef?.name || null,
+        });
         state.__reneged = (state.__reneged || 0) + 1;
         msgs.push(`#${ent.id} reneged after ${(clock - ent.arrivalTime).toFixed(3)} t`);
       } else if (ent) {
@@ -640,6 +671,13 @@ export const MACROS = [
       clearWaitingState(parent);
       parent.status = "done";
       parent.completionTime = clock;
+      setOutcome(parent, {
+        status: "completed",
+        routeId: "macro:UNBATCH",
+        routeLabel: "Unbatched",
+        endedBy: "UNBATCH",
+        endedAt: clock,
+      });
       msgs.push(`UNBATCH: batch #${parentId} → restored #${childIds.join(', #')} to "${targetQueue}"`);
     },
   },
@@ -658,6 +696,13 @@ export const MACROS = [
         clearWaitingState(ent);
         ent.status     = "reneged";
         ent.renegeTime = clock;
+        setOutcome(ent, {
+          status: "reneged",
+          routeId: "macro:RENEGE_OLDEST",
+          routeLabel: "Reneged oldest",
+          endedBy: "RENEGE_OLDEST",
+          endedAt: clock,
+        });
         state.__reneged = (state.__reneged || 0) + 1;
         msgs.push(`#${ent.id} (${cType}) reneged after ${(clock - ent.arrivalTime).toFixed(3)} t`);
       }
@@ -1035,11 +1080,25 @@ export const MACROS = [
       clearWaitingState(entityA);
       entityA.status = "done";
       entityA.completionTime = clock;
+      setOutcome(entityA, {
+        status: "completed",
+        routeId: "macro:MATCH",
+        routeLabel: `Matched into ${targetQueue}`,
+        endedBy: "MATCH",
+        endedAt: clock,
+      });
       entityA._matchedInto = parentId;
 
       clearWaitingState(entityB);
       entityB.status = "done";
       entityB.completionTime = clock;
+      setOutcome(entityB, {
+        status: "completed",
+        routeId: "macro:MATCH",
+        routeLabel: `Matched into ${targetQueue}`,
+        endedBy: "MATCH",
+        endedAt: clock,
+      });
       entityB._matchedInto = parentId;
 
       msgs.push(`MATCH: #${entityA.id} (${typeA}) + #${entityB.id} (${typeB}) → #${parentId} → "${targetQueue}"`);

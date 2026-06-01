@@ -337,6 +337,16 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
     });
   }
   const perResourceEntries = Object.entries(summary.perResource || {});
+  const outcomeEntries = Object.entries(summary.outcomes || {})
+    .map(([routeId, outcome]) => ({
+      routeId,
+      routeLabel: outcome.routeLabel || routeId,
+      status: outcome.status || "",
+      endedBy: outcome.endedBy || "",
+      count: Number(outcome.count) || 0,
+    }))
+    .filter(row => row.count > 0)
+    .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
   const utilPct = v => `${formatNumber(v * 100, 1)}%`;
   const utilColor = v => v > 0.9 ? C.red : v > 0.7 ? C.amber : C.green;
   const avgUtil = perResourceEntries.length > 0
@@ -405,6 +415,29 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
                 </div>
               </div>
             )}
+          </div>
+        </>
+      )}
+      {outcomeEntries.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+            JOURNEY OUTCOMES
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+            {outcomeEntries.map(outcome => (
+              <div key={outcome.routeId} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
+                  {outcome.routeLabel.toUpperCase()}
+                </div>
+                <div style={{ fontSize: 18, color: outcome.status === "reneged" ? C.reneged : C.served, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
+                  {formatMetricValue(outcome.count, 0)}
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                  {outcome.status === "reneged" ? "Left before completion." : "Completed on this route."}
+                  {outcome.endedBy ? ` Source: ${outcome.endedBy}.` : ""}
+                </div>
+              </div>
+            ))}
           </div>
         </>
       )}

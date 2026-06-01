@@ -1,6 +1,6 @@
 # DES Studio — Model Schema Reference for LLM Generation
 
-**Version:** 1.3.1
+**Version:** 1.3.2
 **Date:** 2026-06-01
 **Sprint baseline:** Sprint 71
 
@@ -11,6 +11,7 @@
 | v1.2.0 | 2026-05-23 | Sprint 70 | Fixed app URL to `https://des.simmodlr.app`; updated LLM delivery instructions to save JSON file and produce magic link |
 | v1.3.0 | 2026-05-24 | Sprint 71 | Added `openSky` data source type to §15 (OpenSky Network real-time adapter); added §15.1 `openSky` field reference and supported airports table; added "Airport Arrivals" model pattern to §11 |
 | v1.3.1 | 2026-06-01 | Docs correction | Clarified probabilistic arrival splitting: use separate ARRIVE B-events with proportional inter-arrival means; never use `probabilisticRouting` on ARRIVE events |
+| v1.3.2 | 2026-06-01 | Results contract | Added `entity.outcome` and `summary.outcomes` journey-conclusion result metadata for terminal route reporting and AI analysis |
 
 ---
 
@@ -157,6 +158,46 @@ Servers can have random failures (the engine auto-generates FAIL/REPAIR events):
 - `mtbfDist` / `mttrDist`: any distribution name from §4. `Exponential` and `Triangular` are most common.
 - Mean time between failures (`mtbfDist`) should be much larger than mean time to repair (`mttrDist`).
 - No additional B-events or C-events are needed — the engine handles failure scheduling automatically.
+
+---
+
+## 2.1 Runtime Outcome Metadata
+
+This is output metadata, not author-authored model JSON. When an entity reaches a terminal path, result snapshots may include:
+
+```json
+{
+  "outcome": {
+    "status": "completed",
+    "routeId": "route-exit:b_triage_done",
+    "routeLabel": "Exit",
+    "endedBy": "direct-routing",
+    "endedAt": 42.5,
+    "sourceEventId": "b_triage_done",
+    "sourceEventName": "Triage Done"
+  }
+}
+```
+
+The run summary also aggregates these conclusions:
+
+```json
+"summary": {
+  "served": 19,
+  "reneged": 0,
+  "outcomes": {
+    "route-exit:b_triage_done": {
+      "routeId": "route-exit:b_triage_done",
+      "routeLabel": "Exit",
+      "status": "completed",
+      "endedBy": "direct-routing",
+      "count": 7
+    }
+  }
+}
+```
+
+Use `summary.outcomes` for reports and AI analysis when answering how customers concluded their journey. Do not infer route-specific outcomes from log text.
 
 ---
 
