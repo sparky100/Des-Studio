@@ -7,6 +7,7 @@ import { validateModel } from "../engine/validation.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,currentVersion})=>{
+  const { C, FONT } = useTheme();
   const owner=(profiles||[]).find(p=>p.id===model.owner_id)||null;
   const fmtDate=iso=>{ try{ return new Date(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }catch(e){return '';} };
   const runCount=model.stats?.runs;
@@ -17,7 +18,6 @@ export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,
   const healthLabel = hasErrors ? "Validation Errors" : hasWarnings ? "Validation Warnings" : "Ready";
   const healthColor = hasErrors ? C.red : hasWarnings ? C.amber : C.green;
   const openFromKeyboard=e=>{
-  const { C, FONT } = useTheme();
     if(e.key==="Enter"||e.key===" "){
       e.preventDefault();
       onOpen?.();
@@ -57,6 +57,7 @@ export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,
 };
 
 export const NewModelModal=({onClose,onStartDesign,onUseTemplate,onImportFile,onPasteJson,onUseAi})=>{
+  const { C, FONT } = useTheme();
   const [name,setName]=useState(""); const [desc,setDesc]=useState("");
   const [saving,setSaving]=useState(false);
   const [mode,setMode]=useState("choose");
@@ -66,7 +67,6 @@ export const NewModelModal=({onClose,onStartDesign,onUseTemplate,onImportFile,on
   const startDesign=async()=>{if(!name.trim())return;setSaving(true);try{await onStartDesign?.(name.trim(),desc.trim());}finally{setSaving(false);}onClose();};
   const triggerImport=()=>{if(!name.trim())return;fileInputRef.current?.click();};
   const handleFileSelect=(e)=>{
-  const { C, FONT } = useTheme();
     const file=e.target.files?.[0];
     if(!file)return;
     const reader=new FileReader();

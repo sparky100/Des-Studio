@@ -5,6 +5,7 @@ import { AttrEditor } from "./AttrEditor.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 const EntityTypeEditor=({types,onChange})=>{
+  const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
 
@@ -13,7 +14,6 @@ const EntityTypeEditor=({types,onChange})=>{
   const collapseAll=()=>setExpandedIds(new Set());
 
   const add=()=>{
-  const { C, FONT } = useTheme();
     const id="et"+Date.now();
     onChange([...types,{id,name:"",role:"customer",count:"",attrs:"",description:""}]);
     setExpandedIds(prev=>new Set([...prev,id]));
