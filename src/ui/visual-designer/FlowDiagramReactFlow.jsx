@@ -15,15 +15,9 @@ import "@xyflow/react/dist/style.css";
 import { validateVisualConnection } from "./graph-operations.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-const NODE_COLOR = {
-  source: C.green,
-  queue: C.cEvent,
-  activity: C.purple,
-  sink: C.red,
-};
-
 function DesNode({ data, selected }) {
   const { C, FONT } = useTheme();
+  const NODE_COLOR = { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red };
   const color = NODE_COLOR[data.type] || C.accent;
   const hasTarget = data.type !== "source";
   const hasSource = data.type !== "sink";
@@ -134,7 +128,7 @@ function toFlowNode(node) {
   };
 }
 
-function toFlowEdge(edge) {
+function toFlowEdge(edge, C, FONT) {
   const label = edge.label || edge.source || undefined;
   const isLoop = edge.loop === true;
   const isFallback = edge.label === "fallback";
@@ -162,21 +156,13 @@ function toFlowEdge(edge) {
   };
 }
 
-const panelBtnStyle = {
-  background: C.surface,
-  border: `1px solid ${C.border}`,
-  borderRadius: 4,
-  color: C.muted,
-  cursor: "pointer",
-  fontFamily: FONT,
-  fontSize: 10,
-  fontWeight: 600,
-  letterSpacing: 0.5,
-  padding: "5px 9px",
-};
-
 function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef }) {
   const { C, FONT } = useTheme();
+  const panelBtnStyle = {
+    background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4,
+    color: C.muted, cursor: "pointer", fontFamily: FONT,
+    fontSize: 10, fontWeight: 600, letterSpacing: 0.5, padding: "5px 9px",
+  };
   const { fitView, getNode, setCenter, getViewport } = useReactFlow();
 
   // Pan to a specific node without re-zooming the whole canvas.
@@ -274,7 +260,7 @@ export function FlowDiagramReactFlow({
     [graph.nodes, errorNodeIds]
   );
 
-  const edges = useMemo(() => (graph.edges || []).map(toFlowEdge), [graph.edges]);
+  const edges = useMemo(() => (graph.edges || []).map(e => toFlowEdge(e, C, FONT)), [graph.edges, C, FONT]);
 
   const isValidConnection = useCallback(connection => {
     const validation = validateVisualConnection(graph, connection.source, connection.target);

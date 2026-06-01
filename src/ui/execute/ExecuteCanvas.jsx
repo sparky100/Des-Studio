@@ -21,36 +21,18 @@ import { ExecuteActivityNode } from "./ExecuteActivityNode.jsx";
 import { ExecuteSinkNode }     from "./ExecuteSinkNode.jsx";
 import { AnimatedEdge }        from "./AnimatedEdge.jsx";
 import { formatSimWallTime }   from "../../engine/clockUtils.js";
-
-const NODE_COLOR = {
-  source: C.green,
-  queue: C.cEvent,
-  activity: C.purple,
-  sink: C.red,
-};
+import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
+export { DEFAULT_KPI_SLOTS };
 
 // ── Configurable KPI bar (F9C.7) ─────────────────────────────────────────────
 
-const KPI_METRICS = {
-  arrived: { label: "Arrived total", color: C.kpiArr },
-  served:  { label: "Served total",  color: C.kpiSvc },
-  reneged: { label: "Reneged total", color: C.danger },
-  waiting: { label: "Waiting now",   color: C.bEvent },
-  clock:   { label: "Sim Clock",     color: C.server },
-  active:  { label: "Active now",    color: C.cEvent  },
-};
-
 function preferMetricValue(primary, fallback) {
-  const { C, FONT } = useTheme();
   if (fallback == null) return primary ?? null;
   if (primary == null) return fallback;
   if (primary === 0 && fallback !== 0) return fallback;
   return primary;
 }
-
-import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
-import { useTheme } from "../shared/ThemeContext.jsx";
-export { DEFAULT_KPI_SLOTS };
 
 function resolveKpiValue(key, snap, entities, summary, totals) {
   const customers = entities.filter(e => e.role !== "server");
@@ -69,6 +51,14 @@ function resolveKpiValue(key, snap, entities, summary, totals) {
 
 function KpiSlot({ metricKey, snap, entities, summary, totals, onEdit }) {
   const { C, FONT } = useTheme();
+  const KPI_METRICS = {
+    arrived: { label: "Arrived total", color: C.kpiArr },
+    served:  { label: "Served total",  color: C.kpiSvc },
+    reneged: { label: "Reneged total", color: C.danger },
+    waiting: { label: "Waiting now",   color: C.bEvent },
+    clock:   { label: "Sim Clock",     color: C.server },
+    active:  { label: "Active now",    color: C.cEvent  },
+  };
   const [hovered,  setHovered]  = useState(false);
   const [editing,  setEditing]  = useState(false);
   const meta  = KPI_METRICS[metricKey] || { label: metricKey, color: C.muted };
@@ -326,6 +316,7 @@ function LiveNodeMetric({ type, live }) {
 
 function LiveNode({ data }) {
   const { C, FONT } = useTheme();
+  const NODE_COLOR = { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red };
   const color = NODE_COLOR[data.type] || C.accent;
   const hasTarget = data.type !== "source";
   const hasSource = data.type !== "sink";
@@ -402,7 +393,7 @@ function toFlowNode(node) {
   };
 }
 
-function toFlowEdge(edge) {
+function toFlowEdge(edge, C) {
   return {
     id: edge.id,
     source: edge.from,
@@ -610,10 +601,10 @@ export function ExecuteCanvas({
   }, [snap, baseGraph.nodes, serverTypeIndex, sourceIndex]);
 
   const flowEdges = useMemo(() => baseGraph.edges.map(edge => ({
-    ...toFlowEdge(edge),
+    ...toFlowEdge(edge, C),
     type: animationEnabled ? "animatedEdge" : undefined,
     data: animationEnabled ? { tokens: edgeTokens[edge.id] || [] } : undefined,
-  })), [baseGraph.edges, animationEnabled, edgeTokens]);
+  })), [baseGraph.edges, animationEnabled, edgeTokens, C]);
 
   // No derivable nodes — caller renders VisualView fallback
   if (!baseGraph.nodes.length) return null;
