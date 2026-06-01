@@ -17,7 +17,7 @@ const LLM_PROVIDERS = [
 ];
 
 const LLM_MODELS = {
-  anthropic:   ["claude-sonnet-4-20250514", "claude-sonnet-4-5", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-4-5"],
+  anthropic:   ["claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4-20250514", "claude-haiku-4-5", "claude-opus-4-5"],
   openai:      ["gpt-5.1-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max"],
   "opencode-go": ["opencode-go/deepseek-v4-pro", "opencode-go/deepseek-v4-flash"],
 };
@@ -260,7 +260,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
 
   // LLM form state
   const [provider, setProvider] = useState("anthropic");
-  const [model, setModel] = useState("claude-sonnet-4-20250514");
+  const [model, setModel] = useState("claude-sonnet-4-6");
   const [apiKey, setApiKey] = useState("");
   const [temperature, setTemperature] = useState(0.3);
   const [maxTokens, setMaxTokens] = useState(450);
@@ -290,7 +290,7 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       setFeedback(fb || []);
       if (llmCfg) {
         setProvider(llmCfg.provider || "anthropic");
-        setModel(llmCfg.model || "claude-sonnet-4-20250514");
+        setModel(llmCfg.model || "claude-sonnet-4-6");
         setApiKey(llmCfg.apiKey || "");
         setTemperature(llmCfg.temperature ?? 0.3);
         setMaxTokens(llmCfg.maxTokensPerRun ?? 450);
