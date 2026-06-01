@@ -459,7 +459,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   const systemPrompt = useMemo(() => buildModelBuilderSystemPrompt(), []);
 
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    chatBottomRef.current?.scrollIntoView?.({ behavior: "smooth" });
   }, [history, loading]);
 
   useEffect(() => {
