@@ -10,6 +10,7 @@ import { fetchModels, fetchProfiles,
          setVisibility, setAccess, forkModel,
          fetchRunStatsForModels,
          validateDbSchema,
+         fetchUserSettings,
          getPlatformConfig }              from "./db/models.js";
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
 import { GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
@@ -214,6 +215,18 @@ export default function App({ onThemeChange }){
   },[session])
 
   useEffect(()=>{loadData()},[loadData])
+
+  useEffect(()=>{
+    const themeUserId=session?.user?.id
+    if(!themeUserId||!onThemeChange)return
+    let cancelled=false
+    fetchUserSettings(themeUserId).then(({settings})=>{
+      if(cancelled)return
+      const savedTheme=settings?.ui?.theme
+      if(savedTheme)onThemeChange(savedTheme)
+    }).catch(()=>{})
+    return ()=>{cancelled=true}
+  },[session?.user?.id,onThemeChange])
 
   useEffect(()=>{
     if(!session)return
@@ -603,7 +616,7 @@ export default function App({ onThemeChange }){
             Your account has been suspended. Please contact support if you believe this is an error.
           </div>
           <button type="button" onClick={signOut}
-            style={{background:'#ffffff08',border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,fontFamily:FONT,fontSize:12,padding:'8px 20px',cursor:'pointer',fontWeight:600}}>
+            style={{background:C.surfaceHover,border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,fontFamily:FONT,fontSize:12,padding:'8px 20px',cursor:'pointer',fontWeight:600}}>
             Sign Out
           </button>
         </div>
@@ -668,7 +681,7 @@ export default function App({ onThemeChange }){
         onTabChange={setLibraryTab}
       />
       {showForkConfirm && modelToFork && (
-        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'#000000aa',display:'flex',alignItems:'center',justifyContent:'center',zIndex:Z.modal}}>
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:C.overlay,display:'flex',alignItems:'center',justifyContent:'center',zIndex:Z.modal}}>
           <div role="dialog" aria-modal="true" aria-labelledby="fork-public-model-title" style={{background:C.panel,padding:24,borderRadius:10,width:400,maxWidth:'90vw',display:'flex',flexDirection:'column',gap:20}}>
             <h2 id="fork-public-model-title" style={{fontSize:18,fontWeight:700,color:C.text}}>Run Public Model</h2>
             <p style={{fontSize:13,color:C.muted}}>To run "{modelToFork.name}", a private copy will be created in your library. You will own this copy and its run history.</p>

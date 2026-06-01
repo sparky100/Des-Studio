@@ -99,7 +99,7 @@ export const VisualView = ({ snap, model, summary }) => {
       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 16, alignItems: "start" }}>
         <div style={{ background: C.bg, border: `2px solid ${C.purple}44`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 140 }}>
           <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 2, marginBottom: 6 }}>SIM CLOCK</div>
-          <div style={{ fontSize: 42, fontWeight: 300, color: "#fff", fontFamily: FONT, lineHeight: 1 }}>
+          <div style={{ fontSize: 42, fontWeight: 300, color: C.text, fontFamily: FONT, lineHeight: 1 }}>
             {parseFloat(snap.clock).toFixed(0)}
           </div>
           {wallClock && (
@@ -136,8 +136,8 @@ export const VisualView = ({ snap, model, summary }) => {
             return (
               <div key={qName} style={{ background: C.bg, border: `1px solid ${C.border}`, borderLeft: `4px solid ${C.cEvent || C.purple}`, borderRadius: 8, padding: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#fff", fontFamily: FONT }}>{qName.toUpperCase()}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: qEntities.length > 0 ? C.bEvent : "#fff", fontFamily: FONT }}>{qEntities.length}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: C.text, fontFamily: FONT }}>{qName.toUpperCase()}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: qEntities.length > 0 ? C.bEvent : C.text, fontFamily: FONT }}>{qEntities.length}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', minHeight: 40 }}>
                   {qEntities.length === 0 ? <span style={{ fontSize: 11, color: C.muted, fontStyle: "italic" }}>empty</span> : qEntities.map(e => <CustomerToken key={e.id} entity={e} size={32} />)}

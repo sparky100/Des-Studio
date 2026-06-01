@@ -623,7 +623,7 @@ function NewScheduleForm({ modelId, userId, onCreated, onCancel }) {
           value={name}
           onChange={e => setName(e.target.value)}
           autoFocus
-          style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, background: C.bg || "#fff", color: C.text }}
+          style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, background: C.bg, color: C.text }}
         />
       </div>
       <div>
@@ -631,7 +631,7 @@ function NewScheduleForm({ modelId, userId, onCreated, onCancel }) {
         <input
           value={description}
           onChange={e => setDescription(e.target.value)}
-          style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, background: C.bg || "#fff", color: C.text }}
+          style={{ width: "100%", padding: "6px 10px", border: `1px solid ${C.border}`, borderRadius: 4, fontSize: 13, background: C.bg, color: C.text }}
         />
       </div>
       {error && <div style={{ color: C.danger, fontSize: 11 }}>{error}</div>}

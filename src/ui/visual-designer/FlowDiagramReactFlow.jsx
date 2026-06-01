@@ -56,7 +56,7 @@ function DesNode({ data, selected }) {
             borderRadius: "50%",
             background: C.red,
             border: `2px solid ${C.bg}`,
-            color: "#fff",
+            color: C.bg,
             fontSize: 8,
             fontWeight: 900,
             display: "flex",
@@ -344,7 +344,7 @@ export function FlowDiagramReactFlow({
           pannable
           zoomable
           nodeColor={node => NODE_COLOR[node.data?.type] || C.accent}
-          maskColor="rgba(8, 12, 16, 0.72)"
+          maskColor={C.overlay}
         />
         <CanvasControls
           canEdit={canEdit}

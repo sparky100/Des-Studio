@@ -131,7 +131,7 @@ export function AppNavBar({
             onClick={onAdmin}
             style={{
               ...navBtnStyle,
-              background: isAdminActive ? C.accent + "33" : "#ffffff08",
+              background: isAdminActive ? C.accent + "33" : C.surfaceHover,
               border: `1px solid ${isAdminActive ? C.accent : C.border}`,
               color: isAdminActive ? C.accent : C.muted,
             }}

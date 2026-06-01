@@ -316,19 +316,19 @@ export default function DashboardView({ token, onBack }) {
         <div style={{ fontSize: 11, color: C.muted, borderLeft: `1px solid ${C.border}`, paddingLeft: 16 }}>Shared Results Dashboard</div>
         <div style={{ flex: 1 }} />
         <button type="button" onClick={handleExportReport} disabled={reportGenerating}
-          style={{ background: "#ffffff08", border: `1px solid ${C.border}`, borderRadius: 5, color: C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px", cursor: reportGenerating ? "wait" : "pointer", fontWeight: 600 }}>
+          style={{ background: C.surfaceHover, border: `1px solid ${C.border}`, borderRadius: 5, color: C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px", cursor: reportGenerating ? "wait" : "pointer", fontWeight: 600 }}>
           {reportGenerating ? 'Generating...' : '📄 Export Report'}
         </button>
         {onBack && (
           <button type="button" onClick={onBack}
-            style={{ background: "#ffffff08", border: `1px solid ${C.border}`, borderRadius: 5, color: C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
+            style={{ background: C.surfaceHover, border: `1px solid ${C.border}`, borderRadius: 5, color: C.muted, fontFamily: FONT, fontSize: 11, padding: "5px 12px", cursor: "pointer", fontWeight: 600 }}>
             ← Back
           </button>
         )}
       </div>
 
       {/* Provenance Strip */}
-      <div style={{ background: '#FFF8E1', borderBottom: `1px solid ${C.border}`, padding: "8px 24px", fontSize: 10, fontFamily: 'monospace', color: '#5D4037' }}>
+      <div style={{ background: C.warnBg, borderBottom: `1px solid ${C.border}`, padding: "8px 24px", fontSize: 10, fontFamily: FONT, color: C.amber }}>
         Run ID: {run.id} · Seed: {run.seed} · PRNG: mulberry32 · {new Date(run.ranAt).toLocaleString()}
       </div>
 

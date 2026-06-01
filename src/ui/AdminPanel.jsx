@@ -157,7 +157,7 @@ function UserDrawer({ user, currentUserId, onClose, onRoleChange, onPlanChange, 
         onClick={onClose}
         style={{
           position: "fixed", inset: 0, zIndex: 199,
-          background: "rgba(0,0,0,0.45)",
+          background: C.overlay,
         }}
       />
       {/* Drawer */}

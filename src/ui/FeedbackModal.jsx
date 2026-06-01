@@ -146,7 +146,7 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{
         position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-        background: "rgba(0,0,0,0.67)",
+        background: C.overlay,
         display: "flex", alignItems: "center", justifyContent: "center",
         zIndex: Z.modal, padding: 20,
       }}
@@ -219,7 +219,7 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
                     background: C.accent,
                     border: "none",
                     borderRadius: RADIUS.md,
-                    color: "#000",
+                    color: C.bg,
                     fontFamily: FONT,
                     fontSize: 12,
                     fontWeight: 700,
@@ -366,7 +366,7 @@ export function FeedbackModal({ isOpen, onClose, userId, currentPage }) {
                     background: message.length >= MIN_CHARS && !submitting ? C.accent : alpha(C.accent, 0.3),
                     border: "none",
                     borderRadius: RADIUS.md,
-                    color: message.length >= MIN_CHARS && !submitting ? "#000" : C.muted,
+                    color: message.length >= MIN_CHARS && !submitting ? C.bg : C.muted,
                     fontFamily: FONT,
                     fontSize: 12,
                     fontWeight: 700,

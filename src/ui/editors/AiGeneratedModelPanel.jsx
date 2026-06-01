@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { callModelBuilder } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
-import { C, FONT } from "../shared/tokens.js";
 import { Btn, Empty, Field, InfoBox, SH } from "../shared/components.jsx";
+import { useTheme } from "../shared/ThemeContext.jsx";
 import { ModelDiffPreview } from "./ModelDiffPreview.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { predicateToLegacyString, rowsToPredicate, parseConditionString } from "../../model/conditionFormat.js";
@@ -303,6 +303,7 @@ function stripTrailingQuestion(text = "") {
 }
 
 function Bubble({ role, content }) {
+  const { C, FONT } = useTheme();
   const isUser = role === "user";
   const isSystem = role === "system";
   const label = isSystem ? "Model note" : isUser ? "You" : "Assistant";
@@ -329,6 +330,7 @@ function Bubble({ role, content }) {
 }
 
 function BuildingIndicator() {
+  const { C, FONT } = useTheme();
   return (
     <div style={{
       alignSelf: "flex-start",
@@ -349,6 +351,7 @@ function BuildingIndicator() {
 }
 
 function ConfirmBubble({ explanation, onConfirm, onRefute }) {
+  const { C, FONT } = useTheme();
   return (
     <div
       aria-label="Model confirmation"
@@ -410,6 +413,7 @@ function ConfirmBubble({ explanation, onConfirm, onRefute }) {
 }
 
 function RefinementChips({ suggestions, onChipClick }) {
+  const { C, FONT } = useTheme();
   const [hovered, setHovered] = useState(null);
   if (!suggestions || !suggestions.length) return null;
   return (
@@ -442,6 +446,7 @@ function RefinementChips({ suggestions, onChipClick }) {
 }
 
 export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveModel }) {
+  const { C, FONT } = useTheme();
   const [draft, setDraft] = useState("");
   const [history, setHistory] = useState([]);
   const [proposal, setProposal] = useState(null);

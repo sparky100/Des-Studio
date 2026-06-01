@@ -20,7 +20,7 @@ function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.65)",
+        background: C.overlay,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -503,7 +503,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                   }}
                   onClick={() => addNode(item.type)}
                   style={{
-                    background: "#ffffff08",
+                    background: C.surfaceHover,
                     color: item.color,
                     border: `1px solid ${item.color}66`,
                     borderRadius: 5,

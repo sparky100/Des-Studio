@@ -80,7 +80,7 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
               style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px", outline: "none" }} />
             {authError && <div style={{ fontSize: 11, color: C.red }}>{authError}</div>}
             <button type="button" onClick={handlePasswordReset}
-              style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 4, fontFamily: FONT, fontSize: 13, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
+              style={{ background: C.accent, color: C.bg, border: "none", borderRadius: 4, fontFamily: FONT, fontSize: 13, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
               Update Password
             </button>
           </div>
@@ -100,7 +100,7 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
         </div>
         {!showAuth ? (
           <button type="button" onClick={() => setShowAuth(true)}
-            style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 6, fontFamily: FONT, fontSize: 14, padding: "10px 28px", cursor: "pointer", fontWeight: 700 }}>
+            style={{ background: C.accent, color: C.bg, border: "none", borderRadius: 6, fontFamily: FONT, fontSize: 14, padding: "10px 28px", cursor: "pointer", fontWeight: 700 }}>
             Sign In / Sign Up
           </button>
         ) : (
@@ -123,7 +123,7 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
                   style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 13, padding: "8px 10px", outline: "none" }} />
                 {authError && <div style={{ fontSize: 11, color: C.red }}>{authError}</div>}
                 <button type="button" onClick={handleAuth}
-                  style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 4, fontFamily: FONT, fontSize: 13, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
+                  style={{ background: C.accent, color: C.bg, border: "none", borderRadius: 4, fontFamily: FONT, fontSize: 13, padding: "8px 16px", cursor: "pointer", fontWeight: 600 }}>
                   {authMode === "signin" ? "Sign In" : "Sign Up"}
                 </button>
                 {authMode === "signin" && (

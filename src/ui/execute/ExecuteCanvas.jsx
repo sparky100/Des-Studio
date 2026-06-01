@@ -84,7 +84,7 @@ function KpiSlot({ metricKey, snap, entities, summary, totals, onEdit }) {
       {editing && (
         <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 20,
           background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6,
-          padding: 4, minWidth: 110, boxShadow: "0 4px 16px #0008" }}>
+          padding: 4, minWidth: 110, boxShadow: "0 4px 16px rgba(0,0,0,0.35)" }}>
           {Object.entries(KPI_METRICS).map(([k, m]) => (
             <div key={k}
               onClick={() => { onEdit(k); setEditing(false); }}
@@ -647,7 +647,7 @@ export function ExecuteCanvas({
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 16, alignItems: "start" }}>
           <div style={{ background: C.bg, border: `2px solid ${C.purple}44`, borderRadius: 12, padding: "20px 28px", textAlign: "center", minWidth: 140 }}>
             <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 2, marginBottom: 6 }}>SIM CLOCK</div>
-            <div style={{ fontSize: 42, fontWeight: 300, color: "#fff", fontFamily: FONT, lineHeight: 1 }}>
+            <div style={{ fontSize: 42, fontWeight: 300, color: C.text, fontFamily: FONT, lineHeight: 1 }}>
               {parseFloat(snap.clock).toFixed(0)}
             </div>
             {wallClock && (

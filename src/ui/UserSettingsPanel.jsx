@@ -11,7 +11,9 @@ const TABS = [
 ];
 
 function PlanBadge({ plan }) {
+  const { C } = useTheme();
   const isPro = plan === "pro";
+  const color = isPro ? C.accent : C.muted;
   return (
     <span style={{
       display: "inline-flex",
@@ -22,9 +24,9 @@ function PlanBadge({ plan }) {
       letterSpacing: 1.2,
       padding: "2px 7px",
       borderRadius: 3,
-      background: isPro ? "#06b6d422" : "#7a98bb18",
-      color:      isPro ? "#06b6d4"   : "#7a98bb",
-      border:     `1px solid ${isPro ? "#06b6d444" : "#7a98bb33"}`,
+      background: color + (isPro ? "22" : "18"),
+      color,
+      border:     `1px solid ${color}${isPro ? "44" : "33"}`,
       textTransform: "uppercase",
       userSelect: "none",
     }}>
@@ -63,13 +65,15 @@ function UserSettingsPanel({ userId, plan, onClose, onThemeChange }) {
       setDefaultMaxSimTime(ex.defaultMaxSimTime ?? 1000);
       setResponseStyle(ai.responseStyle ?? "balanced");
       setAutoProposeTemplate(ai.autoProposeTemplate ?? false);
-      setTheme(ui.theme ?? "system");
+      const savedTheme = ui.theme ?? "system";
+      setTheme(savedTheme);
+      onThemeChange?.(savedTheme);
       setSchemaVersion(sv ?? 1);
     } catch (err) {
       setStatus({ state: "error", message: err.message });
     }
     setLoading(false);
-  }, [userId]);
+  }, [userId, onThemeChange]);
 
   useEffect(() => { load(); }, [load]);
 

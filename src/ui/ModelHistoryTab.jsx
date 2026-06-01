@@ -576,7 +576,7 @@ export function ModelHistoryTab({
                           {hasResultsPayload(row) && (
                             <button
                               onClick={() => onViewResults(row)}
-                              style={{ background: C.accent, color: "#fff", border: "none", borderRadius: 999, padding: "4px 12px", fontSize: 11, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}
+                              style={{ background: C.accent, color: C.bg, border: "none", borderRadius: 999, padding: "4px 12px", fontSize: 11, fontFamily: FONT, fontWeight: 600, cursor: "pointer" }}
                             >View Results</button>
                           )}
                           <button
@@ -686,11 +686,11 @@ export function ModelHistoryTab({
         </div>
       )}
       {snapshotDiffRow && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 16 }}>
-          <div style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 12, padding: 20, width: "min(680px, 100%)", maxHeight: "85vh", overflowY: "auto" }}>
+        <div style={{ position: "fixed", inset: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, padding: 16 }}>
+          <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, width: "min(680px, 100%)", maxHeight: "85vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#e0e0e0", fontFamily: "JetBrains Mono, monospace" }}>Model at this run vs. current</span>
-              <button onClick={() => setSnapshotDiffRow(null)} style={{ background: "transparent", border: "none", color: "#888", fontSize: 18, cursor: "pointer" }}>✕</button>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>Model at this run vs. current</span>
+              <button onClick={() => setSnapshotDiffRow(null)} style={{ background: "transparent", border: "none", color: C.muted, fontSize: 18, cursor: "pointer" }}>✕</button>
             </div>
             <ModelDiffPreview
               currentModel={model}

@@ -2407,7 +2407,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           {showCreateReportModal && (
             <>
               <div
-                style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200 }}
+                style={{ position: "fixed", inset: 0, background: C.overlay, zIndex: 200 }}
                 onClick={() => setShowCreateReportModal(false)}
               />
               <div style={{
@@ -2695,9 +2695,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
       {saveStatus && (
         <div style={{
-          background: saveStatus.state === 'error' ? C.errorBg : saveStatus.state === 'success' ? '#1b4332' : '#1f2937',
-          border: `1px solid ${saveStatus.state === 'error' ? C.danger : saveStatus.state === 'success' ? '#31a24c' : '#4b5563'}`,
-          borderRadius: 6, padding: 12, color: saveStatus.state === 'error' ? C.error : saveStatus.state === 'success' ? '#86efac' : '#e5e7eb',
+          background: saveStatus.state === 'error' ? C.errorBg : saveStatus.state === 'success' ? C.green + '18' : C.surface,
+          border: `1px solid ${saveStatus.state === 'error' ? C.danger : saveStatus.state === 'success' ? C.green + '44' : C.border}`,
+          borderRadius: 6, padding: 12, color: saveStatus.state === 'error' ? C.error : saveStatus.state === 'success' ? C.green : C.text,
           fontSize: 12, fontFamily: FONT,
         }}>
           {saveStatus.message}
@@ -3124,7 +3124,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       )}
       {/* Share Modal */}
       {showShareModal && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#000000aa", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
           onClick={() => { setShowShareModal(false); setQrToken(null); }}>
           <div role="dialog" aria-modal="true" aria-labelledby="share-modal-title"
             onClick={e => e.stopPropagation()}

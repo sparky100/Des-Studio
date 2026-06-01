@@ -478,7 +478,7 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
 
               {canEdit && (
                 <div style={{display:'flex', justifyContent:'flex-end'}}>
-                  <Btn small variant="ghost" onClick={() => remove(idx)} style={{color:'#e55'}}>Remove</Btn>
+                  <Btn small variant="ghost" onClick={() => remove(idx)} style={{color:C.red}}>Remove</Btn>
                 </div>
               )}
             </div>
@@ -1528,7 +1528,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           />
         )}
         {showBaselineModal&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200,padding:16}}>
+          <div style={{position:"fixed",inset:0,background:C.overlay,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200,padding:16}}>
             <div role="dialog" aria-modal="true" style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:12,padding:24,width:"min(440px,100%)",fontFamily:FONT,display:"flex",flexDirection:"column",gap:14}}>
               <div style={{fontSize:15,fontWeight:700,color:C.text}}>Save as scenario baseline</div>
               <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>
