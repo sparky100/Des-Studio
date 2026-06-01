@@ -1,5 +1,5 @@
 const DEFAULT_PROVIDER = "anthropic";
-const DEFAULT_MODEL = "claude-sonnet-4-5";
+const DEFAULT_MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const CORS_HEADERS = {
