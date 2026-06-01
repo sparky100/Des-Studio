@@ -70,17 +70,23 @@ function normalizeRequest(body: Record<string, unknown>, config: LlmProviderConf
 }
 
 async function callAnthropic(request: LlmProxyRequest, config: LlmProviderConfig) {
-  const system = request.messages.find(m => m.role === "system")?.content || "";
+  const systemText = request.messages.find(m => m.role === "system")?.content || "";
   const userMessages = request.messages.filter(m => m.role !== "system").map(m => ({
     role: m.role === "assistant" ? "assistant" : "user",
     content: String(m.content || ""),
   }));
+  // Cache the system prompt (contains large static content like schema docs and help reference).
+  // Anthropic charges 10% of normal input-token cost for cache hits; TTL is 5 minutes.
+  const system = systemText
+    ? [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }]
+    : undefined;
   return fetch(ANTHROPIC_API_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-api-key": config.apiKey,
       "anthropic-version": "2023-06-01",
+      "anthropic-beta": "prompt-caching-2024-07-31",
     },
     body: JSON.stringify({
       model: config.model, system, messages: userMessages,

@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 ;
 import { Btn } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
-import { streamNarrative, callLLMOnce } from "../../llm/apiClient.js";
+import { streamNarrative } from "../../llm/apiClient.js";
 import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -559,16 +559,25 @@ export const AiAssistantPanel = ({
     setRefineParsed(null);
     setRefineCardStatus({});
     setRefineCardResults({});
-    try {
-      const prompt = buildPlanRefinementPrompt(model, exportConfig, { ...results, aggregateStats });
-      const text = await callLLMOnce(prompt);
-      const parsed = parsePlanRefinementResponse(text);
-      setRefineParsed(parsed);
-      setRefineStatus("complete");
-    } catch (err) {
-      setRefineError(err?.message || "Plan refinement unavailable");
-      setRefineStatus("error");
-    }
+    const prompt = buildPlanRefinementPrompt(model, exportConfig, { ...results, aggregateStats });
+    let accumulated = "";
+    streamNarrative(prompt, {
+      onToken: token => { accumulated += token; },
+      onComplete: () => {
+        try {
+          const parsed = parsePlanRefinementResponse(accumulated);
+          setRefineParsed(parsed);
+          setRefineStatus("complete");
+        } catch (err) {
+          setRefineError(err?.message || "Plan refinement returned an unexpected format");
+          setRefineStatus("error");
+        }
+      },
+      onError: err => {
+        setRefineError(err?.message || "Plan refinement unavailable");
+        setRefineStatus("error");
+      },
+    });
   }, [model, exportConfig, results, aggregateStats]);
 
   const handleRefineApplyAndRerun = useCallback(async (card) => {

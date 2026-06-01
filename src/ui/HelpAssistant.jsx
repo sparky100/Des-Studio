@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Z } from './shared/tokens.js';
 import { Btn } from './shared/components.jsx';
-import { callLLMOnce } from '../llm/apiClient.js';
+import { streamNarrative } from '../llm/apiClient.js';
 import { buildHelpAssistantSystemPrompt, buildHelpUserMessage } from '../llm/help-assistant-prompt.js';
 import { useTheme } from "./shared/ThemeContext.jsx";
 
@@ -280,66 +280,51 @@ export function HelpAssistant({
 
   const handleSubmit = useCallback(async (question) => {
     if (!question.trim() || isLoading) return;
-    
+
     const userQuestion = question.trim();
     setInputValue('');
     setError(null);
-    
-    // Add user message to history
+    setCurrentResponse('');
+
+    const workflowMode = getWorkflowMode(currentTab, currentView);
+    const modelSummary = buildModelSummary(currentModel, validation);
+
+    // Send context (workflowMode, modelSummary) only on the first turn; follow-ups send the
+    // question alone so the growing history doesn't re-transmit the same static block.
+    const isFirstTurn = conversationHistory.length === 0;
+    const userContent = buildHelpUserMessage(userQuestion, isFirstTurn
+      ? { workflowMode, currentTab, currentView, modelSummary }
+      : {});
+
     const newHistory = [...conversationHistory, { role: 'user', content: userQuestion }];
     setConversationHistory(newHistory);
     setIsLoading(true);
-    setCurrentResponse('');
-    
-    // Build context
-    const workflowMode = getWorkflowMode(currentTab, currentView);
-    const modelSummary = buildModelSummary(currentModel, validation);
-    
-    // Build messages for LLM
+
     const messages = [
-      ...conversationHistory.slice(-10), // Keep last 10 turns
-      {
-        role: 'user',
-        content: buildHelpUserMessage(userQuestion, {
-          workflowMode,
-          currentTab,
-          currentView,
-          modelSummary,
-        }),
-      },
+      { role: 'system', content: systemPrompt() },
+      ...conversationHistory.slice(-10),
+      { role: 'user', content: userContent },
     ];
-    
-    try {
-      const response = await callLLMOnce({
-        kind: 'help-assistant',
-        messages: [
-          { role: 'system', content: systemPrompt() },
-          ...messages,
-        ],
-        maxTokens: 800,
-        stream: false,
-        responseFormat: 'text',
-      });
-      
-      // Extract response text; defensively unwrap JSON { "answer": "..." } if the LLM returns it
-      let answer = typeof response === 'string'
-        ? response
-        : response?.answer || response?.content || JSON.stringify(response);
-      if (typeof answer === 'string' && answer.trimStart().startsWith('{')) {
-        try {
-          const parsed = JSON.parse(answer);
-          if (typeof parsed.answer === 'string') answer = parsed.answer;
-        } catch {
-          // Not valid JSON — use as-is
-        }
+
+    let accumulated = '';
+    streamNarrative(
+      { kind: 'help-assistant', messages, max_tokens: 800 },
+      {
+        onToken: token => {
+          accumulated += token;
+          setCurrentResponse(accumulated);
+        },
+        onComplete: () => {
+          setConversationHistory(prev => [...prev, { role: 'assistant', content: accumulated }]);
+          setCurrentResponse('');
+          setIsLoading(false);
+        },
+        onError: err => {
+          setError(err?.message || 'Failed to get response from Help Assistant');
+          setIsLoading(false);
+        },
       }
-      
-      setConversationHistory(prev => [...prev, { role: 'assistant', content: answer }]);
-    } catch (err) {
-      setError(err?.message || 'Failed to get response from Help Assistant');
-    } finally {
-      setIsLoading(false);
-    }
+    );
   }, [conversationHistory, currentModel, currentTab, currentView, validation, isLoading, systemPrompt]);
 
   const handleSuggestedClick = (question) => {

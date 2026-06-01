@@ -571,7 +571,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     experiment: extractExperiment(experimentConfig),
     kpis,
     confidenceIntervals: confidenceIntervals.length ? confidenceIntervals : undefined,
-    waitDist: results.waitDist || {},
+    // perQueue already contains p50/p90/p95/p99 — omit waitDist to avoid sending duplicate percentile data
     perQueue: results.perQueue || {},
     ...(entityAnomalies ? { entityAnomalies } : {}),
   };
@@ -616,10 +616,6 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "Be concise: 300-500 words total. Use plain English. Technical terms should appear only in helper text or after a plain-English explanation.",
   ].join(" ");
 
-  const waitDist = results.waitDist || {};
-  const waitDistForPrompt = Object.keys(waitDist).length
-    ? Object.fromEntries(Object.entries(waitDist).map(([q, w]) => [q, { n: w.n, mean: w.mean, p50: w.p50, p90: w.p90, p95: w.p95, p99: w.p99 }]))
-    : undefined;
   const perQueue = results.perQueue || {};
   const stateVariables = (model.stateVariables || []).filter(v => v.name).map(v => ({
     name: v.name, initialValue: v.initialValue ?? null,
@@ -646,7 +642,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     },
     experiment: extractExperiment(experimentConfig),
     kpis: buildKpis(model, results),
-    waitDist: waitDistForPrompt,
+    // perQueue already contains p50/p90/p95/p99 — omit waitDist to avoid sending duplicate percentile data
     perQueue: Object.keys(perQueue).length ? perQueue : undefined,
     aggregateStats: results.aggregateStats || {},
     confidenceIntervals: confidenceIntervals.length ? confidenceIntervals : undefined,
@@ -796,59 +792,54 @@ export function promptWordEstimate(prompt) {
 
 export function buildResultsQueryPrompt(question, model = {}, results = {}, conversationHistory = []) {
   const system = "You are a simulation results analyst. Answer questions about the simulation run using only the provided KPI data. You have per-queue wait percentiles (p50, p90, p95, p99), per-resource utilisation and idle counts, and per-queue blocking/balking counters. Be concise and specific — always cite exact KPI values. If the data does not contain the answer, say so clearly. Never invent numbers.";
-  const summary = getSummary(results);
-  const kpis = buildKpis(model, results);
-  const entityTypes = (model.entityTypes || []).map(e => ({ name: e.name, role: e.role }));
-  const queues = (model.queues || []).map(q => ({
-    name: q.name,
-    discipline: q.discipline,
-    capacity: q.capacity,
-    customerType: q.customerType,
-  }));
 
-  const waitDist = results.waitDist || {};
-  const perQueue = results.perQueue || {};
-  const waitDistForPrompt = Object.keys(waitDist).length
-    ? Object.fromEntries(Object.entries(waitDist).map(([q, w]) => [q, { n: w.n, mean: w.mean, p50: w.p50, p90: w.p90, p95: w.p95, p99: w.p99 }]))
-    : null;
+  // On the first turn send the full data context; follow-up turns send the question only.
+  // The conversation history gives the LLM sufficient context without repeating the payload.
+  const isFirstTurn = conversationHistory.length === 0;
 
-  const dataPayload = {
-    model: {
-      name: model.name || DEFAULT_MODEL_NAME,
-      description: model.description || "",
-      entityTypes,
-      queues,
-      stateVariables: (model.stateVariables || []).map(v => ({ name: v.name, initialValue: v.initialValue })),
-    },
-    kpis,
-    summary: {
-      warmupPeriod: summary.warmupPeriod,
-      maxSimTime: summary.maxSimTime,
-      totalEntities: summary.total,
-      served: summary.served,
-      reneged: summary.reneged,
-      avgWait: summary.avgWait,
-      avgService: summary.avgSvc,
-      avgSojourn: summary.avgSojourn,
-    },
-    waitDist: waitDistForPrompt,
-    perQueue: Object.keys(perQueue).length ? perQueue : null,
-    timeSeriesAvailable: !!(Array.isArray(results.timeSeries) && results.timeSeries.length > 0),
-  };
+  let userContent;
+  if (isFirstTurn) {
+    const summary = getSummary(results);
+    const kpis = buildKpis(model, results);
+    const entityTypes = (model.entityTypes || []).map(e => ({ name: e.name, role: e.role }));
+    const queues = (model.queues || []).map(q => ({
+      name: q.name,
+      discipline: q.discipline,
+      capacity: q.capacity,
+      customerType: q.customerType,
+    }));
+    const perQueue = results.perQueue || {};
+    const dataPayload = {
+      model: {
+        name: model.name || DEFAULT_MODEL_NAME,
+        description: model.description || "",
+        entityTypes,
+        queues,
+        stateVariables: (model.stateVariables || []).map(v => ({ name: v.name, initialValue: v.initialValue })),
+      },
+      kpis,
+      summary: {
+        warmupPeriod: summary.warmupPeriod,
+        maxSimTime: summary.maxSimTime,
+        totalEntities: summary.total,
+        served: summary.served,
+        reneged: summary.reneged,
+        avgWait: summary.avgWait,
+        avgService: summary.avgSvc,
+        avgSojourn: summary.avgSojourn,
+      },
+      perQueue: Object.keys(perQueue).length ? perQueue : null,
+      timeSeriesAvailable: !!(Array.isArray(results.timeSeries) && results.timeSeries.length > 0),
+    };
+    userContent = truncateWords(JSON.stringify({ data: dataPayload, question }));
+  } else {
+    userContent = question;
+  }
 
   const messages = [
     { role: "system", content: system },
-    ...conversationHistory.map(msg => ({
-      role: msg.role,
-      content: msg.content,
-    })),
-    {
-      role: "user",
-      content: truncateWords(JSON.stringify({
-        data: dataPayload,
-        question,
-      }, null, 2)),
-    },
+    ...conversationHistory.map(msg => ({ role: msg.role, content: msg.content })),
+    { role: "user", content: userContent },
   ];
 
   return {
@@ -1184,14 +1175,18 @@ export function parseReportRecommendations(text) {
 // ── AI Sidebar: design-context model Q&A ──────────────────────────────────────
 
 export function buildModelQueryPrompt(question, model = {}, history = []) {
-  const entityTypes = (model.entityTypes || []);
-  const customers   = entityTypes.filter(e => e.role === 'customer').map(e => e.name).join(', ') || 'none';
-  const servers     = entityTypes.filter(e => e.role === 'server').map(e => `${e.name} (×${e.count ?? 1})`).join(', ') || 'none';
-  const queues      = (model.queues || []).map(q => q.name).join(', ') || 'none';
-  const bEvents     = (model.bEvents || []).slice(0, 8).map(ev => ev.name).join(', ') || 'none';
-  const goals       = (model.goals || []).map(g => `${g.label}: target ${g.targetValue} ${g.metric}`).join('; ') || 'none';
+  const isFirstTurn = history.length === 0;
 
-  const context = `You are assisting a simulation modeller in DES Studio.
+  // Build model digest only on the first turn; rely on history for follow-ups.
+  let systemContent;
+  if (isFirstTurn) {
+    const entityTypes = (model.entityTypes || []);
+    const customers = entityTypes.filter(e => e.role === 'customer').map(e => e.name).join(', ') || 'none';
+    const servers   = entityTypes.filter(e => e.role === 'server').map(e => `${e.name} (×${e.count ?? 1})`).join(', ') || 'none';
+    const queues    = (model.queues || []).map(q => q.name).join(', ') || 'none';
+    const bEvents   = (model.bEvents || []).slice(0, 8).map(ev => ev.name).join(', ') || 'none';
+    const goals     = (model.goals || []).map(g => `${g.label}: target ${g.targetValue} ${g.metric}`).join('; ') || 'none';
+    systemContent = `You are assisting a simulation modeller in DES Studio.
 
 Model: ${model.name || 'Unnamed'}
 ${model.description ? `Description: ${model.description}\n` : ''}Entity types (customer): ${customers}
@@ -1201,9 +1196,12 @@ B-Events (arrivals/inputs): ${bEvents}
 Performance goals: ${goals}
 
 Answer questions about this model concisely and precisely. If a question requires running the simulation to answer definitively, say so. Do not invent data not present in the model definition above.`;
+  } else {
+    systemContent = `You are assisting a simulation modeller in DES Studio. Answer questions about the model described earlier in this conversation concisely and precisely. Do not invent data.`;
+  }
 
   const messages = [
-    { role: 'system', content: context },
+    { role: 'system', content: systemContent },
     ...history.slice(-8),
     { role: 'user', content: question },
   ];
