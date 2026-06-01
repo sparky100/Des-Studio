@@ -680,7 +680,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     setLoading(true);
 
     const messages = [
-      ...nextHistory.slice(-10),
+      ...nextHistory.slice(-30),
       {
         role: "user",
         content: buildModelBuilderUserMessage(text, model),
