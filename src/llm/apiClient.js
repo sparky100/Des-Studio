@@ -102,15 +102,62 @@ function extractJsonText(payload) {
   return payload.text || payload.completion || "";
 }
 
+function tryExtractJson(raw) {
+  // Strategy 1: code fences (```json ... ```) anywhere in text
+  const fenced = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
+  if (fenced) return JSON.parse(fenced[1]);
+
+  // Strategy 2: <json> tags anywhere
+  const tagged = raw.match(/<json>\s*([\s\S]*?)<\/json>/i);
+  if (tagged) return JSON.parse(tagged[1]);
+
+  // Strategy 3: extract JSON object/array by finding balanced braces from the first { or [
+  const firstBrace = raw.indexOf("{");
+  const firstBracket = raw.indexOf("[");
+  let start = -1;
+  if (firstBrace >= 0 && (firstBracket < 0 || firstBrace < firstBracket)) start = firstBrace;
+  else if (firstBracket >= 0) start = firstBracket;
+
+  if (start >= 0) {
+    const openChar = raw[start];
+    const closeChar = openChar === "{" ? "}" : "]";
+    let depth = 0;
+    let lastValidEnd = -1;
+    let inString = false;
+    for (let i = start; i < raw.length; i++) {
+      const ch = raw[i];
+      if (ch === '"') inString = !inString;
+      if (inString) continue;
+      if (ch === openChar) depth++;
+      else if (ch === closeChar) {
+        depth--;
+        if (depth >= 0) {
+          const candidate = raw.slice(start, i + 1);
+          try { JSON.parse(candidate); lastValidEnd = i + 1; } catch { /* deeper parse needed */ }
+        }
+      }
+    }
+    if (lastValidEnd > start) {
+      const complete = raw.slice(start, lastValidEnd);
+      try { return JSON.parse(complete); } catch { /* fall through */ }
+    }
+  }
+
+  // Strategy 4: brute force — try raw text as-is
+  return JSON.parse(raw);
+}
+
 function parseModelBuilderJson(text) {
-  const raw    = String(text || "").trim();
-  const fenced = raw.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  const tagged = !fenced && raw.match(/<json>\s*([\s\S]*?)<\/json>/i);
+  const raw = String(text || "").trim();
+  if (!raw) {
+    throw new Error("AI returned empty response — please try again.");
+  }
   try {
-    return JSON.parse(fenced ? fenced[1] : tagged ? tagged[1] : raw);
+    return tryExtractJson(raw);
   } catch (error) {
     const friendly = new Error("AI returned incomplete or invalid model JSON. Please ask it to produce a smaller model proposal, or answer one more clarifying question first.");
     friendly.cause = error;
+    friendly.rawResponse = raw;
     throw friendly;
   }
 }

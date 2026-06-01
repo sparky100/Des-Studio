@@ -93,6 +93,78 @@ describe("LLM API client", () => {
     expect(onError.mock.calls[0][0].message).toMatch(/incomplete or invalid model JSON/i);
   });
 
+  it("extracts model builder JSON from code fences with surrounding text", async () => {
+    const onComplete = vi.fn();
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        content: [{
+          text: 'Some prose before\n```json\n{"intent":"build","proposedModel":null,"explanation":"test"}\n```\nand after',
+        }],
+      }),
+    });
+
+    await callModelBuilder("system", [{ role: "user", content: "Build" }], onComplete, vi.fn());
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ intent: "build", explanation: "test" }),
+    );
+  });
+
+  it("extracts model builder JSON when LLM adds prose before the JSON", async () => {
+    const onComplete = vi.fn();
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        content: [{
+          text: 'Here is your model: {"intent":"build","proposedModel":null,"explanation":"test"}',
+        }],
+      }),
+    });
+
+    await callModelBuilder("system", [{ role: "user", content: "Build" }], onComplete, vi.fn());
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ intent: "build", explanation: "test" }),
+    );
+  });
+
+  it("extracts model builder JSON from <json> tags with surrounding text", async () => {
+    const onComplete = vi.fn();
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        content: [{
+          text: '<json>{"intent":"build","proposedModel":null,"explanation":"test"}</json>',
+        }],
+      }),
+    });
+
+    await callModelBuilder("system", [{ role: "user", content: "Build" }], onComplete, vi.fn());
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ intent: "build", explanation: "test" }),
+    );
+  });
+
+  it("extracts nested model JSON from multi-line llm output", async () => {
+    const onComplete = vi.fn();
+    const payload = {
+      intent: "build",
+      proposedModel: {
+        entityTypes: [{ name: "Customer", role: "customer" }],
+        queues: [{ name: "Queue", discipline: "FIFO" }],
+        bEvents: [{ name: "Arrive", effect: ["ARRIVE(Customer, Queue)"], scheduledTime: "0" }],
+      },
+      explanation: "A simple model.",
+    };
+    global.fetch.mockResolvedValueOnce({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ intent: "build", ...payload }),
+    });
+
+    await callModelBuilder("system", [{ role: "user", content: "Build" }], onComplete, vi.fn());
+    expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ intent: "build" }));
+    expect(onComplete.mock.calls[0][0].proposedModel.entityTypes).toHaveLength(1);
+  });
+
   it("sends the query kind through the provider-neutral contract", async () => {
     const onToken = vi.fn();
     const onComplete = vi.fn();
