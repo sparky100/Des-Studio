@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { callModelBuilder } from "../../llm/apiClient.js";
+import { callModelBuilder, streamModelBuilder } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
 ;
 import { Btn, Empty, Field, InfoBox, SH } from "../shared/components.jsx";
@@ -304,6 +304,39 @@ function stripTrailingQuestion(text = "") {
   return String(text).replace(/[.!]?\s*[\w\s,'-]+(Does this|Is this|Sound right|Shall I|Should I|Would you like|Does that|Can I|May I)[^?]*\?+\s*$/i, "").trim();
 }
 
+function sanitiseRawModel(raw) {
+  if (!raw || typeof raw !== "object") return raw;
+  const source = raw.model_json || raw.modelJson || raw.model || raw;
+  const ensureEffectArray = effect => {
+    if (Array.isArray(effect)) return effect;
+    return effect ? [String(effect)] : [];
+  };
+  const sanitised = { ...source };
+  if (Array.isArray(sanitised.bEvents)) {
+    sanitised.bEvents = sanitised.bEvents.map(ev => {
+      const effect = ensureEffectArray(ev.effect);
+      const hasArrive = effect.some(e => typeof e === "string" && /\bARRIVE\s*\(/i.test(e));
+      const result = {
+        ...ev,
+        effect,
+        scheduledTime: ev.scheduledTime != null ? String(ev.scheduledTime) : ev.scheduledTime,
+      };
+      if (hasArrive) delete result.probabilisticRouting;
+      return result;
+    });
+  }
+  if (Array.isArray(sanitised.cEvents)) {
+    sanitised.cEvents = sanitised.cEvents.map(ev => ({
+      ...ev,
+      effect: ensureEffectArray(ev.effect),
+    }));
+  }
+  // Preserve top-level fields (name, description) that unwrapProposedModel reads from raw
+  return raw.model_json || raw.modelJson || raw.model
+    ? { ...raw, [raw.model_json ? "model_json" : raw.modelJson ? "modelJson" : "model"]: sanitised }
+    : sanitised;
+}
+
 function Bubble({ role, content }) {
   const isUser = role === "user";
   const isSystem = role === "system";
@@ -330,7 +363,7 @@ function Bubble({ role, content }) {
   );
 }
 
-function BuildingIndicator() {
+function BuildingIndicator({ tokenCount = 0 }) {
   return (
     <div style={{
       alignSelf: "flex-start",
@@ -345,7 +378,11 @@ function BuildingIndicator() {
       lineHeight: 1.7,
     }}>
       <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, marginBottom: 6 }}>Assistant</div>
-      <span style={{ color: C.muted }}>Building your model — this may take a moment…</span>
+      <span style={{ color: C.muted }}>
+        {tokenCount > 0
+          ? `Generating… ${tokenCount} token${tokenCount === 1 ? "" : "s"}`
+          : "Building your model — this may take a moment…"}
+      </span>
     </div>
   );
 }
@@ -455,6 +492,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [refinementChips, setRefinementChips] = useState([]);
   const [correctionMode, setCorrectionMode] = useState(false);
+  const [streamingTokenCount, setStreamingTokenCount] = useState(0);
   const recognitionRef = useRef(null);
   const inputAreaRef = useRef(null);
   const chatBottomRef = useRef(null);
@@ -512,15 +550,18 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
 
   const callAndProcess = useCallback(async (messages, userText) => {
     let response;
+    setStreamingTokenCount(0);
     try {
-      response = await callModelBuilder(systemPrompt, messages, () => {}, err => {
-        setError(err?.message || "Model builder request failed.");
+      response = await streamModelBuilder(systemPrompt, messages, {
+        onToken: () => setStreamingTokenCount(n => n + 1),
+        onError: err => setError(err?.message || "Model builder request failed."),
       });
     } catch (err) {
       setError(err?.message || "Model builder request failed.");
       setLoading(false);
       return;
     }
+    setStreamingTokenCount(0);
     const originalSuggestions = response?.suggestions;
 
     if (!response) { setLoading(false); return; }
@@ -534,13 +575,22 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     }
 
     if (response.proposedModel) {
-      let proposal = unwrapProposedModel(response.proposedModel);
+      let proposal = unwrapProposedModel(sanitiseRawModel(response.proposedModel));
       let validation = validateModel(proposal);
       let retryMessages = messages;
       const MAX_RETRIES = 3;
 
       for (let attempt = 0; attempt < MAX_RETRIES && validation.errors?.length; attempt++) {
-        const errorSummary = validation.errors.map(e => `[${e.code}] ${e.message}`).join("\n");
+        // Group errors by section so the fix request is as targeted as possible
+        const bySect = {};
+        for (const e of validation.errors) {
+          const sect = e.path?.split(".")?.[0] || "model";
+          (bySect[sect] = bySect[sect] || []).push(`[${e.code}] ${e.message}`);
+        }
+        const errorDetail = Object.entries(bySect)
+          .map(([section, errs]) => `${section}:\n${errs.join("\n")}`)
+          .join("\n\n");
+
         setHistory(prev => [...prev, {
           role: "system",
           content: `Draft has ${validation.errors.length} issue(s) (attempt ${attempt + 1}/${MAX_RETRIES}). Asking the assistant to fix them...`,
@@ -548,15 +598,18 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
 
         retryMessages = [...retryMessages, {
           role: "user",
-          content: `The proposal has validation errors that must ALL be fixed. Return a complete corrected model:\n${errorSummary}`,
+          content: `Fix the following validation errors and return the complete corrected model:\n\n${errorDetail}`,
         }];
 
         const retryResponse = await callModelBuilder(systemPrompt, retryMessages, () => {}, () => {});
         if (retryResponse?.proposedModel) {
-          proposal = unwrapProposedModel(retryResponse.proposedModel);
+          proposal = unwrapProposedModel(sanitiseRawModel(retryResponse.proposedModel));
           response = retryResponse;
           validation = validateModel(proposal);
-          retryMessages = [...retryMessages, { role: "assistant", content: JSON.stringify(retryResponse) }];
+          retryMessages = [...retryMessages, {
+            role: "assistant",
+            content: JSON.stringify({ intent: retryResponse.intent, proposedModel: retryResponse.proposedModel }),
+          }];
         } else {
           break;
         }
@@ -715,7 +768,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           {refinementChips.length > 0 && (
             <RefinementChips suggestions={refinementChips} onChipClick={handleChipClick} />
           )}
-          {loading && <BuildingIndicator />}
+          {loading && <BuildingIndicator tokenCount={streamingTokenCount} />}
           {notice && <Bubble role="system" content={notice} />}
           {error && <div role="alert"><InfoBox color={C.red}>{error}</InfoBox></div>}
           <div ref={chatBottomRef} />

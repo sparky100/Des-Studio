@@ -115,7 +115,88 @@ function parseModelBuilderJson(text) {
   }
 }
 
+export async function streamModelBuilder(systemPrompt, messages = [], { onToken, onComplete, onError, signal } = {}) {
+  const timeout = new AbortController();
+  const timeoutId = setTimeout(() => timeout.abort(), 60_000);
+  const combinedSignal = signal
+    ? AbortSignal.any([signal, timeout.signal])
+    : timeout.signal;
+
+  try {
+    const sessionResponse = await supabase.auth.getSession();
+    const accessToken = sessionResponse?.data?.session?.access_token;
+    const requestMessages = [
+      { role: "system", content: systemPrompt },
+      ...messages,
+    ];
+
+    const response = await fetch(getProxyUrl(), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify(buildLlmRequest({
+        kind: LLM_TASKS.MODEL_BUILDER,
+        messages: requestMessages,
+        maxTokens: 8000,
+        stream: true,
+        responseFormat: LLM_RESPONSE_FORMATS.JSON,
+      })),
+      signal: combinedSignal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`LLM proxy returned ${response.status}`);
+    }
+
+    if (!response.body?.getReader) {
+      const text = await response.text();
+      const parsed = parseModelBuilderJson(text);
+      onComplete?.(parsed);
+      return parsed;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let done = false;
+    while (!done) {
+      const result = await reader.read();
+      done = result.done;
+      if (result.value) {
+        consumeSseChunk(decoder.decode(result.value, { stream: !done }), token => {
+          buffer += token;
+          onToken?.(token);
+        });
+      }
+    }
+    const parsed = parseModelBuilderJson(buffer);
+    onComplete?.(parsed);
+    return parsed;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error?.name === "AbortError") {
+      if (timeout.signal.aborted) {
+        const err = new Error("The model builder took too long — please try again.");
+        onError?.(err);
+      }
+      return null;
+    }
+    onError?.(error);
+    return null;
+  }
+}
+
 export async function callModelBuilder(systemPrompt, messages = [], onComplete, onError, { signal } = {}) {
+  const timeout = new AbortController();
+  const timeoutId = setTimeout(() => timeout.abort(), 60_000);
+  const combinedSignal = signal
+    ? AbortSignal.any([signal, timeout.signal])
+    : timeout.signal;
+
   try {
     const sessionResponse = await supabase.auth.getSession();
     const accessToken = sessionResponse?.data?.session?.access_token;
@@ -137,8 +218,10 @@ export async function callModelBuilder(systemPrompt, messages = [], onComplete, 
         stream: false,
         responseFormat: LLM_RESPONSE_FORMATS.JSON,
       })),
-      signal,
+      signal: combinedSignal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       throw new Error(`LLM proxy returned ${response.status}`);
@@ -150,7 +233,14 @@ export async function callModelBuilder(systemPrompt, messages = [], onComplete, 
     onComplete?.(parsed);
     return parsed;
   } catch (error) {
-    if (error?.name === "AbortError") return null;
+    clearTimeout(timeoutId);
+    if (error?.name === "AbortError") {
+      if (timeout.signal.aborted) {
+        const err = new Error("The model builder took too long — please try again.");
+        onError?.(err);
+      }
+      return null;
+    }
     onError?.(error);
     return null;
   }

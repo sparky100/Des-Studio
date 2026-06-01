@@ -141,7 +141,8 @@ describe("LLM prompt builders", () => {
     expect(payload.kpis.queues[0].meanWait).toBe(8.2);
     expect(payload.kpis.avgWait).toBe(8.2);
     expect(payload.experiment.replications).toBe(3);
-    expect(payload.waitDist).toBeDefined();
+    // waitDist is omitted — percentile data is in kpis.queues and perQueue to avoid duplication
+    expect(payload.waitDist).toBeUndefined();
     expect(payload.perQueue).toBeDefined();
   });
 
@@ -195,7 +196,8 @@ describe("LLM prompt builders", () => {
       blockingCount: 3,
       balkCount: 1,
     }));
-    expect(payload.waitDist["Main queue"]).toBeDefined();
+    // waitDist removed — percentile data is already in kpis.queues; perQueue carries blocking/balking
+    expect(payload.waitDist).toBeUndefined();
     expect(payload.perQueue["Main queue"]).toEqual({ blockingCount: 3, balkCount: 1 });
   });
 
@@ -252,19 +254,17 @@ describe("LLM prompt builders", () => {
       expect(prompt.messages[0].content).toMatch(/never invent numbers/i);
     });
 
-    it("reports timeSeriesAvailable flag and includes waitDist data", () => {
+    it("reports timeSeriesAvailable flag (waitDist removed — percentiles in kpis.queues)", () => {
       const withTimeSeries = buildResultsQueryPrompt("Show me queue trends", queryModel, { ...queryResults, timeSeries: [{ t: 0, queues: {} }] });
       const parsedTs = JSON.parse(withTimeSeries.messages[withTimeSeries.messages.length - 1].content);
       expect(parsedTs.data.timeSeriesAvailable).toBe(true);
-      expect(parsedTs.data.waitDist).toBeNull();
-      expect(parsedTs.data.perQueue).toBeNull();
+      // waitDist omitted from payload to avoid duplicating percentile data already in perQueue/kpis
+      expect(parsedTs.data.waitDist).toBeUndefined();
 
-      const engineWaitDist = { "Triage Queue": { n: 45, mean: 8.2, p50: 6.1, p90: 15.3, p95: 18.7, p99: 22.4 } };
-      const withWaitDist = buildResultsQueryPrompt("Show percentiles", queryModel, { ...queryResults, waitDist: engineWaitDist });
-      const parsedWd = JSON.parse(withWaitDist.messages[withWaitDist.messages.length - 1].content);
-      expect(parsedWd.data.waitDist).toEqual({
-        "Triage Queue": { n: 45, mean: 8.2, p50: 6.1, p90: 15.3, p95: 18.7, p99: 22.4 },
-      });
+      const enginePerQueue = { "Triage Queue": { blockingCount: 0, balkCount: 0 } };
+      const withPerQueue = buildResultsQueryPrompt("Show percentiles", queryModel, { ...queryResults, perQueue: enginePerQueue });
+      const parsedPq = JSON.parse(withPerQueue.messages[withPerQueue.messages.length - 1].content);
+      expect(parsedPq.data.perQueue).toEqual(enginePerQueue);
     });
 
     it("includes perQueue blocking/balking data when available", () => {

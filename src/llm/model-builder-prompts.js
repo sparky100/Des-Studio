@@ -94,14 +94,14 @@ export function buildModelBuilderUserMessage(description, currentModel = {}, res
   if (hasCurrentModel) {
     parts.push(
       "Current model (refine this, do not replace unless asked):\n" +
-      JSON.stringify(currentModel, null, 2)
+      JSON.stringify(currentModel)
     );
   }
 
   if (results) {
     parts.push(
       "Simulation results (use to identify bottlenecks and suggest targeted structural improvements):\n" +
-      JSON.stringify(results, null, 2)
+      JSON.stringify(results)
     );
   }
 
