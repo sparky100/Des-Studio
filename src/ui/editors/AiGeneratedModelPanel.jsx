@@ -98,6 +98,14 @@ function normalizeEffect(effect) {
   return effect || "";
 }
 
+function firstNonEmptyEffectSource(...sources) {
+  for (const source of sources) {
+    const normalized = normalizeEffect(source);
+    if (effectText(normalized).trim()) return source;
+  }
+  return sources.find(source => source != null);
+}
+
 function effectText(effect) {
   return Array.isArray(effect) ? effect.filter(Boolean).join(";") : String(effect || "");
 }
@@ -233,7 +241,7 @@ function servicePartsFromCondition(condition) {
 }
 
 function normalizeCEventEffect(event = {}, queues = []) {
-  const effect = normalizeEffect(event.effect ?? event.effects ?? event.action ?? event.actions);
+  const effect = normalizeEffect(firstNonEmptyEffectSource(event.effect, event.effects, event.action, event.actions));
   if (effectText(effect).trim()) return effect;
 
   const fromCondition = servicePartsFromCondition(event.condition);
@@ -300,6 +308,40 @@ function conditionToLegacyString(condition) {
 
 function stripTrailingQuestion(text = "") {
   return String(text).replace(/[.!]?\s*[\w\s,'-]+(Does this|Is this|Sound right|Shall I|Should I|Would you like|Does that|Can I|May I)[^?]*\?+\s*$/i, "").trim();
+}
+
+function chooseFirstQuestion(description = "") {
+  const text = String(description || "").toLowerCase();
+  const mentionsResource = /\b(clerk|server|doctor|nurse|agent|staff|machine|bay|room|operator|teller|worker|resource|capacity)\b/.test(text);
+  const mentionsArrivalTiming = /\b(arriv|every|per hour|per minute|rate|schedule|appointment|demand|interarrival|inter-arrival)\b/.test(text);
+  const mentionsServiceTiming = /\b(service|takes|duration|process|processing|handle|serve|consult|repair|minutes|hours)\b/.test(text);
+
+  if (!mentionsResource) {
+    return "What resource or staff group limits the work first, and how many are available at the start?";
+  }
+  if (!mentionsArrivalTiming) {
+    return "How do arrivals enter the system: a rough rate, a schedule, or something else?";
+  }
+  if (!mentionsServiceTiming) {
+    return "Roughly how long does the main service step take?";
+  }
+  return "What result should this model help you compare or improve first?";
+}
+
+function buildInitialUnderstandingMessage(model = {}) {
+  const description = String(model.description || "").trim();
+  if (!description) return "";
+  const name = String(model.name || "this model").trim();
+  const question = chooseFirstQuestion(description);
+  return [
+    `Here is what I understand about "${name}":`,
+    "",
+    description,
+    "",
+    "I will treat this as a system where entities arrive, may wait, use limited resources, and then leave or move to another step. I will keep any uncertain timing, capacity, and routing assumptions visible before building.",
+    "",
+    `Before I build it: ${question}`,
+  ].join("\n");
 }
 
 function sanitiseRawModel(raw) {
@@ -527,24 +569,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     const hasContent = model?.entityTypes?.length || model?.bEvents?.length || model?.queues?.length || model?.cEvents?.length;
     if (!desc || hasContent || autoTriggeredRef.current) return;
     autoTriggeredRef.current = true;
-    const trigger = async () => {
-      setLoading(true);
-      setError("");
-      setRawErrorText("");
-      try {
-        const msg = buildModelBuilderUserMessage("", model);
-        const response = await callModelBuilder(systemPrompt, [{ role: "user", content: msg }], () => {}, () => {});
-        if (response) {
-          const text = response.questions || response.explanation || "What would you like to build?";
-          setHistory([{ role: "assistant", content: text }]);
-        }
-      } catch (err) {
-        setError(err.message || "Failed to start conversation.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    trigger();
+    setHistory([{ role: "assistant", content: buildInitialUnderstandingMessage(model) }]);
   }, []);
 
   const toggleListening = () => {

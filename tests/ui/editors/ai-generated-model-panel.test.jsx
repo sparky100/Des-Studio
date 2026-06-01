@@ -3,10 +3,19 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest";
 import { AiGeneratedModelPanel } from "../../../src/ui/editors/AiGeneratedModelPanel.jsx";
 
-const mockCallModelBuilder = vi.hoisted(() => vi.fn());
+const { mockCallModelBuilder, mockStreamModelBuilder } = vi.hoisted(() => {
+  const call = vi.fn();
+  return {
+    mockCallModelBuilder: call,
+    mockStreamModelBuilder: vi.fn((systemPrompt, messages, options = {}) =>
+      call(systemPrompt, messages, options.onComplete || (() => {}), options.onError || (() => {}))
+    ),
+  };
+});
 
 vi.mock("../../../src/llm/apiClient.js", () => ({
   callModelBuilder: mockCallModelBuilder,
+  streamModelBuilder: mockStreamModelBuilder,
 }));
 
 const model = {
@@ -18,6 +27,25 @@ const model = {
 };
 
 describe("AiGeneratedModelPanel", () => {
+  it("plays back the new model description and asks one question before building", async () => {
+    const describedModel = {
+      name: "Clinic Draft",
+      description: "Patients arrive at a small clinic and wait to see a doctor.",
+      entityTypes: [],
+      stateVariables: [],
+      bEvents: [],
+      cEvents: [],
+      queues: [],
+    };
+
+    render(<AiGeneratedModelPanel model={describedModel} canEdit onApplyModel={vi.fn()} />);
+
+    expect(await screen.findByText(/Here is what I understand about "Clinic Draft"/i)).toBeInTheDocument();
+    expect(screen.getByText(/Patients arrive at a small clinic/i)).toBeInTheDocument();
+    expect(screen.getByText(/Before I build it:/i)).toBeInTheDocument();
+    expect(mockCallModelBuilder).not.toHaveBeenCalled();
+  });
+
   it("renders conversation input and handles a proposal response", async () => {
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
       const response = {
