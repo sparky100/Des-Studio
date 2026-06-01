@@ -501,6 +501,22 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   const inputAreaRef = useRef(null);
   const chatBottomRef = useRef(null);
   const systemPrompt = useMemo(() => buildModelBuilderSystemPrompt(), []);
+  const openingMessage = useMemo(() => {
+    if (history.length > 0) return null;
+    const eCount = model?.entityTypes?.length || 0;
+    const bCount = model?.bEvents?.length || 0;
+    const qCount = model?.queues?.length || 0;
+    const cCount = model?.cEvents?.length || 0;
+    const hasContent = eCount || bCount || qCount || cCount;
+    if (hasContent) {
+      const name = model?.name || "Untitled";
+      return `You have a model "${name}" with ${eCount} entity type${eCount !== 1 ? "s" : ""}, ${bCount} B-event${bCount !== 1 ? "s" : ""}, ${qCount} queue${qCount !== 1 ? "s" : ""}, and ${cCount} C-event${cCount !== 1 ? "s" : ""}. Describe what you want changed.`;
+    }
+    if (model?.description) {
+      return `I see you described: "${model.description}". I'll ask a few questions to get the details right.`;
+    }
+    return "I don't know anything about your model yet. What would you like to build?";
+  }, [model, history.length]);
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -762,6 +778,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           </div>
         </div>
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, padding: 14, overflowY: "auto" }}>
+          {openingMessage && <Bubble role="assistant" content={openingMessage} />}
           {history.map((turn, index) => {
             if (turn.role === "assistant-confirm") {
               return (
