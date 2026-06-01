@@ -1,7 +1,7 @@
 # DES Studio — Model Schema Reference for LLM Generation
 
-**Version:** 1.3.0
-**Date:** 2026-05-24
+**Version:** 1.3.1
+**Date:** 2026-06-01
 **Sprint baseline:** Sprint 71
 
 | Version | Date | Sprint | Changes |
@@ -10,6 +10,7 @@
 | v1.1.0 | 2026-05-23 | Sprint 70 | Added SPT, EDD, PRIORITY(attrName) queue disciplines to §3; added V11 (Normal warning) and V16 (no termination condition warning) to §10 validation table |
 | v1.2.0 | 2026-05-23 | Sprint 70 | Fixed app URL to `https://des.simmodlr.app`; updated LLM delivery instructions to save JSON file and produce magic link |
 | v1.3.0 | 2026-05-24 | Sprint 71 | Added `openSky` data source type to §15 (OpenSky Network real-time adapter); added §15.1 `openSky` field reference and supported airports table; added "Airport Arrivals" model pattern to §11 |
+| v1.3.1 | 2026-06-01 | Docs correction | Clarified probabilistic arrival splitting: use separate ARRIVE B-events with proportional inter-arrival means; never use `probabilisticRouting` on ARRIVE events |
 
 ---
 
@@ -25,7 +26,7 @@ Read this before writing any model JSON.
 
 | # | Mistake | Fix |
 |---|---------|------|
-| 1 | `probabilisticRouting` on ARRIVE B-events | ARRIVE events route entities via their effect macro — never via routing tables. Remove `probabilisticRouting` from arrival events. |
+| 1 | `probabilisticRouting` on ARRIVE B-events | ARRIVE events route entities via their effect macro — never via routing tables. For arrival splits, create one ARRIVE B-event per stream and set each Exponential mean to `baseMean / probability`. |
 | 2 | `"effect": ["RELEASE(Server)", "COMPLETE()"]` | `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped. Use `"effect": ["COMPLETE()"]` alone — COMPLETE releases the server automatically. |
 | 3 | Missing `useEntityCtx: true` on cSchedules | Without this, the target B-event can't identify the entity. Always add `"useEntityCtx": true` to every `cSchedules[]` entry. |
 | 4 | `balkCondition` as a string | Must be a predicate object: `{ "variable": "...", "operator": "...", "value": "..." }`. Never a string expression. |
@@ -402,7 +403,7 @@ Predicate object fields:
 
 ### Optional: Probabilistic Routing
 
-> **Constraint: `probabilisticRouting` is only valid on B-events whose `effect` contains a `RELEASE` statement.** It must NOT be placed on arrival B-events (those whose effect contains `ARRIVE`). For arrival-time splitting (e.g. 30% high-acuity, 70% low-acuity), use two separate arrival B-events with appropriately scaled inter-arrival times (Poisson splitting) rather than probabilistic routing on a single arrival event.
+> **Constraint: `probabilisticRouting` is only valid on B-events whose `effect` contains a `RELEASE` statement.** It must NOT be placed on arrival B-events (those whose effect contains `ARRIVE`). For arrival-time splitting (e.g. 30% high-acuity, 70% low-acuity), use separate ARRIVE B-events with appropriately scaled inter-arrival times (Poisson splitting) rather than probabilistic routing on a single arrival event. If the base Exponential mean is `M` and a stream probability is `p`, that stream's mean is `M / p`.
 
 ```json
 "probabilisticRouting": [
@@ -924,9 +925,12 @@ Common modelling patterns and the mistakes to avoid when generating DES Studio m
 | Pattern | When to Use | Example |
 |---|---|---|
 | **✓ Plain ARRIVE** | ARRIVE always routes to a queue via its effect syntax | `"effect": ["ARRIVE(Patient, Waiting Room)"]` — no `probabilisticRouting` |
+| **✓ Split arrival streams** | Initial arrivals must be split by probability | Two B-events: `"ARRIVE(Patient, Urgent Queue)"` with mean `baseMean / 0.3`; `"ARRIVE(Patient, Routine Queue)"` with mean `baseMean / 0.7` |
 | **✗ ARRIVE with probabilisticRouting** | (Invalid) ARRIVE creates entities and places them in a queue — routing tables are for B-events that already have an entity, not arrival events | `"effect": ["ARRIVE(Patient)"], "probabilisticRouting": [{"queueName": "A", "probability": 0.5}]` |
 
-**Rule:** Never add `probabilisticRouting` to a B-event whose effect is `ARRIVE()`. ARRIVE events route via their effect argument `ARRIVE(Type, QueueName)`. If you need probabilistic splitting, use a single `ARRIVE()` to a buffer queue, then let a C-event with probabilistic routing handle the split.
+**Rule:** Never add `probabilisticRouting` to a B-event whose effect is `ARRIVE()`. ARRIVE events route via their effect argument `ARRIVE(Type, QueueName)`. If arrivals must be split probabilistically, create one ARRIVE B-event per stream and give each stream its own queue and schedule. For Exponential arrivals, scale each stream's mean inter-arrival time as `baseMean / probability`; for planned arrivals, use separate schedule rows or a multi-event CSV so each row belongs to the correct arrival B-event.
+
+**Attribute guidance:** If the split implies attributes such as priority, severity, route, or class, declare those attributes in `entityTypes[].attrDefs` and set them at creation time on the stream-specific ARRIVE event, for example: `"effect": ["ARRIVE(Patient, Urgent Queue)", "SET_ATTR(priority, 1)", "SET_ATTR(severity, \"urgent\")"]`. Do not create a generic arrival and then probabilistically route it just to assign the class later.
 
 ---
 
