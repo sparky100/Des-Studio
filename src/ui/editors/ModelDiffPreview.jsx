@@ -351,8 +351,8 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
   const toggleSection = key => setSelected(prev => prev.includes(key) ? prev.filter(item => item !== key) : [...prev, key]);
 
   return (
-    <div aria-label="Model proposal preview" style={{ display: "flex", flexDirection: "column", gap: 12, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+    <div aria-label="Model proposal preview" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", padding: 14, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <div>
           <SH label="Model Proposal" />
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
@@ -362,99 +362,101 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
         <Btn small variant="ghost" onClick={onDiscard}>Discard</Btn>
       </div>
 
-      {llmExplanation && (
-        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, fontStyle: "italic", lineHeight: 1.6, borderLeft: `2px solid ${C.accent}44`, paddingLeft: 10 }}>
-          {llmExplanation}
-        </div>
-      )}
-
-      <SimulationSummaryCard proposedModel={proposedModel} />
-
-      {validation?.errors?.length > 0 && (
-        <div role="alert" style={{ background: C.red + "22", border: `1px solid ${C.red}`, borderRadius: 6, padding: 10, color: C.text, fontFamily: FONT, fontSize: 12 }}>
-          {allowDraftApply && <div style={{ marginBottom: 6, color: C.amber }}>Applied as a draft is allowed, but this model must be fixed before it can run.</div>}
-          {validation.errors.map(error => <div key={`${error.code}-${error.message}`}>[{error.code}] {error.message}</div>)}
-        </div>
-      )}
-      {saveError && (
-        <div role="alert" style={{ background: C.red + "22", border: `1px solid ${C.red}`, borderRadius: 6, padding: 10, color: C.text, fontFamily: FONT, fontSize: 12 }}>
-          {saveError}
-        </div>
-      )}
-      {validation?.warnings?.length > 0 && !validation.errors.length && (
-        <div style={{ background: C.amber + "22", border: `1px solid ${C.amber}`, borderRadius: 6, padding: 10, color: C.text, fontFamily: FONT, fontSize: 12 }}>
-          {validation.warnings.map(warning => <div key={`${warning.code}-${warning.message}`}>[{warning.code}] {warning.message}</div>)}
-        </div>
-      )}
-
-      <div>
-        <button
-          type="button"
-          onClick={() => setShowTechnical(prev => !prev)}
-          style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontFamily: FONT, fontSize: 11, padding: 0, display: "flex", alignItems: "center", gap: 5 }}
-        >
-          <span style={{ fontSize: 9 }}>{showTechnical ? "▼" : "▶"}</span>
-          Show technical changes
-        </button>
-      </div>
-
-      {showTechnical && (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
-            {[
-              { label: "Sections changed", value: summary.changedSections, color: summary.changedSections ? C.accent : C.muted },
-              { label: "Modified", value: summary.modified, color: summary.modified ? C.amber : C.muted },
-              { label: "Added", value: summary.added, color: summary.added ? C.green : C.muted },
-              { label: "Removed", value: summary.removed, color: summary.removed ? C.red : C.muted },
-            ].map(item => (
-              <div key={item.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "9px 10px" }}>
-                <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, fontWeight: 700, marginBottom: 4, letterSpacing: 1 }}>
-                  {item.label}
-                </div>
-                <div style={{ color: item.color, fontFamily: FONT, fontSize: 18, fontWeight: 700 }}>
-                  {item.value}
-                </div>
-              </div>
-            ))}
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: 14, overflowY: "auto", flex: 1, minHeight: 0 }}>
+        {llmExplanation && (
+          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, fontStyle: "italic", lineHeight: 1.6, borderLeft: `2px solid ${C.accent}44`, paddingLeft: 10 }}>
+            {llmExplanation}
           </div>
+        )}
 
-          {orderedDiff.map(section => {
-            const { added, modified, removed, unchanged } = section.diff;
-            const hasChanges = added.length || modified.length || removed.length;
-            return (
-              <section key={section.key} style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  {selecting && (
-                    <input
-                      type="checkbox"
-                      aria-label={`Apply ${section.label}`}
-                      checked={selected.includes(section.key)}
-                      onChange={() => toggleSection(section.key)}
-                    />
-                  )}
-                  <div style={{ color: C.text, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>{section.label}</div>
-                  {hasChanges && <Tag label="Changed" color={C.accent} />}
-                  {hasChanges && (
-                    <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
-                      {[added.length ? `${added.length} added` : "", modified.length ? `${modified.length} modified` : "", removed.length ? `${removed.length} removed` : ""].filter(Boolean).join("  ·  ")}
+        <SimulationSummaryCard proposedModel={proposedModel} />
+
+        {validation?.errors?.length > 0 && (
+          <div role="alert" style={{ background: C.red + "22", border: `1px solid ${C.red}`, borderRadius: 6, padding: 10, color: C.text, fontFamily: FONT, fontSize: 12 }}>
+            {allowDraftApply && <div style={{ marginBottom: 6, color: C.amber }}>Applied as a draft is allowed, but this model must be fixed before it can run.</div>}
+            {validation.errors.map(error => <div key={`${error.code}-${error.message}`}>[{error.code}] {error.message}</div>)}
+          </div>
+        )}
+        {saveError && (
+          <div role="alert" style={{ background: C.red + "22", border: `1px solid ${C.red}`, borderRadius: 6, padding: 10, color: C.text, fontFamily: FONT, fontSize: 12 }}>
+            {saveError}
+          </div>
+        )}
+        {validation?.warnings?.length > 0 && !validation.errors.length && (
+          <div style={{ background: C.amber + "22", border: `1px solid ${C.amber}`, borderRadius: 6, padding: 10, color: C.text, fontFamily: FONT, fontSize: 12 }}>
+            {validation.warnings.map(warning => <div key={`${warning.code}-${warning.message}`}>[{warning.code}] {warning.message}</div>)}
+          </div>
+        )}
+
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowTechnical(prev => !prev)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: C.muted, fontFamily: FONT, fontSize: 11, padding: 0, display: "flex", alignItems: "center", gap: 5 }}
+          >
+            <span style={{ fontSize: 9 }}>{showTechnical ? "▼" : "▶"}</span>
+            Show technical changes
+          </button>
+        </div>
+
+        {showTechnical && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
+              {[
+                { label: "Sections changed", value: summary.changedSections, color: summary.changedSections ? C.accent : C.muted },
+                { label: "Modified", value: summary.modified, color: summary.modified ? C.amber : C.muted },
+                { label: "Added", value: summary.added, color: summary.added ? C.green : C.muted },
+                { label: "Removed", value: summary.removed, color: summary.removed ? C.red : C.muted },
+              ].map(item => (
+                <div key={item.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "9px 10px" }}>
+                  <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, fontWeight: 700, marginBottom: 4, letterSpacing: 1 }}>
+                    {item.label}
+                  </div>
+                  <div style={{ color: item.color, fontFamily: FONT, fontSize: 18, fontWeight: 700 }}>
+                    {item.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {orderedDiff.map(section => {
+              const { added, modified, removed, unchanged } = section.diff;
+              const hasChanges = added.length || modified.length || removed.length;
+              return (
+                <section key={section.key} style={{ display: "flex", flexDirection: "column", gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    {selecting && (
+                      <input
+                        type="checkbox"
+                        aria-label={`Apply ${section.label}`}
+                        checked={selected.includes(section.key)}
+                        onChange={() => toggleSection(section.key)}
+                      />
+                    )}
+                    <div style={{ color: C.text, fontFamily: FONT, fontSize: 13, fontWeight: 700 }}>{section.label}</div>
+                    {hasChanges && <Tag label="Changed" color={C.accent} />}
+                    {hasChanges && (
+                      <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
+                        {[added.length ? `${added.length} added` : "", modified.length ? `${modified.length} modified` : "", removed.length ? `${removed.length} removed` : ""].filter(Boolean).join("  ·  ")}
+                      </div>
+                    )}
+                  </div>
+                  <ChangeList title="Added" items={added} color={C.green} renderItem={renderItemSummary} />
+                  <ChangeList title="Removed" items={removed} color={C.red} renderItem={renderItemSummary} />
+                  <ChangeList title="Modified" items={modified} color={C.amber} renderItem={(item) => <ModifiedSummaryItem item={item} />} />
+                  {!hasChanges && (
+                    <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", color: C.muted, fontFamily: FONT, fontSize: 10 }}>
+                      {unchanged.length} item{unchanged.length === 1 ? "" : "s"} unchanged
                     </div>
                   )}
-                </div>
-                <ChangeList title="Added" items={added} color={C.green} renderItem={renderItemSummary} />
-                <ChangeList title="Removed" items={removed} color={C.red} renderItem={renderItemSummary} />
-                <ChangeList title="Modified" items={modified} color={C.amber} renderItem={(item) => <ModifiedSummaryItem item={item} />} />
-                {!hasChanges && (
-                  <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", color: C.muted, fontFamily: FONT, fontSize: 10 }}>
-                    {unchanged.length} item{unchanged.length === 1 ? "" : "s"} unchanged
-                  </div>
-                )}
-              </section>
-            );
-          })}
-        </>
-      )}
+                </section>
+              );
+            })}
+          </>
+        )}
+      </div>
 
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap", padding: 14, borderTop: `1px solid ${C.border}`, background: C.panel, flexShrink: 0 }}>
         {!readOnly && (
           <>
             {isNewModel ? (

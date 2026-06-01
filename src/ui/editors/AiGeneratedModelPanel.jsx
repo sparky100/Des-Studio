@@ -3,6 +3,7 @@ import { callModelBuilder, streamModelBuilder } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
 import { Btn, Empty, Field, InfoBox, SH } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { useViewport } from "../shared/hooks.js";
 import { ModelDiffPreview } from "./ModelDiffPreview.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { predicateToLegacyString, rowsToPredicate, parseConditionString } from "../../model/conditionFormat.js";
@@ -524,6 +525,7 @@ function RefinementChips({ suggestions, onChipClick }) {
 
 export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveModel }) {
   const { C, FONT } = useTheme();
+  const { isMobile, isCompact } = useViewport();
   const [draft, setDraft] = useState("");
   const [history, setHistory] = useState([]);
   const [proposal, setProposal] = useState(null);
@@ -536,6 +538,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [refinementChips, setRefinementChips] = useState([]);
   const [correctionMode, setCorrectionMode] = useState(false);
+  const [mobilePane, setMobilePane] = useState("conversation");
   const recognitionRef = useRef(null);
   const inputAreaRef = useRef(null);
   const chatBottomRef = useRef(null);
@@ -559,6 +562,10 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView?.({ behavior: "smooth" });
   }, [history, loading]);
+
+  useEffect(() => {
+    if (isMobile && proposal) setMobilePane("proposal");
+  }, [isMobile, proposal]);
 
   useEffect(() => {
     return () => recognitionRef.current?.stop();
@@ -812,16 +819,55 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     setTimeout(() => inputAreaRef.current?.querySelector("textarea")?.focus(), 0);
   };
 
+  const showConversation = !isMobile || mobilePane === "conversation" || !proposal;
+  const showProposal = proposal && (!isMobile || mobilePane === "proposal");
+  const layoutColumns = proposal
+    ? isCompact
+      ? "minmax(320px, 1fr) minmax(320px, 1fr)"
+      : "minmax(360px, 1.05fr) minmax(380px, 0.95fr)"
+    : "minmax(320px, 760px)";
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: proposal ? "minmax(320px, 1fr) minmax(360px, 0.95fr)" : "minmax(320px, 760px)", gap: 16, alignItems: "stretch" }}>
-      <section aria-label="Describe conversation" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, height: "100%", minHeight: 0, overflow: "hidden" }}>
+      {isMobile && proposal && (
+        <div role="tablist" aria-label="Describe panes" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, flexShrink: 0 }}>
+          {[
+            { id: "conversation", label: "Conversation" },
+            { id: "proposal", label: "Proposal" },
+          ].map(pane => (
+            <button
+              key={pane.id}
+              type="button"
+              role="tab"
+              aria-selected={mobilePane === pane.id}
+              onClick={() => setMobilePane(pane.id)}
+              style={{
+                background: mobilePane === pane.id ? C.accent + "22" : C.panel,
+                border: `1px solid ${mobilePane === pane.id ? C.accent : C.border}`,
+                borderRadius: 6,
+                color: mobilePane === pane.id ? C.accent : C.muted,
+                fontFamily: FONT,
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "8px 10px",
+                cursor: "pointer",
+              }}
+            >
+              {pane.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : layoutColumns, gap: 16, alignItems: "stretch", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      {showConversation && (
+      <section aria-label="Describe conversation" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, height: "100%", background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: 14, borderBottom: `1px solid ${C.border}` }}>
           <SH label="Describe" />
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
             Describe the system you want to build, or explain what you want changed.
           </div>
         </div>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, padding: 14, overflowY: "auto" }}>
+        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 10, padding: 14, overflowY: "auto" }}>
           {openingMessage && <Bubble role="assistant" content={openingMessage} />}
           {history.map((turn, index) => {
             if (turn.role === "assistant-confirm") {
@@ -836,8 +882,26 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
             }
             return <Bubble key={index} role={turn.role} content={turn.content} />;
           })}
-          {refinementChips.length > 0 && (
-            <RefinementChips suggestions={refinementChips} onChipClick={handleChipClick} />
+          {refinementChips.length > 0 && <RefinementChips suggestions={refinementChips} onChipClick={handleChipClick} />}
+          {isMobile && proposal && (
+            <button
+              type="button"
+              onClick={() => setMobilePane("proposal")}
+              style={{
+                alignSelf: "stretch",
+                background: C.accent + "18",
+                border: `1px solid ${C.accent}`,
+                borderRadius: 6,
+                color: C.accent,
+                fontFamily: FONT,
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "8px 10px",
+                cursor: "pointer",
+              }}
+            >
+              Review proposal
+            </button>
           )}
           {loading && <BuildingIndicator />}
           {notice && <Bubble role="system" content={notice} />}
@@ -880,8 +944,9 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           <Btn variant="primary" onClick={() => send()} disabled={!draft.trim() || loading || !canEdit}>{loading ? "Sending..." : "Send"}</Btn>
         </div>
       </section>
+      )}
 
-      {proposal && (
+      {showProposal && (
         <ModelDiffPreview
           currentModel={model}
           proposedModel={proposal}
@@ -894,6 +959,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           isNewModel={!model?.entityTypes?.length && !model?.bEvents?.length && !model?.queues?.length}
         />
       )}
+      </div>
     </div>
   );
 }
