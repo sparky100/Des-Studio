@@ -1100,9 +1100,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           message="This tab could not render. Try opening the tab again."
         >
         {tab==="ai"&&(
-          renderAuthoringShell(
+          <div style={{height:"calc(100vh - 220px)", display:"flex", flexDirection:"column"}}>
+          {renderAuthoringShell(
             <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel} onSaveModel={saveGeneratedModel}/>
-          )
+          )}
+          </div>
         )}
         {tab==="visual"&&(
           renderAuthoringShell(

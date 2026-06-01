@@ -362,7 +362,7 @@ function Bubble({ role, content }) {
   );
 }
 
-function BuildingIndicator({ tokenCount = 0 }) {
+function BuildingIndicator() {
   const { C, FONT } = useTheme();
   return (
     <div style={{
@@ -379,9 +379,7 @@ function BuildingIndicator({ tokenCount = 0 }) {
     }}>
       <div style={{ color: C.muted, fontSize: 10, fontWeight: 700, marginBottom: 6 }}>Assistant</div>
       <span style={{ color: C.muted }}>
-        {tokenCount > 0
-          ? `Generating… ${tokenCount} token${tokenCount === 1 ? "" : "s"}`
-          : "Building your model — this may take a moment…"}
+        Building your model — this may take a moment…
       </span>
     </div>
   );
@@ -496,7 +494,6 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   const [pendingConfirm, setPendingConfirm] = useState(null);
   const [refinementChips, setRefinementChips] = useState([]);
   const [correctionMode, setCorrectionMode] = useState(false);
-  const [streamingTokenCount, setStreamingTokenCount] = useState(0);
   const recognitionRef = useRef(null);
   const inputAreaRef = useRef(null);
   const chatBottomRef = useRef(null);
@@ -595,10 +592,9 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
 
   const callAndProcess = useCallback(async (messages, userText) => {
     let response;
-    setStreamingTokenCount(0);
     try {
       response = await streamModelBuilder(systemPrompt, messages, {
-        onToken: () => setStreamingTokenCount(n => n + 1),
+        onToken: () => {},
         onError: err => {
           setError(err?.message || "Model builder request failed.");
           if (err?.rawResponse) setRawErrorText(err.rawResponse);
@@ -610,7 +606,6 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       setLoading(false);
       return;
     }
-    setStreamingTokenCount(0);
     const originalSuggestions = response?.suggestions;
 
     if (!response) { setLoading(false); return; }
@@ -794,7 +789,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: proposal ? "minmax(320px, 1fr) minmax(360px, 0.95fr)" : "minmax(320px, 760px)", gap: 16, alignItems: "stretch" }}>
-      <section aria-label="Describe conversation" style={{ display: "flex", flexDirection: "column", minHeight: 520, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
+      <section aria-label="Describe conversation" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: 14, borderBottom: `1px solid ${C.border}` }}>
           <SH label="Describe" />
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
@@ -819,7 +814,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           {refinementChips.length > 0 && (
             <RefinementChips suggestions={refinementChips} onChipClick={handleChipClick} />
           )}
-          {loading && <BuildingIndicator tokenCount={streamingTokenCount} />}
+          {loading && <BuildingIndicator />}
           {notice && <Bubble role="system" content={notice} />}
           {error && <div role="alert"><InfoBox color={C.red}>{error}</InfoBox>{rawErrorText ? <details style={{marginTop:6,cursor:"pointer"}}><summary style={{fontSize:11,color:C.muted,fontFamily:FONT}}>Show raw AI response ({rawErrorText.length} chars)</summary><pre style={{fontSize:10,fontFamily:"monospace",lineHeight:1.4,maxHeight:200,overflow:"auto",padding:8,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,whiteSpace:"pre-wrap",wordBreak:"break-all",marginTop:4}}>{rawErrorText.length > 3000 ? rawErrorText.slice(0,3000)+"\n\n... (truncated, full length: "+rawErrorText.length+" chars)" : rawErrorText}</pre></details> : null}</div>}
           <div ref={chatBottomRef} />
