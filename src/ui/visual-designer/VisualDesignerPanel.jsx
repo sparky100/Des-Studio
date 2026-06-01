@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { validateVisualGraph, addVisualNode, createStarterFlowModel, deleteVisualNode, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection } from "./graph-operations.js";
@@ -7,27 +7,10 @@ import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { renameEntityType } from "../../engine/queue-refs.js";
-
-const PALETTE_ITEMS = [
-  { type: VISUAL_NODE_TYPES.SOURCE,   label: "Add Source",   icon: "S", color: C.green },
-  { type: VISUAL_NODE_TYPES.QUEUE,    label: "Add Queue",    icon: "Q", color: C.cEvent },
-  { type: VISUAL_NODE_TYPES.ACTIVITY, label: "Add Activity", icon: "A", color: C.purple },
-  { type: VISUAL_NODE_TYPES.SINK,     label: "Add Sink",     icon: "✕", color: C.red },
-];
-
-const ICON_BTN_BASE = {
-  background: "transparent",
-  border: "none",
-  borderRadius: 3,
-  color: C.muted,
-  cursor: "pointer",
-  fontFamily: FONT,
-  fontSize: 13,
-  lineHeight: 1,
-  padding: "2px 5px",
-};
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
+  const { C, FONT } = useTheme();
   return (
     <div
       role="dialog"
@@ -110,6 +93,7 @@ function findNodeForError(item, graph) {
 // Clickable checklist combining visual-graph warnings with canonical model errors/warnings.
 // Each row with a known nodeId pans the canvas to that node and selects it.
 function ValidationChecklist({ visualIssues, modelErrors, modelWarnings, graph, onFocusNode }) {
+  const { C, FONT } = useTheme();
   const items = [
     ...visualIssues.map((issue, i) => ({
       key: `vis-${i}`,
@@ -219,6 +203,18 @@ function ValidationChecklist({ visualIssues, modelErrors, modelWarnings, graph, 
 }
 
 export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit }) {
+  const { C, FONT } = useTheme();
+  const PALETTE_ITEMS = [
+    { type: VISUAL_NODE_TYPES.SOURCE,   label: "Add Source",   icon: "S", color: C.green },
+    { type: VISUAL_NODE_TYPES.QUEUE,    label: "Add Queue",    icon: "Q", color: C.cEvent },
+    { type: VISUAL_NODE_TYPES.ACTIVITY, label: "Add Activity", icon: "A", color: C.purple },
+    { type: VISUAL_NODE_TYPES.SINK,     label: "Add Sink",     icon: "✕", color: C.red },
+  ];
+  const ICON_BTN_BASE = {
+    background: "transparent", border: "none", borderRadius: 3,
+    color: C.muted, cursor: "pointer", fontFamily: FONT,
+    fontSize: 13, lineHeight: 1, padding: "2px 5px",
+  };
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [message, setMessage] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);

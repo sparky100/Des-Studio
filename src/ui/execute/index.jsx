@@ -2,7 +2,7 @@
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 const ExecuteCanvas = lazy(() => import("./ExecuteCanvas.jsx").then(m => ({ default: m.ExecuteCanvas })));
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Tag, PhaseTag, Btn, SH, InfoBox } from "../shared/components.jsx";
 import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { buildEngine } from "../../engine/index.js";
@@ -34,9 +34,11 @@ import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
 import { generateReport, sanitizeFilename } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 /** Collect {{env.VAR}} secrets from sessionStorage for live-data adapters. */
 function collectEnvSecrets(dataSources) {
+
   const secrets = {};
   for (const ds of dataSources || []) {
     if (!ds.authSecret) continue;
@@ -155,6 +157,7 @@ const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLoc
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
 const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, schedulesVersion = 0 }) => {
+  const { C, FONT } = useTheme();
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
   const [currentSnap, setCurrentSnap] = useState(null);

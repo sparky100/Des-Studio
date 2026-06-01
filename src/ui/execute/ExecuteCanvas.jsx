@@ -13,7 +13,7 @@ import {
   ReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
+import { TOKEN_COLORS } from "../shared/tokens.js";
 import { deriveGraphFromModel } from "../visual-designer/graph.js";
 import { ExecuteSourceNode }   from "./ExecuteSourceNode.jsx";
 import { ExecuteQueueNode }    from "./ExecuteQueueNode.jsx";
@@ -41,6 +41,7 @@ const KPI_METRICS = {
 };
 
 function preferMetricValue(primary, fallback) {
+  const { C, FONT } = useTheme();
   if (fallback == null) return primary ?? null;
   if (primary == null) return fallback;
   if (primary === 0 && fallback !== 0) return fallback;
@@ -48,6 +49,7 @@ function preferMetricValue(primary, fallback) {
 }
 
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 export { DEFAULT_KPI_SLOTS };
 
 function resolveKpiValue(key, snap, entities, summary, totals) {
@@ -66,6 +68,7 @@ function resolveKpiValue(key, snap, entities, summary, totals) {
 }
 
 function KpiSlot({ metricKey, snap, entities, summary, totals, onEdit }) {
+  const { C, FONT } = useTheme();
   const [hovered,  setHovered]  = useState(false);
   const [editing,  setEditing]  = useState(false);
   const meta  = KPI_METRICS[metricKey] || { label: metricKey, color: C.muted };
@@ -245,6 +248,7 @@ function extractServerType(effect) {
 }
 
 function LiveBadge({ value, label, color }) {
+  const { C, FONT } = useTheme();
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
       <div style={{
@@ -267,6 +271,7 @@ function LiveBadge({ value, label, color }) {
 }
 
 function LiveNodeMetric({ type, live }) {
+  const { C, FONT } = useTheme();
   if (!live) return null;
 
   if (type === "queue") {
@@ -320,6 +325,7 @@ function LiveNodeMetric({ type, live }) {
 }
 
 function LiveNode({ data }) {
+  const { C, FONT } = useTheme();
   const color = NODE_COLOR[data.type] || C.accent;
   const hasTarget = data.type !== "source";
   const hasSource = data.type !== "sink";
@@ -413,6 +419,7 @@ export function ExecuteCanvas({
   onKpiSlotChange,
   onNodeSelect,
 }) {
+  const { C, FONT } = useTheme();
   const baseGraph = useMemo(() => deriveGraphFromModel(model), [model]);
   const cumulativeGraphTotals = useMemo(() => {
     if (!snap) return { arrived: 0, served: 0, reneged: 0 };

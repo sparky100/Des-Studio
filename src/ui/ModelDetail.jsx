@@ -1,7 +1,7 @@
 // ui/ModelDetail.jsx
 import { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import pkg from '../../package.json';
-import { C, FONT, RADIUS, Z, alpha } from "./shared/tokens.js";
+import { RADIUS, Z, alpha } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { useViewport } from "./shared/hooks.js";
@@ -36,6 +36,7 @@ import { renameEntityType, renameQueue }    from "../engine/queue-refs.js";
 import { resolveRunAdmissionTier }          from "../engine/run-admission.js";
 import { AdaptiveBatchPanel }               from "./execute/AdaptiveBatchPanel.jsx";
 import { normalizeModelConditions }         from "../model/conditionFormat.js";
+import { useTheme } from "./shared/ThemeContext.jsx";
 
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
 
@@ -48,6 +49,7 @@ const AuthoringWorkflowShell = ({ mode, children }) => (
 );
 
 const TabErrors = ({ tabId, validation }) => {
+  const { C, FONT } = useTheme();
   const errs = (validation.errors || []).filter(e => e.tab === tabId);
   const warns = (validation.warnings || []).filter(w => w.tab === tabId);
   if (!errs.length && !warns.length) return null;
@@ -332,6 +334,7 @@ const BLANK_SOURCE = () => ({
 });
 
 function DataSourcesEditor({ sources, onChange, canEdit }) {
+  const { C, FONT } = useTheme();
   const [expanded, setExpanded] = useState(null);
 
   const update = (idx, patch) => {
@@ -487,6 +490,7 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
 }
 
 const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,overrides={},initialTab})=>{
+  const { C, FONT } = useTheme();
   const [model,setModel]=useState(()=>{
     if(!modelData) return null;
     return normalizeModelConditions({

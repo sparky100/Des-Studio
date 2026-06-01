@@ -1,19 +1,20 @@
 import { useMemo, useState } from "react";
-import { C, FONT, alpha } from "../shared/tokens.js";
+import { alpha } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../engine/statistics.js";
 import { buildResultsViewModel } from "./resultsViewModel.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const HIST_W = 360;
 const HIST_H = 140;
 const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 140;
-const CHART_COLORS = [C.accent, C.bEvent, C.purple, C.green, C.red, C.server];
 
 const SECTION_DEFAULTS = { summary: true, bottlenecks: true, cost: true, analysis: true, runtime: true };
 
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
+  const { C, FONT } = useTheme();
   return (
     <button
       type="button"
@@ -136,6 +137,7 @@ function downloadTextFile(content, filename, type = "text/csv;charset=utf-8") {
 }
 
 export function buildSeriesCsv(series = {}) {
+
   const rows = [["index", "time", "value"]];
   (series.points || []).forEach((point, index) => {
     rows.push([index + 1, point.t ?? "", point.value ?? ""]);
@@ -144,6 +146,7 @@ export function buildSeriesCsv(series = {}) {
 }
 
 export function buildWaitValuesCsv(dist = {}) {
+
   const rows = [["rank", "wait"]];
   (dist.values || []).forEach((value, index) => {
     rows.push([index + 1, value]);
@@ -152,6 +155,7 @@ export function buildWaitValuesCsv(dist = {}) {
 }
 
 function MetricStrip({ items }) {
+  const { C, FONT } = useTheme();
   return (
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(104px, 1fr))", gap: 6 }}>
       {items.map(item => (
@@ -172,6 +176,7 @@ function MetricStrip({ items }) {
 // Unified stat footer used by both line-chart panels and histogram panels.
 // Replaces the ad-hoc MetricStrip that appeared below time-series charts.
 function StatCards({ items }) {
+  const { C, FONT } = useTheme();
   const cols = Math.min(items.length, 6);
   return (
     <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 5 }}>
@@ -203,6 +208,7 @@ function StatCards({ items }) {
 // histograms alike. Provides the colour-dot title row, source label, chart
 // body slot, optional stat footer, and optional data-preview slot.
 function ChartCard({ title, color, sourceLabel, statItems, dataPreview, children }) {
+  const { C, FONT } = useTheme();
   return (
     <div style={{
       background: C.surface,
@@ -268,6 +274,7 @@ function lineSeriesStats(series, yLabel, color, formatValue = v => formatNumber(
 }
 
 function SummaryCardGrid({ results, replicationResults = [] }) {
+  const { C, FONT } = useTheme();
   const summary = results?.summary || {};
   // Derive replication count: prefer explicit replicationResults array length,
   // fall back to single run (1). Used to show per-run averages alongside totals.
@@ -406,6 +413,7 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
 }
 
 function SeriesDataSummary({ series, valueLabel, formatValue = v => formatNumber(v) }) {
+  const { C, FONT } = useTheme();
   const points = Array.isArray(series?.points) ? series.points : [];
   if (!points.length) return null;
   const first = points[0];
@@ -424,6 +432,7 @@ function SeriesDataSummary({ series, valueLabel, formatValue = v => formatNumber
 }
 
 function WaitDataSummary({ dist }) {
+  const { C, FONT } = useTheme();
   const vals = Array.isArray(dist?.values) ? dist.values : [];
   if (!vals.length) return null;
   return (
@@ -439,6 +448,7 @@ function WaitDataSummary({ dist }) {
 }
 
 function RuntimeMetricsSection({ runtimeMetrics }) {
+  const { C, FONT } = useTheme();
   const metrics = runtimeMetrics?.metrics || {};
   const queuePeaks = Array.isArray(metrics.maxQueueLengthByQueue) ? metrics.maxQueueLengthByQueue : [];
   const items = [
@@ -483,6 +493,7 @@ function previewRows(rows, headCount = 6, tailCount = 4) {
 }
 
 function DataPreviewShell({ summary, onExport, children }) {
+  const { C, FONT } = useTheme();
   return (
     <details style={{ marginTop: 4 }}>
       <summary style={{ cursor: "pointer", color: C.accent, fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
@@ -515,6 +526,7 @@ function DataPreviewShell({ summary, onExport, children }) {
 }
 
 function SeriesDataPreview({ series }) {
+  const { C, FONT } = useTheme();
   const points = Array.isArray(series?.points) ? series.points : [];
   if (!points.length) return null;
   const th = label => <th key={label} scope="col" style={{ padding: "4px 8px", textAlign: "right", color: C.muted, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>{label}</th>;
@@ -543,6 +555,7 @@ function SeriesDataPreview({ series }) {
 }
 
 function WaitValuesPreview({ dist }) {
+  const { C, FONT } = useTheme();
   const values = Array.isArray(dist?.values) ? dist.values : [];
   if (!values.length) return null;
   const th = label => <th key={label} scope="col" style={{ padding: "4px 8px", textAlign: "right", color: C.muted, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>{label}</th>;
@@ -570,6 +583,7 @@ function WaitValuesPreview({ dist }) {
 }
 
 function WaitHistogram({ dist, color }) {
+  const { C, FONT } = useTheme();
   const [tip, setTip] = useState(null);
   if (!dist || dist.n < 2) return null;
   const vals = dist.values;
@@ -675,6 +689,7 @@ function WaitHistogram({ dist, color }) {
 }
 
 function ChartSectionShell({ section, children }) {
+  const { C, FONT } = useTheme();
   return (
     <section style={{
       background: C.surface,
@@ -705,6 +720,7 @@ function ChartSectionShell({ section, children }) {
 }
 
 export function MiniLineChart({ title, ariaTitle, points, color, yLabel, formatY = v => formatNumber(v) }) {
+  const { C, FONT } = useTheme();
   const [tip, setTip] = useState(null);
   if (!points || points.length < 2) return null;
   const accessibleName = ariaTitle ?? title;
@@ -791,6 +807,7 @@ export function MiniLineChart({ title, ariaTitle, points, color, yLabel, formatY
 }
 
 export function ResultsAnalysisPanel({ results, replicationResults = [], warmupDetection = null }) {
+  const { C, FONT } = useTheme();
   const [batchMetric, setBatchMetric] = useState("summary.avgWait");
   const [batchResult, setBatchResult] = useState(null);
   const replications = useMemo(
@@ -956,6 +973,8 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
 }
 
 export function ResultsWorkspace({ results, model, replicationResults = [], warmupDetection = null }) {
+  const { C, FONT } = useTheme();
+  const CHART_COLORS = [C.accent, C.bEvent, C.purple, C.green, C.red, C.server];
   const [sectionsOpen, setSectionsOpen] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem("des.results.sections") || "null");

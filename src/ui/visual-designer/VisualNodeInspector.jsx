@@ -1,14 +1,17 @@
 import { useId } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Btn, DistPicker, Field, SH, Tag } from "../shared/components.jsx";
 import { ConditionBuilder, EntityFilterBuilder } from "../editors/index.jsx";
 import { VISUAL_NODE_TYPES } from "./graph.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 function effectValue(effect = "", pattern) {
+
   return String(effect || "").match(pattern)?.[1]?.trim() || "";
 }
 
 function SelectField({ label, value, onChange, children, disabled }) {
+  const { C, FONT } = useTheme();
   const id = `visual-select-${useId()}`;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -39,6 +42,7 @@ function SelectField({ label, value, onChange, children, disabled }) {
 }
 
 export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onPatchNode, onDeleteNode, onClose }) {
+  const { C, FONT } = useTheme();
   const node = (graph.nodes || []).find(item => item.id === selectedNodeId);
   const customers = (model.entityTypes || []).filter(type => type.role === "customer");
   const servers = (model.entityTypes || []).filter(type => type.role === "server");

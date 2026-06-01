@@ -2,14 +2,16 @@
 // Tabs: Step Log | Entity Details | Charts | Live Metrics
 // F9C.8 + F9C.9 + F9C.11 node-filtered log
 import { useEffect, useMemo, useRef, useState } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Tag, PhaseTag } from "../shared/components.jsx";
 import { QueueDepthTimePlot, QueueHistogram } from "./SweepViews.jsx";
 import { formatSimWallTime } from "../../engine/clockUtils.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
 function formatStatus(status) {
+
   if (status === "serving") return "In Service";
   return status;
 }
@@ -29,6 +31,7 @@ const PANEL_MAX_HEIGHT = 640;
 const PANEL_MAXIMIZED_HEIGHT = "65vh";
 
 function EventCountGroup({ title, color, events, counts }) {
+  const { C, FONT } = useTheme();
   if (events.length === 0) return null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -78,6 +81,7 @@ function EventCountGroup({ title, color, events, counts }) {
 // ── Stage KPIs ────────────────────────────────────────────────────────────────
 
 function EventCountsTable({ snap, model }) {
+  const { C, FONT } = useTheme();
   const counts = snap?.eventCounts ?? {};
   const bEvents = (model.bEvents || []).filter(b => parseFloat(b.scheduledTime) < 900 || Object.prototype.hasOwnProperty.call(counts, b.id));
   const cEvents = model.cEvents || [];
@@ -102,6 +106,7 @@ function EventCountsTable({ snap, model }) {
 }
 
 function StageKpisTable({ snap, model }) {
+  const { C, FONT } = useTheme();
   if (!snap) {
     return (
       <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, padding: 8 }}>
@@ -218,6 +223,7 @@ function StageKpisTable({ snap, model }) {
 // ── Log tab ───────────────────────────────────────────────────────────────────
 
 function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeSelect, model }) {
+  const { C, FONT } = useTheme();
   const [expandedSeq, setExpandedSeq] = useState(null);
   const [searchText, setSearchText]   = useState("");
   const [phaseFilter, setPhaseFilter] = useState("all");
@@ -442,6 +448,7 @@ function LogTab({ log, selectedNodeLabel, onClearFilter, onEntitySelect, onNodeS
 // ── Entity Inspector ─────────────────────────────────────────────────────────
 
 function EntityInspector({ entity, snap, onClose }) {
+  const { C, FONT } = useTheme();
   if (!entity) return null;
   const clock = snap?.clock ?? 0;
   const waitingAge = entity.waitingSince != null ? clock - entity.waitingSince : null;
@@ -602,6 +609,7 @@ function EntityInspector({ entity, snap, onClose }) {
 // ── Entities tab (split view) ───────────────────────────────────────────────
 
 function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
+  const { C, FONT } = useTheme();
   const [filterText,   setFilterText]   = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
 
@@ -719,6 +727,7 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
 // ── FEL tab ──────────────────────────────────────────────────────────────────
 
 function FelTab({ snap, model }) {
+  const { C, FONT } = useTheme();
   const fel = snap?.felPreview;
   if (!snap) {
     return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>Run the simulation to see the Future Events List.</div>;
@@ -779,6 +788,7 @@ function FelTab({ snap, model }) {
 // ── BottomPanel ───────────────────────────────────────────────────────────────
 
 export function BottomPanel({ log, snap, model, hasResults = false, onOpenResults, selectedNodeLabel, onClearFilter, selectedEntityId, onEntitySelect, onNodeSelect, timeSeries, waitDist }) {
+  const { C, FONT } = useTheme();
   const [activeTab, setActiveTab] = useState(() => {
     try { const t = localStorage.getItem("des.bottomPanel.tab"); return TABS.some(tab => tab.id === t) ? t : "log"; } catch { return "log"; }
   });

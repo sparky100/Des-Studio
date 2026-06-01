@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
-import { C, FONT, normTypeName } from "../shared/tokens.js";
+import { normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { ConditionBuilder, buildConditionStr } from "./ConditionBuilder.jsx";
 import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 import { DropField, assignOptions, displayEventName } from "./helpers.jsx";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[]})=>{
   const [filterText,setFilterText]=useState("");
@@ -16,6 +17,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
   const blank=()=>({id:"c"+Date.now(),name:"",condition:"",effect:"",
     cSchedules:[],description:"",priority:events.length+1});
   const add=()=>{
+  const { C, FONT } = useTheme();
     const ev=blank();
     onChange([...events,ev]);
     setExpandedIds(prev=>new Set([...prev,ev.id]));

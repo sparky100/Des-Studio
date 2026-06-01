@@ -1,9 +1,11 @@
 import { useState, useRef, useMemo, useEffect } from "react";
-import { C, FONT, toTitleCase, normTypeName } from "../shared/tokens.js";
+import { toTitleCase, normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, Field, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildConditionString, rowsToPredicate, parseConditionString, predicateToRows } from "../../model/conditionFormat.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const defaultConditionValueForType = (valueType) => {
+
   if (valueType === 'boolean') return 'true';
   if (valueType === 'string') return 'value';
   return '0';
@@ -37,6 +39,7 @@ const sameConditionRows = (a = [], b = []) => {
 };
 
 const ConditionBuilder = ({value, onChange, entityTypes=[], stateVariables=[], queues=[]}) => {
+  const { C, FONT } = useTheme();
   // useMemo ensures dropdown rebuilds whenever entityTypes, stateVariables, or queues change (C8 fix)
   const tokens = useMemo(() => {
     // Named queue tokens — "Number of Patients in Triage Queue"

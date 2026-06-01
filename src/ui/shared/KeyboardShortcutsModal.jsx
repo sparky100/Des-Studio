@@ -1,7 +1,8 @@
 // ui/shared/KeyboardShortcutsModal.jsx
 import { useEffect } from "react";
-import { C, FONT, Z, RADIUS, SPACE, alpha } from "./tokens.js";
+import { Z, RADIUS, SPACE, alpha } from "./tokens.js";
 import { Btn } from "./components.jsx";
+import { useTheme } from "./ThemeContext.jsx";
 
 const SHORTCUTS = [
   { keys: ["Ctrl", "Z"],        description: "Undo last model edit" },
@@ -12,6 +13,7 @@ const SHORTCUTS = [
 ];
 
 function Key({ label }) {
+  const { C, FONT } = useTheme();
   return (
     <kbd style={{
       display: "inline-block",
@@ -30,6 +32,7 @@ function Key({ label }) {
 }
 
 export function KeyboardShortcutsModal({ onClose }) {
+  const { C, FONT } = useTheme();
   useEffect(() => {
     const onKey = e => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);

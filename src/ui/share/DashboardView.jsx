@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { getShareLink } from "../../db/models.js";
-import { C, FONT, GOOGLE_FONT_URL } from "../shared/tokens.js";
+import { GOOGLE_FONT_URL } from "../shared/tokens.js";
 import { generateReport } from '../../reports/index.js';
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const CHART_W = 360, CHART_H = 80;
 const HIST_W = 360, HIST_H = 60, HIST_BINS = 12;
@@ -10,6 +11,7 @@ const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : "—";
 const fmtInt = (v) => Number.isFinite(v) ? v.toFixed(0) : "—";
 
 function MiniLineChart({ title, points, color, yLabel }) {
+  const { C, FONT } = useTheme();
   if (!points || points.length < 2) return null;
   const maxY = Math.max(...points.map(p => p.value), 1);
   const maxT = points[points.length - 1].t || 1;
@@ -37,6 +39,7 @@ function MiniLineChart({ title, points, color, yLabel }) {
 }
 
 function WaitHistogram({ dist, color }) {
+  const { C, FONT } = useTheme();
   if (!dist || dist.n < 2 || !dist.values || dist.values.length < 2) return null;
   const vals = dist.values;
   const minV = vals[0];
@@ -81,6 +84,7 @@ function WaitHistogram({ dist, color }) {
 }
 
 function KpiCard({ label, value, color, sub }) {
+  const { C, FONT } = useTheme();
   return (
     <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 18px", minWidth: 140, flex: 1 }}>
       <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 4 }}>{label}</div>
@@ -90,11 +94,12 @@ function KpiCard({ label, value, color, sub }) {
   );
 }
 
-const NODE_COLORS = { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red };
 const NODE_LABELS = { source: "Source", queue: "Queue", activity: "Activity", sink: "Sink" };
 const NODE_W = 130, NODE_H = 36;
 
 function ModelTopology({ model }) {
+  const { C, FONT } = useTheme();
+  const NODE_COLORS = { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red };
   const graph = model.graph || {};
   const storedNodes = graph.nodes || [];
   const storedEdges = graph.edges || [];
@@ -209,6 +214,7 @@ function ModelTopology({ model }) {
 }
 
 export default function DashboardView({ token, onBack }) {
+  const { C, FONT } = useTheme();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);

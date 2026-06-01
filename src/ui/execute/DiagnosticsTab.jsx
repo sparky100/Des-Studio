@@ -1,8 +1,9 @@
 // ui/execute/DiagnosticsTab.jsx — F69.3 + F69.4: AI diagnosis panel and chat
 import { useCallback, useEffect, useRef, useState } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Btn } from "../shared/components.jsx";
 import { supabase } from "../../db/supabase.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 function getProxyUrl() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -97,10 +98,10 @@ const CHAT_STARTERS = [
   "Explain this model's behaviour in plain English",
 ];
 
-const SEV_COLOR = { CRITICAL: C.red, WARNING: C.amber, INFO: C.accent };
-const SEV_BG = { CRITICAL: `${C.red}18`, WARNING: `${C.amber}18`, INFO: `${C.accent}18` };
-
 function FindingCard({ finding, onGoToNode }) {
+  const { C, FONT } = useTheme();
+  const SEV_COLOR = { CRITICAL: C.red, WARNING: C.amber, INFO: C.accent };
+  const SEV_BG = { CRITICAL: `${C.red}18`, WARNING: `${C.amber}18`, INFO: `${C.accent}18` };
   const color = SEV_COLOR[finding.severity] ?? C.muted;
   const bg = SEV_BG[finding.severity] ?? `${C.muted}18`;
   return (
@@ -160,6 +161,7 @@ function FindingCard({ finding, onGoToNode }) {
 }
 
 function TypingIndicator() {
+  const { C, FONT } = useTheme();
   return (
     <div style={{ display: "flex", gap: 4, alignItems: "center", padding: "8px 12px" }}>
       {[0, 1, 2].map(i => (
@@ -180,6 +182,7 @@ function TypingIndicator() {
 }
 
 function ChatMessage({ msg }) {
+  const { C, FONT } = useTheme();
   const isUser = msg.role === "user";
   const isError = msg.role === "error";
   return (
@@ -210,6 +213,7 @@ function ChatMessage({ msg }) {
 }
 
 export function DiagnosticsTab({ model, results, onGoToNode }) {
+  const { C, FONT } = useTheme();
   const hasRun = Boolean(results?.summary);
 
   // F69.3 state

@@ -1,11 +1,13 @@
 // ui/ImportPreview.jsx — Magic-link model preview and import
 import { useState } from 'react';
-import { C, FONT, GOOGLE_FONT_URL, RADIUS, SPACE, TYPO, alpha } from './shared/tokens.js';
+import { GOOGLE_FONT_URL, RADIUS, SPACE, TYPO, alpha } from './shared/tokens.js';
 import { Btn } from './shared/components.jsx';
+import { useTheme } from "./shared/ThemeContext.jsx";
 
 const PENDING_IMPORT_KEY = 'des.pendingImport';
 
 export function ImportPreview({ model, errors, warnings, user, onSave, onDismiss }) {
+  const { C, FONT } = useTheme();
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [showRawJson, setShowRawJson] = useState(false);

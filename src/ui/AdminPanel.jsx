@@ -1,6 +1,6 @@
 // ui/AdminPanel.jsx — Platform administration (admin role only)
 import { useState, useEffect, useCallback, Fragment } from "react";
-import { C, FONT } from "./shared/tokens.js";
+;
 import { Btn, Tag, SH, InfoBox, SectionPanel } from "./shared/components.jsx";
 import { useViewport } from "./shared/hooks.js";
 import { getPlatformConfig, setPlatformConfig, updateUserRole,
@@ -8,6 +8,7 @@ import { getPlatformConfig, setPlatformConfig, updateUserRole,
          fetchAdminUserStats, fetchPlatformStats, fetchSignupCounts,
          updateUserPlan, fetchFeedback, updateFeedbackStatus } from "../db/models.js";
 import { RUN_ADMISSION_TIERS } from "../engine/run-admission.js";
+import { useTheme } from "./shared/ThemeContext.jsx";
 
 const LLM_PROVIDERS = [
   { value: "anthropic",    label: "Anthropic" },
@@ -24,6 +25,7 @@ const LLM_MODELS = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function relativeTime(isoDate) {
+
   if (!isoDate) return "Never";
   const diff = Date.now() - new Date(isoDate).getTime();
   const mins = Math.floor(diff / 60000);
@@ -55,6 +57,7 @@ function sortUsers(users, col, dir) {
 }
 
 function PlanBadge({ plan }) {
+  const { C, FONT } = useTheme();
   const isPro = plan === "pro";
   return (
     <span style={{
@@ -73,6 +76,7 @@ function PlanBadge({ plan }) {
 
 // ── Signups Bar Chart (inline SVG — no external chart library needed) ─────────
 function SignupsBarChart({ data }) {
+  const { C, FONT } = useTheme();
   if (!data || data.length === 0) {
     return (
       <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, fontStyle: "italic" }}>
@@ -135,6 +139,7 @@ function SignupsBarChart({ data }) {
 
 // ── User detail drawer ────────────────────────────────────────────────────────
 function UserDrawer({ user, currentUserId, onClose, onRoleChange, onPlanChange, onSuspend, onUnsuspend }) {
+  const { C, FONT } = useTheme();
   if (!user) return null;
   const isSelf = user.id === currentUserId;
 
@@ -231,6 +236,7 @@ function UserDrawer({ user, currentUserId, onClose, onRoleChange, onPlanChange, 
 
 // ── Main AdminPanel ───────────────────────────────────────────────────────────
 function AdminPanel({ userId, isAdmin, onClose }) {
+  const { C, FONT } = useTheme();
   const { isMobile, isCompact } = useViewport();
   const narrowLayout = isMobile || isCompact;
   const [tab, setTab] = useState("llm");

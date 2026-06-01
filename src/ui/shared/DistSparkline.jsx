@@ -1,5 +1,5 @@
 // ui/shared/DistSparkline.jsx — Small SVG preview of distribution shape
-import { C } from "./tokens.js";
+;
 
 const W = 120;
 const H = 40;
@@ -8,6 +8,7 @@ const IW = W - PAD * 2;
 const IH = H - PAD * 2;
 
 function pathPoints(xs, ys) {
+
   const xMin = Math.min(...xs), xMax = Math.max(...xs);
   const yMin = 0, yMax = Math.max(...ys, 0.01);
   const px = x => PAD + ((x - xMin) / (xMax - xMin || 1)) * IW;

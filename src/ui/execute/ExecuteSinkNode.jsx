@@ -3,14 +3,13 @@
 // data.liveData shape: { served, reneged, throughputPerHour, meanSojourn }
 // throughputPerHour assumes simulation time unit is minutes: rate = served / clock * 60
 import { Handle, Position } from "@xyflow/react";
-import { C, FONT } from "../shared/tokens.js";
-
-const SINK_COLOR = C.red;   // "#f85149" — matches authoring-mode Sink node
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const fmt = (value, digits = 0) =>
   Number.isFinite(value) && value !== null ? value.toFixed(digits) : "—";
 
 function StatRow({ icon, label, value, color }) {
+  const { C, FONT } = useTheme();
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
       <span style={{ fontSize: 9, color: color || C.muted, fontFamily: FONT }}>{icon}</span>
@@ -28,6 +27,8 @@ function StatRow({ icon, label, value, color }) {
 }
 
 export function ExecuteSinkNode({ data }) {
+  const { C, FONT } = useTheme();
+  const SINK_COLOR = C.red;
   const live = data.liveData;
 
   const served    = live?.served   ?? 0;

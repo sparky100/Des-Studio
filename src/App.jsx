@@ -12,9 +12,10 @@ import { fetchModels, fetchProfiles,
          validateDbSchema,
          getPlatformConfig }              from "./db/models.js";
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
-import { C, FONT, GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
+import { GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
 import { ToastProvider }                    from "./ui/shared/ToastContext.jsx";
+import { useTheme }                         from "./ui/shared/ThemeContext.jsx";
 import { KeyboardShortcutsModal }           from "./ui/shared/KeyboardShortcutsModal.jsx";
 import { HelpAssistant }                    from "./ui/HelpAssistant.jsx";
 import { AuthShell }                        from "./ui/AuthShell.jsx";
@@ -96,6 +97,7 @@ export { createSampleMm1Model, extractImportedModelPayload };
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App({ onThemeChange }){
+  const { C, FONT } = useTheme();
   const lastActiveTouched=useRef(false)
   const [session,setSession]=useState(null)
   const [profile,setProfile]=useState(null)

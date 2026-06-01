@@ -1,14 +1,16 @@
 // ui/execute/LogViewer.jsx — filterable, searchable simulation event log
 
 import { useState, useMemo } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Btn, PhaseTag } from "../shared/components.jsx";
 import { downloadTextFile } from "./executeHelpers.js";
 import { formatSimWallTime } from "../../engine/clockUtils.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const ALL_PHASES = ["B", "C", "A", "INIT", "WARMUP", "REP", "SAVE", "ERROR", "CANCEL", "END"];
 
 function buildCsvFromLog(log) {
+
   const header = "phase,time,message";
   const rows = [...log].reverse().map(r =>
     [r.phase, r.time?.toFixed?.(3) ?? r.time ?? "", String(r.message || "").replace(/"/g, '""')]
@@ -18,6 +20,7 @@ function buildCsvFromLog(log) {
 }
 
 export function LogViewer({ log = [], currentClock, model }) {
+  const { C, FONT } = useTheme();
   const [phaseFilter, setPhaseFilter] = useState(new Set());
   const [search, setSearch] = useState("");
   const clockWallTime = model?.epoch && currentClock != null

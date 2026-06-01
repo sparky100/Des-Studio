@@ -1,12 +1,14 @@
 // src/ui/HelpAssistant.jsx
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { C, FONT, Z } from './shared/tokens.js';
+import { Z } from './shared/tokens.js';
 import { Btn } from './shared/components.jsx';
 import { callLLMOnce } from '../llm/apiClient.js';
 import { buildHelpAssistantSystemPrompt, buildHelpUserMessage } from '../llm/help-assistant-prompt.js';
+import { useTheme } from "./shared/ThemeContext.jsx";
 
 // Render a line with **bold** markers converted to <strong> spans
 function renderLine(line, key) {
+
   const parts = line.split(/(\*\*[^*]+\*\*)/g);
   return (
     <span key={key}>
@@ -21,6 +23,7 @@ function renderLine(line, key) {
 
 // Render assistant markdown text: bold, numbered lists, bullet points, blank-line paragraphs
 function MarkdownContent({ text }) {
+  const { C, FONT } = useTheme();
   const lines = String(text || '').split('\n');
   const nodes = [];
   let i = 0;
@@ -56,6 +59,7 @@ function MarkdownContent({ text }) {
 
 // Simple message bubble for conversation
 function MessageBubble({ role, content }) {
+  const { C, FONT } = useTheme();
   const isUser = role === 'user';
   const isAssistant = role === 'assistant';
   const isSystem = role === 'system';
@@ -226,6 +230,7 @@ export function HelpAssistant({
   currentView,
   validation,
 }) {
+  const { C, FONT } = useTheme();
   const [conversationHistory, setConversationHistory] = useState([]);
   const [suggestedQuestions, setSuggestedQuestions] = useState([]);
   const [isLoading, setIsLoading] = useState(false);

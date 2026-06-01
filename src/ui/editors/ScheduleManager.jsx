@@ -11,7 +11,7 @@
 //   timeUnit      string — model time unit (e.g. 'minutes')
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Btn, SH, InfoBox, Empty } from "../shared/components.jsx";
 import {
   fetchModelSchedules,
@@ -23,10 +23,12 @@ import {
 import { parsePlanCsv } from "../shared/planCsvParser.js";
 import { parseXlsx } from "../shared/xlsxParser.js";
 import { mergeScheduleRows, linkBEventToSchedule, unlinkBEventFromSchedule, partitionScheduleBEvents } from "./scheduleHelpers.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatMinutes(minutes) {
+  const { C, FONT } = useTheme();
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
@@ -47,6 +49,7 @@ function scheduleUsedBy(sched, bEvents = []) {
 // ── ScheduleRow: one row in the schedule list ─────────────────────────────────
 
 function ScheduleRow({ sched, bEvents, isSelected, onSelect, onSetDefault, onDelete, canEdit }) {
+  const { C, FONT } = useTheme();
   const rowCount = scheduleRowCount(sched);
   const usedByEvents = scheduleUsedBy(sched, bEvents);
   const [confirming, setConfirming] = useState(false);
@@ -123,6 +126,12 @@ function ScheduleRow({ sched, bEvents, isSelected, onSelect, onSetDefault, onDel
 // ── ScheduleDetail: view/edit a single schedule ───────────────────────────────
 
 function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUnit, onUpdateBEvents, onGoToBEvent }) {
+  const { C, FONT } = useTheme();
+  const thStyle = {
+    padding: "6px 10px", textAlign: "left", fontWeight: 600, fontSize: "11px",
+    color: C.muted, borderBottom: `1px solid ${C.border}`, whiteSpace: "nowrap",
+  };
+  const tdStyle = { padding: "5px 10px", fontSize: "12px", color: C.text, whiteSpace: "nowrap" };
   const [name, setName] = useState(sched.name);
   const [description, setDescription] = useState(sched.description || "");
   const [saving, setSaving] = useState(false);
@@ -576,26 +585,10 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
   );
 }
 
-const thStyle = {
-  padding: "6px 10px",
-  textAlign: "left",
-  fontWeight: 600,
-  fontSize: "11px",
-  color: C.muted,
-  borderBottom: `1px solid ${C.border}`,
-  whiteSpace: "nowrap",
-};
-
-const tdStyle = {
-  padding: "5px 10px",
-  fontSize: "12px",
-  color: C.text,
-  whiteSpace: "nowrap",
-};
-
 // ── NewScheduleForm ───────────────────────────────────────────────────────────
 
 function NewScheduleForm({ modelId, userId, onCreated, onCancel }) {
+  const { C, FONT } = useTheme();
   const [name, setName] = useState("New Schedule");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
@@ -674,6 +667,7 @@ function totalInlineRowCount(bEvents = []) {
 // ── InlineRowsBanner ──────────────────────────────────────────────────────────
 
 function InlineRowsBanner({ modelId, userId, bEvents, onExtracted }) {
+  const { C, FONT } = useTheme();
   const [migrating, setMigrating] = useState(false);
   const [error, setError] = useState(null);
   const [scheduleName, setScheduleName] = useState("Default Schedule");
@@ -775,6 +769,7 @@ function InlineRowsBanner({ modelId, userId, bEvents, onExtracted }) {
 // ── ScheduleManager (exported) ────────────────────────────────────────────────
 
 export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch, timeUnit = "minutes", onBEventsExtracted, onUpdateBEvents, focusScheduleId, onFocusHandled, onGoToBEvent }) {
+  const { C, FONT } = useTheme();
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

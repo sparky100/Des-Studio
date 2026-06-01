@@ -1,14 +1,16 @@
 // ui/execute/AiAssistantPanel.jsx — AiAssistantPanel
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { C, FONT } from "../shared/tokens.js";
+;
 import { Btn } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative, callLLMOnce } from "../../llm/apiClient.js";
 import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 function ConfidenceBadge({ confidence }) {
+  const { C, FONT } = useTheme();
   const color = confidence === "high" ? C.green : confidence === "medium" ? C.amber : C.red;
   return (
     <span style={{ fontSize: 9, fontFamily: FONT, fontWeight: 700, color, border: `1px solid ${color}44`, borderRadius: 3, padding: "1px 5px", letterSpacing: 1 }}>
@@ -28,6 +30,7 @@ const KPI_ROWS = [
 ];
 
 function BeforeAfterTable({ goals, baselineStats, afterStats }) {
+  const { C, FONT } = useTheme();
   const fmt = v => v === null ? "—" : Number.isFinite(v) ? (Number.isInteger(v) ? v.toString() : v.toFixed(2)) : "—";
   const delta = (before, after) => {
     if (before === null || after === null) return null;
@@ -98,6 +101,7 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
 }
 
 function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult, onSaved }) {
+  const { C, FONT } = useTheme();
   const isManual = suggestion.change?.type === "manual";
   const canApply = !isManual && typeof onRunWithPatch === "function";
   const canSave = !isManual && typeof onApplyPatchedModel === "function" && verifyResult;
@@ -192,6 +196,7 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
 }
 
 function FeasibilityBadge({ feasible }) {
+  const { C, FONT } = useTheme();
   const color = feasible ? C.green : C.red;
   const label = feasible ? "Within capacity" : "Requires capacity increase";
   return (
@@ -202,6 +207,7 @@ function FeasibilityBadge({ feasible }) {
 }
 
 function RefinementCard({ card, model, aggregateStats, onApplyAndRerun, cardStatus, cardResult }) {
+  const { C, FONT } = useTheme();
   const running = cardStatus === "running";
   const hasResult = cardStatus === "done" && cardResult;
   const hasError = cardStatus === "error";

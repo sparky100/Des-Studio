@@ -6,30 +6,28 @@
 // used to trigger the flash without needing direct FEL access.
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { C, FONT } from "../shared/tokens.js";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
-const ACTIVITY_COLOR = C.purple;    // "#8b5cf6" — matches authoring-mode Activity node
-const BUSY_DOT_COLOR = C.cEvent;    // "#06b6d4" teal — matches spec  ■ (busy, teal)
-const FAILED_DOT_COLOR = C.red;     // "#f85149" red — failed servers
-const MAX_DOTS       = 12;
-const FLASH_MS       = 400;
+const MAX_DOTS = 12;
+const FLASH_MS = 400;
 
-// One square dot: ■ busy (teal), ■ failed (red), or □ idle (muted outline)
 function Dot({ busy, failed }) {
+  const { C } = useTheme();
+  const busyColor   = C.cEvent;
+  const failedColor = C.red;
   return (
     <div style={{
       width: 10,
       height: 10,
       borderRadius: 2,
-      background:  failed ? FAILED_DOT_COLOR : busy ? BUSY_DOT_COLOR : "transparent",
-      border:      `1.5px solid ${failed ? FAILED_DOT_COLOR : busy ? BUSY_DOT_COLOR : `${C.muted}66`}`,
+      background:  failed ? failedColor : busy ? busyColor : "transparent",
+      border:      `1.5px solid ${failed ? failedColor : busy ? busyColor : `${C.muted}66`}`,
       flexShrink: 0,
       transition: "background 0.12s, border-color 0.12s",
     }} />
   );
 }
 
-// Dot grid for capacity ≤ MAX_DOTS
 function DotGrid({ capacity, busyCount, failedCount }) {
   const effectiveFailed = Math.min(failedCount, capacity);
   const effectiveBusy = Math.max(0, Math.min(busyCount, capacity - effectiveFailed));
@@ -45,8 +43,9 @@ function DotGrid({ capacity, busyCount, failedCount }) {
   );
 }
 
-// Text fallback when capacity exceeds dot limit
 function PoolText({ busyCount, failedCount, capacity }) {
+  const { C, FONT } = useTheme();
+  const failedColor = C.red;
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
       <span style={{
@@ -62,7 +61,7 @@ function PoolText({ busyCount, failedCount, capacity }) {
           fontFamily: FONT,
           fontSize: 11,
           fontWeight: 600,
-          color: FAILED_DOT_COLOR,
+          color: failedColor,
         }}>
           {failedCount} failed
         </span>
@@ -72,6 +71,8 @@ function PoolText({ busyCount, failedCount, capacity }) {
 }
 
 export function ExecuteActivityNode({ data }) {
+  const { C, FONT } = useTheme();
+  const ACTIVITY_COLOR = C.purple;
   const live = data.liveData;
   const [flashing, setFlashing] = useState(false);
   const prevSignalRef = useRef(null);

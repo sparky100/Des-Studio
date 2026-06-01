@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { validateModel } from "../../engine/validation.js";
-import { C, FONT } from "../shared/tokens.js";
 import { Btn, Empty, SH, Tag } from "../shared/components.jsx";
+import { useTheme } from "../shared/ThemeContext.jsx";
 
 const SECTION_META = [
   { key: "entityTypes", label: "Entity Classes" },
@@ -57,6 +57,7 @@ function mergeSections(currentModel, proposedModel, selectedSections) {
 }
 
 function ChangeList({ title, items, color, renderItem }) {
+  const { C, FONT } = useTheme();
   if (!items.length) return null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -99,7 +100,8 @@ function renderItemSummary(item) {
   return item.name || item.id || "Unnamed";
 }
 
-function renderModifiedSummary(item) {
+function ModifiedSummaryItem({ item }) {
+  const { C } = useTheme();
   const before = item.before || {};
   const after = item.after || {};
   const title = after.name || before.name || after.id || before.id || "Unnamed";
@@ -227,6 +229,7 @@ function deriveSimulationSummary(proposedModel = {}) {
 }
 
 function SimulationSummaryCard({ proposedModel }) {
+  const { C, FONT } = useTheme();
   const { entityName, arrivalText, flowLines, renegeText, resourceLines, experimentText, goals } = deriveSimulationSummary(proposedModel);
 
   const hasContent = arrivalText || flowLines.length > 0 || resourceLines.length > 0 || experimentText || goals.length > 0;
@@ -296,6 +299,7 @@ function SimulationSummaryCard({ proposedModel }) {
 }
 
 export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onApply, onApplyAndSave, onDiscard, onRefine, allowDraftApply = false, readOnly = false, llmExplanation = null }) {
+  const { C, FONT } = useTheme();
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(SECTION_META.map(section => section.key));
   const [validation, setValidation] = useState(null);
@@ -438,7 +442,7 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
                 </div>
                 <ChangeList title="Added" items={added} color={C.green} renderItem={renderItemSummary} />
                 <ChangeList title="Removed" items={removed} color={C.red} renderItem={renderItemSummary} />
-                <ChangeList title="Modified" items={modified} color={C.amber} renderItem={renderModifiedSummary} />
+                <ChangeList title="Modified" items={modified} color={C.amber} renderItem={(item) => <ModifiedSummaryItem item={item} />} />
                 {!hasChanges && (
                   <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", color: C.muted, fontFamily: FONT, fontSize: 10 }}>
                     {unchanged.length} item{unchanged.length === 1 ? "" : "s"} unchanged
