@@ -1,10 +1,9 @@
 // ui/ModelLibrary.jsx — Model library: My Models / Templates / Public / Community tabs
 import { useState, useRef, useMemo } from "react";
-import { SHADOW, RADIUS, Z } from "./shared/tokens.js";
+import { C, FONT, SHADOW, RADIUS, Z } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, Empty } from "./shared/components.jsx";
 import { TEMPLATES } from "../engine/templates.js";
 import { validateModel } from "../engine/validation.js";
-import { useTheme } from "./shared/ThemeContext.jsx";
 
 export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,currentVersion})=>{
   const owner=(profiles||[]).find(p=>p.id===model.owner_id)||null;
@@ -17,7 +16,6 @@ export const ModelCard=({model,onOpen,onDelete,onCopy,profiles=[],currentUserId,
   const healthLabel = hasErrors ? "Validation Errors" : hasWarnings ? "Validation Warnings" : "Ready";
   const healthColor = hasErrors ? C.red : hasWarnings ? C.amber : C.green;
   const openFromKeyboard=e=>{
-  const { C, FONT } = useTheme();
     if(e.key==="Enter"||e.key===" "){
       e.preventDefault();
       onOpen?.();
@@ -66,7 +64,6 @@ export const NewModelModal=({onClose,onStartDesign,onUseTemplate,onImportFile,on
   const startDesign=async()=>{if(!name.trim())return;setSaving(true);try{await onStartDesign?.(name.trim(),desc.trim());}finally{setSaving(false);}onClose();};
   const triggerImport=()=>{if(!name.trim())return;fileInputRef.current?.click();};
   const handleFileSelect=(e)=>{
-  const { C, FONT } = useTheme();
     const file=e.target.files?.[0];
     if(!file)return;
     const reader=new FileReader();
@@ -248,7 +245,6 @@ export function ModelLibrary({
   onPasteJsonImport,
   tab, onTabChange,
 }) {
-  const { C, FONT } = useTheme();
   const setTab = onTabChange;
   const [showNew, setShowNew] = useState(false);
   const [tmplSearch, setTmplSearch] = useState("");

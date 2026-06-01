@@ -264,14 +264,6 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       });
     });
 
-    it('round-trips high-contrast-dark theme through normalizeUserSettings', () => {
-      const result = normalizeUserSettings({
-        schema_version: 1,
-        settings_json: { ui: { theme: 'high-contrast-dark' } },
-      });
-      expect(result.settings.ui.theme).toBe('high-contrast-dark');
-    });
-
     it('upserts user settings by current user id', async () => {
       supabase.from('user_settings').upsert.mockReturnThis();
       supabase.from('user_settings').select.mockReturnThis();

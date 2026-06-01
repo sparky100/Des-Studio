@@ -1,10 +1,8 @@
 import { useState } from "react";
-;
+import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty } from "../shared/components.jsx";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
-  const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
 

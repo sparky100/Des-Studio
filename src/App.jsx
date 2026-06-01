@@ -10,11 +10,9 @@ import { fetchModels, fetchProfiles,
          setVisibility, setAccess, forkModel,
          fetchRunStatsForModels,
          validateDbSchema,
-         getPlatformConfig,
-         fetchUserSettings }             from "./db/models.js";
+         getPlatformConfig }              from "./db/models.js";
 import { saveLocalModel, deleteLocalModel } from "./db/local.js";
-import { GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
-import { useTheme } from "./ui/shared/ThemeContext.jsx";
+import { C, FONT, GOOGLE_FONT_URL, Z } from "./ui/shared/tokens.js";
 import { ErrorBoundary, Btn }              from "./ui/shared/components.jsx";
 import { ToastProvider }                    from "./ui/shared/ToastContext.jsx";
 import { KeyboardShortcutsModal }           from "./ui/shared/KeyboardShortcutsModal.jsx";
@@ -98,7 +96,6 @@ export { createSampleMm1Model, extractImportedModelPayload };
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App({ onThemeChange }){
-  const { C, FONT } = useTheme();
   const lastActiveTouched=useRef(false)
   const [session,setSession]=useState(null)
   const [profile,setProfile]=useState(null)
@@ -222,14 +219,6 @@ export default function App({ onThemeChange }){
       if(data)setTierPolicies(data)
     }).catch(()=>{})
   },[session])
-
-  useEffect(()=>{
-    if(!session?.user?.id || !onThemeChange)return
-    fetchUserSettings(session.user.id).then(({ settings })=>{
-      const t = settings?.ui?.theme
-      if(t) onThemeChange(t)
-    }).catch(()=>{})
-  },[session?.user?.id, onThemeChange])
 
   useEffect(()=>{
     const onKey=e=>{

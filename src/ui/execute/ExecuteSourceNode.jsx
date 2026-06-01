@@ -5,12 +5,11 @@
 // increases on each arrival, used to trigger the pulse without needing FEL access.
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { useTheme } from "../shared/ThemeContext.jsx";
+import { C, FONT } from "../shared/tokens.js";
 
 const PULSE_DURATION_MS = 500;
 
 export function ExecuteSourceNode({ data }) {
-  const { C, FONT } = useTheme();
   const live = data.liveData;
   const [pulsing, setPulsing] = useState(false);
   const prevKeyRef = useRef(null);

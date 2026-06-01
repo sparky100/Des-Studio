@@ -1,11 +1,10 @@
 // ui/VersionHistoryPanel.jsx — Version history list and create version dialog
 import { useState, useEffect } from "react";
-import { SHADOW, Z } from "./shared/tokens.js";
+import { C, FONT, SHADOW, Z } from "./shared/tokens.js";
 import { Btn, Tag } from "./shared/components.jsx";
 import { listVersions, createVersion, deleteVersion, getNextVersion } from "../db/models.js";
 import { detectStructuralChanges } from "../engine/validation.js";
 import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
-import { useTheme } from "./shared/ThemeContext.jsx";
 
 const fmtDate = iso => {
   try { return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
@@ -13,7 +12,6 @@ const fmtDate = iso => {
 };
 
 export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersionChange, currentModel, onRestoreVersion }) {
-  const { C, FONT } = useTheme();
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);

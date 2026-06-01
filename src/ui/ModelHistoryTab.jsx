@@ -1,6 +1,6 @@
 // ui/ModelHistoryTab.jsx — Run history tab extracted from ModelDetail
 import { useState } from "react";
-import { alpha } from "./shared/tokens.js";
+import { C, FONT, alpha } from "./shared/tokens.js";
 import { Btn, Empty } from "./shared/components.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink, fetchModelSchedules, buildSchedulesMap } from "../db/models.js";
@@ -10,10 +10,8 @@ import { compareResults } from "../db/runRecord.js";
 import { compareScenarios } from "../engine/statistics.js";
 import { CI_METRICS, METRIC_LABELS, fmt } from "./execute/executeHelpers.js";
 import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
-import { useTheme } from "./shared/ThemeContext.jsx";
 
 function slugifyModelName(name = "") {
-  const { C, FONT } = useTheme();
   return (name || "untitled")
     .toLowerCase()
     .trim()

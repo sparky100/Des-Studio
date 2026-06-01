@@ -4,10 +4,9 @@ import App from './App.jsx'
 import { ThemeProvider } from './ui/shared/ThemeContext.jsx'
 
 function AppRoot() {
-  const [themeId, setThemeId] = useState(() => {
-    try { return localStorage.getItem('des.themeId') || 'system'; } catch (_) { return 'system'; }
-  });
-
+  const [themeId, setThemeId] = useState(
+    () => (typeof localStorage !== 'undefined' && localStorage.getItem('des.themeId')) || 'system'
+  );
   return (
     <ThemeProvider themeId={themeId} onThemeChange={setThemeId}>
       <App onThemeChange={setThemeId} />
@@ -20,4 +19,3 @@ createRoot(document.getElementById('root')).render(
     <AppRoot />
   </StrictMode>,
 )
-

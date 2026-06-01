@@ -1,6 +1,5 @@
-;
+import { C, FONT } from "../shared/tokens.js";
 import { SH, Btn, InfoBox, Empty } from "../shared/components.jsx";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 const StateVarEditor=({vars,onChange})=>{
   const add=()=>onChange([...vars,{id:"sv"+Date.now(),name:"",initialValue:"0",description:"",resetOnWarmup:false}]);

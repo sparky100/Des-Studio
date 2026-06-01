@@ -1,6 +1,6 @@
 // ui/AppNavBar.jsx — Top navigation bar for the authenticated app shell
 import { useState } from "react";
-import { useTheme } from "./shared/ThemeContext.jsx";
+import { C, FONT } from "./shared/tokens.js";
 import { FeedbackModal } from "./FeedbackModal.jsx";
 import { AboutModal }    from "./AboutModal.jsx";
 
@@ -24,6 +24,21 @@ function InfoIcon() {
   );
 }
 
+const navBtnStyle = {
+  background: "#ffffff08",
+  border: `1px solid ${C.border}`,
+  borderRadius: 5,
+  color: C.muted,
+  fontFamily: FONT,
+  fontSize: 11,
+  padding: "5px 12px",
+  cursor: "pointer",
+  fontWeight: 600,
+  display: "flex",
+  alignItems: "center",
+  gap: 5,
+};
+
 export function AppNavBar({
   profile,
   isAdmin,
@@ -35,21 +50,6 @@ export function AppNavBar({
   userId,
   currentPage,
 }) {
-  const { C, FONT } = useTheme();
-  const navBtnStyle = {
-    background: C.surfaceHover,
-    border: `1px solid ${C.border}`,
-    borderRadius: 5,
-    color: C.muted,
-    fontFamily: FONT,
-    fontSize: 11,
-    padding: "5px 12px",
-    cursor: "pointer",
-    fontWeight: 600,
-    display: "flex",
-    alignItems: "center",
-    gap: 5,
-  };
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [aboutOpen,    setAboutOpen]    = useState(false);
 

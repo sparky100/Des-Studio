@@ -1,7 +1,6 @@
 import { useState } from "react";
-;
+import { C, FONT } from "../shared/tokens.js";
 import { Btn, DistPicker } from "../shared/components.jsx";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 const VALUE_TYPES = [
   { value: "number",  label: "Number" },
@@ -10,7 +9,6 @@ const VALUE_TYPES = [
 ];
 
 function CommitInput({ value, onCommit, placeholder, style }) {
-  const { C, FONT } = useTheme();
   const [local, setLocal] = useState(value);
   const commit = () => { if (local !== value) onCommit(local); };
   return (

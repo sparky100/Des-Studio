@@ -1,11 +1,9 @@
 import { useState, useRef, useMemo, useEffect } from "react";
-import { toTitleCase, normTypeName } from "../shared/tokens.js";
+import { C, FONT, toTitleCase, normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, Field, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { buildConditionString, rowsToPredicate, parseConditionString, predicateToRows } from "../../model/conditionFormat.js";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 const defaultConditionValueForType = (valueType) => {
-  const { C, FONT } = useTheme();
   if (valueType === 'boolean') return 'true';
   if (valueType === 'string') return 'value';
   return '0';

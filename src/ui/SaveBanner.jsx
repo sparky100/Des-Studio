@@ -1,10 +1,8 @@
 // ui/SaveBanner.jsx — Dirty-state banner: unsaved changes notification with save/discard actions
-;
+import { C, FONT } from "./shared/tokens.js";
 import { Btn } from "./shared/components.jsx";
-import { useTheme } from "./shared/ThemeContext.jsx";
 
 export function SaveBanner({ canEdit, dirty, saving, discardConfirm, setDiscardConfirm, onSave, onDiscard }) {
-  const { C, FONT } = useTheme();
   if (!canEdit || !dirty) return null;
   return (
     <div role="status" style={{

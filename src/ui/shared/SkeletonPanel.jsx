@@ -1,11 +1,9 @@
 // ui/shared/SkeletonPanel.jsx — animated placeholder for loading states
-import { RADIUS } from "./tokens.js";
-import { useTheme } from "./ThemeContext.jsx";
+import { C, RADIUS } from "./tokens.js";
 
 const STYLE_ID = "des-skeleton-pulse";
 
 function ensurePulseKeyframes() {
-  const { C, FONT } = useTheme();
   if (typeof document === "undefined") return;
   if (document.getElementById(STYLE_ID)) return;
   const style = document.createElement("style");

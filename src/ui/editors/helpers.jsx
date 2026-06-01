@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { toTitleCase, normTypeName } from "../shared/tokens.js";
+import { C, FONT, toTitleCase, normTypeName } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 const displayEventName = name => String(name || "").replace(/\s*\((template|tmpl)\)\s*/gi, "").trim();
 const queueDisplayName = name => {
@@ -237,7 +236,6 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerType
 
 // Dropdown — structured options only, no free-text escape hatch (audit C1)
 const DropField = ({value, onChange, options, color}) => {
-  const { C, FONT } = useTheme();
   const col = color || C.green;
   return (
     <div style={{display:'flex',flexDirection:'column',gap:4,flex:1}}>
@@ -264,20 +262,20 @@ const categorizeEffect = (value) => {
   return 'other';
 };
 
+const CATEGORY_CONFIG = {
+  queue:     {label:'Queue',     color:C.cEvent},
+  service:   {label:'Service',   color:C.green},
+  state:     {label:'State',     color:C.amber},
+  cost:      {label:'Cost',      color:C.server},
+  server:    {label:'Server',    color:C.red},
+  container: {label:'Container', color:C.purple},
+  other:     {label:'Other',     color:C.muted},
+};
+
 const CAT_ORDER = ['queue','service','state','cost','server','container','other'];
 
 // ── EffectPicker — chips + category-filtered dropdown ─────────────────────────
 const EffectPicker = ({effects, options, onChange}) => {
-  const { C, FONT } = useTheme();
-  const CATEGORY_CONFIG = {
-    queue:     {label:'Queue',     color:C.cEvent},
-    service:   {label:'Service',   color:C.green},
-    state:     {label:'State',     color:C.amber},
-    cost:      {label:'Cost',      color:C.server},
-    server:    {label:'Server',    color:C.red},
-    container: {label:'Container', color:C.purple},
-    other:     {label:'Other',     color:C.muted},
-  };
   const [adding, setAdding] = useState(false);
   const [category, setCategory] = useState('all');
 

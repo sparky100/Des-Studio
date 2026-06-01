@@ -3,20 +3,22 @@
 // data.liveData shape: { depth, entities, discipline, clock }
 import { useEffect, useRef, useState } from "react";
 import { Handle, Position } from "@xyflow/react";
-import { TOKEN_COLORS } from "../shared/tokens.js";
-import { useTheme } from "../shared/ThemeContext.jsx";
+import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 
+const QUEUE_COLOR   = C.cEvent;   // "#06b6d4" — matches authoring-mode Queue node
 const MAX_DOT_SHOWN = 8;
 const HISTORY_LEN   = 20;
 const SPARKLINE_W   = 138;
 const SPARKLINE_H   = 22;
 
-function depthColor(depth, C) {
+function depthColor(depth) {
   if (depth === 0) return C.green;
   if (depth <= 3)  return C.amber;
   return C.red;
 }
 
+// Stable entity-type colour: hash the type name to a palette slot so the
+// same entity type always gets the same colour regardless of entity ID.
 function typeColor(typeName) {
   let hash = 0;
   for (const ch of String(typeName || "")) hash = (hash * 31 + ch.charCodeAt(0)) & 0xffffffff;
@@ -24,8 +26,6 @@ function typeColor(typeName) {
 }
 
 function DisciplineBadge({ discipline }) {
-  const { C, FONT } = useTheme();
-  const QUEUE_COLOR = C.cEvent;
   if (!discipline) return null;
   return (
     <div style={{
@@ -47,8 +47,7 @@ function DisciplineBadge({ discipline }) {
 }
 
 function DepthBadge({ depth, capacity }) {
-  const { C, FONT } = useTheme();
-  const color = capacity ? (depth >= capacity ? C.red : depthColor(depth, C)) : depthColor(depth, C);
+  const color = capacity ? (depth >= capacity ? C.red : depthColor(depth)) : depthColor(depth);
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
       <div style={{
@@ -74,7 +73,6 @@ function DepthBadge({ depth, capacity }) {
 }
 
 function EntityDots({ entities }) {
-  const { C, FONT } = useTheme();
   const visible = entities.slice(0, MAX_DOT_SHOWN);
   const overflow = entities.length - visible.length;
   return (
@@ -102,8 +100,6 @@ function EntityDots({ entities }) {
 }
 
 function Sparkline({ history }) {
-  const { C } = useTheme();
-  const QUEUE_COLOR = C.cEvent;
   if (history.length < 2) {
     return (
       <div style={{
@@ -147,12 +143,11 @@ function Sparkline({ history }) {
 }
 
 export function ExecuteQueueNode({ data }) {
-  const { C, FONT } = useTheme();
-  const QUEUE_COLOR = C.cEvent;
   const live = data.liveData;
   const [history, setHistory] = useState([]);
   const lastClockRef = useRef(null);
 
+  // Record depth at every clock tick; reset history when clock rewinds (sim reset).
   useEffect(() => {
     if (live == null) {
       setHistory([]);
@@ -174,7 +169,7 @@ export function ExecuteQueueNode({ data }) {
 
   const depth      = live?.depth ?? 0;
   const capacity   = live?.capacity ?? null;
-  const color      = capacity ? (depth >= capacity ? C.red : depthColor(depth, C)) : depthColor(depth, C);
+  const color      = capacity ? (depth >= capacity ? C.red : depthColor(depth)) : depthColor(depth);
   const entities   = live?.entities ?? [];
   const discipline = live?.discipline ?? null;
 
@@ -205,6 +200,7 @@ export function ExecuteQueueNode({ data }) {
         style={{ width: 8, height: 8, background: QUEUE_COLOR, borderColor: C.bg, pointerEvents: "none" }}
       />
 
+      {/* Header: type label + discipline badge */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 4 }}>
         <div style={{
           color: QUEUE_COLOR,
@@ -218,18 +214,22 @@ export function ExecuteQueueNode({ data }) {
         <DisciplineBadge discipline={discipline} />
       </div>
 
+      {/* Queue name */}
       <div style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.35, color: C.text }}>
         {data.label}
       </div>
 
+      {/* Depth badge */}
       {live ? (
         <DepthBadge depth={depth} capacity={capacity} />
       ) : (
         <div style={{ fontSize: 9, color: C.muted }}>—</div>
       )}
 
+      {/* Entity token dots */}
       {entities.length > 0 && <EntityDots entities={entities} />}
 
+      {/* Sparkline — shown once we have at least 2 data points */}
       {history.length >= 2 && (
         <div style={{ marginTop: 3 }}>
           <Sparkline history={history} />

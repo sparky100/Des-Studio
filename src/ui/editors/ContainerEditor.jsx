@@ -1,9 +1,7 @@
-;
+import { C, FONT } from "../shared/tokens.js";
 import { SH, Btn, InfoBox, Empty } from "../shared/components.jsx";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 const ContainerEditor = ({ containers, onChange }) => {
-  const { C, FONT } = useTheme();
   const add = () => onChange([
     ...containers,
     { id: "ct" + Date.now(), capacity: "1000", initialLevel: "0" },

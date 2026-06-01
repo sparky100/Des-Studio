@@ -1,10 +1,8 @@
 // ui/ModelDetailHeader.jsx — Top header bar for an open model
-;
+import { C, FONT } from "./shared/tokens.js";
 import { Tag, Btn } from "./shared/components.jsx";
-import { useTheme } from "./shared/ThemeContext.jsx";
 
 export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion, onExplore, exploreVisible }) {
-  const { C, FONT } = useTheme();
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10, padding: "11px 20px",

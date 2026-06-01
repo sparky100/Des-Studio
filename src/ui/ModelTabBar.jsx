@@ -1,6 +1,5 @@
 // ui/ModelTabBar.jsx — Two-level tab navigation: mode selector bar + contextual sub-tab bar
-import { RADIUS, Z, alpha } from "./shared/tokens.js";
-import { useTheme } from "./shared/ThemeContext.jsx";
+import { C, FONT, RADIUS, Z, alpha } from "./shared/tokens.js";
 
 export function ModelTabBar({
   tab, setTab,
@@ -10,7 +9,6 @@ export function ModelTabBar({
   showMoreTabs, setShowMoreTabs,
   aiSidebarOpen = false, onToggleAiSidebar = null,
 }) {
-  const { C, FONT } = useTheme();
   const tabIssueLabel = tabId => {
     const counts = tabIssueCounts[tabId];
     if (!counts) return "";

@@ -1,6 +1,6 @@
 // ui/AdminPanel.jsx — Platform administration (admin role only)
 import { useState, useEffect, useCallback, Fragment } from "react";
-;
+import { C, FONT } from "./shared/tokens.js";
 import { Btn, Tag, SH, InfoBox, SectionPanel } from "./shared/components.jsx";
 import { useViewport } from "./shared/hooks.js";
 import { getPlatformConfig, setPlatformConfig, updateUserRole,
@@ -8,7 +8,6 @@ import { getPlatformConfig, setPlatformConfig, updateUserRole,
          fetchAdminUserStats, fetchPlatformStats, fetchSignupCounts,
          updateUserPlan, fetchFeedback, updateFeedbackStatus } from "../db/models.js";
 import { RUN_ADMISSION_TIERS } from "../engine/run-admission.js";
-import { useTheme } from "./shared/ThemeContext.jsx";
 
 const LLM_PROVIDERS = [
   { value: "anthropic",    label: "Anthropic" },
@@ -25,7 +24,6 @@ const LLM_MODELS = {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function relativeTime(isoDate) {
-  const { C, FONT } = useTheme();
   if (!isoDate) return "Never";
   const diff = Date.now() - new Date(isoDate).getTime();
   const mins = Math.floor(diff / 60000);

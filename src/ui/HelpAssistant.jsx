@@ -1,14 +1,12 @@
 // src/ui/HelpAssistant.jsx
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Z } from './shared/tokens.js';
+import { C, FONT, Z } from './shared/tokens.js';
 import { Btn } from './shared/components.jsx';
 import { callLLMOnce } from '../llm/apiClient.js';
 import { buildHelpAssistantSystemPrompt, buildHelpUserMessage } from '../llm/help-assistant-prompt.js';
-import { useTheme } from "./shared/ThemeContext.jsx";
 
 // Render a line with **bold** markers converted to <strong> spans
 function renderLine(line, key) {
-  const { C, FONT } = useTheme();
   const parts = line.split(/(\*\*[^*]+\*\*)/g);
   return (
     <span key={key}>

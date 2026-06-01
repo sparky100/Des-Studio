@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { getShareLink } from "../../db/models.js";
-import { GOOGLE_FONT_URL } from "../shared/tokens.js";
+import { C, FONT, GOOGLE_FONT_URL } from "../shared/tokens.js";
 import { generateReport } from '../../reports/index.js';
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 const CHART_W = 360, CHART_H = 80;
 const HIST_W = 360, HIST_H = 60, HIST_BINS = 12;
@@ -11,7 +10,6 @@ const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : "—";
 const fmtInt = (v) => Number.isFinite(v) ? v.toFixed(0) : "—";
 
 function MiniLineChart({ title, points, color, yLabel }) {
-  const { C, FONT } = useTheme();
   if (!points || points.length < 2) return null;
   const maxY = Math.max(...points.map(p => p.value), 1);
   const maxT = points[points.length - 1].t || 1;

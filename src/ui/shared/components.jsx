@@ -1,14 +1,13 @@
 // ui/shared/components.jsx — Reusable micro-components
 import React, { Component, useEffect, useId, useState, useRef } from "react";
-import { SPACE, RADIUS, TYPO, alpha } from "./tokens.js";
-import { useTheme, PALETTES } from "./ThemeContext.jsx";
+import { C, FONT, SPACE, RADIUS, TYPO, alpha } from "./tokens.js";
 import { DISTRIBUTIONS } from "../../engine/distributions.js";
 import { DIST_GROUPS, DIST_HELP, getDistGroup, validateDistParams } from "./DistHelp.js";
 import { DistSparkline } from "./DistSparkline.jsx";
 import { parsePlanCsv } from "./planCsvParser.js";
 import { parseXlsx } from "./xlsxParser.js";
 
-class ErrorBoundaryClass extends Component {
+class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
     this.state = { error: null };
@@ -30,7 +29,6 @@ class ErrorBoundaryClass extends Component {
   render() {
     if (!this.state.error) return this.props.children;
 
-    const { C, FONT } = this.props.themeColors || { C: PALETTES.dark, FONT: "'JetBrains Mono','Fira Code',monospace" };
     const errorMessage = this.state.error?.message || String(this.state.error);
     const isChunkError = /Failed to fetch dynamically imported module|Loading chunk|dynamically imported module/i.test(errorMessage);
 
@@ -90,37 +88,27 @@ class ErrorBoundaryClass extends Component {
   }
 }
 
-function ErrorBoundary(props) {
-  const themeColors = useTheme();
-  return <ErrorBoundaryClass {...props} themeColors={themeColors} />;
-}
-
-const Tag=React.memo(({label,color})=>{
-  const {C,FONT}=useTheme();
-  const c=color??C.muted;
-  return <span style={{background:c+"18",border:`1px solid ${c}44`,color:c,borderRadius:3,padding:"2px 7px",fontSize:11,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",fontFamily:FONT}}>{label}</span>;
-});
+const Tag=React.memo(({label,color=C.muted})=>(
+  <span style={{background:color+"18",border:`1px solid ${color}44`,color,borderRadius:3,padding:"2px 7px",fontSize:11,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase",fontFamily:FONT}}>{label}</span>
+));
 const PhaseTag=React.memo(({phase})=>{
-  const {C}=useTheme();
   const cfg={A:{color:C.phaseA,label:"Phase A"},B:{color:C.phaseB,label:"Phase B"},
              C:{color:C.phaseC,label:"Phase C"},INIT:{color:C.muted,label:"Init"},END:{color:C.green,label:"Done"},
              WARMUP:{color:C.amber,label:"Warmup"}};
   const c=cfg[phase]||{color:C.muted,label:phase};
   return <Tag label={c.label} color={c.color}/>;
 });
-const Avatar=({u,size=28})=>{
-  const {FONT}=useTheme();
-  return <div style={{width:size,height:size,borderRadius:"50%",background:u.color+"22",border:`1.5px solid ${u.color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.38,fontWeight:700,color:u.color,fontFamily:FONT,flexShrink:0}}>{u.initials}</div>;
-};
+const Avatar=({u,size=28})=>(
+  <div style={{width:size,height:size,borderRadius:"50%",background:u.color+"22",border:`1.5px solid ${u.color}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.38,fontWeight:700,color:u.color,fontFamily:FONT,flexShrink:0}}>{u.initials}</div>
+);
 /**
  * Btn — primary action button.
  * Variants: "primary" (accent fill), "ghost" (subtle surface), "danger" (red tint),
  *           "amber" (warning tint), "success" (green tint — use sparingly for confirmation states).
  */
 const Btn=({children,onClick,variant="ghost",small,disabled,full,style={},ariaLabel,title,type="button"})=>{
-  const {C,FONT}=useTheme();
   const v={
-    primary:{bg:C.accent,            fg:C.bg,     br:C.accent},
+    primary:{bg:C.accent,            fg:"#080c10",br:C.accent},
     ghost:  {bg:C.surfaceHover,      fg:C.text,   br:C.border},
     danger: {bg:alpha(C.red,0.09),   fg:C.red,    br:alpha(C.red,0.27)},
     success:{bg:alpha(C.green,0.09), fg:C.green,  br:alpha(C.green,0.27)},
@@ -135,7 +123,6 @@ const Btn=({children,onClick,variant="ghost",small,disabled,full,style={},ariaLa
       transition:"opacity 120ms ease",flexShrink:0,...style}}>{children}</button>;
 };
 const Field=({label,value,onChange,multiline,rows=2,placeholder="",autoFocus=false,inputStyle={}})=>{
-  const {C,FONT}=useTheme();
   const generatedId=useId();
   const id=`field-${generatedId}`;
   const inputBase={background:C.bg,border:`1px solid ${C.border}`,borderRadius:RADIUS.sm,color:C.text,
@@ -197,37 +184,27 @@ const CommitInput=({
     />
   );
 };
-const SH=({label,color,children})=>{
-  const {C,FONT}=useTheme();
-  const c=color??C.muted;
-  return (
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${C.border}`,paddingBottom:SPACE.sm,marginBottom:SPACE.md}}>
-      <span style={{...TYPO.label,letterSpacing:"1.8px",color:c,fontFamily:FONT}}>{label}</span>
-      {children}
-    </div>
-  );
-};
-const InfoBox=({color,children})=>{
-  const {C,FONT}=useTheme();
-  const c=color??C.muted;
-  return <div style={{background:alpha(c,0.06),border:`1px solid ${alpha(c,0.2)}`,borderRadius:RADIUS.md,padding:`${SPACE.sm+2}px ${SPACE.md+2}px`,fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.8}}>{children}</div>;
-};
-const Empty=({icon,msg,action})=>{
-  const {C,FONT}=useTheme();
-  return (
-    <div style={{textAlign:"center",padding:"24px 16px",color:C.muted,fontFamily:FONT,fontSize:12,display:"flex",flexDirection:"column",alignItems:"center",gap:SPACE.sm}}>
-      <div style={{fontSize:24}}>{icon}</div>
-      <div>{msg}</div>
-      {action&&<Btn small variant="ghost" onClick={action.onClick}>{action.label}</Btn>}
-    </div>
-  );
-};
+const SH=({label,color=C.muted,children})=>(
+  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${C.border}`,paddingBottom:SPACE.sm,marginBottom:SPACE.md}}>
+    <span style={{...TYPO.label,letterSpacing:"1.8px",color,fontFamily:FONT}}>{label}</span>
+    {children}
+  </div>
+);
+const InfoBox=({color,children})=>(
+  <div style={{background:alpha(color,0.06),border:`1px solid ${alpha(color,0.2)}`,borderRadius:RADIUS.md,padding:`${SPACE.sm+2}px ${SPACE.md+2}px`,fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.8}}>{children}</div>
+);
+const Empty=({icon,msg,action})=>(
+  <div style={{textAlign:"center",padding:"24px 16px",color:C.muted,fontFamily:FONT,fontSize:12,display:"flex",flexDirection:"column",alignItems:"center",gap:SPACE.sm}}>
+    <div style={{fontSize:24}}>{icon}</div>
+    <div>{msg}</div>
+    {action&&<Btn small variant="ghost" onClick={action.onClick}>{action.label}</Btn>}
+  </div>
+);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // DISTRIBUTION PICKER — reusable widget used by both B-event schedules and C-events
 // ═══════════════════════════════════════════════════════════════════════════════
 const PiecewiseEditor=({value,onChange,compact})=>{
-  const {C,FONT}=useTheme();
   const periods=Array.isArray(value?.distParams?.periods)?value.distParams.periods:[];
   const upd=(i,patch)=>{
     const next=[...periods];
@@ -265,7 +242,6 @@ const PiecewiseEditor=({value,onChange,compact})=>{
 };
 
 const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
-  const {C,FONT}=useTheme();
   const dp=value?.distParams||{};
   const hasRows=Array.isArray(dp.rows)&&dp.rows.length>0;
   const times=hasRows?dp.rows.map(r=>r.time):(Array.isArray(dp.times)?dp.times:[]);
@@ -560,7 +536,6 @@ const ScheduleEditor=({value,onChange,attrDefs=[],epoch,timeUnit})=>{
 };
 
 const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[],epoch,timeUnit})=>{
-  const {C,FONT}=useTheme();
   const fileRef=useRef(null);
   const [csvParse,setCsvParse]=useState(null);
   const [showHelp,setShowHelp]=useState(false);
@@ -815,9 +790,7 @@ const DistPicker=({value,onChange,compact,allowPiecewise=true,attrDefs=[],epoch,
 // SECTION PANEL — collapsible accordion section with status badge
 // ═══════════════════════════════════════════════════════════════════════════════
 const isActiveStatus = s => s && s !== "off" && s !== "0" && s !== "none";
-const SectionPanel = ({label, status, color, children, defaultOpen=false}) => {
-  const {C,FONT}=useTheme();
-  const c=color??C.muted;
+const SectionPanel = ({label, status, color=C.muted, children, defaultOpen=false}) => {
   const [open, setOpen] = useState(() => defaultOpen || isActiveStatus(status));
   return (
     <div style={{background:C.surface,borderRadius:RADIUS.md,border:`1px solid ${C.border}`}}>
@@ -825,12 +798,12 @@ const SectionPanel = ({label, status, color, children, defaultOpen=false}) => {
         style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",
           padding:`${SPACE.sm}px ${SPACE.md}px`,background:"transparent",border:"none",cursor:"pointer",borderRadius:RADIUS.md}}>
         <div style={{display:"flex",alignItems:"center",gap:SPACE.sm}}>
-          <span style={{...TYPO.label,color:c,fontFamily:FONT}}>{label}</span>
+          <span style={{...TYPO.label,color,fontFamily:FONT}}>{label}</span>
           {status!=null&&(
             <span style={{...TYPO.caption,fontFamily:FONT,
-              color:isActiveStatus(status)?c:C.muted,
-              background:alpha(isActiveStatus(status)?c:C.muted,0.09),
-              border:`1px solid ${alpha(isActiveStatus(status)?c:C.muted,0.27)}`,
+              color:isActiveStatus(status)?color:C.muted,
+              background:alpha(isActiveStatus(status)?color:C.muted,0.09),
+              border:`1px solid ${alpha(isActiveStatus(status)?color:C.muted,0.27)}`,
               borderRadius:RADIUS.sm,padding:"1px 6px",whiteSpace:"nowrap"}}>
               {status}
             </span>

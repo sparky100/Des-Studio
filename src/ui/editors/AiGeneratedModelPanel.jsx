@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { callModelBuilder } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
-;
+import { C, FONT } from "../shared/tokens.js";
 import { Btn, Empty, Field, InfoBox, SH } from "../shared/components.jsx";
 import { ModelDiffPreview } from "./ModelDiffPreview.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { predicateToLegacyString, rowsToPredicate, parseConditionString } from "../../model/conditionFormat.js";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 const DIST_NAMES = {
   fixed: "Fixed",
@@ -25,7 +24,6 @@ const DIST_NAMES = {
 };
 
 function unwrapProposedModel(proposedModel = {}) {
-  const { C, FONT } = useTheme();
   const source = proposedModel.model_json || proposedModel.modelJson || proposedModel.model || proposedModel;
   const normalizeEntityType = entityType => ({
     ...entityType,

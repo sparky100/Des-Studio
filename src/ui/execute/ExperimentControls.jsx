@@ -1,11 +1,10 @@
 // ui/execute/ExperimentControls.jsx — Setup form section for run configuration
-;
+import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn } from "../shared/components.jsx";
 import { cumulativeMean } from "../../engine/statistics.js";
 import { WarmupChart, CumulativeMeanChart } from "./SweepViews.jsx";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { simToWall, formatWallTime } from "../../engine/clockUtils.js";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 export function ExperimentControls({
   warmupPeriod, setWarmupPeriod,
@@ -28,7 +27,6 @@ export function ExperimentControls({
   speedMultiplier, setSpeedMultiplier,
   onClose,
 }) {
-  const { C, FONT } = useTheme();
   const helperStyle = { fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.5, maxWidth: 220 };
   return (
     <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>

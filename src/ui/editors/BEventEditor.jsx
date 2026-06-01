@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef } from "react";
-;
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
+  const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
   const cardRefs=useRef({});
 
   useEffect(()=>{
-  const { C, FONT } = useTheme();
     if(!focusBEventId)return;
     setExpandedIds(prev=>new Set([...prev,focusBEventId]));
     setFilterText("");

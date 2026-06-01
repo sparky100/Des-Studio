@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { normTypeName } from "../shared/tokens.js";
+import { C, FONT, normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { AttrEditor } from "./AttrEditor.jsx";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 const EntityTypeEditor=({types,onChange})=>{
   const [filterText,setFilterText]=useState("");
@@ -13,7 +12,6 @@ const EntityTypeEditor=({types,onChange})=>{
   const collapseAll=()=>setExpandedIds(new Set());
 
   const add=()=>{
-  const { C, FONT } = useTheme();
     const id="et"+Date.now();
     onChange([...types,{id,name:"",role:"customer",count:"",attrs:"",description:""}]);
     setExpandedIds(prev=>new Set([...prev,id]));

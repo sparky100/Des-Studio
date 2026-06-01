@@ -1,12 +1,10 @@
 // ui/execute/DiagnosticsTab.jsx — F69.3 + F69.4: AI diagnosis panel and chat
 import { useCallback, useEffect, useRef, useState } from "react";
-;
+import { C, FONT } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { supabase } from "../../db/supabase.js";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 function getProxyUrl() {
-  const { C, FONT } = useTheme();
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   if (supabaseUrl) return `${supabaseUrl.replace(/\/$/, "")}/functions/v1/llm-proxy`;
   return "/functions/v1/llm-proxy";

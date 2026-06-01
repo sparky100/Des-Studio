@@ -92,7 +92,6 @@ export const lerpColor = (hexA, hexB, t) => {
 export const toTitleCase = s =>
   (s || '').trim().replace(/\b\w/g, c => c.toUpperCase());
 
-
 // Normalise entity type name: trim + title-case
 export const normTypeName = s =>
   toTitleCase((s || '').replace(/\s+/g, " "));

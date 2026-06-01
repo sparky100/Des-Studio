@@ -24,6 +24,7 @@ export const CustomerToken = ({ entity, size = 36, showId = true }) => {
 };
 
 const ServerBay = ({ server, customers }) => {
+  const { C, FONT } = useTheme();
   const servingCust = customers.find(e => e.id === server.currentCustId);
   const isB = server.status === "busy";
   const borderCol = isB ? C.busy : C.idle;

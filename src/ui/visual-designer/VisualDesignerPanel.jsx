@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-;
+import { C, FONT } from "../shared/tokens.js";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
 import { validateVisualGraph, addVisualNode, createStarterFlowModel, deleteVisualNode, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection } from "./graph-operations.js";
@@ -7,7 +7,6 @@ import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { renameEntityType } from "../../engine/queue-refs.js";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 const PALETTE_ITEMS = [
   { type: VISUAL_NODE_TYPES.SOURCE,   label: "Add Source",   icon: "S", color: C.green },
@@ -29,7 +28,6 @@ const ICON_BTN_BASE = {
 };
 
 function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
-  const { C, FONT } = useTheme();
   return (
     <div
       role="dialog"

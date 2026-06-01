@@ -13,7 +13,7 @@ import {
   ReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { TOKEN_COLORS } from "../shared/tokens.js";
+import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { deriveGraphFromModel } from "../visual-designer/graph.js";
 import { ExecuteSourceNode }   from "./ExecuteSourceNode.jsx";
 import { ExecuteQueueNode }    from "./ExecuteQueueNode.jsx";
@@ -41,7 +41,6 @@ const KPI_METRICS = {
 };
 
 function preferMetricValue(primary, fallback) {
-  const { C, FONT } = useTheme();
   if (fallback == null) return primary ?? null;
   if (primary == null) return fallback;
   if (primary === 0 && fallback !== 0) return fallback;
@@ -49,7 +48,6 @@ function preferMetricValue(primary, fallback) {
 }
 
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
-import { useTheme } from "../shared/ThemeContext.jsx";
 export { DEFAULT_KPI_SLOTS };
 
 function resolveKpiValue(key, snap, entities, summary, totals) {

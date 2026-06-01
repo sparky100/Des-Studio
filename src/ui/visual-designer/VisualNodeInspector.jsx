@@ -1,12 +1,10 @@
 import { useId } from "react";
-;
+import { C, FONT } from "../shared/tokens.js";
 import { Btn, DistPicker, Field, SH, Tag } from "../shared/components.jsx";
 import { ConditionBuilder, EntityFilterBuilder } from "../editors/index.jsx";
 import { VISUAL_NODE_TYPES } from "./graph.js";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 function effectValue(effect = "", pattern) {
-  const { C, FONT } = useTheme();
   return String(effect || "").match(pattern)?.[1]?.trim() || "";
 }
 

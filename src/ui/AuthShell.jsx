@@ -1,11 +1,9 @@
 // ui/AuthShell.jsx — Authentication forms (sign-in, sign-up, password recovery)
 import { useState, useCallback } from "react";
-import { GOOGLE_FONT_URL } from "./shared/tokens.js";
+import { C, FONT, GOOGLE_FONT_URL } from "./shared/tokens.js";
 import { supabase } from "../db/supabase.js";
-import { useTheme } from "./shared/ThemeContext.jsx";
 
 export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
-  const { C, FONT } = useTheme();
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState("signin");
   const [authEmail, setAuthEmail] = useState("");

@@ -1,6 +1,6 @@
 // ui/execute/executeHelpers.js — Pure helper constants and functions (no React dependency)
 
-import { TOKEN_COLORS } from "../shared/tokens.js";
+import { C, FONT, TOKEN_COLORS } from "../shared/tokens.js";
 import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
 
 export const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];

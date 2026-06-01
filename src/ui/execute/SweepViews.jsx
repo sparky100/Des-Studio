@@ -1,16 +1,14 @@
 // ui/execute/SweepViews.jsx — SweepChart, WarmupChart, Sweep2DGrid, QueueHistogram, EntitySummaryTable
 
 import { useMemo, useState } from "react";
-import { alpha, lerpColor } from "../shared/tokens.js";
+import { C, FONT, alpha, lerpColor } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { fmt, METRIC_LABELS } from "./executeHelpers.js";
-import { useTheme } from "../shared/ThemeContext.jsx";
 
 // Check whether a sweep point's aggregateStats satisfies all goals.
 // goals: array of {metric, operator, target} from model.goals
 // Returns true if all goals met, false if any missed, null if no goals or no data.
 function pointIsFeasible(goals, aggregateStats) {
-  const { C, FONT } = useTheme();
   if (!goals?.length) return null;
   const STAT_KEY = {
     avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn",
@@ -35,7 +33,6 @@ function pointIsFeasible(goals, aggregateStats) {
 }
 
 export function SweepChart({ results, metric, paramLabel, goals = [] }) {
-  const { C, FONT } = useTheme();
   const [tip, setTip] = useState(null);
   if (!results?.length) return null;
 
@@ -196,7 +193,6 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
 }
 
 export function WarmupChart({ series, truncationPoint, width = 320, height = 100 }) {
-  const { C, FONT } = useTheme();
   if (!series || series.length < 2) return null;
   const W = width, H = height, PAD = { top: 8, right: 8, bottom: 18, left: 36 };
   const plotW = W - PAD.left - PAD.right;
@@ -252,7 +248,6 @@ export function WarmupChart({ series, truncationPoint, width = 320, height = 100
 }
 
 export function CumulativeMeanChart({ points, warmupPeriod, width = 320, height = 100 }) {
-  const { C, FONT } = useTheme();
   if (!points || points.length < 2) return null;
   const W = width, H = height, PAD = { top: 8, right: 8, bottom: 18, left: 36 };
   const plotW = W - PAD.left - PAD.right;
@@ -305,7 +300,6 @@ export function CumulativeMeanChart({ points, warmupPeriod, width = 320, height 
 }
 
 export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellClick, goals = [] }) {
-  const { C, FONT } = useTheme();
   if (!results?.length) return null;
 
   const valueAs = [...new Set(results.map(r => r.valueA))].sort((a, b) => a - b);
@@ -423,7 +417,6 @@ export function Sweep2DGrid({ results, metric, paramLabelA, paramLabelB, onCellC
 const QUEUE_COLORS = [C.accent, C.amber, C.green, C.purple, C.reneged, C.kpiArr, C.pink, C.server];
 
 export function QueueDepthTimePlot({ timeSeries, queues, timeUnit, width = 400, height = 140 }) {
-  const { C, FONT } = useTheme();
   if (!timeSeries || timeSeries.length < 2) {
     return (
       <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, padding: 12, textAlign: "center", background: C.bg, borderRadius: 6, border: `1px solid ${C.border}` }}>
@@ -501,7 +494,6 @@ export function QueueDepthTimePlot({ timeSeries, queues, timeUnit, width = 400, 
 
 // ── QueueHistogram — per-queue wait time distribution bar chart ───────────────
 export function QueueHistogram({ waitDist }) {
-  const { C, FONT } = useTheme();
   if (!waitDist || !Object.keys(waitDist).length) return null;
   const queues = Object.entries(waitDist).filter(([, d]) => d && d.n > 0);
   if (!queues.length) return null;
@@ -643,7 +635,6 @@ const OUTCOME_COLOR = { done: C.green, served: C.green, reneged: C.red, waiting:
 const fmtT = v => v != null && Number.isFinite(v) ? v.toFixed(2) : "—";
 
 export function EntitySummaryTable({ entitySummary, meanWait }) {
-  const { C, FONT } = useTheme();
   const [sortKey, setSortKey] = useState("arrivalTime");
   const [sortAsc, setSortAsc] = useState(true);
   const [typeFilter, setTypeFilter] = useState("all");
