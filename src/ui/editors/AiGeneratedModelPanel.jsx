@@ -489,6 +489,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   const [proposal, setProposal] = useState(null);
   const [proposalExplanation, setProposalExplanation] = useState(null);
   const [error, setError] = useState("");
+  const [rawErrorText, setRawErrorText] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [listening, setListening] = useState(false);
@@ -549,6 +550,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     recognitionRef.current = recognition;
     setListening(true);
     setError("");
+    setRawErrorText("");
   };
 
   const callAndProcess = useCallback(async (messages, userText) => {
@@ -557,10 +559,14 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     try {
       response = await streamModelBuilder(systemPrompt, messages, {
         onToken: () => setStreamingTokenCount(n => n + 1),
-        onError: err => setError(err?.message || "Model builder request failed."),
+        onError: err => {
+          setError(err?.message || "Model builder request failed.");
+          if (err?.rawResponse) setRawErrorText(err.rawResponse);
+        },
       });
     } catch (err) {
       setError(err?.message || "Model builder request failed.");
+      if (err?.rawResponse) setRawErrorText(err.rawResponse);
       setLoading(false);
       return;
     }
@@ -667,6 +673,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
     setHistory(nextHistory);
     setDraft("");
     setError("");
+    setRawErrorText("");
     setNotice("");
     setRefinementChips([]);
     setCorrectionMode(false);
@@ -773,7 +780,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           )}
           {loading && <BuildingIndicator tokenCount={streamingTokenCount} />}
           {notice && <Bubble role="system" content={notice} />}
-          {error && <div role="alert"><InfoBox color={C.red}>{error}</InfoBox></div>}
+          {error && <div role="alert"><InfoBox color={C.red}>{error}</InfoBox>{rawErrorText ? <details style={{marginTop:6,cursor:"pointer"}}><summary style={{fontSize:11,color:C.muted,fontFamily:FONT}}>Show raw AI response ({rawErrorText.length} chars)</summary><pre style={{fontSize:10,fontFamily:"monospace",lineHeight:1.4,maxHeight:200,overflow:"auto",padding:8,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,whiteSpace:"pre-wrap",wordBreak:"break-all",marginTop:4}}>{rawErrorText.length > 3000 ? rawErrorText.slice(0,3000)+"\n\n... (truncated, full length: "+rawErrorText.length+" chars)" : rawErrorText}</pre></details> : null}</div>}
           <div ref={chatBottomRef} />
         </div>
         <div ref={inputAreaRef} style={{ padding: 14, borderTop: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "end" }}>
