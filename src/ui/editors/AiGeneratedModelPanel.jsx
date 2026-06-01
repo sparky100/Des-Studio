@@ -513,7 +513,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
       return `You have a model "${name}" with ${eCount} entity type${eCount !== 1 ? "s" : ""}, ${bCount} B-event${bCount !== 1 ? "s" : ""}, ${qCount} queue${qCount !== 1 ? "s" : ""}, and ${cCount} C-event${cCount !== 1 ? "s" : ""}. Describe what you want changed.`;
     }
     if (model?.description) {
-      return `I see you described: "${model.description}". I'll ask a few questions to get the details right.`;
+      return `I see you described: "${model.description}". Could you tell me more about what you're simulating?`;
     }
     return "I don't know anything about your model yet. What would you like to build?";
   }, [model, history.length]);
