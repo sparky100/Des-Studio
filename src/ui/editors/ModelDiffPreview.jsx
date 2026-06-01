@@ -298,7 +298,7 @@ function SimulationSummaryCard({ proposedModel }) {
   );
 }
 
-export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onApply, onApplyAndSave, onDiscard, onRefine, allowDraftApply = false, readOnly = false, llmExplanation = null }) {
+export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onApply, onApplyAndSave, onDiscard, onRefine, allowDraftApply = false, readOnly = false, llmExplanation = null, isNewModel = false }) {
   const { C, FONT } = useTheme();
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState(SECTION_META.map(section => section.key));
@@ -356,7 +356,7 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
         <div>
           <SH label="Model Proposal" />
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
-            Review what will change before applying it to the model.
+            {isNewModel ? "Review the model before saving it to your library." : "Review what will change before applying it to the model."}
           </div>
         </div>
         <Btn small variant="ghost" onClick={onDiscard}>Discard</Btn>
@@ -457,17 +457,24 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
         {!readOnly && (
           <>
-            {onRefine && (
-              <Btn variant="ghost" onClick={onRefine} disabled={saving}>Refine this</Btn>
+            {isNewModel ? (
+              <>
+                {onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("all", true)} disabled={saving}>{saving ? "Saving..." : "Apply & Save"}</Btn>}
+                <Btn variant="primary" onClick={() => applyModel("all")} disabled={saving}>Apply (draft)</Btn>
+              </>
+            ) : (
+              <>
+                {onRefine && <Btn variant="ghost" onClick={onRefine} disabled={saving}>Refine this</Btn>}
+                {!selecting && <Btn variant="ghost" onClick={() => setSelecting(true)} disabled={saving}>Apply Selected</Btn>}
+                {selecting && <Btn variant="ghost" onClick={() => applyModel("selected")} disabled={!selected.length || saving}>Apply Selected</Btn>}
+                {selecting && onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("selected", true)} disabled={!selected.length || saving}>{saving ? "Saving..." : "Apply & Save Selected"}</Btn>}
+                <Btn variant="primary" onClick={() => applyModel("all")} disabled={saving}>Apply model</Btn>
+                {onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("all", true)} disabled={saving}>{saving ? "Saving..." : "Apply & Save All"}</Btn>}
+              </>
             )}
-            {!selecting && <Btn variant="ghost" onClick={() => setSelecting(true)} disabled={saving}>Apply Selected</Btn>}
-            {selecting && <Btn variant="ghost" onClick={() => applyModel("selected")} disabled={!selected.length || saving}>Apply Selected</Btn>}
-            {selecting && onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("selected", true)} disabled={!selected.length || saving}>{saving ? "Saving..." : "Apply & Save Selected"}</Btn>}
-            <Btn variant="primary" onClick={() => applyModel("all")} disabled={saving}>Apply model</Btn>
-            {onApplyAndSave && <Btn variant="primary" onClick={() => applyModel("all", true)} disabled={saving}>{saving ? "Saving..." : "Apply & Save All"}</Btn>}
           </>
         )}
-        <Btn variant="ghost" onClick={onDiscard}>Close</Btn>
+        <Btn variant="ghost" onClick={onDiscard}>{isNewModel ? "Discard" : "Close"}</Btn>
       </div>
     </div>
   );

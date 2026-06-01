@@ -830,6 +830,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           onDiscard={() => { setProposal(null); setProposalExplanation(null); }}
           onRefine={handleRefineFromPreview}
           allowDraftApply
+          isNewModel={!model?.entityTypes?.length && !model?.bEvents?.length && !model?.queues?.length}
         />
       )}
     </div>
