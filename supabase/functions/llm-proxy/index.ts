@@ -118,7 +118,6 @@ async function callProvider(request: LlmProxyRequest, config: LlmProviderConfig)
 }
 
 async function loadConfig(): Promise<LlmProviderConfig> {
-  // Try platform_config table first so admin UI changes take effect without redeployment
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -133,31 +132,49 @@ async function loadConfig(): Promise<LlmProviderConfig> {
           const cfg = rows[0].value;
           const provider = cfg.provider || DEFAULT_PROVIDER;
           const model = cfg.model || DEFAULT_MODEL;
-          // API key: prefer DB-stored value, fall back to provider-specific env var
           const apiKey = cfg.apiKey ||
             (provider === "anthropic"
               ? Deno.env.get("ANTHROPIC_API_KEY")
               : Deno.env.get("OPENAI_API_KEY")) || "";
           const temperature = typeof cfg.temperature === "number" ? cfg.temperature : 0.3;
           const rateLimitPerHour = typeof cfg.rateLimitPerHour === "number" ? cfg.rateLimitPerHour : 25;
+          console.log("[llm-proxy] config:platform_config", { provider, model, hasApiKey: !!apiKey, apiKeyLen: apiKey.length });
           return { provider, model, apiKey, temperature, rateLimitPerHour };
         }
+        console.log("[llm-proxy] config:platform_config table has no 'llm' row — falling back to env vars");
+      } else {
+        console.error("[llm-proxy] config:platform_config fetch failed", res.status, await res.text().catch(() => ""));
       }
+    } else {
+      console.log("[llm-proxy] config:SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing — falling back to env vars");
     }
-  } catch {
-    // fall through to env vars
+  } catch (e) {
+    console.error("[llm-proxy] config:loadConfig exception", e);
   }
-  // Fallback: env vars (used when platform_config is unavailable)
   const provider = Deno.env.get("LLM_PROVIDER") || DEFAULT_PROVIDER;
   const model = Deno.env.get("LLM_MODEL") || DEFAULT_MODEL;
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("OPENAI_API_KEY") || "";
   const rateLimitPerHour = parseInt(Deno.env.get("LLM_RATE_LIMIT") || "25", 10);
   const temperature = parseFloat(Deno.env.get("LLM_TEMPERATURE") || "0.3");
+  console.log("[llm-proxy] config:env_vars", { provider, model, hasApiKey: !!apiKey, apiKeyLen: apiKey.length });
   return { provider, model, apiKey, temperature, rateLimitPerHour };
 }
 
 Deno.serve(async request => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: CORS_HEADERS });
+
+  if (request.method === "GET") {
+    const config = await loadConfig();
+    return new Response(JSON.stringify({
+      provider: config.provider,
+      model: config.model,
+      hasApiKey: !!config.apiKey,
+      apiKeyPreview: config.apiKey ? config.apiKey.slice(0, 12) + "..." : "(none)",
+      temperature: config.temperature,
+      rateLimitPerHour: config.rateLimitPerHour,
+    }, null, 2), { status: 200, headers: { ...CORS_HEADERS, "Content-Type": "application/json" } });
+  }
+
   if (request.method !== "POST") return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
 
   const config = await loadConfig();
