@@ -1,7 +1,7 @@
 import { supabase } from "../db/supabase.js";
 import { LLM_RESPONSE_FORMATS, LLM_TASKS, buildLlmRequest } from "./contracts.js";
 
-const DEFAULT_MODEL = "claude-sonnet-4-6";
+const DEFAULT_MODEL = "claude-sonnet-4-20250514";
 
 function getProxyUrl() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;

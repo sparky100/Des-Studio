@@ -1,5 +1,5 @@
 const DEFAULT_PROVIDER = "anthropic";
-const DEFAULT_MODEL = "claude-sonnet-4-6";
+const DEFAULT_MODEL = "claude-sonnet-4-20250514";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const CORS_HEADERS = {
@@ -75,9 +75,7 @@ async function callAnthropic(request: LlmProxyRequest, config: LlmProviderConfig
     role: m.role === "assistant" ? "assistant" : "user",
     content: String(m.content || ""),
   }));
-  const system = systemText
-    ? [{ type: "text", text: systemText }]
-    : undefined;
+  const system = systemText || undefined;
   return fetch(ANTHROPIC_API_URL, {
     method: "POST",
     headers: {
