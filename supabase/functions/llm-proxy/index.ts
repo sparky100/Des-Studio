@@ -1,5 +1,5 @@
 const DEFAULT_PROVIDER = "anthropic";
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
+const DEFAULT_MODEL = "claude-sonnet-4-5";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 const CORS_HEADERS = {
@@ -75,10 +75,8 @@ async function callAnthropic(request: LlmProxyRequest, config: LlmProviderConfig
     role: m.role === "assistant" ? "assistant" : "user",
     content: String(m.content || ""),
   }));
-  // Cache the system prompt (contains large static content like schema docs and help reference).
-  // Anthropic charges 10% of normal input-token cost for cache hits; TTL is 5 minutes.
   const system = systemText
-    ? [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }]
+    ? [{ type: "text", text: systemText }]
     : undefined;
   return fetch(ANTHROPIC_API_URL, {
     method: "POST",
@@ -86,7 +84,6 @@ async function callAnthropic(request: LlmProxyRequest, config: LlmProviderConfig
       "Content-Type": "application/json",
       "x-api-key": config.apiKey,
       "anthropic-version": "2023-06-01",
-      "anthropic-beta": "prompt-caching-2024-07-31",
     },
     body: JSON.stringify({
       model: config.model, system, messages: userMessages,
@@ -181,6 +178,15 @@ Deno.serve(async request => {
   const proxyRequest = normalizeRequest(body, config);
   if (proxyRequest instanceof Response) return proxyRequest;
   const upstream = await callProvider(proxyRequest, config);
+
+  if (!upstream.ok) {
+    let detail = "";
+    try { detail = await upstream.text(); } catch { /* ignore */ }
+    return new Response(
+      `Upstream ${upstream.status}: ${detail || "no body"}`,
+      { status: upstream.status, headers: CORS_HEADERS },
+    );
+  }
 
   return new Response(upstream.body, {
     status: upstream.status,

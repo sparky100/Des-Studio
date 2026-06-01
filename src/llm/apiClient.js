@@ -62,7 +62,9 @@ export async function streamNarrative(prompt, {
     });
 
     if (!response.ok) {
-      throw new Error(`LLM proxy returned ${response.status}`);
+      let detail = "";
+      try { detail = await response.text(); } catch {}
+      throw new Error(`LLM proxy returned ${response.status}${detail ? `: ${detail}` : ""}`);
     }
 
     if (!response.body?.getReader) {
@@ -196,7 +198,11 @@ export async function streamModelBuilder(systemPrompt, messages = [], { onToken,
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`LLM proxy returned ${response.status}`);
+      let detail = "";
+      try { detail = await response.text(); } catch {}
+      const err = new Error(`LLM proxy returned ${response.status}${detail ? `: ${detail}` : ""}`);
+      err.rawResponse = detail;
+      throw err;
     }
 
     if (!response.body?.getReader) {
@@ -271,7 +277,9 @@ export async function callModelBuilder(systemPrompt, messages = [], onComplete, 
     clearTimeout(timeoutId);
 
     if (!response.ok) {
-      throw new Error(`LLM proxy returned ${response.status}`);
+      let detail = "";
+      try { detail = await response.text(); } catch {}
+      throw new Error(`LLM proxy returned ${response.status}${detail ? `: ${detail}` : ""}`);
     }
 
     const payload = await response.json();
