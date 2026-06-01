@@ -41,7 +41,7 @@ describe('UserSettingsPanel theme preference', () => {
     await waitFor(() => expect(onThemeChange).toHaveBeenCalledWith('light'));
   });
 
-  it('applies changed theme immediately and saves it with UI settings', async () => {
+  it('applies changed theme immediately and persists it without waiting for Save Settings', async () => {
     const onThemeChange = vi.fn();
 
     render(<UserSettingsPanel userId="user-1" plan="free" onThemeChange={onThemeChange} />);
@@ -53,8 +53,6 @@ describe('UserSettingsPanel theme preference', () => {
     fireEvent.change(select, { target: { value: 'high-contrast-dark' } });
 
     expect(onThemeChange).toHaveBeenCalledWith('high-contrast-dark');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Save Settings' }));
 
     await waitFor(() => expect(mockSaveUserSettings).toHaveBeenCalled());
     expect(mockSaveUserSettings).toHaveBeenCalledWith(

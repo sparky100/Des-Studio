@@ -77,19 +77,29 @@ function UserSettingsPanel({ userId, plan, onClose, onThemeChange }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleSave = async () => {
+  const buildSettings = (nextTheme = theme) => ({
+    execute: { defaultReplications, defaultWarmup, defaultMaxSimTime },
+    ai:      { responseStyle, autoProposeTemplate },
+    ui:      { theme: nextTheme },
+  });
+
+  const persistSettings = async (nextTheme = theme, successMessage = "Settings saved.") => {
     setSaving(true); setStatus(null);
     try {
-      await saveUserSettings(userId, {
-        execute: { defaultReplications, defaultWarmup, defaultMaxSimTime },
-        ai:      { responseStyle, autoProposeTemplate },
-        ui:      { theme },
-      }, schemaVersion);
-      setStatus({ state: "success", message: "Settings saved." });
+      await saveUserSettings(userId, buildSettings(nextTheme), schemaVersion);
+      setStatus({ state: "success", message: successMessage });
     } catch (err) {
       setStatus({ state: "error", message: err.message });
     }
     setSaving(false);
+  };
+
+  const handleSave = () => persistSettings();
+
+  const handleThemeChange = (nextTheme) => {
+    setTheme(nextTheme);
+    onThemeChange?.(nextTheme);
+    persistSettings(nextTheme, "Theme saved.");
   };
 
   const inp = (extra = {}) => ({
@@ -189,10 +199,7 @@ function UserSettingsPanel({ userId, plan, onClose, onThemeChange }) {
               <SH label="Interface" color={C.accent} />
               <div style={gridRow}>
                 <span style={lbl}>Theme</span>
-                <select value={theme} onChange={e => {
-                  setTheme(e.target.value);
-                  if (onThemeChange) onThemeChange(e.target.value);
-                }}
+                <select value={theme} onChange={e => handleThemeChange(e.target.value)}
                   style={{ ...inp({ color: C.accent, width: 200 }) }}>
                   {THEME_OPTIONS.map(opt => (
                     <option key={opt.id} value={opt.id}>{opt.label}</option>
