@@ -294,6 +294,7 @@ export const AiAssistantPanel = ({
   inline = false,
   triggerAction = null, // { action: "explain"|"compare"|"refine", seq: number }
 }) => {
+  const { C, FONT } = useTheme();
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY), 10);
     return Number.isFinite(stored) ? Math.min(Math.max(stored, SIDEBAR_MIN), SIDEBAR_MAX) : 320;
