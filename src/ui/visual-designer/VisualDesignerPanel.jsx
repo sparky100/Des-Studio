@@ -407,7 +407,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
         {/* ── Node Palette ── */}
         <div style={{
           flexShrink: 0,
-          width: paletteCollapsed ? 44 : 160,
+          width: paletteCollapsed ? 44 : 200,
           transition: "width 220ms cubic-bezier(0.4,0,0.2,1)",
           overflow: "hidden",
         }}>
@@ -534,7 +534,9 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                 )}
                 {(model.entityTypes || []).map((et, i) => (
                   <div key={et.id || i} style={{
-                    display: "flex", alignItems: "center", gap: 4, padding: "3px 4px",
+                    display: "grid",
+                    gridTemplateColumns: et.role === "server" ? "minmax(0, 1fr) 66px 44px 14px" : "minmax(0, 1fr) 66px 14px",
+                    alignItems: "center", gap: 4, padding: "3px 4px",
                     background: C.bg, borderRadius: 4, marginBottom: 3,
                     border: `1px solid ${et.role === "server" ? C.server + "44" : C.cEvent + "33"}`,
                     borderLeft: `2px solid ${et.role === "server" ? C.server : C.cEvent}`,
@@ -554,14 +556,14 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                       maxLength={20}
                       disabled={!canEdit}
                       ariaLabel={`Entity type ${i + 1} name`}
-                      style={{ width: 60, background: "transparent", border: "none", color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
+                      style={{ width: "100%", minWidth: 0, background: "transparent", border: "none", color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
                     />
                     <select value={et.role || "customer"} onChange={e => {
                       const next = [...(model.entityTypes || [])];
                       next[i] = { ...next[i], role: e.target.value, count: e.target.value === "server" ? (next[i].count || "1") : "" };
                       applyModel({ ...model, entityTypes: next });
                     }}
-                      style={{ width: 56, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: et.role === "server" ? C.server : C.cEvent, fontFamily: FONT, fontSize: 9, padding: "1px 3px", outline: "none" }}>
+                      style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: et.role === "server" ? C.server : C.cEvent, fontFamily: FONT, fontSize: 9, padding: "1px 3px", outline: "none" }}>
                       <option value="customer">Entity</option>
                       <option value="server">Server</option>
                     </select>
@@ -571,7 +573,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                         next[i] = { ...next[i], count: e.target.value };
                         applyModel({ ...model, entityTypes: next });
                       }}
-                        style={{ width: 30, background: "transparent", border: "none", color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px", outline: "none", textAlign: "center" }}
+                        style={{ width: "100%", boxSizing: "border-box", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 3px", outline: "none", textAlign: "center" }}
                       />
                     )}
                     {canEdit && (

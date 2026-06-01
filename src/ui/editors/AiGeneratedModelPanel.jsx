@@ -541,7 +541,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   const [mobilePane, setMobilePane] = useState("conversation");
   const recognitionRef = useRef(null);
   const inputAreaRef = useRef(null);
-  const chatBottomRef = useRef(null);
+  const chatScrollRef = useRef(null);
   const systemPrompt = useMemo(() => buildModelBuilderSystemPrompt(), []);
   const autoTriggeredRef = useRef(false);
   const openingMessage = useMemo(() => {
@@ -560,7 +560,8 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
   }, [model, history.length]);
 
   useEffect(() => {
-    chatBottomRef.current?.scrollIntoView?.({ behavior: "smooth" });
+    const chatEl = chatScrollRef.current;
+    if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
   }, [history, loading]);
 
   useEffect(() => {
@@ -867,7 +868,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
             Describe the system you want to build, or explain what you want changed.
           </div>
         </div>
-        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 10, padding: 14, overflowY: "auto" }}>
+        <div ref={chatScrollRef} style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 10, padding: 14, overflowY: "auto" }}>
           {openingMessage && <Bubble role="assistant" content={openingMessage} />}
           {history.map((turn, index) => {
             if (turn.role === "assistant-confirm") {
@@ -906,7 +907,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           {loading && <BuildingIndicator />}
           {notice && <Bubble role="system" content={notice} />}
           {error && <div role="alert"><InfoBox color={C.red}>{error}</InfoBox>{rawErrorText ? <details style={{marginTop:6,cursor:"pointer"}}><summary style={{fontSize:11,color:C.muted,fontFamily:FONT}}>Show raw AI response ({rawErrorText.length} chars)</summary><pre style={{fontSize:10,fontFamily:"monospace",lineHeight:1.4,maxHeight:200,overflow:"auto",padding:8,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,whiteSpace:"pre-wrap",wordBreak:"break-all",marginTop:4}}>{rawErrorText.length > 3000 ? rawErrorText.slice(0,3000)+"\n\n... (truncated, full length: "+rawErrorText.length+" chars)" : rawErrorText}</pre></details> : null}</div>}
-          <div ref={chatBottomRef} />
+          <div />
         </div>
         <div ref={inputAreaRef} style={{ padding: 14, borderTop: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "end" }}>
           <Field

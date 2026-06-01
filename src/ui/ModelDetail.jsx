@@ -41,8 +41,8 @@ import { useTheme } from "./shared/ThemeContext.jsx";
 const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
 
 const AuthoringWorkflowShell = ({ mode, children }) => (
-  <section aria-label={`${mode.label} authoring shell`} style={{ display: "block" }}>
-    <main aria-label={`${mode.label} workspace`} style={{ minWidth: 0 }}>
+  <section aria-label={`${mode.label} authoring shell`} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+    <main aria-label={`${mode.label} workspace`} style={{ minWidth: 0, height: "100%", minHeight: 0 }}>
       {children}
     </main>
   </section>
@@ -1100,7 +1100,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           message="This tab could not render. Try opening the tab again."
         >
         {tab==="ai"&&(
-          <div style={{height:"calc(100vh - 220px)", display:"flex", flexDirection:"column"}}>
+          <div style={{height:"calc(100vh - 220px)", minHeight: 0, display:"flex", flexDirection:"column", overflow:"hidden"}}>
           {renderAuthoringShell(
             <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel} onSaveModel={saveGeneratedModel}/>
           )}

@@ -275,6 +275,35 @@ describe('Visual Designer shell', () => {
     expect(screen.getByDisplayValue('Customer Arrival')).toBeInTheDocument();
   });
 
+  it('gives server count controls room for two digits in the node palette', async () => {
+    const onModelChange = vi.fn();
+
+    render(
+      <VisualDesignerPanel
+        model={{
+          ...twoStageModel,
+          entityTypes: [
+            { id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] },
+            { id: 'nurse', name: 'Nurse', role: 'server', count: '2', attrDefs: [] },
+          ],
+        }}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    const countInput = screen.getByDisplayValue('2');
+    expect(countInput).toHaveStyle({ width: '100%', boxSizing: 'border-box' });
+
+    fireEvent.change(countInput, { target: { value: '12' } });
+
+    expect(onModelChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      entityTypes: expect.arrayContaining([
+        expect.objectContaining({ id: 'nurse', count: '12' }),
+      ]),
+    }));
+  });
+
   it('shows dependency dialog listing C-event when deleting a queue referenced by C-events', async () => {
     const user = userEvent.setup();
     const onModelChange = vi.fn();
