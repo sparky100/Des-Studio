@@ -194,7 +194,9 @@ const PATTERNS_GUIDE = [
     templates: ["cost-call-centre"] },
 ];
 
-const PatternsGuidePanel = ({ onClose }) => (
+const PatternsGuidePanel = ({ onClose }) => {
+  const { C, FONT } = useTheme();
+  return (
   <div role="dialog" aria-modal="true" aria-labelledby="patterns-guide-title" style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 480, maxWidth: "95vw", background: C.surface, borderLeft: `1px solid ${C.border}`, zIndex: Z.modal, display: "flex", flexDirection: "column", boxShadow: SHADOW.panel }}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
       <div>
@@ -224,9 +226,12 @@ const PatternsGuidePanel = ({ onClose }) => (
       ))}
     </div>
   </div>
-);
+  );
+};
 
-const FirstRunPanel = ({ onCreateBlank, onBrowseTemplates }) => (
+const FirstRunPanel = ({ onCreateBlank, onBrowseTemplates }) => {
+  const { C, FONT } = useTheme();
+  return (
   <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 18, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
     <div>
       <div style={{ fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 4 }}>Start your first model</div>
@@ -237,7 +242,8 @@ const FirstRunPanel = ({ onCreateBlank, onBrowseTemplates }) => (
       <Btn variant="primary" onClick={onCreateBlank}>Create a Model</Btn>
     </div>
   </div>
-);
+  );
+};
 
 export function ModelLibrary({
   myModels, pubModels, communityModels,
