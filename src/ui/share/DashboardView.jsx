@@ -8,6 +8,48 @@ const CHART_W = 360, CHART_H = 80;
 const HIST_W = 360, HIST_H = 60, HIST_BINS = 12;
 
 const fmt = (v, d = 1) => Number.isFinite(v) ? v.toFixed(d) : "—";
+
+// Minimal markdown → JSX renderer (handles headings, bold, italic, bullets, paragraphs)
+function renderMarkdown(text) {
+  if (!text) return null;
+  const paragraphs = text.split(/\n{2,}/);
+  return paragraphs.map((para, pi) => {
+    const lines = para.split("\n");
+    // Bullet list block
+    if (lines.every(l => /^[-*]\s/.test(l.trim()) || l.trim() === "")) {
+      return (
+        <ul key={pi} style={{ paddingLeft: 18, margin: "0 0 8px 0" }}>
+          {lines.filter(l => /^[-*]\s/.test(l.trim())).map((l, li) => (
+            <li key={li} style={{ marginBottom: 2 }}>{inlineMarkdown(l.replace(/^[-*]\s/, ""))}</li>
+          ))}
+        </ul>
+      );
+    }
+    // Single-line heading
+    if (lines.length === 1 && /^#{1,3}\s/.test(lines[0])) {
+      const level = lines[0].match(/^(#{1,3})\s/)[1].length;
+      const content = lines[0].replace(/^#{1,3}\s/, "");
+      const sizes = { 1: 15, 2: 13, 3: 12 };
+      return <div key={pi} style={{ fontWeight: 700, fontSize: sizes[level] || 12, marginBottom: 6, marginTop: pi > 0 ? 8 : 0 }}>{inlineMarkdown(content)}</div>;
+    }
+    // Normal paragraph
+    return (
+      <p key={pi} style={{ margin: "0 0 8px 0", lineHeight: 1.7 }}>
+        {lines.map((line, li) => (<span key={li}>{inlineMarkdown(line)}{li < lines.length - 1 ? " " : ""}</span>))}
+      </p>
+    );
+  });
+}
+
+function inlineMarkdown(text) {
+  // Split on **bold**, *italic*, keeping delimiters
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return parts.map((part, i) => {
+    if (/^\*\*[^*]+\*\*$/.test(part)) return <strong key={i}>{part.slice(2, -2)}</strong>;
+    if (/^\*[^*]+\*$/.test(part))     return <em key={i}>{part.slice(1, -1)}</em>;
+    return part;
+  });
+}
 const fmtInt = (v) => Number.isFinite(v) ? v.toFixed(0) : "—";
 
 function MiniLineChart({ title, points, color, yLabel }) {
@@ -94,124 +136,6 @@ function KpiCard({ label, value, color, sub }) {
   );
 }
 
-const NODE_LABELS = { source: "Source", queue: "Queue", activity: "Activity", sink: "Sink" };
-const NODE_W = 130, NODE_H = 36;
-
-function ModelTopology({ model }) {
-  const { C, FONT } = useTheme();
-  const NODE_COLORS = { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red };
-  const graph = model.graph || {};
-  const storedNodes = graph.nodes || [];
-  const storedEdges = graph.edges || [];
-  const types = model.entityTypes || [];
-  const queues = model.queues || [];
-
-  // If we have stored graph layout, use it
-  if (storedNodes.length > 0) {
-    const xs = storedNodes.map(n => n.position?.x ?? 0);
-    const ys = storedNodes.map(n => n.position?.y ?? 0);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-    const minY = Math.min(...ys), maxY = Math.max(...ys);
-    const pad = 50;
-    const totalW = maxX - minX + NODE_W + pad * 2;
-    const totalH = maxY - minY + NODE_H + pad * 2;
-
-    return (
-      <svg width={totalW} height={totalH} style={{ display: "block", width: "100%", maxWidth: "100%" }}
-        viewBox={`0 0 ${totalW} ${totalH}`} aria-label="Model topology">
-        <style>{`.tn{font-family:monospace;font-size:9px;font-weight:700;}.tl{font-family:monospace;font-size:8px;fill:${C.muted};}.te{stroke:${C.border};stroke-width:1.5;fill:none;marker-end:url(#arrow);}`}</style>
-        <defs>
-          <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-            <path d="M0,0 L10,5 L0,10 Z" fill={C.border} />
-          </marker>
-        </defs>
-        {storedEdges.map(edge => {
-          const from = storedNodes.find(n => n.id === edge.from);
-          const to = storedNodes.find(n => n.id === edge.to);
-          if (!from || !to) return null;
-          const x1 = (from.position?.x ?? 0) - minX + pad + NODE_W / 2;
-          const y1 = (from.position?.y ?? 0) - minY + pad + NODE_H / 2;
-          const x2 = (to.position?.x ?? 0) - minX + pad + NODE_W / 2;
-          const y2 = (to.position?.y ?? 0) - minY + pad + NODE_H / 2;
-          return <line key={edge.id} x1={x1} y1={y1} x2={x2} y2={y2} className="te" />;
-        })}
-        {storedNodes.map(node => {
-          const x = (node.position?.x ?? 0) - minX + pad;
-          const y = (node.position?.y ?? 0) - minY + pad;
-          const col = NODE_COLORS[node.type] || C.muted;
-          return (
-            <g key={node.id}>
-              <rect x={x} y={y} width={NODE_W} height={NODE_H} rx={6}
-                fill={col + "22"} stroke={col} strokeWidth={1.5} />
-              <text x={x + NODE_W / 2} y={y + NODE_H / 2 + 3} textAnchor="middle" className="tn" fill={col}>{node.label || node.type}</text>
-            </g>
-          );
-        })}
-      </svg>
-    );
-  }
-
-  // Fallback: derive a simple layout from model data
-  const customers = types.filter(t => t.role !== "server");
-  const servers = types.filter(t => t.role === "server");
-  const gapX = 160, gapY = 40;
-  const w = 120, h = 36;
-  const cX = 50, cY = 50;
-  const qX = cX + gapX, qY = 50;
-  const sX = qX + gapX, sY = cY + Math.max(customers.length, 1) * gapY;
-  const totalW = sX + w + 40;
-  const totalH = Math.max(qY + Math.max(queues.length, 1) * gapY + h, sY + Math.max(servers.length, 1) * gapY + h) + 40;
-
-  return (
-    <svg width={totalW} height={totalH} style={{ display: "block", width: "100%", maxWidth: 600 }}
-      viewBox={`0 0 ${totalW} ${totalH}`} aria-label="Model topology">
-      <style>{`.tn{font-family:monospace;font-size:9px;font-weight:700;}.tl{font-family:monospace;font-size:8px;fill:${C.muted};}.te{stroke:${C.border};stroke-width:1;fill:none;}`}</style>
-      {customers.length > 0 && (
-        <>
-          <text x={cX + w / 2} y={42} textAnchor="middle" className="tl">Entity Types</text>
-          {customers.map((t, i) => (
-            <g key={t.id || t.name}>
-              <rect x={cX} y={cY + i * gapY} width={w} height={h} rx={6} fill={C.green + "22"} stroke={C.green} strokeWidth={1.5} />
-              <text x={cX + w / 2} y={cY + i * gapY + h / 2 + 3} textAnchor="middle" className="tn" fill={C.green}>{t.name}</text>
-            </g>
-          ))}
-        </>
-      )}
-      {queues.length > 0 && (
-        <>
-          <text x={qX + w / 2} y={42} textAnchor="middle" className="tl">Queues</text>
-          {queues.map((q, i) => {
-            const match = customers.find(c => c.name === q.customerType);
-            const srcIdx = match ? customers.indexOf(match) : 0;
-            return (
-              <g key={q.id || q.name}>
-                <line x1={cX + w} y1={cY + srcIdx * gapY + h / 2} x2={qX} y2={qY + i * gapY + h / 2} className="te" />
-                <rect x={qX} y={qY + i * gapY} width={w} height={h} rx={6} fill={C.cEvent + "22"} stroke={C.cEvent} strokeWidth={1.5} />
-                <text x={qX + w / 2} y={qY + i * gapY + h / 2 + 3} textAnchor="middle" className="tn" fill={C.cEvent}>{q.name}</text>
-              </g>
-            );
-          })}
-        </>
-      )}
-      {servers.length > 0 && (
-        <>
-          <text x={sX + w / 2} y={42} textAnchor="middle" className="tl">Servers</text>
-          {servers.map((s, i) => {
-            const fromQ = i < queues.length ? queues[i] : null;
-            const fromY = fromQ ? qY + queues.indexOf(fromQ) * gapY + h / 2 : (sY - gapY);
-            return (
-              <g key={s.id || s.name}>
-                <line x1={qX + w} y1={fromY} x2={sX} y2={sY + i * gapY + h / 2} className="te" />
-                <rect x={sX} y={sY + i * gapY} width={w} height={h} rx={6} fill={C.server + "22"} stroke={C.server} strokeWidth={1.5} />
-                <text x={sX + w / 2} y={sY + i * gapY + h / 2 + 3} textAnchor="middle" className="tn" fill={C.server}>{s.name} ({s.count || 1})</text>
-              </g>
-            );
-          })}
-        </>
-      )}
-    </svg>
-  );
-}
 
 export default function DashboardView({ token, onBack }) {
   const { C, FONT } = useTheme();
@@ -297,7 +221,6 @@ export default function DashboardView({ token, onBack }) {
   const aiInsights = run.aiInsights && run.aiInsights.summary ? run.aiInsights : null;
   const totalServed = summary.served || run.totalServed || 0;
   const totalServedPerQ = queueDefs.length ? Math.round(totalServed / Math.max(queueDefs.length, 1)) : totalServed;
-  const throughput = run.maxSimulationTime ? (totalServed / run.maxSimulationTime).toFixed(2) : null;
   const renegeRate = (summary.reneged && totalServed) ? ((summary.reneged / (summary.reneged + totalServed)) * 100).toFixed(1) : null;
 
   return (
@@ -334,26 +257,54 @@ export default function DashboardView({ token, onBack }) {
 
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "28px 24px", display: "flex", flexDirection: "column", gap: 24 }}>
         {/* Model info */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
-          <div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>{model.name}</div>
-            <div style={{ fontSize: 11, color: C.muted }}>
-              Ran {new Date(run.ranAt).toLocaleString()} · {run.replications} replication{run.replications > 1 ? "s" : ""} · Seed {run.seed}
-              {run.maxSimulationTime ? ` · ${run.maxSimulationTime} time units` : ""}
-            </div>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 2 }}>{model.name}</div>
+          <div style={{ fontSize: 11, color: C.muted }}>
+            Ran {new Date(run.ranAt).toLocaleString()} · {run.replications} replication{run.replications > 1 ? "s" : ""} · Seed {run.seed}
+            {run.maxSimulationTime ? ` · ${run.maxSimulationTime} time units` : ""}
           </div>
-          {throughput && <KpiCard label="THROUGHPUT" value={`${throughput}/tu`} color={C.accent} />}
         </div>
 
-        {/* Model Topology */}
+        {/* Model Structure — text summary, no SVG */}
         {hasWidget("summary") && (
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>MODEL STRUCTURE</div>
-            <ModelTopology model={model} />
-            <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 10, color: C.green, fontFamily: FONT }}>● {(model.entityTypes || []).filter(e => e.role !== "server").length} entity types</span>
-              <span style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT }}>● {queueDefs.length} queues</span>
-              <span style={{ fontSize: 10, color: C.server, fontFamily: FONT }}>● {serverTypes.length} server types</span>
+            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 12 }}>MODEL STRUCTURE</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 16 }}>
+              {/* Entity types (arrivals) */}
+              <div>
+                <div style={{ fontSize: 9, color: C.green, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>Arrivals</div>
+                {(model.entityTypes || []).filter(e => e.role !== "server").length === 0
+                  ? <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>—</span>
+                  : (model.entityTypes || []).filter(e => e.role !== "server").map(e => (
+                    <div key={e.id || e.name} style={{ display: "inline-block", background: C.green + "18", border: `1px solid ${C.green}44`, borderRadius: 4, padding: "3px 8px", fontSize: 11, color: C.green, fontFamily: FONT, marginRight: 4, marginBottom: 4 }}>
+                      {e.name}
+                    </div>
+                  ))
+                }
+              </div>
+              {/* Queues */}
+              <div>
+                <div style={{ fontSize: 9, color: C.cEvent, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>Queues</div>
+                {queueDefs.length === 0
+                  ? <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>—</span>
+                  : queueDefs.map(q => (
+                    <div key={q.id || q.name} style={{ display: "inline-block", background: C.cEvent + "18", border: `1px solid ${C.cEvent}44`, borderRadius: 4, padding: "3px 8px", fontSize: 11, color: C.cEvent, fontFamily: FONT, marginRight: 4, marginBottom: 4 }}>
+                      {q.name}
+                    </div>
+                  ))
+                }
+              </div>
+              {/* Servers */}
+              {serverTypes.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 9, color: C.server, fontFamily: FONT, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>Servers</div>
+                  {serverTypes.map(s => (
+                    <div key={s.id || s.name} style={{ display: "inline-block", background: C.server + "18", border: `1px solid ${C.server}44`, borderRadius: 4, padding: "3px 8px", fontSize: 11, color: C.server, fontFamily: FONT, marginRight: 4, marginBottom: 4 }}>
+                      {s.name}{s.count && s.count > 1 ? ` ×${s.count}` : ""}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -362,7 +313,7 @@ export default function DashboardView({ token, onBack }) {
         {hasWidget("summary") && run.narrativeText && (
           <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
             <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 10 }}>WHAT THIS ANALYSIS SHOWS</div>
-            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{run.narrativeText}</div>
+            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>{renderMarkdown(run.narrativeText)}</div>
           </div>
         )}
 
@@ -382,7 +333,7 @@ export default function DashboardView({ token, onBack }) {
         {hasWidget("summary") && aiInsights && (
           <div style={{ background: C.panel, border: `1px solid ${C.purple}44`, borderRadius: 8, padding: 16 }}>
             <div style={{ fontSize: 10, color: C.purple, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>AI INSIGHTS</div>
-            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiInsights.summary}</div>
+            <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>{renderMarkdown(aiInsights.summary)}</div>
             {aiInsights.recommendation && (
               <div style={{ marginTop: 8, fontSize: 11, color: C.accent, fontFamily: FONT, fontWeight: 700 }}>
                 Recommendation: {aiInsights.recommendation}
