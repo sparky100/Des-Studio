@@ -188,7 +188,7 @@ export function ExecuteActivityNode({ data }) {
             {hasFailures && (
               <span style={{
                 fontSize: 9,
-                color: FAILED_DOT_COLOR,
+                color: C.red,
                 fontFamily: FONT,
                 fontWeight: 600,
               }}>
