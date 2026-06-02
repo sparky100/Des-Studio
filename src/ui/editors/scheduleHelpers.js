@@ -97,10 +97,13 @@ export function linkBEventToSchedule(bEvents, bEventId, scheduleId) {
       const existing = be.schedules || [];
       if (existing.length === 0) {
         // bEvent has no schedule entry yet — create one
-        return [{ eventId: be.id, scheduleRef: scheduleId, rows: [] }];
+        return [{ eventId: be.id, scheduleRef: scheduleId }];
       }
+      // Keep existing rows[] as fallback: resolveInlineSchedules prefers the named-schedule
+      // map when scheduleRef is set, so updated rows always win; but if the map is unavailable
+      // (e.g. schedule not yet loaded), inline rows prevent events being pushed to t=1e9.
       return existing.map((s, i) =>
-        i === 0 ? { ...s, eventId: s.eventId ?? be.id, scheduleRef: scheduleId, rows: [] } : s
+        i === 0 ? { ...s, eventId: s.eventId ?? be.id, scheduleRef: scheduleId } : s
       );
     })(),
   });
