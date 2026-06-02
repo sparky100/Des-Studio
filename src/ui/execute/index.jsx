@@ -254,6 +254,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [shareConfig, setShareConfig] = useState(() => ({
     title: "",
     pinnedWidgets: ["summary", "queues", "resources", "charts"],
+    expiresIn: "never",
   }));
   const [shareSaving, setShareSaving] = useState(false);
   const [justCreatedLink, setJustCreatedLink] = useState(null);
@@ -1315,7 +1316,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     if (!userId || !results || !latestRunId) return;
     setShareSaving(true);
     try {
-      const result = await createShareLink(latestRunId, userId, shareConfig);
+      const expiresAt =
+        shareConfig.expiresIn === "24h"  ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() :
+        shareConfig.expiresIn === "7d"   ? new Date(Date.now() + 7  * 24 * 60 * 60 * 1000).toISOString() :
+        shareConfig.expiresIn === "30d"  ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() :
+        null;
+      const result = await createShareLink(latestRunId, userId, { ...shareConfig, expiresAt });
       setJustCreatedLink(result);
       await loadShareLinks();
     } catch (e) {
@@ -3164,6 +3170,16 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   onChange={e => setShareConfig(prev => ({ ...prev, title: e.target.value }))}
                   style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 10px", outline: "none" }}
                 />
+                <select
+                  aria-label="Link expiry"
+                  value={shareConfig.expiresIn}
+                  onChange={e => setShareConfig(prev => ({ ...prev, expiresIn: e.target.value }))}
+                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", cursor: "pointer" }}>
+                  <option value="never">No expiry</option>
+                  <option value="24h">24 hours</option>
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                </select>
                 <Btn variant="primary" onClick={handleCreateShareLink} disabled={shareSaving}>
                   {shareSaving ? "Creating..." : "Create Link"}
                 </Btn>
@@ -3182,11 +3198,18 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {shareLinks.filter(l => l.isActive).map(link => {
                   const url = `${baseUrl}/#share/${link.token}`;
+                  const expiryLabel = link.expiresAt
+                    ? `Expires ${new Date(link.expiresAt).toLocaleDateString()}`
+                    : "No expiry";
+                  const viewLabel = link.viewCount > 0
+                    ? `${link.viewCount} view${link.viewCount !== 1 ? "s" : ""}${link.lastViewedAt ? ` · last ${new Date(link.lastViewedAt).toLocaleDateString()}` : ""}`
+                    : "Not yet viewed";
                   return (
                     <div key={link.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, padding: "8px 10px" }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 11, color: C.text, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{link.token.slice(0, 8)}…</div>
-                        <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{new Date(link.createdAt).toLocaleString()}</div>
+                        <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>{new Date(link.createdAt).toLocaleString()} · {expiryLabel}</div>
+                        <div style={{ fontSize: 9, color: link.viewCount > 0 ? C.accent : C.muted, fontFamily: FONT }}>{viewLabel}</div>
                       </div>
                       {justCreatedLink?.token === link.token && (
                         <span style={{ fontSize: 9, color: C.green, fontFamily: FONT, fontWeight: 700 }}>NEW</span>

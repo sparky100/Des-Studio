@@ -615,17 +615,22 @@ export function ModelHistoryTab({
                                     disabled={reproduceState[row.id]?.status === 'running'}
                                     style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
                                   >{reproduceState[row.id]?.status === 'running' ? 'Running…' : 'Reproduce'}</button>
-                                  {shareLinksMap?.[row.id] && (
+                                  {shareLinksMap?.[row.id] ? (
                                     <>
                                       <button
                                         onClick={() => {
                                           const link = shareLinksMap[row.id];
-                                          const url = `${baseUrl}/share/${link.token}`;
+                                          const url = `${baseUrl}/#share/${link.token}`;
                                           navigator.clipboard?.writeText(url).catch(() => {});
                                           setMoreMenuId(null);
                                         }}
                                         style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
-                                      >📋 Copy share link</button>
+                                      >
+                                        📋 Copy share link
+                                        {shareLinksMap[row.id].viewCount > 0 && (
+                                          <span style={{ marginLeft: 6, fontSize: 10, color: C.muted }}>({shareLinksMap[row.id].viewCount} view{shareLinksMap[row.id].viewCount !== 1 ? "s" : ""})</span>
+                                        )}
+                                      </button>
                                       <button
                                         onClick={async () => {
                                           if (!confirm("Remove the share link? Anyone with the link will lose access.")) return;
@@ -637,6 +642,18 @@ export function ModelHistoryTab({
                                         style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.red, cursor: "pointer", borderRadius: 4 }}
                                       >✕ Unshare</button>
                                     </>
+                                  ) : userId && (
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          const result = await createShareLink(row.id, userId, {});
+                                          setShareLinksMap?.(prev => ({ ...prev, [row.id]: result }));
+                                          navigator.clipboard?.writeText(`${baseUrl}/#share/${result.token}`).catch(() => {});
+                                        } catch {}
+                                        setMoreMenuId(null);
+                                      }}
+                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
+                                    >🔗 Create share link</button>
                                   )}
                                   {userId && (
                                     <button

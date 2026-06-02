@@ -598,6 +598,7 @@ export async function createShareLink(runId, userId, config = {}) {
       run_id: runId,
       created_by: userId,
       token,
+      expires_at: config.expiresAt || null,
       config: {
         pinnedWidgets: config.pinnedWidgets || [],
         title: config.title || "",
@@ -606,18 +607,22 @@ export async function createShareLink(runId, userId, config = {}) {
     .select()
     .single();
   if (error) throw error;
-  return { id: data.id, token: data.token, createdAt: data.created_at };
+  return { id: data.id, token: data.token, createdAt: data.created_at, expiresAt: data.expires_at };
 }
 
 export async function getShareLink(token) {
   const { data: link, error: linkError } = await supabase
     .from("share_links")
-    .select("id, run_id, config, created_at, revoked_at")
+    .select("id, run_id, config, created_at, revoked_at, expires_at")
     .eq("token", token)
     .single();
   if (linkError) throw linkError;
   if (!link) throw new Error("Share link not found.");
   if (link.revoked_at) throw new Error("This share link has been revoked.");
+  if (link.expires_at && new Date(link.expires_at) <= new Date()) throw new Error("This share link has expired.");
+
+  // Fire-and-forget: record the view (non-blocking, best-effort)
+  supabase.rpc("increment_share_view", { p_token: token }).then(() => {}).catch(() => {});
 
   const { data: run, error: runError } = await supabase
     .from("simulation_runs")
@@ -757,19 +762,26 @@ export async function listShareLinks(modelId) {
 
   const { data, error } = await supabase
     .from("share_links")
-    .select("id, token, config, created_at, revoked_at, run_id")
+    .select("id, token, config, created_at, revoked_at, run_id, expires_at, view_count, last_viewed_at")
     .in("run_id", runIds)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return (data || []).map(link => ({
-    id: link.id,
-    token: link.token,
-    config: link.config,
-    createdAt: link.created_at,
-    revokedAt: link.revoked_at,
-    isActive: !link.revoked_at,
-    runId: link.run_id,
-  }));
+  return (data || []).map(link => {
+    const expired = link.expires_at != null && new Date(link.expires_at) <= new Date();
+    return {
+      id: link.id,
+      token: link.token,
+      config: link.config,
+      createdAt: link.created_at,
+      revokedAt: link.revoked_at,
+      expiresAt: link.expires_at,
+      viewCount: link.view_count ?? 0,
+      lastViewedAt: link.last_viewed_at,
+      isActive: !link.revoked_at && !expired,
+      isExpired: expired,
+      runId: link.run_id,
+    };
+  });
 }
 
 // ── Platform config (admin only) ──────────────────────────────────────────────
