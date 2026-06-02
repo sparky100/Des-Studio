@@ -396,24 +396,43 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
             JOURNEY OUTCOMES
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
             {outcomeEntries.map(outcome => {
               const outcomeAvg = avgPerRun(outcome.count);
+              const outcomeColor = outcome.status === "reneged" ? C.reneged : C.served;
+              const hasWait    = Number.isFinite(outcome.avgWait)    && outcome.avgWait    > 0;
+              const hasSojourn = Number.isFinite(outcome.avgSojourn) && outcome.avgSojourn > 0;
               return (
                 <div key={outcome.routeId} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
                   <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
                     {outcome.routeLabel.toUpperCase()}
                   </div>
                   {outcomeAvg != null ? (
-                    <div style={{ marginBottom: 5 }}>
-                      <div style={{ fontSize: 18, color: outcome.status === "reneged" ? C.reneged : C.served, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>
+                    <div style={{ marginBottom: 6 }}>
+                      <div style={{ fontSize: 18, color: outcomeColor, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>
                         {formatMetricValue(outcome.count, 0)}
                       </div>
                       <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, marginTop: 3 }}>avg {outcomeAvg.toLocaleString()} per run</div>
                     </div>
                   ) : (
-                    <div style={{ fontSize: 18, color: outcome.status === "reneged" ? C.reneged : C.served, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
+                    <div style={{ fontSize: 18, color: outcomeColor, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>
                       {formatMetricValue(outcome.count, 0)}
+                    </div>
+                  )}
+                  {(hasWait || hasSojourn) && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 6, paddingTop: 6, borderTop: `1px solid ${C.border}` }}>
+                      {hasWait && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT, fontSize: 11 }}>
+                          <span style={{ color: C.muted }}>Avg wait</span>
+                          <span style={{ color: C.text, fontWeight: 600 }}>{formatMetricValue(outcome.avgWait)}</span>
+                        </div>
+                      )}
+                      {hasSojourn && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontFamily: FONT, fontSize: 11 }}>
+                          <span style={{ color: C.muted }}>Avg time in system</span>
+                          <span style={{ color: C.text, fontWeight: 600 }}>{formatMetricValue(outcome.avgSojourn)}</span>
+                        </div>
+                      )}
                     </div>
                   )}
                   <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>

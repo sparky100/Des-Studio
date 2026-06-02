@@ -69,10 +69,21 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
           status: outcome.status || "completed",
           endedBy: outcome.endedBy || "unknown",
           count: 0,
+          _waitSum: 0, _waitN: 0,
+          _sojournSum: 0, _sojournN: 0,
         };
       }
-      outcomeAcc[routeId].count += Number(outcome.count) || 0;
+      const n = Number(outcome.count) || 0;
+      outcomeAcc[routeId].count += n;
+      // Weighted accumulation so the batch average reflects entity counts not rep counts
+      if (Number.isFinite(outcome.avgWait))    { outcomeAcc[routeId]._waitSum    += outcome.avgWait    * n; outcomeAcc[routeId]._waitN    += n; }
+      if (Number.isFinite(outcome.avgSojourn)) { outcomeAcc[routeId]._sojournSum += outcome.avgSojourn * n; outcomeAcc[routeId]._sojournN += n; }
     }
+  }
+  for (const o of Object.values(outcomeAcc)) {
+    o.avgWait    = o._waitN    > 0 ? +(o._waitSum    / o._waitN).toFixed(4)    : null;
+    o.avgSojourn = o._sojournN > 0 ? +(o._sojournSum / o._sojournN).toFixed(4) : null;
+    delete o._waitSum; delete o._waitN; delete o._sojournSum; delete o._sojournN;
   }
 
   // Average perResource utilisation across replications

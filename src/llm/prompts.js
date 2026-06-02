@@ -97,6 +97,8 @@ function extractOutcomes(summary = {}) {
       status: outcome.status || null,
       endedBy: outcome.endedBy || null,
       count: finiteOrNull(outcome.count),
+      avgWait: finiteOrNull(outcome.avgWait),
+      avgSojourn: finiteOrNull(outcome.avgSojourn),
     }))
     .filter(row => row.count != null && row.count > 0)
     .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
