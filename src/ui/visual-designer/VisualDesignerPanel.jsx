@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 ;
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
-import { validateVisualGraph, addVisualNode, createStarterFlowModel, deleteVisualNode, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, createStarterFlowModel, deleteVisualNode, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
@@ -218,6 +218,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [message, setMessage] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [selectedPatternId, setSelectedPatternId] = useState(VISUAL_PATTERNS[0]?.id || "");
   const [paletteCollapsed, setPaletteCollapsed] = useState(() => {
     try { return localStorage.getItem("des.palette.collapsed") === "1"; } catch { return false; }
   });
@@ -342,6 +343,17 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     }
     applyModel(next);
     setSelectedNodeId(newest?.id || null);
+  };
+  const addPattern = () => {
+    if (!canEdit || !selectedPatternId) return;
+    const pattern = VISUAL_PATTERNS.find(item => item.id === selectedPatternId);
+    const next = addVisualPattern(model, selectedPatternId);
+    applyModel(next);
+    setSelectedNodeId(null);
+    setMessage({
+      state: "success",
+      text: `${pattern?.label || "Pattern"} added. Review names and timing before running.`,
+    });
   };
   const moveNode = (nodeId, position) => {
     if (!canEdit) return;
@@ -517,6 +529,39 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                   }}
                 >{item.label}</button>
               ))}
+
+              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 2, display: "flex", flexDirection: "column", gap: 6 }}>
+                <label htmlFor="visual-pattern-select" style={{ color: C.muted, fontFamily: FONT, fontSize: 10, letterSpacing: 1.5, fontWeight: 700 }}>
+                  ADD PATTERN
+                </label>
+                <select
+                  id="visual-pattern-select"
+                  value={selectedPatternId}
+                  disabled={!canEdit}
+                  onChange={e => setSelectedPatternId(e.target.value)}
+                  style={{
+                    width: "100%",
+                    background: C.bg,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 4,
+                    color: C.text,
+                    fontFamily: FONT,
+                    fontSize: 11,
+                    padding: "5px 7px",
+                    outline: "none",
+                  }}
+                >
+                  {VISUAL_PATTERNS.map(pattern => (
+                    <option key={pattern.id} value={pattern.id}>{pattern.label}</option>
+                  ))}
+                </select>
+                <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, lineHeight: 1.4 }}>
+                  {VISUAL_PATTERNS.find(pattern => pattern.id === selectedPatternId)?.hint}
+                </div>
+                <Btn small variant="ghost" disabled={!canEdit || !selectedPatternId} onClick={addPattern}>
+                  Add pattern
+                </Btn>
+              </div>
 
               {/* Entity Types section */}
               <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 4 }}>

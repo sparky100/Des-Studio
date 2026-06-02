@@ -304,6 +304,37 @@ describe('Visual Designer shell', () => {
     }));
   });
 
+  it('adds a selected modelling pattern from the node palette', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+
+    render(
+      <VisualDesignerPanel
+        model={{ entityTypes: [], stateVariables: [], queues: [], bEvents: [], cEvents: [] }}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    await user.selectOptions(screen.getByLabelText(/add pattern/i), 'priority-queue');
+    await user.click(screen.getByRole('button', { name: /add pattern/i }));
+
+    expect(onModelChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      queues: expect.arrayContaining([
+        expect.objectContaining({ name: 'Priority Queue', discipline: 'PRIORITY' }),
+      ]),
+      entityTypes: expect.arrayContaining([
+        expect.objectContaining({
+          name: 'Customer',
+          attrDefs: expect.arrayContaining([
+            expect.objectContaining({ name: 'priority', valueType: 'number' }),
+          ]),
+        }),
+      ]),
+    }));
+    expect(screen.getByText(/Priority queue added/i)).toBeInTheDocument();
+  });
+
   it('shows dependency dialog listing C-event when deleting a queue referenced by C-events', async () => {
     const user = userEvent.setup();
     const onModelChange = vi.fn();

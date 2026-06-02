@@ -22,6 +22,17 @@ function firstServerType(model) {
   return (model.entityTypes || []).find(type => type.role === "server")?.name || "Server";
 }
 
+export const VISUAL_PATTERNS = Object.freeze([
+  { id: "single-queue", label: "Single queue service", hint: "Arrival, queue, service, completion" },
+  { id: "two-stage", label: "Two-stage process", hint: "Route from one service stage to another" },
+  { id: "reneging", label: "Reneging / abandonment", hint: "Waiting customers can leave after patience time" },
+  { id: "finite-capacity", label: "Finite capacity queue", hint: "Queue has a maximum waiting space" },
+  { id: "priority-queue", label: "Priority queue", hint: "Lower priority value is served first" },
+  { id: "batching", label: "Batching", hint: "Wait until a group is ready, then process it" },
+  { id: "server-failure", label: "Server failure and repair", hint: "Add failure and repair timing to a server" },
+  { id: "cost-tracking", label: "Cost tracking", hint: "Track service cost in the results" },
+]);
+
 function ensureEntityTypes(model) {
   const entityTypes = [...(model.entityTypes || [])];
   const ids = new Set(entityTypes.map(type => type.id || type.name));
@@ -36,6 +47,103 @@ function ensureEntityTypes(model) {
     changed = true;
   }
   return changed ? { ...model, entityTypes } : model;
+}
+
+function uniqueName(base, existingNames) {
+  let name = base;
+  let i = 2;
+  while (existingNames.has(clean(name).toLowerCase())) {
+    name = `${base} ${i}`;
+    i += 1;
+  }
+  existingNames.add(clean(name).toLowerCase());
+  return name;
+}
+
+function nextPriority(cEvents = []) {
+  const max = cEvents.reduce((acc, event) => Math.max(acc, Number(event.priority) || 0), 0);
+  return max + 1;
+}
+
+function appendServicePattern(model, {
+  prefix,
+  queueBase,
+  arrivalBase,
+  activityBase,
+  completeBase,
+  customer,
+  server,
+  queuePatch = {},
+  arrivalSchedules = null,
+  completionEffect = "COMPLETE()",
+  serviceDist = { dist: "Fixed", distParams: { value: "1" } },
+}) {
+  const bEvents = [...(model.bEvents || [])];
+  const cEvents = [...(model.cEvents || [])];
+  const queues = [...(model.queues || [])];
+  const allIds = new Set([...bEvents, ...cEvents, ...queues, ...(model.entityTypes || [])].map(item => item.id || item.name));
+  const queueNames = new Set(queues.map(q => clean(q.name).toLowerCase()).filter(Boolean));
+  const bNames = new Set(bEvents.map(e => clean(e.name).toLowerCase()).filter(Boolean));
+  const cNames = new Set(cEvents.map(e => clean(e.name).toLowerCase()).filter(Boolean));
+
+  const queueId = makeId(`${prefix}-queue`, allIds);
+  allIds.add(queueId);
+  const arrivalId = makeId(`${prefix}-arrival`, allIds);
+  allIds.add(arrivalId);
+  const completeId = makeId(`${prefix}-complete`, allIds);
+  allIds.add(completeId);
+  const activityId = makeId(`${prefix}-activity`, allIds);
+
+  const queueName = uniqueName(queueBase, queueNames);
+  const arrivalName = uniqueName(arrivalBase, bNames);
+  const completeName = uniqueName(completeBase, bNames);
+  const activityName = uniqueName(activityBase, cNames);
+
+  queues.push({
+    id: queueId,
+    name: queueName,
+    customerType: customer,
+    discipline: "FIFO",
+    ...queuePatch,
+  });
+  bEvents.push({
+    id: arrivalId,
+    name: arrivalName,
+    scheduledTime: "0",
+    effect: `ARRIVE(${customer}, ${queueName})`,
+    schedules: arrivalSchedules || [{ eventId: arrivalId, dist: "Exponential", distParams: { mean: "5" } }],
+  });
+  bEvents.push({
+    id: completeId,
+    name: completeName,
+    scheduledTime: "9999",
+    effect: completionEffect,
+    schedules: [],
+  });
+  cEvents.push({
+    id: activityId,
+    name: activityName,
+    priority: nextPriority(cEvents),
+    condition: `queue(${queueName}).length > 0 AND idle(${server}).count > 0`,
+    effect: `ASSIGN(${queueName}, ${server})`,
+    cSchedules: [{ eventId: completeId, ...serviceDist, useEntityCtx: true }],
+  });
+
+  return { ...model, bEvents, cEvents, queues };
+}
+
+function addPriorityAttribute(model, customer) {
+  const entityTypes = (model.entityTypes || []).map(type => {
+    if (type.name !== customer || (type.attrDefs || []).some(attr => attr.name === "priority")) return type;
+    return {
+      ...type,
+      attrDefs: [
+        ...(type.attrDefs || []),
+        { id: makeId("priority", new Set((type.attrDefs || []).map(attr => attr.id || attr.name))), name: "priority", valueType: "number", defaultValue: 3, mutable: true },
+      ],
+    };
+  });
+  return { ...model, entityTypes };
 }
 
 function updateByRef(items, refId, updater) {
@@ -216,6 +324,162 @@ export function createStarterFlowModel(model) {
   }
   if (activityId && sinkId) {
     next = connectVisualNodes(next, graph, activityId, sinkId).model;
+  }
+
+  const relayoutSeed = {
+    ...next,
+    graph: next.graph ? { ...next.graph, nodes: [] } : undefined,
+  };
+  return updateGraphLayout(relayoutSeed, deriveGraphFromModel(relayoutSeed));
+}
+
+export function addVisualPattern(model, patternId) {
+  let next = ensureEntityTypes(model || {});
+  const customer = firstCustomerType(next);
+  const server = firstServerType(next);
+
+  if (patternId === "single-queue") {
+    next = appendServicePattern(next, {
+      prefix: "single-service",
+      queueBase: "Service Queue",
+      arrivalBase: "Customer Arrival",
+      activityBase: "Start Service",
+      completeBase: "Service Complete",
+      customer,
+      server,
+    });
+  } else if (patternId === "reneging") {
+    const bEvents = [...(next.bEvents || [])];
+    const allIds = new Set([...bEvents, ...(next.cEvents || []), ...(next.queues || []), ...(next.entityTypes || [])].map(item => item.id || item.name));
+    const renegeId = makeId("renege", allIds);
+    next = appendServicePattern(next, {
+      prefix: "reneging",
+      queueBase: "Waiting Queue",
+      arrivalBase: "Customer Arrival",
+      activityBase: "Start Service",
+      completeBase: "Service Complete",
+      customer,
+      server,
+      arrivalSchedules: null,
+    });
+    const arrival = next.bEvents.find(event => String(event.id || "").startsWith("reneging-arrival"));
+    next = {
+      ...next,
+      bEvents: [
+        ...next.bEvents.map(event => event.id !== arrival?.id ? event : {
+          ...event,
+          schedules: [
+            ...(event.schedules || []),
+            { eventId: renegeId, dist: "Fixed", distParams: { value: "10" }, isRenege: true },
+          ],
+        }),
+        { id: renegeId, name: "Abandonment Timer", scheduledTime: "9999", effect: "RENEGE(ctx)", schedules: [] },
+      ],
+    };
+  } else if (patternId === "finite-capacity") {
+    next = appendServicePattern(next, {
+      prefix: "finite-capacity",
+      queueBase: "Waiting Area",
+      arrivalBase: "Customer Arrival",
+      activityBase: "Start Service",
+      completeBase: "Service Complete",
+      customer,
+      server,
+      queuePatch: { capacity: "20" },
+    });
+  } else if (patternId === "priority-queue") {
+    next = addPriorityAttribute(next, customer);
+    next = appendServicePattern(next, {
+      prefix: "priority",
+      queueBase: "Priority Queue",
+      arrivalBase: "Customer Arrival",
+      activityBase: "Start Priority Service",
+      completeBase: "Service Complete",
+      customer,
+      server,
+      queuePatch: { discipline: "PRIORITY" },
+    });
+  } else if (patternId === "two-stage") {
+    const bEvents = [...(next.bEvents || [])];
+    const cEvents = [...(next.cEvents || [])];
+    const queues = [...(next.queues || [])];
+    const allIds = new Set([...bEvents, ...cEvents, ...queues, ...(next.entityTypes || [])].map(item => item.id || item.name));
+    const queueNames = new Set(queues.map(q => clean(q.name).toLowerCase()).filter(Boolean));
+    const q1 = uniqueName("Stage 1 Queue", queueNames);
+    const q2 = uniqueName("Stage 2 Queue", queueNames);
+    const q1Id = makeId("stage-1-queue", allIds); allIds.add(q1Id);
+    const q2Id = makeId("stage-2-queue", allIds); allIds.add(q2Id);
+    const arrivalId = makeId("two-stage-arrival", allIds); allIds.add(arrivalId);
+    const stage1DoneId = makeId("stage-1-complete", allIds); allIds.add(stage1DoneId);
+    const stage2DoneId = makeId("stage-2-complete", allIds); allIds.add(stage2DoneId);
+    const stage1Id = makeId("stage-1-activity", allIds); allIds.add(stage1Id);
+    const stage2Id = makeId("stage-2-activity", allIds);
+    queues.push(
+      { id: q1Id, name: q1, customerType: customer, discipline: "FIFO" },
+      { id: q2Id, name: q2, customerType: customer, discipline: "FIFO" },
+    );
+    bEvents.push(
+      { id: arrivalId, name: "Customer Arrival", scheduledTime: "0", effect: `ARRIVE(${customer}, ${q1})`, schedules: [{ eventId: arrivalId, dist: "Exponential", distParams: { mean: "5" } }] },
+      { id: stage1DoneId, name: "Stage 1 Complete", scheduledTime: "9999", effect: `RELEASE(${server}, ${q2})`, schedules: [] },
+      { id: stage2DoneId, name: "Stage 2 Complete", scheduledTime: "9999", effect: "COMPLETE()", schedules: [] },
+    );
+    const priority = nextPriority(cEvents);
+    cEvents.push(
+      { id: stage1Id, name: "Start Stage 1", priority, condition: `queue(${q1}).length > 0 AND idle(${server}).count > 0`, effect: `ASSIGN(${q1}, ${server})`, cSchedules: [{ eventId: stage1DoneId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+      { id: stage2Id, name: "Start Stage 2", priority: priority + 1, condition: `queue(${q2}).length > 0 AND idle(${server}).count > 0`, effect: `ASSIGN(${q2}, ${server})`, cSchedules: [{ eventId: stage2DoneId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+    );
+    next = { ...next, bEvents, cEvents, queues };
+  } else if (patternId === "batching") {
+    next = appendServicePattern(next, {
+      prefix: "batching",
+      queueBase: "Batch Queue",
+      arrivalBase: "Item Arrival",
+      activityBase: "Process Batch",
+      completeBase: "Batch Complete",
+      customer,
+      server,
+      serviceDist: { dist: "Fixed", distParams: { value: "5" } },
+    });
+    const queues = next.queues || [];
+    const batchQueue = [...queues].reverse().find(queue => String(queue.id || "").startsWith("batching-queue"));
+    const cEvents = [...(next.cEvents || [])];
+    const allIds = new Set([...cEvents, ...(next.bEvents || []), ...queues, ...(next.entityTypes || [])].map(item => item.id || item.name));
+    next = {
+      ...next,
+      cEvents: [
+        ...cEvents,
+        {
+          id: makeId("form-batch", allIds),
+          name: "Form Batch",
+          priority: 1,
+          condition: `queue(${batchQueue?.name || "Batch Queue"}).length >= 5`,
+          effect: `BATCH(${batchQueue?.name || "Batch Queue"}, 5)`,
+          cSchedules: [],
+        },
+      ],
+    };
+  } else if (patternId === "server-failure") {
+    next = {
+      ...next,
+      entityTypes: (next.entityTypes || []).map(type => type.role !== "server" ? type : {
+        ...type,
+        mtbfDist: type.mtbfDist || { dist: "Exponential", distParams: { mean: "120" } },
+        mttrDist: type.mttrDist || { dist: "Exponential", distParams: { mean: "20" } },
+      }),
+    };
+  } else if (patternId === "cost-tracking") {
+    next = appendServicePattern(next, {
+      prefix: "cost",
+      queueBase: "Costed Queue",
+      arrivalBase: "Customer Arrival",
+      activityBase: "Start Costed Service",
+      completeBase: "Service Complete",
+      customer,
+      server,
+      completionEffect: ["COMPLETE()", "COST(5)"],
+    });
+  } else {
+    return next;
   }
 
   const relayoutSeed = {

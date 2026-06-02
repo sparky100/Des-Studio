@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { deriveGraphFromModel } from "../../../src/ui/visual-designer/graph.js";
 import {
   addVisualNode,
+  addVisualPattern,
   createStarterFlowModel,
   connectVisualNodes,
   deleteVisualEdge,
@@ -9,6 +10,7 @@ import {
   updateVisualNode,
   validateVisualGraph,
   validateVisualConnection,
+  VISUAL_PATTERNS,
 } from "../../../src/ui/visual-designer/graph-operations.js";
 
 const baseModel = {
@@ -76,6 +78,60 @@ describe("visual designer graph operations", () => {
     expect(edgePairs.some(edge => edge.startsWith("source:") && edge.includes("->queue:queue-1"))).toBe(true);
     expect(edgePairs).toContain("queue:queue-1->activity:activity-1");
     expect(edgePairs.some(edge => edge.startsWith("activity:activity-1->sink:"))).toBe(true);
+  });
+
+  it("adds modelling patterns as runnable canonical model scaffolds", () => {
+    expect(VISUAL_PATTERNS.map(pattern => pattern.id)).toEqual(expect.arrayContaining([
+      "single-queue",
+      "reneging",
+      "finite-capacity",
+      "priority-queue",
+      "two-stage",
+      "batching",
+      "server-failure",
+      "cost-tracking",
+    ]));
+
+    const priority = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "priority-queue");
+    expect(priority.queues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "Priority Queue", discipline: "PRIORITY" }),
+    ]));
+    expect(priority.entityTypes.find(type => type.role === "customer").attrDefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "priority", valueType: "number" }),
+    ]));
+    expect(priority.bEvents.some(event => String(event.effect).startsWith("ARRIVE("))).toBe(true);
+    expect(priority.cEvents.some(event => String(event.effect).startsWith("ASSIGN("))).toBe(true);
+
+    const reneging = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "reneging");
+    expect(reneging.bEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ effect: "RENEGE(ctx)" }),
+      expect.objectContaining({
+        schedules: expect.arrayContaining([
+          expect.objectContaining({ isRenege: true }),
+        ]),
+      }),
+    ]));
+
+    const finite = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "finite-capacity");
+    expect(finite.queues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ capacity: "20" }),
+    ]));
+
+    const batching = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "batching");
+    expect(batching.cEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ effect: "BATCH(Batch Queue, 5)" }),
+    ]));
+
+    const failure = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "server-failure");
+    expect(failure.entityTypes.find(type => type.role === "server")).toEqual(expect.objectContaining({
+      mtbfDist: expect.objectContaining({ dist: "Exponential" }),
+      mttrDist: expect.objectContaining({ dist: "Exponential" }),
+    }));
+
+    const cost = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "cost-tracking");
+    expect(cost.bEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ effect: ["COMPLETE()", "COST(5)"] }),
+    ]));
   });
 
   it("can place a newly added visual node at a requested canvas position", () => {
