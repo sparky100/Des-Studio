@@ -152,6 +152,10 @@ export function AdaptiveBatchPanel({
   }, []);
 
   function handleProceed() {
+    if (hasHardErrors) {
+      setError("Fix the blocking issues before running Explore.");
+      return;
+    }
     const controller = new AbortController();
     abortRef.current = controller;
     setPhase("running");
@@ -359,9 +363,9 @@ export function AdaptiveBatchPanel({
           {phase === "confirming" && (
             <div style={{ display: "flex", flexDirection: "column", gap: SPACE.md }}>
               <div style={{ fontFamily: FONT, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
-                Explore will run up to <strong style={{ color: C.accent }}>{tierMax} replications</strong> ({tier} plan),
+                Explore will run up to <strong style={{ color: C.accent }}>{tierMax} replications</strong> of the model,
                 stepping up in batches until the 95% confidence interval is within ±5% of the mean,
-                then stream an AI opportunity analysis.
+                then provide an analysis of the results.
               </div>
 
               {/* Model complexity row */}
