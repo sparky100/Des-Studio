@@ -1,7 +1,7 @@
 // src/ui/HelpAssistant.jsx
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Z } from './shared/tokens.js';
-import { Btn } from './shared/components.jsx';
+import { Btn, MicIcon, ArrowUpIcon } from './shared/components.jsx';
 import { streamNarrative } from '../llm/apiClient.js';
 import { buildHelpAssistantSystemPrompt, buildHelpUserMessage } from '../llm/help-assistant-prompt.js';
 import { useTheme } from "./shared/ThemeContext.jsx";
@@ -237,6 +237,8 @@ export function HelpAssistant({
   const [currentResponse, setCurrentResponse] = useState('');
   const [error, setError] = useState(null);
   const [inputValue, setInputValue] = useState('');
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
   const conversationEndRef = useRef(null);
   const inputRef = useRef(null);
   const systemPrompt = useCallback(() => buildHelpAssistantSystemPrompt(), []);
@@ -326,6 +328,32 @@ export function HelpAssistant({
       }
     );
   }, [conversationHistory, currentModel, currentTab, currentView, validation, isLoading, systemPrompt]);
+
+  const toggleListening = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
+    recognition.onresult = (event) => {
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) transcript += event.results[i][0].transcript;
+      }
+      if (transcript) setInputValue(prev => prev + (prev.trim() ? ' ' : '') + transcript);
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognition.start();
+    recognitionRef.current = recognition;
+    setListening(true);
+  };
 
   const handleSuggestedClick = (question) => {
     handleSubmit(question);
@@ -509,37 +537,65 @@ export function HelpAssistant({
         borderTop: `1px solid ${C.border}`,
         flexShrink: 0,
       }}>
-        <textarea
-          ref={inputRef}
-          aria-label="Your question"
-          value={inputValue}
-          onChange={e => setInputValue(e.target.value)}
-          rows={3}
-          placeholder="e.g. How do I set up exponential arrivals?"
-          onKeyDown={handleKeyDown}
-          disabled={isLoading}
-          style={{
-            width: '100%',
-            background: C.bg,
-            border: `1px solid ${C.border}`,
-            borderRadius: 5,
-            color: C.text,
-            fontFamily: FONT,
-            fontSize: 12,
-            padding: '8px 10px',
-            outline: 'none',
-            boxSizing: 'border-box',
-            resize: 'none',
-          }}
-        />
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-          <Btn
-            variant="primary"
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <textarea
+            ref={inputRef}
+            aria-label="Your question"
+            value={inputValue}
+            onChange={e => setInputValue(e.target.value)}
+            rows={3}
+            placeholder="e.g. How do I set up exponential arrivals?"
+            onKeyDown={handleKeyDown}
+            disabled={isLoading}
+            style={{
+              flex: 1,
+              background: C.bg,
+              border: `1px solid ${C.border}`,
+              borderRadius: 5,
+              color: C.text,
+              fontFamily: FONT,
+              fontSize: 12,
+              padding: '8px 10px',
+              outline: 'none',
+              boxSizing: 'border-box',
+              resize: 'none',
+            }}
+          />
+          <button
+            type="button"
+            aria-label={listening ? 'Stop voice input' : 'Start voice input'}
+            title={typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition) ? 'Voice input' : 'Voice input requires Chrome or Edge'}
+            onClick={toggleListening}
+            disabled={isLoading}
+            style={{
+              width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+              background: listening ? C.red + '22' : 'transparent',
+              border: `1px solid ${listening ? C.red : C.border}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              opacity: isLoading ? 0.45 : 1,
+              transition: 'all .15s',
+            }}
+          >
+            <MicIcon size={15} color={listening ? C.red : C.muted} />
+          </button>
+          <button
+            type="button"
+            aria-label="Send"
             onClick={() => handleSubmit(inputValue)}
             disabled={!inputValue.trim() || isLoading}
+            style={{
+              width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+              background: !inputValue.trim() || isLoading ? C.muted : C.accent,
+              border: 'none',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: !inputValue.trim() || isLoading ? 'not-allowed' : 'pointer',
+              opacity: !inputValue.trim() || isLoading ? 0.35 : 1,
+              transition: 'opacity .12s, background .12s',
+            }}
           >
-            Send
-          </Btn>
+            <ArrowUpIcon size={16} color={C.bg} />
+          </button>
         </div>
       </div>
 
