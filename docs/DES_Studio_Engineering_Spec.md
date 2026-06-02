@@ -3,7 +3,7 @@
 **Version:** 7.1.0  
 **Date:** 2026-06-02  
 **Note:** package.json version is 0.9.0-Beta; this document uses an internal engineering version number.  
-**Sprint baseline:** Sprint 79  
+**Sprint baseline:** Sprint 80  
 **Status:** Living document — updated at end of each sprint  
 **Audience:** Engineering team, technical contributors, platform integrators
 
@@ -434,7 +434,22 @@ The returned `Engine` object exposes:
 
 **`buildEngine()` is the only engine import allowed in UI code.** No UI component may import from `src/engine/macros.js`, `src/engine/phases.js`, or any other engine sub-module directly.
 
-### 3.2 src/db/ — database layer
+### 3.2 Visual Designer interaction contract
+
+The Visual Designer is an authoring surface over the canonical `model_json`; it does not maintain a separate graph model. `deriveGraphFromModel(model)` derives nodes and edges from queues, B-Events, C-Events, and `model_json.graph` layout metadata.
+
+| Interaction | Implementation contract |
+|-------------|-------------------------|
+| Single selection | `selectedNodeIds` contains one node id; the inspector edits that canonical element. |
+| Multi-selection | `selectedNodeIds` contains multiple node ids; the toolbar shows count and bulk actions while the inspector remains single-node only. |
+| Mouse selection | Shift/Ctrl/Meta click toggles node selection. React Flow box selection feeds `onNodeSelectionChange(ids)`. |
+| Touch selection | The `Pan / Select` segmented control switches from canvas panning to tap-to-toggle selection without requiring keyboard modifiers. |
+| Group move | React Flow drag stop emits all moved nodes; `updateGraphLayout(model, graph, { nodes })` persists only non-normative layout coordinates. |
+| Bulk delete | `deleteVisualNodes(model, nodes)` repeatedly resolves current derived nodes and delegates to `deleteVisualNode()`, preserving canonical cascade behavior for queues, B-Events, C-Events, and routing references. |
+
+The only persisted data produced by selection or movement is `model_json.graph.nodes[]` layout metadata. Selection state is UI-only and must never be written to `model_json`, Supabase, or run records.
+
+### 3.3 src/db/ — database layer
 
 The `src/db/` layer consists of four modules. Direct Supabase client calls from UI components are forbidden.
 
@@ -478,14 +493,14 @@ restoreModelVersion(versionId): Promise<Model>
 submitFeedback(category, message, context): Promise<void>
 ```
 
-### 3.3 Supabase Edge Functions
+### 3.4 Supabase Edge Functions
 
 | Function | Trigger | Description |
 |----------|---------|-------------|
 | `llm-proxy` | HTTP POST from `src/llm/` | Provider-neutral LLM routing. Accepts a prompt payload, routes to the configured provider (OpenAI, Anthropic, or other), returns a structured response. Credentials never exposed to the browser. |
 | `notify-new-signup` | `auth.users` INSERT trigger | Sends email and Slack notification to the platform admin on new user registration. |
 
-### 3.4 LLM prompt builders (src/llm/)
+### 3.5 LLM prompt builders (src/llm/)
 
 All LLM calls go through `src/llm/prompts.js`. Prompts are built as structured objects; the raw model JSON and run results are injected as context. No UI component constructs LLM prompts directly.
 
@@ -504,7 +519,7 @@ All LLM calls go through `src/llm/prompts.js`. Prompts are built as structured o
 | `buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, ciSummary, tier)` | Explore/Adaptive Batch analysis narrative |
 | `buildReportRecommendationsPrompt(model, results)` | Report recommendations section |
 
-### 3.5 Report generation (src/reports/)
+### 3.6 Report generation (src/reports/)
 
 ```typescript
 function generateReport(

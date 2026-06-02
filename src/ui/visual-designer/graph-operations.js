@@ -146,6 +146,162 @@ function addPriorityAttribute(model, customer) {
   return { ...model, entityTypes };
 }
 
+function effectParts(effect) {
+  return Array.isArray(effect) ? effect : [effect].filter(part => part !== undefined && part !== null && part !== "");
+}
+
+function withEffectPart(effect, part) {
+  const parts = effectParts(effect);
+  if (parts.some(item => String(item).trim().toUpperCase() === String(part).trim().toUpperCase())) return effect;
+  return parts.length <= 1 && typeof effect === "string" ? [effect, part] : [...parts, part];
+}
+
+function queueForAnchor(model, anchorNode) {
+  if (anchorNode?.type !== VISUAL_NODE_TYPES.QUEUE || !anchorNode.refId) return null;
+  return (model.queues || []).find(queue => queue.id === anchorNode.refId) || null;
+}
+
+function serverNameFromActivity(model, anchorNode) {
+  if (anchorNode?.type !== VISUAL_NODE_TYPES.ACTIVITY || !anchorNode.refId) return "";
+  const event = (model.cEvents || []).find(item => item.id === anchorNode.refId);
+  return String(event?.effect || "").match(/ASSIGN\([^,)]+,\s*([^)]+)\)/i)?.[1]?.trim() || "";
+}
+
+function relayoutModel(model) {
+  const relayoutSeed = {
+    ...model,
+    graph: model.graph ? { ...model.graph, nodes: [] } : undefined,
+  };
+  return updateGraphLayout(relayoutSeed, deriveGraphFromModel(relayoutSeed));
+}
+
+function applyQueuePattern(model, patternId, anchorNode, customer) {
+  const queue = queueForAnchor(model, anchorNode);
+  if (!queue?.name) return null;
+
+  if (patternId === "finite-capacity") {
+    return {
+      model: {
+        ...model,
+        queues: (model.queues || []).map(item => item.id === queue.id ? { ...item, capacity: item.capacity || "20" } : item),
+      },
+      appliedToSelection: true,
+    };
+  }
+
+  if (patternId === "priority-queue") {
+    const withPriority = addPriorityAttribute(model, queue.customerType || customer);
+    return {
+      model: {
+        ...withPriority,
+        queues: (withPriority.queues || []).map(item => item.id === queue.id ? { ...item, discipline: "PRIORITY" } : item),
+      },
+      appliedToSelection: true,
+    };
+  }
+
+  if (patternId === "batching") {
+    const allIds = new Set([...(model.cEvents || []), ...(model.bEvents || []), ...(model.queues || []), ...(model.entityTypes || [])].map(item => item.id || item.name));
+    return {
+      model: {
+        ...model,
+        cEvents: [
+          ...(model.cEvents || []),
+          {
+            id: makeId("form-batch", allIds),
+            name: `Form ${queue.name} Batch`,
+            priority: 1,
+            condition: `queue(${queue.name}).length >= 5`,
+            effect: `BATCH(${queue.name}, 5)`,
+            cSchedules: [],
+          },
+        ],
+      },
+      appliedToSelection: true,
+    };
+  }
+
+  if (patternId === "reneging") {
+    const allIds = new Set([...(model.bEvents || []), ...(model.cEvents || []), ...(model.queues || []), ...(model.entityTypes || [])].map(item => item.id || item.name));
+    const renegeId = makeId("renege", allIds);
+    const queueEsc = queue.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const arrivalPattern = new RegExp(`ARRIVE\\([^,]+,\\s*${queueEsc}\\)`, "i");
+    let attached = false;
+    const bEvents = (model.bEvents || []).map(event => {
+      if (!arrivalPattern.test(effectParts(event.effect).join(";"))) return event;
+      attached = true;
+      return {
+        ...event,
+        schedules: [
+          ...(event.schedules || []),
+          { eventId: renegeId, dist: "Fixed", distParams: { value: "10" }, isRenege: true },
+        ],
+      };
+    });
+    if (!attached) return null;
+    return {
+      model: {
+        ...model,
+        bEvents: [
+          ...bEvents,
+          { id: renegeId, name: `${queue.name} Abandonment Timer`, scheduledTime: "9999", effect: "RENEGE(ctx)", schedules: [] },
+        ],
+      },
+      appliedToSelection: true,
+    };
+  }
+
+  return null;
+}
+
+function applyActivityPattern(model, patternId, anchorNode) {
+  if (patternId !== "server-failure" && patternId !== "cost-tracking") return null;
+
+  if (patternId === "server-failure") {
+    const serverName = serverNameFromActivity(model, anchorNode);
+    if (!serverName) return null;
+    return {
+      model: {
+        ...model,
+        entityTypes: (model.entityTypes || []).map(type => type.name !== serverName ? type : {
+          ...type,
+          mtbfDist: type.mtbfDist || "Exponential",
+          mtbfDistParams: type.mtbfDistParams || { mean: "120" },
+          mttrDist: type.mttrDist || "Exponential",
+          mttrDistParams: type.mttrDistParams || { mean: "20" },
+        }),
+      },
+      appliedToSelection: true,
+    };
+  }
+
+  if (patternId === "cost-tracking" && anchorNode?.type === VISUAL_NODE_TYPES.ACTIVITY && anchorNode.refId) {
+    const activity = (model.cEvents || []).find(event => event.id === anchorNode.refId);
+    const scheduledIds = new Set((activity?.cSchedules || []).map(schedule => schedule.eventId).filter(Boolean));
+    if (!scheduledIds.size) return null;
+    return {
+      model: {
+        ...model,
+        bEvents: (model.bEvents || []).map(event => scheduledIds.has(event.id) ? { ...event, effect: withEffectPart(event.effect, "COST(5)") } : event),
+      },
+      appliedToSelection: true,
+    };
+  }
+
+  return null;
+}
+
+function applySinkPattern(model, patternId, anchorNode) {
+  if (patternId !== "cost-tracking" || anchorNode?.type !== VISUAL_NODE_TYPES.SINK || !anchorNode.refId) return null;
+  return {
+    model: {
+      ...model,
+      bEvents: (model.bEvents || []).map(event => event.id === anchorNode.refId ? { ...event, effect: withEffectPart(event.effect, "COST(5)") } : event),
+    },
+    appliedToSelection: true,
+  };
+}
+
 function updateByRef(items, refId, updater) {
   return (items || []).map(item => (item.id === refId ? updater(item) : item));
 }
@@ -333,10 +489,20 @@ export function createStarterFlowModel(model) {
   return updateGraphLayout(relayoutSeed, deriveGraphFromModel(relayoutSeed));
 }
 
-export function addVisualPattern(model, patternId) {
+export function addVisualPattern(model, patternId, options = {}) {
   let next = ensureEntityTypes(model || {});
   const customer = firstCustomerType(next);
   const server = firstServerType(next);
+  const anchorNode = options.anchorNode || null;
+  const selectionPatch = applyQueuePattern(next, patternId, anchorNode, customer)
+    || applyActivityPattern(next, patternId, anchorNode)
+    || applySinkPattern(next, patternId, anchorNode);
+  if (selectionPatch) {
+    return {
+      model: relayoutModel(selectionPatch.model),
+      appliedToSelection: true,
+    };
+  }
 
   if (patternId === "single-queue") {
     next = appendServicePattern(next, {
@@ -459,12 +625,24 @@ export function addVisualPattern(model, patternId) {
       ],
     };
   } else if (patternId === "server-failure") {
+    next = appendServicePattern(next, {
+      prefix: "failure",
+      queueBase: "Machine Queue",
+      arrivalBase: "Job Arrival",
+      activityBase: "Start Machine Work",
+      completeBase: "Job Complete",
+      customer,
+      server,
+      serviceDist: { dist: "Fixed", distParams: { value: "5" } },
+    });
     next = {
       ...next,
       entityTypes: (next.entityTypes || []).map(type => type.role !== "server" ? type : {
         ...type,
-        mtbfDist: type.mtbfDist || { dist: "Exponential", distParams: { mean: "120" } },
-        mttrDist: type.mttrDist || { dist: "Exponential", distParams: { mean: "20" } },
+        mtbfDist: type.mtbfDist || "Exponential",
+        mtbfDistParams: type.mtbfDistParams || { mean: "120" },
+        mttrDist: type.mttrDist || "Exponential",
+        mttrDistParams: type.mttrDistParams || { mean: "20" },
       }),
     };
   } else if (patternId === "cost-tracking") {
@@ -479,14 +657,13 @@ export function addVisualPattern(model, patternId) {
       completionEffect: ["COMPLETE()", "COST(5)"],
     });
   } else {
-    return next;
+    return { model: next, appliedToSelection: false };
   }
 
-  const relayoutSeed = {
-    ...next,
-    graph: next.graph ? { ...next.graph, nodes: [] } : undefined,
+  return {
+    model: relayoutModel(next),
+    appliedToSelection: false,
   };
-  return updateGraphLayout(relayoutSeed, deriveGraphFromModel(relayoutSeed));
 }
 
 export function validateVisualGraph(graph = {}) {
@@ -885,6 +1062,20 @@ export function deleteVisualNode(model, node) {
     }));
   }
 
+  return updateGraphLayout(next, deriveGraphFromModel(next));
+}
+
+export function deleteVisualNodes(model, nodes = []) {
+  const requestedIds = new Set((nodes || []).map(node => node?.id).filter(Boolean));
+  if (!requestedIds.size) return model;
+
+  let next = model;
+  for (const requestedId of requestedIds) {
+    const graph = deriveGraphFromModel(next);
+    const current = (graph.nodes || []).find(node => node.id === requestedId);
+    if (!current) continue;
+    next = deleteVisualNode(next, current);
+  }
   return updateGraphLayout(next, deriveGraphFromModel(next));
 }
 

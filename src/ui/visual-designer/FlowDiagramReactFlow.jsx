@@ -11,14 +11,16 @@ import {
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-;
 import { validateVisualConnection } from "./graph-operations.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
+function colorForNodeType(type, C) {
+  return { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red }[type] || C.accent;
+}
+
 function DesNode({ data, selected }) {
   const { C, FONT } = useTheme();
-  const NODE_COLOR = { source: C.green, queue: C.cEvent, activity: C.purple, sink: C.red };
-  const color = NODE_COLOR[data.type] || C.accent;
+  const color = colorForNodeType(data.type, C);
   const hasTarget = data.type !== "source";
   const hasSource = data.type !== "sink";
   const hasError = !!data.hasError;
@@ -235,10 +237,14 @@ export function FlowDiagramReactFlow({
   graph,
   canEdit = false,
   selectedNodeId = null,
+  selectedNodeIds = [],
+  selectionMode = "pan",
   errorNodeIds,
   fitNodeRef,
   onNodeSelect,
+  onNodeSelectionChange,
   onNodeMove,
+  onNodesMove,
   onViewportChange,
   onConnectNodes,
   onDropNode,
@@ -249,6 +255,7 @@ export function FlowDiagramReactFlow({
   const [dragOver, setDragOver] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const suppressViewportSyncRef = useRef(true);
+  const selectedSet = useMemo(() => new Set(selectedNodeIds.length ? selectedNodeIds : (selectedNodeId ? [selectedNodeId] : [])), [selectedNodeId, selectedNodeIds]);
 
   // Attach hasError flag to each node so DesNode can show the error badge.
   // This is derived state — never stored in model_json.
@@ -304,7 +311,7 @@ export function FlowDiagramReactFlow({
       }}
     >
       <ReactFlow
-        nodes={nodes.map(node => ({ ...node, selected: node.id === selectedNodeId }))}
+        nodes={nodes.map(node => ({ ...node, selected: selectedSet.has(node.id) }))}
         edges={edges}
         nodeTypes={nodeTypes}
         defaultViewport={graph.viewport || { x: 0, y: 0, zoom: 1 }}
@@ -314,11 +321,25 @@ export function FlowDiagramReactFlow({
         nodesConnectable={canEdit}
         deleteKeyCode={null}
         elementsSelectable
+        selectionOnDrag={canEdit && selectionMode === "select"}
+        panOnDrag={selectionMode !== "select"}
+        multiSelectionKeyCode={["Shift", "Control", "Meta"]}
         panOnScroll
         isValidConnection={isValidConnection}
-        onNodeClick={(_, node) => onNodeSelect?.(node.id)}
+        onNodeClick={(event, node) => {
+          const toggle = selectionMode === "select" || event?.shiftKey || event?.ctrlKey || event?.metaKey;
+          onNodeSelect?.(node.id, { toggle });
+        }}
         onPaneClick={() => onNodeSelect?.(null)}
-        onNodeDragStop={(_, node) => onNodeMove?.(node.id, node.position)}
+        onSelectionChange={({ nodes: selectedNodes = [] }) => {
+          onNodeSelectionChange?.(selectedNodes.map(node => node.id));
+        }}
+        onNodeDragStop={(_, node, movedNodes = []) => {
+          const moved = movedNodes.length ? movedNodes : [node];
+          const movedPositions = moved.map(item => ({ id: item.id, x: item.position.x, y: item.position.y }));
+          if (onNodesMove) onNodesMove(movedPositions);
+          else if (!movedNodes.length) onNodeMove?.(node.id, node.position);
+        }}
         onMoveEnd={(_, viewport) => {
           if (suppressViewportSyncRef.current) {
             suppressViewportSyncRef.current = false;
@@ -343,7 +364,7 @@ export function FlowDiagramReactFlow({
         <MiniMap
           pannable
           zoomable
-          nodeColor={node => NODE_COLOR[node.data?.type] || C.accent}
+          nodeColor={node => colorForNodeType(node.data?.type, C)}
           maskColor={C.overlay}
         />
         <CanvasControls

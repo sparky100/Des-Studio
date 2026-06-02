@@ -29,7 +29,7 @@ vi.mock('@xyflow/react', () => ({
     setCenter: vi.fn(),
     getViewport: vi.fn(() => ({ zoom: 1 })),
   }),
-  ReactFlow: ({ nodes = [], edges = [], children, fitView, defaultViewport, onNodeClick, onNodeDragStop, onConnect }) => {
+  ReactFlow: ({ nodes = [], edges = [], children, fitView, defaultViewport, onNodeClick, onNodeDragStop, onSelectionChange, onConnect }) => {
     const source = nodes.find(node => node.id.startsWith('source:'));
     const firstQueue = nodes.find(node => node.id.startsWith('queue:'));
     const overflow = nodes.find(node => node.id === 'queue:consult-q');
@@ -47,6 +47,22 @@ vi.mock('@xyflow/react', () => ({
           <button type="button" onClick={() => onNodeDragStop?.({}, { id: first.id, position: { x: 444, y: 555 } })}>
             Mock move first node
           </button>
+        )}
+        {firstQueue && overflow && (
+          <>
+            <button type="button" onClick={() => onSelectionChange?.({ nodes: [firstQueue, overflow] })}>
+              Mock multi-select queues
+            </button>
+            <button
+              type="button"
+              onClick={() => onNodeDragStop?.({}, firstQueue, [
+                { id: firstQueue.id, position: { x: 111, y: 222 } },
+                { id: overflow.id, position: { x: 333, y: 444 } },
+              ])}
+            >
+              Mock move selected queues
+            </button>
+          </>
         )}
         {source && (
           <button type="button" onClick={() => onNodeClick?.({}, source)}>
@@ -228,6 +244,86 @@ describe('Visual Designer shell', () => {
     }));
     expect(onSave.mock.calls[0][0].graph.edges).toBeUndefined();
   }, 15000);
+
+  it('shows and clears multi-node canvas selection actions', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock multi-select queues/i }));
+
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /clear selection/i }));
+
+    expect(screen.queryByText('2 selected')).not.toBeInTheDocument();
+  });
+
+  it('persists group movement for selected visual nodes', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock multi-select queues/i }));
+    await user.click(screen.getByRole('button', { name: /mock move selected queues/i }));
+
+    expect(onModelChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      graph: expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({ id: 'queue:triage-q', x: 111, y: 222 }),
+          expect.objectContaining({ id: 'queue:consult-q', x: 333, y: 444 }),
+        ]),
+      }),
+    }));
+  });
+
+  it('bulk deletes selected visual nodes after confirmation', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+    const queueOnlyModel = {
+      id: 'queue-only',
+      entityTypes: [{ id: 'patient', name: 'Patient', role: 'customer', attrDefs: [] }],
+      stateVariables: [],
+      queues: [
+        { id: 'triage-q', name: 'Triage Queue', customerType: 'Patient', discipline: 'FIFO' },
+        { id: 'consult-q', name: 'Consultant Queue', customerType: 'Patient', discipline: 'FIFO' },
+      ],
+      bEvents: [],
+      cEvents: [],
+    };
+
+    render(
+      <VisualDesignerPanel
+        model={queueOnlyModel}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock multi-select queues/i }));
+    await user.click(within(screen.getByLabelText('Selection actions')).getByRole('button', { name: /^delete$/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /confirm node deletion/i });
+    expect(within(dialog).getByText('Delete 2 selected nodes?')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+
+    expect(onModelChange).toHaveBeenCalledOnce();
+    expect(onModelChange.mock.calls[0][0].queues).toHaveLength(0);
+  });
 
   it('uses visual connections to update canonical source routing', async () => {
     const user = userEvent.setup();

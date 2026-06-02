@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-;
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
-import { validateVisualGraph, addVisualNode, addVisualPattern, createStarterFlowModel, deleteVisualNode, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, createStarterFlowModel, deleteVisualNode, deleteVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
 import { renameEntityType } from "../../engine/queue-refs.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
+function DeleteNodeDialog({ node, nodes = [], dependents, onConfirm, onCancel }) {
   const { C, FONT } = useTheme();
+  const count = nodes.length || (node ? 1 : 0);
+  const title = count > 1 ? `Delete ${count} selected nodes?` : `Delete ${node?.label || "node"}?`;
   return (
     <div
       role="dialog"
@@ -40,7 +41,7 @@ function DeleteNodeDialog({ node, dependents, onConfirm, onCancel }) {
         fontFamily: FONT,
       }}>
         <div style={{ color: C.red, fontSize: 13, fontWeight: 700 }}>
-          Delete {node.label}?
+          {title}
         </div>
         {dependents.length > 0 && (
           <>
@@ -216,6 +217,8 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     fontSize: 13, lineHeight: 1, padding: "2px 5px",
   };
   const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [selectedNodeIds, setSelectedNodeIds] = useState([]);
+  const [selectionMode, setSelectionMode] = useState("pan");
   const [message, setMessage] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [selectedPatternId, setSelectedPatternId] = useState(VISUAL_PATTERNS[0]?.id || "");
@@ -252,11 +255,53 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     setMessage(null);
     onModelChange?.(nextModel);
   };
+  const selectedNodes = useMemo(() => {
+    const ids = new Set(selectedNodeIds);
+    return (graph.nodes || []).filter(node => ids.has(node.id));
+  }, [graph.nodes, selectedNodeIds]);
+  const inspectorNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] : null;
+
+  const clearSelection = () => {
+    setSelectedNodeIds([]);
+    setSelectedNodeId(null);
+  };
+
+  const selectNode = (nodeId, options = {}) => {
+    if (!nodeId) {
+      clearSelection();
+      return;
+    }
+    if (options.toggle) {
+      setSelectedNodeIds(prev => {
+        const set = new Set(prev);
+        if (set.has(nodeId)) set.delete(nodeId);
+        else set.add(nodeId);
+        const next = [...set];
+        setSelectedNodeId(next.includes(nodeId) ? nodeId : (next[0] || null));
+        return next;
+      });
+      return;
+    }
+    setSelectedNodeIds([nodeId]);
+    setSelectedNodeId(nodeId);
+  };
+
+  const syncSelection = ids => {
+    const next = [...new Set(ids || [])];
+    setSelectedNodeIds(next);
+    setSelectedNodeId(current => next.includes(current) ? current : (next[0] || null));
+  };
 
   // Auto-open inspector whenever a node is selected
   useEffect(() => {
-    if (selectedNodeId) setInspectorCollapsed(false);
-  }, [selectedNodeId]);
+    if (inspectorNodeId) setInspectorCollapsed(false);
+  }, [inspectorNodeId]);
+
+  useEffect(() => {
+    const validIds = new Set((graph.nodes || []).map(node => node.id));
+    setSelectedNodeIds(prev => prev.filter(id => validIds.has(id)));
+    setSelectedNodeId(prev => prev && validIds.has(prev) ? prev : null);
+  }, [graph.nodes]);
 
   const togglePalette = () => {
     setPaletteCollapsed(prev => {
@@ -276,9 +321,12 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     }
   }, [canEdit, isStarterBlank]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function doDelete(targetNode) {
-    const nextModel = deleteVisualNode(model, targetNode);
-    setSelectedNodeId(null);
+  function doDelete(targetNode, targetNodes = null) {
+    const nodesToDelete = targetNodes?.length ? targetNodes : (targetNode ? [targetNode] : []);
+    const nextModel = nodesToDelete.length > 1
+      ? deleteVisualNodes(model, nodesToDelete)
+      : deleteVisualNode(model, targetNode);
+    clearSelection();
     setPendingDelete(null);
     applyModel(nextModel);
   }
@@ -293,18 +341,20 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     }
   }
 
+  function deleteSelectedNodes() {
+    if (!canEdit || selectedNodes.length === 0) return;
+    const deps = selectedNodes.flatMap(node => findNodeDependents(model, node));
+    if (deps.length > 0 || selectedNodes.length > 1) {
+      setPendingDelete({ node: selectedNodes[0], nodes: selectedNodes, dependents: deps });
+    } else {
+      doDelete(selectedNodes[0], selectedNodes);
+    }
+  }
+
   // Ref holds the latest delete-triggering closure so the keydown listener never goes stale.
   const deleteKeyHandlerRef = useRef(null);
   deleteKeyHandlerRef.current = () => {
-    if (!canEdit || !selectedNodeId) return;
-    const targetNode = (graph.nodes || []).find(n => n.id === selectedNodeId);
-    if (!targetNode) return;
-    const deps = findNodeDependents(model, targetNode);
-    if (deps.length > 0) {
-      setPendingDelete({ node: targetNode, dependents: deps });
-    } else {
-      doDelete(targetNode);
-    }
+    deleteSelectedNodes();
   };
 
   useEffect(() => {
@@ -324,7 +374,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     let next = addVisualNode(model, type, position);
     let nextGraph = deriveGraphFromModel(next);
     const newest = [...nextGraph.nodes].reverse().find(node => node.type === type);
-    const selectedNode = selectedNodeId ? graph.nodes.find(node => node.id === selectedNodeId) : null;
+    const selectedNode = inspectorNodeId ? graph.nodes.find(node => node.id === inspectorNodeId) : null;
     const autoLinkTypes = [VISUAL_NODE_TYPES.SOURCE, VISUAL_NODE_TYPES.ACTIVITY];
     if (selectedNode && newest && selectedNode.id !== newest.id && autoLinkTypes.includes(selectedNode.type)) {
       const validation = validateVisualConnection(nextGraph, selectedNode.id, newest.id);
@@ -333,7 +383,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
         nextGraph = deriveGraphFromModel(next);
         const linkedNewest = nextGraph.nodes.find(node => node.id === newest.id);
         applyModel(next);
-        setSelectedNodeId(linkedNewest?.id || newest.id);
+        selectNode(linkedNewest?.id || newest.id);
         setMessage({
           state: "success",
           text: `${selectedNode.label} linked to ${linkedNewest?.label || newest.label}.`,
@@ -342,22 +392,29 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
       }
     }
     applyModel(next);
-    setSelectedNodeId(newest?.id || null);
+    if (newest?.id) selectNode(newest.id);
   };
   const addPattern = () => {
     if (!canEdit || !selectedPatternId) return;
     const pattern = VISUAL_PATTERNS.find(item => item.id === selectedPatternId);
-    const next = addVisualPattern(model, selectedPatternId);
-    applyModel(next);
-    setSelectedNodeId(null);
+    const selectedNode = inspectorNodeId ? graph.nodes.find(node => node.id === inspectorNodeId) : null;
+    const result = addVisualPattern(model, selectedPatternId, { anchorNode: selectedNode });
+    applyModel(result.model);
+    clearSelection();
     setMessage({
       state: "success",
-      text: `${pattern?.label || "Pattern"} added. Review names and timing before running.`,
+      text: result.appliedToSelection
+        ? `${pattern?.label || "Pattern"} applied to selected flow. Review names and timing before running.`
+        : `${pattern?.label || "Pattern"} added. Review names and timing before running.`,
     });
   };
   const moveNode = (nodeId, position) => {
     if (!canEdit) return;
     applyModel(updateGraphLayout(model, graph, { nodes: [{ id: nodeId, x: position.x, y: position.y }] }));
+  };
+  const moveNodes = (nodes) => {
+    if (!canEdit || !nodes?.length) return;
+    applyModel(updateGraphLayout(model, graph, { nodes }));
   };
   const changeViewport = viewport => {
     if (!canEdit || !viewport) return;
@@ -382,7 +439,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     const next = updateVisualNode(model, node, patch);
     applyModel(next);
     const updated = deriveGraphFromModel(next).nodes.find(item => item.refId === node.refId && item.type === node.type);
-    if (updated) setSelectedNodeId(updated.id);
+    if (updated) selectNode(updated.id);
   };
   const deleteEdge = (edgeId) => {
     if (!canEdit) return;
@@ -397,7 +454,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
 
   // Pan/zoom the canvas to a node and open its inspector.
   const focusNode = (nodeId) => {
-    setSelectedNodeId(nodeId);
+    selectNode(nodeId);
     fitNodeRef.current?.(nodeId);
   };
 
@@ -409,7 +466,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     return () => clearTimeout(timer);
   }, [message]);
 
-  const inspectorOpen = Boolean(selectedNodeId) && !inspectorCollapsed;
+  const inspectorOpen = Boolean(inspectorNodeId) && !inspectorCollapsed;
 
   return (
     <div aria-label="Visual Designer" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -556,7 +613,9 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                   ))}
                 </select>
                 <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, lineHeight: 1.4 }}>
-                  {VISUAL_PATTERNS.find(pattern => pattern.id === selectedPatternId)?.hint}
+                  {selectedNodeIds.length > 0
+                    ? "Selection-aware: compatible patterns update the selected node or flow."
+                    : VISUAL_PATTERNS.find(pattern => pattern.id === selectedPatternId)?.hint}
                 </div>
                 <Btn small variant="ghost" disabled={!canEdit || !selectedPatternId} onClick={addPattern}>
                   Add pattern
@@ -650,6 +709,81 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
 
         {/* ── Canvas ── */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{
+            alignItems: "center",
+            display: "flex",
+            gap: 8,
+            justifyContent: "space-between",
+            minHeight: 34,
+          }}>
+            <div
+              aria-label="Canvas interaction mode"
+              role="group"
+              style={{
+                background: C.panel,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                display: "flex",
+                gap: 2,
+                padding: 3,
+              }}
+            >
+              {[
+                { id: "pan", label: "Pan" },
+                { id: "select", label: "Select" },
+              ].map(mode => (
+                <button
+                  key={mode.id}
+                  type="button"
+                  aria-pressed={selectionMode === mode.id}
+                  disabled={!canEdit && mode.id === "select"}
+                  onClick={() => setSelectionMode(mode.id)}
+                  style={{
+                    background: selectionMode === mode.id ? `${C.accent}22` : "transparent",
+                    border: `1px solid ${selectionMode === mode.id ? C.accent : "transparent"}`,
+                    borderRadius: 4,
+                    color: selectionMode === mode.id ? C.accent : C.muted,
+                    cursor: canEdit || mode.id === "pan" ? "pointer" : "not-allowed",
+                    fontFamily: FONT,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "5px 10px",
+                  }}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+
+            {selectedNodeIds.length > 0 && (
+              <div
+                aria-label="Selection actions"
+                style={{
+                  alignItems: "center",
+                  background: C.panel,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 6,
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  justifyContent: "flex-end",
+                  padding: "4px 6px",
+                }}
+              >
+                <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                  {selectedNodeIds.length} selected
+                </span>
+                {canEdit && (
+                  <Btn small variant="danger" onClick={deleteSelectedNodes}>
+                    Delete
+                  </Btn>
+                )}
+                <Btn small variant="ghost" onClick={clearSelection}>
+                  Clear selection
+                </Btn>
+              </div>
+            )}
+          </div>
           {message && (
             <div role={message.state === "error" ? "alert" : "status"} style={{
               background: message.state === "error" ? C.red + "16" : C.green + "16",
@@ -667,11 +801,15 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
             key={flowKey}
             graph={graphWithViewport}
             canEdit={canEdit}
-            selectedNodeId={selectedNodeId}
+            selectedNodeId={inspectorNodeId}
+            selectedNodeIds={selectedNodeIds}
+            selectionMode={selectionMode}
             errorNodeIds={errorNodeIds}
             fitNodeRef={fitNodeRef}
-            onNodeSelect={setSelectedNodeId}
+            onNodeSelect={selectNode}
+            onNodeSelectionChange={syncSelection}
             onNodeMove={moveNode}
+            onNodesMove={moveNodes}
             onViewportChange={changeViewport}
             onConnectNodes={connectNodes}
             onDropNode={addNode}
@@ -692,7 +830,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
             <VisualNodeInspector
               model={model}
               graph={graph}
-              selectedNodeId={selectedNodeId}
+              selectedNodeId={inspectorNodeId}
               canEdit={canEdit}
               onPatchNode={patchNode}
               onDeleteNode={canEdit ? deleteNode : null}
@@ -702,7 +840,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
         </div>
 
         {/* Inspector re-open handle — visible when a node is selected but the inspector is dismissed */}
-        {selectedNodeId && inspectorCollapsed && (
+        {inspectorNodeId && inspectorCollapsed && (
           <button
             type="button"
             onClick={() => setInspectorCollapsed(false)}
@@ -736,8 +874,9 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
       {pendingDelete && (
         <DeleteNodeDialog
           node={pendingDelete.node}
+          nodes={pendingDelete.nodes || []}
           dependents={pendingDelete.dependents}
-          onConfirm={() => doDelete(pendingDelete.node)}
+          onConfirm={() => doDelete(pendingDelete.node, pendingDelete.nodes)}
           onCancel={() => setPendingDelete(null)}
         />
       )}

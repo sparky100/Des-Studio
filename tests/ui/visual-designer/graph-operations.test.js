@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { deriveGraphFromModel } from "../../../src/ui/visual-designer/graph.js";
+import { validateModel } from "../../../src/engine/validation.js";
 import {
   addVisualNode,
   addVisualPattern,
   createStarterFlowModel,
   connectVisualNodes,
   deleteVisualEdge,
+  deleteVisualNodes,
   updateGraphLayout,
   updateVisualNode,
   validateVisualGraph,
@@ -92,7 +94,7 @@ describe("visual designer graph operations", () => {
       "cost-tracking",
     ]));
 
-    const priority = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "priority-queue");
+    const priority = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "priority-queue").model;
     expect(priority.queues).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "Priority Queue", discipline: "PRIORITY" }),
     ]));
@@ -102,7 +104,7 @@ describe("visual designer graph operations", () => {
     expect(priority.bEvents.some(event => String(event.effect).startsWith("ARRIVE("))).toBe(true);
     expect(priority.cEvents.some(event => String(event.effect).startsWith("ASSIGN("))).toBe(true);
 
-    const reneging = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "reneging");
+    const reneging = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "reneging").model;
     expect(reneging.bEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({ effect: "RENEGE(ctx)" }),
       expect.objectContaining({
@@ -112,25 +114,72 @@ describe("visual designer graph operations", () => {
       }),
     ]));
 
-    const finite = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "finite-capacity");
+    const finite = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "finite-capacity").model;
     expect(finite.queues).toEqual(expect.arrayContaining([
       expect.objectContaining({ capacity: "20" }),
     ]));
 
-    const batching = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "batching");
+    const batching = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "batching").model;
     expect(batching.cEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({ effect: "BATCH(Batch Queue, 5)" }),
     ]));
 
-    const failure = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "server-failure");
+    const failure = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "server-failure").model;
     expect(failure.entityTypes.find(type => type.role === "server")).toEqual(expect.objectContaining({
-      mtbfDist: expect.objectContaining({ dist: "Exponential" }),
-      mttrDist: expect.objectContaining({ dist: "Exponential" }),
+      mtbfDist: "Exponential",
+      mtbfDistParams: { mean: "120" },
+      mttrDist: "Exponential",
+      mttrDistParams: { mean: "20" },
     }));
 
-    const cost = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "cost-tracking");
+    const cost = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, "cost-tracking").model;
     expect(cost.bEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({ effect: ["COMPLETE()", "COST(5)"] }),
+    ]));
+  });
+
+  it("creates schema-compliant runnable models for every visual pattern scaffold", () => {
+    for (const pattern of VISUAL_PATTERNS) {
+      const result = addVisualPattern({ entityTypes: [], queues: [], bEvents: [], cEvents: [], stateVariables: [] }, pattern.id);
+      const validation = validateModel({
+        ...result.model,
+        maxSimTime: 500,
+        replications: 1,
+        terminationMode: "time",
+      });
+
+      expect(validation.errors, pattern.id).toEqual([]);
+    }
+  });
+
+  it("applies compatible patterns to a selected existing queue instead of adding a duplicate flow", () => {
+    const graph = deriveGraphFromModel(baseModel);
+    const mainQueueNode = graph.nodes.find(node => node.id === "queue:main-q");
+
+    const finite = addVisualPattern(baseModel, "finite-capacity", { anchorNode: mainQueueNode });
+    expect(finite.appliedToSelection).toBe(true);
+    expect(finite.model.queues).toHaveLength(baseModel.queues.length);
+    expect(finite.model.queues.find(queue => queue.id === "main-q")).toEqual(expect.objectContaining({
+      capacity: "20",
+    }));
+
+    const priority = addVisualPattern(baseModel, "priority-queue", { anchorNode: mainQueueNode });
+    expect(priority.appliedToSelection).toBe(true);
+    expect(priority.model.queues.find(queue => queue.id === "main-q")).toEqual(expect.objectContaining({
+      discipline: "PRIORITY",
+    }));
+    expect(priority.model.entityTypes.find(type => type.name === "Customer").attrDefs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "priority", valueType: "number" }),
+    ]));
+
+    const reneging = addVisualPattern(baseModel, "reneging", { anchorNode: mainQueueNode });
+    expect(reneging.appliedToSelection).toBe(true);
+    expect(reneging.model.queues).toHaveLength(baseModel.queues.length);
+    expect(reneging.model.bEvents.find(event => event.id === "arrival").schedules).toEqual(expect.arrayContaining([
+      expect.objectContaining({ isRenege: true }),
+    ]));
+    expect(reneging.model.bEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({ effect: "RENEGE(ctx)" }),
     ]));
   });
 
@@ -259,6 +308,21 @@ describe("visual designer graph operations", () => {
     expect((startService.cSchedules || []).some(s => s.eventId === "complete")).toBe(false);
     // The "complete" bEvent itself must still exist (it is a Sink node, not exclusively owned for deletion here)
     expect(next.bEvents.some(be => be.id === "complete")).toBe(true);
+  });
+
+  it("deletes multiple visual nodes from the canonical model", () => {
+    const graph = deriveGraphFromModel(baseModel);
+    const nodes = [
+      graph.nodes.find(node => node.id === "queue:main-q"),
+      graph.nodes.find(node => node.id === "queue:overflow-q"),
+    ];
+
+    const next = deleteVisualNodes(baseModel, nodes);
+
+    expect(next.queues).toHaveLength(0);
+    expect(next.bEvents.find(event => event.id === "arrival").effect).toBe("ARRIVE(Customer)");
+    expect(next.cEvents.find(event => event.id === "start-service")).toBeUndefined();
+    expect(deriveGraphFromModel(next).nodes.some(node => node.id.startsWith("queue:"))).toBe(false);
   });
 
   it("summarizes visual graph warnings for incomplete routes", () => {

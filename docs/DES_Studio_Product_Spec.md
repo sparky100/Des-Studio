@@ -1,8 +1,8 @@
 # DES Studio — Product Specification
 
 **Version:** 7.0.0  
-**Date:** 2026-06-01  
-**Sprint baseline:** Sprint 79  
+**Date:** 2026-06-02  
+**Sprint baseline:** Sprint 80  
 **Status:** Living document — reviewed and updated at end of each sprint  
 **Note:** package.json version is 0.9.0-Beta; version alignment with spec version number pending.
 
@@ -89,7 +89,7 @@ High-value features that are complete but whose absence would degrade the platfo
 
 | # | Feature | Description |
 |---|---------|-------------|
-| S1 | **Visual Designer** | @xyflow/react drag-and-drop canvas. Writes to the same `model_json` as Forms/Tabs. |
+| S1 | **Visual Designer** | @xyflow/react drag-and-drop canvas. Writes to the same `model_json` as Forms/Tabs. Supports mouse and touch-friendly multi-select, group move, and bulk delete for larger diagrams. |
 | S2 | **AI Generator** | Natural-language model authoring. Four-phase conversation (clarify / confirm / build / refine). Produces complete `model_json`. |
 | S3 | **Execute canvas** | Topology-derived live flow canvas. Entity token animation, queue depth badges, server utilisation overlays. |
 | S4 | **Parametric sweep** | 1D and 2D sweeps with Goal Feasibility line. Two-scenario comparison uses paired-t confidence intervals with Bonferroni correction. Note: tukeyHSD() and oneWayANOVA() are implemented in the engine but not yet wired to the UI. |
@@ -163,6 +163,7 @@ Valuable additions already partially implemented or planned for near-term sprint
 - AI Generator produces a `model_json` that passes validation with zero blocking errors for a well-described scenario.
 - Refinement loop lets the user describe what is wrong and the AI patches the model without regenerating from scratch.
 - Generated model is immediately editable in Forms/Tabs or Visual Designer.
+- Visual Designer users can select multiple nodes, move them as a group, and delete them together without switching to the structured editor.
 
 ---
 

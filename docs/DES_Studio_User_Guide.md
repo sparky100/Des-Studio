@@ -1,8 +1,8 @@
 # DES Studio — User Guide
 
 **Version:** 7.0.0  
-**Date:** 2026-06-01  
-**Sprint baseline:** Sprint 79  
+**Date:** 2026-06-02  
+**Sprint baseline:** Sprint 80  
 **Audience:** Simulation practitioners, operations analysts, engineering students
 
 ---
@@ -155,6 +155,8 @@ You have now completed the core DES Studio loop: build → run → analyse → a
 - Use descriptive names for entity types (e.g. "Patient" not "Entity1").
 - If you use a PRIORITY queue discipline, the entity type needs a `priority` attribute of type `number`.
 - B-Events set *when* things happen. C-Events set *what can happen given the current state*. If nothing is happening during a run, check your C-Event conditions.
+
+**Visual Designer.** The **Design** tab also includes a canvas-based Visual Designer for building and rearranging the same model. Use **Pan** mode to move around the diagram. Use **Select** mode, or Shift/Ctrl-click with a mouse, to select more than one node. Once nodes are selected, the toolbar above the canvas shows how many are selected and lets you clear the selection or delete the selected nodes together. Dragging a selected group moves the whole group and saves the updated layout with the model.
 
 ### 4.2 Generate a model with AI
 
