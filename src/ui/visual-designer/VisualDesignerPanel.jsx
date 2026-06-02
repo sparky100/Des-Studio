@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
 import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
-import { validateVisualGraph, addVisualNode, addVisualPattern, createStarterFlowModel, deleteVisualNode, deleteVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
+import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
 import { validateModel } from "../../engine/validation.js";
@@ -311,15 +311,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     });
   };
 
-  useEffect(() => {
-    if (!canEdit || !isStarterBlank) return;
-    const starterModel = createStarterFlowModel(model || {});
-    if (onModelInit) {
-      onModelInit(starterModel);
-    } else {
-      applyModel(starterModel);
-    }
-  }, [canEdit, isStarterBlank]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function doDelete(targetNode, targetNodes = null) {
     const nodesToDelete = targetNodes?.length ? targetNodes : (targetNode ? [targetNode] : []);
@@ -797,25 +788,63 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               {message.text}
             </div>
           )}
-          <FlowDiagramReactFlow
-            key={flowKey}
-            graph={graphWithViewport}
-            canEdit={canEdit}
-            selectedNodeId={inspectorNodeId}
-            selectedNodeIds={selectedNodeIds}
-            selectionMode={selectionMode}
-            errorNodeIds={errorNodeIds}
-            fitNodeRef={fitNodeRef}
-            onNodeSelect={selectNode}
-            onNodeSelectionChange={syncSelection}
-            onNodeMove={moveNode}
-            onNodesMove={moveNodes}
-            onViewportChange={changeViewport}
-            onConnectNodes={connectNodes}
-            onDropNode={addNode}
-            onDeleteEdge={canEdit ? deleteEdge : null}
-            onResetLayout={canEdit ? resetLayout : null}
-          />
+          <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
+            <FlowDiagramReactFlow
+              key={flowKey}
+              graph={graphWithViewport}
+              canEdit={canEdit}
+              selectedNodeId={inspectorNodeId}
+              selectedNodeIds={selectedNodeIds}
+              selectionMode={selectionMode}
+              errorNodeIds={errorNodeIds}
+              fitNodeRef={fitNodeRef}
+              onNodeSelect={selectNode}
+              onNodeSelectionChange={syncSelection}
+              onNodeMove={moveNode}
+              onNodesMove={moveNodes}
+              onViewportChange={changeViewport}
+              onConnectNodes={connectNodes}
+              onDropNode={addNode}
+              onDeleteEdge={canEdit ? deleteEdge : null}
+              onResetLayout={canEdit ? resetLayout : null}
+            />
+            {isStarterBlank && canEdit && (
+              <div style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 12,
+                pointerEvents: "none",
+              }}>
+                <div style={{
+                  background: C.panel,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 10,
+                  padding: "20px 28px",
+                  textAlign: "center",
+                  pointerEvents: "auto",
+                  maxWidth: 320,
+                }}>
+                  <div style={{ color: C.text, fontFamily: FONT, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                    Canvas is empty
+                  </div>
+                  <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, lineHeight: 1.5, marginBottom: 14 }}>
+                    Pick a pattern from the left panel to build a flow instantly, or drag individual nodes onto the canvas to start from scratch.
+                  </div>
+                  <Btn small variant="primary" onClick={() => {
+                    const patternId = selectedPatternId || "single-queue";
+                    const next = addVisualPattern(model || {}, patternId);
+                    applyModel(next);
+                  }}>
+                    Add "{(VISUAL_PATTERNS.find(p => p.id === selectedPatternId) || VISUAL_PATTERNS[0]).label}"
+                  </Btn>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Inspector (width-animated, auto-hides when no node selected) ── */}
