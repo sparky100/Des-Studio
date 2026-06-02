@@ -264,7 +264,10 @@ export function AdaptiveBatchPanel({
     if (controller.signal.aborted) return;
 
     if (!response?.proposedModel) {
-      setApplyError("The AI did not return a model proposal. Try rephrasing the opportunity.");
+      setApplyError(
+        response?.explanation ||
+        "This opportunity cannot be directly applied as a model change. Try a more structural improvement such as changing server counts, service times, or routing."
+      );
       setApplyPhase("apply-error");
       return;
     }
