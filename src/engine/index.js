@@ -701,6 +701,32 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     registry,
   });
 
+  function checkTermination() {
+    if (!terminationCondition) return null;
+    const h = makeHelpers(entities, runtimeModel);
+    if (!compiledTerminationCondition(usePredicateState(h))) return null;
+    _terminationConditionMet = true;
+    const msg      = "Termination condition met — simulation complete";
+    const endEntry = makeTraceEntry("END", { message: msg });
+    log.push(endEntry);
+    return endEntry;
+  }
+
+  function buildFelEventLog(phase, ev, msgs, ctx, felEntries) {
+    const msg = [`${phase}: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
+    const entityIds = [
+      ...(ctx._lastCustId != null ? [ctx._lastCustId] : []),
+      ...(ctx._lastSrvId  != null ? [ctx._lastSrvId]  : []),
+    ];
+    const newEvents = felEntries.map(fe => ({
+      id:     fe.id || fe.name || "?",
+      name:   fe.name || fe.id || "?",
+      at:     fe.scheduledTime,
+      reason: fe._isRenege ? "renege" : "schedule",
+    }));
+    return { msg, entityIds, newEvents };
+  }
+
   // ── step(): one Phase A → B → C cycle ────────────────────────────────────
   function step(options = {}) {
     const captureSnap = options.captureSnap !== false;
@@ -736,15 +762,9 @@ const cycleLog = [];
     clock = nextTime;
 
     // Condition-based termination check
-    if (terminationCondition) {
-      const h = makeHelpers(entities, runtimeModel);
-      if (compiledTerminationCondition(usePredicateState(h))) {
-        _terminationConditionMet = true;
-        const msg = "Termination condition met — simulation complete";
-        const endEntry = makeTraceEntry("END", { message: msg });
-        log.push(endEntry);
-        return { done: true, cycleLog: [endEntry], snap: stepSnapshot() };
-      }
+    {
+      const endEntry = checkTermination();
+      if (endEntry) return { done: true, cycleLog: [endEntry], snap: stepSnapshot() };
     }
 
     const phaseAClock = { from: previousClock, to: clock, dueEvents: due.map(e => ({ id: e.id || e.name, name: e.name || e.id || "?", type: e.type || "B" })) };
@@ -866,17 +886,7 @@ const cycleLog = [];
       fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
       noteFelSize();
 
-      const msg = [`B: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
-      const entityIds = [
-        ...(ctx._lastCustId != null ? [ctx._lastCustId] : []),
-        ...(ctx._lastSrvId  != null ? [ctx._lastSrvId]  : []),
-      ];
-      const newEvents = felEntries.map(fe => ({
-        id:     fe.id || fe.name || "?",
-        name:   fe.name || fe.id || "?",
-        at:     fe.scheduledTime,
-        reason: fe._isRenege ? "renege" : "schedule",
-      }));
+      const { msg, entityIds, newEvents } = buildFelEventLog("B", ev, msgs, ctx, felEntries);
       cycleLog.push({ phase: "B", time: clock, message: msg, skipped, event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents } });
       log.push(_trace("B", { event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents }, message: msg, skipped }));
     }
@@ -929,17 +939,7 @@ const cycleLog = [];
         _runtimeMetrics.cEventsFired++;
         _runtimeMetrics.eventsProcessed++;
         cFired = true;
-        const msg = [`C: "${ev.name}"`, ...msgs].filter(Boolean).join("  ·  ");
-        const entityIds = [
-          ...(ctx._lastCustId != null ? [ctx._lastCustId] : []),
-          ...(ctx._lastSrvId  != null ? [ctx._lastSrvId]  : []),
-        ];
-        const newEvents = felEntries.map(fe => ({
-          id:     fe.id || fe.name || "?",
-          name:   fe.name || fe.id || "?",
-          at:     fe.scheduledTime,
-          reason: fe._isRenege ? "renege" : "schedule",
-        }));
+        const { msg, entityIds, newEvents } = buildFelEventLog("C", ev, msgs, ctx, felEntries);
         const firedEntry = makeTraceEntry("C", {
           cEval: { eventId: ev.id || ev.name || "?", eventName: ev.name || ev.id || "?", priority: ev.priority ?? 9999, pass: cPass, conditionTrue: true },
           event: { type: "C", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: true, result: msgs, entityIds, newEvents },
@@ -984,15 +984,9 @@ const cycleLog = [];
     }
 
     // Condition-based termination check (post-step)
-    if (terminationCondition) {
-      const h = makeHelpers(entities, runtimeModel);
-      if (compiledTerminationCondition(usePredicateState(h))) {
-        _terminationConditionMet = true;
-        const msg = "Termination condition met — simulation complete";
-        const endEntry = makeTraceEntry("END", { message: msg });
-        log.push(endEntry);
-        return { done: true, cycleLog: [...cycleLog, endEntry], snap: stepSnapshot(), felSize: fel.length, phaseCTruncated };
-      }
+    {
+      const endEntry = checkTermination();
+      if (endEntry) return { done: true, cycleLog: [...cycleLog, endEntry], snap: stepSnapshot(), felSize: fel.length, phaseCTruncated };
     }
 
     // Collect time-series snapshot after Phase C stabilises (F10.4a)

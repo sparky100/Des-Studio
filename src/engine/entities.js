@@ -114,15 +114,7 @@ export function sortWaitingEntities(waiting, discipline = "FIFO") {
  * sorted by discipline. Set `isQueueName=true` to match entity.queue; false for entity.type.
  */
 export function selectWaiting(token, discipline, entities, filterFn = null, isQueueName = false) {
-  const key = norm(token);
-  let pool = entities.filter(e => {
-    if (e.status !== "waiting") return false;
-    return isQueueName
-      ? (e.queue && norm(e.queue) === key)
-      : (norm(e.type) === key);
-  });
-  if (filterFn) pool = pool.filter(filterFn);
-  return sortWaitingEntities(pool, discipline)[0] ?? null;
+  return listWaiting(token, discipline, entities, filterFn, isQueueName)[0] ?? null;
 }
 
 /**
@@ -286,6 +278,14 @@ export function makeHelpers(entities, model = null) {
     return sortWaitingEntities(waiting, discipline);
   }
 
+  function makeQueueFilter(queueName, includeBatches) {
+    return entity => {
+      if (!entity.queue || !match(entity.queue, queueName)) return false;
+      if (!includeBatches && entity.role === "batch") return false;
+      return true;
+    };
+  }
+
   return {
     entities,
     model,
@@ -295,21 +295,13 @@ export function makeHelpers(entities, model = null) {
       filterWaiting(entity => match(entity.type, type), discipline, filterFn),
 
     waitingInQueue: (queueName, discipline = "FIFO", filterFn = null, includeBatches = true) =>
-      filterWaiting(entity => {
-        if (!entity.queue || !match(entity.queue, queueName)) return false;
-        if (!includeBatches && entity.role === "batch") return false;
-        return true;
-      }, discipline, filterFn),
+      filterWaiting(makeQueueFilter(queueName, includeBatches), discipline, filterFn),
 
     selectWaitingOf: (type, discipline = "FIFO", filterFn = null) =>
       filterWaiting(entity => match(entity.type, type), discipline, filterFn)[0],
 
     selectWaitingInQueue: (queueName, discipline = "FIFO", filterFn = null, includeBatches = true) =>
-      filterWaiting(entity => {
-        if (!entity.queue || !match(entity.queue, queueName)) return false;
-        if (!includeBatches && entity.role === "batch") return false;
-        return true;
-      }, discipline, filterFn)[0],
+      filterWaiting(makeQueueFilter(queueName, includeBatches), discipline, filterFn)[0],
 
     idleOf: (type) =>
       sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "idle")),

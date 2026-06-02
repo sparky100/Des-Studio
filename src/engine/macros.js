@@ -13,6 +13,69 @@ import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
 import { claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState, selectWaiting, listWaiting } from "./entities.js";
 
+// ── Private helpers shared across multiple macros ────────────────────────────
+
+function resolveScalarString(s) {
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))
+    return s.slice(1, -1);
+  if (s === 'true')  return true;
+  if (s === 'false') return false;
+  const n = safeArithmetic(s);
+  if (!isNaN(n)) return n;
+  const num = Number(s);
+  if (!isNaN(num) && s !== '') return num;
+  return s;
+}
+
+function flushContainerIntegral(state, clock, cName) {
+  const key  = `__container_${cName}`;
+  const prev = state[`__containerPrev_${cName}`] ?? clock;
+  state[`__containerIntegral_${cName}`] =
+    (state[`__containerIntegral_${cName}`] ?? 0) + state[key] * Math.max(0, clock - prev);
+  state[`__containerPrev_${cName}`] = clock;
+}
+
+function updateContainerMinMax(state, cName, newLevel) {
+  const minKey = `__containerMin_${cName}`;
+  const maxKey = `__containerMax_${cName}`;
+  if (newLevel < (state[minKey] ?? newLevel)) state[minKey] = newLevel;
+  if (newLevel > (state[maxKey] ?? newLevel)) state[maxKey] = newLevel;
+}
+
+function preemptCustomer(cust, srv, clock, noteQueueDepth) {
+  const scheduledDuration = srv._scheduledDuration || 0;
+  const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
+  cust._remainingService  = remainingService;
+  releaseServerClaim(cust, srv, clock);
+  clearWaitingState(cust);
+  markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
+  noteQueueDepth?.(cust.queue);
+  return remainingService;
+}
+
+function resolveContextEntity(ctx) {
+  const custId = ctx.getLastCustId();
+  return custId != null ? ctx.entities.find(e => e.id === custId) : null;
+}
+
+function rerouteOrBalk(metricKey, reroutedMsg, exitMsg, { ctx, queueName, typeName, et, qDef, entities, clock, incQueueMetric, noteEntityCreated, setLastCustId, msgs }) {
+  incQueueMetric?.(queueName, metricKey);
+  const dest = qDef?.overflowDestination ?? null;
+  if (dest) {
+    const id       = ctx.nextId();
+    const rerouted = { id, type: typeName, role: et?.role || "customer",
+      queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
+      arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
+    markEntityWaiting(rerouted, clock, dest);
+    entities.push(rerouted);
+    noteEntityCreated?.(rerouted);
+    setLastCustId(id);
+    msgs.push(reroutedMsg(id, dest));
+  } else {
+    msgs.push(exitMsg);
+  }
+}
+
 // ── Safe scalar expression evaluator (replaces new Function in applyScalar) ──
 
 // Recursive descent parser for arithmetic on number literals: + - * / ()
@@ -88,16 +151,7 @@ function safeArithmetic(s) {
 // Evaluate a scalar RHS expression after state variable substitution.
 // Returns a number, boolean, string, or raw string fallback — never executes code.
 function safeEvalScalar(v) {
-  const s = v.trim();
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))
-    return s.slice(1, -1);
-  if (s === 'true')  return true;
-  if (s === 'false') return false;
-  const n = safeArithmetic(s);
-  if (!isNaN(n)) return n;
-  const direct = Number(s);
-  if (!isNaN(direct) && s !== '') return direct;
-  return s; // raw string fallback — matches previous behaviour for unresolved identifiers
+  return resolveScalarString(v.trim());
 }
 
 // Evaluate an expression that may reference Entity.<attr>, state variables, clock,
@@ -123,16 +177,7 @@ function evalEntityExpr(expr, { state, clock, entity }) {
         typeof state[k] === 'string' ? `"${state[k]}"` : String(state[k] ?? 0));
     });
   s = s.replace(/\bclock\b/g, String(clock));
-  s = s.trim();
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")))
-    return s.slice(1, -1);
-  if (s === 'true') return true;
-  if (s === 'false') return false;
-  const n = safeArithmetic(s);
-  if (!isNaN(n)) return n;
-  const num = Number(s);
-  if (!isNaN(num) && s !== '') return num;
-  return s;
+  return resolveScalarString(s.trim());
 }
 
 function normName(value) {
@@ -244,41 +289,21 @@ export const MACROS = [
           };
           const balks = evaluatePredicate(bEvent.balkCondition, balkState);
           if (balks) {
-            incQueueMetric?.(queueName, "balkCount");
-            const dest = qDef?.overflowDestination ?? null;
-            if (dest) {
-              const id = ctx.nextId();
-              const rerouted = { id, type: typeName, role: et?.role || "customer",
-                queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
-                arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
-              markEntityWaiting(rerouted, clock, dest);
-              entities.push(rerouted);
-              noteEntityCreated?.(rerouted);
-              setLastCustId(id);
-              msgs.push(`#${id} (${typeName}) balked → rerouted to "${dest}"`);
-            } else {
-              msgs.push(`(${typeName}) balked at ${queueName} — not recorded`);
-            }
+            rerouteOrBalk("balkCount",
+              (id, dest) => `#${id} (${typeName}) balked → rerouted to "${dest}"`,
+              `(${typeName}) balked at ${queueName} — not recorded`,
+              { ctx, queueName, typeName, et, qDef, entities, clock, incQueueMetric, noteEntityCreated, setLastCustId, msgs }
+            );
             return;
           }
         }
         // Probability-based balking
         if (bEvent.balkProbability != null && ctx.rng() < bEvent.balkProbability) {
-          incQueueMetric?.(queueName, "balkCount");
-          const dest = qDef?.overflowDestination ?? null;
-          if (dest) {
-            const id = ctx.nextId();
-            const rerouted = { id, type: typeName, role: et?.role || "customer",
-              queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
-              arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
-            markEntityWaiting(rerouted, clock, dest);
-            entities.push(rerouted);
-            noteEntityCreated?.(rerouted);
-            setLastCustId(id);
-            msgs.push(`#${id} (${typeName}) balked (p) → rerouted to "${dest}"`);
-          } else {
-            msgs.push(`(${typeName}) balked at ${queueName} — exited`);
-          }
+          rerouteOrBalk("balkCount",
+            (id, dest) => `#${id} (${typeName}) balked (p) → rerouted to "${dest}"`,
+            `(${typeName}) balked at ${queueName} — exited`,
+            { ctx, queueName, typeName, et, qDef, entities, clock, incQueueMetric, noteEntityCreated, setLastCustId, msgs }
+          );
           return;
         }
       }
@@ -290,22 +315,12 @@ export const MACROS = [
           e => e.status === "waiting" && e.queue?.trim().toLowerCase() === queueName.trim().toLowerCase()
         ).length;
         if (currentDepth >= cap) {
-          incQueueMetric?.(queueName, "blockingCount");
           // F11.3 overflow routing: route to overflowDestination or exit
-          const dest = qDef?.overflowDestination ?? null;
-          if (dest) {
-            const id = ctx.nextId();
-            const rerouted = { id, type: typeName, role: et?.role || "customer",
-              queue: dest, attrs: sampleAttrs(et?.attrDefs || et?.attrs || "", ctx.rng),
-              arrivalTime: clock, stages: [], lastStageStart: null, loopCount: 0 };
-            markEntityWaiting(rerouted, clock, dest);
-            entities.push(rerouted);
-            noteEntityCreated?.(rerouted);
-            setLastCustId(id);
-            msgs.push(`#${id} (${typeName}) blocked (capacity ${cap}) → overflow to "${dest}"`);
-          } else {
-            msgs.push(`(${typeName}) blocked at ${queueName} (capacity ${cap}) → exited system`);
-          }
+          rerouteOrBalk("blockingCount",
+            (id, dest) => `#${id} (${typeName}) blocked (capacity ${cap}) → overflow to "${dest}"`,
+            `(${typeName}) blocked at ${queueName} (capacity ${cap}) → exited system`,
+            { ctx, queueName, typeName, et, qDef, entities, clock, incQueueMetric, noteEntityCreated, setLastCustId, msgs }
+          );
           return;
         }
       }
@@ -728,17 +743,11 @@ export const MACROS = [
         msgs.push(`FILL(${cName},${match[2].trim()}): amount must be a positive number`);
         return;
       }
-      // Flush time-integral before changing level
-      const prev  = state[`__containerPrev_${cName}`] ?? clock;
-      state[`__containerIntegral_${cName}`] =
-        (state[`__containerIntegral_${cName}`] ?? 0) + state[key] * Math.max(0, clock - prev);
-      state[`__containerPrev_${cName}`] = clock;
-
+      flushContainerIntegral(state, clock, cName);
       const cap      = state[capKey] ?? Infinity;
       const newLevel = Math.min(state[key] + amount, cap);
       state[key] = newLevel;
-      if (newLevel < (state[`__containerMin_${cName}`] ?? newLevel)) state[`__containerMin_${cName}`] = newLevel;
-      if (newLevel > (state[`__containerMax_${cName}`] ?? newLevel)) state[`__containerMax_${cName}`] = newLevel;
+      updateContainerMinMax(state, cName, newLevel);
       msgs.push(`FILL(${cName},${amount}): level → ${newLevel.toFixed(4)}${newLevel >= cap ? ' [at capacity]' : ''}`);
       ctx.trace?.push?.({ event: "Fill", container: cName, amount, level: newLevel, time: clock });
     },
@@ -766,16 +775,10 @@ export const MACROS = [
         msgs.push(`DRAIN(${cName},${amount}): guard failed — level ${state[key].toFixed(4)} < ${amount}`);
         return;
       }
-      // Flush time-integral before changing level
-      const prev = state[`__containerPrev_${cName}`] ?? clock;
-      state[`__containerIntegral_${cName}`] =
-        (state[`__containerIntegral_${cName}`] ?? 0) + state[key] * Math.max(0, clock - prev);
-      state[`__containerPrev_${cName}`] = clock;
-
+      flushContainerIntegral(state, clock, cName);
       const newLevel = state[key] - amount;
       state[key] = newLevel;
-      if (newLevel < (state[`__containerMin_${cName}`] ?? newLevel)) state[`__containerMin_${cName}`] = newLevel;
-      if (newLevel > (state[`__containerMax_${cName}`] ?? newLevel)) state[`__containerMax_${cName}`] = newLevel;
+      updateContainerMinMax(state, cName, newLevel);
       msgs.push(`DRAIN(${cName},${amount}): level → ${newLevel.toFixed(4)}`);
       ctx.trace?.push?.({ event: "Drain", container: cName, amount, level: newLevel, time: clock });
     },
@@ -809,14 +812,7 @@ export const MACROS = [
         return;
       }
 
-      const scheduledDuration = srv._scheduledDuration || 0;
-      const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
-      cust._remainingService = remainingService;
-
-      releaseServerClaim(cust, srv, clock);
-      clearWaitingState(cust);
-      markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
-      noteQueueDepth?.(cust.queue);
+      const remainingService = preemptCustomer(cust, srv, clock, noteQueueDepth);
 
       if (_arbitration && typeof _arbitration === "object") {
         Object.assign(_arbitration, {
@@ -855,13 +851,7 @@ export const MACROS = [
           const custId = srv.currentCustId;
           const cust = entities.find(e => e.id === custId);
           if (cust) {
-            const scheduledDuration = srv._scheduledDuration || 0;
-            const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
-            cust._remainingService = remainingService;
-            releaseServerClaim(cust, srv, clock);
-            clearWaitingState(cust);
-            markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
-            noteQueueDepth?.(cust.queue);
+            const remainingService = preemptCustomer(cust, srv, clock, noteQueueDepth);
             msgs.push(`FAIL: server #${srv.id} (${sType}) failed — #${cust.id} re-queued [remaining ${remainingService.toFixed(3)} t]`);
           }
         }
@@ -1116,9 +1106,8 @@ export const MACROS = [
     apply(match, ctx) {
       const varName = match[1].trim();
       const expr    = match[2].trim();
-      const { state, clock, entities, getLastCustId, msgs } = ctx;
-      const custId  = getLastCustId();
-      const entity  = custId != null ? entities.find(e => e.id === custId) : null;
+      const { state, clock, msgs } = ctx;
+      const entity  = resolveContextEntity(ctx);
       const value   = evalEntityExpr(expr, { state, clock, entity });
       state[varName] = value;
       msgs.push(`SET ${varName} = ${value}`);
@@ -1135,9 +1124,8 @@ export const MACROS = [
     apply(match, ctx) {
       const attrName = match[1].trim();
       const expr     = match[2].trim();
-      const { state, clock, entities, getLastCustId, msgs } = ctx;
-      const custId   = getLastCustId();
-      const entity   = custId != null ? entities.find(e => e.id === custId) : null;
+      const { state, clock, msgs } = ctx;
+      const entity   = resolveContextEntity(ctx);
       if (!entity) {
         msgs.push(`SET_ATTR(${attrName}): no context entity — use after ARRIVE, ASSIGN, or COSEIZE`);
         return;
