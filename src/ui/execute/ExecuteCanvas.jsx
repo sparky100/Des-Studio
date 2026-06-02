@@ -22,6 +22,7 @@ import { ExecuteSinkNode }     from "./ExecuteSinkNode.jsx";
 import { AnimatedEdge }        from "./AnimatedEdge.jsx";
 import { formatSimWallTime }   from "../../engine/clockUtils.js";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
+import { computeExecuteLayout } from "./executeLayout.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 export { DEFAULT_KPI_SLOTS };
 
@@ -523,12 +524,17 @@ export function ExecuteCanvas({
     prevSnapRef.current = snap;
   }, [snap, animationEnabled, baseGraph]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const layoutedNodes = useMemo(
+    () => computeExecuteLayout(baseGraph.nodes, baseGraph.edges),
+    [baseGraph.nodes, baseGraph.edges]
+  );
+
   const flowNodes = useMemo(() => {
     const entities = snap?.entities || [];
     const waiting = entities.filter(e => e.status === "waiting");
     const servers = entities.filter(e => e.role === "server");
 
-    return baseGraph.nodes.map(node => {
+    return layoutedNodes.map(node => {
       let liveData = null;
       if (snap) {
         if (node.type === "queue") {
@@ -598,7 +604,7 @@ export function ExecuteCanvas({
       }
       return { ...toFlowNode(node), data: { ...node, liveData } };
     });
-  }, [snap, baseGraph.nodes, serverTypeIndex, sourceIndex]);
+  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex]);
 
   const flowEdges = useMemo(() => baseGraph.edges.map(edge => ({
     ...toFlowEdge(edge, C),
