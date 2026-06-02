@@ -284,9 +284,11 @@ export function fireBEvent(ev, ctx) {
 
   // Process the B-event's own schedules list (next arrival, reneging timer, etc.)
   for (const sched of ev.schedules || []) {
-    const tmpl = (model.bEvents || []).find(b => b.id === sched.eventId);
+    // eventId may be absent when scheduleRef was linked without it — treat as self-referencing
+    const selfId = sched.eventId ?? ev.id;
+    const tmpl = (model.bEvents || []).find(b => b.id === selfId);
     if (!tmpl) continue;
-    const schedCtx = { clock, state: ctx.state, schedKey: sched.eventId };
+    const schedCtx = { clock, state: ctx.state, schedKey: selfId };
     // rows[]/times[] may be top-level on the entry (schema doc format) or inside distParams
     const topLevelData = sched.rows ? { rows: sched.rows } : sched.times ? { times: sched.times } : null;
     const baseParams = topLevelData ? { ...topLevelData, ...(sched.distParams || {}) } : (sched.distParams || {});
@@ -296,7 +298,7 @@ export function fireBEvent(ev, ctx) {
       : baseParams;
     const delay = Math.max(0, sample(schedDist, resolvedBParams, ctx.rng, null, schedCtx));
     // Carry per-arrival row attrs from schedule rows[] (S40.2)
-    const rowAttrs = ctx.state?.[`__schedRowAttrs_${sched.eventId}`] ?? null;
+    const rowAttrs = ctx.state?.[`__schedRowAttrs_${selfId}`] ?? null;
     let renegeTarget;
     if (sched.isRenege) {
       renegeTarget = effectCtx._lastCustId;

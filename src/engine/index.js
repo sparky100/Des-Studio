@@ -359,7 +359,8 @@ export function resolveInlineSchedules(model, schedulesMap = {}) {
       ...be,
       schedules: (be.schedules || []).map(s => {
         if (!s.scheduleRef) return s;                              // no ref — leave as-is
-        if (Array.isArray(s.rows) && s.rows.length > 0) return s; // already resolved
+        // Always prefer schedulesMap when scheduleRef is present so updated named-schedule rows
+        // override any stale inline rows[] left from a prior import.
         // Prefer compound key (multi-event schedule), fall back to plain uuid
         const resolved = schedulesMap[`${s.scheduleRef}:${be.id}`] ?? schedulesMap[s.scheduleRef];
         if (!resolved) return s;                                   // ref not found — 0 arrivals
@@ -631,7 +632,8 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       // phantom arrival at t=0 with no attributes.
       let _scheduleRowAttrs = undefined;
       for (const sched of ev.schedules || []) {
-        if (sched.eventId !== ev.id) continue; // only self-referencing schedule
+        // eventId may be absent when scheduleRef was set without eventId (treat as self-referencing)
+        if (sched.eventId != null && sched.eventId !== ev.id) continue;
         const dp = sched.distParams || {};
         const rows = sched.rows ? sched.rows : (Array.isArray(dp.rows) ? dp.rows : null);
         const rawTimes = rows
@@ -639,7 +641,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
           : (sched.times ? sched.times.map(Number) : (Array.isArray(dp.times) ? dp.times.map(Number) : []));
         const isScheduleDist = (sched.dist || "") === "Schedule" || rows || sched.times || dp.rows || dp.times;
         if (isScheduleDist && rawTimes.length > 0 && Number.isFinite(rawTimes[0])) {
-          const schedKey = sched.eventId;
+          const schedKey = sched.eventId ?? ev.id;
           // Pre-advance: skip the phantom t=0 firing and start at the first planned time
           state[`__schedIdx_${schedKey}`] = 1;
           _scheduleRowAttrs = rows?.[0]?.attrs ?? null;

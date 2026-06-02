@@ -245,18 +245,20 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
       let updatedBEvents = [...bEvents];
       const newStubs = [];
       for (const mg of multiImportPreview.matched) {
-        const targetId = mg.bEvent?.id ?? mg.eventId;
-        newJson = mergeScheduleRows(newJson, targetId, mg.rows);
         if (mg.bEvent) {
+          const targetId = mg.bEvent.id;
+          newJson = mergeScheduleRows(newJson, targetId, mg.rows);
           // Ensure scheduleRef is set so the engine can resolve rows at run time
           updatedBEvents = linkBEventToSchedule(updatedBEvents, mg.bEvent.id, sched.id);
         } else if (createStubs) {
+          const stubId = 'b' + Date.now() + Math.random().toString(36).slice(2, 6);
+          newJson = mergeScheduleRows(newJson, stubId, mg.rows);
           newStubs.push({
-            id: 'b' + Date.now() + Math.random().toString(36).slice(2, 6),
+            id: stubId,
             name: mg.eventId,
             scheduledTime: '0',
             effect: [],
-            schedules: [{ scheduleRef: sched.id }],
+            schedules: [{ eventId: stubId, scheduleRef: sched.id, rows: [] }],
             description: 'Created from schedule import — add arrival effect and queue',
           });
         }
