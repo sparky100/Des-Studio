@@ -3,7 +3,8 @@
 **Version:** 7.0.0  
 **Date:** 2026-06-01  
 **Sprint baseline:** Sprint 79  
-**Status:** Living document — reviewed and updated at end of each sprint
+**Status:** Living document — reviewed and updated at end of each sprint  
+**Note:** package.json version is 0.9.0-Beta; version alignment with spec version number pending.
 
 ---
 
@@ -72,7 +73,7 @@ These are non-negotiable. Removing any one of them makes DES Studio no longer a 
 | M1 | **Three-Phase DES engine** | Pidd's A/B/C algorithm with restart rule, pure JavaScript, runs in browser or Web Worker. No `eval`, no `new Function`. |
 | M2 | **Entity model** | Typed entity types with named attributes (number/string/boolean). Entities flow through queues and are served by resources. |
 | M3 | **Queue disciplines** | FIFO, LIFO, PRIORITY, SPT, EDD. PRIORITY requires a numeric entity attribute. |
-| M4 | **Macro vocabulary** | 15 action macros: ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE, BATCH, UNBATCH, PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, MATCH, SET, COST. |
+| M4 | **Macro vocabulary** | 19 action macros: ARRIVE, ASSIGN, BATCH, COMPLETE, COSEIZE, COST, DRAIN, FAIL, FILL, MATCH, PREEMPT, RELEASE, RENEGE, RENEGE_OLDEST, REPAIR, SET, SET_ATTR, SPLIT, UNBATCH. |
 | M5 | **Predicate Builder** | Type-safe, point-and-click condition editor for C-Events. No free-text logic. Operator set constrained by attribute type. |
 | M6 | **Distribution library** | 11 distribution types: Exponential, Uniform, Normal, Triangular, Fixed, Erlang, Empirical, Piecewise, Attribute-based (ServerAttr, EntityAttr), Schedule. Seeded PRNG (mulberry32). No `Math.random()` in engine. |
 | M7 | **Validation gates** | 38 validation rules (V1–V38). Blocking errors prevent run; warnings proceed with banner. Model Health panel shows live status. |
@@ -89,17 +90,21 @@ High-value features that are complete but whose absence would degrade the platfo
 | # | Feature | Description |
 |---|---------|-------------|
 | S1 | **Visual Designer** | @xyflow/react drag-and-drop canvas. Writes to the same `model_json` as Forms/Tabs. |
-| S2 | **AI Generator** | Natural-language model authoring. Three-phase conversation (Discover/Confirm/Generate). Produces complete `model_json`. |
+| S2 | **AI Generator** | Natural-language model authoring. Four-phase conversation (clarify / confirm / build / refine). Produces complete `model_json`. |
 | S3 | **Execute canvas** | Topology-derived live flow canvas. Entity token animation, queue depth badges, server utilisation overlays. |
-| S4 | **Parametric sweep** | 1D and 2D sweeps with Goal Feasibility line. ANOVA + Tukey HSD post-hoc test for multi-scenario comparison. |
+| S4 | **Parametric sweep** | 1D and 2D sweeps with Goal Feasibility line. Two-scenario comparison uses paired-t confidence intervals with Bonferroni correction. Note: tukeyHSD() and oneWayANOVA() are implemented in the engine but not yet wired to the UI. |
 | S5 | **Warm-up diagnostics** | Welch graphical warm-up test. Transient detection. Replication-level variance chart. |
 | S6 | **Report generation** | Senior Management and Technical reports in HTML and Markdown. AI-written narrative sections grounded in run results. |
 | S7 | **Share / public dashboard** | Public link, QR code, embeddable widget. Read-only. No login required for viewers. |
 | S8 | **Model versioning** | Explicit milestones with notes. Version history panel. Structural change detection. Run records reference version snapshot. |
 | S9 | **Model Assistant (AI)** | Persistent sidebar. Focused views: Explain Results, Compare Runs, Refine Plan. Context-aware Q&A. |
-| S10 | **Template library** | 16 pre-built templates covering healthcare, logistics, transport, manufacturing, and service industries. |
-| S11 | **Schedule Manager** | Named timetables (e.g. Weekday, Weekend) stored separately from `model_json` (ADR-016). CSV export. Schedule selector in Execute panel. |
+| S10 | **Template library** | 22 pre-built templates covering healthcare, logistics, transport, manufacturing, and service industries. |
+| S11 | **Schedule Manager** | Named timetables (e.g. Weekday, Weekend) stored separately from `model_json` (ADR-016). CSV and Excel/XLSX import, multi-event import, and inline-row migration to named schedules. Schedule selector in Execute panel. |
 | S12 | **Resource failures** | FAIL/REPAIR macros with MTBF/MTTR distributions. V37 validation enforces paired configuration. |
+| S13 | **Voice input** | Microphone button in AI chat dialogs. Uses the Web Speech API to transcribe spoken input into the prompt field. |
+| S14 | **Explore / AdaptiveBatchPanel** | AI-driven bottleneck analysis panel. Runs adaptive replication stepping (increasing batch size until 95% CI is within ±5% of the mean), surfaces bottleneck resources and queues, and provides an Apply-to-model action. |
+| S15 | **Run admission tier system** | Per-user run tier controls replication depth: Free (10 reps), Standard (30 reps), Pro (100 reps). Enforced before each run. |
+| S16 | **Per-outcome metrics** | avgWait and avgSojourn reported per journey outcome in run results, enabling comparison across routing branches. |
 
 ### Could-have
 
@@ -111,7 +116,7 @@ Valuable additions already partially implemented or planned for near-term sprint
 | C2 | **Actuals tracking** | Plan vs actual deviation per entity. `avgPlanDeviation` in run summary. |
 | C3 | **Magic-link model import** | Encode a model as a URL. Opening the link shows a pre-flight preview and saves to the library with one click. |
 | C4 | **Community gallery** | Browse, tag, fork, and import public models shared by other users. |
-| C5 | **Container resource pools** | FILL/DRAIN macros for bulk resource consumption (e.g. fuel, inventory). |
+| C5 | **Container resource pools** | FILL/DRAIN macros for bulk resource consumption (e.g. fuel, inventory). Both macros are fully implemented in the engine. |
 | C6 | **Multi-shift rostering** | Named shift patterns bound to resource capacity over time. Currently limited to piecewise NHPP arrivals. |
 
 ### Won't-have (this release)
@@ -180,7 +185,7 @@ Valuable additions already partially implemented or planned for near-term sprint
 - 1D parametric sweep runs the full replication set for each parameter value.
 - Results chart plots mean ± CI for each value.
 - Goal Feasibility overlay shows where the target is met.
-- ANOVA/Tukey HSD output identifies which configurations are statistically distinguishable.
+- Two-scenario comparison uses paired-t confidence intervals with Bonferroni correction to identify statistically distinguishable configurations.
 
 ---
 
