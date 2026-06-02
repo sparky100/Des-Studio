@@ -23,6 +23,7 @@ vi.mock('@xyflow/react', () => ({
   MiniMap: () => <div data-testid="flow-minimap" />,
   Panel: ({ children }) => <div data-testid="flow-panel">{children}</div>,
   Position: { Left: 'left', Right: 'right' },
+  SelectionMode: { Full: 'full', Partial: 'partial' },
   useReactFlow: () => ({
     fitView: vi.fn(),
     getNode: vi.fn(() => null),
@@ -50,8 +51,21 @@ vi.mock('@xyflow/react', () => ({
         )}
         {firstQueue && overflow && (
           <>
-            <button type="button" onClick={() => onSelectionChange?.({ nodes: [firstQueue, overflow] })}>
+            <button type="button" onClick={() => onSelectionChange?.({
+              nodes: [
+                { ...firstQueue, selected: true },
+                { ...overflow, selected: true },
+              ],
+            })}>
               Mock multi-select queues
+            </button>
+            <button
+              type="button"
+              onClick={() => onSelectionChange?.({
+                nodes: nodes.map(node => ({ ...node, selected: node.id === firstQueue.id })),
+              })}
+            >
+              Mock noisy box selection
             </button>
             <button
               type="button"
@@ -263,6 +277,23 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /clear selection/i }));
 
     expect(screen.queryByText('2 selected')).not.toBeInTheDocument();
+  });
+
+  it('ignores unselected nodes when React Flow reports a noisy selection payload', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock noisy box selection/i }));
+
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    expect(screen.queryByText('6 selected')).not.toBeInTheDocument();
   });
 
   it('persists group movement for selected visual nodes', async () => {

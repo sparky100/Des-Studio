@@ -8,6 +8,7 @@ import {
   Panel,
   Position,
   ReactFlow,
+  SelectionMode as ReactFlowSelectionMode,
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -322,6 +323,7 @@ export function FlowDiagramReactFlow({
         deleteKeyCode={null}
         elementsSelectable
         selectionOnDrag={canEdit && selectionMode === "select"}
+        selectionMode={ReactFlowSelectionMode.Full}
         panOnDrag={selectionMode !== "select"}
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
         panOnScroll
@@ -332,7 +334,11 @@ export function FlowDiagramReactFlow({
         }}
         onPaneClick={() => onNodeSelect?.(null)}
         onSelectionChange={({ nodes: selectedNodes = [] }) => {
-          onNodeSelectionChange?.(selectedNodes.map(node => node.id));
+          const flagged = selectedNodes.filter(node => node.selected === true);
+          const nextSelected = flagged.length > 0 || selectedNodes.some(node => node.selected === false)
+            ? flagged
+            : selectedNodes;
+          onNodeSelectionChange?.(nextSelected.map(node => node.id));
         }}
         onNodeDragStop={(_, node, movedNodes = []) => {
           const moved = movedNodes.length ? movedNodes : [node];
