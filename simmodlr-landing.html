@@ -340,6 +340,33 @@ section { padding: 6rem 3rem; position: relative; }
 .ai-box-label::before { content: '✦'; font-size: 0.5rem; }
 .ai-box-text { font-size: 0.78rem; color: var(--mid); line-height: 1.65; font-style: italic; }
 
+/* ── SCENARIO SHOTS ── */
+.scenario-intro { max-width: 720px; margin-bottom: 3.5rem; }
+.scenario-shots {
+  display: grid; grid-template-columns: repeat(3,1fr);
+  gap: 1.75rem; align-items: start;
+}
+.shot-item { display: flex; flex-direction: column; gap: 0.75rem; }
+.shot-step {
+  font-family: var(--mono); font-size: 0.62rem; color: var(--teal);
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+.shot-title {
+  font-family: var(--syne); font-size: 1.0625rem; font-weight: 700;
+  color: var(--white);
+}
+.shot-frame {
+  border-radius: 10px; overflow: hidden;
+  border: 1px solid rgba(14,207,180,0.22);
+  box-shadow: 0 20px 56px rgba(0,0,0,0.55);
+  background: var(--bg);
+}
+.shot-frame img {
+  display: block; width: 100%; height: auto;
+  max-height: 560px; object-fit: cover; object-position: top;
+}
+.shot-caption { font-size: 0.8125rem; color: var(--mid); line-height: 1.62; }
+
 /* ── AUDIENCES ── */
 .audiences { background: var(--bg); }
 .aud-grid {
@@ -407,6 +434,7 @@ footer {
   section{padding:4rem 1.5rem;} .hero{padding:7rem 1.5rem 4rem;}
   .proof-bar{padding:1.75rem 1.5rem;} .proof-inner{grid-template-columns:repeat(2,1fr);}
   .problem-split,.scenario-split{grid-template-columns:1fr;gap:3rem;}
+  .scenario-shots{grid-template-columns:1fr;}
   .steps,.feat-grid,.aud-grid{grid-template-columns:1fr;}
   .footer-inner{flex-direction:column;text-align:center;} .footer-links{justify-content:center;}
 }
@@ -629,34 +657,34 @@ footer {
   <div class="section-inner">
     <div class="section-tag">Worked example</div>
     <h2 class="section-h2">A&amp;E triage, modelled in 20 minutes.</h2>
-    <div class="scenario-split">
-      <div class="reveal">
-        <div class="scenario-meta">Two-stage emergency pathway</div>
-        <p class="scenario-p">An emergency department receives patients at an average rate of <strong>12 per hour</strong>. High-acuity patients (30%) go directly to a priority queue; low-acuity patients (70%) route to a secondary queue.</p>
-        <p class="scenario-p">With <strong>3 clinicians</strong> shared across both queues, the department runs at approximately 83% utilisation. The Erlang-C formula (treating all patients equally) estimates mean wait at around 25 minutes — but tells you nothing about how that wait splits by acuity.</p>
-        <p class="scenario-p">Running <strong>30 replications with warm-up removal</strong>, the simulation reveals something the formula cannot: a 5× difference in experience between patient groups — and the AI Insights panel identifies the structural problem driving it.</p>
-      </div>
-      <div class="reveal d2">
-        <div class="result-card">
-          <div class="rc-head">
-            <div class="rc-dot" style="background:#FF5F57"></div>
-            <div class="rc-dot" style="background:#FFBD2E"></div>
-            <div class="rc-dot" style="background:#28CA41"></div>
-            <span class="rc-title">Simmodlr — Run results</span>
-          </div>
-          <div class="rc-body">
-            <div class="rc-row"><span class="rc-k">High-acuity mean wait</span><span class="rc-v g">3.6 min (CI: 3.1–4.1)</span></div>
-            <div class="rc-row"><span class="rc-k">Low-acuity mean wait</span><span class="rc-v w">15.1 min (CI: 11.6–18.7)</span></div>
-            <div class="rc-row"><span class="rc-k">Clinician utilisation</span><span class="rc-v w">82.8% (CI: 79.4%–86.2%)</span></div>
-            <div class="rc-row"><span class="rc-k">Throughput</span><span class="rc-v">11.2 / hr (CI: 10.8–11.5)</span></div>
-            <div class="rc-row"><span class="rc-k">Warm-up excluded</span><span class="rc-v g">First 60 min</span></div>
-            <div class="rc-row"><span class="rc-k">Replications</span><span class="rc-v">30</span></div>
-          </div>
-          <div class="ai-box">
-            <div class="ai-box-label">AI Insight</div>
-            <p class="ai-box-text">"Low-acuity wait variance is high — the CI spans 7 minutes. The priority mechanism strongly protects high-acuity patients (3.6 min) but pushes significant delay onto low-acuity patients (15.1 min). Recommend modelling a capacity uplift or dedicated low-acuity stream before committing to current staffing."</p>
-          </div>
+    <div class="scenario-intro reveal">
+      <p class="scenario-p">An emergency department receives patients at an average rate of <strong>12 per hour</strong>. High-acuity patients (30%) go directly to a priority queue; low-acuity patients (70%) route to a secondary queue. With <strong>3 clinicians</strong> shared across both queues the department runs near 85% utilisation — but aggregate statistics hide a critical split in patient experience.</p>
+      <p class="scenario-p">Running <strong>replications with warm-up removal</strong>, the simulation reveals what the formula cannot: a severe bottleneck at the doctor resource, an AI that reads the results and ranks every fix, and a before/after comparison that makes the case for change in seconds.</p>
+    </div>
+    <div class="scenario-shots">
+      <div class="shot-item reveal d1">
+        <div class="shot-step">01 — Build</div>
+        <div class="shot-title">Draw the model visually</div>
+        <div class="shot-frame">
+          <img src="images/screenshot-draw.jpg" alt="Draw view: Patient Arrives → Triage Queue → Start Triage → 30% Exit / 70% Doctor Queue → Doctor Consultation Complete" loading="lazy">
         </div>
+        <p class="shot-caption">Drag-and-drop source, queue, and activity nodes onto the canvas. The model structure writes itself as you draw — no code, no config files.</p>
+      </div>
+      <div class="shot-item reveal d2">
+        <div class="shot-step">02 — Explore</div>
+        <div class="shot-title">AI finds the bottlenecks</div>
+        <div class="shot-frame">
+          <img src="images/screenshot-explore.jpg" alt="Explore panel: confidence ±3.9% achieved with 5 replications; bottlenecks, quick wins and investment opportunities each with Apply button" loading="lazy">
+        </div>
+        <p class="shot-caption">Confidence achieved: ±3.9% with 5 replications. Doctor resource at 96% utilisation flagged as primary constraint. One tap to apply any suggested fix.</p>
+      </div>
+      <div class="shot-item reveal d3">
+        <div class="shot-step">03 — Compare</div>
+        <div class="shot-title">Measure the impact</div>
+        <div class="shot-frame">
+          <img src="images/screenshot-compare.jpg" alt="Model Assistant before/after: avg wait 6.78 → 0.02 minutes (−99.7%), avg sojourn 37.08 → 30.05 (−19%)" loading="lazy">
+        </div>
+        <p class="shot-caption">Doctor count 2 → 3. Avg wait collapses from 6.78 to 0.02 min (−99.7%). The number you need before you commit the budget.</p>
       </div>
     </div>
   </div>
