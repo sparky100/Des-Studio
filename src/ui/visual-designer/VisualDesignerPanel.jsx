@@ -836,8 +836,8 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                   </div>
                   <Btn small variant="primary" onClick={() => {
                     const patternId = selectedPatternId || "single-queue";
-                    const next = addVisualPattern(model || {}, patternId);
-                    applyModel(next);
+                    const result = addVisualPattern(model || {}, patternId);
+                    applyModel(result.model);
                   }}>
                     Add "{(VISUAL_PATTERNS.find(p => p.id === selectedPatternId) || VISUAL_PATTERNS[0]).label}"
                   </Btn>
