@@ -13,6 +13,7 @@ import { RADIUS, Z, SPACE, SHADOW } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { ModelDiffPreview } from "../editors/ModelDiffPreview.jsx";
+import { SummaryCardGrid } from "../results/ResultsWorkspace.jsx";
 
 const RISK_LABELS = { small: "Low", medium: "Medium", large: "High", too_large: "Very high" };
 
@@ -112,6 +113,8 @@ export function AdaptiveBatchPanel({
   const [totalReps, setTotalReps] = useState(0);
   const [currentCiPct, setCurrentCiPct] = useState(null);
   const [batchResult, setBatchResult] = useState(null);
+  const [combinedBatchResult, setCombinedBatchResult] = useState(null);
+  const [replicationResults, setReplicationResults] = useState([]);
   const [streamedText, setStreamedText] = useState("");
   const [savedRunId, setSavedRunId] = useState(null);
   const [error, setError] = useState(null);
@@ -183,6 +186,8 @@ export function AdaptiveBatchPanel({
 
       const aggregateStats = summarizeReplicationResults(adaptiveResult.results, CI_METRICS);
       const combinedResult = makeBatchResult(adaptiveResult.results, aggregateStats, maxSimTime, warmupPeriod);
+      setCombinedBatchResult(combinedResult);
+      setReplicationResults(adaptiveResult.results);
 
       let runId = null;
       if (onSave) {
@@ -482,6 +487,9 @@ export function AdaptiveBatchPanel({
                       : `⚠ Tier limit reached (${batchResult.finalReps} reps)${batchResult.relativeHalfWidth != null ? ` — CI ±${batchResult.relativeHalfWidth.toFixed(1)}%` : ""} — results are indicative`}
                   </span>
                 </div>
+              )}
+              {combinedBatchResult && (
+                <SummaryCardGrid results={combinedBatchResult} replicationResults={replicationResults} />
               )}
               {phase === "analysing" && !streamedText && (
                 <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
