@@ -136,7 +136,34 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
   const [description, setDescription] = useState(sched.description || "");
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(0);
-  const PAGE_SIZE = 50;
+  const [pageSize, setPageSize] = useState(15);
+  const aboveRef = useRef(null);
+
+  // Dynamically compute how many rows fit in the visible viewport so the
+  // pagination controls are always reachable without scrolling.
+  useEffect(() => {
+    const ROW_H = 30;        // px per data row (12px text + 10px padding + 1px border ≈ 30)
+    const TABLE_HEADER_H = 32;
+    const PAGINATION_H = 44;
+    const BOTTOM_PAD = 20;
+
+    const compute = () => {
+      const el = aboveRef.current;
+      if (!el) return;
+      const bottom = el.getBoundingClientRect().bottom;
+      const available = window.innerHeight - bottom - TABLE_HEADER_H - PAGINATION_H - BOTTOM_PAD;
+      setPageSize(Math.max(5, Math.floor(available / ROW_H)));
+    };
+
+    const obs = new ResizeObserver(compute);
+    if (aboveRef.current) obs.observe(aboveRef.current);
+    window.addEventListener('resize', compute);
+    compute();
+    return () => { obs.disconnect(); window.removeEventListener('resize', compute); };
+  }, []);
+
+  // Reset to first page if a resize makes the current page out of bounds.
+  useEffect(() => { setPage(0); }, [pageSize]);
 
   // Import state
   const importRef = useRef(null);
@@ -151,8 +178,8 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
     (entry.rows || []).map(r => ({ ...r, _eventId: entry.eventId }))
   );
   const totalRows = allRows.length;
-  const pageRows = allRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
-  const totalPages = Math.ceil(totalRows / PAGE_SIZE);
+  const pageRows = allRows.slice(page * pageSize, (page + 1) * pageSize);
+  const totalPages = Math.ceil(totalRows / pageSize);
 
   // Collect attribute names from first few rows
   const attrHeaders = totalRows > 0
@@ -292,6 +319,8 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, color: C.text }}>
+      {/* Everything above the rows table — measured so we know how many rows fit in the viewport */}
+      <div ref={aboveRef} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {/* Back button */}
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Btn size="sm" variant="ghost" onClick={onBack}>← Schedules</Btn>
@@ -540,6 +569,8 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
         );
       })()}
 
+      </div>{/* end aboveRef */}
+
       {/* Rows table */}
       {totalRows === 0 ? (
         <Empty>No schedule rows — this schedule is empty.</Empty>
@@ -571,7 +602,7 @@ function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUn
           </table>
           {totalPages > 1 && (
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", fontSize: 13, color: C.muted }}>
-              <span>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalRows)} of {totalRows.toLocaleString()}</span>
+              <span>Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalRows)} of {totalRows.toLocaleString()}</span>
               <div style={{ display: "flex", gap: 4 }}>
                 <Btn size="xs" variant="ghost" disabled={page === 0} onClick={() => setPage(p => p - 1)}>‹ Prev</Btn>
                 <Btn size="xs" variant="ghost" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>Next ›</Btn>
