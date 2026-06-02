@@ -3,8 +3,8 @@
 // streams an LLM opportunity analysis, and saves results to the DB.
 import { useState, useEffect, useRef, useMemo } from "react";
 import { runAdaptiveBatch } from "../../engine/adaptive-batch.js";
-import { buildBatchAnalysisPrompt } from "../../llm/prompts.js";
-import { streamNarrative, streamModelBuilder } from "../../llm/apiClient.js";
+import { buildBatchAnalysisPrompt, buildApplyOpportunityPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
+import { streamNarrative, streamModelBuilder, callLLMOnce } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
 import { makeBatchResult, CI_METRICS } from "./executeHelpers.js";
 import { summarizeReplicationResults } from "../../engine/statistics.js";
@@ -252,37 +252,60 @@ export function AdaptiveBatchPanel({
     setProposedModel(null);
     setProposalExplanation(null);
 
-    const systemPrompt = buildModelBuilderSystemPrompt();
-    const userMessage = buildModelBuilderUserMessage(
-      `Apply the following improvement to the model as a concrete structural change. ` +
-      `If the exact target value is not specified, choose a sensible increment (e.g. +1 server, −20% service time) and explain your choice. ` +
-      `Do not ask for clarification — produce a complete updated model JSON with intent "refine".\n\nImprovement: ${opportunityText}`,
-      model,
-      batchResult || null
-    );
-    const response = await streamModelBuilder(systemPrompt, [{ role: "user", content: userMessage }], {
-      signal: controller.signal,
-      onToken: () => {},
-      onError: (err) => {
-        setApplyError(err?.message || "Failed to generate model change.");
-        setApplyPhase("apply-error");
-      },
-    });
+    try {
+      // Step 1: structured patch approach — same schema as the Analyse panel
+      const applyPrompt = buildApplyOpportunityPrompt(opportunityText, model, batchResult || null);
+      const rawText = await callLLMOnce(applyPrompt);
 
-    if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return;
 
-    if (!response?.proposedModel) {
-      setApplyError(
-        response?.explanation ||
-        "This opportunity cannot be directly applied as a model change. Try a more structural improvement such as changing server counts, service times, or routing."
+      const { analysis, suggestions } = parseSuggestionResponse(rawText);
+      const suggestion = suggestions?.[0];
+
+      if (suggestion?.change && suggestion.change.type !== "manual") {
+        const patched = applySuggestionPatch(model, suggestion.change);
+        const changeDesc = `${suggestion.change.target}: ${suggestion.change.from} → ${suggestion.change.to}`;
+        setProposedModel(patched);
+        setProposalExplanation(analysis || `${changeDesc}. ${suggestion.predicted || ""}`);
+        setApplyPhase("preview");
+        return;
+      }
+
+      // Step 2: structural / manual change — fall back to full model builder
+      const systemPrompt = buildModelBuilderSystemPrompt();
+      const userMessage = buildModelBuilderUserMessage(
+        `Apply the following improvement to the model. Respond with intent "refine" and include the complete updated model.\n\nImprovement: ${opportunityText}`,
+        model,
+        batchResult || null
       );
-      setApplyPhase("apply-error");
-      return;
-    }
+      const response = await streamModelBuilder(systemPrompt, [{ role: "user", content: userMessage }], {
+        signal: controller.signal,
+        onToken: () => {},
+        onError: (err) => {
+          setApplyError(err?.message || "Failed to generate model change.");
+          setApplyPhase("apply-error");
+        },
+      });
 
-    setProposedModel(response.proposedModel);
-    setProposalExplanation(response.explanation || null);
-    setApplyPhase("preview");
+      if (controller.signal.aborted) return;
+
+      if (!response?.proposedModel) {
+        setApplyError(
+          response?.explanation || analysis ||
+          "This improvement requires structural changes that cannot be applied automatically. Please edit the model manually."
+        );
+        setApplyPhase("apply-error");
+        return;
+      }
+
+      setProposedModel(response.proposedModel);
+      setProposalExplanation(response.explanation || null);
+      setApplyPhase("preview");
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      setApplyError(err?.message || "Failed to generate model change.");
+      setApplyPhase("apply-error");
+    }
   }
 
   const pct = tierMax > 0 ? Math.round((totalReps / tierMax) * 100) : 0;

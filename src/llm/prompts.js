@@ -1276,11 +1276,64 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     "### Investment Opportunities\nList 2 structural improvements requiring additional resources or redesign. " +
     "Quantify the potential gain where the CI data supports it.\n" +
     "### Confidence Summary\nOne paragraph: state whether results are statistically robust, " +
-    "cite the CI and replication count, and flag any caveats from non-convergence or warnings.";
+    "cite the CI and replication count, and flag any caveats from non-convergence or warnings.\n\n" +
+    "NUMBER FORMAT: Express all numeric values to at most 1 decimal place. Express all utilisation values as integer percentages (e.g. '57%' not '57.3%' or '0.57'). Express all time values to at most 1 decimal place.";
 
   return {
     kind: "batch_analysis",
     messages: makeMessages(system, payload, instruction),
     max_tokens: 800,
+  };
+}
+
+/**
+ * Converts a free-text improvement opportunity into a single structured change object,
+ * using the same schema as buildSuggestionPrompt so applySuggestionPatch can apply it.
+ */
+export function buildApplyOpportunityPrompt(opportunityText, model = {}, results = {}) {
+  const system = [
+    "You are a queueing systems expert. Given a simulation improvement opportunity and the current model,",
+    "produce a single structured change in the exact JSON format specified.",
+    "Be specific: name the exact parameter, its current value from the model, and the proposed new value.",
+    "If the improvement is directional (e.g. 'increase doctors') but no specific number is given,",
+    "choose a sensible increment (+1 server, or the smallest change expected to improve the KPI) and explain in 'predicted'.",
+    "Use type 'manual' ONLY if the change cannot be expressed as a single numeric field update.",
+  ].join(" ");
+
+  const entityTypes = (model.entityTypes || []).map(e => ({
+    name: e.name, role: e.role, count: e.count,
+  }));
+  const queues = (model.queues || []).map(q => ({
+    name: q.name, capacity: q.capacity ?? null,
+  }));
+  const stateVariables = (model.stateVariables || []).filter(v => v.name).map(v => ({
+    name: v.name, initialValue: v.initialValue ?? null,
+  }));
+  const kpis = buildKpis(model, results || {});
+
+  const payload = {
+    opportunity: opportunityText,
+    model: {
+      name: model.name || DEFAULT_MODEL_NAME,
+      entityTypes,
+      queues,
+      stateVariables,
+    },
+    kpis,
+  };
+
+  const instruction = [
+    "Convert this improvement opportunity into a single structured change.",
+    "Output one JSON block wrapped in ```json ... ``` fences with this schema:",
+    '{ "analysis": "<one sentence explaining what will change and why>", "suggestions": [ { "rank": 1, "constraint": "<metric=value>", "cause": "<brief cause>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|manual>", "target": "<exact name from model>", "from": <current number or null>, "to": <proposed number or null> }, "predicted": "<expected improvement>", "goalImpact": "<MET|MISSED|N/A>", "confidence": "<high|moderate|low>" } ] }',
+    "The 'target' MUST exactly match a name in the model's entityTypes, queues, or stateVariables list.",
+    "entityTypeCount = change server/entity count; queueCapacity = change queue capacity limit; stateVariable = change initial state value.",
+    "Use type 'manual' only for routing, distribution, or structural changes that cannot be a single field update.",
+  ].join("\n");
+
+  return {
+    kind: "suggestion",
+    messages: makeMessages(system, payload, instruction),
+    max_tokens: 500,
   };
 }
