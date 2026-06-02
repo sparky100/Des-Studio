@@ -18,6 +18,7 @@
    - 4.3 [Run an experiment and read results](#43-run-an-experiment-and-read-results)
    - 4.4 [Compare scenarios with a parametric sweep](#44-compare-scenarios-with-a-parametric-sweep)
    - 4.5 [Share results with stakeholders](#45-share-results-with-stakeholders)
+   - 4.6 [Additional features](#46-additional-features)
 5. [Troubleshooting](#5-troubleshooting)
 6. [Glossary](#6-glossary)
 
@@ -43,7 +44,7 @@ DES Studio is a browser-based discrete-event simulation (DES) platform. It lets 
 | Encode business rules and routing | Predicate Builder (no code, no free-text logic) |
 | Run multiple replications and get confidence intervals | One-click experiment runner |
 | Debug live simulation state | Execute canvas with entity animation and step-by-step event log |
-| Analyse results | Charts, bottleneck analysis, Welch warm-up test, ANOVA/Tukey HSD |
+| Analyse results | Charts, bottleneck analysis, Welch warm-up test, paired-t confidence intervals with Bonferroni correction |
 | Share results | Public link, QR code, embeddable dashboard |
 
 ### 1.1 The Three-Phase Method — a brief primer
@@ -142,8 +143,10 @@ You have now completed the core DES Studio loop: build → run → analyse → a
    | **Queues** | Add a queue for each waiting point. Set discipline (FIFO, LIFO, PRIORITY, SPT, EDD). Set capacity if finite. |
    | **B-Events** | Add arrival events (with a distribution) and service-completion events. Use the distribution picker to choose Exponential, Uniform, Triangular, Fixed, Erlang, Empirical, or other supported types. |
    | **C-Events** | Define the conditions under which service starts: entity waiting AND server idle. Use the Predicate Builder — a point-and-click condition builder that prevents type mismatches. |
-   | **State Variables** | Add counters you want to track (e.g. total cost, total reneges). |
-   | **Goals** | Set service-level targets (e.g. "95% of customers wait less than 5 minutes"). Results will show green/red against these goals. |
+   | **Schedules** | Create named timetables for time-varying arrival rates. Import rows from CSV or Excel and link timetables to B-Events. |
+   | **Model Data** | Add counters you want to track (e.g. total cost, total reneges). Also set the time unit, real-world epoch, and any external data sources. |
+
+   Goals (service-level targets, e.g. "95% of customers wait less than 5 minutes") are set on the **Overview** tab. Results will show green/red against these goals.
 
 4. Watch the **Model Health** panel (bottom of the editor). It runs 38 validation rules continuously and flags errors before you attempt a run. Fix all blocking errors (red) before running; warnings (amber) let you proceed with a caution banner.
 5. Click **Save**.
@@ -157,7 +160,7 @@ You have now completed the core DES Studio loop: build → run → analyse → a
 
 **When to use this.** You have a scenario in mind but do not want to configure every element manually.
 
-1. Open a new model or an existing one. Click the **Describe** tab.
+1. Open a new model or an existing one. Click the **Design** tab, then select the **Describe** sub-tab.
 2. In the AI Generator panel, type a plain-English description of your system. Be specific:
 
    > "A hospital emergency department with two triage nurses and four doctors. Patients arrive on average every 8 minutes. Triage takes 3–7 minutes; consultation takes 10–25 minutes. High-priority patients are seen before low-priority ones. The target is that 90% of patients are seen within 30 minutes."
@@ -230,6 +233,18 @@ You have now completed the core DES Studio loop: build → run → analyse → a
    - **QR code** — present in a meeting; attendees scan to open the live results on their phones.
    - **Embed widget** — paste an `<iframe>` snippet into an internal wiki or dashboard.
 
+### 4.6 Additional features
+
+**Voice input.** The AI chat dialogs — Help Assistant, Model Assistant, and AI Diagnostics — each include a microphone button. Clicking it activates the browser's Speech Recognition API so you can dictate questions or describe changes verbally instead of typing.
+
+**Explore panel.** After a batch run completes, a ✦ Explore button appears in the model header. Clicking it opens an AI panel that analyses the results for bottlenecks, quick wins, and investment opportunities. Each suggestion has an **Apply ↗** button that proposes the change to the model with a before/after diff so you can review it before committing.
+
+**Schedule Manager.** The **Schedules** sub-tab under the Design section lets you create named timetables for time-varying arrival patterns. You can import arrival rows from CSV or Excel files (including multi-event imports) and link timetables to B-Events.
+
+**Run tier limits.** The number of replications available per run depends on your account tier: Free accounts can run up to 10 replications; Standard accounts up to 30; Pro accounts up to 100.
+
+**Per-outcome results.** The Results tab shows a Journey Outcomes section that breaks down completed entities by route (COMPLETE, RENEGE, and other terminal outcomes), with average wait time and average time in system reported separately per route.
+
 ---
 
 ## 5. Troubleshooting
@@ -261,7 +276,7 @@ Click any error in the Model Health panel to jump directly to the relevant edito
    - The resource status check uses the wrong resource name.
    - The condition combines `AND` clauses that are mutually exclusive.
 
-**Fix.** Correct the predicate in the Predicate Builder. Use the **Condition Evaluator** (available in the Entity Inspector during a stepped run) to evaluate the condition against live state.
+**Fix.** Correct the predicate in the Predicate Builder. During a stepped run, the **Entity Inspector** panel shows each entity's current attributes and queue position, which helps you verify whether the condition should be firing for a specific entity.
 
 ### 5.3 "The AI model generator produced a model that doesn't match my description"
 
@@ -291,10 +306,10 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 |------|-----------|
 | **B-Event** | A *bound* event: scheduled to fire at a specific time (e.g. an arrival, a service completion). Defined in the B-Events editor. |
 | **C-Event** | A *conditional* event: fires when a state condition is true (e.g. "entity waiting AND server idle"). Defined in the C-Events editor using the Predicate Builder. |
-| **Confidence interval (CI)** | A range that contains the true mean with 95% probability across replications. Narrower CIs → more reliable results (use more replications). |
+| **Confidence interval (CI)** | A between-replication t-confidence interval: the engine computes one mean per replication, then applies Student's t across those replication-level means. Narrower CIs → more reliable results (use more replications). For two-scenario comparison the UI uses paired-t confidence intervals with Bonferroni correction. (Note: `tukeyHSD()` and `oneWayANOVA()` are implemented in the engine but not yet exposed in the UI.) |
 | **Entity** | An object that flows through the model: a customer, patient, train, job. |
 | **Future Event List (FEL)** | The engine's internal queue of scheduled B-Events, ordered by time. |
-| **Macro** | A named effect instruction applied to entities or resources (e.g. `ARRIVE`, `COMPLETE`, `RELEASE`, `RENEGE`). |
+| **Macro** | A named effect instruction applied to entities or resources. The full set of 19 supported macros is: `ARRIVE`, `ASSIGN`, `BATCH`, `COMPLETE`, `COSEIZE`, `COST`, `DRAIN`, `FAIL`, `FILL`, `MATCH`, `PREEMPT`, `RELEASE`, `RENEGE`, `RENEGE_OLDEST`, `REPAIR`, `SET`, `SET_ATTR`, `SPLIT`, `UNBATCH`. |
 | **MTBF / MTTR** | Mean time between failures / mean time to repair. Used for resource failure modelling. |
 | **Predicate Builder** | The point-and-click condition editor for C-Events. Prevents type mismatches; no free-text logic. |
 | **Replication** | One independent run of the simulation from start to finish with a unique random seed. |
