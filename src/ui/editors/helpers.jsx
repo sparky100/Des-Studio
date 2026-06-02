@@ -280,6 +280,7 @@ const EffectPicker = ({effects, options, onChange}) => {
   };
   const [adding, setAdding] = useState(false);
   const [category, setCategory] = useState('all');
+  const [customText, setCustomText] = useState('');
 
   const remove = (j) => onChange(effects.filter((_,i)=>i!==j));
   const add = (val) => {
@@ -287,6 +288,12 @@ const EffectPicker = ({effects, options, onChange}) => {
     onChange([...effects, val]);
     setAdding(false);
     setCategory('all');
+    setCustomText('');
+  };
+  const addCustom = () => {
+    const val = customText.trim();
+    if (!val) return;
+    add(val);
   };
 
   const nonHeader = options.filter(o=>o.value&&!o.disabled);
@@ -352,6 +359,17 @@ const EffectPicker = ({effects, options, onChange}) => {
               <option key={i} value={o.value} disabled={!!o.disabled}>{o.label}</option>
             ))}
           </select>
+          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+            <input
+              value={customText}
+              onChange={e=>setCustomText(e.target.value)}
+              onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCustom();}}}
+              placeholder="or type e.g. SET_ATTR(priority, 2)"
+              style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}
+            />
+            <Btn small variant="ghost" onClick={addCustom} disabled={!customText.trim()}>Add</Btn>
+          </div>
         </div>
       )}
     </div>
