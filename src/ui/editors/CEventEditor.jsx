@@ -3,7 +3,7 @@ import { normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { ConditionBuilder, buildConditionStr } from "./ConditionBuilder.jsx";
 import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
-import { DropField, assignOptions, displayEventName } from "./helpers.jsx";
+import { EffectPicker, assignOptions, displayEventName } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[]})=>{
@@ -175,12 +175,14 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                 />
               </div>
 
-              {/* Effect — ASSIGN only */}
-              <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,minWidth:72}}>effect(s):</span>
-                <DropField value={ev.effect} onChange={v=>upd(i,'effect',v)}
-                  options={assignOptions(entityTypes, stateVariables, queues, ev.name)} color={C.green}
-                  placeholder="e.g. ASSIGN(Customer, Server); totalServed++"/>
+              {/* Effects */}
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>EFFECTS</span>
+                <EffectPicker
+                  effects={Array.isArray(ev.effect) ? ev.effect.filter(Boolean) : (ev.effect ? ev.effect.split(';').map(s=>s.trim()).filter(Boolean) : [])}
+                  options={assignOptions(entityTypes, stateVariables, queues, ev.name)}
+                  onChange={arr=>upd(i,'effect',arr)}
+                />
               </div>
 
               {/* Structured B-event schedules */}
