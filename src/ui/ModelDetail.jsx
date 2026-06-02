@@ -512,6 +512,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [saving,setSaving]=useState(false);
   const [saveError,setSaveError]=useState(null);
   const [discardConfirm,setDiscardConfirm]=useState(false);
+  const [discardKey,setDiscardKey]=useState(0);
   const [past,setPast]=useState([]);    // undo stack — model snapshots, capped at 20
   const [future,setFuture]=useState([]); // redo stack
   const [historyRows,setHistoryRows]=useState([]);
@@ -750,9 +751,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       access:        modelData.access         || {},
     }));
     setDirty(false);
+    setVisualPending(false);
     visualPendingRef.current=false;
     setPast([]);
     setFuture([]);
+    setDiscardKey(k=>k+1);
   };
 
   const handleBack=()=>{
@@ -1109,7 +1112,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="visual"&&(
           renderAuthoringShell(
             <Suspense fallback={<SkeletonPanel rows={5} />}>
-              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
+              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
             </Suspense>
           )
         )}

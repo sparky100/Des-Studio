@@ -202,7 +202,7 @@ function ValidationChecklist({ visualIssues, modelErrors, modelWarnings, graph, 
   );
 }
 
-export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit }) {
+export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit, flowKey = 0 }) {
   const { C, FONT } = useTheme();
   const PALETTE_ITEMS = [
     { type: VISUAL_NODE_TYPES.SOURCE,   label: "Add Source",   icon: "S", color: C.green },
@@ -619,6 +619,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
             </div>
           )}
           <FlowDiagramReactFlow
+            key={flowKey}
             graph={graphWithViewport}
             canEdit={canEdit}
             selectedNodeId={selectedNodeId}
