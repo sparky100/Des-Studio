@@ -128,7 +128,8 @@ function tryExtractJson(raw) {
     let inString = false;
     for (let i = start; i < raw.length; i++) {
       const ch = raw[i];
-      if (ch === '"') inString = !inString;
+      // Toggle string state only on unescaped quotes
+      if (ch === '"' && (i === start || raw[i - 1] !== '\\')) inString = !inString;
       if (inString) continue;
       if (ch === openChar) depth++;
       else if (ch === closeChar) {
@@ -215,17 +216,38 @@ export async function streamModelBuilder(systemPrompt, messages = [], { onToken,
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let sseBuffer = "";
     let done = false;
+
+    const processSseEvent = event => {
+      const lines = event.split(/\r?\n/);
+      const dataLines = lines
+        .filter(line => line.startsWith("data:"))
+        .map(line => line.slice(5).trim());
+      if (!dataLines.length) return;
+      const token = extractTokenFromSsePayload(dataLines.join("\n"));
+      if (token) {
+        buffer += token;
+        onToken?.(token);
+      }
+    };
+
     while (!done) {
       const result = await reader.read();
       done = result.done;
-      if (result.value) {
-        consumeSseChunk(decoder.decode(result.value, { stream: !done }), token => {
-          buffer += token;
-          onToken?.(token);
-        });
+      sseBuffer += result.value ? decoder.decode(result.value, { stream: true }) : "";
+      if (done) sseBuffer += decoder.decode(); // flush any buffered bytes
+
+      // Process all complete SSE events (delimited by blank lines)
+      let boundary;
+      while ((boundary = sseBuffer.indexOf("\n\n")) >= 0) {
+        processSseEvent(sseBuffer.slice(0, boundary));
+        sseBuffer = sseBuffer.slice(boundary + 2);
       }
     }
+    // Process any trailing data that arrived without a final blank line
+    if (sseBuffer.trim()) processSseEvent(sseBuffer);
+
     const parsed = parseModelBuilderJson(buffer);
     onComplete?.(parsed);
     return parsed;
