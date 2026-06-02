@@ -66,7 +66,7 @@ function extractResources(model = {}, summary = {}) {
     const result = {
       name: server.name || server.id || "Server",
       count: finiteOrNull(server.count),
-      utilisation: finiteOrNull(pr?.utilisation ?? summary.resourceUtilisation?.[server.name] ?? summary.utilisation),
+      utilisation: (() => { const v = pr?.utilisation ?? summary.resourceUtilisation?.[server.name] ?? summary.utilisation; return Number.isFinite(v) ? Math.round(v * 100) : null; })(),
       busyCount: finiteOrNull(pr?.busyCount ?? summary.busyCount),
       idleCount: finiteOrNull(pr?.idleCount),
       totalServers: finiteOrNull(pr?.total),
@@ -195,10 +195,10 @@ function extractEntityAnomalies(results = {}) {
   ));
   return {
     anomalyCount: anomalies.length,
-    anomalyRate: +(anomalies.length / entitySummary.length).toFixed(4),
-    worstWait: +worstWait.toFixed(4),
+    anomalyRate: +(anomalies.length / entitySummary.length).toFixed(1),
+    worstWait: +worstWait.toFixed(1),
     byType,
-    threshold: +threshold.toFixed(4),
+    threshold: +threshold.toFixed(1),
   };
 }
 
@@ -460,7 +460,7 @@ export function buildGoalGaps(model = {}, aggregateStats = {}) {
       else if (op === ">=") met = current >= target;
       else if (op === "==") met = Math.abs(current - target) < 0.001;
     }
-    const gap = current != null ? +(current - target).toFixed(4) : null;
+    const gap = current != null ? +(current - target).toFixed(1) : null;
     return {
       metric: g.metric,
       label: g.label || `${g.metric} ${op} ${target}`,
@@ -544,7 +544,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
       ci95Lower: finiteOrNull(s.lower),
       ci95Upper: finiteOrNull(s.upper),
       n: s.n,
-      ciWidth: (s.upper != null && s.lower != null) ? +(s.upper - s.lower).toFixed(4) : null,
+      ciWidth: (s.upper != null && s.lower != null) ? +(s.upper - s.lower).toFixed(1) : null,
     }));
 
   const bEvents = extractBEvents(model, results);
@@ -632,7 +632,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
       ci95Lower: finiteOrNull(s.lower),
       ci95Upper: finiteOrNull(s.upper),
       n: s.n,
-      ciWidth: (s.upper != null && s.lower != null) ? +(s.upper - s.lower).toFixed(4) : null,
+      ciWidth: (s.upper != null && s.lower != null) ? +(s.upper - s.lower).toFixed(1) : null,
     }));
 
   const payload = {

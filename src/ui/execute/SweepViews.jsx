@@ -156,7 +156,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
           const cx = xScale(v), cy = yScale(vMeans[i]);
           return (
             <g key={i}
-              onMouseEnter={() => setTip({ x: cx, y: cy, label: `${paramLabel || "x"} = ${v}`, value: `${(METRIC_LABELS[metric] || metric).slice(0,14)}: ${vMeans[i]?.toFixed(2)}` })}
+              onMouseEnter={() => setTip({ x: cx, y: cy, label: `${paramLabel || "x"} = ${v}`, value: `${(METRIC_LABELS[metric] || metric).slice(0,14)}: ${vMeans[i]?.toFixed(1)}` })}
               style={{ cursor: "crosshair" }}>
               <circle cx={cx} cy={cy} r={isBest ? 5 : 3}
                 fill={col} stroke={C.bg} strokeWidth={1.5} opacity={f === false ? 0.5 : 1} />
@@ -188,7 +188,7 @@ export function SweepChart({ results, metric, paramLabel, goals = [] }) {
       {bestIdx != null && (
         <div style={{ fontSize: 10, fontFamily: FONT, color: C.green, marginTop: 4 }}>
           Best feasible: {paramLabel || "param"} = <strong>{vValues[bestIdx]}</strong>,
-          {" "}{METRIC_LABELS[metric] || metric} = <strong>{vMeans[bestIdx]?.toFixed(3)}</strong>
+          {" "}{METRIC_LABELS[metric] || metric} = <strong>{vMeans[bestIdx]?.toFixed(1)}</strong>
         </div>
       )}
     </div>
@@ -285,7 +285,7 @@ export function CumulativeMeanChart({ points, warmupPeriod, width = 320, height 
           <g key={i}>
             <line x1={PAD.left} y1={yScale(tick)} x2={W - PAD.right} y2={yScale(tick)} stroke={C.chartGrid} strokeWidth={1} />
             <text x={PAD.left - 4} y={yScale(tick) + 4} textAnchor="end" fill={C.muted} fontSize={11} fontFamily="monospace">
-              {tick.toFixed(2)}
+              {tick.toFixed(1)}
             </text>
           </g>
         ))}
@@ -639,7 +639,7 @@ function QueueHistogramCard({ name, dist }) {
 }
 
 // ── EntitySummaryTable — per-entity lifecycle table ───────────────────────────
-const fmtT = v => v != null && Number.isFinite(v) ? v.toFixed(2) : "—";
+const fmtT = v => v != null && Number.isFinite(v) ? v.toFixed(1) : "—";
 
 export function EntitySummaryTable({ entitySummary, meanWait }) {
   const { C, FONT } = useTheme();

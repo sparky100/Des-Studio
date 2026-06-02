@@ -84,7 +84,7 @@ function slugify(value = "") {
     .replace(/^-+|-+$/g, "") || "data";
 }
 
-function formatNumber(value, digits = 2) {
+function formatNumber(value, digits = 1) {
   if (!Number.isFinite(Number(value))) return "0";
   const rounded = Number(value).toFixed(digits);
   return rounded.includes(".") ? rounded.replace(/\.?0+$/, "") : rounded;
@@ -347,7 +347,7 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
     }))
     .filter(row => row.count > 0)
     .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
-  const utilPct = v => `${formatNumber(v * 100, 1)}%`;
+  const utilPct = v => `${Math.round((v ?? 0) * 100)}%`;
   const utilColor = v => v > 0.9 ? C.red : v > 0.7 ? C.amber : C.green;
   const avgUtil = perResourceEntries.length > 0
     ? perResourceEntries.reduce((sum, [, r]) => sum + (r.utilisation ?? 0), 0) / perResourceEntries.length
@@ -1216,7 +1216,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                 <div aria-label="Server utilisation chart grid" style={CHART_GRID}>
                   {serverSection.series.map((series, idx) => {
                     const color = CHART_COLORS[(idx + 3) % CHART_COLORS.length];
-                    const fmtPct = v => `${formatNumber(v, 1)}%`;
+                    const fmtPct = v => `${Math.round(v ?? 0)}%`;
                     return (
                       <ChartCard
                         key={series.id}

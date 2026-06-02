@@ -31,7 +31,7 @@ const KPI_ROWS = [
 
 function BeforeAfterTable({ goals, baselineStats, afterStats }) {
   const { C, FONT } = useTheme();
-  const fmt = v => v === null ? "—" : Number.isFinite(v) ? (Number.isInteger(v) ? v.toString() : v.toFixed(2)) : "—";
+  const fmt = v => v === null ? "—" : Number.isFinite(v) ? (Number.isInteger(v) ? v.toString() : v.toFixed(1)) : "—";
   const delta = (before, after) => {
     if (before === null || after === null) return null;
     if (!Number.isFinite(before) || !Number.isFinite(after)) return null;

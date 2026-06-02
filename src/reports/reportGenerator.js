@@ -379,7 +379,7 @@ function horizBarChart({ items, title, width = 520 }) {
     item.lines.forEach((ln, li) => {
       bars += `<text x="${m.left - 6}" y="${(startY + li * lineH).toFixed(1)}" text-anchor="end" font-size="11" fill="#374151" font-family="sans-serif">${esc(ln)}</text>`;
     });
-    bars += `<text x="${m.left + cW + 8}" y="${(barMidY + 4).toFixed(1)}" font-size="11" font-weight="600" fill="${color}" font-family="sans-serif">${(pct * 100).toFixed(1)}%</text>`;
+    bars += `<text x="${m.left + cW + 8}" y="${(barMidY + 4).toFixed(1)}" font-size="11" font-weight="600" fill="${color}" font-family="sans-serif">${Math.round(pct * 100)}%</text>`;
     yOff += item.rH;
   });
 

@@ -2814,10 +2814,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                           {goalMet === false && <span style={{ marginLeft: 5, color: C.red }}>✗</span>}
                         </div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: C.accent, fontFamily: FONT }}>
-                          {fmt(stat.mean, 2)}
+                          {fmt(stat.mean, 1)}
                         </div>
                         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>
-                          ±{fmt(stat.halfWidth, 2)} (95% CI)
+                          ±{fmt(stat.halfWidth, 1)} (95% CI)
                         </div>
                       </div>
                     );
@@ -2873,8 +2873,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       const isServedOutlier = sei >= 0 && outlierServed.outlierIndices.includes(sei);
                       const isOutlier = isWaitOutlier || isSvcOutlier || isServedOutlier;
                       const outlierMsg = [
-                        isWaitOutlier && `Avg wait outside fence [${fmt(outlierWait.lowerFence, 2)}, ${fmt(outlierWait.upperFence, 2)}]`,
-                        isSvcOutlier && `Avg service outside fence [${fmt(outlierSvc.lowerFence, 2)}, ${fmt(outlierSvc.upperFence, 2)}]`,
+                        isWaitOutlier && `Avg wait outside fence [${fmt(outlierWait.lowerFence, 1)}, ${fmt(outlierWait.upperFence, 1)}]`,
+                        isSvcOutlier && `Avg service outside fence [${fmt(outlierSvc.lowerFence, 1)}, ${fmt(outlierSvc.upperFence, 1)}]`,
                         isServedOutlier && `Served outside fence [${fmt(outlierServed.lowerFence)}, ${fmt(outlierServed.upperFence)}]`,
                       ].filter(Boolean).join("; ");
                       return (
@@ -2883,9 +2883,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                           <td style={{ padding: 8, color: C.amber }}>{payload.seed}</td>
                           <td style={{ padding: 8 }}>{summary?.served ?? "—"}</td>
                           <td style={{ padding: 8 }}>{summary?.reneged ?? "—"}</td>
-                          <td style={{ padding: 8 }}>{fmt(rowWait, 2)}</td>
-                          <td style={{ padding: 8 }}>{fmt(rowSvc, 2)}</td>
-                          <td style={{ padding: 8 }}>{fmt(summary?.avgSojourn, 2)}</td>
+                          <td style={{ padding: 8 }}>{fmt(rowWait, 1)}</td>
+                          <td style={{ padding: 8 }}>{fmt(rowSvc, 1)}</td>
+                          <td style={{ padding: 8 }}>{fmt(summary?.avgSojourn, 1)}</td>
                           <td style={{ padding: 8 }}>
                             <Tag label="complete" color={C.green} />
                             {isOutlier && (
@@ -2905,8 +2905,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         <td style={{ padding: 8 }} colSpan={2}>Min / Max</td>
                         <td style={{ padding: 8 }}>{minMaxRow.minServed ?? "—"} / {minMaxRow.maxServed ?? "—"}</td>
                         <td style={{ padding: 8 }}>—</td>
-                        <td style={{ padding: 8 }}>{minMaxRow.minWait != null ? fmt(minMaxRow.minWait, 2) : "—"} / {minMaxRow.maxWait != null ? fmt(minMaxRow.maxWait, 2) : "—"}</td>
-                        <td style={{ padding: 8 }}>{minMaxRow.minSvc != null ? fmt(minMaxRow.minSvc, 2) : "—"} / {minMaxRow.maxSvc != null ? fmt(minMaxRow.maxSvc, 2) : "—"}</td>
+                        <td style={{ padding: 8 }}>{minMaxRow.minWait != null ? fmt(minMaxRow.minWait, 1) : "—"} / {minMaxRow.maxWait != null ? fmt(minMaxRow.maxWait, 1) : "—"}</td>
+                        <td style={{ padding: 8 }}>{minMaxRow.minSvc != null ? fmt(minMaxRow.minSvc, 1) : "—"} / {minMaxRow.maxSvc != null ? fmt(minMaxRow.maxSvc, 1) : "—"}</td>
                         <td style={{ padding: 8 }}>—</td>
                         <td style={{ padding: 8 }}>—</td>
                       </tr>
@@ -2946,10 +2946,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       {ciRows.map(({ metric, stat, relPrec, precColor }) => (
                         <tr key={metric} style={{ borderBottom: `1px solid ${C.border}` }}>
                           <td style={{ padding: 8 }}>{METRIC_LABELS[metric]}</td>
-                          <td style={{ padding: 8, color: C.accent }}>{fmt(stat.mean, 2)}</td>
-                          <td style={{ padding: 8 }}>{fmt(stat.lower, 2)}</td>
-                          <td style={{ padding: 8 }}>{fmt(stat.upper, 2)}</td>
-                          <td style={{ padding: 8, color: C.amber }}>{fmt(stat.halfWidth, 2)}</td>
+                          <td style={{ padding: 8, color: C.accent }}>{fmt(stat.mean, 1)}</td>
+                          <td style={{ padding: 8 }}>{fmt(stat.lower, 1)}</td>
+                          <td style={{ padding: 8 }}>{fmt(stat.upper, 1)}</td>
+                          <td style={{ padding: 8, color: C.amber }}>{fmt(stat.halfWidth, 1)}</td>
                           <td style={{ padding: 8 }}>
                             {relPrec != null ? (
                               <span style={{ color: precColor, fontWeight: 700 }}>{relPrec.toFixed(1)}%</span>
