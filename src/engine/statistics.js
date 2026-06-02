@@ -598,6 +598,15 @@ function lag1Autocorrelation(values) {
  * @param {number} [options.maxRho=0.1] — target lag-1 autocorrelation for batch means
  * @returns {number} recommended batch size
  */
+function computeBatchMeans(finite, k, m) {
+  const batchMeans = [];
+  for (let i = 0; i < k; i++) {
+    const batch = finite.slice(i * m, (i + 1) * m);
+    batchMeans.push(batch.reduce((s, v) => s + v, 0) / batch.length);
+  }
+  return batchMeans;
+}
+
 export function suggestBatchSize(values = [], options = {}) {
   const { maxRho = 0.1 } = options;
   const finite = finiteValues(values);
@@ -609,11 +618,7 @@ export function suggestBatchSize(values = [], options = {}) {
   for (let attempt = 0; attempt < 10; attempt++) {
     const k = Math.floor(n / m);
     if (k < 3) break; // too few batches
-    const batchMeans = [];
-    for (let i = 0; i < k; i++) {
-      const batch = finite.slice(i * m, (i + 1) * m);
-      batchMeans.push(batch.reduce((s, v) => s + v, 0) / batch.length);
-    }
+    const batchMeans = computeBatchMeans(finite, k, m);
     const rho = lag1Autocorrelation(batchMeans);
     if (Math.abs(rho) <= maxRho) return m;
     m = Math.ceil(m * 1.5);
@@ -650,11 +655,7 @@ export function batchMeansCI(values = [], batchSize = null) {
   }
 
   // Compute batch means
-  const batchMeans = [];
-  for (let i = 0; i < k; i++) {
-    const batch = finite.slice(i * m, (i + 1) * m);
-    batchMeans.push(batch.reduce((s, v) => s + v, 0) / batch.length);
-  }
+  const batchMeans = computeBatchMeans(finite, k, m);
 
   // Apply standard CI to batch means (treat them as approximately independent)
   const avg = mean(batchMeans);
@@ -992,6 +993,15 @@ function approximateFPValue(f, df1, df2) {
  * @param {number} b — second shape parameter
  * @returns {number} I_x(a, b) approximation
  */
+function cfIterate(d, c, num) {
+  d = 1.0 + num * d;
+  if (Math.abs(d) < 1e-30) d = 1e-30;
+  d = 1.0 / d;
+  c = 1.0 + num / c;
+  if (Math.abs(c) < 1e-30) c = 1e-30;
+  return { d, c, factor: d * c };
+}
+
 function incompleteBeta(x, a, b) {
   if (x <= 0) return 0;
   if (x >= 1) return 1;
@@ -1018,21 +1028,14 @@ function incompleteBeta(x, a, b) {
   for (let m = 1; m <= maxIter; m++) {
     // Even step
     let num = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
-    d = 1.0 + num * d;
-    if (Math.abs(d) < 1e-30) d = 1e-30;
-    d = 1.0 / d;
-    c = 1.0 + num / c;
-    if (Math.abs(c) < 1e-30) c = 1e-30;
-    f *= d * c;
+    let step = cfIterate(d, c, num);
+    d = step.d; c = step.c; f *= step.factor;
 
     // Odd step
     num = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
-    d = 1.0 + num * d;
-    if (Math.abs(d) < 1e-30) d = 1e-30;
-    d = 1.0 / d;
-    c = 1.0 + num / c;
-    if (Math.abs(c) < 1e-30) c = 1e-30;
-    const delta = d * c;
+    step = cfIterate(d, c, num);
+    d = step.d; c = step.c;
+    const delta = step.factor;
     f *= delta;
 
     if (Math.abs(delta - 1.0) < eps) break;

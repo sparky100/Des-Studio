@@ -13,6 +13,22 @@ import { evalCondition, evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
 import { clearWaitingState, markEntityWaiting } from "./entities.js";
 
+function completeEntity(cust, ev, clock, state) {
+  const previousQueue = cust.queue ?? cust.lastQueue ?? null;
+  clearWaitingState(cust);
+  cust.status         = "done";
+  cust.completionTime = clock;
+  cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
+  cust.lastQueue      = previousQueue;
+  delete cust.queue;
+  state.__served = (state.__served || 0) + 1;
+  return {
+    endedAt: clock,
+    ...(ev.id   ? { sourceEventId:   ev.id   } : {}),
+    ...(ev.name ? { sourceEventName: ev.name } : {}),
+  };
+}
+
 function hasConditionDefinition(condition) {
   if (!condition) return false;
   if (typeof condition === "string") return condition.trim() !== "";
@@ -175,23 +191,14 @@ export function fireBEvent(ev, ctx) {
   // null / "" means "exit system" — complete the customer immediately.
   const applyRoute = (cust, queueName, note) => {
     if (!queueName) {
-      const previousQueue = cust.queue ?? cust.lastQueue ?? null;
-      clearWaitingState(cust);
-      cust.status        = "done";
-      cust.completionTime = clock;
-      cust.sojournTime    = +(clock - cust.arrivalTime).toFixed(4);
-      cust.lastQueue = previousQueue;
+      const evTail = completeEntity(cust, ev, clock, ctx.state);
       cust.outcome = {
         status: "completed",
         routeId: `route-exit:${ev.id || ev.name || "unknown"}`,
         routeLabel: "Exit",
         endedBy: "direct-routing",
-        endedAt: clock,
-        ...(ev.id ? { sourceEventId: ev.id } : {}),
-        ...(ev.name ? { sourceEventName: ev.name } : {}),
+        ...evTail,
       };
-      delete cust.queue;
-      ctx.state.__served  = (ctx.state.__served || 0) + 1;
       ctx.incEventCount?.(`route-exit:${ev.id || ev.name || "unknown"}`);
       msgs.push(`Routing: #${cust.id} → exit system (${note})`);
     } else {
@@ -257,23 +264,14 @@ export function fireBEvent(ev, ctx) {
           ctx.noteQueueDepth?.(exitQ);
           msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → "${exitQ}"`);
         } else {
-          const previousQueue = cust.queue ?? cust.lastQueue ?? null;
-          clearWaitingState(cust);
-          cust.status = "done";
-          cust.completionTime = clock;
-          cust.sojournTime = +(clock - cust.arrivalTime).toFixed(4);
-          cust.lastQueue = previousQueue;
+          const evTail = completeEntity(cust, ev, clock, ctx.state);
           cust.outcome = {
             status: "completed",
             routeId: `loop-exit:${ev.id || ev.name || "unknown"}`,
             routeLabel: "Loop guard exit",
             endedBy: "loop-guard",
-            endedAt: clock,
-            ...(ev.id ? { sourceEventId: ev.id } : {}),
-            ...(ev.name ? { sourceEventName: ev.name } : {}),
+            ...evTail,
           };
-          delete cust.queue;
-          ctx.state.__served = (ctx.state.__served || 0) + 1;
           msgs.push(`Loop guard: #${cust.id} recirculated ${cust.loopCount}x → exit system`);
         }
       } else {
