@@ -10,7 +10,7 @@ The app lets simulation modellers define entity types, queues, B-Events, C-Event
 
 Version: `7.0.0`
 
-The project has completed **33 sprints** covering the full DES modelling lifecycle — from engine safety and correctness through advanced scheduling macros, resource reliability, and statistical analytics.
+The project has completed **79+ sprints** covering the full DES modelling lifecycle — from engine safety and correctness through advanced scheduling macros, resource reliability, statistical analytics, and AI-powered model authoring and analysis.
 
 | Area | Status |
 |---|---|
@@ -130,7 +130,7 @@ Key rules:
 
 ## Macro Vocabulary
 
-DES Studio supports 15 macros across B-Events and C-Events:
+DES Studio supports 19 macros across B-Events and C-Events:
 
 | Macro | Phase | Purpose |
 |---|---|---|
@@ -138,7 +138,8 @@ DES Studio supports 15 macros across B-Events and C-Events:
 | `ASSIGN` | C-Event | Seizes resource for entity, schedules completion |
 | `COMPLETE` | B-Event | Releases resource, records stats, entity departs |
 | `RELEASE` | B-Event | Frees resource and routes entity to another queue |
-| `RENEGE` | B-Event | Removes oldest waiting entity from queue (abandonment) |
+| `RENEGE` | B-Event | Removes waiting entity from queue on timeout (abandonment) |
+| `RENEGE_OLDEST` | B-Event | Removes the oldest waiting entity of a given type from queue |
 | `BATCH` | C-Event | Accumulates N entities into one batch |
 | `UNBATCH` | B-Event | Restores children from parent batch |
 | `PREEMPT` | C-Event | Interrupts busy server; re-queues entity with remaining service |
@@ -147,6 +148,8 @@ DES Studio supports 15 macros across B-Events and C-Events:
 | `SPLIT` | B/C-Event | Creates N-1 clones of context entity |
 | `COSEIZE` | C-Event | Atomically seizes multiple server types simultaneously |
 | `MATCH` | C-Event | Pairs entities from two queues into batch |
+| `FILL` | B-Event | Adds a quantity to a named container (tank/stock) |
+| `DRAIN` | C-Event | Removes a quantity from a named container; blocks if insufficient |
 | `SET` | B/C-Event | Computes state variable via safe arithmetic expression |
 | `SET_ATTR` | B/C-Event | Computes entity attribute via safe arithmetic expression |
 | `COST` | B/C-Event | Records cost events for economic analysis |

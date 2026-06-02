@@ -1,12 +1,13 @@
 # DES Studio — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-05-31 | Reflects: Sprint 79 — Consistent Panel Visibility UX complete. Sprint 72 queued.*
+*Last updated: 2026-06-02 | Reflects: Sprint 79 — Consistent Panel Visibility UX + AI-Powered Explore (Adaptive Batch Analysis) complete.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Current sprint plan: `docs/reviews/sprint-79-plan.md`
-- Previous sprint plan: `docs/reviews/sprint-78-plan.md`
+- Current sprint plan (AI Explore): `docs/reviews/sprint-79-ai-explore-plan.md` — AI-Powered Adaptive Batch Analysis, Explore panel, Apply ↗, per-outcome timing
+- Current sprint plan (Panel UX): `docs/reviews/sprint-79-plan.md` — Consistent Panel Visibility UX (companion Sprint 79 delivery)
+- Previous sprint plan: `docs/reviews/sprint-78-plan.md` — Visual Designer Canvas Visibility
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
 
