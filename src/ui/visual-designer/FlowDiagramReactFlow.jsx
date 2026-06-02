@@ -256,6 +256,7 @@ export function FlowDiagramReactFlow({
   const [dragOver, setDragOver] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const suppressViewportSyncRef = useRef(true);
+  const nodeClickHandledRef = useRef(false);
   const selectedSet = useMemo(() => new Set(selectedNodeIds.length ? selectedNodeIds : (selectedNodeId ? [selectedNodeId] : [])), [selectedNodeId, selectedNodeIds]);
 
   // Attach hasError flag to each node so DesNode can show the error badge.
@@ -329,16 +330,20 @@ export function FlowDiagramReactFlow({
         panOnScroll
         isValidConnection={isValidConnection}
         onNodeClick={(event, node) => {
+          nodeClickHandledRef.current = true;
           const toggle = selectionMode === "select" || event?.shiftKey || event?.ctrlKey || event?.metaKey;
           onNodeSelect?.(node.id, { toggle });
         }}
         onPaneClick={() => onNodeSelect?.(null)}
         onSelectionChange={({ nodes: selectedNodes = [] }) => {
-          const flagged = selectedNodes.filter(node => node.selected === true);
-          const nextSelected = flagged.length > 0 || selectedNodes.some(node => node.selected === false)
-            ? flagged
-            : selectedNodes;
-          onNodeSelectionChange?.(nextSelected.map(node => node.id));
+          // onNodeClick handles single-node selection; skip here to avoid overwriting it
+          // with stale controlled `selected` props before React re-renders
+          if (nodeClickHandledRef.current) {
+            nodeClickHandledRef.current = false;
+            return;
+          }
+          // Box-selection: use ReactFlow's internal selected flag (not our controlled prop)
+          onNodeSelectionChange?.(selectedNodes.filter(node => node.selected).map(node => node.id));
         }}
         onNodeDragStop={(_, node, movedNodes = []) => {
           const moved = movedNodes.length ? movedNodes : [node];
