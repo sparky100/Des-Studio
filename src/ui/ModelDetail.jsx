@@ -750,6 +750,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       access:        modelData.access         || {},
     }));
     setDirty(false);
+    setVisualPending(false);
     visualPendingRef.current=false;
     setPast([]);
     setFuture([]);
