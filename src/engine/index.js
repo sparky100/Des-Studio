@@ -1212,9 +1212,21 @@ const cycleLog = [];
           status: outcome.status || (entity.status === "reneged" ? "reneged" : "completed"),
           endedBy: outcome.endedBy || "unknown",
           count: 0,
+          _waitSum: 0, _waitN: 0,
+          _sojournSum: 0, _sojournN: 0,
         };
       }
       outcomes[routeId].count++;
+      const wait = entityWaitAfterWarmup(entity);
+      if (Number.isFinite(wait)) { outcomes[routeId]._waitSum += wait; outcomes[routeId]._waitN++; }
+      const endTime = entity.completionTime ?? entity.renegeTime ?? null;
+      const sojourn = endTime != null ? truncateInterval(entity.arrivalTime, endTime) : null;
+      if (Number.isFinite(sojourn)) { outcomes[routeId]._sojournSum += sojourn; outcomes[routeId]._sojournN++; }
+    }
+    for (const o of Object.values(outcomes)) {
+      o.avgWait    = o._waitN    > 0 ? +(o._waitSum    / o._waitN).toFixed(4)    : null;
+      o.avgSojourn = o._sojournN > 0 ? +(o._sojournSum / o._sojournN).toFixed(4) : null;
+      delete o._waitSum; delete o._waitN; delete o._sojournSum; delete o._sojournN;
     }
 
     const elapsed = clock - _statsResetTime;

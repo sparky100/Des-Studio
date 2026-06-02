@@ -87,6 +87,8 @@ function outcomeRows(summary = {}) {
       status: outcome.status || '',
       endedBy: outcome.endedBy || '',
       count: Number(outcome.count) || 0,
+      avgWait: Number.isFinite(outcome.avgWait) ? outcome.avgWait : null,
+      avgSojourn: Number.isFinite(outcome.avgSojourn) ? outcome.avgSojourn : null,
     }))
     .filter(row => row.count > 0)
     .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
@@ -801,15 +803,19 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     ${htmlTable(['Resource type', 'Count', 'Utilisation'], utilRows)}`;
   }
 
+  const outcomeHasTimings = outcomes.some(r => r.avgWait != null || r.avgSojourn != null);
   const outcomesHtml = outcomes.length
     ? `<h3>Journey outcomes</h3>
     <p class="note">How each entity concluded its journey through the model.</p>
-    ${htmlTable(['Outcome', 'Status', 'Source', 'Count'], outcomes.map(row => [
-      row.routeLabel,
-      row.status || '—',
-      row.endedBy || '—',
-      formatInt(row.count) || '0',
-    ]))}`
+    ${htmlTable(
+      outcomeHasTimings
+        ? ['Outcome', 'Status', 'Source', 'Count', 'Avg wait', 'Avg time in system']
+        : ['Outcome', 'Status', 'Source', 'Count'],
+      outcomes.map(row => outcomeHasTimings
+        ? [row.routeLabel, row.status || '—', row.endedBy || '—', formatInt(row.count) || '0', row.avgWait != null ? formatN(row.avgWait) : '—', row.avgSojourn != null ? formatN(row.avgSojourn) : '—']
+        : [row.routeLabel, row.status || '—', row.endedBy || '—', formatInt(row.count) || '0']
+      )
+    )}`
     : '';
 
   // Time-series load chart (shown when timeSeries data was collected)
@@ -1120,12 +1126,16 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
   if (outcomesForMd.length) {
     lines.push('### Journey Outcomes');
     lines.push('');
-    lines.push(mdTable(['Outcome', 'Status', 'Source', 'Count'], outcomesForMd.map(row => [
-      row.routeLabel,
-      row.status || '—',
-      row.endedBy || '—',
-      formatInt(row.count) || '0',
-    ])));
+    const mdOutcomeHasTimings = outcomesForMd.some(r => r.avgWait != null || r.avgSojourn != null);
+    lines.push(mdTable(
+      mdOutcomeHasTimings
+        ? ['Outcome', 'Status', 'Source', 'Count', 'Avg wait', 'Avg time in system']
+        : ['Outcome', 'Status', 'Source', 'Count'],
+      outcomesForMd.map(row => mdOutcomeHasTimings
+        ? [row.routeLabel, row.status || '—', row.endedBy || '—', formatInt(row.count) || '0', row.avgWait != null ? formatN(row.avgWait) : '—', row.avgSojourn != null ? formatN(row.avgSojourn) : '—']
+        : [row.routeLabel, row.status || '—', row.endedBy || '—', formatInt(row.count) || '0']
+      )
+    ));
     lines.push('');
   }
 
