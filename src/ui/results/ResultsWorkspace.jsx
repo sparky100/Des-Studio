@@ -90,7 +90,7 @@ function formatNumber(value, digits = 1) {
   return rounded.includes(".") ? rounded.replace(/\.?0+$/, "") : rounded;
 }
 
-function formatMetricValue(value, digits = 2, suffix = "") {
+function formatMetricValue(value, digits = 1, suffix = "") {
   if (!Number.isFinite(Number(value))) return "—";
   return `${formatNumber(value, digits)}${suffix}`;
 }
@@ -273,7 +273,7 @@ function lineSeriesStats(series, yLabel, color, formatValue = v => formatNumber(
   ];
 }
 
-function SummaryCardGrid({ results, replicationResults = [] }) {
+export function SummaryCardGrid({ results, replicationResults = [] }) {
   const { C, FONT } = useTheme();
   const summary = results?.summary || {};
   // Derive replication count: prefer explicit replicationResults array length,
