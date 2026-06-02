@@ -49,6 +49,35 @@ function buildFedQueues(bEvents) {
   return queues;
 }
 
+function buildAllFedQueues(bEvents) {
+  const queues = new Set(buildFedQueues(bEvents));
+  for (const bEvent of bEvents) {
+    for (const m of effectString(bEvent).matchAll(/RELEASE\s*\([^,)]+,\s*([^)]+)/gi))
+      queues.add(m[1].trim().toLowerCase());
+    for (const branch of bEvent.routing || [])
+      if (branch.queueName) queues.add(branch.queueName.trim().toLowerCase());
+    for (const branch of bEvent.probabilisticRouting || [])
+      if (branch.queueName) queues.add(branch.queueName.trim().toLowerCase());
+    if (bEvent.defaultQueueName) queues.add(bEvent.defaultQueueName.trim().toLowerCase());
+  }
+  return queues;
+}
+
+function buildConsumedQueues(cEvents) {
+  const queues = new Set();
+  for (const cEvent of cEvents) {
+    const s = effectString(cEvent);
+    for (const m of s.matchAll(/ASSIGN\s*\(\s*([^,)]+)/gi))  queues.add(m[1].trim().toLowerCase());
+    for (const m of s.matchAll(/BATCH\s*\(\s*([^,)]+)/gi))   queues.add(m[1].trim().toLowerCase());
+    for (const m of s.matchAll(/COSEIZE\s*\(\s*([^,)]+)/gi)) queues.add(m[1].trim().toLowerCase());
+    for (const m of s.matchAll(/MATCH\s*\(\s*[^,]+,\s*([^,]+),\s*[^,]+,\s*([^,)]+)/gi)) {
+      queues.add(m[1].trim().toLowerCase());
+      queues.add(m[2].trim().toLowerCase());
+    }
+  }
+  return queues;
+}
+
 function hasAnyExitEffect(bEvents) {
   return bEvents.some(b => /\b(COMPLETE|RENEGE)\s*\(/i.test(effectString(b)));
 }
@@ -389,6 +418,27 @@ function chk011(model) {
 }
 
 /**
+ * CHK-013: Queue receives entities (via ARRIVE, RELEASE, or routing) but no C-event consumes from it.
+ */
+function chk013(model) {
+  const issues = [];
+  const fedQueues = buildAllFedQueues(model.bEvents || []);
+  const consumedQueues = buildConsumedQueues(model.cEvents || []);
+
+  for (const queueNameLower of fedQueues) {
+    if (consumedQueues.has(queueNameLower)) continue;
+    const qObj = (model.queues || []).find(q => (q.name || '').trim().toLowerCase() === queueNameLower);
+    const displayName = qObj ? (qObj.name || queueNameLower) : queueNameLower;
+    issues.push(makeIssue(
+      "warning", "CHK-013",
+      `Queue '${displayName}' receives entities but no C-event consumes from it — entities will accumulate indefinitely.`,
+      qObj?.id ?? null, displayName
+    ));
+  }
+  return issues;
+}
+
+/**
  * CHK-012: B-event routing condition is a string — must be a predicate object.
  */
 function chk012(model) {
@@ -433,6 +483,7 @@ export function checkModel(model) {
     ...chk010(model),
     ...chk011(model),
     ...chk012(model),
+    ...chk013(model),
   ];
 
   return all.sort((a, b) => (SEV_ORDER[a.severity] ?? 99) - (SEV_ORDER[b.severity] ?? 99));

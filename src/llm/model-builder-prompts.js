@@ -71,7 +71,15 @@ companionCsv rules:
 
 4. scheduledTime and all distParams values MUST be strings.
    ✓ CORRECT: "scheduledTime": "0", "distParams": {"mean": "5"}
-   ✗ WRONG:   "scheduledTime": 0, "distParams": {"mean": 5}`,
+   ✗ WRONG:   "scheduledTime": 0, "distParams": {"mean": 5}
+
+5. Every queue that receives entities MUST have a C-event that consumes from it.
+   A queue populated by ARRIVE() or RELEASE() with no C-event whose effect contains
+   ASSIGN(QueueName,...), BATCH(QueueName,N), COSEIZE(QueueName,...), or MATCH(...) will
+   fill indefinitely — entities never leave (CHK-013).
+
+   ✓ CORRECT: ARRIVE(Patient, Triage Queue) paired with C-event effect "ASSIGN(Triage Queue, Nurse)"
+   ✗ WRONG:   ARRIVE(Patient, Discharge Queue) with no C-event that ASSIGN/BATCH/COSEIZE from it`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:

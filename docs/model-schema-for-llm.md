@@ -37,6 +37,7 @@ Read this before writing any model JSON.
 | 8 | Distribution params as numbers | Must be strings: `"distParams": { "mean": "5" }` — never `{ "mean": 5 }`. |
 | 9 | `RENEGE(Patient)` instead of `RENEGE(ctx)` | Always use `RENEGE(ctx)`. The entity-type form silently fails (validation V25). |
 | 10 | No `COMPLETE()` or `RENEGE()` sink | Every model needs at least one exit path. Missing sinks = entities accumulate forever (validation V8, CHK-002). |
+| 11 | Queue fed but no C-event consumes it | Every queue receiving entities via `ARRIVE()`, `RELEASE()`, or routing must have a C-event whose `effect` includes `ASSIGN(QueueName,...)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH`. Otherwise entities accumulate forever (CHK-013). |
 
 ---
 
@@ -818,6 +819,7 @@ All generated model JSON MUST pass every blocking rule below.
 | CHK-008 | A server entity type is defined but never used in any C-event — it will show 0% utilisation |
 | W-CAP-01 | Multi-class resource contention — multiple customer types competing for the same server type may cause unexpected priority inversion |
 | W-CAP-02 | Very high arrival rate — an arrival schedule uses Exponential with mean interval < 0.001, suggesting arrivals beyond discrete-event simulation limits |
+| CHK-013 | A queue receives entities (via `ARRIVE`, `RELEASE`, or routing) but no C-event consumes from it — entities will accumulate indefinitely |
 
 ---
 
@@ -1008,7 +1010,20 @@ Common modelling patterns and the mistakes to avoid when generating DES Studio m
 
 ---
 
-### 16.15 `scheduledTime` as String vs. Number
+### 16.15 Queue-to-C-Event Binding (CHK-013)
+
+Every queue that receives entities must have at least one C-event that consumes from it. A queue populated by `ARRIVE()`, `RELEASE()`, or routing with no consuming C-event will fill indefinitely — entities never leave.
+
+| Pattern | When to Use | Example |
+|---|---|---|
+| **✓ Every fed queue consumed** | Each queue receiving entities has a C-event ASSIGN/BATCH/COSEIZE | `ARRIVE(Patient, Triage Queue)` + C-event `ASSIGN(Triage Queue, Nurse)` |
+| **✗ Orphan queue** | Queue receives entities but no C-event drains it — entities pile up | `RELEASE(Nurse, Discharge Bay)` + no C-event referencing `Discharge Bay` |
+
+**Rule:** For every queue in `queues[]`, trace which B-event places entities into it (via `ARRIVE`, `RELEASE`, routing, or `defaultQueueName`) and confirm there is a C-event whose `effect` contains `ASSIGN(QueueName,...)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH(…,QueueName,…)`. Multi-stage pipelines are the most common source of orphan queues: a stage-1 completion event `RELEASE(Nurse, Treatment Queue)` must always be paired with a stage-2 C-event `ASSIGN(Treatment Queue, Doctor)`.
+
+---
+
+### 16.16 `scheduledTime` as String vs. Number
 
 | Pattern | When to Use | Example |
 |---|---|---|
