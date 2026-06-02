@@ -407,7 +407,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
         {/* ── Node Palette ── */}
         <div style={{
           flexShrink: 0,
-          width: paletteCollapsed ? 44 : 200,
+          width: paletteCollapsed ? 44 : 240,
           transition: "width 220ms cubic-bezier(0.4,0,0.2,1)",
           overflow: "hidden",
         }}>
@@ -471,7 +471,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
           ) : (
             /* Expanded palette */
             <div style={{
-              width: 160,
+              width: 240,
               background: C.panel,
               border: `1px solid ${C.border}`,
               borderRadius: 6,
