@@ -1,7 +1,8 @@
 # DES Studio — Engineering Specification
 
-**Version:** 7.0.0  
-**Date:** 2026-06-01  
+**Version:** 7.1.0  
+**Date:** 2026-06-02  
+**Note:** package.json version is 0.9.0-Beta; this document uses an internal engineering version number.  
 **Sprint baseline:** Sprint 79  
 **Status:** Living document — updated at end of each sprint  
 **Audience:** Engineering team, technical contributors, platform integrators
@@ -52,11 +53,12 @@ DES Studio is a single-page application with a pure-JavaScript simulation engine
                 │ HTTPS / Supabase JS client
 ┌───────────────▼─────────────────────────────────────────────┐
 │                    Supabase (PostgreSQL)                     │
-│  models  run_results  model_schedules  model_versions       │
-│  user_settings  platform_config  feedback  profiles         │
+│  des_models  simulation_runs  model_schedules               │
+│  model_versions  user_settings  platform_config             │
+│  feedback  profiles  share_links  sweeps  experiments       │
 │                                                             │
 │  Auth: Supabase Auth (JWT, magic link, email+password)      │
-│  RLS: row_level_security on all tables (user_id filter)     │
+│  RLS: row_level_security on all tables (owner_id filter)    │
 │  Edge Functions: llm-proxy  notify-new-signup               │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -94,12 +96,28 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 |------|---------------|
 | `index.js` | `buildEngine()` factory, FEL management, run orchestration |
 | `phases.js` | Phase A (clock advance), Phase B (B-Event fire), Phase C (C-scan with restart rule) |
-| `macros.js` | 15 effect macros: ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE, BATCH, UNBATCH, PREEMPT, FAIL, REPAIR, SPLIT, COSEIZE, MATCH, SET, COST |
+| `macros.js` | 19 effect macros: ARRIVE, ASSIGN, BATCH, COMPLETE, COSEIZE, COST, DRAIN, FAIL, FILL, MATCH, PREEMPT, RELEASE, RENEGE, RENEGE_OLDEST, REPAIR, SET, SET_ATTR, SPLIT, UNBATCH |
 | `entities.js` | Entity lifecycle, queue discipline sort functions, server pool management, `_busyStart`/`_busyTime` utilisation tracking |
 | `distributions.js` | Sampler registry, seeded RNG (mulberry32), all 11 distribution types |
 | `conditions.js` | Safe predicate evaluator — no `eval`, no `new Function` |
-| `validation.js` | 38 validation rules (V1–V38), pre-run gate |
+| `validation.js` | V1–V39 (V7 unused); 38 distinct rules, pre-run gate |
+| `statistics.js` | CI, batch means, ANOVA, Tukey HSD, Welch test |
+| `replication-runner.js` | Parallel replication orchestration |
+| `worker.js` | Web Worker entry point |
+| `run-admission.js` | Tier-based run limits (Free/Standard/Pro) enforced before any run |
+| `adaptive-batch.js` | Adaptive replication logic for Explore panel |
+| `sweep-runner.js` | Parametric sweep execution |
+| `sweep-params.js` | Sweep parameter space |
+| `complexity-estimator.js` | Pre-run complexity estimate |
+| `public-api.js` | Public engine API |
+| `clockUtils.js` | Clock utilities |
+| `queue-refs.js` | Queue reference helpers |
+| `progress-contract.js` | Progress reporting contract |
+| `distribution-fitting.js` | Distribution fitting utilities |
+| `templates.js` | Model templates |
 | `adapters/` | Real-time data sources: RestAdapter, ScheduleFeedAdapter, ActualsStreamAdapter |
+| `adapters/OpenSkyAdapter.js` | OpenSky real-time flight data adapter |
+| `adapters/mockAdapter.js` | Mock adapter for testing |
 
 ### 1.4 Three-Phase execution loop
 
@@ -260,75 +278,110 @@ All distributions sample via `state.rng` (mulberry32 seeded PRNG). No distributi
 
 ### 2.2 Supabase schema
 
+The authoritative source of truth for schema details is the migration files under `supabase/migrations/`.
+
 ```sql
--- User models
-CREATE TABLE models (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name         TEXT NOT NULL,
-  description  TEXT,
-  model_json   JSONB NOT NULL,
-  user_id      UUID REFERENCES auth.users NOT NULL,
-  is_public    BOOLEAN DEFAULT FALSE,
-  tags         TEXT[],
-  created_at   TIMESTAMPTZ DEFAULT now(),
-  updated_at   TIMESTAMPTZ DEFAULT now()
+-- User models (actual table name: des_models)
+CREATE TABLE des_models (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name            TEXT NOT NULL,
+  description     TEXT,
+  owner_id        UUID REFERENCES auth.users NOT NULL,
+  visibility      TEXT DEFAULT 'private',   -- 'private' | 'public' (replaces is_public BOOLEAN)
+  access          JSONB DEFAULT '{}',        -- per-user access grants: { "<userId>": "viewer"|"editor" }
+  entity_types    JSONB NOT NULL DEFAULT '[]',
+  state_variables JSONB NOT NULL DEFAULT '[]',
+  b_events        JSONB NOT NULL DEFAULT '[]',
+  c_events        JSONB NOT NULL DEFAULT '[]',
+  queues          JSONB NOT NULL DEFAULT '[]',
+  goals           JSONB NOT NULL DEFAULT '[]',
+  tags            TEXT[],
+  model_json      JSONB,                     -- supplementary fields: graph, experimentDefaults, dataSources
+  latest_version  INTEGER DEFAULT 0,
+  parent_model_id UUID REFERENCES des_models(id),
+  created_at      TIMESTAMPTZ DEFAULT now(),
+  updated_at      TIMESTAMPTZ DEFAULT now()
 );
 
--- Simulation run results
-CREATE TABLE run_results (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  model_id        UUID REFERENCES models NOT NULL,
-  run_label       TEXT,
-  summary         JSONB,              -- KPIs, CI, replication count
-  experiment_config JSONB,            -- seed, warmup, maxSimTime, replications
-  model_snapshot  JSONB,             -- full model_json at time of run (for Reproduce)
-  schedules_map   JSONB,             -- resolved schedule rows (ADR-016)
-  tags            TEXT[],
-  archived        BOOLEAN DEFAULT FALSE,
-  created_at      TIMESTAMPTZ DEFAULT now()
+-- Simulation run results (actual table name: simulation_runs, uses flat denormalised columns)
+CREATE TABLE simulation_runs (
+  id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  model_id             UUID REFERENCES des_models NOT NULL,
+  run_by               UUID REFERENCES auth.users NOT NULL,
+  ran_at               TIMESTAMPTZ DEFAULT now(),
+  replications         INTEGER,
+  max_simulation_time  REAL,
+  warmup_period        REAL,
+  seed                 BIGINT,
+  total_arrived        INTEGER DEFAULT 0,
+  total_served         INTEGER DEFAULT 0,
+  total_reneged        INTEGER DEFAULT 0,
+  avg_wait_time        REAL,
+  avg_service_time     REAL,
+  renege_rate          REAL DEFAULT 0,
+  duration_ms          INTEGER,
+  run_label            TEXT,
+  tags                 TEXT[] NOT NULL DEFAULT '{}',
+  archived             BOOLEAN NOT NULL DEFAULT false,
+  results_json         JSONB,               -- aggregated KPIs, CI, replication summaries
+  ai_insights          JSONB,
+  version_id           UUID REFERENCES model_versions(id),
+  -- Provenance columns (immutable after insert — enforced by trigger)
+  model_snapshot       JSONB,
+  engine_version       TEXT,
+  prng_algorithm       TEXT DEFAULT 'mulberry32',
+  base_seed            BIGINT,
+  narrative_text       TEXT,
+  model_description_text TEXT
 );
 
 -- Timetable data (ADR-016 — separated from model_json)
 CREATE TABLE model_schedules (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  model_id     UUID REFERENCES models NOT NULL,
-  name         TEXT NOT NULL,
-  description  TEXT,
-  schedule_json JSONB NOT NULL,       -- rows: [{time, entityType, attributes}]
-  is_default   BOOLEAN DEFAULT FALSE,
-  created_by   UUID REFERENCES auth.users,
-  created_at   TIMESTAMPTZ DEFAULT now(),
-  updated_at   TIMESTAMPTZ DEFAULT now(),
-  CONSTRAINT one_default_per_model UNIQUE NULLS NOT DISTINCT (model_id, is_default)
-    WHERE (is_default = TRUE)
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  model_id      UUID REFERENCES des_models NOT NULL,
+  name          TEXT NOT NULL,
+  description   TEXT,
+  schedule_json JSONB NOT NULL,  -- entries: [{ eventId, rows: [{time, entityType, attributes}] }]
+  is_default    BOOLEAN DEFAULT FALSE,
+  created_by    UUID REFERENCES auth.users,
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  updated_at    TIMESTAMPTZ DEFAULT now()
 );
 
 -- Explicit model version milestones (ADR-015)
 CREATE TABLE model_versions (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  model_id     UUID REFERENCES models NOT NULL,
-  version_label TEXT NOT NULL,
-  notes        TEXT,
-  model_snapshot JSONB NOT NULL,
-  created_at   TIMESTAMPTZ DEFAULT now(),
-  created_by   UUID REFERENCES auth.users
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  model_id      UUID REFERENCES des_models NOT NULL,
+  version       INTEGER NOT NULL,            -- sequential integer (not version_label)
+  name          TEXT,
+  notes         TEXT,
+  model_json    JSONB NOT NULL,              -- snapshot (not model_snapshot)
+  is_structural BOOLEAN DEFAULT true,
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  created_by    UUID REFERENCES auth.users,
+  UNIQUE(model_id, version)
 );
 
 -- User feedback
 CREATE TABLE feedback (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id      UUID REFERENCES auth.users,  -- nullable (anonymous)
-  category     TEXT,
-  message      TEXT NOT NULL,
-  app_version  TEXT,
-  page_context TEXT,
-  user_agent   TEXT,
-  status       TEXT DEFAULT 'new',
-  created_at   TIMESTAMPTZ DEFAULT now()
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       UUID REFERENCES auth.users,  -- nullable (anonymous)
+  category      TEXT NOT NULL,
+  message       TEXT NOT NULL,
+  app_version   TEXT,
+  page_context  TEXT,
+  user_agent    TEXT,
+  account_email TEXT,
+  reply_email   TEXT,
+  status        TEXT DEFAULT 'new',
+  created_at    TIMESTAMPTZ DEFAULT now()
 );
+
+-- Additional tables: share_links, sweeps, experiments, user_settings,
+--   platform_config, profiles, admin_audit_log (see supabase/migrations/).
 ```
 
-Row-Level Security is enabled on all tables. All queries filter by `user_id = auth.uid()`. Public models expose only non-sensitive fields via a separate `public_models` view.
+Row-Level Security is enabled on all tables. Models filter by `owner_id = auth.uid()`. Access-controlled models use the `access` JSONB column. Public models are exposed via a read-only view.
 
 ### 2.3 State variables (runtime)
 
@@ -381,11 +434,18 @@ The returned `Engine` object exposes:
 
 **`buildEngine()` is the only engine import allowed in UI code.** No UI component may import from `src/engine/macros.js`, `src/engine/phases.js`, or any other engine sub-module directly.
 
-### 3.2 src/db/models.js — database interface
+### 3.2 src/db/ — database layer
 
-All database access from UI components goes through this module. Direct Supabase client calls from components are forbidden.
+The `src/db/` layer consists of four modules. Direct Supabase client calls from UI components are forbidden.
 
-Key exported functions:
+| Module | Responsibility |
+|--------|---------------|
+| `models.js` | All model, run history, schedule, version, and admin CRUD operations |
+| `supabase.js` | Supabase client singleton; `submitFeedback()`; `touchLastActive()` |
+| `results-persistence.js` | Payload trimming and size-guard before `simulation_runs` insert |
+| `runRecord.js` | Run record construction (`buildRunRecord()`); narrative update (`updateRunNarrative()`) |
+
+Key exported functions from `models.js`:
 
 ```typescript
 // Model CRUD
@@ -431,13 +491,18 @@ All LLM calls go through `src/llm/prompts.js`. Prompts are built as structured o
 
 | Builder function | Purpose |
 |-----------------|---------|
-| `buildModelGenerationPrompt(description)` | Converts natural-language description to `model_json` |
-| `buildExplainResultsPrompt(model, results)` | Generates narrative for Results → Explain |
-| `buildCompareRunsPrompt(runA, runB)` | Structured comparison of two run results |
-| `buildPlanRefinementPrompt(model, feedback)` | Patches `model_json` based on user feedback |
-| `buildModelQueryPrompt(model, results, question)` | Context-aware Q&A for Model Assistant sidebar |
-| `buildModelDescriptionPrompt(model)` | Plain-English description for Senior Management report |
-| `buildCiResults(results)` | Formats CI data for report narrative |
+| `buildNarrativePrompt(model, experimentConfig, results)` | Generates narrative for Results → Explain (replaces `buildModelGenerationPrompt`) |
+| `buildExplainResultsPrompt(model, experimentConfig, results, ciResults)` | Generates narrative for Results → Explain tab |
+| `buildComparisonPrompt(modelName, runA, runB, modelA, modelB)` | Structured comparison of two run results (actual name; not `buildCompareRunsPrompt`) |
+| `buildPlanRefinementPrompt(model, experimentConfig, results)` | Patches `model_json` based on user feedback |
+| `buildResultsQueryPrompt(question, model, results, conversationHistory)` | Context-aware Q&A for Model Assistant sidebar (actual name; not `buildModelQueryPrompt`) |
+| `buildModelDescriptionPrompt(model, results)` | Plain-English description for Senior Management report |
+| `buildCiResults(aggregateStats)` | Formats CI data for report narrative |
+| `buildSuggestionPrompt(model, experimentConfig, results)` | Generates improvement suggestions |
+| `buildSensitivityPrompt(modelName, experimentConfig, ciResults)` | Sensitivity analysis narrative |
+| `buildModelQueryPrompt(question, model, history)` | Model structure Q&A (separate from results query) |
+| `buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, ciSummary, tier)` | Explore/Adaptive Batch analysis narrative |
+| `buildReportRecommendationsPrompt(model, results)` | Report recommendations section |
 
 ### 3.5 Report generation (src/reports/)
 
@@ -472,7 +537,7 @@ The report pipeline:
 |------|-----------|
 | **Dynamic code execution** | No `eval()`, no `new Function()`, no `Function()` constructor anywhere in the engine or condition evaluator. Predicates are parsed JSON trees evaluated by `conditions.js:evaluateCondition()`. |
 | **Injection via model fields** | All model fields are consumed as data, never concatenated into code strings. Distribution parameters are numbers; predicate nodes are typed JSON objects. |
-| **Database access control** | Supabase RLS enforces `user_id = auth.uid()` on every table. No shared-state tables. Public models are exposed via a read-only view. |
+| **Database access control** | Supabase RLS enforces `owner_id = auth.uid()` on `des_models` and `run_by = auth.uid()` on `simulation_runs`. No shared-state tables. Public models are exposed via a read-only view. |
 | **LLM prompt injection** | LLM responses are parsed and validated against the model JSON schema before `Apply` is offered. Malformed or schema-violating responses are rejected with a user-visible error. |
 | **Credential exposure** | LLM API keys are held exclusively in Supabase Edge Function environment variables. The `llm-proxy` function proxies all LLM calls server-side. No AI provider key is ever sent to or stored in the browser. |
 | **WCAG 2.1 AA** | All interactive elements have ARIA labels. Colour contrast meets AA minimums. Keyboard navigation supported throughout. |
@@ -485,7 +550,7 @@ The report pipeline:
 | 30 replications, 100,000 events each | < 60 seconds | Worker pool, 4 workers |
 | M/M/1 analytical accuracy | Within 5% of formula | Benchmark gate in CI (`mm1_benchmark.js`) |
 | M/M/c analytical accuracy | Within 5% of formula | Benchmark gate in CI (`mmc_benchmark.js`) |
-| model_json parse + validate | < 100 ms | All 38 validation rules |
+| model_json parse + validate | < 100 ms | V1–V39 (V7 unused); 38 distinct rules |
 | Visual Designer canvas: 50 nodes | 60 fps | @xyflow/react default render loop |
 
 Worker pool size defaults to `navigator.hardwareConcurrency - 1` (minimum 2). The replication runner distributes seeds sequentially to workers; each worker is stateless and receives the full `model_json` on each call.
@@ -494,9 +559,10 @@ Worker pool size defaults to `navigator.hardwareConcurrency - 1` (minimum 2). Th
 
 `src/db/results-persistence.js` enforces payload size limits before saving to Supabase:
 
-- **Detailed results** (entity-level trace, full time-series): stored at full fidelity for the most recent run per model.
-- **Summary results** (KPI cards, CI tables): always stored.
-- **Time-series resolution**: downsampled to 500 points per series if raw count exceeds 2,000.
+- **Detailed results** (entity-level trace, full time-series): stored at full fidelity when `resultDetailLevel = "full"`.
+- **Summary results** (KPI cards, CI tables): always stored (`resultDetailLevel = "minimal"`).
+- **Compact time-series**: downsampled to `COMPACT_TIME_SERIES_MAX_POINTS = 200` points per series when `resultDetailLevel = "compact"`.
+- **Payload guard**: if the JSON payload exceeds `PAYLOAD_SAFE_BYTES = 800,000` bytes after detail-level trimming, the same stripping applied by `"minimal"` is forced automatically to prevent INSERT timeouts.
 
 ### 4.4 MAX_C_PASSES guard
 
@@ -506,6 +572,29 @@ The Phase C loop has a hard limit of `MAX_C_PASSES = 500` iterations per clock t
 3. Continuation of the simulation (the run is not aborted).
 
 Models consistently triggering this guard should be reviewed: the most common cause is a circular C-Event dependency or a condition that becomes true immediately after its effects fire.
+
+### 4.5 Additional subsystems
+
+#### Run Admission (`src/engine/run-admission.js`)
+
+Tier-based run limits enforced before any run starts. `getRunAdmission(model, options)` returns an admission decision based on the user's plan tier (Free/Standard/Pro), model complexity, and estimated event count. Prevents oversized runs from reaching the engine.
+
+#### Explore / Adaptive Batch (`src/engine/adaptive-batch.js`)
+
+AI-driven adaptive replication orchestration used by the Explore panel. `runAdaptiveBatch(options)` runs successive batches of replications, stopping when the confidence interval half-width meets the target precision threshold or a maximum replication count is reached.
+
+#### Confidence Interval method
+
+The primary CI method is **between-replication t-CI**: `confidenceInterval95()` in `src/engine/statistics.js` computes a 95% t-CI across replication-level means. `batchMeansCI()` is also available for single-replication within-run analysis but is not the default CI reported in the Results panel.
+
+#### Voice Input
+
+Web Speech API voice input is available in three components: `HelpAssistant.jsx`, `AiGeneratedModelPanel.jsx`, and `DiagnosticsTab.jsx`. Each uses `webkitSpeechRecognition`/`SpeechRecognition` to transcribe spoken input into the relevant text field.
+
+#### src/simulation/ — Model Checker and Trace Collector
+
+`src/simulation/modelChecker.js` — static model analysis run before execution to detect structural issues beyond the validation rule set.  
+`src/simulation/traceCollector.js` — collects per-entity trace events during step-mode execution for the Step Log panel.
 
 ---
 
@@ -622,7 +711,7 @@ These rules are enforced in code and must not be violated by any PR. They are re
 
 2. **Single engine entry point.** UI code calls `buildEngine()` from `src/engine/index.js` only. No UI component imports from `src/engine/phases.js`, `src/engine/macros.js`, or other engine internals.
 
-3. **Centralised DB access.** No UI component queries Supabase directly. All DB calls go through `src/db/models.js` or `src/db/supabase.js`.
+3. **Centralised DB access.** No UI component queries Supabase directly. All DB calls go through `src/db/models.js`, `src/db/supabase.js`, `src/db/results-persistence.js`, or `src/db/runRecord.js`.
 
 4. **Seeded RNG everywhere.** No `Math.random()` call exists in `src/engine/`. All random sampling uses `state.rng` (the run's mulberry32 instance). This ensures reproducibility.
 

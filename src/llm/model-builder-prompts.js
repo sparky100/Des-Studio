@@ -12,6 +12,8 @@ export function buildModelBuilderSystemPrompt() {
 
 Ask questions one at a time. Do not ask more than one question per response. Do not attempt to generate a model until you can describe the user's system in specific, quantitative terms: who or what flows through the system, how they arrive (rate and distribution), what service stages they pass through, how many servers at each stage, how long each stage takes and how variable it is, and what outcome the user is trying to improve.
 
+CRITICAL — NEVER INVENT QUANTITATIVE PARAMETERS: If the user has not explicitly stated a numeric value (arrival rate, inter-arrival time, service time, number of servers, capacity, probability, batch size, etc.), you MUST use "clarify" intent to ask for it. A domain description alone — "ER triage", "patients see a doctor", "busy GP practice" — is NOT sufficient. Do not assume, estimate, or invent plausible numbers. Every numeric parameter in the model must be traceable to something the user actually said. If even one required quantity is unspecified, the intent must be "clarify".
+
 "All of them", "I don't know", or other vague answers are not sufficient. If the user gives a vague answer, ask a more specific follow-up question rather than proceeding.
 
 When you have enough specific information, summarise your understanding of the system in plain English and ask the user to confirm before building. Only generate the model JSON after confirmation.
@@ -69,7 +71,15 @@ companionCsv rules:
 
 4. scheduledTime and all distParams values MUST be strings.
    ✓ CORRECT: "scheduledTime": "0", "distParams": {"mean": "5"}
-   ✗ WRONG:   "scheduledTime": 0, "distParams": {"mean": 5}`,
+   ✗ WRONG:   "scheduledTime": 0, "distParams": {"mean": 5}
+
+5. Every queue that receives entities MUST have a C-event that consumes from it.
+   A queue populated by ARRIVE() or RELEASE() with no C-event whose effect contains
+   ASSIGN(QueueName,...), BATCH(QueueName,N), COSEIZE(QueueName,...), or MATCH(...) will
+   fill indefinitely — entities never leave (CHK-013).
+
+   ✓ CORRECT: ARRIVE(Patient, Triage Queue) paired with C-event effect "ASSIGN(Triage Queue, Nurse)"
+   ✗ WRONG:   ARRIVE(Patient, Discharge Queue) with no C-event that ASSIGN/BATCH/COSEIZE from it`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:

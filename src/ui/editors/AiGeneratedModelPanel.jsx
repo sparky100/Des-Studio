@@ -906,7 +906,7 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
           )}
           {loading && <BuildingIndicator />}
           {notice && <Bubble role="system" content={notice} />}
-          {error && <div role="alert"><InfoBox color={C.red}>{error}</InfoBox>{rawErrorText ? <details style={{marginTop:6,cursor:"pointer"}}><summary style={{fontSize:11,color:C.muted,fontFamily:FONT}}>Show raw AI response ({rawErrorText.length} chars)</summary><pre style={{fontSize:10,fontFamily:"monospace",lineHeight:1.4,maxHeight:200,overflow:"auto",padding:8,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,whiteSpace:"pre-wrap",wordBreak:"break-all",marginTop:4}}>{rawErrorText.length > 3000 ? rawErrorText.slice(0,3000)+"\n\n... (truncated, full length: "+rawErrorText.length+" chars)" : rawErrorText}</pre></details> : null}</div>}
+          {error && <div role="alert"><InfoBox color={C.red}>{error}</InfoBox>{rawErrorText ? <details style={{marginTop:6,cursor:"pointer"}}><summary style={{fontSize:11,color:C.muted,fontFamily:FONT}}>Show raw AI response ({rawErrorText.length} chars)</summary><pre style={{fontSize:10,fontFamily:"monospace",lineHeight:1.4,maxHeight:200,overflow:"auto",padding:8,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,whiteSpace:"pre-wrap",wordBreak:"break-all",marginTop:4}}>{rawErrorText}</pre></details> : null}</div>}
           <div />
         </div>
         <div ref={inputAreaRef} style={{ padding: 14, borderTop: `1px solid ${C.border}`, display: "grid", gridTemplateColumns: "1fr auto auto", gap: 8, alignItems: "end" }}>
