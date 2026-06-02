@@ -1607,6 +1607,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             : async()=>null}
           onSaveInsights={saveAiInsights}
           onGoToResults={()=>{setShowExplorePanel(false);setTab("results");setResultsView("summary");}}
+          onApplyModel={(nextModel)=>{setWholeModel(nextModel);setShowExplorePanel(false);}}
           onClose={()=>setShowExplorePanel(false)}
         />
       )}
