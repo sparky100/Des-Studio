@@ -1,7 +1,7 @@
 // ui/execute/DiagnosticsTab.jsx — F69.3 + F69.4: AI diagnosis panel and chat
 import { useCallback, useEffect, useRef, useState } from "react";
 ;
-import { Btn } from "../shared/components.jsx";
+import { Btn, MicIcon, ArrowUpIcon } from "../shared/components.jsx";
 import { supabase } from "../../db/supabase.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
@@ -226,6 +226,8 @@ export function DiagnosticsTab({ model, results, onGoToNode }) {
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
   const chatEndRef = useRef(null);
 
   useEffect(() => {
@@ -297,6 +299,32 @@ export function DiagnosticsTab({ model, results, onGoToNode }) {
       setChatLoading(false);
     }
   }, [chatInput, chatMessages, chatLoading, model, results]);
+
+  const toggleListening = () => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (event) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) transcript += event.results[i][0].transcript;
+      }
+      if (transcript) setChatInput(prev => prev + (prev.trim() ? " " : "") + transcript);
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognition.start();
+    recognitionRef.current = recognition;
+    setListening(true);
+  };
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -495,13 +523,41 @@ export function DiagnosticsTab({ model, results, onGoToNode }) {
               opacity: chatLoading ? 0.6 : 1,
             }}
           />
-          <Btn
-            variant="primary"
-            disabled={!chatInput.trim() || chatLoading}
-            onClick={() => handleChatSend()}
+          <button
+            type="button"
+            aria-label={listening ? "Stop voice input" : "Start voice input"}
+            title={typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition) ? "Voice input" : "Voice input requires Chrome or Edge"}
+            onClick={toggleListening}
+            disabled={chatLoading}
+            style={{
+              width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+              background: listening ? C.red + "22" : "transparent",
+              border: `1px solid ${listening ? C.red : C.border}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: chatLoading ? "not-allowed" : "pointer",
+              opacity: chatLoading ? 0.45 : 1,
+              transition: "all .15s",
+            }}
           >
-            Send
-          </Btn>
+            <MicIcon size={15} color={listening ? C.red : C.muted} />
+          </button>
+          <button
+            type="button"
+            aria-label="Send"
+            onClick={() => handleChatSend()}
+            disabled={!chatInput.trim() || chatLoading}
+            style={{
+              width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+              background: !chatInput.trim() || chatLoading ? C.muted : C.accent,
+              border: "none",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: !chatInput.trim() || chatLoading ? "not-allowed" : "pointer",
+              opacity: !chatInput.trim() || chatLoading ? 0.35 : 1,
+              transition: "opacity .12s, background .12s",
+            }}
+          >
+            <ArrowUpIcon size={16} color={C.bg} />
+          </button>
         </div>
         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
           Press Enter to send · Shift+Enter for new line

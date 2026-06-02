@@ -122,9 +122,78 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       }))
     : lastResult?.waitDist;
 
+// Compute an ensemble-average time series from all replication time series.
+// For each time grid point we take the last-known snapshot per replication
+// (step interpolation — correct for discrete queue counts) and average across reps.
+function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
+  const allSeries = replicationPayloads
+    .map(p => p?.result?.timeSeries)
+    .filter(ts => Array.isArray(ts) && ts.length > 0);
+
+  if (allSeries.length === 0) return undefined;
+  if (allSeries.length === 1) return allSeries[0];
+
+  // Union of all time points, then sample evenly if too many
+  const allTimes = new Set();
+  for (const ts of allSeries) for (const pt of ts) allTimes.add(pt.t);
+  let timeGrid = Array.from(allTimes).sort((a, b) => a - b);
+  if (timeGrid.length > maxPoints) {
+    const step = (timeGrid.length - 1) / (maxPoints - 1);
+    timeGrid = Array.from({ length: maxPoints }, (_, i) => timeGrid[Math.round(i * step)]);
+  }
+
+  // Collect all key names across all reps
+  const queueNames = new Set();
+  const typeNames = new Set();
+  for (const ts of allSeries) {
+    for (const pt of ts) {
+      for (const k of Object.keys(pt.byQueue || {})) queueNames.add(k);
+      for (const k of Object.keys(pt.byType || {})) typeNames.add(k);
+    }
+  }
+
+  // For each replication, do a single O(M) forward pass to find the last-known
+  // snapshot at each grid time — avoids O(M×N) nested scan
+  const repSnapshots = allSeries.map(ts => {
+    const snaps = [];
+    let j = 0;
+    for (const gridT of timeGrid) {
+      while (j < ts.length - 1 && ts[j + 1].t <= gridT) j++;
+      snaps.push(ts[j].t <= gridT ? ts[j] : null);
+    }
+    return snaps;
+  });
+
+  // Average across replications at each grid point
+  return timeGrid.map((t, gi) => {
+    const byQueue = {};
+    const byType = {};
+
+    for (const qName of queueNames) {
+      let sumWaiting = 0, sumTotal = 0, count = 0;
+      for (const snaps of repSnapshots) {
+        const q = snaps[gi]?.byQueue?.[qName];
+        if (q != null) { sumWaiting += q.waiting ?? 0; sumTotal += q.total ?? 0; count++; }
+      }
+      if (count > 0) byQueue[qName] = { waiting: sumWaiting / count, total: sumTotal / count };
+    }
+
+    for (const tName of typeNames) {
+      let sumWaiting = 0, sumBusy = 0, sumIdle = 0, sumTotal = 0, count = 0;
+      for (const snaps of repSnapshots) {
+        const ty = snaps[gi]?.byType?.[tName];
+        if (ty != null) { sumWaiting += ty.waiting ?? 0; sumBusy += ty.busy ?? 0; sumIdle += ty.idle ?? 0; sumTotal += ty.total ?? 0; count++; }
+      }
+      if (count > 0) byType[tName] = { waiting: sumWaiting / count, busy: sumBusy / count, idle: sumIdle / count, total: sumTotal / count };
+    }
+
+    return { t, byQueue, byType };
+  });
+}
+
   return {
     snap: { clock: finalTime },
-    timeSeries: lastResult?.timeSeries,
+    timeSeries: averageBatchTimeSeries(replicationPayloads),
     waitDist,
     summary: {
       total,

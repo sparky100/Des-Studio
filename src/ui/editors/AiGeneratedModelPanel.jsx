@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { callModelBuilder, streamModelBuilder } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
-import { Btn, Empty, Field, InfoBox, SH } from "../shared/components.jsx";
+import { Btn, Empty, Field, InfoBox, SH, MicIcon, ArrowUpIcon } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { useViewport } from "../shared/hooks.js";
 import { ModelDiffPreview } from "./ModelDiffPreview.jsx";
@@ -925,24 +925,36 @@ export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveMode
             onClick={toggleListening}
             disabled={!canEdit || loading}
             style={{
-              background: listening ? C.red + "22" : C.surface,
+              width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+              background: listening ? C.red + "22" : "transparent",
               border: `1px solid ${listening ? C.red : C.border}`,
-              borderRadius: 5,
-              color: listening ? C.red : C.muted,
-              fontFamily: FONT,
-              fontSize: 10,
-              fontWeight: 600,
-              padding: "7px 11px",
-              cursor: canEdit && !loading ? "pointer" : "default",
-              opacity: canEdit && !loading ? 1 : 0.5,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: canEdit && !loading ? "pointer" : "not-allowed",
+              opacity: canEdit && !loading ? 1 : 0.45,
               transition: "all .15s",
               alignSelf: "end",
-              lineHeight: 1,
             }}
           >
-            {listening ? "■ Stop" : "Mic"}
+            <MicIcon size={15} color={listening ? C.red : C.muted} />
           </button>
-          <Btn variant="primary" onClick={() => send()} disabled={!draft.trim() || loading || !canEdit}>{loading ? "Sending..." : "Send"}</Btn>
+          <button
+            type="button"
+            aria-label="Send"
+            onClick={() => send()}
+            disabled={!draft.trim() || loading || !canEdit}
+            style={{
+              width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+              background: !draft.trim() || loading || !canEdit ? C.muted : C.accent,
+              border: "none",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: !draft.trim() || loading || !canEdit ? "not-allowed" : "pointer",
+              opacity: !draft.trim() || loading || !canEdit ? 0.35 : 1,
+              transition: "opacity .12s, background .12s",
+              alignSelf: "end",
+            }}
+          >
+            <ArrowUpIcon size={16} color={C.bg} />
+          </button>
         </div>
       </section>
       )}

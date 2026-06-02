@@ -286,9 +286,9 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
   const reneged = Number(summary.reneged ?? summary.totalReneged ?? 0);
   const leftRate = totalArrived > 0 ? (reneged / totalArrived) * 100 : null;
 
-  // For count metrics, compute the per-run average when running multi-rep.
+  // For count metrics, compute the per-run average when running multi-rep (integer).
   const avgPerRun = (total) =>
-    isMultiRep && total > 0 ? (total / repCount).toFixed(1) : null;
+    isMultiRep && total > 0 ? Math.round(total / repCount) : null;
 
   const cards = [
     {
@@ -355,8 +355,19 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
 
   return (
     <section style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
-        RESULTS SUMMARY
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
+          RESULTS SUMMARY
+        </div>
+        {isMultiRep && (
+          <div style={{
+            fontSize: 10, fontFamily: FONT, color: C.accent,
+            background: C.accent + "18", border: `1px solid ${C.accent}44`,
+            borderRadius: 4, padding: "2px 8px", letterSpacing: 0.5, fontWeight: 600,
+          }}>
+            Batch run · {repCount} replications
+          </div>
+        )}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
         {cards.map(card => (
@@ -365,12 +376,9 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
               {card.label.toUpperCase()}
             </div>
             {card.avg != null ? (
-              /* Multi-rep: "11000 — 1100 per run" */
               <div style={{ marginBottom: 5 }}>
-                <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700 }}>{card.value}</span>
-                <span style={{ fontSize: 13, color: C.muted, fontFamily: FONT, fontWeight: 400, margin: "0 5px" }}>—</span>
-                <span style={{ fontSize: 16, color: card.color, fontFamily: FONT, fontWeight: 700, opacity: 0.75 }}>{card.avg}</span>
-                <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginLeft: 3 }}>per run</span>
+                <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>{card.value}</div>
+                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, marginTop: 3 }}>avg {card.avg.toLocaleString()} per run</div>
               </div>
             ) : (
               <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
@@ -383,6 +391,41 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
           </div>
         ))}
       </div>
+      {outcomeEntries.length > 0 && (
+        <>
+          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+            JOURNEY OUTCOMES
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
+            {outcomeEntries.map(outcome => {
+              const outcomeAvg = avgPerRun(outcome.count);
+              return (
+                <div key={outcome.routeId} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
+                  <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
+                    {outcome.routeLabel.toUpperCase()}
+                  </div>
+                  {outcomeAvg != null ? (
+                    <div style={{ marginBottom: 5 }}>
+                      <div style={{ fontSize: 18, color: outcome.status === "reneged" ? C.reneged : C.served, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>
+                        {formatMetricValue(outcome.count, 0)}
+                      </div>
+                      <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, marginTop: 3 }}>avg {outcomeAvg.toLocaleString()} per run</div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 18, color: outcome.status === "reneged" ? C.reneged : C.served, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
+                      {formatMetricValue(outcome.count, 0)}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                    {outcome.status === "reneged" ? "Left before completion." : "Completed on this route."}
+                    {outcome.endedBy ? ` Source: ${outcome.endedBy}.` : ""}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
       {perResourceEntries.length > 0 && (
         <>
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
@@ -415,29 +458,6 @@ function SummaryCardGrid({ results, replicationResults = [] }) {
                 </div>
               </div>
             )}
-          </div>
-        </>
-      )}
-      {outcomeEntries.length > 0 && (
-        <>
-          <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
-            JOURNEY OUTCOMES
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-            {outcomeEntries.map(outcome => (
-              <div key={outcome.routeId} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
-                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
-                  {outcome.routeLabel.toUpperCase()}
-                </div>
-                <div style={{ fontSize: 18, color: outcome.status === "reneged" ? C.reneged : C.served, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
-                  {formatMetricValue(outcome.count, 0)}
-                </div>
-                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
-                  {outcome.status === "reneged" ? "Left before completion." : "Completed on this route."}
-                  {outcome.endedBy ? ` Source: ${outcome.endedBy}.` : ""}
-                </div>
-              </div>
-            ))}
           </div>
         </>
       )}
@@ -1101,7 +1121,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
         <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
         <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
-          <SummaryCardGrid results={results} />
+          <SummaryCardGrid results={results} replicationResults={replicationResults} />
         </div>
       </div>
 
