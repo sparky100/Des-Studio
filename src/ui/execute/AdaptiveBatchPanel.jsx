@@ -13,6 +13,55 @@ import { Btn } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 const RISK_LABELS = { small: "Low", medium: "Medium", large: "High", too_large: "Very high" };
+
+function renderMarkdown(text, C, FONT) {
+  if (!text) return null;
+  const lines = text.split("\n");
+  const elements = [];
+  let key = 0;
+
+  const inlineBold = (str) => {
+    const parts = str.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) =>
+      part.startsWith("**") && part.endsWith("**")
+        ? <strong key={i} style={{ color: C.text, fontWeight: 700 }}>{part.slice(2, -2)}</strong>
+        : part
+    );
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^### (.+)/.test(line)) {
+      elements.push(
+        <div key={key++} style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: "1.1px", textTransform: "uppercase", marginTop: 14, marginBottom: 4, fontFamily: FONT }}>
+          {line.replace(/^### /, "")}
+        </div>
+      );
+    } else if (/^## (.+)/.test(line)) {
+      elements.push(
+        <div key={key++} style={{ fontSize: 12, fontWeight: 700, color: C.text, marginTop: 12, marginBottom: 4, fontFamily: FONT }}>
+          {line.replace(/^## /, "")}
+        </div>
+      );
+    } else if (/^\d+\. /.test(line)) {
+      elements.push(
+        <div key={key++} style={{ display: "flex", gap: 6, marginTop: 6, fontFamily: FONT, fontSize: 12, color: C.text, lineHeight: 1.6 }}>
+          <span style={{ color: C.accent, flexShrink: 0, fontWeight: 700 }}>{line.match(/^(\d+)\./)[1]}.</span>
+          <span>{inlineBold(line.replace(/^\d+\. /, ""))}</span>
+        </div>
+      );
+    } else if (line.trim() === "") {
+      elements.push(<div key={key++} style={{ height: 4 }} />);
+    } else {
+      elements.push(
+        <div key={key++} style={{ fontFamily: FONT, fontSize: 12, color: C.text, lineHeight: 1.65 }}>
+          {inlineBold(line)}
+        </div>
+      );
+    }
+  }
+  return elements;
+}
 const RISK_COLORS = { small: C => C.green, medium: C => C.amber, large: C => C.amber, too_large: C => C.red };
 
 export function AdaptiveBatchPanel({
@@ -330,16 +379,10 @@ export function AdaptiveBatchPanel({
                 </div>
               )}
               {streamedText && (
-                <div
-                  aria-live={phase === "analysing" ? "polite" : "off"}
-                  style={{
-                    fontFamily: FONT, fontSize: 12, color: C.text,
-                    lineHeight: 1.65, whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {streamedText}
+                <div aria-live={phase === "analysing" ? "polite" : "off"}>
+                  {renderMarkdown(streamedText, C, FONT)}
                   {phase === "analysing" && (
-                    <span style={{ color: C.accent }}>▌</span>
+                    <span style={{ color: C.accent, fontFamily: FONT }}>▌</span>
                   )}
                 </div>
               )}
