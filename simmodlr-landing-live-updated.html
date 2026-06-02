@@ -9,6 +9,78 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
+  --bg:         #F5F8FB;
+  --bg-2:       #FFFFFF;
+  --bg-3:       #EAF1F5;
+  --teal:       #0F9D8A;
+  --teal-dim:   #0B7D6E;
+  --teal-faint: rgba(15,157,138,0.1);
+  --amber:      #E59B2E;
+  --white:      #163042;
+  --mid:        #5E7486;
+  --dim:        #B4C4CF;
+  --nav-bg:     rgba(245,248,251,0.88);
+  --nav-border: rgba(15,157,138,0.12);
+  --grid-line:  rgba(15,157,138,0.08);
+  --orb-glow:   radial-gradient(circle, rgba(15,157,138,0.18) 0%, transparent 62%);
+  --surface-border: rgba(15,157,138,0.14);
+  --surface-line: rgba(22,48,66,0.08);
+  --tag-bg:     rgba(15,157,138,0.08);
+  --tag-border: rgba(15,157,138,0.18);
+  --hero-note:  #7890A1;
+  --shadow-soft: 0 18px 50px rgba(39,72,94,0.08);
+  --syne:       'Syne', sans-serif;
+  --inter:      'Inter', sans-serif;
+  --mono:       'JetBrains Mono', monospace;
+}
+
+body[data-theme="paper"] {
+  --bg:         #F7F3EC;
+  --bg-2:       #FFFDF8;
+  --bg-3:       #EFE7D8;
+  --teal:       #0E8C78;
+  --teal-dim:   #0B6D5D;
+  --teal-faint: rgba(14,140,120,0.1);
+  --amber:      #C46B2D;
+  --white:      #2A241E;
+  --mid:        #6F675D;
+  --dim:        #D1C3B0;
+  --nav-bg:     rgba(247,243,236,0.9);
+  --nav-border: rgba(14,140,120,0.12);
+  --grid-line:  rgba(14,140,120,0.07);
+  --orb-glow:   radial-gradient(circle, rgba(196,107,45,0.16) 0%, transparent 62%);
+  --surface-border: rgba(14,140,120,0.14);
+  --surface-line: rgba(42,36,30,0.08);
+  --tag-bg:     rgba(14,140,120,0.07);
+  --tag-border: rgba(14,140,120,0.16);
+  --hero-note:  #8D7D6E;
+  --shadow-soft: 0 18px 50px rgba(74,54,30,0.09);
+}
+
+body[data-theme="blueprint"] {
+  --bg:         #EEF4FA;
+  --bg-2:       #FFFFFF;
+  --bg-3:       #DCE8F3;
+  --teal:       #18A999;
+  --teal-dim:   #14796D;
+  --teal-faint: rgba(24,169,153,0.1);
+  --amber:      #1476D1;
+  --white:      #122638;
+  --mid:        #607689;
+  --dim:        #B2C5D7;
+  --nav-bg:     rgba(238,244,250,0.88);
+  --nav-border: rgba(20,118,209,0.12);
+  --grid-line:  rgba(20,118,209,0.08);
+  --orb-glow:   radial-gradient(circle, rgba(20,118,209,0.16) 0%, transparent 62%);
+  --surface-border: rgba(20,118,209,0.14);
+  --surface-line: rgba(18,38,56,0.08);
+  --tag-bg:     rgba(20,118,209,0.07);
+  --tag-border: rgba(20,118,209,0.16);
+  --hero-note:  #7A91A4;
+  --shadow-soft: 0 18px 50px rgba(20,50,82,0.08);
+}
+
+body[data-theme="black"] {
   --bg:         #070D15;
   --bg-2:       #0C1520;
   --bg-3:       #12202E;
@@ -19,9 +91,16 @@
   --white:      #EEF3F8;
   --mid:        #6B8299;
   --dim:        #2E4459;
-  --syne:       'Syne', sans-serif;
-  --inter:      'Inter', sans-serif;
-  --mono:       'JetBrains Mono', monospace;
+  --nav-bg:     rgba(7,13,21,0.85);
+  --nav-border: rgba(14,207,180,0.08);
+  --grid-line:  rgba(14,207,180,0.035);
+  --orb-glow:   radial-gradient(circle, rgba(14,207,180,0.09) 0%, transparent 62%);
+  --surface-border: rgba(14,207,180,0.15);
+  --surface-line: rgba(255,255,255,0.04);
+  --tag-bg:     rgba(14,207,180,0.08);
+  --tag-border: rgba(14,207,180,0.18);
+  --hero-note:  #2E4459;
+  --shadow-soft: 0 20px 60px rgba(0,0,0,0.45);
 }
 
 html { scroll-behavior: smooth; }
@@ -39,9 +118,9 @@ nav {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   display: flex; align-items: center; justify-content: space-between;
   padding: 1.1rem 3rem;
-  background: rgba(7,13,21,0.85);
+  background: var(--nav-bg);
   backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(14,207,180,0.08);
+  border-bottom: 1px solid var(--nav-border);
 }
 .nav-brand {
   font-family: var(--syne); font-size: 1.3rem; font-weight: 800;
@@ -72,23 +151,23 @@ nav {
 .hero-grid {
   position: absolute; inset: 0;
   background-image:
-    linear-gradient(rgba(14,207,180,0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(14,207,180,0.035) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 60px 60px;
   mask-image: radial-gradient(ellipse 85% 65% at 55% 35%, black 15%, transparent 72%);
 }
 .hero-orb {
   position: absolute; top: -15%; right: -8%;
   width: 750px; height: 750px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(14,207,180,0.09) 0%, transparent 62%);
+  background: var(--orb-glow);
   pointer-events: none;
 }
 .hero-inner { position: relative; max-width: 1120px; margin: 0 auto; width: 100%; }
 
 .hero-badge {
   display: inline-flex; align-items: center; gap: 0.5rem;
-  border: 1px solid rgba(14,207,180,0.25);
-  background: rgba(14,207,180,0.07);
+  border: 1px solid var(--tag-border);
+  background: var(--tag-bg);
   padding: 0.35rem 0.9rem; border-radius: 100px;
   font-family: var(--mono); font-size: 0.68rem; color: var(--teal);
   letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 2rem;
@@ -137,7 +216,7 @@ nav {
 .btn-ghost:hover { border-color: var(--mid); }
 .hero-note {
   margin-top: 1.25rem;
-  font-family: var(--mono); font-size: 0.68rem; color: var(--dim);
+  font-family: var(--mono); font-size: 0.68rem; color: var(--hero-note);
   letter-spacing: 0.06em;
   opacity: 0; animation: up 0.6s 0.5s ease forwards;
 }
@@ -145,19 +224,19 @@ nav {
 /* ── PROOF BAR ── */
 .proof-bar {
   background: var(--bg-2);
-  border-top: 1px solid rgba(14,207,180,0.07);
-  border-bottom: 1px solid rgba(14,207,180,0.07);
+  border-top: 1px solid var(--nav-border);
+  border-bottom: 1px solid var(--nav-border);
   padding: 2.25rem 3rem;
 }
 .proof-inner {
   max-width: 1120px; margin: 0 auto;
-  display: grid; grid-template-columns: repeat(4,1fr);
+  display: grid; grid-template-columns: repeat(3,1fr);
   gap: 1.5rem; text-align: center;
 }
 .proof-item { position: relative; }
 .proof-item + .proof-item::before {
   content: ''; position: absolute; left: 0; top: 15%; bottom: 15%;
-  width: 1px; background: rgba(14,207,180,0.12);
+  width: 1px; background: var(--surface-border);
 }
 .proof-n {
   font-family: var(--syne); font-size: 2.25rem; font-weight: 800;
@@ -195,18 +274,19 @@ section { padding: 6rem 3rem; position: relative; }
 .problem-point { display: flex; gap: 1rem; align-items: flex-start; }
 .pp-icon {
   flex-shrink: 0; width: 38px; height: 38px;
-  border: 1px solid rgba(14,207,180,0.2); border-radius: 8px;
+  border: 1px solid var(--surface-border); border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
   font-size: 1.05rem; margin-top: 0.1rem;
-  background: rgba(14,207,180,0.05);
+  background: var(--tag-bg);
 }
 .pp-title { font-weight: 500; color: var(--white); margin-bottom: 0.25rem; font-size: 0.9375rem; }
 .pp-body { font-size: 0.875rem; color: var(--mid); line-height: 1.7; }
 
 /* chart */
 .chart-wrap {
-  background: var(--bg-2); border: 1px solid rgba(14,207,180,0.15);
+  background: var(--bg-2); border: 1px solid var(--surface-border);
   border-radius: 12px; padding: 1.75rem; overflow: hidden;
+  box-shadow: var(--shadow-soft);
 }
 .chart-label {
   font-family: var(--mono); font-size: 0.65rem; color: var(--mid);
@@ -230,7 +310,7 @@ section { padding: 6rem 3rem; position: relative; }
 .bar-key { font-family: var(--mono); font-size: 0.6rem; color: var(--mid); }
 .chart-legend {
   display: flex; gap: 1.5rem; margin-top: 1.25rem;
-  padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.04);
+  padding-top: 1rem; border-top: 1px solid var(--surface-line);
 }
 .legend-i { display: flex; align-items: center; gap: 0.45rem; font-size: 0.73rem; color: var(--mid); }
 .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
@@ -244,7 +324,7 @@ section { padding: 6rem 3rem; position: relative; }
 .step { background: var(--bg); padding: 2.25rem 1.875rem; position: relative; }
 .step-n {
   font-family: var(--syne); font-size: 3rem; font-weight: 800;
-  color: rgba(14,207,180,0.1); line-height: 1;
+  color: var(--teal-faint); line-height: 1;
   position: absolute; top: 1.25rem; right: 1.25rem;
 }
 .step-icon { font-size: 1.625rem; margin-bottom: 1.25rem; display: block; }
@@ -256,7 +336,7 @@ section { padding: 6rem 3rem; position: relative; }
 .step-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1.125rem; }
 .tag {
   font-family: var(--mono); font-size: 0.6rem; color: var(--teal);
-  background: rgba(14,207,180,0.08); border: 1px solid rgba(14,207,180,0.16);
+  background: var(--tag-bg); border: 1px solid var(--tag-border);
   padding: 0.25rem 0.6rem; border-radius: 4px; letter-spacing: 0.04em;
 }
 
@@ -268,11 +348,12 @@ section { padding: 6rem 3rem; position: relative; }
 }
 .feat-card {
   padding: 1.875rem; border-radius: 10px;
-  background: var(--bg-2); border: 1px solid rgba(255,255,255,0.04);
+  background: var(--bg-2); border: 1px solid var(--surface-line);
   transition: border-color 0.22s, transform 0.22s;
+  box-shadow: var(--shadow-soft);
 }
-.feat-card:hover { border-color: rgba(14,207,180,0.2); transform: translateY(-2px); }
-.feat-card.primary { border-color: rgba(14,207,180,0.18); background: linear-gradient(140deg, rgba(14,207,180,0.07), var(--bg-2)); }
+.feat-card:hover { border-color: var(--surface-border); transform: translateY(-2px); }
+.feat-card.primary { border-color: var(--surface-border); background: linear-gradient(140deg, var(--tag-bg), var(--bg-2)); }
 .feat-icon { font-size: 1.375rem; margin-bottom: 0.875rem; display: block; }
 .feat-title {
   font-family: var(--syne); font-size: 1.125rem; font-weight: 700;
@@ -281,64 +362,15 @@ section { padding: 6rem 3rem; position: relative; }
 .feat-body { font-size: 0.875rem; color: var(--mid); line-height: 1.72; }
 .feat-detail {
   margin-top: 0.875rem; padding-top: 0.875rem;
-  border-top: 1px solid rgba(255,255,255,0.05);
+  border-top: 1px solid var(--surface-line);
   font-family: var(--mono); font-size: 0.67rem;
-  color: rgba(14,207,180,0.6); line-height: 1.85;
+  color: var(--teal-dim); line-height: 1.85;
 }
 
 /* ── SCENARIO ── */
 .scenario { background: var(--bg-2); }
-.scenario-split {
-  display: grid; grid-template-columns: 1fr 1.15fr;
-  gap: 4.5rem; align-items: start; margin-top: 3.5rem;
-}
-.scenario-meta {
-  font-family: var(--mono); font-size: 0.67rem; color: var(--dim);
-  letter-spacing: 0.09em; text-transform: uppercase; margin-bottom: 1.5rem;
-}
 .scenario-p { font-size: 1rem; color: var(--mid); line-height: 1.82; font-weight: 300; margin-bottom: 1.125rem; }
 .scenario-p strong { color: var(--white); font-weight: 500; }
-
-.result-card {
-  background: var(--bg); border: 1px solid rgba(14,207,180,0.18);
-  border-radius: 12px; overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.45);
-}
-.rc-head {
-  background: var(--bg-3); padding: 0.8rem 1.125rem;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  display: flex; align-items: center; gap: 0.5rem;
-}
-.rc-dot { width: 9px; height: 9px; border-radius: 50%; }
-.rc-title {
-  font-family: var(--mono); font-size: 0.67rem; color: var(--mid);
-  letter-spacing: 0.07em; margin-left: auto;
-}
-.rc-body { padding: 1.125rem; }
-.rc-row {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 0.6rem 0.375rem;
-  border-bottom: 1px solid rgba(255,255,255,0.035);
-  font-size: 0.8rem;
-}
-.rc-row:last-child { border-bottom: none; }
-.rc-k { color: var(--mid); }
-.rc-v { font-family: var(--mono); font-size: 0.78rem; color: var(--white); }
-.rc-v.g { color: var(--teal); }
-.rc-v.w { color: var(--amber); }
-.ai-box {
-  margin: 0.875rem; margin-top: 0;
-  background: rgba(14,207,180,0.05);
-  border: 1px solid rgba(14,207,180,0.13); border-radius: 8px;
-  padding: 0.875rem;
-}
-.ai-box-label {
-  font-family: var(--mono); font-size: 0.6rem; color: var(--teal);
-  letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.4rem;
-  display: flex; align-items: center; gap: 0.35rem;
-}
-.ai-box-label::before { content: '✦'; font-size: 0.5rem; }
-.ai-box-text { font-size: 0.78rem; color: var(--mid); line-height: 1.65; font-style: italic; }
 
 /* ── SCENARIO SHOTS ── */
 .scenario-intro { max-width: 720px; margin-bottom: 3.5rem; }
@@ -357,13 +389,14 @@ section { padding: 6rem 3rem; position: relative; }
 }
 .shot-frame {
   border-radius: 10px; overflow: hidden;
-  border: 1px solid rgba(14,207,180,0.22);
-  box-shadow: 0 20px 56px rgba(0,0,0,0.55);
-  background: var(--bg);
+  border: 1px solid var(--surface-border);
+  box-shadow: var(--shadow-soft);
+  background: var(--bg-3);
+  display: flex; align-items: center; justify-content: center;
+  min-height: 200px;
 }
 .shot-frame img {
   display: block; width: 100%; height: auto;
-  max-height: 560px; object-fit: cover; object-position: top;
 }
 .shot-caption { font-size: 0.8125rem; color: var(--mid); line-height: 1.62; }
 
@@ -375,7 +408,8 @@ section { padding: 6rem 3rem; position: relative; }
 }
 .aud-card {
   padding: 1.875rem; border-radius: 10px;
-  background: var(--bg-2); border: 1px solid rgba(255,255,255,0.04);
+  background: var(--bg-2); border: 1px solid var(--surface-line);
+  box-shadow: var(--shadow-soft);
 }
 .aud-role {
   font-family: var(--syne); font-size: 1.0625rem; font-weight: 700;
@@ -387,14 +421,14 @@ section { padding: 6rem 3rem; position: relative; }
 /* ── CTA ── */
 .cta {
   background: var(--bg-2);
-  border-top: 1px solid rgba(14,207,180,0.07);
+  border-top: 1px solid var(--nav-border);
   text-align: center; padding: 7rem 3rem; position: relative; overflow: hidden;
 }
 .cta-glow {
   position: absolute; top: 50%; left: 50%;
   transform: translate(-50%,-50%);
   width: 700px; height: 280px; border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(14,207,180,0.07) 0%, transparent 68%);
+  background: radial-gradient(ellipse, var(--tag-bg) 0%, transparent 68%);
   pointer-events: none;
 }
 .cta .section-h2 { max-width: 560px; margin: 0 auto 1rem; }
@@ -405,7 +439,7 @@ section { padding: 6rem 3rem; position: relative; }
 /* ── FOOTER ── */
 footer {
   background: var(--bg); padding: 2.25rem 3rem;
-  border-top: 1px solid rgba(255,255,255,0.04);
+  border-top: 1px solid var(--nav-border);
 }
 .footer-inner {
   max-width: 1120px; margin: 0 auto;
@@ -433,7 +467,7 @@ footer {
   nav{padding:1rem 1.5rem;} .nav-links{display:none;}
   section{padding:4rem 1.5rem;} .hero{padding:7rem 1.5rem 4rem;}
   .proof-bar{padding:1.75rem 1.5rem;} .proof-inner{grid-template-columns:repeat(2,1fr);}
-  .problem-split,.scenario-split{grid-template-columns:1fr;gap:3rem;}
+  .problem-split{grid-template-columns:1fr;gap:3rem;}
   .scenario-shots{grid-template-columns:1fr;}
   .steps,.feat-grid,.aud-grid{grid-template-columns:1fr;}
   .footer-inner{flex-direction:column;text-align:center;} .footer-links{justify-content:center;}
@@ -450,7 +484,7 @@ footer {
     <li><a href="#features">Capabilities</a></li>
     <li><a href="#example">Example</a></li>
     <li><a href="#for-who">Who it's for</a></li>
-    <li><a href="#cta" class="nav-btn">Try free →</a></li>
+    <li><a href="https://des.simmodlr.app/" class="nav-btn">Try Now →</a></li>
   </ul>
 </nav>
 
@@ -459,18 +493,19 @@ footer {
   <div class="hero-grid"></div>
   <div class="hero-orb"></div>
   <div class="hero-inner">
-    <div class="hero-badge"><div class="badge-pulse"></div>DES Studio — now live</div>
+    <div class="hero-badge"><div class="badge-pulse"></div>Simmodlr — now live</div>
     <h1 class="hero-h1">Understand your system<br>before you <span class="teal">commit to it.</span></h1>
     <p class="hero-sub">
-      Simmodlr is a free, browser-based discrete-event simulation tool.
-      Model queues, resources, and service processes — no install, no code,
-      results you can rely on.
+      Simmodlr is a set of modelling components. The first released
+      component is a browser-based discrete-event simulation tool.
+      Model queues, resources, and service processes — no install,
+      no code, results you can rely on.
     </p>
     <div class="hero-ctas">
-      <a href="#cta" class="btn-primary">Start modelling free →</a>
+      <a href="https://des.simmodlr.app/" class="btn-primary">Start modelling →</a>
       <a href="#example" class="btn-ghost">See a worked example</a>
     </div>
-    <p class="hero-note">Free · No install · Runs entirely in your browser · simmodlr.app</p>
+    <p class="hero-note">No install · Runs entirely in your browser · simmodlr.app</p>
   </div>
 </section>
 
@@ -478,20 +513,16 @@ footer {
 <div class="proof-bar">
   <div class="proof-inner">
     <div class="proof-item">
-      <div class="proof-n">1,938</div>
+      <div class="proof-n">1,992</div>
       <div class="proof-l">Passing tests across the codebase</div>
     </div>
     <div class="proof-item">
       <div class="proof-n">95%</div>
-      <div class="proof-l">Confidence intervals, statistically sound results</div>
+      <div class="proof-l">Clear ranges around your results</div>
     </div>
     <div class="proof-item">
-      <div class="proof-n">Proven</div>
-      <div class="proof-l">Robust simulation engine</div>
-    </div>
-    <div class="proof-item">
-      <div class="proof-n">£0</div>
-      <div class="proof-l">Cost to use, forever</div>
+      <div class="proof-n">±2%</div>
+      <div class="proof-l">Analytical accuracy tolerance</div>
     </div>
   </div>
 </div>
@@ -577,33 +608,33 @@ footer {
         <div class="step-n">01</div>
         <span class="step-icon">🏗️</span>
         <h3 class="step-title">Build your model</h3>
-        <p class="step-body">Define arrivals, queues, activities, and resources using structured editors or the Visual Designer canvas. Describe a scenario in plain text and let the AI generate a starting model.</p>
+        <p class="step-body">Set up arrivals, queues, activities, and resources using simple editors or the visual canvas. Describe your scenario in plain English and let Simmodlr generate a starting model.</p>
         <div class="step-tags">
-          <span class="tag">Visual Designer</span>
-          <span class="tag">AI model builder</span>
-          <span class="tag">Form editors</span>
+          <span class="tag">Visual canvas</span>
+          <span class="tag">Simmodlr model builder</span>
+          <span class="tag">Simple editors</span>
         </div>
       </div>
       <div class="step">
         <div class="step-n">02</div>
         <span class="step-icon">▶️</span>
         <h3 class="step-title">Run experiments</h3>
-        <p class="step-body">Run a single simulation or a replicated experiment. Set warm-up periods, termination conditions, and replication counts. Parallel Web Workers run replications simultaneously across your CPU cores.</p>
+        <p class="step-body">Run one scenario or several test runs. Choose how long to run it and how many times to repeat it, then let the app do the rest.</p>
         <div class="step-tags">
-          <span class="tag">Parallel replications</span>
-          <span class="tag">Warm-up removal</span>
-          <span class="tag">Parametric sweep</span>
+          <span class="tag">Repeat runs</span>
+          <span class="tag">Settling period</span>
+          <span class="tag">Test options</span>
         </div>
       </div>
       <div class="step">
         <div class="step-n">03</div>
         <span class="step-icon">📈</span>
         <h3 class="step-title">Analyse the results</h3>
-        <p class="step-body">Confidence intervals, utilisation breakdowns, and run comparisons are generated automatically. The AI Insights panel reads your actual results and produces narrative interpretation and specific recommendations.</p>
+        <p class="step-body">Result ranges, resource use, and run comparisons are shown automatically. Simmodlr reads your results and gives a plain-English interpretation with practical suggestions.</p>
         <div class="step-tags">
-          <span class="tag">95% CI</span>
-          <span class="tag">Statistical comparison</span>
-          <span class="tag">AI Insights</span>
+          <span class="tag">Result ranges</span>
+          <span class="tag">Run comparison</span>
+          <span class="tag">Simmodlr insights</span>
         </div>
       </div>
     </div>
@@ -619,34 +650,39 @@ footer {
     <div class="feat-grid reveal">
       <div class="feat-card primary" style="grid-column: 1 / -1;">
         <span class="feat-icon">✏️</span>
-        <h3 class="feat-title">Design — two ways to build your model</h3>
-        <p class="feat-body">Describe your system in plain English and let the AI build a starting model for you — then refine it visually on the drag-and-drop canvas, or through the structured editors. No modelling experience required to get started. No coding required at any point.</p>
+        <h3 class="feat-title">Design — three ways to build your model</h3>
+        <p class="feat-body">Describe your system in plain English and let Simmodlr build a starting model for you, then adjust it on the canvas or in the editors. No modelling experience is needed to get started, and there is no coding required.</p>
         <div class="feat-detail" style="display:flex; gap: 2.5rem; flex-wrap: wrap; margin-top: 1rem;">
           <div>
-            <div style="color: var(--teal); font-weight: 600; margin-bottom: 0.3rem;">AI Model Builder</div>
+            <div style="color: var(--teal); font-weight: 600; margin-bottom: 0.3rem;">Describe</div>
             Describe your process in plain English<br>
-            AI proposes the model structure<br>
+            Simmodlr builds the first version<br>
             Review and adjust before anything runs
           </div>
           <div>
-            <div style="color: var(--teal); font-weight: 600; margin-bottom: 0.3rem;">Visual Designer</div>
-            Drag-and-drop canvas<br>
-            Always in sync with the form editors<br>
-            Instant visual validation
+            <div style="color: var(--teal); font-weight: 600; margin-bottom: 0.3rem;">Draw</div>
+            Drag-and-drop layout<br>
+            Stays in sync with the editors<br>
+            Easy visual checking
+          </div>
+          <div>
+            <div style="color: var(--teal); font-weight: 600; margin-bottom: 0.3rem;">Form Based</div>
+            Robust, Validated, Easy to Use<br>
+            Definition of Entities, Events and Queues
           </div>
         </div>
       </div>
       <div class="feat-card">
         <span class="feat-icon">▶️</span>
         <h3 class="feat-title">Run — robust experiments</h3>
-        <p class="feat-body">Run a single simulation or a full replicated experiment. The engine is proven and handles real-world complexity correctly — results you can rely on, not just plausible-looking numbers.</p>
-        <div class="feat-detail">Multiple replications in parallel<br>Automatic warm-up detection and removal<br>Parameter sweep to test configurations</div>
+        <p class="feat-body">Run one simulation or several repeats to see how the system behaves. The results are built to be dependable, not just plausible.</p>
+        <div class="feat-detail">Repeat runs for reassurance<br>Ignore the early settling period<br>Try different setups side by side</div>
       </div>
       <div class="feat-card">
         <span class="feat-icon">📊</span>
         <h3 class="feat-title">Analyse — results that speak plainly</h3>
-        <p class="feat-body">Confidence intervals, not just averages. The AI reads your actual results and tells you what they mean — what's working, what isn't, and what to try next.</p>
-        <div class="feat-detail">95% confidence intervals on every KPI<br>AI interprets results in plain English<br>Compare runs · Sensitivity analysis</div>
+        <p class="feat-body">See more than averages. Simmodlr reads your results and explains what is working, what is not, and what you could try next.</p>
+        <div class="feat-detail">Clear ranges around each measure<br>Plain-English explanation<br>Compare runs and test changes</div>
       </div>
     </div>
   </div>
@@ -658,8 +694,8 @@ footer {
     <div class="section-tag">Worked example</div>
     <h2 class="section-h2">A&amp;E triage, modelled in 20 minutes.</h2>
     <div class="scenario-intro reveal">
-      <p class="scenario-p">An emergency department receives patients at an average rate of <strong>12 per hour</strong>. High-acuity patients (30%) go directly to a priority queue; low-acuity patients (70%) route to a secondary queue. With <strong>3 clinicians</strong> shared across both queues the department runs near 85% utilisation — but aggregate statistics hide a critical split in patient experience.</p>
-      <p class="scenario-p">Running <strong>replications with warm-up removal</strong>, the simulation reveals what the formula cannot: a severe bottleneck at the doctor resource, an AI that reads the results and ranks every fix, and a before/after comparison that makes the case for change in seconds.</p>
+      <p class="scenario-p">An emergency department receives patients at an average rate of <strong>12 per hour</strong>. High-acuity patients (30%) go directly to a priority queue; low-acuity patients (70%) route to a secondary queue. With <strong>3 clinicians</strong> shared across both queues the department runs near 87% utilisation — but aggregate statistics hide a critical split in patient experience.</p>
+      <p class="scenario-p">After <strong>repeated runs with the early settling period removed</strong>, the simulation reveals what the formula cannot: a severe bottleneck at the doctor resource, an AI that reads the results and ranks every fix, and a before/after comparison that makes the case for change in seconds.</p>
     </div>
     <div class="scenario-shots">
       <div class="shot-item reveal d1">
@@ -695,7 +731,7 @@ footer {
   <div class="section-inner">
     <div class="section-tag">Who it's for</div>
     <h2 class="section-h2">If you have a problem to solve, this is for you.</h2>
-    <p class="section-body">You do not need a background in simulation. You need a real problem and an honest answer.</p>
+    <p class="section-body">You do not need a background in simulation. If you have a real problem and need an honest answer, this is for you.</p>
     <div class="aud-grid reveal">
       <div class="aud-card">
         <h3 class="aud-role">"We need to understand this before we spend the money."</h3>
@@ -709,8 +745,8 @@ footer {
       </div>
       <div class="aud-card">
         <h3 class="aud-role">"I want to learn simulation properly, without the cost."</h3>
-        <p class="aud-body">You're studying operations, engineering, or healthcare systems — or teaching it. Commercial simulation tools are expensive and slow to learn. Simmodlr is free, runs in a browser, and doesn't hide how it works.</p>
-        <div class="aud-use">→ Free. No install. No licence. No black box.</div>
+        <p class="aud-body">You're studying operations, engineering, or healthcare systems — or teaching it. Commercial simulation tools are expensive and slow to learn. Simmodlr has a generous free tier, runs in a browser, and doesn't hide how it works.</p>
+        <div class="aud-use">→ Free tier. No install. No licence barrier. No black box.</div>
       </div>
     </div>
   </div>
@@ -724,9 +760,9 @@ footer {
     <h2 class="section-h2">Ready to trust your analysis?</h2>
     <p class="section-body">No account needed to explore. Sign up free to save models and run replicated experiments.</p>
     <div class="cta-btns">
-      <a href="#" class="btn-primary">Open Simmodlr free →</a>
+      <a href="https://des.simmodlr.app/" class="btn-primary">Open Simmodlr →</a>
     </div>
-    <p class="cta-note">Free · No credit card · Browser-native · simmodlr.app</p>
+    <p class="cta-note">No credit card · Browser-native · simmodlr.app</p>
   </div>
 </section>
 
@@ -737,7 +773,7 @@ footer {
     <ul class="footer-links">
       <li><a href="#how">How it works</a></li>
       <li><a href="#features">Capabilities</a></li>
-        <li><a href="#">User Guide</a></li>
+      <li><a href="https://sparky100.github.io/simmoldr-hub/user-guide/">User Guide</a></li>
       <li><a href="#">Contact</a></li>
     </ul>
     <div class="footer-copy">© 2026 Simmodlr · simmodlr.app</div>
@@ -745,6 +781,8 @@ footer {
 </footer>
 
 <script>
+  document.body.dataset.theme = 'paper';
+
   // Scroll reveal
   const obs = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('in'); });
