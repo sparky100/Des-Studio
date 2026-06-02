@@ -128,7 +128,8 @@ function tryExtractJson(raw) {
     let inString = false;
     for (let i = start; i < raw.length; i++) {
       const ch = raw[i];
-      if (ch === '"') inString = !inString;
+      // Toggle string state only on unescaped quotes
+      if (ch === '"' && (i === start || raw[i - 1] !== '\\')) inString = !inString;
       if (inString) continue;
       if (ch === openChar) depth++;
       else if (ch === closeChar) {
@@ -165,82 +166,112 @@ function parseModelBuilderJson(text) {
 }
 
 export async function streamModelBuilder(systemPrompt, messages = [], { onToken, onComplete, onError, signal } = {}) {
-  const timeout = new AbortController();
-  const timeoutId = setTimeout(() => timeout.abort(), 60_000);
-  const combinedSignal = signal
-    ? AbortSignal.any([signal, timeout.signal])
-    : timeout.signal;
+  const sessionResponse = await supabase.auth.getSession();
+  const accessToken = sessionResponse?.data?.session?.access_token;
+  const requestMessages = [
+    { role: "system", content: systemPrompt },
+    ...messages,
+  ];
 
-  try {
-    const sessionResponse = await supabase.auth.getSession();
-    const accessToken = sessionResponse?.data?.session?.access_token;
-    const requestMessages = [
-      { role: "system", content: systemPrompt },
-      ...messages,
-    ];
+  const MAX_ATTEMPTS = 2;
+  let lastError;
 
-    const response = await fetch(getProxyUrl(), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      },
-      body: JSON.stringify(buildLlmRequest({
-        kind: LLM_TASKS.MODEL_BUILDER,
-        messages: requestMessages,
-        maxTokens: 8000,
-        stream: true,
-        responseFormat: LLM_RESPONSE_FORMATS.JSON,
-      })),
-      signal: combinedSignal,
-    });
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const timeout = new AbortController();
+    const timeoutId = setTimeout(() => timeout.abort(), 60_000);
+    const combinedSignal = signal
+      ? AbortSignal.any([signal, timeout.signal])
+      : timeout.signal;
 
-    clearTimeout(timeoutId);
+    try {
+      const response = await fetch(getProxyUrl(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(buildLlmRequest({
+          kind: LLM_TASKS.MODEL_BUILDER,
+          messages: requestMessages,
+          maxTokens: 8000,
+          stream: true,
+          responseFormat: LLM_RESPONSE_FORMATS.JSON,
+        })),
+        signal: combinedSignal,
+      });
 
-    if (!response.ok) {
-      let detail = "";
-      try { detail = await response.text(); } catch {}
-      const err = new Error(`LLM proxy returned ${response.status}${detail ? `: ${detail}` : ""}`);
-      err.rawResponse = detail;
-      throw err;
-    }
+      clearTimeout(timeoutId);
 
-    if (!response.body?.getReader) {
-      const text = await response.text();
-      const parsed = parseModelBuilderJson(text);
-      onComplete?.(parsed);
-      return parsed;
-    }
+      if (!response.ok) {
+        let detail = "";
+        try { detail = await response.text(); } catch {}
+        const err = new Error(`LLM proxy returned ${response.status}${detail ? `: ${detail}` : ""}`);
+        err.rawResponse = detail;
+        throw err;
+      }
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    let done = false;
-    while (!done) {
-      const result = await reader.read();
-      done = result.done;
-      if (result.value) {
-        consumeSseChunk(decoder.decode(result.value, { stream: !done }), token => {
+      if (!response.body?.getReader) {
+        const text = await response.text();
+        const parsed = parseModelBuilderJson(text);
+        onComplete?.(parsed);
+        return parsed;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let sseBuffer = "";
+      let done = false;
+
+      const processSseEvent = event => {
+        const lines = event.split(/\r?\n/);
+        const dataLines = lines
+          .filter(line => line.startsWith("data:"))
+          .map(line => line.slice(5).trim());
+        if (!dataLines.length) return;
+        const token = extractTokenFromSsePayload(dataLines.join("\n"));
+        if (token) {
           buffer += token;
           onToken?.(token);
-        });
+        }
+      };
+
+      while (!done) {
+        const result = await reader.read();
+        done = result.done;
+        sseBuffer += result.value ? decoder.decode(result.value, { stream: true }) : "";
+        if (done) sseBuffer += decoder.decode(); // flush any buffered bytes
+
+        // Process all complete SSE events (delimited by blank lines)
+        let boundary;
+        while ((boundary = sseBuffer.indexOf("\n\n")) >= 0) {
+          processSseEvent(sseBuffer.slice(0, boundary));
+          sseBuffer = sseBuffer.slice(boundary + 2);
+        }
       }
-    }
-    const parsed = parseModelBuilderJson(buffer);
-    onComplete?.(parsed);
-    return parsed;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error?.name === "AbortError") {
-      if (timeout.signal.aborted) {
-        const err = new Error("The model builder took too long — please try again.");
-        onError?.(err);
+      // Process any trailing data that arrived without a final blank line
+      if (sseBuffer.trim()) processSseEvent(sseBuffer);
+
+      const parsed = parseModelBuilderJson(buffer);
+      onComplete?.(parsed);
+      return parsed;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error?.name === "AbortError") {
+        if (timeout.signal.aborted) {
+          const err = new Error("The model builder took too long — please try again.");
+          onError?.(err);
+        }
+        return null;
       }
+      lastError = error;
+      // Retry once on parse failure; surface the error only after all attempts exhausted
+      if (attempt < MAX_ATTEMPTS - 1) continue;
+      onError?.(lastError);
       return null;
     }
-    onError?.(error);
-    return null;
   }
+  return null;
 }
 
 export async function callModelBuilder(systemPrompt, messages = [], onComplete, onError, { signal } = {}) {
