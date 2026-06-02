@@ -1079,8 +1079,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         past={past} future={future} currentVersion={currentVersion}
         onBack={handleBack} onUndo={undo} onRedo={redo} onSave={save} onDiscard={discard}
         onHelpOpen={overrides.onHelpOpen}
-        onExplore={()=>setShowExplorePanel(true)}
-        exploreVisible={exploreVisible}
       />
       <ModelTabBar
         tab={tab} setTab={setTab}
@@ -1091,6 +1089,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         showMoreTabs={showMoreTabs} setShowMoreTabs={setShowMoreTabs}
         aiSidebarOpen={aiSidebarOpen}
         onToggleAiSidebar={isMobileLayout ? null : ()=>setAiSidebarOpen(v=>!v)}
+        onExplore={()=>setShowExplorePanel(true)}
+        exploreVisible={exploreVisible}
       />
       <div style={{flex:1,display:"flex",flexDirection:"row",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>

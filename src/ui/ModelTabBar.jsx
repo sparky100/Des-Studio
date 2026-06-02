@@ -9,6 +9,7 @@ export function ModelTabBar({
   isCompactLayout,
   showMoreTabs, setShowMoreTabs,
   aiSidebarOpen = false, onToggleAiSidebar = null,
+  onExplore = null, exploreVisible = false,
 }) {
   const { C, FONT } = useTheme();
   const tabIssueLabel = tabId => {
@@ -141,6 +142,26 @@ export function ModelTabBar({
             </button>
           );
         })}
+        {exploreVisible && onExplore && (
+          <>
+            <div style={{ width: 1, background: C.border, margin: "6px 4px", alignSelf: "stretch" }} />
+            <button
+              type="button"
+              onClick={onExplore}
+              title="Run adaptive batch and get AI-powered improvement opportunities"
+              style={{
+                background: C.surface,
+                border: `1px solid ${C.accent}`,
+                borderRadius: 6, color: C.accent,
+                cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+                flexShrink: 0, fontFamily: FONT, fontSize: 11, fontWeight: 700,
+                padding: "7px 10px", whiteSpace: "nowrap",
+              }}
+            >
+              ✦ Explore
+            </button>
+          </>
+        )}
       </div>
 
       {/* Contextual sub-tab bar */}

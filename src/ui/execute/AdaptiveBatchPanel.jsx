@@ -21,6 +21,7 @@ function renderMarkdown(text, C, FONT, onApplyItem) {
   const lines = text.split("\n");
   const elements = [];
   let key = 0;
+  let inBottleneckSection = false;
 
   const inlineBold = (str) => {
     const parts = str.split(/(\*\*[^*]+\*\*)/g);
@@ -34,24 +35,29 @@ function renderMarkdown(text, C, FONT, onApplyItem) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (/^### (.+)/.test(line)) {
+      const heading = line.replace(/^### /, "");
+      inBottleneckSection = /bottleneck/i.test(heading);
       elements.push(
         <div key={key++} style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: "1.1px", textTransform: "uppercase", marginTop: 14, marginBottom: 4, fontFamily: FONT }}>
-          {line.replace(/^### /, "")}
+          {heading}
         </div>
       );
     } else if (/^## (.+)/.test(line)) {
+      const heading = line.replace(/^## /, "");
+      inBottleneckSection = /bottleneck/i.test(heading);
       elements.push(
         <div key={key++} style={{ fontSize: 12, fontWeight: 700, color: C.text, marginTop: 12, marginBottom: 4, fontFamily: FONT }}>
-          {line.replace(/^## /, "")}
+          {heading}
         </div>
       );
     } else if (/^\d+\. /.test(line)) {
       const itemText = line.replace(/^\d+\. /, "");
+      const showApply = onApplyItem && !inBottleneckSection;
       elements.push(
         <div key={key++} style={{ display: "flex", gap: 6, marginTop: 6, fontFamily: FONT, fontSize: 12, color: C.text, lineHeight: 1.6, alignItems: "flex-start" }}>
           <span style={{ color: C.accent, flexShrink: 0, fontWeight: 700 }}>{line.match(/^(\d+)\./)[1]}.</span>
           <span style={{ flex: 1 }}>{inlineBold(itemText)}</span>
-          {onApplyItem && (
+          {showApply && (
             <button
               type="button"
               onClick={() => onApplyItem(itemText)}
@@ -248,7 +254,9 @@ export function AdaptiveBatchPanel({
 
     const systemPrompt = buildModelBuilderSystemPrompt();
     const userMessage = buildModelBuilderUserMessage(
-      `Apply the following improvement to the model: ${opportunityText}`,
+      `Apply the following improvement to the model as a concrete structural change. ` +
+      `If the exact target value is not specified, choose a sensible increment (e.g. +1 server, −20% service time) and explain your choice. ` +
+      `Do not ask for clarification — produce a complete updated model JSON with intent "refine".\n\nImprovement: ${opportunityText}`,
       model,
       batchResult || null
     );

@@ -3,7 +3,7 @@
 import { Tag, Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
-export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion, onExplore, exploreVisible }) {
+export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion }) {
   const { C, FONT } = useTheme();
   return (
     <div style={{
@@ -40,11 +40,6 @@ export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future,
           <Btn small variant="primary" onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Btn>
           <Btn small variant="ghost" onClick={onDiscard} disabled={saving}>Discard</Btn>
         </div>
-      )}
-      {exploreVisible && onExplore && (
-        <Btn small variant="ghost" onClick={onExplore} title="Run adaptive batch and get AI-powered improvement opportunities">
-          ✦ Explore
-        </Btn>
       )}
     </div>
   );
