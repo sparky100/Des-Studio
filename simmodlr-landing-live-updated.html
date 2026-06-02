@@ -391,11 +391,12 @@ section { padding: 6rem 3rem; position: relative; }
   border-radius: 10px; overflow: hidden;
   border: 1px solid var(--surface-border);
   box-shadow: var(--shadow-soft);
-  background: var(--bg);
+  background: var(--bg-3);
+  display: flex; align-items: center; justify-content: center;
+  min-height: 200px;
 }
 .shot-frame img {
   display: block; width: 100%; height: auto;
-  max-height: 560px; object-fit: cover; object-position: top;
 }
 .shot-caption { font-size: 0.8125rem; color: var(--mid); line-height: 1.62; }
 
