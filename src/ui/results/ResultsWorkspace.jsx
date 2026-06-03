@@ -1162,19 +1162,41 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
         );
       })}
 
-      {journeyRows.length > 0 && (
-        <div style={{ marginTop: 4 }}>
-          <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>ENTITY PATHWAYS ACROSS SECTIONS</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {journeyRows.map(({ key, label, count }) => (
-              <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontSize: 11 }}>
-                <span style={{ flex: 1, color: C.text }}>{label}</span>
-                <span style={{ color: C.muted, flexShrink: 0 }}>{count} {count === 1 ? "entity" : "entities"}</span>
-              </div>
-            ))}
+      {journeyRows.length > 0 && (() => {
+        const visibleRows = journeyRows.slice(0, 15);
+        const total = visibleRows.reduce((s, r) => s + r.count, 0);
+        const maxCount = visibleRows[0].count;
+        return (
+          <div style={{ marginTop: 4 }}>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>ENTITY PATHWAYS ACROSS SECTIONS</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {visibleRows.map(({ key, count }) => {
+                const names = key.split("→").map(id => sectionById[id]?.name || id);
+                const pct = total > 0 ? Math.round(count / total * 100) : 0;
+                return (
+                  <div key={key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                      {names.map((name, i) => (
+                        <React.Fragment key={i}>
+                          {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
+                          <span style={{ fontFamily: FONT, fontSize: 10, color: C.text, background: C.bg,
+                            border: `1px solid ${C.border}`, borderRadius: 3, padding: "1px 5px" }}>{name}</span>
+                        </React.Fragment>
+                      ))}
+                      <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
+                        {count} ({pct}%)
+                      </span>
+                    </div>
+                    <div style={{ height: 3, background: C.border, borderRadius: 2 }}>
+                      <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
