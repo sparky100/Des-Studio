@@ -368,6 +368,22 @@ export const AiAssistantPanel = ({
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // Clear conversation when context group changes (design ↔ run ↔ results)
+  const contextGroup = isRunContext ? "run" : isResultsContext ? "results" : "design";
+  useEffect(() => {
+    abortRef.current?.abort();
+    setConversationHistory([]);
+    setResponse("");
+    setStatus("idle");
+    setError("");
+    setParsedSuggestion(null);
+    setVerifyStatus({});
+    setVerifyResults({});
+    setActiveKind(null);
+    setModelQueryText("");
+    setQueryText("");
+  }, [contextGroup]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (responseAreaRef.current) {
       responseAreaRef.current.scrollTop = responseAreaRef.current.scrollHeight;
@@ -792,14 +808,12 @@ export const AiAssistantPanel = ({
     minWidth: 320,
     maxWidth: 420,
     maxHeight: "calc(100vh - 120px)",
-    overflowY: "auto",
+    overflow: "hidden",
     background: C.panel,
     border: `1px solid ${C.border}`,
     borderRadius: 8,
-    padding: 14,
     display: "flex",
     flexDirection: "column",
-    gap: 12,
     boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
   } : inline ? {
     width: "100%",
@@ -844,9 +858,11 @@ export const AiAssistantPanel = ({
     ? "Analyse and refine simulation results."
     : "Ask questions about this model.";
   const innerStyle = sidebar
-    ? { flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
+    ? { flex: 1, minHeight: 0, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
     : mobileFullscreen
-    ? { flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }
+    ? { flex: 1, minHeight: 0, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 12 }
+    : overlay
+    ? { flex: 1, minHeight: 0, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
     : { display: "contents" };
 
   return (
