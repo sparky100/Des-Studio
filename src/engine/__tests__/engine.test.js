@@ -1,5 +1,6 @@
 import { beforeAll, describe, test, expect } from 'vitest';
 import { buildEngine } from '../index.js';
+import { assertDoneEntitiesHaveSojournTime } from './helpers/fixtures.js';
 
 // ── M/M/1 model fixture ───────────────────────────────────────────────────────
 // Customer arrives at t=0, inter-arrival ~ Exp(2), service Fixed(3)
@@ -193,11 +194,7 @@ describe('runAll() M/M/1 model', () => {
   });
 
   test('all done customers have sojournTime > 0', () => {
-    const done = result.entitySummary.filter(e => e.status === 'done');
-    expect(done.length).toBeGreaterThan(0);
-    for (const e of done) {
-      expect(e.sojournTime).toBeGreaterThan(0);
-    }
+    assertDoneEntitiesHaveSojournTime(result);
   });
 
   test('all done customers have stages.length === 1', () => {
@@ -244,11 +241,7 @@ describe('two-stage model (TriageNurse + Doctor)', () => {
   });
 
   test('done patients have sojournTime > 0', () => {
-    const done = result.entitySummary.filter(e => e.status === 'done');
-    expect(done.length).toBeGreaterThan(0);
-    for (const e of done) {
-      expect(e.sojournTime).toBeGreaterThan(0);
-    }
+    assertDoneEntitiesHaveSojournTime(result);
   });
 
   test('done patients have at least 1 stage', () => {

@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach } from 'vitest';
 import { MACROS, applyScalar } from '../macros.js';
 import { applyEffect } from '../phases.js';
 import { makeHelpers } from '../entities.js';
+import { assertClaimsCleared } from './helpers/fixtures.js';
 
 // Build a minimal applyEffect context
 function makeCtx(entities, state, model, clock = 0, felRef = null) {
@@ -317,10 +318,7 @@ describe('COMPLETE()', () => {
 
   test('clears mirrored claim metadata on complete', () => {
     runComplete();
-    expect(customer.serverId).toBeUndefined();
-    expect(customer.resourceClaim).toBeUndefined();
-    expect(server.currentCustId).toBeUndefined();
-    expect(server.resourceClaim).toBeUndefined();
+    assertClaimsCleared(customer, server);
   });
 
   test('increments state.__served', () => {
@@ -395,10 +393,7 @@ describe('RELEASE(ServerType)', () => {
 
   test('clears mirrored claim metadata on release', () => {
     runRelease();
-    expect(customer.serverId).toBeUndefined();
-    expect(customer.resourceClaim).toBeUndefined();
-    expect(server.currentCustId).toBeUndefined();
-    expect(server.resourceClaim).toBeUndefined();
+    assertClaimsCleared(customer, server);
   });
 
   test('sets customer status back to "waiting"', () => {

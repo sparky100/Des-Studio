@@ -1,6 +1,7 @@
 // Tests for attribute-conditional cSchedule `when` predicates (Sprint 64)
 import { describe, test, expect } from 'vitest';
 import { fireCEvent } from '../phases.js';
+import { B_HIP, B_KNEE, B_GEN, makeWhenModel, makeStandardScheduleEv } from './helpers/fixtures.js';
 
 // Minimal context builder
 function makeCtx(overrides = {}) {
@@ -18,36 +19,14 @@ function makeCtx(overrides = {}) {
   };
 }
 
-const B_HIP   = { id: 'b_hip',   name: 'Hip Complete',   scheduledTime: null };
-const B_KNEE  = { id: 'b_knee',  name: 'Knee Complete',  scheduledTime: null };
-const B_DEFLT = { id: 'b_gen',   name: 'Generic Complete', scheduledTime: null };
-
-function makeModel(bEventIds = [B_HIP, B_KNEE, B_DEFLT]) {
-  return { bEvents: bEventIds, queues: [], entityTypes: [] };
-}
-
 describe('cSchedule `when` condition — first-match semantics', () => {
   test('selects hip cSchedule when entity has surgery_type=hip', () => {
     const ctx = makeCtx({
-      model: makeModel(),
+      model: makeWhenModel(),
       entities: [{ id: 'p1', type: 'Patient', status: 'serving', attrs: { surgery_type: 'hip' } }],
     });
     ctx._lastCustId = 'p1';
-
-    const ev = {
-      id: 'ce1',
-      name: 'Assign',
-      effect: '',
-      cSchedules: [
-        { id: 'cs1', eventId: 'b_hip',  dist: 'Fixed', distParams: { value: '120' }, useEntityCtx: false,
-          when: { variable: 'Entity.surgery_type', operator: '==', value: 'hip' } },
-        { id: 'cs2', eventId: 'b_knee', dist: 'Fixed', distParams: { value: '90' },  useEntityCtx: false,
-          when: { variable: 'Entity.surgery_type', operator: '==', value: 'knee' } },
-        { id: 'cs3', eventId: 'b_gen',  dist: 'Fixed', distParams: { value: '60' },  useEntityCtx: false },
-      ],
-    };
-
-    const { felEntries } = fireCEvent(ev, ctx);
+    const { felEntries } = fireCEvent(makeStandardScheduleEv(), ctx);
     expect(felEntries).toHaveLength(1);
     expect(felEntries[0].id).toBe('b_hip');
     expect(felEntries[0].scheduledTime).toBe(120);
@@ -55,25 +34,11 @@ describe('cSchedule `when` condition — first-match semantics', () => {
 
   test('selects knee cSchedule when entity has surgery_type=knee', () => {
     const ctx = makeCtx({
-      model: makeModel(),
+      model: makeWhenModel(),
       entities: [{ id: 'p2', type: 'Patient', status: 'serving', attrs: { surgery_type: 'knee' } }],
     });
     ctx._lastCustId = 'p2';
-
-    const ev = {
-      id: 'ce1',
-      name: 'Assign',
-      effect: '',
-      cSchedules: [
-        { id: 'cs1', eventId: 'b_hip',  dist: 'Fixed', distParams: { value: '120' }, useEntityCtx: false,
-          when: { variable: 'Entity.surgery_type', operator: '==', value: 'hip' } },
-        { id: 'cs2', eventId: 'b_knee', dist: 'Fixed', distParams: { value: '90' },  useEntityCtx: false,
-          when: { variable: 'Entity.surgery_type', operator: '==', value: 'knee' } },
-        { id: 'cs3', eventId: 'b_gen',  dist: 'Fixed', distParams: { value: '60' },  useEntityCtx: false },
-      ],
-    };
-
-    const { felEntries } = fireCEvent(ev, ctx);
+    const { felEntries } = fireCEvent(makeStandardScheduleEv(), ctx);
     expect(felEntries).toHaveLength(1);
     expect(felEntries[0].id).toBe('b_knee');
     expect(felEntries[0].scheduledTime).toBe(90);
@@ -81,25 +46,11 @@ describe('cSchedule `when` condition — first-match semantics', () => {
 
   test('falls back to unconditional entry when no when-condition matches', () => {
     const ctx = makeCtx({
-      model: makeModel(),
+      model: makeWhenModel(),
       entities: [{ id: 'p3', type: 'Patient', status: 'serving', attrs: { surgery_type: 'spine' } }],
     });
     ctx._lastCustId = 'p3';
-
-    const ev = {
-      id: 'ce1',
-      name: 'Assign',
-      effect: '',
-      cSchedules: [
-        { id: 'cs1', eventId: 'b_hip',  dist: 'Fixed', distParams: { value: '120' }, useEntityCtx: false,
-          when: { variable: 'Entity.surgery_type', operator: '==', value: 'hip' } },
-        { id: 'cs2', eventId: 'b_knee', dist: 'Fixed', distParams: { value: '90' },  useEntityCtx: false,
-          when: { variable: 'Entity.surgery_type', operator: '==', value: 'knee' } },
-        { id: 'cs3', eventId: 'b_gen',  dist: 'Fixed', distParams: { value: '60' },  useEntityCtx: false },
-      ],
-    };
-
-    const { felEntries } = fireCEvent(ev, ctx);
+    const { felEntries } = fireCEvent(makeStandardScheduleEv(), ctx);
     expect(felEntries).toHaveLength(1);
     expect(felEntries[0].id).toBe('b_gen');
     expect(felEntries[0].scheduledTime).toBe(60);
@@ -107,7 +58,7 @@ describe('cSchedule `when` condition — first-match semantics', () => {
 
   test('fires nothing when all conditions have `when` and none match', () => {
     const ctx = makeCtx({
-      model: makeModel(),
+      model: makeWhenModel(),
       entities: [{ id: 'p4', type: 'Patient', status: 'serving', attrs: { surgery_type: 'spine' } }],
     });
     ctx._lastCustId = 'p4';
@@ -130,7 +81,7 @@ describe('cSchedule `when` condition — first-match semantics', () => {
 
   test('no `when` on any entry → all entries fire (legacy behaviour)', () => {
     const ctx = makeCtx({
-      model: makeModel(),
+      model: makeWhenModel(),
       entities: [{ id: 'p5', type: 'Patient', status: 'serving', attrs: {} }],
     });
     ctx._lastCustId = 'p5';
@@ -151,7 +102,7 @@ describe('cSchedule `when` condition — first-match semantics', () => {
 
   test('numeric attribute comparison works', () => {
     const ctx = makeCtx({
-      model: makeModel(),
+      model: makeWhenModel(),
       entities: [{ id: 'p6', type: 'Patient', status: 'serving', attrs: { priority: 1 } }],
     });
     ctx._lastCustId = 'p6';
@@ -174,7 +125,7 @@ describe('cSchedule `when` condition — first-match semantics', () => {
 
   test('compound AND predicate', () => {
     const ctx = makeCtx({
-      model: makeModel(),
+      model: makeWhenModel(),
       entities: [{ id: 'p7', type: 'Patient', status: 'serving', attrs: { surgery_type: 'hip', priority: 1 } }],
     });
     ctx._lastCustId = 'p7';
