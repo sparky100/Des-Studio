@@ -225,6 +225,9 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   const [paletteCollapsed, setPaletteCollapsed] = useState(() => {
     try { return localStorage.getItem("des.palette.collapsed") === "1"; } catch { return false; }
   });
+  const [showSections, setShowSections] = useState(() => {
+    try { return localStorage.getItem("des.sections.show") !== "0"; } catch { return true; }
+  });
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   // Ref set by CanvasControls (inside ReactFlow) to expose fitView for specific nodes
   const fitNodeRef = useRef(null);
@@ -746,6 +749,32 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               ))}
             </div>
 
+            {(model?.sections || []).length > 0 && (
+              <button
+                type="button"
+                aria-pressed={showSections}
+                onClick={() => setShowSections(prev => {
+                  const next = !prev;
+                  try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch {}
+                  return next;
+                })}
+                title={showSections ? "Hide section overlays" : "Show section overlays"}
+                style={{
+                  background: showSections ? `${C.accent}22` : "transparent",
+                  border: `1px solid ${showSections ? C.accent : C.border}`,
+                  borderRadius: 4,
+                  color: showSections ? C.accent : C.muted,
+                  cursor: "pointer",
+                  fontFamily: FONT,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: "5px 10px",
+                }}
+              >
+                Sections
+              </button>
+            )}
+
             {selectedNodeIds.length > 0 && (
               <div
                 aria-label="Selection actions"
@@ -798,6 +827,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               selectionMode={selectionMode}
               errorNodeIds={errorNodeIds}
               fitNodeRef={fitNodeRef}
+              showSections={showSections}
               onNodeSelect={selectNode}
               onNodeSelectionChange={syncSelection}
               onNodeMove={moveNode}

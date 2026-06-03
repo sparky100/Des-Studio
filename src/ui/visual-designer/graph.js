@@ -348,11 +348,36 @@ export function deriveGraphFromModel(model = {}) {
     }
   });
 
+  const layoutedNodes = withLayout(dedupedNodes, dedupedEdges, graph);
+
+  // Compute bounding-box panel metadata for each section that has placed members.
+  const SECTION_PAD = 24;
+  const SECTION_LABEL_H = 22;
+  const sectionPanels = sections.map(sec => {
+    const members = layoutedNodes.filter(n => n.sectionId === sec.id);
+    if (!members.length) return null;
+    const minX = Math.min(...members.map(n => n.x));
+    const minY = Math.min(...members.map(n => n.y));
+    const maxX = Math.max(...members.map(n => n.x + NODE_WIDTH));
+    const maxY = Math.max(...members.map(n => n.y + NODE_HEIGHT));
+    return {
+      id: `section-panel:${sec.id}`,
+      sectionId: sec.id,
+      name: sec.name || sec.id,
+      color: sec.color || "#888",
+      x: minX - SECTION_PAD,
+      y: minY - SECTION_PAD - SECTION_LABEL_H,
+      width: (maxX - minX) + SECTION_PAD * 2,
+      height: (maxY - minY) + SECTION_PAD * 2 + SECTION_LABEL_H,
+    };
+  }).filter(Boolean);
+
   return {
     version: 1,
-    nodes: withLayout(dedupedNodes, dedupedEdges, graph),
+    nodes: layoutedNodes,
     edges: dedupedEdges,
     viewport: graph.viewport || { x: 0, y: 0, zoom: 1 },
+    sectionPanels,
   };
 }
 

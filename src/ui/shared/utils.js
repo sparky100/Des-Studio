@@ -34,6 +34,7 @@ export function extractImportedModelPayload(payload) {
   if (source.timeUnit) model.timeUnit = source.timeUnit;
   if (source.epoch)    model.epoch    = source.epoch;
   if (Array.isArray(source.dataSources)) model.dataSources = source.dataSources;
+  if (Array.isArray(source.sections)) model.sections = source.sections;
   return model;
 }
 

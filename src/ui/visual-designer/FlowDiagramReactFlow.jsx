@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   Controls,
@@ -136,7 +136,61 @@ function DesNode({ data, selected }) {
   );
 }
 
-const nodeTypes = { desNode: DesNode };
+// Semi-transparent bounding-box panel rendered behind section member nodes.
+// The background is pointer-events:none so pan/select is unaffected;
+// only the label button captures clicks to toggle section focus.
+function SectionPanelNode({ data }) {
+  const { C, FONT } = useTheme();
+  const isFocused = !!data.isFocused;
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        width: data.width,
+        height: data.height,
+        background: isFocused ? `${data.color}1a` : `${data.color}0d`,
+        border: `1.5px solid ${isFocused ? `${data.color}cc` : `${data.color}44`}`,
+        borderRadius: 10,
+        boxSizing: "border-box",
+        pointerEvents: "none",
+        position: "relative",
+        transition: "background 180ms, border-color 180ms",
+      }}
+    >
+      <button
+        type="button"
+        onClick={e => {
+          e.stopPropagation();
+          data.onToggleFocus?.();
+        }}
+        title={isFocused ? `Clear focus: ${data.name}` : `Focus section: ${data.name}`}
+        style={{
+          position: "absolute",
+          top: 5,
+          left: 8,
+          background: isFocused ? `${data.color}33` : "transparent",
+          border: isFocused ? `1px solid ${data.color}88` : "none",
+          borderRadius: 4,
+          color: data.color,
+          cursor: "pointer",
+          fontFamily: FONT,
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: 1,
+          lineHeight: 1,
+          padding: "2px 6px",
+          pointerEvents: "auto",
+          textTransform: "uppercase",
+          transition: "background 180ms",
+        }}
+      >
+        {data.name}
+      </button>
+    </div>
+  );
+}
+
+const nodeTypes = { desNode: DesNode, sectionPanel: SectionPanelNode };
 
 function toFlowNode(node) {
   return {
@@ -258,6 +312,7 @@ export function FlowDiagramReactFlow({
   selectionMode = "pan",
   errorNodeIds,
   fitNodeRef,
+  showSections = true,
   onNodeSelect,
   onNodeSelectionChange,
   onNodeMove,
@@ -271,21 +326,81 @@ export function FlowDiagramReactFlow({
   const { C, FONT } = useTheme();
   const [dragOver, setDragOver] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [focusedSectionId, setFocusedSectionId] = useState(null);
   const suppressViewportSyncRef = useRef(true);
   const nodeClickHandledRef = useRef(false);
   const selectedSet = useMemo(() => new Set(selectedNodeIds.length ? selectedNodeIds : (selectedNodeId ? [selectedNodeId] : [])), [selectedNodeId, selectedNodeIds]);
 
-  // Attach hasError flag to each node so DesNode can show the error badge.
-  // This is derived state — never stored in model_json.
-  const nodes = useMemo(
-    () => (graph.nodes || []).map(node => {
-      const base = toFlowNode(node);
-      return { ...base, data: { ...base.data, hasError: errorNodeIds ? errorNodeIds.has(node.id) : false } };
-    }),
-    [graph.nodes, errorNodeIds]
-  );
+  // Clear section focus when sections overlay is toggled off
+  useEffect(() => {
+    if (!showSections) setFocusedSectionId(null);
+  }, [showSections]);
 
-  const edges = useMemo(() => (graph.edges || []).map(e => toFlowEdge(e, C, FONT)), [graph.edges, C, FONT]);
+  // Lookup used by edge dimming — keyed by graph node id
+  const nodeById = useMemo(() => new Map((graph.nodes || []).map(n => [n.id, n])), [graph.nodes]);
+
+  // Build React Flow nodes. Section panel nodes are prepended so they sit
+  // behind regular nodes (DOM order = z-stacking when z-index is equal).
+  const nodes = useMemo(() => {
+    const flowNodes = (graph.nodes || []).map(node => {
+      const base = toFlowNode(node);
+      const hasError = errorNodeIds ? errorNodeIds.has(node.id) : false;
+      const dimmed = showSections && focusedSectionId != null && node.sectionId !== focusedSectionId;
+      return {
+        ...base,
+        selected: selectedSet.has(node.id),
+        data: {
+          ...base.data,
+          hasError,
+          sectionColor: showSections ? base.data.sectionColor : undefined,
+          sectionId: showSections ? base.data.sectionId : undefined,
+        },
+        style: { opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms" },
+      };
+    });
+
+    if (showSections && graph.sectionPanels?.length) {
+      const panelNodes = graph.sectionPanels.map(panel => ({
+        id: panel.id,
+        type: "sectionPanel",
+        position: { x: panel.x, y: panel.y },
+        width: panel.width,
+        height: panel.height,
+        data: {
+          ...panel,
+          isFocused: focusedSectionId === panel.sectionId,
+          onToggleFocus: () => setFocusedSectionId(id => id === panel.sectionId ? null : panel.sectionId),
+        },
+        selectable: false,
+        draggable: false,
+        focusable: false,
+        style: { width: panel.width, height: panel.height },
+      }));
+      return [...panelNodes, ...flowNodes];
+    }
+
+    return flowNodes;
+  }, [graph.nodes, graph.sectionPanels, errorNodeIds, showSections, focusedSectionId, selectedSet]);
+
+  const edges = useMemo(() => {
+    return (graph.edges || []).map(e => {
+      const flowEdge = toFlowEdge(e, C, FONT);
+      if (showSections && focusedSectionId != null) {
+        const fromNode = nodeById.get(e.from);
+        const toNode = nodeById.get(e.to);
+        const fromIn = fromNode?.sectionId === focusedSectionId;
+        const toIn = toNode?.sectionId === focusedSectionId;
+        if (!fromIn && !toIn) {
+          return {
+            ...flowEdge,
+            style: { ...flowEdge.style, opacity: 0.08, transition: "opacity 200ms" },
+            labelStyle: { ...flowEdge.labelStyle, opacity: 0.08 },
+          };
+        }
+      }
+      return flowEdge;
+    });
+  }, [graph.edges, C, FONT, showSections, focusedSectionId, nodeById]);
 
   const isValidConnection = useCallback(connection => {
     const validation = validateVisualConnection(graph, connection.source, connection.target);
@@ -329,7 +444,7 @@ export function FlowDiagramReactFlow({
       }}
     >
       <ReactFlow
-        nodes={nodes.map(node => ({ ...node, selected: selectedSet.has(node.id) }))}
+        nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         defaultViewport={graph.viewport || { x: 0, y: 0, zoom: 1 }}
@@ -346,11 +461,15 @@ export function FlowDiagramReactFlow({
         panOnScroll
         isValidConnection={isValidConnection}
         onNodeClick={(event, node) => {
+          if (node.type === "sectionPanel") return;
           nodeClickHandledRef.current = true;
           const toggle = selectionMode === "select" || event?.shiftKey || event?.ctrlKey || event?.metaKey;
           onNodeSelect?.(node.id, { toggle });
         }}
-        onPaneClick={() => onNodeSelect?.(null)}
+        onPaneClick={() => {
+          setFocusedSectionId(null);
+          onNodeSelect?.(null);
+        }}
         onSelectionChange={({ nodes: selectedNodes = [] }) => {
           // onNodeClick handles single-node selection; skip here to avoid overwriting it
           // with stale controlled `selected` props before React re-renders
@@ -358,8 +477,12 @@ export function FlowDiagramReactFlow({
             nodeClickHandledRef.current = false;
             return;
           }
-          // Box-selection: use ReactFlow's internal selected flag (not our controlled prop)
-          onNodeSelectionChange?.(selectedNodes.filter(node => node.selected).map(node => node.id));
+          // Box-selection: filter out section panel nodes, use ReactFlow's internal selected flag
+          onNodeSelectionChange?.(
+            selectedNodes
+              .filter(node => node.selected && node.type !== "sectionPanel")
+              .map(node => node.id)
+          );
         }}
         onNodeDragStop={(_, node, movedNodes = []) => {
           const moved = movedNodes.length ? movedNodes : [node];
@@ -391,7 +514,7 @@ export function FlowDiagramReactFlow({
         <MiniMap
           pannable
           zoomable
-          nodeColor={node => colorForNodeType(node.data?.type, C)}
+          nodeColor={node => node.type === "sectionPanel" ? "transparent" : colorForNodeType(node.data?.type, C)}
           maskColor={C.overlay}
         />
         <CanvasControls
