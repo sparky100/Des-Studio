@@ -22,6 +22,7 @@ const IconEntities  = () => ic(11, 11, <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4
 const IconQueues    = () => ic(11, 11, <><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></>);
 const IconBEvents   = () => ic(11, 11, <><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></>);
 const IconCEvents   = () => ic(11, 11, <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>);
+const IconSections  = () => ic(11, 11, <><rect x="3" y="4" width="18" height="5" rx="1"/><rect x="3" y="15" width="18" height="5" rx="1"/><line x1="7" y1="9" x2="7" y2="15"/><line x1="17" y1="9" x2="17" y2="15"/></>);
 const IconSchedules = () => ic(11, 11, <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>);
 const IconModelData = () => ic(11, 11, <><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></>);
 
@@ -30,13 +31,14 @@ const SUB_ICONS = {
   queues:   <IconQueues />,
   bevents:  <IconBEvents />,
   cevents:  <IconCEvents />,
+  sections: <IconSections />,
   schedules:<IconSchedules />,
   state:    <IconModelData />,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DEFINE_TAB_IDS = ["entities", "queues", "bevents", "cevents", "schedules", "state"];
+const DEFINE_TAB_IDS = ["entities", "queues", "bevents", "cevents", "sections", "schedules", "state"];
 
 export function ModelTabBar({
   tab, setTab,
