@@ -275,6 +275,13 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
 **Per-outcome results.** The Results tab shows a Journey Outcomes section that breaks down completed entities by route (COMPLETE, RENEGE, and other terminal outcomes), with average wait time and average time in system reported separately per route.
 
+**Sections (large-model organisation).** When a model grows beyond roughly ten queues or twenty events, you can group elements into named *sections* to keep the editors manageable. Open the **Sections** tab (under the Design area) and click **+ Add Section** to create a named, coloured group. Assign queues, entity types, B-events, and C-events to the section using the member checkboxes. For queues that act as handoff points between sections, mark them **IN** (entities arrive from another section) or **OUT** (entities leave to another section).
+
+Once sections are defined:
+- Every table editor (Entity Types, Queues, B-Events, C-Events) shows a coloured filter tab strip — click a section name to see only its elements.
+- The Visual Designer shows a small coloured dot on each node that belongs to a section.
+- Sections are pure metadata: the simulation engine is unchanged and all elements remain part of the same flat model.
+
 ---
 
 ## 5. Troubleshooting

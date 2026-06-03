@@ -115,6 +115,7 @@ export function norm(r) {
     timeUnit:       modelJson.timeUnit ?? 'minutes',
     epoch:          modelJson.epoch ?? null,
     dataSources:    modelJson.dataSources ?? [],
+    sections:       modelJson.sections ?? [],
     owner_id:       r.owner_id,
     owner:          r.owner_id,
     createdAt:      r.created_at,
@@ -139,6 +140,7 @@ function modelJsonFromModel(model = {}) {
     epoch:                model.epoch || null,
   };
   if (model.dataSources?.length) json.dataSources = model.dataSources;
+  if (model.sections?.length) json.sections = model.sections;
   return json;
 }
 

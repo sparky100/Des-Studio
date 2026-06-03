@@ -65,7 +65,8 @@ Read this before writing any model JSON.
     "liveDataMode": null,
     "terminationCondition": null
   },
-  "dataSources": []
+  "dataSources": [],
+  "sections": []
 }
 ```
 
@@ -84,6 +85,7 @@ Read this before writing any model JSON.
 | `experimentDefaults.terminationCondition` | string \| null | No | Stop expression evaluated after each event, e.g. `"summary.served >= 100"`. When set, the run stops when the condition becomes true — regardless of `maxSimTime`. Editable in the UI's Execute panel → Run Configuration tab. Set `null` or omit for pure time-bounded runs. Warning V16 fires if neither `maxSimTime` nor `terminationCondition` is configured. |
 | `experimentDefaults.liveDataMode` | `null` \| `"calibrated_batch"` \| `"rolling"` \| `"lookahead"` | No | Live-data run mode. `null` = static (default). See §15 for live data. |
 | `dataSources` | array | No | Live data source definitions. See §15. |
+| `sections` | array | No | Named groupings of model elements. See §11.1. |
 
 ---
 
@@ -1122,6 +1124,61 @@ All other model settings (routing, probabilistic routing, balking, loop guards, 
 ---
 
 ## 11. Common Patterns
+
+### 11.1 Sections (Large-Model Organisation)
+
+`sections[]` is an optional metadata layer that groups queues, entity types, B-events, and C-events into named, coloured swimlanes. The simulation engine ignores sections entirely — they are authoring and visualisation aids only.
+
+```json
+"sections": [
+  {
+    "id": "sec_nhs24",
+    "name": "NHS 24 / 111 Triage",
+    "color": "#4A90D9",
+    "memberIds": ["q_nhs24_call", "q_nhs24_clinical", "et_call_handler"],
+    "entryQueues": ["q_nhs24_call"],
+    "exitQueues":  ["q_miu_appt", "q_ae_referred"]
+  }
+]
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique section ID (e.g. `"sec_nhs24"`) |
+| `name` | string | Human-readable label shown in filter tabs and swimlane headers |
+| `color` | string | CSS hex colour used for swimlane background and filter tab indicators |
+| `memberIds` | string[] | IDs of queues, entity types, B-events, and/or C-events that belong to this section. Each element may appear in at most one section. |
+| `entryQueues` | string[] | Subset of `memberIds` — queues where entities arrive from another section |
+| `exitQueues` | string[] | Subset of `memberIds` — queues where entities leave to another section |
+
+**Effect on the UI:**
+- Each editor (Entity Types, Queues, B-Events, C-Events) shows a section filter tab strip; clicking a tab hides all rows not in that section.
+- The Visual Designer shows a coloured dot on each node whose `refId` appears in a section's `memberIds`.
+- A dedicated **Sections** tab in the Design area lets users create, rename, recolour, and assign members.
+
+**When sections are appropriate:**
+
+Sections add value when a model has distinct, named stages that an entity passes through sequentially, and when the total number of queues or events makes the flat list hard to navigate. Typical triggers:
+
+| Signal | Example |
+|---|---|
+| ≥ 8 queues or ≥ 15 events | Glasgow Urgent Care Pathway (20 queues, 50+ events) |
+| Multi-stage pathway with named handoff points | NHS 24 → MIU → A&E |
+| Multiple departments or wards modelled in one file | Triage, Observation, Theatres, Recovery |
+| User asks for sub-models, swimlanes, or grouped views | "Can you split this into sections?" |
+
+Sections are **not** needed for:
+- Simple single-flow models (M/M/1, M/M/c, one or two queues)
+- Models where all queues belong to the same logical stage
+- Exploratory or template models
+
+**Rules:**
+- `entryQueues` and `exitQueues` must be subsets of `memberIds` and must reference queue IDs (not other element types).
+- An element appearing in multiple sections is a modelling error (the UI will assign it to the last section that claims it).
+- When generating a model JSON, you **may** populate `sections[]` if the model is clearly multi-stage (see table above) and element IDs are known. Reference the actual `id` values of the queues and events you defined earlier in the JSON — do not invent IDs.
+- If you are unsure which elements belong to which stage, omit `sections` or set it to `[]` and note in your response that the user can assign sections via the Sections tab.
+
+---
 
 ### Single-server queue (M/M/1)
 

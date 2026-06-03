@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
+import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { AttrEditor } from "./AttrEditor.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-const EntityTypeEditor=({types,onChange})=>{
+const EntityTypeEditor=({types,sections=[],onChange})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
+  const [activeSectionId,setActiveSectionId]=useState("all");
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(types.map(e=>e.id)));
@@ -56,12 +58,14 @@ const EntityTypeEditor=({types,onChange})=>{
   };
 
   const lcFilter=filterText.toLowerCase();
-  const filtered=lcFilter?types.filter(et=>(et.name||"").toLowerCase().includes(lcFilter)):types;
+  const sectionFiltered=filterBySection(types, sections, activeSectionId);
+  const filtered=lcFilter?sectionFiltered.filter(et=>(et.name||"").toLowerCase().includes(lcFilter)):sectionFiltered;
   const effectiveExpanded=lcFilter?new Set(filtered.map(e=>e.id)):expandedIds;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
       <SH label="Entity Types" color={C.server}><Btn small variant="ghost" onClick={add}>+ Add Type</Btn></SH>
+      <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
       {types.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"

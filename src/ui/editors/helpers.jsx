@@ -376,4 +376,55 @@ const EffectPicker = ({effects, options, onChange}) => {
   );
 };
 
-export { displayEventName, queueDisplayName, conditionOptions, assignOptions, bEffectOptions, DropField, EffectPicker, toTitleCase, normTypeName };
+// SectionFilterTabs — section-aware filter strip shared by all table editors.
+// sections: model.sections array. activeId: current section filter ("all"|"unassigned"|sectionId).
+// onChange(id): called when user switches tab.
+const SectionFilterTabs = ({ sections = [], activeId, onChange }) => {
+  const { C, FONT } = useTheme();
+  if (!sections.length) return null;
+  const tabs = [
+    { id: "all", label: "All", color: C.muted },
+    ...sections.map(s => ({ id: s.id, label: s.name || "Section", color: s.color })),
+    { id: "unassigned", label: "Unassigned", color: C.muted },
+  ];
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+      {tabs.map(t => {
+        const active = activeId === t.id;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => onChange(t.id)}
+            style={{
+              fontSize: 10, fontWeight: active ? 700 : 400, fontFamily: FONT,
+              padding: "3px 10px", borderRadius: 12, cursor: "pointer",
+              border: `1px solid ${active ? t.color : `${t.color}55`}`,
+              background: active ? `${t.color}22` : "transparent",
+              color: active ? t.color : C.muted,
+            }}
+          >
+            {active && t.id !== "all" && t.id !== "unassigned" && (
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: t.color, marginRight: 4, verticalAlign: "middle" }} />
+            )}
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+};
+
+// filterBySection — returns items whose id appears in the given section, or all/unassigned.
+export function filterBySection(items, sections, activeSectionId) {
+  if (!activeSectionId || activeSectionId === "all") return items;
+  if (activeSectionId === "unassigned") {
+    const allMemberIds = new Set(sections.flatMap(s => s.memberIds));
+    return items.filter(item => !allMemberIds.has(item.id));
+  }
+  const section = sections.find(s => s.id === activeSectionId);
+  if (!section) return items;
+  return items.filter(item => section.memberIds.includes(item.id));
+}
+
+export { displayEventName, queueDisplayName, conditionOptions, assignOptions, bEffectOptions, DropField, EffectPicker, toTitleCase, normTypeName, SectionFilterTabs };

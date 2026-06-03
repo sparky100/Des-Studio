@@ -68,6 +68,22 @@ function DesNode({ data, selected }) {
           }}
         >!</div>
       )}
+      {!hasError && data.sectionColor && (
+        <div
+          aria-hidden="true"
+          title={`Section: ${data.sectionId || ""}`}
+          style={{
+            position: "absolute",
+            top: -4,
+            right: -4,
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            background: data.sectionColor,
+            border: `1.5px solid ${C.bg}`,
+          }}
+        />
+      )}
       {hasTarget && (
         <Handle
           type="target"

@@ -122,7 +122,16 @@ export function deriveGraphFromModel(model = {}) {
   const cEvents = model.cEvents || [];
   const queues = model.queues || [];
   const dataSources = model.dataSources || [];
+  const sections = model.sections || [];
   const graph = model.graph || {};
+
+  // Build a lookup: element id → { sectionId, sectionColor }
+  const sectionByElemId = new Map();
+  sections.forEach(sec => {
+    (sec.memberIds || []).forEach(id => {
+      sectionByElemId.set(id, { sectionId: sec.id, sectionColor: sec.color });
+    });
+  });
   const nodes = [];
   const edges = [];
   const queueByName = new Map(queues.map(queue => [norm(queue.name), queue]));
@@ -296,7 +305,11 @@ export function deriveGraphFromModel(model = {}) {
     });
   });
 
-  const dedupedNodes = [...new Map(nodes.map(node => [node.id, node])).values()];
+  const dedupedNodes = [...new Map(nodes.map(node => [node.id, node])).values()]
+    .map(node => {
+      const sec = node.refId ? sectionByElemId.get(node.refId) : null;
+      return sec ? { ...node, sectionId: sec.sectionId, sectionColor: sec.sectionColor } : node;
+    });
   const dedupedEdges = [...new Map(edges.map(edge => [edge.id, edge])).values()];
   const nodeTypeById = new Map(dedupedNodes.map(n => [n.id, n.type]));
 
