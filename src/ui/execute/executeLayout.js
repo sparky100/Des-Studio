@@ -3,7 +3,7 @@
 // so nodes in the same column are centre-aligned and don't overlap.
 import dagre from "@dagrejs/dagre";
 
-const EXEC_NODE_WIDTH = 180;   // 160 px card + 20 px breathing room
+export const EXEC_NODE_WIDTH = 180;   // 160 px card + 20 px breathing room
 const EXEC_RANK_SEP   = 80;    // horizontal gap between columns
 const EXEC_NODE_SEP   = 50;    // vertical gap between nodes in the same column
 const EXEC_MARGIN_X   = 60;
@@ -13,7 +13,7 @@ const EXEC_MARGIN_Y   = 60;
 // Dagre uses these to reserve the right vertical slot per node type and to
 // centre nodes within a column — subtracting h/2 below converts Dagre's
 // centre-point to the React Flow top-left origin.
-const EXEC_NODE_HEIGHT = {
+export const EXEC_NODE_HEIGHT = {
   source:   95,
   queue:   120,
   activity: 145,

@@ -22,7 +22,8 @@ import { ExecuteSinkNode }     from "./ExecuteSinkNode.jsx";
 import { AnimatedEdge }        from "./AnimatedEdge.jsx";
 import { formatSimWallTime }   from "../../engine/clockUtils.js";
 import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
-import { computeExecuteLayout } from "./executeLayout.js";
+import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_NODE_HEIGHT } from "./executeLayout.js";
+import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 export { DEFAULT_KPI_SLOTS };
 
@@ -377,6 +378,7 @@ const liveNodeTypes = {
   queueNode:     ExecuteQueueNode,
   activityNode:  ExecuteActivityNode,
   sinkNode:      ExecuteSinkNode,
+  sectionPanel:  SectionPanelNode,
 };
 
 const edgeTypes = { animatedEdge: AnimatedEdge };
@@ -431,7 +433,13 @@ export function ExecuteCanvas({
     return { arrived, served, reneged: snap.reneged ?? 0 };
   }, [baseGraph.nodes, snap]);
   const [canvasHeight, setCanvasHeight] = useState(480);
+  const [showSections, setShowSections] = useState(() => {
+    try { return localStorage.getItem("des.sections.show") !== "0"; } catch { return true; }
+  });
+  const [focusedSectionId, setFocusedSectionId] = useState(null);
   const dragStateRef = useRef(null);
+
+  useEffect(() => { if (!showSections) setFocusedSectionId(null); }, [showSections]);
 
   useEffect(() => {
     const handlePointerMove = (event) => {
@@ -529,12 +537,41 @@ export function ExecuteCanvas({
     [baseGraph.nodes, baseGraph.edges]
   );
 
+  // Lookup used for edge dimming — keyed by graph node id
+  const nodeById = useMemo(() => new Map(layoutedNodes.map(n => [n.id, n])), [layoutedNodes]);
+
+  // Bounding-box panels for each section, computed from execute-layout positions.
+  // Cannot reuse graph.sectionPanels — those use design-canvas (smaller, uniform) dimensions.
+  const sectionPanels = useMemo(() => {
+    if (!showSections || !(model.sections?.length)) return [];
+    const SECTION_PAD = 24;
+    const SECTION_LABEL_H = 22;
+    return model.sections.map(sec => {
+      const members = layoutedNodes.filter(n => n.sectionId === sec.id);
+      if (!members.length) return null;
+      const minX = Math.min(...members.map(n => n.x));
+      const minY = Math.min(...members.map(n => n.y));
+      const maxX = Math.max(...members.map(n => n.x + EXEC_NODE_WIDTH));
+      const maxY = Math.max(...members.map(n => n.y + (EXEC_NODE_HEIGHT[n.type] ?? 120)));
+      return {
+        id: `section-panel:${sec.id}`,
+        sectionId: sec.id,
+        name: sec.name || sec.id,
+        color: sec.color || "#888",
+        x: minX - SECTION_PAD,
+        y: minY - SECTION_PAD - SECTION_LABEL_H,
+        width: (maxX - minX) + SECTION_PAD * 2,
+        height: (maxY - minY) + SECTION_PAD * 2 + SECTION_LABEL_H,
+      };
+    }).filter(Boolean);
+  }, [showSections, model.sections, layoutedNodes]);
+
   const flowNodes = useMemo(() => {
     const entities = snap?.entities || [];
     const waiting = entities.filter(e => e.status === "waiting");
     const servers = entities.filter(e => e.role === "server");
 
-    return layoutedNodes.map(node => {
+    const mapped = layoutedNodes.map(node => {
       let liveData = null;
       if (snap) {
         if (node.type === "queue") {
@@ -602,15 +639,52 @@ export function ExecuteCanvas({
           };
         }
       }
-      return { ...toFlowNode(node), data: { ...node, liveData } };
+      const dimmed = showSections && focusedSectionId != null && node.sectionId !== focusedSectionId;
+      return {
+        ...toFlowNode(node),
+        data: { ...node, liveData },
+        style: { opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms" },
+      };
     });
-  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex]);
 
-  const flowEdges = useMemo(() => baseGraph.edges.map(edge => ({
-    ...toFlowEdge(edge, C),
-    type: animationEnabled ? "animatedEdge" : undefined,
-    data: animationEnabled ? { tokens: edgeTokens[edge.id] || [] } : undefined,
-  })), [baseGraph.edges, animationEnabled, edgeTokens, C]);
+    if (showSections && sectionPanels.length) {
+      const panelFlowNodes = sectionPanels.map(panel => ({
+        id: panel.id,
+        type: "sectionPanel",
+        position: { x: panel.x, y: panel.y },
+        width: panel.width,
+        height: panel.height,
+        data: {
+          ...panel,
+          isFocused: focusedSectionId === panel.sectionId,
+          onToggleFocus: () => setFocusedSectionId(id => id === panel.sectionId ? null : panel.sectionId),
+        },
+        selectable: false,
+        draggable: false,
+        focusable: false,
+        style: { width: panel.width, height: panel.height },
+      }));
+      return [...panelFlowNodes, ...mapped];
+    }
+
+    return mapped;
+  }, [snap, layoutedNodes, serverTypeIndex, sourceIndex, showSections, focusedSectionId, sectionPanels]);
+
+  const flowEdges = useMemo(() => baseGraph.edges.map(edge => {
+    const base = {
+      ...toFlowEdge(edge, C),
+      type: animationEnabled ? "animatedEdge" : undefined,
+      data: animationEnabled ? { tokens: edgeTokens[edge.id] || [] } : undefined,
+    };
+    if (showSections && focusedSectionId != null) {
+      const fromNode = nodeById.get(edge.from);
+      const toNode = nodeById.get(edge.to);
+      if (fromNode?.sectionId !== focusedSectionId && toNode?.sectionId !== focusedSectionId) {
+        return { ...base, style: { ...base.style, opacity: 0.08, transition: "opacity 200ms" } };
+      }
+    }
+    return base;
+  }), [baseGraph.edges, animationEnabled, edgeTokens, C, showSections, focusedSectionId, nodeById]);
 
   // No derivable nodes — caller renders VisualView fallback
   if (!baseGraph.nodes.length) return null;
@@ -703,11 +777,41 @@ export function ExecuteCanvas({
           minZoom={0.15}
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
-          onNodeClick={(_, node) => onNodeSelect?.(node.data?.label ?? null)}
-          onPaneClick={() => onNodeSelect?.(null)}
+          onNodeClick={(_, node) => {
+            if (node.type === "sectionPanel") return;
+            onNodeSelect?.(node.data?.label ?? null);
+          }}
+          onPaneClick={() => { setFocusedSectionId(null); onNodeSelect?.(null); }}
         >
           <Background color={C.border} gap={24} size={1} />
           <Controls showInteractive={false} />
+          {(model.sections?.length > 0) && (
+            <Panel position="top-left">
+              <button
+                type="button"
+                aria-pressed={showSections}
+                onClick={() => setShowSections(prev => {
+                  const next = !prev;
+                  try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch {}
+                  return next;
+                })}
+                title={showSections ? "Hide section overlays" : "Show section overlays"}
+                style={{
+                  background: showSections ? `${C.accent}22` : C.surface,
+                  border: `1px solid ${showSections ? C.accent : C.border}`,
+                  borderRadius: 4,
+                  color: showSections ? C.accent : C.muted,
+                  cursor: "pointer",
+                  fontFamily: FONT,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  padding: "5px 9px",
+                }}
+              >
+                Sections
+              </button>
+            </Panel>
+          )}
           {!snap && (
             <Panel position="bottom-center">
               <div style={{
