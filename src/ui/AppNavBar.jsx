@@ -67,7 +67,6 @@ export function AppNavBar({
         {/* Brand */}
         <div>
           <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2, fontFamily: FONT, lineHeight: 1.1 }}>simmodlr</div>
-          <div style={{ fontSize: 9, color: C.muted, letterSpacing: 0.5, fontFamily: FONT, lineHeight: 1.1 }}>a simmodlr.app</div>
         </div>
 
         <div style={{ flex: 1 }} />
