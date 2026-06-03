@@ -38,7 +38,7 @@ Date: 2026-05-26
 
 ## Goal
 
-Add a lightweight, explicit runtime instrumentation layer so DES Studio can answer two questions for any run:
+Add a lightweight, explicit runtime instrumentation layer so simmodlr can answer two questions for any run:
 
 1. How much simulation work did the engine perform?
 2. What did that work cost in browser time, memory-adjacent payload size, and persistence size?

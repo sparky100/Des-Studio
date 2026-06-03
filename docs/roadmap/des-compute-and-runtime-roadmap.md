@@ -481,7 +481,7 @@ Control storage, API, and compute cost as run volume grows, using measured evide
 
 ## Outcome
 
-If delivered in this order, DES Studio keeps its current strengths:
+If delivered in this order, simmodlr keeps its current strengths:
 
 - browser-first simplicity for small runs
 - strong existing benchmark assets

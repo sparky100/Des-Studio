@@ -60,13 +60,13 @@ The biggest gaps against the latest LLM/schema-oriented safety requirements are:
 
 ### Engine-level validation
 
-- `validateModel(model)` in [src/engine/validation.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:14)
+- `validateModel(model)` in [src/engine/validation.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:14)
 - returns `{ errors, warnings }`
 - reused by tests and by the Execute workspace
 
 ### Execute-only checks
 
-- Execute adds two extra blockers in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:191):
+- Execute adds two extra blockers in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:191):
   - warm-up must be less than run duration
   - `replications` must be a positive integer
 
@@ -76,32 +76,32 @@ This means some safeguards are not part of the portable schema validator today.
 
 | Area | Status today | Evidence | Notes |
 |---|---|---|---|
-| Missing `maxSimTime` / stop rule | Partially checked | [validation.js:542](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:542) | `V16` warns when there are arrivals and neither positive `maxSimTime` nor termination condition is set. It is warning-only, not a blocker. |
-| Missing sinks | Partially checked | [validation.js:296](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:296) | `V8` blocks only when both source and sink are missing; source-only or sink-only cases are warnings. |
-| Probabilistic routing to `null` must terminate entity | Checked | [validation.js:451](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:451) | `V30` blocks null probabilistic exit without `COMPLETE()` or `RENEGE()`. |
-| Routing combined with `RELEASE(Server, Queue)` | Checked for routing tables | [validation.js:367](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:367), [validation.js:418](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:418) | `V17` and `V18` catch `routing`/`probabilisticRouting` combined with a literal RELEASE target queue. |
-| Priority queue without `priority` attribute | Partially checked | [validation.js:96](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:96) | `V4` checks for presence of `priority`, but not that its `valueType` is numeric. |
-| Loop guard shape | Checked narrowly | [validation.js:527](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:527) | `V24` validates `loopConfig.maxLoopCount` and `exitQueueName`, not whether explosive loops exist without a guard. |
-| C-event condition references unknown queues | Checked | [validation.js:338](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:338) | `V9` handles queue-name references only. |
-| Probabilistic routing probabilities and queue names | Checked | [validation.js:418](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:418) | `V18` validates sum and queue references. |
-| Conditional routing queue references | Checked | [validation.js:367](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:367) | `V17` validates queue targets and `defaultQueueName`. |
-| `RENEGE(ctx)` guidance | Checked as warning | [validation.js:553](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:553) | `V25` warns on non-`ctx` usage. |
-| `cSchedules` all-conditional with no fallback | Checked as warning | [validation.js:638](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:638) | `V29` warns when all rows have `when` and no fallback exists. |
-| Positive integer replications | Checked in Execute only | [index.jsx:201](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:201) | Not part of `validateModel()`. |
-| Warm-up less than maxSimTime | Checked in Execute only | [index.jsx:198](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:198) | Uses ad hoc `V14` code in Execute, which collides semantically with engine `V14` shift-schedule validation. |
+| Missing `maxSimTime` / stop rule | Partially checked | [validation.js:542](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:542) | `V16` warns when there are arrivals and neither positive `maxSimTime` nor termination condition is set. It is warning-only, not a blocker. |
+| Missing sinks | Partially checked | [validation.js:296](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:296) | `V8` blocks only when both source and sink are missing; source-only or sink-only cases are warnings. |
+| Probabilistic routing to `null` must terminate entity | Checked | [validation.js:451](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:451) | `V30` blocks null probabilistic exit without `COMPLETE()` or `RENEGE()`. |
+| Routing combined with `RELEASE(Server, Queue)` | Checked for routing tables | [validation.js:367](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:367), [validation.js:418](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:418) | `V17` and `V18` catch `routing`/`probabilisticRouting` combined with a literal RELEASE target queue. |
+| Priority queue without `priority` attribute | Partially checked | [validation.js:96](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:96) | `V4` checks for presence of `priority`, but not that its `valueType` is numeric. |
+| Loop guard shape | Checked narrowly | [validation.js:527](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:527) | `V24` validates `loopConfig.maxLoopCount` and `exitQueueName`, not whether explosive loops exist without a guard. |
+| C-event condition references unknown queues | Checked | [validation.js:338](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:338) | `V9` handles queue-name references only. |
+| Probabilistic routing probabilities and queue names | Checked | [validation.js:418](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:418) | `V18` validates sum and queue references. |
+| Conditional routing queue references | Checked | [validation.js:367](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:367) | `V17` validates queue targets and `defaultQueueName`. |
+| `RENEGE(ctx)` guidance | Checked as warning | [validation.js:553](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:553) | `V25` warns on non-`ctx` usage. |
+| `cSchedules` all-conditional with no fallback | Checked as warning | [validation.js:638](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:638) | `V29` warns when all rows have `when` and no fallback exists. |
+| Positive integer replications | Checked in Execute only | [index.jsx:201](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:201) | Not part of `validateModel()`. |
+| Warm-up less than maxSimTime | Checked in Execute only | [index.jsx:198](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:198) | Uses ad hoc `V14` code in Execute, which collides semantically with engine `V14` shift-schedule validation. |
 
 ## Rules Missing Today
 
 | Gap | Severity | Current state | Proposed validation message |
 |---|---|---|---|
-| Time-mode run must have explicit `maxSimTime` | High | `validateModel()` falls back to `500` via `DEFAULT_MAX_SIM_TIME` in [validation.js:12](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:12) and [validation.js:236](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:236), so missing duration is silently accepted in many cases. | `Run duration is missing. Set maxSimTime or choose a condition-based stop rule before running.` |
+| Time-mode run must have explicit `maxSimTime` | High | `validateModel()` falls back to `500` via `DEFAULT_MAX_SIM_TIME` in [validation.js:12](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:12) and [validation.js:236](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:236), so missing duration is silently accepted in many cases. | `Run duration is missing. Set maxSimTime or choose a condition-based stop rule before running.` |
 | Lifecycle sink must be unambiguous | High | Validation checks sink presence heuristically, but does not inspect whether a terminal completion mixes conflicting sink patterns. | `Terminal path is ambiguous. Choose one clear lifecycle sink: COMPLETE(), RENEGE(ctx), or a guarded explicit exit route.` |
 | Conditional routing to `null` used as simple sink | High | `V30` exists only for `probabilisticRouting`, not `routing: [{ condition, queueName: null }]`. | `B-Event '{name}' routes to exit through a null queue but does not explicitly complete or renege the entity.` |
-| String routing conditions where predicate objects are required | High | `routing.condition` is only checked for “has some content” in [validation.js:37](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:37). No shape enforcement exists. | `Routing condition must be a predicate object from the Predicate Builder, not a free-text string.` |
-| String C-event conditions accepted as normal | Medium | `V9` still parses legacy `queue(...)` strings in [validation.js:324](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:324). | `C-Event condition uses legacy text format. Convert it to a structured predicate before running.` |
+| String routing conditions where predicate objects are required | High | `routing.condition` is only checked for “has some content” in [validation.js:37](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:37). No shape enforcement exists. | `Routing condition must be a predicate object from the Predicate Builder, not a free-text string.` |
+| String C-event conditions accepted as normal | Medium | `V9` still parses legacy `queue(...)` strings in [validation.js:324](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:324). | `C-Event condition uses legacy text format. Convert it to a structured predicate before running.` |
 | `cSchedules` with entity-dependent `when` but missing `useEntityCtx` | High | No check ensures entity context is carried when `when` references `Entity.*`. Engine tests show `when` can exist with `useEntityCtx: false`. | `C-schedule row uses an Entity-based condition but does not carry entity context. Enable useEntityCtx for this row.` |
-| `EntityAttr` cSchedule without `useEntityCtx` | High | Validation explicitly skips `EntityAttr` parameter checks in [validation.js:119](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:119) and does not require context transport. | `EntityAttr service time requires useEntityCtx so the scheduled B-Event can target the correct entity.` |
-| Partial server failure specs | High | Engine uses `mtbfDist`, `mtbfDistParams`, `mttrDist`, `mttrDistParams` in [index.js:305](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/index.js:305), but validation has no rule for missing repair side, invalid dist params, or server-role mismatch. | `Server failure model is incomplete. Provide both MTBF and MTTR distributions with valid parameters, or remove the failure model.` |
+| `EntityAttr` cSchedule without `useEntityCtx` | High | Validation explicitly skips `EntityAttr` parameter checks in [validation.js:119](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:119) and does not require context transport. | `EntityAttr service time requires useEntityCtx so the scheduled B-Event can target the correct entity.` |
+| Partial server failure specs | High | Engine uses `mtbfDist`, `mtbfDistParams`, `mttrDist`, `mttrDistParams` in [index.js:305](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/index.js:305), but validation has no rule for missing repair side, invalid dist params, or server-role mismatch. | `Server failure model is incomplete. Provide both MTBF and MTTR distributions with valid parameters, or remove the failure model.` |
 | Priority queue requires numeric `priority` attribute | High | `V4` checks only attribute presence, not `valueType === "number"`. | `Queue '{name}' uses PRIORITY discipline but entity class '{class}' does not have a numeric priority attribute.` |
 | Unguarded loops / explosive recirculation | High | `loopConfig` shape is validated, but there is no structural check for back-edges, null-exit absence, or recirculation without any guard. | `Possible unbounded recirculation detected. Add a loop guard, a finite stop rule, or an explicit exit path.` |
 | Excessive planned rows | High | No validator counts `Schedule.rows` / `times`, even though the complexity estimator and admission design already discuss this. | `Planned schedule size exceeds the supported limit for this run tier. Reduce imported rows or move the run to a higher-capacity execution path.` |
@@ -117,9 +117,9 @@ The latest safety-oriented prompts assume explicit run-sizing intent. Current va
 
 Relevant code:
 
-- [src/engine/validation.js:12](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:12)
-- [src/engine/validation.js:236](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:236)
-- [tests/engine/validation.test.js:237](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/tests/engine/validation.test.js:237)
+- [src/engine/validation.js:12](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:12)
+- [src/engine/validation.js:236](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:236)
+- [tests/engine/validation.test.js:237](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/tests/engine/validation.test.js:237)
 
 ### 2. Lifecycle validation is presence-based, not path-based
 
@@ -142,14 +142,14 @@ That is compatible with older stored models, but it also means the validator can
 
 Relevant code:
 
-- [src/engine/validation.js:37](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:37)
-- [src/engine/validation.js:324](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js:324)
+- [src/engine/validation.js:37](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:37)
+- [src/engine/validation.js:324](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js:324)
 
 ### 4. `useEntityCtx` is a real runtime contract but not a validated one
 
 The engine clearly uses `useEntityCtx` when scheduling follow-up B-events:
 
-- [src/engine/phases.js:387](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/phases.js:387)
+- [src/engine/phases.js:387](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/phases.js:387)
 
 But validation does not currently enforce:
 
@@ -162,11 +162,11 @@ This is a subtle correctness gap because the model can be syntactically valid wh
 
 The engine supports server breakdown/repair scheduling from entity-type fields:
 
-- [src/engine/index.js:305](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/index.js:305)
+- [src/engine/index.js:305](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/index.js:305)
 
 The UI exposes those fields in:
 
-- [src/ui/editors/EntityTypeEditor.jsx:125](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/editors/EntityTypeEditor.jsx:125)
+- [src/ui/editors/EntityTypeEditor.jsx:125](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/editors/EntityTypeEditor.jsx:125)
 
 But `validateModel()` has no rule that:
 
@@ -180,8 +180,8 @@ That is a clear gap between supported schema and pre-run safety.
 
 The repo already has:
 
-- a complexity estimator in [src/engine/complexity-estimator.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/complexity-estimator.js:210)
-- an admission-rules design in [des-run-admission-rules.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/architecture/des-run-admission-rules.md)
+- a complexity estimator in [src/engine/complexity-estimator.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/complexity-estimator.js:210)
+- an admission-rules design in [des-run-admission-rules.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/architecture/des-run-admission-rules.md)
 
 But the validator still does not block or warn on:
 
@@ -266,7 +266,7 @@ Those are the main “slow or invalid model” gaps from an operational perspect
 - “too large” complexity blocking
 - some structural loop-risk warnings when they depend on chosen run settings
 
-That split matches the existing direction in [des-run-admission-rules.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/architecture/des-run-admission-rules.md).
+That split matches the existing direction in [des-run-admission-rules.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/architecture/des-run-admission-rules.md).
 
 ## Bottom Line
 

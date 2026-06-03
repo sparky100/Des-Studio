@@ -66,7 +66,7 @@ The sprint also incorporated SimPy-informed design guidance by tightening event 
 - `tests/db/models.test.js`
 - `src/engine/__tests__/distributions.test.js`
 - `AGENTS.md`
-- `docs/DES_Studio_Build_Plan.md`
+- `docs/simmodlr_Build_Plan.md`
 
 ## Verification
 
@@ -112,4 +112,4 @@ Recommended Sprint 25 candidates:
 
 ## Final Assessment
 
-Sprint 24 met its primary objective: the simulation engine is materially safer, more deterministic, and more explicit about unstable conditions than at sprint start, while remaining compatible with the existing DES Studio architecture.
+Sprint 24 met its primary objective: the simulation engine is materially safer, more deterministic, and more explicit about unstable conditions than at sprint start, while remaining compatible with the existing simmodlr architecture.

@@ -124,9 +124,9 @@ Apply consistent formatting across all chart components in the Analysis view:
 | `src/ui/execute/ExperimentControls.jsx` | Add Animate, Collect time-series, Speed props and renders |
 | `src/ui/execute/index.jsx` | Remove Animate/Collect/Speed from menu; add Export… popover; remove Share; disable Log during run; rename Entities tab |
 | Analysis chart components | Axis labels, titles, grid lines, colour, padding |
-| `docs/DES_Studio_Engineering_Spec.md` | v1.9.0 — update §7.3, §7.4, add §2.11 |
-| `docs/DES_Studio_User_Guide.md` | v1.7.0 — update §8, §7.4 |
-| `docs/DES_Studio_Build_Plan.md` | Add Sprint 66 |
+| `docs/simmodlr_Engineering_Spec.md` | v1.9.0 — update §7.3, §7.4, add §2.11 |
+| `docs/simmodlr_User_Guide.md` | v1.7.0 — update §8, §7.4 |
+| `docs/simmodlr_Build_Plan.md` | Add Sprint 66 |
 
 ---
 

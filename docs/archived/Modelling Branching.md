@@ -1,4 +1,4 @@
-In DES Studio, which uses Pidd's Three-Phase Method, you handle branching outcomes based on whether the branch is
+In simmodlr, which uses Pidd's Three-Phase Method, you handle branching outcomes based on whether the branch is
   probabilistic (e.g., 80% pass, 20% fail) or conditional (e.g., if queue length > 5 then route to B, else route to
   A).
 
@@ -15,7 +15,7 @@ In DES Studio, which uses Pidd's Three-Phase Method, you handle branching outcom
       follow-on B-events, but you use a Custom distribution that returns 0 (meaning do not schedule) or 1 (meaning
       schedule now) based on a random draw.
 
-  Currently, DES Studio's built-in distributions handle time. To route probabilistically, you often schedule an
+  Currently, simmodlr's built-in distributions handle time. To route probabilistically, you often schedule an
   intermediate B-Event (e.g., InspectComplete) which then uses macros to modify the entity's state variables, and
   subsequent C-events look at that state variable to determine the next step.
 
@@ -37,7 +37,7 @@ In DES Studio, which uses Pidd's Three-Phase Method, you handle branching outcom
      the Slow queue.
 
   The Most Common Pattern: Attribute-Based Routing
-  The cleanest way to handle complex branching in DES Studio is:
+  The cleanest way to handle complex branching in simmodlr is:
    1. When an activity finishes (B-Event), assign a specific attribute to the entity (e.g., needsRework = true or
       needsRework = false).
    2. Create separate C-Events that watch for those attributes.

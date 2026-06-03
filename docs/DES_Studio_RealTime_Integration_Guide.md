@@ -1,14 +1,14 @@
-# DES Studio — Real-Time Data Integration Guide
+# simmodlr — Real-Time Data Integration Guide
 
 **Version:** 1.0.0
 **Sprint baseline:** Sprint 57 (adapter layer foundation)
-**Audience:** Operations analysts and system administrators enabling live data feeds for DES Studio models
+**Audience:** Operations analysts and system administrators enabling live data feeds for simmodlr models
 
 ---
 
 ## Overview
 
-DES Studio can connect to external operational data sources so that model parameters (arrival rates, service times, resource capacities) are updated from live systems before or during a simulation run. This removes the need to manually recalibrate models each day and enables three new operational patterns:
+simmodlr can connect to external operational data sources so that model parameters (arrival rates, service times, resource capacities) are updated from live systems before or during a simulation run. This removes the need to manually recalibrate models each day and enables three new operational patterns:
 
 | Pattern | Description |
 |---|---|
@@ -24,11 +24,11 @@ DES Studio can connect to external operational data sources so that model parame
 
 ### 1. A data endpoint (required for any live data pattern)
 
-DES Studio connects to HTTP REST endpoints or WebSocket streams that return current operational metrics. Your system must expose at least one of:
+simmodlr connects to HTTP REST endpoints or WebSocket streams that return current operational metrics. Your system must expose at least one of:
 
 **Option A — REST API (simplest)**
 
-An HTTP endpoint that returns a JSON object containing the parameter values DES Studio should use. It must:
+An HTTP endpoint that returns a JSON object containing the parameter values simmodlr should use. It must:
 - Be reachable from the user's browser (i.e. CORS-enabled or on the same origin)
 - Return a valid JSON response body
 - Respond within 10 seconds
@@ -48,17 +48,17 @@ Nested fields are supported using dot-notation (e.g. `arrivals.mean`, `triage.se
 
 **Option B — WebSocket stream (Sprint 59+)**
 
-A WebSocket endpoint that pushes updates as conditions change. DES Studio subscribes and uses the most recently received message. The message must be a JSON object with the same field structure as Option A.
+A WebSocket endpoint that pushes updates as conditions change. simmodlr subscribes and uses the most recently received message. The message must be a JSON object with the same field structure as Option A.
 
 **Option C — State snapshot endpoint (Sprint 60+)**
 
-An endpoint that returns the current system state in a format DES Studio can use to initialise a lookahead run. See [Appendix A — Snapshot endpoint contract](#appendix-a--snapshot-endpoint-contract).
+An endpoint that returns the current system state in a format simmodlr can use to initialise a lookahead run. See [Appendix A — Snapshot endpoint contract](#appendix-a--snapshot-endpoint-contract).
 
 ---
 
 ### 2. Authentication credentials (if your endpoint requires them)
 
-DES Studio supports a single bearer-style header (e.g. `Authorization: Bearer <token>`, `X-API-Key: <key>`). More complex auth schemes (OAuth2, mTLS) are not yet supported.
+simmodlr supports a single bearer-style header (e.g. `Authorization: Bearer <token>`, `X-API-Key: <key>`). More complex auth schemes (OAuth2, mTLS) are not yet supported.
 
 Credentials are:
 - Entered by the modeller per browser session
@@ -72,7 +72,7 @@ Credentials are:
 ### 3. Network accessibility
 
 The endpoint must be reachable from the user's browser at runtime:
-- If DES Studio is hosted at `https://app.des-studio.com`, your endpoint must either be on the same origin or have CORS headers permitting requests from that origin
+- If simmodlr is hosted at `https://app.simmodlr.com`, your endpoint must either be on the same origin or have CORS headers permitting requests from that origin
 - If your endpoint is on an internal network, users must be on VPN or the endpoint must be accessible via a secure proxy
 
 ---
@@ -100,7 +100,7 @@ Below the data source form, enter the actual credential value in the **Session c
 
 ### Step 4 — Test the connection
 
-Click **Test connection**. DES Studio will make one request to the endpoint and show the raw JSON response. Confirm the fields you need are present.
+Click **Test connection**. simmodlr will make one request to the endpoint and show the raw JSON response. Confirm the fields you need are present.
 
 ---
 
@@ -131,7 +131,7 @@ When a model has at least one live-bound parameter, the **Run** panel shows a mo
 ### Calibrated batch (recommended for multi-replication studies)
 
 1. Select **Calibrated batch** in the run mode selector
-2. Click **Run** — DES Studio fetches all live values once, then runs all replications using those frozen values
+2. Click **Run** — simmodlr fetches all live values once, then runs all replications using those frozen values
 3. Results are reproducible: re-running at the same moment produces identical output
 4. A summary banner shows which values were fetched and when
 
@@ -148,7 +148,7 @@ When a model has at least one live-bound parameter, the **Run** panel shows a mo
 1. Configure a **State Snapshot** data source pointing at your system snapshot endpoint
 2. Select **Lookahead** in the run mode selector
 3. Set the lookahead horizon (e.g. `60` minutes)
-4. Click **Run** — DES Studio fetches the live system state, injects it as the starting state (bypassing warm-up), and runs forward the defined horizon
+4. Click **Run** — simmodlr fetches the live system state, injects it as the starting state (bypassing warm-up), and runs forward the defined horizon
 5. Compare multiple scenarios by adjusting parameters and running again
 
 ---
@@ -229,11 +229,11 @@ Defined at the top level of the model JSON. Lives inside the `model_json` JSONB 
 | Concern | How it is addressed |
 |---|---|
 | **Credentials in the database** | Never stored. `authSecret` fields in `dataSources` contain only `{{env.VAR}}` placeholders. Actual values live only in `sessionStorage`. |
-| **Credentials in exports** | Run exports contain resolved parameter values (the number DES Studio used), not the raw API credentials. |
+| **Credentials in exports** | Run exports contain resolved parameter values (the number simmodlr used), not the raw API credentials. |
 | **Data from live sources** | Fetched data is used only to update model parameters. It is not stored in run history or shown to other users. |
 | **Shared/public models** | `dataSources[]` definitions (URLs, field paths, header names) are visible to anyone who can view the model. Only credentials are protected. Avoid putting sensitive endpoint URLs in shared models. |
-| **Endpoint access control** | DES Studio respects your endpoint's access controls. It makes requests as a standard browser client; if the endpoint requires authentication, provide the credential. |
-| **HTTPS** | Always use `https://` endpoints. `http://` endpoints will be blocked by the browser's mixed-content policy when DES Studio is served over HTTPS. |
+| **Endpoint access control** | simmodlr respects your endpoint's access controls. It makes requests as a standard browser client; if the endpoint requires authentication, provide the credential. |
+| **HTTPS** | Always use `https://` endpoints. `http://` endpoints will be blocked by the browser's mixed-content policy when simmodlr is served over HTTPS. |
 
 ---
 
@@ -241,7 +241,7 @@ Defined at the top level of the model JSON. Lives inside the `model_json` JSONB 
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| "Test connection failed — network error" | CORS not configured on your endpoint | Add `Access-Control-Allow-Origin: https://your-des-studio-host` to your endpoint's response headers |
+| "Test connection failed — network error" | CORS not configured on your endpoint | Add `Access-Control-Allow-Origin: https://your-simmodlr-host` to your endpoint's response headers |
 | "Test connection failed — HTTP 401" | Wrong or missing credential | Check the credential value entered in the session credential slot |
 | "Test connection failed — HTTP 403" | Correct credential but insufficient permissions | Check that the API key/token has read access to the sim-feed endpoint |
 | "Field not found in response" | Wrong field path | Use the **Test connection** result to verify the exact JSON structure and correct the field path |
@@ -254,7 +254,7 @@ Defined at the top level of the model JSON. Lives inside the `model_json` JSONB 
 
 *(Sprint 60+)*
 
-For **Predictive lookahead** mode, DES Studio expects a snapshot endpoint to return a JSON object with the following structure:
+For **Predictive lookahead** mode, simmodlr expects a snapshot endpoint to return a JSON object with the following structure:
 
 ```json
 {
@@ -294,7 +294,7 @@ For **Predictive lookahead** mode, DES Studio expects a snapshot endpoint to ret
 | `queues[name].waiting` | integer | Number of entities currently waiting |
 | `queues[name].serving` | integer | Number of entities currently being served |
 
-**Validation:** DES Studio validates the snapshot before injecting it. Runs are aborted with a user-readable error message if:
+**Validation:** simmodlr validates the snapshot before injecting it. Runs are aborted with a user-readable error message if:
 - An entity type is not found in the model
 - A `queueId` does not match any queue in the model
 - Required fields are missing
@@ -303,7 +303,7 @@ For **Predictive lookahead** mode, DES Studio expects a snapshot endpoint to ret
 
 ## Appendix B — Example Integration: NHS 111 Triage
 
-This example shows how a hospital A&E triage department would configure DES Studio for a calibrated batch run, fetching live data from a queue management system (QMS) REST API.
+This example shows how a hospital A&E triage department would configure simmodlr for a calibrated batch run, fetching live data from a queue management system (QMS) REST API.
 
 ### What the QMS exposes
 
@@ -347,12 +347,12 @@ Response:
 ### Session setup
 
 1. Obtain a QMS API token from the hospital IT team
-2. Open the model in DES Studio
+2. Open the model in simmodlr
 3. Go to Settings → Data Sources → select `A&E Queue Management System`
 4. In the **Session credential** field, enter `Bearer <your-token>`
 5. Click **Test connection** — confirm the response shows the expected fields
 6. Click **Run** with mode set to **Calibrated batch**
-7. DES Studio fetches live values, freezes them, and runs all replications
+7. simmodlr fetches live values, freezes them, and runs all replications
 
 ---
 

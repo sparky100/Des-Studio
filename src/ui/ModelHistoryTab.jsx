@@ -160,20 +160,20 @@ export function ModelHistoryTab({
 
   const exportRunHistoryJson = () => {
     const payload = buildRunHistoryExportPayload(model, historyRows);
-    downloadJsonFile(payload, `des-studio-run-history-${slugifyModelName(model?.name)}.json`);
+    downloadJsonFile(payload, `simmodlr-run-history-${slugifyModelName(model?.name)}.json`);
     toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as JSON`);
   };
 
   const exportRunHistoryCsv = () => {
     const csv = buildRunHistoryCsv(historyRows);
-    downloadTextFile(csv, `des-studio-run-history-${slugifyModelName(model?.name)}.csv`, "text/csv;charset=utf-8");
+    downloadTextFile(csv, `simmodlr-run-history-${slugifyModelName(model?.name)}.csv`, "text/csv;charset=utf-8");
     toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as CSV`);
   };
 
   const exportSelectedCsv = () => {
     const rows = historyRows.filter(r => historySelected.has(r.id));
     const csv = buildRunHistoryCsv(rows);
-    downloadTextFile(csv, `des-studio-selected-runs-${slugifyModelName(model?.name)}.csv`, "text/csv;charset=utf-8");
+    downloadTextFile(csv, `simmodlr-selected-runs-${slugifyModelName(model?.name)}.csv`, "text/csv;charset=utf-8");
     toast.success(`Exported ${rows.length} selected run${rows.length !== 1 ? "s" : ""} as CSV`);
   };
 

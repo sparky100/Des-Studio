@@ -42,7 +42,7 @@ const renderDetail = (modelData = baseModel) => render(
 describe('model JSON export', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    URL.createObjectURL = vi.fn(() => 'blob:des-studio-export');
+    URL.createObjectURL = vi.fn(() => 'blob:simmodlr-export');
     URL.revokeObjectURL = vi.fn();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
   });
@@ -131,6 +131,6 @@ describe('model JSON export', () => {
     await waitFor(() => {
       expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     });
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:des-studio-export');
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:simmodlr-export');
   });
 });

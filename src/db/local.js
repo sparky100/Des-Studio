@@ -3,8 +3,8 @@
 import { normalizeModelConditions } from "../model/conditionFormat.js";
 import { buildPersistedResultsJson } from "./results-persistence.js";
 
-const STORAGE_KEY = "des_studio_models";
-const RUNS_KEY = "des_studio_runs";
+const STORAGE_KEY = "simmodlr_models";
+const RUNS_KEY = "simmodlr_runs";
 
 function readAll() {
   try {
@@ -135,7 +135,7 @@ export function fetchLocalRunHistory(modelId) {
 }
 
 // Sweep storage (localStorage)
-const SWEEPS_KEY = "des_studio_sweeps";
+const SWEEPS_KEY = "simmodlr_sweeps";
 
 function readLocalSweeps() {
   try { return JSON.parse(localStorage.getItem(SWEEPS_KEY) || "{}"); }

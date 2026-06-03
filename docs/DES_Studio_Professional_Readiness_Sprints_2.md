@@ -1,4 +1,4 @@
-# DES Studio — Professional Readiness Sprint Plan
+# simmodlr — Professional Readiness Sprint Plan
 ## Implementing R1–R5 of the Studio Platform Professional Readiness Standard v1.0
 
 **Version:** 1.0 | **Date:** May 2026 | **Sprint baseline:** 55a
@@ -7,7 +7,7 @@
 
 ## 1. Current State and Gap Analysis
 
-DES Studio at Sprint 55a is a substantive tool. The engine correctly implements the Three-Phase Method with 1,248 passing tests, mulberry32 PRNG, full macro vocabulary, parallel replication workers, confidence intervals, warmup removal, parametric sweep, and ANOVA. This is not a prototype.
+simmodlr at Sprint 55a is a substantive tool. The engine correctly implements the Three-Phase Method with 1,248 passing tests, mulberry32 PRNG, full macro vocabulary, parallel replication workers, confidence intervals, warmup removal, parametric sweep, and ANOVA. This is not a prototype.
 
 However, five requirements defined in the Studio Platform Professional Readiness Standard v1.0 must be satisfied before results may be used in professional consultancy work.
 
@@ -53,7 +53,7 @@ Read CLAUDE.md before writing any code. Do not proceed to Prompt 2 until the mig
 ```
 Read CLAUDE.md before writing any code.
 
-We are implementing Sprint PR-1 of the DES Studio Professional Readiness plan.
+We are implementing Sprint PR-1 of the simmodlr Professional Readiness plan.
 This prompt applies a database schema migration that adds model_snapshot to
 run_results and enforces immutability. No UI changes. No engine changes.
 
@@ -317,7 +317,7 @@ PR-1 EXIT GATE:
 # SPRINT PR-2 — Benchmark CI Gate
 **Addresses:** R1 | **Can run in parallel with PR-1**
 
-DES Studio already has M/M/1 and M/M/c benchmarks that pass manually. This sprint adds the six missing benchmarks, tightens the M/M/1 tolerance from 5% to 2%, wires the benchmark suite into GitHub Actions so the build fails on any breach, and documents results in `performance-envelope.md`.
+simmodlr already has M/M/1 and M/M/c benchmarks that pass manually. This sprint adds the six missing benchmarks, tightens the M/M/1 tolerance from 5% to 2%, wires the benchmark suite into GitHub Actions so the build fails on any breach, and documents results in `performance-envelope.md`.
 
 ---
 
@@ -326,7 +326,7 @@ DES Studio already has M/M/1 and M/M/c benchmarks that pass manually. This sprin
 ```
 Read CLAUDE.md before writing any code.
 
-We are completing the DES Studio benchmark register to all 8 required benchmarks.
+We are completing the simmodlr benchmark register to all 8 required benchmarks.
 The existing M/M/1 and M/M/c benchmarks pass at 5% tolerance.
 
 TASK 1: Tighten M/M/1 tolerance to ±2%
@@ -446,7 +446,7 @@ TASK 1: Create .github/workflows/benchmark-gate.yml
 
 TASK 2: Add benchmark badge to README.md
   Near the top of README.md, add:
-  ![Benchmark Gate](https://github.com/sparky100/Des-Studio/actions/workflows/benchmark-gate.yml/badge.svg)
+  ![Benchmark Gate](https://github.com/sparky100/simmodlr/actions/workflows/benchmark-gate.yml/badge.svg)
 
 TASK 3: Confirm package.json bench script
   Ensure "bench" script exists:
@@ -493,7 +493,7 @@ TASK 1: Add buildModelDescriptionPrompt(model) to src/llm/prompts.js
   plain English describing the model for a non-technical client.
 
   System instruction (embed verbatim):
-    "Describe the following DES Studio model in 120-180 words of plain English
+    "Describe the following simmodlr model in 120-180 words of plain English
      for a non-technical client audience. Do not use any of these words:
      entity, macro, B-event, C-event, Phase, ARRIVE, COMPLETE, RELEASE,
      ASSIGN, queue discipline, FIFO, LIFO, PRIORITY. Describe the real-world
@@ -616,7 +616,7 @@ TASK 3: Create src/reports/reportGenerator.js
     2. Builds a .docx document using the docx npm library.
        Page size: A4 (11906 × 16838 DXA), 1 inch margins.
        Font: Arial throughout.
-       Header: "DES Studio — [model.name] — [runMeta.runLabel]" right-aligned.
+       Header: "simmodlr — [model.name] — [runMeta.runLabel]" right-aligned.
        Footer: "Confidential" left, page number right.
 
   SECTION 1 — COVER (followed by page break):
@@ -624,7 +624,7 @@ TASK 3: Create src/reports/reportGenerator.js
     "Simulation Analysis Report" — 20pt centred, colour #555555
     runMeta.runLabel — 14pt centred
     Date formatted as "DD Month YYYY" from runMeta.runTimestamp
-    "Prepared using DES Studio v[runMeta.engineVersion]" — 11pt italic centred
+    "Prepared using simmodlr v[runMeta.engineVersion]" — 11pt italic centred
     "CONFIDENTIAL" — 11pt bold centred, colour #8B0000
 
   SECTION 2 — MODEL SUMMARY (followed by page break):
@@ -692,7 +692,7 @@ TASK 3: Create src/reports/reportGenerator.js
       Spacer paragraph between blocks.
     If recommendations array is empty:
       Italic paragraph: "Recommendations could not be generated for this run.
-        Review the AI Insights panel in DES Studio for interactive analysis."
+        Review the AI Insights panel in simmodlr for interactive analysis."
 
   SECTION 7 — RUN PROVENANCE:
     Subheading: "Run Provenance"
@@ -705,10 +705,10 @@ TASK 3: Create src/reports/reportGenerator.js
       PRNG algorithm: runMeta.prnAlgorithm
       Base seed: runMeta.seed
     Italic paragraph:
-      "This report was generated from a run record stored in DES Studio.
+      "This report was generated from a run record stored in simmodlr.
        The model definition, experiment configuration, and results used to
        produce this report are preserved in the run record identified above
-       and can be reproduced exactly by loading that record in DES Studio
+       and can be reproduced exactly by loading that record in simmodlr
        and using the Reproduce Run function."
 
     3. Return:
@@ -844,7 +844,7 @@ TASK 2: Create src/ui/shared/SharedRunView.jsx
   Layout:
 
   HEADER BAR (background #1A2E4A, white text, full width):
-    Left: "DES Studio" product name (bold)
+    Left: "simmodlr" product name (bold)
     Centre: model name from run.model_snapshot.name
     Right: run label from run.run_label (truncated if > 40 chars)
     Below right: engine version badge "v[run.engine_version]" in amber
@@ -883,7 +883,7 @@ TASK 2: Create src/ui/shared/SharedRunView.jsx
 
   FOOTER:
     Small grey text:
-    "Generated with DES Studio  ·  Results reproducible from run record [run.id]"
+    "Generated with simmodlr  ·  Results reproducible from run record [run.id]"
 
 TASK 3: Add routing to App.jsx
   Before the auth check, add:
@@ -970,7 +970,7 @@ PR-4 EXIT GATE:
 # SPRINT PR-5 — Capability Register and Professional Readiness Gate
 **Addresses:** R5 | **Requires all previous sprints complete**
 
-This sprint formalises what DES Studio can and cannot model, adds in-tool warnings for edge cases, and produces the official readiness gate assessment document that determines whether the tool may be used in professional consultancy work.
+This sprint formalises what simmodlr can and cannot model, adds in-tool warnings for edge cases, and produces the official readiness gate assessment document that determines whether the tool may be used in professional consultancy work.
 
 ---
 
@@ -982,7 +982,7 @@ Confirm all previous sprints (PR-1 through PR-4) are complete.
 
 TASK 1: Create docs/capability-register.md with this exact content:
 
-# DES Studio — Capability Register v1.0
+# simmodlr — Capability Register v1.0
 Sprint baseline: 55a  |  Date: [today's date]
 
 All "Supported" statuses are backed by a passing benchmark in the
@@ -1032,7 +1032,7 @@ TASK 3: Add W-CAP-02 to validateModel()
     interval is < 0.001 (proxy for very high-frequency discrete arrivals
     that may be approximating continuous flow).
 
-  Message: "Very high arrival rate detected (W-CAP-02). DES Studio models
+  Message: "Very high arrival rate detected (W-CAP-02). simmodlr models
     discrete individual entities. If you are modelling continuous flow or
     aggregate quantities, consider SD Studio which implements System Dynamics."
 
@@ -1067,14 +1067,14 @@ Confirm all PR-1 through PR-5 Prompt 1 work is complete.
 
 TASK 1: Create docs/readiness-gate-PR5.md
 
-  This document is the official assessment of DES Studio against the
+  This document is the official assessment of simmodlr against the
   Studio Platform Professional Readiness Standard v1.0. It must be
   honest. If any requirement is not met, say so precisely.
 
   Use this template and fill in real values from actual tests:
 
   ---
-  # DES Studio — Professional Readiness Gate Assessment
+  # simmodlr — Professional Readiness Gate Assessment
   Date: [today]  |  Sprint: Post-PR5  |  Assessor: [your initials]
 
   ## R1 — Numerical Accuracy
@@ -1146,13 +1146,13 @@ TASK 1: Create docs/readiness-gate-PR5.md
   [Choose one of the following — do not use both]
 
   **PASS:** R1, R2, R3, R4, and R5 all pass.
-  "DES Studio v[engineVersion] satisfies all five requirements of the Studio
+  "simmodlr v[engineVersion] satisfies all five requirements of the Studio
    Platform Professional Readiness Standard v1.0. Results may be presented
    in professional consultancy work."
    Recommended action: git tag v-readiness-1.0
 
   **FAIL:** One or more requirements do not pass.
-  "DES Studio v[engineVersion] does NOT yet satisfy the Professional Readiness
+  "simmodlr v[engineVersion] does NOT yet satisfy the Professional Readiness
    Standard. Outstanding items:"
   - [List each failing requirement and the specific gap]
   Recommended action: do not use for client-facing consultancy work until
@@ -1172,7 +1172,7 @@ TASK 2: Update AGENTS.md
 TASK 3: If gate result is PASS — add to README.md
   ## Professional Readiness
   [![Benchmark Gate]([badge URL])]([workflow URL])
-  DES Studio satisfies the Studio Platform Professional Readiness Standard v1.0.
+  simmodlr satisfies the Studio Platform Professional Readiness Standard v1.0.
   See [docs/readiness-gate-PR5.md](docs/readiness-gate-PR5.md) for the full assessment.
 
 TASK 4: Final regression check — run in this exact order
@@ -1190,7 +1190,7 @@ PR-5 EXIT GATE — THIS IS THE PROFESSIONAL READINESS GATE:
   □ AGENTS.md updated with all sprint completion dates and gate result
 
   IF GATE IS PASS:
-    DES Studio is ready for professional consultancy use.
+    simmodlr is ready for professional consultancy use.
     Tag: git tag v-readiness-1.0
 
   IF GATE IS FAIL:
@@ -1215,4 +1215,4 @@ PR-5 EXIT GATE — THIS IS THE PROFESSIONAL READINESS GATE:
 
 ---
 
-*After all five sprints, run `npm test && npm run bench && npm run build` one final time. Open `docs/readiness-gate-PR5.md`. If R1–R5 all show PASS, DES Studio meets the Professional Readiness Standard.*
+*After all five sprints, run `npm test && npm run bench && npm run build` one final time. Open `docs/readiness-gate-PR5.md`. If R1–R5 all show PASS, simmodlr meets the Professional Readiness Standard.*

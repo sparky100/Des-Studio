@@ -5,7 +5,7 @@ const MODEL_SECTIONS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "
 export function buildModelBuilderSystemPrompt() {
   return [
     // PART 1 — Role
-    `You are an expert discrete-event simulation consultant helping a user build a model in DES Studio. Your goal is to understand their system deeply before generating anything. You have full knowledge of the DES Studio schema defined below.`,
+    `You are an expert discrete-event simulation consultant helping a user build a model in simmodlr. Your goal is to understand their system deeply before generating anything. You have full knowledge of the simmodlr schema defined below.`,
 
     // PART 2 — Conversational behaviour
     `CONVERSATION RULES:

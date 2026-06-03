@@ -6,7 +6,7 @@
 
 ## Context
 
-Sprint 26 is focused on resource semantics and waiting behaviour. During the sprint kickoff and early engine work, one of the main open architectural questions was whether DES Studio should introduce first-class preemption or interruption semantics immediately.
+Sprint 26 is focused on resource semantics and waiting behaviour. During the sprint kickoff and early engine work, one of the main open architectural questions was whether simmodlr should introduce first-class preemption or interruption semantics immediately.
 
 There is clear product value in this area:
 
@@ -27,7 +27,7 @@ Introducing interruption/preemption before those contracts are fully settled wou
 
 ## Decision
 
-DES Studio will **not** implement first-class preemption or interruption semantics in Sprint 26.
+simmodlr will **not** implement first-class preemption or interruption semantics in Sprint 26.
 
 Sprint 26 will instead focus on:
 
@@ -67,7 +67,7 @@ Rejected. The requirement is valuable and should remain visible in both roadmap 
 
 ### Negative
 
-- DES Studio still cannot model interruption-heavy scenarios as a first-class capability
+- simmodlr still cannot model interruption-heavy scenarios as a first-class capability
 - some higher-value operational scenarios remain partially supported rather than fully credible
 - users may still need to approximate escalation behaviour using indirect patterns
 

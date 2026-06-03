@@ -1,4 +1,4 @@
-# DES Studio — User Guide
+# simmodlr — User Guide
 
 **Version:** 7.0.0  
 **Date:** 2026-06-02  
@@ -27,11 +27,11 @@
 
 ## 1. Introduction
 
-DES Studio is a browser-based discrete-event simulation (DES) platform. It lets you build queue-based models, run experiments, and analyse results — without writing code. Everything runs in your browser: there is nothing to install and no server needed for computation.
+simmodlr is a browser-based discrete-event simulation (DES) platform. It lets you build queue-based models, run experiments, and analyse results — without writing code. Everything runs in your browser: there is nothing to install and no server needed for computation.
 
-**The problem it solves.** When demand temporarily exceeds capacity — patients waiting for a doctor, trains waiting for a platform, calls holding for an agent — the resulting delay is often counterintuitive. A resource that is 90% utilised typically produces waits nine times longer than one at 50%. Running a real-world experiment is costly or impossible, so organisations need to test changes on a model first. DES Studio makes that model fast to build and statistically rigorous to run.
+**The problem it solves.** When demand temporarily exceeds capacity — patients waiting for a doctor, trains waiting for a platform, calls holding for an agent — the resulting delay is often counterintuitive. A resource that is 90% utilised typically produces waits nine times longer than one at 50%. Running a real-world experiment is costly or impossible, so organisations need to test changes on a model first. simmodlr makes that model fast to build and statistically rigorous to run.
 
-**Who it is for.** DES Studio targets:
+**Who it is for.** simmodlr targets:
 
 - **Operations analysts** who need evidence for staffing, capacity, or process-redesign decisions.
 - **Engineering students** who are learning DES and want to see theory come alive.
@@ -41,7 +41,7 @@ DES Studio is a browser-based discrete-event simulation (DES) platform. It lets 
 
 | Task | How |
 |------|-----|
-| Define entities, queues, and service logic | Structured editors (Forms/Tabs), Visual Designer, or AI Generator |
+| Define entities, queues, and service logic | **Define** editors, **Draw** (Visual Designer), or **Describe** (AI Generator) |
 | Encode business rules and routing | Predicate Builder (no code, no free-text logic) |
 | Run multiple replications and get confidence intervals | One-click experiment runner |
 | Debug live simulation state | Execute canvas with entity animation and step-by-step event log |
@@ -50,7 +50,7 @@ DES Studio is a browser-based discrete-event simulation (DES) platform. It lets 
 
 ### 1.1 The Three-Phase Method — a brief primer
 
-DES Studio implements Pidd's Three-Phase algorithm. Understanding these three phases helps you build better models.
+simmodlr implements Pidd's Three-Phase algorithm. Understanding these three phases helps you build better models.
 
 | Phase | What happens |
 |-------|-------------|
@@ -73,11 +73,11 @@ B-Events handle "what happens when" and C-Events handle "what can happen now." T
 | **Network** | Stable connection required for login, model save, and AI features |
 | **Screen** | Minimum 1024 × 768 px; 1440 × 900 px recommended for the Visual Designer |
 
-DES Studio runs entirely in your browser. No local installation is required.
+simmodlr runs entirely in your browser. No local installation is required.
 
 ### 2.2 Account
 
-Sign up at the DES Studio URL provided by your organisation. You need:
+Sign up at the simmodlr URL provided by your organisation. You need:
 
 - A valid email address
 - A password (set during sign-up, or via a magic link if your organisation uses that flow)
@@ -102,7 +102,7 @@ Obtain these values from your Supabase project dashboard.
 
 ### Step 1 — Log in
 
-Open DES Studio in your browser. Enter your email and password. You land on the **Model Library** — your personal list of saved models.
+Open simmodlr in your browser. Enter your email and password. You land on the **Model Library** — your personal list of saved models.
 
 ### Step 2 — Open a template
 
@@ -124,7 +124,7 @@ When the run completes, the Results tab opens automatically. Key things to look 
 
 Go back to the **Design** tab. Click **Define**, then select **B-Events**. Find the arrival B-Event and change the inter-arrival time distribution mean from `10` to `8` (faster arrivals). Click **Save**. Go to **Run** and click **Run** again. Compare the new results with the previous run using **Run History → Compare**.
 
-You have now completed the core DES Studio loop: build → run → analyse → adjust → re-run.
+You have now completed the core simmodlr loop: build → run → analyse → adjust → re-run.
 
 ---
 

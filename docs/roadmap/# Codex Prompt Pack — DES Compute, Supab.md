@@ -1,6 +1,6 @@
 # Codex Prompt Pack — DES Compute, Supabase, and Cloudflare Sizing
 
-These prompts are intended to be run one at a time in Codex against the DES Studio codebase. They are written to produce concrete markdown findings and, where appropriate, small, reviewable code changes.
+These prompts are intended to be run one at a time in Codex against the simmodlr codebase. They are written to produce concrete markdown findings and, where appropriate, small, reviewable code changes.
 
 ## Suggested Codex Operating Rules
 
@@ -280,7 +280,7 @@ Do not change production schema unless explicitly necessary. If migration is rec
 ## Prompt 7 — Cloudflare Usage Review
 
 ```markdown
-Review the codebase for Cloudflare usage related to DES Studio.
+Review the codebase for Cloudflare usage related to simmodlr.
 
 Focus on:
 - Cloudflare Pages/static hosting
@@ -543,7 +543,7 @@ Do not implement unless the code already has a clear extension point.
 ## Prompt 14 — DES Model Validation Gap Review
 
 ```markdown
-Review the current model validation logic against the latest DES Studio LLM schema.
+Review the current model validation logic against the latest simmodlr LLM schema.
 
 Focus on gaps that could allow slow or invalid models:
 - missing maxSimTime
@@ -674,7 +674,7 @@ If the Glasgow files are not in the repo, state that clearly and provide instruc
 ## Prompt 18 — Supabase and Cloudflare Cost-Control Checklist
 
 ```markdown
-Create a practical cost-control checklist for DES Studio running on Supabase and Cloudflare.
+Create a practical cost-control checklist for simmodlr running on Supabase and Cloudflare.
 
 Review the codebase and produce:
 

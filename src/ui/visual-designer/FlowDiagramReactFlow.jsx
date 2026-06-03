@@ -290,7 +290,7 @@ export function FlowDiagramReactFlow({
       onDrop={event => {
         setDragOver(false);
         if (!canEdit) return;
-        const type = event.dataTransfer.getData("application/des-studio-node");
+        const type = event.dataTransfer.getData("application/simmodlr-node");
         if (!type) return;
         event.preventDefault();
         const rect = event.currentTarget.getBoundingClientRect();

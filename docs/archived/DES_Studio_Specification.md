@@ -2,7 +2,7 @@
 > which contains the current authoritative specification for all sprints through 35.
 > Date superseded: 2026-05-15
 
-# DES Studio — Complete Specification
+# simmodlr — Complete Specification
 
 **Version:** 7.0.0  
 **Last updated:** 2026-05-08  
@@ -39,7 +39,7 @@
 
 ## 1. Project Overview
 
-DES Studio is a browser-based discrete-event simulation (DES) modelling tool implementing **Pidd's Three-Phase Method (A/B/C)**. Modellers define entity types, queues, B-Events, and C-Events using three authoring modes (Forms/Tabs, AI Generated Model, Visual Designer), run single or parallel replications, and view results in real time.
+simmodlr is a browser-based discrete-event simulation (DES) modelling tool implementing **Pidd's Three-Phase Method (A/B/C)**. Modellers define entity types, queues, B-Events, and C-Events using three authoring modes (Forms/Tabs, AI Generated Model, Visual Designer), run single or parallel replications, and view results in real time.
 
 **Target user:** A simulation modeller who understands DES concepts. The UI must never require them to write code or logic strings — all model logic is built through structured pickers and the Predicate Builder.
 
@@ -91,10 +91,10 @@ project root
 ├── CLAUDE.md                        ← Sprint context file
 ├── docs/
 │   ├── addition1_entity_model.md   ← Entity schema, macros, distributions spec
-│   ├── DES_Studio_Build_Plan.md    ← Sprint-by-sprint build plan (living)
-│   ├── DES_Studio_Specification.md ← This file
-│   ├── DES_Studio_User_Guide.md    ← End-user documentation
-│   ├── DES_Studio_Visual_Designer_Design.md ← Visual designer design doc
+│   ├── simmodlr_Build_Plan.md    ← Sprint-by-sprint build plan (living)
+│   ├── simmodlr_Specification.md ← This file
+│   ├── simmodlr_User_Guide.md    ← End-user documentation
+│   ├── simmodlr_Visual_Designer_Design.md ← Visual designer design doc
 │   ├── decisions/                  ← ADR files (11 accepted)
 │   │   ├── ADR-001-auth-model.md
 │   │   ├── ...
@@ -894,13 +894,13 @@ UI / UX
 | Platform roles + settings migration | `supabase/migrations/20260505073000_platform_roles_user_settings.sql` |
 | Architecture contract (rules) | `AGENTS.md` |
 | Entity model spec | `docs/addition1_entity_model.md` |
-| Build plan | `docs/DES_Studio_Build_Plan.md` |
-| User guide | `docs/DES_Studio_User_Guide.md` |
-| Visual designer design | `docs/DES_Studio_Visual_Designer_Design.md` |
+| Build plan | `docs/simmodlr_Build_Plan.md` |
+| User guide | `docs/simmodlr_User_Guide.md` |
+| Visual designer design | `docs/simmodlr_Visual_Designer_Design.md` |
 
 ---
 
-*End of DES Studio Specification v7.0.0.*  
+*End of simmodlr Specification v7.0.0.*  
 *This document is the authoritative reference for the project's current state, architecture, and rules.*  
-*For sprint-by-sprint planning, refer to `docs/DES_Studio_Build_Plan.md`.*  
+*For sprint-by-sprint planning, refer to `docs/simmodlr_Build_Plan.md`.*  
 *For the architectural contract, refer to `AGENTS.md`.*

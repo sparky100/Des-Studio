@@ -1,4 +1,4 @@
-// ui/AboutModal.jsx — Static About panel for DES Studio
+// ui/AboutModal.jsx — Static About panel for simmodlr
 import { useEffect, useRef } from "react";
 import { SPACE, RADIUS, TYPO, Z, alpha } from "./shared/tokens.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
@@ -72,7 +72,7 @@ export function AboutModal({ isOpen, onClose }) {
             id={headingId}
             style={{ fontFamily: FONT, ...TYPO.heading, color: C.text }}
           >
-            About DES Studio
+            About simmodlr
           </div>
           <button
             type="button"
@@ -105,7 +105,7 @@ export function AboutModal({ isOpen, onClose }) {
               letterSpacing: 2,
               marginBottom: 4,
             }}>
-              DES Studio
+              simmodlr
             </div>
             <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
               Browser-native simulation modelling for everyone

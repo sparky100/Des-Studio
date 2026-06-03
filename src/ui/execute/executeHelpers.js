@@ -230,7 +230,7 @@ export function buildResultsExportPayload({
   }
 
   return {
-    schema: "des-studio.results.v1",
+    schema: "simmodlr.results.v1",
     exportedAt,
     status: results ? "complete" : "partial",
     batchStatus,

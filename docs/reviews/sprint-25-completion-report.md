@@ -30,21 +30,21 @@ No new dependencies were introduced. The browser runtime remains JavaScript and 
 
 ### Engine contract updates
 
-- [src/engine/validation.js](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js)
+- [src/engine/validation.js](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js)
   - Encodes the final `V8` rule:
     - both source and sink missing: blocking error
     - source-only or sink-only: warning
 
-- [src/engine/index.js](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/index.js)
+- [src/engine/index.js](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/index.js)
   - Tracks a warm-up statistics reset boundary
   - Truncates wait, service, sojourn, and wait-distribution metrics at warm-up
   - Preserves in-flight entity/event context while resetting statistical counting
 
-- [src/engine/macros.js](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/macros.js)
+- [src/engine/macros.js](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/macros.js)
   - Records stage timing fields needed for post-warm-up truncation
   - Routes selection-sensitive macros through shared helper-led arbitration
 
-- [src/engine/entities.js](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/entities.js)
+- [src/engine/entities.js](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/entities.js)
   - Adds centralized arbitration helpers for:
     - queue lookup
     - queue discipline comparators
@@ -53,15 +53,15 @@ No new dependencies were introduced. The browser runtime remains JavaScript and 
 
 ### Regression coverage
 
-- [tests/engine/validation.test.js](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/tests/engine/validation.test.js)
+- [tests/engine/validation.test.js](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/tests/engine/validation.test.js)
   - Covers the resolved `V8` contract
 
-- [src/engine/__tests__/warmup.test.js](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/__tests__/warmup.test.js)
+- [src/engine/__tests__/warmup.test.js](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/__tests__/warmup.test.js)
   - Covers waiting across warm-up
   - Covers in-service completion across warm-up
   - Covers truncated post-warm-up summary metrics
 
-- [src/engine/__tests__/macros.test.js](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/__tests__/macros.test.js)
+- [src/engine/__tests__/macros.test.js](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/__tests__/macros.test.js)
   - Covers centralized arbitration behavior for `RENEGE_OLDEST` and `BATCH`
 
 ## SimPy-Informed Outcome

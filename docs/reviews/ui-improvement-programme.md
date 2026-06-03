@@ -1,4 +1,4 @@
-# DES Studio — UI Improvement Programme
+# simmodlr — UI Improvement Programme
 **Source:** `docs/ui-ux-review.md` (reviewed 2026-05-16)
 **Sprints:** 47–53
 **Baseline rating:** 6 / 10 UX maturity

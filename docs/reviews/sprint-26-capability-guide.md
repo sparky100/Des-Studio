@@ -72,7 +72,7 @@ Reference models:
 
 - `Construction Logistics` template
 - `Outpatient Clinic` template
-- sample import: [priority-handoff-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/examples/sprint-26/priority-handoff-demo.json)
+- sample import: [priority-handoff-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/examples/sprint-26/priority-handoff-demo.json)
 
 ### 3. Priority downstream queue after an upstream stage
 
@@ -94,7 +94,7 @@ What Sprint 26 adds:
 Reference models:
 
 - `ER Triage` template
-- sample import: [priority-handoff-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/examples/sprint-26/priority-handoff-demo.json)
+- sample import: [priority-handoff-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/examples/sprint-26/priority-handoff-demo.json)
 
 ### 4. Waiting cancellation through reneging
 
@@ -180,7 +180,7 @@ What Sprint 26 adds:
 
 Reference:
 
-- sample import: [recirculation-exit-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/examples/sprint-26/recirculation-exit-demo.json)
+- sample import: [recirculation-exit-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/examples/sprint-26/recirculation-exit-demo.json)
 
 ### 8. Batch and unbatch flows
 
@@ -219,7 +219,7 @@ These are the modelling scenarios that improved materially, even if the UI looks
 
 ## What is still out of scope
 
-Sprint 26 improves lifecycle integrity. It does not turn DES Studio into a full preemptive resource simulator.
+Sprint 26 improves lifecycle integrity. It does not turn simmodlr into a full preemptive resource simulator.
 
 ### Not yet supported as first-class capabilities
 
@@ -256,8 +256,8 @@ You should not yet model:
 
 If you want the smallest examples that isolate Sprint 26 outcomes:
 
-1. [priority-handoff-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/examples/sprint-26/priority-handoff-demo.json)
-2. [recirculation-exit-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/examples/sprint-26/recirculation-exit-demo.json)
+1. [priority-handoff-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/examples/sprint-26/priority-handoff-demo.json)
+2. [recirculation-exit-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/examples/sprint-26/recirculation-exit-demo.json)
 
 If you want richer scenario context:
 

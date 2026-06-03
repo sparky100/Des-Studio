@@ -85,7 +85,7 @@ Seeds are globally non-overlapping across rounds (validated by test 3).
 | F79.4 | Header button | ✅ | `src/ui/ModelDetailHeader.jsx` (add `onExplore`, `exploreVisible` props) |
 | F79.5 | ModelDetail wiring | ✅ | `src/ui/ModelDetail.jsx` (imports, state, computed values, modal render) |
 | F79.6 | Tests | ✅ | `tests/engine/adaptive-batch.test.js` (new, 3 tests) |
-| F79.7 | Documentation | ✅ | `docs/DES_Studio_Build_Plan.md` (Sprint 79 entry); `docs/reviews/sprint-79-ai-explore-plan.md` (this file) |
+| F79.7 | Documentation | ✅ | `docs/simmodlr_Build_Plan.md` (Sprint 79 entry); `docs/reviews/sprint-79-ai-explore-plan.md` (this file) |
 
 ---
 

@@ -137,7 +137,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "DES_Studio_Build_Plan.md",
+                "file": "simmodlr_Build_Plan.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -147,7 +147,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for DES_Studio_Build_Plan"
+              "title": "Backlinks for simmodlr_Build_Plan"
             }
           },
           {
@@ -156,12 +156,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "DES_Studio_Build_Plan.md",
+                "file": "simmodlr_Build_Plan.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from DES_Studio_Build_Plan"
+              "title": "Outgoing links from simmodlr_Build_Plan"
             }
           },
           {
@@ -199,13 +199,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "DES_Studio_Build_Plan.md",
+                "file": "simmodlr_Build_Plan.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of DES_Studio_Build_Plan"
+              "title": "Outline of simmodlr_Build_Plan"
             }
           }
         ]
@@ -232,13 +232,13 @@
     "reviews/sprint-79-plan.md",
     "reviews/sprint-79-ai-explore-plan.md",
     "reviews/sprint-78-plan.md",
-    "DES_Studio_User_Guide.md.tmp.20908.4794976507f2",
-    "DES_Studio_User_Guide.md.tmp.20908.30b4d93d4316",
-    "DES_Studio_Engineering_Spec.md.tmp.20908.ba794746a870",
-    "DES_Studio_Engineering_Spec.md.tmp.20908.d45c70ecf458",
+    "simmodlr_User_Guide.md.tmp.20908.4794976507f2",
+    "simmodlr_User_Guide.md.tmp.20908.30b4d93d4316",
+    "simmodlr_Engineering_Spec.md.tmp.20908.ba794746a870",
+    "simmodlr_Engineering_Spec.md.tmp.20908.d45c70ecf458",
     "model-schema-for-llm.md.tmp.20908.bcc83229f332",
     "model-schema-for-llm.md.tmp.20908.31b9118a725a",
-    "analysis/des-studio-competitive-comparison-and-gap-update.md",
+    "analysis/simmodlr-competitive-comparison-and-gap-update.md",
     "analysis/des-capability-comparison-open-source-and-professional-2026-05.md",
     "reviews/sprint-77-plan.md",
     "reviews/sprint-77-closure.md",

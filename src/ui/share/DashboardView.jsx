@@ -235,7 +235,7 @@ export default function DashboardView({ token, onBack }) {
 
       {/* Header */}
       <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 24px", display: "flex", alignItems: "center", gap: 16, height: 52 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>DES STUDIO</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: C.accent, letterSpacing: 2 }}>simmodlr</div>
         <div style={{ fontSize: 11, color: C.muted, borderLeft: `1px solid ${C.border}`, paddingLeft: 16 }}>Shared Results Dashboard</div>
         <div style={{ flex: 1 }} />
         <button type="button" onClick={handleExportReport} disabled={reportGenerating}
@@ -452,7 +452,7 @@ export default function DashboardView({ token, onBack }) {
 
         {/* Footer */}
         <div style={{ textAlign: "center", fontSize: 10, color: C.muted, fontFamily: FONT, padding: "12px 0" }}>
-          Generated with DES Studio · {new Date(share.createdAt).toLocaleString()}
+          Generated with simmodlr · {new Date(share.createdAt).toLocaleString()}
         </div>
       </div>
     </div>

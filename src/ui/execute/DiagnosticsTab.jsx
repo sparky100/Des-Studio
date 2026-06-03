@@ -40,9 +40,9 @@ async function callDiagnosticsApi(messages, maxTokens = 1000) {
   return payload?.content || payload?.text || payload?.completion || String(payload || "");
 }
 
-const DIAGNOSIS_SYSTEM_PROMPT = `You are an expert discrete event simulation debugger. You are analysing a DES Studio model and its simulation run output to identify why the model is not behaving as expected.
+const DIAGNOSIS_SYSTEM_PROMPT = `You are an expert discrete event simulation debugger. You are analysing a simmodlr model and its simulation run output to identify why the model is not behaving as expected.
 
-DES Studio uses a three-event paradigm:
+simmodlr uses a three-event paradigm:
 - A-events: arrival/generation of entities (always fire, no condition)
 - B-events: state-bound events that fire when a condition is met
 - C-events: conditional service events requiring both an entity in a queue AND an available server/resource
@@ -74,7 +74,7 @@ Order findings by severity: CRITICAL first.
 If the model appears to be working correctly, return an empty findings array and say so in overallAssessment.`;
 
 function buildChatSystemPrompt(modelJson, traceJson, statsJson) {
-  return `You are an expert DES Studio simulation debugger in a conversation with the model author.
+  return `You are an expert simmodlr simulation debugger in a conversation with the model author.
 
 You have full access to the model definition and run trace below.
 Use them to answer questions precisely, referencing specific event names, queue IDs, and server names from the model.

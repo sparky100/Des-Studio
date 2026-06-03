@@ -41,7 +41,7 @@
 | 68-6 | UI — Run records store `version_id` (optional, nullable) | UI/DB | `src/ui/execute/index.jsx`, `src/db/models.js` |
 | 68-7 | Tests — DB layer, UI components, structural change detection | Tests | `tests/db/`, `tests/ui/`, `tests/engine/` |
 | 68-8 | Full regression — all tests pass, build succeeds | CI | — |
-| 68-9 | Documentation — AGENTS.md, User Guide, ADR-015 | Docs | `AGENTS.md`, `docs/DES_Studio_User_Guide.md`, `docs/decisions/` |
+| 68-9 | Documentation — AGENTS.md, User Guide, ADR-015 | Docs | `AGENTS.md`, `docs/simmodlr_User_Guide.md`, `docs/decisions/` |
 
 ---
 

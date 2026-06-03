@@ -6,7 +6,7 @@ Plan reference: `docs/reviews/sprint-32-plan.md`
 
 ## Sprint Summary
 
-Sprint 32 added resource preemption and breakdown/repair capabilities to DES Studio. These are the two highest-impact resource modelling gaps identified in the capability gap analysis. The changes modify the core server state machine and claim/release contract.
+Sprint 32 added resource preemption and breakdown/repair capabilities to simmodlr. These are the two highest-impact resource modelling gaps identified in the capability gap analysis. The changes modify the core server state machine and claim/release contract.
 
 ## Goal
 

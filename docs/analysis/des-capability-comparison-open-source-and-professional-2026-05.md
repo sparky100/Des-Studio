@@ -1,14 +1,14 @@
-# DES Studio — Capability Comparison Against Open-Source and Professional Simulation Software
+# simmodlr — Capability Comparison Against Open-Source and Professional Simulation Software
 
 **Date:** 2026-05-29  
-**Scope:** Fresh comparison of DES Studio against representative open-source and professional discrete-event simulation tools  
-**Method:** Official vendor / project documentation review plus current DES Studio codebase and product-document audit
+**Scope:** Fresh comparison of simmodlr against representative open-source and professional discrete-event simulation tools  
+**Method:** Official vendor / project documentation review plus current simmodlr codebase and product-document audit
 
 ---
 
 ## Executive Summary
 
-DES Studio is now strong in the areas where traditional simulation tools are often weakest for new or occasional users:
+simmodlr is now strong in the areas where traditional simulation tools are often weakest for new or occasional users:
 
 - browser-based access with no local install
 - plain-English, no-code model authoring
@@ -25,7 +25,7 @@ Against both open-source and commercial comparators, the biggest remaining gaps 
 4. **high-dimensional optimisation**
 5. **hierarchical reusable modelling assets**
 
-The practical conclusion is that DES Studio is already competitive for its target users: analysts, consultants, educators, and domain experts who want interpretable DES without code-first tooling. It is not yet a full replacement for the most mature commercial platforms in enterprise-scale, high-dimensional, spatial, or heavily customised simulation programmes.
+The practical conclusion is that simmodlr is already competitive for its target users: analysts, consultants, educators, and domain experts who want interpretable DES without code-first tooling. It is not yet a full replacement for the most mature commercial platforms in enterprise-scale, high-dimensional, spatial, or heavily customised simulation programmes.
 
 ---
 
@@ -51,13 +51,13 @@ The practical conclusion is that DES Studio is already competitive for its targe
 
 This document is not a raw feature dump. It focuses on:
 
-- where DES Studio is already competitive
+- where simmodlr is already competitive
 - where the remaining gaps are real and material
 - what improvements would move the product forward most efficiently
 
 Status labels:
 
-- `Lead` — DES Studio is ahead for its target user group
+- `Lead` — simmodlr is ahead for its target user group
 - `Competitive` — broadly credible alongside the comparator cohort
 - `Partial` — usable, but clearly narrower or less mature
 - `Gap` — materially behind
@@ -66,14 +66,14 @@ Status labels:
 
 ## Cross-Market Capability Matrix
 
-| Area | DES Studio vs Open-Source Cohort | DES Studio vs Professional Cohort | Current Assessment | Notes |
+| Area | simmodlr vs Open-Source Cohort | simmodlr vs Professional Cohort | Current Assessment | Notes |
 |---|---|---|---|---|
-| Browser access and deployment friction | Ahead | Ahead | `Lead` | DES Studio remains the only browser-first option in this comparison set. |
+| Browser access and deployment friction | Ahead | Ahead | `Lead` | simmodlr remains the only browser-first option in this comparison set. |
 | No-code guided authoring | Ahead | Competitive | `Lead` | Stronger than code-first OSS; easier to approach than most commercial tools for new users. |
 | AI-assisted model generation and explanation | Ahead | Ahead | `Lead` | No comparator in this set offers equivalent integrated natural-language authoring plus analysis. |
 | Core queue/resource/process DES coverage | Competitive | Competitive | `Competitive` | ARRIVE / ASSIGN / RELEASE / COMPLETE / PREEMPT / FAIL / REPAIR / MATCH / BATCH / SPLIT / COST cover most mainstream queueing studies. |
 | Statistical output and experiment workbench | Ahead | Competitive | `Competitive` | Batch means, Welch, paired comparison, ANOVA/Tukey, sweeps, outlier flagging, and run labelling are unusually strong for a browser tool. |
-| Planned-arrival / schedule-driven modelling | Ahead | Competitive | `Competitive` | DES Studio is strong for timetable-heavy service and transport models. |
+| Planned-arrival / schedule-driven modelling | Ahead | Competitive | `Competitive` | simmodlr is strong for timetable-heavy service and transport models. |
 | Real-time and operational integration | Competitive | Partial | `Partial` | Better than most OSS tools out of the box; still narrower than full digital-twin commercial stacks. |
 | Visual modelling depth | Competitive | Partial | `Partial` | Stronger than SimPy/simmer, but behind AnyLogic, Simio, and FlexSim in hierarchy, 3D, GIS, and spatial realism. |
 | Custom scripting and deep extensibility | Partial | Gap | `Partial` | Safe and intentional, but materially less open-ended than Python/Java/C# ecosystems. |
@@ -84,11 +84,11 @@ Status labels:
 
 ---
 
-## Where DES Studio Is Already Strong
+## Where simmodlr Is Already Strong
 
 ### 1. Accessibility and onboarding
 
-DES Studio is meaningfully easier to adopt than SimPy, salabim, simmer, JaamSim, Arena, AnyLogic, Simio, or FlexSim for users who are not already simulation specialists. The product’s core combination remains unusual:
+simmodlr is meaningfully easier to adopt than SimPy, salabim, simmer, JaamSim, Arena, AnyLogic, Simio, or FlexSim for users who are not already simulation specialists. The product’s core combination remains unusual:
 
 - structured editors
 - visual designer
@@ -100,7 +100,7 @@ That combination is a genuine differentiator, not a marketing layer over a weak 
 
 ### 2. Statistical workflow for practical DES studies
 
-DES Studio’s current statistical feature set compares well with both cohorts for mainstream operational analysis:
+simmodlr’s current statistical feature set compares well with both cohorts for mainstream operational analysis:
 
 - replication support
 - 95% confidence intervals
@@ -116,18 +116,18 @@ This closes what used to be one of the biggest gaps.
 
 ### 3. AI as a workflow advantage
 
-DES Studio is ahead of the benchmark set in three AI-adjacent areas:
+simmodlr is ahead of the benchmark set in three AI-adjacent areas:
 
 - model generation from natural language
 - AI-supported interpretation of results
 - structured AI diagnostics from model, run statistics, and execution trace
 - goal-driven, explainable exploration rather than opaque black-box optimisation
 
-Commercial tools still lead in high-dimensional optimisation engines, but DES Studio is ahead on accessible AI explanation and user-facing diagnostic guidance.
+Commercial tools still lead in high-dimensional optimisation engines, but simmodlr is ahead on accessible AI explanation and user-facing diagnostic guidance.
 
 ### 4. Planned data and operationally grounded DES
 
-The timetable and actuals capabilities now make DES Studio particularly credible for:
+The timetable and actuals capabilities now make simmodlr particularly credible for:
 
 - transport timetables
 - appointment and clinic plans
@@ -143,7 +143,7 @@ That is a narrower but valuable niche where several comparators require more man
 
 ### Gap A — Advanced simulation depth beyond structured process-flow DES
 
-DES Studio is intentionally structured around Pidd’s Three-Phase Method and a safe, no-code macro vocabulary. That gives clarity and safety, but it also means the platform is still narrower than tools built around:
+simmodlr is intentionally structured around Pidd’s Three-Phase Method and a safe, no-code macro vocabulary. That gives clarity and safety, but it also means the platform is still narrower than tools built around:
 
 - coroutine/process interaction
 - fully general event composition
@@ -157,7 +157,7 @@ DES Studio is intentionally structured around Pidd’s Three-Phase Method and a 
 
 ### Gap B — Deterministic causal debugging and forensic traceability
 
-DES Studio already has stronger diagnostic support than many earlier reviews credited it for. The product now includes logs, traces, visuals, entity tables, AI-assisted diagnosis, and contextual debugging chat. The remaining need is not basic diagnosis support, but stronger deterministic answers to questions like:
+simmodlr already has stronger diagnostic support than many earlier reviews credited it for. The product now includes logs, traces, visuals, entity tables, AI-assisted diagnosis, and contextual debugging chat. The remaining need is not basic diagnosis support, but stronger deterministic answers to questions like:
 
 - Why did this entity wait here?
 - Why did this C-event not fire?
@@ -165,13 +165,13 @@ DES Studio already has stronger diagnostic support than many earlier reviews cre
 - Which condition or routing branch sent it here?
 - What changed between baseline and patched model behavior?
 
-**Impact:** the harder the model, the more important explainability becomes. DES Studio now performs well on guided diagnosis, but this remaining gap matters for trust, teaching, model validation, and consulting delivery where users need machine-verifiable "why exactly?" evidence.
+**Impact:** the harder the model, the more important explainability becomes. simmodlr now performs well on guided diagnosis, but this remaining gap matters for trust, teaching, model validation, and consulting delivery where users need machine-verifiable "why exactly?" evidence.
 
 ### Gap C — Performance envelope and operational scale
 
 This remains the most important engineering gap versus mature commercial tools.
 
-DES Studio has improved significantly, but it still lacks the same confidence envelope for:
+simmodlr has improved significantly, but it still lacks the same confidence envelope for:
 
 - very large entity populations
 - long-running interactive models
@@ -182,7 +182,7 @@ DES Studio has improved significantly, but it still lacks the same confidence en
 
 ### Gap D — High-dimensional optimisation
 
-DES Studio’s sweep-based and AI-explained optimisation story is excellent for human-centred analysis, but it is not yet a substitute for:
+simmodlr’s sweep-based and AI-explained optimisation story is excellent for human-centred analysis, but it is not yet a substitute for:
 
 - heuristic search
 - ranking-and-selection at larger design spaces
@@ -193,7 +193,7 @@ DES Studio’s sweep-based and AI-explained optimisation story is excellent for 
 
 ### Gap E — Hierarchical reusable modelling assets
 
-DES Studio has templates and a visual designer, but it still lacks the richer reusable modelling structure seen in stronger commercial platforms:
+simmodlr has templates and a visual designer, but it still lacks the richer reusable modelling structure seen in stronger commercial platforms:
 
 - hierarchical submodels
 - organisation-specific object libraries
@@ -206,14 +206,14 @@ DES Studio has templates and a visual designer, but it still lacks the richer re
 
 This is a clear gap versus AnyLogic, Simio, and especially FlexSim and JaamSim.
 
-DES Studio does not currently try to compete on:
+simmodlr does not currently try to compete on:
 
 - 3D facility views
 - spatial movement as a first-class model concern
 - GIS / map-based modelling
 - transport paths and conveyors as native constructs
 
-**Impact:** this is acceptable if DES Studio stays focused on service, queueing, and process-flow DES; it becomes a gap only if the product wants to expand into broader physical-system digital twins.
+**Impact:** this is acceptable if simmodlr stays focused on service, queueing, and process-flow DES; it becomes a gap only if the product wants to expand into broader physical-system digital twins.
 
 ---
 
@@ -225,7 +225,7 @@ DES Studio does not currently try to compete on:
 |---|---|---|---|
 | Causal trace and “why?” diagnostics | Improves trust, debugging speed, and teaching value | Medium | High |
 | Performance-envelope hardening and publication | Reduces the biggest commercial-tool credibility gap | Medium-High | High |
-| Better schedule / live-data operational UX | Builds on an area where DES Studio is already differentiated | Medium | High |
+| Better schedule / live-data operational UX | Builds on an area where simmodlr is already differentiated | Medium | High |
 | Reusable modelling patterns / compound templates | Increases practical modelling speed without changing the engine philosophy | Medium | High |
 
 ### Priority 2 — Strong follow-on improvements
@@ -251,7 +251,7 @@ DES Studio does not currently try to compete on:
 
 ### Recommended path
 
-The best next move is **not** to chase every commercial-tool feature category. The stronger path is to deepen the things DES Studio is already good at:
+The best next move is **not** to chase every commercial-tool feature category. The stronger path is to deepen the things simmodlr is already good at:
 
 1. interpretable process-flow DES
 2. planned-data and real-time operational analysis
@@ -272,7 +272,7 @@ The comparison does **not** support prioritising these as near-term core bets:
 - full general-purpose scripting runtime
 - 3D animation parity with FlexSim
 - GIS parity with top-end digital twin tools
-- broad agent-based or continuous-flow expansion inside DES Studio
+- broad agent-based or continuous-flow expansion inside simmodlr
 
 Those would be expensive and would risk diluting the product’s strongest current identity.
 
@@ -280,7 +280,7 @@ Those would be expensive and would risk diluting the product’s strongest curre
 
 ## Bottom Line
 
-DES Studio compares well today in the dimensions that matter most to its intended users:
+simmodlr compares well today in the dimensions that matter most to its intended users:
 
 - approachability
 - modelling guidance
@@ -289,9 +289,9 @@ DES Studio compares well today in the dimensions that matter most to its intende
 - browser-native collaboration
 - AI-supported workflow
 
-Against open-source tools, DES Studio is already ahead on usability and integrated workflow, while still behind the code-first frameworks on unrestricted expressiveness.
+Against open-source tools, simmodlr is already ahead on usability and integrated workflow, while still behind the code-first frameworks on unrestricted expressiveness.
 
-Against professional tools, DES Studio is now much closer on mainstream DES capability than earlier reviews suggested. The remaining meaningful gaps are concentrated in:
+Against professional tools, simmodlr is now much closer on mainstream DES capability than earlier reviews suggested. The remaining meaningful gaps are concentrated in:
 
 - performance at scale
 - high-dimensional optimisation
@@ -304,9 +304,9 @@ That is a much more focused and manageable gap profile than before.
 
 ## Suggested Follow-On Questions
 
-1. Should DES Studio remain primarily a browser-first process-flow DES platform, or deliberately move toward broader digital-twin coverage?
+1. Should simmodlr remain primarily a browser-first process-flow DES platform, or deliberately move toward broader digital-twin coverage?
 2. Which debugging questions should the product answer directly in the UI by default?
-3. What published performance envelope would make DES Studio credible for consulting and operational studies?
+3. What published performance envelope would make simmodlr credible for consulting and operational studies?
 4. Is the next optimisation step better served by heuristic search, AI-guided design-space reduction, or stronger DOE workflows?
 5. Which reusable modelling patterns should become first-class template or compound-model assets?
 
@@ -314,11 +314,11 @@ That is a much more focused and manageable gap profile than before.
 
 ## Sources
 
-### DES Studio internal references
+### simmodlr internal references
 
 - `docs/capability-gap-analysis.md`
 - `docs/reviews/open-source-tool-gap-analysis.md`
-- `docs/archived/des-studio-professional-gap-analysis.md`
+- `docs/archived/simmodlr-professional-gap-analysis.md`
 - current engine, UI, and analysis code in `src/`
 
 ### Open-source tool references
@@ -358,8 +358,8 @@ That is a much more focused and manageable gap profile than before.
 
 This document is a refreshed, cross-market comparison. It should be read alongside:
 
-- [docs/capability-gap-analysis.md](/abs/path/c:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/capability-gap-analysis.md)
-- [docs/reviews/open-source-tool-gap-analysis.md](/abs/path/c:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/reviews/open-source-tool-gap-analysis.md)
-- [docs/archived/des-studio-professional-gap-analysis.md](/abs/path/c:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/archived/des-studio-professional-gap-analysis.md)
+- [docs/capability-gap-analysis.md](/abs/path/c:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/capability-gap-analysis.md)
+- [docs/reviews/open-source-tool-gap-analysis.md](/abs/path/c:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/reviews/open-source-tool-gap-analysis.md)
+- [docs/archived/simmodlr-professional-gap-analysis.md](/abs/path/c:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/archived/simmodlr-professional-gap-analysis.md)
 
 `docs/capability-gap-analysis.md` remains the detailed feature-by-feature canonical matrix. This document is the updated strategic comparison and improvement brief.

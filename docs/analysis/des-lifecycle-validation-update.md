@@ -4,8 +4,8 @@ Date: 2026-05-26
 
 ## Files Changed
 
-- [src/engine/validation.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/validation.js)
-- [tests/engine/validation.test.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/tests/engine/validation.test.js)
+- [src/engine/validation.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/validation.js)
+- [tests/engine/validation.test.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/tests/engine/validation.test.js)
 
 ## Validation Messages Added
 
@@ -46,7 +46,7 @@ Date: 2026-05-26
 
 ## Tests Added
 
-Added or updated coverage in [tests/engine/validation.test.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/tests/engine/validation.test.js) for:
+Added or updated coverage in [tests/engine/validation.test.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/tests/engine/validation.test.js) for:
 
 - non-`ctx` `RENEGE(...)` is now an error for B-events
 - non-`ctx` `RENEGE(...)` is now an error for C-events

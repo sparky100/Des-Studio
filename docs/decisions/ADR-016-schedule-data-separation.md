@@ -11,7 +11,7 @@
 
 ### The problem
 
-DES Studio models that represent real operational systems embed full
+simmodlr models that represent real operational systems embed full
 timetable data directly inside `model_json`. For Glasgow Central station
 the breakdown is:
 

@@ -1,4 +1,4 @@
-# DES Studio — Document Gap Tracker
+# simmodlr — Document Gap Tracker
 
 **Created:** 2026-05-23  
 **Review session:** Read-only gap analysis (4 documents + 6 source files)  

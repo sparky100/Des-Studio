@@ -19,36 +19,36 @@ Supabase is currently responsible for storage, auth, sharing, admin/config, and 
 - it does not execute replications
 - it does not run CPU-heavy simulation work inside Edge Functions
 
-That matches the current runtime architecture documented in [des-runtime-execution-map.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/des-runtime-execution-map.md).
+That matches the current runtime architecture documented in [des-runtime-execution-map.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/des-runtime-execution-map.md).
 
 ## Tables And Functions Used
 
 ### Core model and run storage
 
 - `des_models`
-  - read/write wrapper: [models.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/db/models.js)
+  - read/write wrapper: [models.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/db/models.js)
   - stores both legacy top-level arrays and newer `model_json`
   - includes metadata such as `visibility`, `access`, `tags`, `goals`, `latest_version`, `parent_model_id`
 
 - `simulation_runs`
-  - write path: `saveSimulationRun(...)` in [models.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/db/models.js)
+  - write path: `saveSimulationRun(...)` in [models.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/db/models.js)
   - read paths: `fetchRunHistory(...)`, `getRun(...)`, share-link lookup
   - stores both summary columns and a rich `results_json` blob
 
 - `model_versions`
-  - migration: [20260520000000_add_model_versions.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260520000000_add_model_versions.sql)
+  - migration: [20260520000000_add_model_versions.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260520000000_add_model_versions.sql)
   - stores full `model_json` snapshots per version
 
 - `experiments`
-  - created in [20260514000000_create_experiments.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260514000000_create_experiments.sql)
+  - created in [20260514000000_create_experiments.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260514000000_create_experiments.sql)
   - stores saved run-config definitions
 
 - `sweeps`
-  - migration: [20260510090000_share_links_sweeps.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260510090000_share_links_sweeps.sql)
+  - migration: [20260510090000_share_links_sweeps.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260510090000_share_links_sweeps.sql)
   - stores sweep config and results as JSONB
 
 - `share_links`
-  - migration: [20260510090000_share_links_sweeps.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260510090000_share_links_sweeps.sql)
+  - migration: [20260510090000_share_links_sweeps.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260510090000_share_links_sweeps.sql)
   - exposes saved run outputs publicly by token
 
 ### Admin and support tables
@@ -73,10 +73,10 @@ That matches the current runtime architecture documented in [des-runtime-executi
 
 These are created across:
 
-- [20260505073000_platform_roles_user_settings.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260505073000_platform_roles_user_settings.sql)
-- [20260510090004_fix_rls_recursion.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260510090004_fix_rls_recursion.sql)
-- [20260515000000_sprint38_user_management.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260515000000_sprint38_user_management.sql)
-- [20260524060000_sprint71_saas_operator.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260524060000_sprint71_saas_operator.sql)
+- [20260505073000_platform_roles_user_settings.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260505073000_platform_roles_user_settings.sql)
+- [20260510090004_fix_rls_recursion.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260510090004_fix_rls_recursion.sql)
+- [20260515000000_sprint38_user_management.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260515000000_sprint38_user_management.sql)
+- [20260524060000_sprint71_saas_operator.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260524060000_sprint71_saas_operator.sql)
 
 ## Edge Functions
 
@@ -84,19 +84,19 @@ Functions present under `supabase/functions/`:
 
 - `import-model`
   - normalizes and validates a posted model, then inserts into `des_models`
-  - file: [import-model/index.ts](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/functions/import-model/index.ts)
+  - file: [import-model/index.ts](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/functions/import-model/index.ts)
 
 - `llm-proxy`
   - reads config, applies in-memory rate limiting, and proxies LLM requests upstream
-  - file: [llm-proxy/index.ts](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/functions/llm-proxy/index.ts)
+  - file: [llm-proxy/index.ts](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/functions/llm-proxy/index.ts)
 
 - `notify-feedback`
   - sends support notifications
-  - file: [notify-feedback/index.ts](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/functions/notify-feedback/index.ts)
+  - file: [notify-feedback/index.ts](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/functions/notify-feedback/index.ts)
 
 - `notify-new-signup`
   - sends signup notifications
-  - file: [notify-new-signup/index.ts](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/functions/notify-new-signup/index.ts)
+  - file: [notify-new-signup/index.ts](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/functions/notify-new-signup/index.ts)
 
 ### Edge Function compute risk
 
@@ -170,14 +170,14 @@ Single-run saves can include a large payload assembled from engine output:
 
 Evidence:
 
-- engine returns these fields in [index.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/index.js)
-- save path copies the full result into `results_json` in [models.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/db/models.js)
+- engine returns these fields in [index.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/index.js)
+- save path copies the full result into `results_json` in [models.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/db/models.js)
 
 ### Are event-level traces persisted?
 
 Yes.
 
-- `trace` is derived from the engine log via [traceCollector.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/simulation/traceCollector.js)
+- `trace` is derived from the engine log via [traceCollector.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/simulation/traceCollector.js)
 - it is capped at 1,000 trace records and sets `traceTruncated` when over cap
 - that trace is included in engine results and therefore saved in `results_json` for single runs
 
@@ -212,7 +212,7 @@ The biggest concern is `simulation_runs.results_json`, because it can combine:
 
 Batch run saves are materially safer than single-run saves.
 
-- replication worker results are compacted in [replication-runner.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/replication-runner.js)
+- replication worker results are compacted in [replication-runner.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/replication-runner.js)
 - persisted batch metadata stores:
   - aggregate stats
   - aggregate runtime metrics
@@ -416,7 +416,7 @@ Recommended but not applied:
 
 A proposed migration file has been provided separately:
 
-- [2026-05-26-supabase-run-history-indexes.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/architecture/proposed-migrations/2026-05-26-supabase-run-history-indexes.sql)
+- [2026-05-26-supabase-run-history-indexes.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/architecture/proposed-migrations/2026-05-26-supabase-run-history-indexes.sql)
 
 ## Recommendations
 

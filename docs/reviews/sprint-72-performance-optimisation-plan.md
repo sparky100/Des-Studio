@@ -27,7 +27,7 @@
 | 72-6 | Cache Phase C ordering and reduce repeated helper construction | Engine | `src/engine/index.js`, `src/engine/entities.js` (only if helper API needs small support changes) |
 | 72-7 | Dirty-dependency filtering for Phase C candidate scans | Engine | `src/engine/index.js`, `src/engine/phases.js`, condition dependency helpers |
 | 72-8 | Focused correctness and migration coverage | Tests | `tests/engine/conditions.test.js`, `tests/engine/three-phase.test.js`, new migration/benchmark tests, relevant UI/db tests |
-| 72-9 | Documentation and architecture tracking update | Docs | `AGENTS.md`, `docs/DES_Studio_Build_Plan.md`, `docs/DES_Studio_Engineering_Spec.md`, closure report |
+| 72-9 | Documentation and architecture tracking update | Docs | `AGENTS.md`, `docs/simmodlr_Build_Plan.md`, `docs/simmodlr_Engineering_Spec.md`, closure report |
 
 ---
 
@@ -216,10 +216,10 @@
   - current sprint tracking
   - condition-runtime contract
   - any new architectural rule around predicate-only execution
-- `docs/DES_Studio_Build_Plan.md`
+- `docs/simmodlr_Build_Plan.md`
   - Sprint 72 entry
   - roadmap/history update
-- `docs/DES_Studio_Engineering_Spec.md`
+- `docs/simmodlr_Engineering_Spec.md`
   - canonical condition format
   - Phase C optimisation notes
 - Sprint 72 closure report with:

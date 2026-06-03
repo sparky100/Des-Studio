@@ -1,4 +1,4 @@
-# DES Studio — AGENTS.md
+# simmodlr — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
 *Last updated: 2026-06-02 | Reflects: Sprint 79 — Consistent Panel Visibility UX + AI-Powered Explore (Adaptive Batch Analysis) complete.*
 
@@ -8,14 +8,14 @@
 - Current sprint plan (AI Explore): `docs/reviews/sprint-79-ai-explore-plan.md` — AI-Powered Adaptive Batch Analysis, Explore panel, Apply ↗, per-outcome timing
 - Current sprint plan (Panel UX): `docs/reviews/sprint-79-plan.md` — Consistent Panel Visibility UX (companion Sprint 79 delivery)
 - Previous sprint plan: `docs/reviews/sprint-78-plan.md` — Visual Designer Canvas Visibility
-- Build plan: `docs/DES_Studio_Build_Plan.md`
-- Roadmap: `docs/DES_Studio_Build_Plan.md`
+- Build plan: `docs/simmodlr_Build_Plan.md`
+- Roadmap: `docs/simmodlr_Build_Plan.md`
 
 ---
 
 ## 1. Project Purpose
 
-DES Studio is a browser-based discrete-event simulation (DES) modelling tool implementing **Pidd's Three-Phase Method (A/B/C)**. Modellers define entity types, queues, B-Events, and C-Events using structured editors, run single or parallel replications, and view results in real time.
+simmodlr is a browser-based discrete-event simulation (DES) modelling tool implementing **Pidd's Three-Phase Method (A/B/C)**. Modellers define entity types, queues, B-Events, and C-Events using structured editors, run single or parallel replications, and view results in real time.
 
 The tool is backed by Supabase for authentication, model storage, and run history.
 
@@ -297,7 +297,7 @@ All six disciplines are fully implemented in `src/engine/entities.js`. The `Queu
 
 ## 7. Model Definition UI
 
-The model editor is the primary surface through which modellers interact with DES Studio. It is a **tab-based, form-driven interface** — not a visual DAG canvas (that is a future sprint). Every element of a simulation model is defined through dedicated editor components, each with its own create / update / delete workflow.
+The model editor is the primary surface through which modellers interact with simmodlr. It is a **tab-based, form-driven interface** — not a visual DAG canvas (that is a future sprint). Every element of a simulation model is defined through dedicated editor components, each with its own create / update / delete workflow.
 
 This section documents what exists, the rules for working on each editor, and the target state for editors that are incomplete.
 
@@ -462,7 +462,7 @@ These rules apply to every change made to any component in `src/ui/`:
 
 ### 7.11 Plain-English Presentation Rule
 
-DES Studio supports advanced modellers, but user-facing wording must not assume that every user wants engine or statistical jargon as the first layer of explanation.
+simmodlr supports advanced modellers, but user-facing wording must not assume that every user wants engine or statistical jargon as the first layer of explanation.
 
 **Rule:** user-facing presentation follows a two-layer pattern:
 
@@ -1188,7 +1188,7 @@ Key tables in Supabase. Do not change column names without updating `src/db/mode
 
 ## 16. Authentication & Multi-User Rules
 
-DES Studio is a **multi-user application**. Authentication is managed by Supabase Auth. The existing implementation is working and must be fully preserved across all sprints. No auth-related code may be simplified, removed, or bypassed without an explicit ADR (see Section 15).
+simmodlr is a **multi-user application**. Authentication is managed by Supabase Auth. The existing implementation is working and must be fully preserved across all sprints. No auth-related code may be simplified, removed, or bypassed without an explicit ADR (see Section 15).
 
 ### 16.1 What Exists and Must Not Be Broken
 
@@ -1450,14 +1450,14 @@ UI / UX
 | Platform roles and user settings, with SaaS/LLM follow-ons | `docs/decisions/ADR-008-platform-roles-saas-llm-configuration.md` | Before adding admin features, user settings, tenancy/workspace logic, or LLM provider configuration |
 | Incremental TypeScript adoption | `docs/decisions/ADR-009-typescript-reassessment.md` | Before adding TypeScript tooling or beginning schema-heavy/domain-boundary refactors |
 | Schedule data separation | `docs/decisions/ADR-016-schedule-data-separation.md` | Before touching `model_schedules`, `resolveInlineSchedules`, or `buildEngine` schedule options |
-| Build plan with sprint features and prompts | `docs/DES_Studio_Build_Plan.md` | Start of every sprint — read current sprint section |
+| Build plan with sprint features and prompts | `docs/simmodlr_Build_Plan.md` | Start of every sprint — read current sprint section |
 | Full codebase audit findings | `docs/AUDIT.md` | When investigating a known issue — check audit ref before changing |
 
 ---
 
 ## 20. Sprint History
 
-See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Latest completed sprint details below.
+See `docs/simmodlr_Build_Plan.md` for the full sprint-by-sprint roadmap. Latest completed sprint details below.
 
 | Sprint | Status | Completed | Description |
 |---|---|---|---|
@@ -1630,7 +1630,7 @@ See `docs/DES_Studio_Build_Plan.md` for the full sprint-by-sprint roadmap. Lates
 | F23.7 Tablet layout refinements | ✅ Complete | Workflow shell, chart grids, history summary, and Model Health use wrapping/flexible layouts for tablet widths. |
 | F23.8 Mobile read/run/results view | ✅ Complete | Phone-width ModelDetail switches to Summary, Validate, Run, Results, and History instead of the full authoring workflow. |
 | F23.9 UI warning cleanup | ✅ Complete | ExecutePanel async test warnings are addressed by controlling async history/settings mocks; table whitespace warnings remain clean in focused tests. |
-| F23.10 Sprint documentation and regression coverage | ✅ Complete | `AGENTS.md` and `docs/DES_Studio_Build_Plan.md` updated; focused UI tests and production build passed. |
+| F23.10 Sprint documentation and regression coverage | ✅ Complete | `AGENTS.md` and `docs/simmodlr_Build_Plan.md` updated; focused UI tests and production build passed. |
 
 **Sprint 23 exit gate:**
 - Focused tests for Model Health, navigation, Results, run history, Execute, and accessibility pass.
@@ -1743,10 +1743,10 @@ At the end of every sprint, the following documents MUST be reviewed and updated
 | Document | What to update |
 |----------|---------------|
 | `AGENTS.md` | Sprint tracking block (current sprint plan/closure/capability guide links), any new architectural rules, any new file paths |
-| `docs/DES_Studio_Build_Plan.md` | Mark completed sprints ✅, update the roadmap diagram, add new sprint entries |
+| `docs/simmodlr_Build_Plan.md` | Mark completed sprints ✅, update the roadmap diagram, add new sprint entries |
 | `docs/capability-gap-analysis.md` | Update the scoring matrix for any gaps closed, add version history entry |
-| `docs/DES_Studio_User_Guide.md` | Add any new user-facing features; update version history table |
-| `docs/DES_Studio_Specification.md` | Update functional specification sections affected by the sprint |
+| `docs/simmodlr_User_Guide.md` | Add any new user-facing features; update version history table |
+| `docs/simmodlr_Specification.md` | Update functional specification sections affected by the sprint |
 | `docs/Template Models Guide.md` | Add or update templates if the sprint added modelling capabilities that templates should demonstrate |
 | Sprint plan: `docs/reviews/sprint-NN-plan.md` | Must exist before sprint starts |
 | Sprint closure: `docs/reviews/sprint-NN-closure-report.md` | Must exist before sprint is marked complete |
@@ -1860,13 +1860,13 @@ Any change that adds a field to model_json, db/models.js serialisation, or the S
 
 ## Documentation & Test Completeness Rule
 
-Standing rule. Applies to every change made to DES Studio, regardless of size or sprint context._
+Standing rule. Applies to every change made to simmodlr, regardless of size or sprint context._
 
 ---
 
 ## The Rule
 
-No change to DES Studio is complete until the following obligations have been discharged. Claude Code must treat these as exit conditions, not optional follow-up tasks.
+No change to simmodlr is complete until the following obligations have been discharged. Claude Code must treat these as exit conditions, not optional follow-up tasks.
 
 ---
 
@@ -1876,9 +1876,9 @@ After any change that affects behaviour, schema, UI, or API, review each of the 
 
 |Document|Update trigger|
 |---|---|
-|`DES_Studio_User_Guide.md`|Any change visible to the end user: new features, renamed controls, changed workflows, new error messages|
-|`DES_Studio_Product_Spec.md`|Any change to product-level capability, scope, or roadmap|
-|`DES_Studio_Engineering_Spec.md`|Any change to engine behaviour, macro signatures, schema, API contracts, or architectural decisions|
+|`simmodlr_User_Guide.md`|Any change visible to the end user: new features, renamed controls, changed workflows, new error messages|
+|`simmodlr_Product_Spec.md`|Any change to product-level capability, scope, or roadmap|
+|`simmodlr_Engineering_Spec.md`|Any change to engine behaviour, macro signatures, schema, API contracts, or architectural decisions|
 |`model-schema-for-llm.md`|Any change to `model_json` structure, validation rules, macro syntax, or LLM-facing schema|
 |In-app help content|Any change to a feature that has corresponding in-app guidance or tooltip text|
 

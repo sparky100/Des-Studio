@@ -7,7 +7,7 @@ Source reviews:
 
 ## Goal
 
-Harden DES Studio's simulation correctness after the architecture reviews by fixing the urgent Phase C, event-context, entity lifecycle, event scheduling, and persistence-contract defects, then adding SimPy-informed JavaScript abstractions for cancellation, resource arbitration, queue selection, and lifecycle transitions where they reduce correctness risk.
+Harden simmodlr's simulation correctness after the architecture reviews by fixing the urgent Phase C, event-context, entity lifecycle, event scheduling, and persistence-contract defects, then adding SimPy-informed JavaScript abstractions for cancellation, resource arbitration, queue selection, and lifecycle transitions where they reduce correctness risk.
 
 ## Sprint Theme
 
@@ -86,7 +86,7 @@ Sprint 24 is complete only when:
 - `npm run build` passes.
 - `docs/reviews/simulation-architecture-review.md` is updated with resolved/deferred status notes.
 - `docs/reviews/simpy-architecture-review.md` is updated with resolved/deferred status notes or a follow-up SimPy validation backlog item.
-- `AGENTS.md` and `docs/DES_Studio_Build_Plan.md` are updated with Sprint 24 closure details.
+- `AGENTS.md` and `docs/simmodlr_Build_Plan.md` are updated with Sprint 24 closure details.
 
 ## Defer Criteria
 

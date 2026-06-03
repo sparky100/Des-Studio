@@ -1,4 +1,4 @@
-# DES Studio — Build Plan
+# simmodlr — Build Plan
 *Living document. Update after each sprint completion.*
 *Version: 1.83 | Created: 2026-04-30 | Updated: 2026-05-31 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
@@ -33,7 +33,7 @@ Claude Code must read the relevant existing files before touching anything.
 
 ## Direction of Travel
 
-DES Studio is moving from a working Forms/Tabs DES modeller into a richer modelling platform with three authoring modes over one canonical `model_json`: manual Forms/Tabs, AI Generated Model, and Visual Designer. The modelling expressiveness sprints (10–12) now extend the engine vocabulary to cover the critical real-world problem classes not yet supported.
+simmodlr is moving from a working Forms/Tabs DES modeller into a richer modelling platform with three authoring modes over one canonical `model_json`: manual Forms/Tabs, AI Generated Model, and Visual Designer. The modelling expressiveness sprints (10–12) now extend the engine vocabulary to cover the critical real-world problem classes not yet supported.
 
 ```mermaid
 flowchart LR
@@ -354,7 +354,7 @@ flowchart LR
 | F25.5 | P2 | SimPy-style documentation follow-through | ✅ | Docs explain the JavaScript equivalents of SimPy-style validation, waiting, and arbitration patterns. |
 
 **Resolved SimPy-informed mappings:**
-- Validation remains a DES Studio authoring concern rather than a SimPy runtime primitive; the V8 rule is now explicit in engine validation and Execute UX.
+- Validation remains a simmodlr authoring concern rather than a SimPy runtime primitive; the V8 rule is now explicit in engine validation and Execute UX.
 - Warm-up handling remains a JavaScript engine concern; instead of process suspension semantics, the engine truncates metric intervals at the warm-up boundary while preserving live entity/event context.
 - Queue/resource arbitration remains custom to support Three-Phase semantics, but now follows one shared helper-led path analogous to a lightweight `Resource` / `PriorityResource` service.
 
@@ -369,7 +369,7 @@ flowchart LR
 
 ## Sprint 23 — UI Interface Polish & Workflow Shell
 
-**Goal:** Make DES Studio easier to navigate for simulation modellers by grouping ModelDetail into workflow modes, keeping validation/health visible, separating build/run/results concerns, and preparing tablet/mobile-specific layouts.
+**Goal:** Make simmodlr easier to navigate for simulation modellers by grouping ModelDetail into workflow modes, keeping validation/health visible, separating build/run/results concerns, and preparing tablet/mobile-specific layouts.
 
 **Status:** ✅ Complete | **Started:** 2026-05-11 | **Completed:** 2026-05-11
 
@@ -407,7 +407,7 @@ flowchart LR
 
 ## Forward Product Roadmap
 
-ADR-007 establishes DES Studio's model-authoring architecture: one canonical `model_json`, three authoring modes.
+ADR-007 establishes simmodlr's model-authoring architecture: one canonical `model_json`, three authoring modes.
 
 | Sprint    | Product focus                                       | Authoring mode / capability impact                                                            |
 | --------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -571,7 +571,7 @@ npm run build
 ### Sprint 9B Documentation Update *(run at completion, before commit)*
 
 ```
-Sprint 9B of DES Studio is complete. Before committing, update ALL of:
+Sprint 9B of simmodlr is complete. Before committing, update ALL of:
 
 1. docs/addition1_entity_model.md
    - If any macro behaviour changed or was clarified during 9B, update
@@ -583,7 +583,7 @@ Sprint 9B of DES Studio is complete. Before committing, update ALL of:
    - Update "Current Sprint" to Sprint 10
    - Record any new architectural decisions or conventions introduced
 
-3. docs/DES_Studio_Build_Plan.md
+3. docs/simmodlr_Build_Plan.md
    - Set Sprint 9B status to ✅ Complete with completion date
    - Record final test count in Sprint History table
    - Add any new deferred items to the Deferred Features Register
@@ -601,7 +601,7 @@ Show me the diff for each document before writing it.
 
 **Status:** ✅ Complete | **Started:** 2026-05-22 | **Completed:** 2026-05-22
 **Prerequisite:** Sprint 9B complete.
-**Files changed:** `src/llm/model-builder-prompts.js`, `src/ui/editors/ModelDiffPreview.jsx`, `src/ui/editors/AiGeneratedModelPanel.jsx`, `docs/DES_Studio_User_Guide.md`, `docs/DES_Studio_Engineering_Spec.md`
+**Files changed:** `src/llm/model-builder-prompts.js`, `src/ui/editors/ModelDiffPreview.jsx`, `src/ui/editors/AiGeneratedModelPanel.jsx`, `docs/simmodlr_User_Guide.md`, `docs/simmodlr_Engineering_Spec.md`
 
 | Feature | Action |
 |---------|--------|
@@ -673,7 +673,7 @@ Show me the diff for each document before writing it.
 ### Sprint 9C Planning Prompt *(run in claude.ai)*
 
 ```
-We are starting Sprint 9C of DES Studio.
+We are starting Sprint 9C of simmodlr.
 
 Sprint 9C goal: Execute Canvas — Live Flow View.
 This sprint replaces the flat server-card / queue-lane Execute view
@@ -996,7 +996,7 @@ Sprint 9C is feature-complete. Before committing, update ALL of:
      Execute canvas layout
    - Note that animation preference is stored in user_settings
 
-2. docs/DES_Studio_Build_Plan.md
+2. docs/simmodlr_Build_Plan.md
    - Set Sprint 9C status to ✅ Complete with completion date
    - Record final test count in Sprint History table
    - Remove "Execute running-model UX" from Deferred Features Register
@@ -1063,7 +1063,7 @@ Recommendation: Option A for Sprint 10. Option B is future syntactic sugar over 
 ### Sprint 10 Planning Prompt *(run in claude.ai)*
 
 ```
-We are starting Sprint 10 of DES Studio.
+We are starting Sprint 10 of simmodlr.
 
 Sprint 10 goal: Modelling Expressiveness — Routing & Pooling.
 This sprint extends the engine's modelling vocabulary. No existing
@@ -1370,7 +1370,7 @@ following. Show me the diff for each before writing it.
    - Add collectTimeSeries and waitDist to results object description
    - Update ADR register: mark ADR-011 closed with Option A recorded
 
-3. docs/DES_Studio_Build_Plan.md
+3. docs/simmodlr_Build_Plan.md
    - Set Sprint 10 status to ✅ Complete with completion date
    - Record final test count in Sprint History table
    - Update Modelling Capability Coverage table: mark Sprint 10 items ✅
@@ -1419,7 +1419,7 @@ npm run build                           # Succeeds
 ### Sprint 11 Planning Prompt *(run in claude.ai)*
 
 ```
-We are starting Sprint 11 of DES Studio.
+We are starting Sprint 11 of simmodlr.
 
 Sprint 11 goal: Modelling Expressiveness — Capacity & Output.
 Prerequisite: Sprint 10 conditional routing is complete and working.
@@ -1492,7 +1492,7 @@ npm run build                           # Succeeds
 ### Sprint 12 Planning Prompt *(run in claude.ai)*
 
 ```
-We are starting Sprint 12 of DES Studio.
+We are starting Sprint 12 of simmodlr.
 
 Sprint 12 goal: Modelling Expressiveness — Assembly & Recirculation.
 Prerequisite: Sprints 10 and 11 complete.
@@ -1549,7 +1549,7 @@ node tests/engine/mm1_benchmark.js      # 1.48% error (< 5% gate)
 ### Sprint 12 Documentation Update *(run at completion)*
 
 ```
-Sprint 12 of DES Studio is complete. Before committing, update ALL of:
+Sprint 12 of simmodlr is complete. Before committing, update ALL of:
 
 1. docs/addition1_entity_model.md
    - BATCH (MACRO 6) and UNBATCH (MACRO 7) macro specifications
@@ -1564,7 +1564,7 @@ Sprint 12 of DES Studio is complete. Before committing, update ALL of:
    - Add BATCH/UNBATCH to the five permitted macros (now seven)
    - Add loop guard rules to Three-Phase and entity sections
 
-3. docs/DES_Studio_Build_Plan.md
+3. docs/simmodlr_Build_Plan.md
    - Set Sprint 12 status to ✅ Complete with completion date 2026-05-08
    - Record final test count in Sprint History table (541 tests, 60 files)
    - Update roadmap flowchart, Roadmap Snapshot, Modelling Capability Coverage
@@ -1614,7 +1614,7 @@ npm run build                                               # Succeeds
 | T3 — Template auto-run | ✅ | Opening a template creates a private model and opens Execute tab with auto-run flag. |
 | T4 — Anonymous/local storage mode | ✅ | localStorage CRUD backend (`src/db/local.js`); local_ prefix for model IDs; works without Supabase session. |
 | T5 — Template validation tests | ✅ | All 10 templates pass model validation; ER Triage priority queue discipline tested. |
-| T6 — User guide update | ✅ | DES_Studio_User_Guide.md updated to cover all features across Sprints 1–13. |
+| T6 — User guide update | ✅ | simmodlr_User_Guide.md updated to cover all features across Sprints 1–13. |
 
 ---
 

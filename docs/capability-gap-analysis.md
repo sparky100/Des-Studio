@@ -1,7 +1,7 @@
-# DES Studio — Capability Gap Analysis
+# simmodlr — Capability Gap Analysis
 
 **Date:** 2026-05-21 (updated post Sprint 68)
-**Scope:** DES Studio vs SimPy 4.x, AnyLogic 8.x (Process Modelling Library), JaamSim 2024
+**Scope:** simmodlr vs SimPy 4.x, AnyLogic 8.x (Process Modelling Library), JaamSim 2024
 **Method:** Web-fetched reference feature lists + full codebase audit (engine, macros, UI, tests, templates)
 
 ---
@@ -22,7 +22,7 @@
 | v1.9 | 2026-05-15 | Sprint 43 | AI: buildGoalGaps(), evaluateSweepPointGoals(), goal-driven sweep feasibility colouring. |
 | v2.0 | 2026-05-15 | Sprint 44 | Execution insights: LogViewer, QueueHistogram, EntitySummaryTable, goal-aware KPI cards. |
 | v2.1 | 2026-05-16 | Sprint 45 | AI prompt grounding: enriched KPI payload, B/C-event digest, server failure model, state variables, anomaly digest. |
-| v2.2 | 2026-05-16 | Post-Sprint 55a | AI optimisation positioning corrected. DES Studio goal-driven sweep reframed as a differentiator. Section D narrative and competitive differentiators table updated. |
+| v2.2 | 2026-05-16 | Post-Sprint 55a | AI optimisation positioning corrected. simmodlr goal-driven sweep reframed as a differentiator. Section D narrative and competitive differentiators table updated. |
 | v2.3 | 2026-05-17 | Sprints 56–61 | **Real-time data integration:** AdapterRegistry, RestAdapter, WebSocketAdapter, mockAdapter, calibrated batch mode, rolling mode. New rows added to F and G matrices. G25 registered. |
 | v2.4 | 2026-05-18 | Sprints 62–65 | **Real-world clock + planned data:** epoch, clockUtils, planCsvParser, named entity instances, schedule feed API, ActualsStreamAdapter, avgPlanDeviation. G26–G28 registered and closed. New D row added. |
 | v2.5 | 2026-05-18 | Sprint 66 | **Visual Designer UX:** `when`/`feed` discoverability badges on nodes, Export popover consolidation, chart formatting. New E row added. |
@@ -37,7 +37,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 
 ### A — Core Entity Model
 
-| Feature | SimPy | AnyLogic | JaamSim | DES Studio | Gap? |
+| Feature | SimPy | AnyLogic | JaamSim | simmodlr | Gap? |
 |---|---|---|---|---|---|
 | Customer/entity creation (generator/source) | ✅ | ✅ | ✅ | ✅ ARRIVE macro | — |
 | Entity disposal (sink) | ✅ | ✅ | ✅ | ✅ COMPLETE macro | — |
@@ -57,7 +57,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 
 ### B — Resource & Server Model
 
-| Feature | SimPy | AnyLogic | JaamSim | DES Studio | Gap? |
+| Feature | SimPy | AnyLogic | JaamSim | simmodlr | Gap? |
 |---|---|---|---|---|---|
 | Multi-capacity server pool | ✅ Resource | ✅ ResourcePool | ✅ ResourcePool | ✅ count per type | — |
 | Single-entity server (c=1) | ✅ | ✅ | ✅ | ✅ | — |
@@ -76,7 +76,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 
 ### C — Queueing & Scheduling
 
-| Feature | SimPy | AnyLogic | JaamSim | DES Studio | Gap? |
+| Feature | SimPy | AnyLogic | JaamSim | simmodlr | Gap? |
 |---|---|---|---|---|---|
 | FIFO queue discipline | ⚠️ implicit | ✅ | ✅ | ✅ | — |
 | LIFO queue discipline | ❌ | ✅ | ✅ | ✅ | — |
@@ -99,7 +99,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 
 ### D — Statistical Output
 
-| Feature | SimPy | AnyLogic | JaamSim | DES Studio | Gap? |
+| Feature | SimPy | AnyLogic | JaamSim | simmodlr | Gap? |
 |---|---|---|---|---|---|
 | Throughput (served count) | ⚠️ manual | ✅ | ✅ | ✅ | — |
 | Mean / max wait time | ⚠️ manual | ✅ | ✅ | ✅ avgWait, maxSojourn | — |
@@ -132,7 +132,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 
 ### E — Visual Authoring
 
-| Feature | SimPy | AnyLogic | JaamSim | DES Studio | Gap? |
+| Feature | SimPy | AnyLogic | JaamSim | simmodlr | Gap? |
 |---|---|---|---|---|---|
 | Canvas-based process flow editor | ❌ | ✅ | ✅ | ✅ VisualDesignerPanel | — |
 | Drag-and-drop entity type creation | ❌ | ✅ | ✅ | ✅ palette nodes | — |
@@ -159,7 +159,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 
 ### F — Scripting & Extensibility
 
-| Feature | SimPy | AnyLogic | JaamSim | DES Studio | Gap? |
+| Feature | SimPy | AnyLogic | JaamSim | simmodlr | Gap? |
 |---|---|---|---|---|---|
 | General-purpose scripting language | ✅ Python | ✅ Java | ❌ | ❌ | Gap |
 | Custom logic in process steps | ✅ yield | ✅ code blocks | ❌ | ⚠️ SET/SET_ATTR macros; arithmetic + math fns; no coroutines | Gap |
@@ -185,9 +185,9 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 
 ### G — Real-Time Operations, Versioning & Collaboration
 
-*New category. All features in this category are DES Studio innovations without direct comparator equivalents.*
+*New category. All features in this category are simmodlr innovations without direct comparator equivalents.*
 
-| Feature | SimPy | AnyLogic | JaamSim | DES Studio | Gap? |
+| Feature | SimPy | AnyLogic | JaamSim | simmodlr | Gap? |
 |---|---|---|---|---|---|
 | Calibrated batch mode (pre-fetch live params, freeze for run) | ❌ | ❌ | ❌ | ✅ prefetchAll() before buildEngine() | — |
 | Rolling run mode (re-sample params on each FEL event) | ❌ | ❌ | ❌ | ✅ registry.resolve() per sample site | — |
@@ -240,7 +240,7 @@ Scoring: ✅ Implemented | ⚠️ Partial | ❌ Missing
 ## Section 3: Capability Summary
 
 ### A — Core Entity Model
-DES Studio implements the essential entity lifecycle: typed entities with sampled attributes, multi-stage routing via RELEASE, recirculation tracking, balking/reneging, and both conditional and probabilistic routing. Entity splitting/cloning (G06) and entity matching/synchronisation (G10) are implemented via the `SPLIT` and `MATCH` macros. Named entity instances (Sprint 63) allow real schedule data — surgical patients, flight arrivals — to be modelled with individual identity rather than anonymous statistical arrivals. Entity conveyors and state machines remain out of scope.
+simmodlr implements the essential entity lifecycle: typed entities with sampled attributes, multi-stage routing via RELEASE, recirculation tracking, balking/reneging, and both conditional and probabilistic routing. Entity splitting/cloning (G06) and entity matching/synchronisation (G10) are implemented via the `SPLIT` and `MATCH` macros. Named entity instances (Sprint 63) allow real schedule data — surgical patients, flight arrivals — to be modelled with individual identity rather than anonymous statistical arrivals. Entity conveyors and state machines remain out of scope.
 
 ### B — Resource & Server Model
 Server pools, multi-capacity types, shift schedules, dynamic capacity adjustment, utilisation tracking, preemption (G01), resource failures (G04), and multi-resource co-seize (G07) are all implemented and tested. **Container/level resources (G21) are now fully closed** via `FILL` and `DRAIN` macros with capacity clamping, time-integral averaging, min/max statistics, and V27 validation — closing the only remaining resource category gap of practical significance. Store/FilterStore item buffers remain the single open resource gap (low priority; approximable with queues).
@@ -249,27 +249,27 @@ Server pools, multi-capacity types, shift schedules, dynamic capacity adjustment
 Queue discipline coverage (FIFO, LIFO, PRIORITY), finite capacity, balking, reneging, batching, unbatching, SPT/EDD/PRIORITY(attr) sort keys, and entity matching/synchronisation are all implemented. Jockeying is the only remaining queueing gap and is low-priority (backlog indefinitely).
 
 ### D — Statistical Output
-DES Studio's statistical output remains its strongest differentiator: 95% CI, batch means, paired t-test, 1D/2D parametric sweeps, warm-up with Welch's graphical test, anomalous replication flagging, ANOVA with Tukey HSD, cost modelling, run labelling/tagging, and saved experiments. **Sprints 62–65 added plan vs actual deviation tracking** (`avgPlanDeviation`) as a new first-class metric — surfaced in `getSummary()` and the Word report's Plan vs Actual section. This capability has no equivalent in SimPy, AnyLogic, or JaamSim and targets operational planning contexts where comparing schedule to reality matters. All statistical gaps in this category are closed.
+simmodlr's statistical output remains its strongest differentiator: 95% CI, batch means, paired t-test, 1D/2D parametric sweeps, warm-up with Welch's graphical test, anomalous replication flagging, ANOVA with Tukey HSD, cost modelling, run labelling/tagging, and saved experiments. **Sprints 62–65 added plan vs actual deviation tracking** (`avgPlanDeviation`) as a new first-class metric — surfaced in `getSummary()` and the Word report's Plan vs Actual section. This capability has no equivalent in SimPy, AnyLogic, or JaamSim and targets operational planning contexts where comparing schedule to reality matters. All statistical gaps in this category are closed.
 
-**AI-driven optimisation — DES Studio's primary differentiator vs all comparators:**
+**AI-driven optimisation — simmodlr's primary differentiator vs all comparators:**
 
-| Capability | OptQuest (Arena/Simio/AnyLogic) | DES Studio |
+| Capability | OptQuest (Arena/Simio/AnyLogic) | simmodlr |
 |-----------|--------------------------------|------------|
 | Goal specification | Numeric objective + constraint bounds | Natural language goals (`buildGoalGaps()`) |
 | Parameter space exploration | Black-box heuristic search | Full 1D/2D exhaustive sweep; entire tradeoff surface visible |
 | Transparency | Opaque — "solution: servers=4" | Interactive — user sees every configuration's performance |
 | Result explanation | None | AI narrative with goal-gap context |
 
-Where OptQuest still leads: parameter spaces larger than ~4 dimensions and formal convergence guarantees on non-convex spaces. For DES Studio's target market (operations analysts, consultants, educators), the AI-driven goal-directed approach produces more interpretable outputs than OptQuest.
+Where OptQuest still leads: parameter spaces larger than ~4 dimensions and formal convergence guarantees on non-convex spaces. For simmodlr's target market (operations analysts, consultants, educators), the AI-driven goal-directed approach produces more interpretable outputs than OptQuest.
 
 ### E — Visual Authoring
 The visual authoring surface is comprehensive for a browser-based tool: canvas DAG editor, real-time token animation, per-node live counts, structured trace/event log, entity inspector, KPI cards, and sweep charts. **Sprint 66 added node discoverability badges** — `when` badges on Activity nodes show whether a C-event condition is attached; `feed` badges on Source nodes show when a live data source is bound. This closes a discoverability gap where configuration was invisible from the canvas. **Sprint 67 formalised a plain-English-first UI rule** covering all primary labels, with technical terminology demoted to helper text and tooltips. Remaining gaps (2D spatial, 3D, GIS) are out of scope for a browser-first declarative tool.
 
 ### F — Scripting & Extensibility
-DES Studio makes a deliberate safety-first choice: all logic is expressed through a declarative macro and condition token system with no `new Function()` or `eval()`. **Sprints 57–65 added a production-grade adapter layer**: RestAdapter (poll with TTL cache and exponential-backoff retry), WebSocketAdapter (streaming parameter feeds), ActualsStreamAdapter (real-time actuals ingestion), and mockAdapter for testing. The `AdapterRegistry` pattern means any `distParams` field can be resolved from a live data source at sample time — fully backwards-compatible with existing static models. **Real-world clock (Sprint 62)** maps simulation time to calendar datetime via `model.epoch`, enabling HH:MM and ISO 8601 timestamps in CSV imports. **Planned data import (Sprint 63)** adds named entity instances and the `scheduleFeed` dataSource type. The public embeddable API (`public-api.js`) is stable and documented. What remains impossible under the three-phase declarative model is coroutine-style multi-step waiting within a single entity's lifetime.
+simmodlr makes a deliberate safety-first choice: all logic is expressed through a declarative macro and condition token system with no `new Function()` or `eval()`. **Sprints 57–65 added a production-grade adapter layer**: RestAdapter (poll with TTL cache and exponential-backoff retry), WebSocketAdapter (streaming parameter feeds), ActualsStreamAdapter (real-time actuals ingestion), and mockAdapter for testing. The `AdapterRegistry` pattern means any `distParams` field can be resolved from a live data source at sample time — fully backwards-compatible with existing static models. **Real-world clock (Sprint 62)** maps simulation time to calendar datetime via `model.epoch`, enabling HH:MM and ISO 8601 timestamps in CSV imports. **Planned data import (Sprint 63)** adds named entity instances and the `scheduleFeed` dataSource type. The public embeddable API (`public-api.js`) is stable and documented. What remains impossible under the three-phase declarative model is coroutine-style multi-step waiting within a single entity's lifetime.
 
 ### G — Real-Time Operations, Versioning & Collaboration
-This is DES Studio's newest and most distinctive capability dimension — entirely absent from SimPy, AnyLogic, and JaamSim:
+This is simmodlr's newest and most distinctive capability dimension — entirely absent from SimPy, AnyLogic, and JaamSim:
 
 - **Calibrated batch mode:** live parameter values pre-fetched once at run start and frozen for all replications, enabling reproducible multi-replication studies calibrated to current real-world conditions.
 - **Rolling single-run mode:** parameters re-resolved on each FEL scheduling event, enabling digital twin and real-time operations dashboards.
@@ -305,7 +305,7 @@ This is DES Studio's newest and most distinctive capability dimension — entire
 |-----|----------|------------|
 | G02 ⚠️ | F — Scripting | Coroutine-style multi-step logic is an architectural non-starter for the three-phase declarative model. SET/SET_ATTR cover the practical common cases. No further progress expected without fundamental rearchitecture. |
 | G18 ❌ | C — Queueing | Jockeying (entities move between queues). Very complex; extremely low practical demand. Backlog indefinitely. |
-| G19, G20, G22 ❌ | A/E — Spatial | 2D layout, 3D, GIS. Out of scope for a browser-based declarative tool at DES Studio's market positioning. |
+| G19, G20, G22 ❌ | A/E — Spatial | 2D layout, 3D, GIS. Out of scope for a browser-based declarative tool at simmodlr's market positioning. |
 | G23 ❌ | F — Scripting | Entity-to-entity rendezvous. Rare in three-phase DES; would require significant engine extension. Backlog. |
 | Store/FilterStore ❌ | B — Resources | Item buffer resource type. Low priority; approximable with queues and BATCH/MATCH macros. |
 
@@ -344,9 +344,9 @@ The AI analysis layer (`src/llm/prompts.js`) receives the following data for eve
 
 ## Section 6: Competitive Differentiators
 
-The following capabilities are DES Studio-exclusive among the compared tools:
+The following capabilities are simmodlr-exclusive among the compared tools:
 
-| Differentiator | DES Studio | SimPy | AnyLogic | JaamSim |
+| Differentiator | simmodlr | SimPy | AnyLogic | JaamSim |
 |---|---|---|---|---|
 | In-browser, no install | ✅ | ❌ | ❌ | ❌ |
 | AI model generation from natural language | ✅ | ❌ | ❌ | ❌ |
@@ -370,11 +370,11 @@ The following capabilities are DES Studio-exclusive among the compared tools:
 
 ## Section 7: Usability Assessment
 
-*Added in v2.6/v3.0. This section evaluates DES Studio as a tool that real users must navigate, not just as a feature checklist.*
+*Added in v2.6/v3.0. This section evaluates simmodlr as a tool that real users must navigate, not just as a feature checklist.*
 
 ### Target audience alignment
 
-DES Studio targets **operations analysts, consultants, service system designers, and educators** — not simulation programmers. The design choices throughout reflect this:
+simmodlr targets **operations analysts, consultants, service system designers, and educators** — not simulation programmers. The design choices throughout reflect this:
 
 - No code entry anywhere in the product. All logic is expressed through structured pickers, the Predicate Builder, and the Macro editor.
 - Primary labels use natural language ("How long until the next patient arrives?"); technical simulation terms appear only in helper text and tooltips.
@@ -414,7 +414,7 @@ This positioning is well-maintained and enforced by a formal rule in `AGENTS.md`
 
 ### Usability rating vs comparators
 
-| Dimension | DES Studio | SimPy | AnyLogic | JaamSim |
+| Dimension | simmodlr | SimPy | AnyLogic | JaamSim |
 |---|---|---|---|---|
 | Non-programmer accessibility | ★★★★★ | ★★ | ★★★ | ★★ |
 | Time to first runnable model | ★★★★★ (template) / ★★★ (from scratch) | ★★ | ★★★ | ★★ |
@@ -425,7 +425,7 @@ This positioning is well-maintained and enforced by a formal rule in `AGENTS.md`
 | Collaboration / sharing | ★★★★★ | ★ | ★★ | ★ |
 | Deployment friction | ★★★★★ (browser) | ★★★ | ★★ (install) | ★★ (install) |
 
-**Overall usability assessment:** DES Studio is the most accessible and collaboration-ready DES tool in this comparison for its target user group. The plain-English UX, template library, AI-assisted authoring, and in-browser deployment remove the main friction points that prevent non-specialists from adopting simulation. The primary usability debt is the conceptual overhead of the three-phase model and the two-panel (canvas + forms) authoring workflow — both solvable with onboarding improvements rather than architectural changes.
+**Overall usability assessment:** simmodlr is the most accessible and collaboration-ready DES tool in this comparison for its target user group. The plain-English UX, template library, AI-assisted authoring, and in-browser deployment remove the main friction points that prevent non-specialists from adopting simulation. The primary usability debt is the conceptual overhead of the three-phase model and the two-panel (canvas + forms) authoring workflow — both solvable with onboarding improvements rather than architectural changes.
 
 ---
 
@@ -433,7 +433,7 @@ This positioning is well-maintained and enforced by a formal rule in `AGENTS.md`
 
 Counts are derived from the Section 1 scoring matrix.
 
-| Category | Features Assessed | DES Studio ✅ | DES Studio ⚠️ | DES Studio ❌ | Coverage % |
+| Category | Features Assessed | simmodlr ✅ | simmodlr ⚠️ | simmodlr ❌ | Coverage % |
 |----------|-------------------|---------------|---------------|---------------|------------|
 | A — Core entity model | 15 | 12 | 1 | 2 | 83% |
 | B — Resource & server model | 14 | 12 | 1 | 1 | 89% |

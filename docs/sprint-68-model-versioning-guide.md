@@ -1,7 +1,7 @@
-# DES Studio — Model Versioning Guide
+# simmodlr — Model Versioning Guide
 
 **Version:** 1.13.0 (Sprint 68)  
-**Audience:** Modellers using DES Studio for iterative model development
+**Audience:** Modellers using simmodlr for iterative model development
 
 ---
 
@@ -27,7 +27,7 @@ There are three related but distinct capabilities in Sprint 68:
 2. Click the **Versions** tab (visible to owners only).
 3. Click **+ Create version**.
 4. Give it a name (e.g., "v1 – Initial design") and optional notes.
-5. DES Studio detects whether changes since the last version are **structural** (topology changed: entity types, events, queues) or **parameter-only** (distributions tweaked, server counts adjusted).
+5. simmodlr detects whether changes since the last version are **structural** (topology changed: entity types, events, queues) or **parameter-only** (distributions tweaked, server counts adjusted).
 6. Click **Create Version**.
 
 The version is saved with a full snapshot of the model at that moment.
@@ -81,7 +81,7 @@ A scenario baseline is a fork of the current model, linked back to its origin so
 3. Enter a name for the new scenario (e.g., "High-volume staffing scenario").
 4. Click **Save as scenario baseline**.
 
-DES Studio creates a new private model with a **Forked from [original model] on [date]** badge in its Overview tab.
+simmodlr creates a new private model with a **Forked from [original model] on [date]** badge in its Overview tab.
 
 ### What changes in a fork
 

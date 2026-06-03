@@ -316,7 +316,7 @@ const PatternsGuidePanel = ({ onClose }) => {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <div>
           <div id="patterns-guide-title" style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Modelling Patterns</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>6 reusable patterns for DES Studio models</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>6 reusable patterns for simmodlr models</div>
         </div>
         <button type="button" aria-label="Close patterns guide" onClick={onClose} style={{ background: "none", border: "none", color: C.muted, fontSize: 18, cursor: "pointer", lineHeight: 1 }}>✕</button>
       </div>

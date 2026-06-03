@@ -50,7 +50,7 @@ describe('first-run onboarding', () => {
     expect(screen.getByText('Start your first model')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create a model/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /use a template/i })).toBeInTheDocument();
-    expect(screen.queryByText(/import an existing des studio model file/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/import an existing simmodlr model file/i)).not.toBeInTheDocument();
   });
 
   it('hides onboarding when the user already has models', async () => {

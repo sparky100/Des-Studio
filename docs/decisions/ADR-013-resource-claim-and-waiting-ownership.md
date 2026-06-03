@@ -12,7 +12,7 @@ Sprint 26 focuses on resource semantics and waiting behaviour. The current engin
 - a serving customer is identified by `status === "serving"` and `serverId`
 - a busy server is identified by `status === "busy"` and `currentCustId`
 
-This works, but the claim relationship is spread across multiple fields and not always mirrored explicitly. As DES Studio moves toward richer contention, explainability, and possible interruption semantics, the runtime needs a clearer ownership contract without a full engine rewrite.
+This works, but the claim relationship is spread across multiple fields and not always mirrored explicitly. As simmodlr moves toward richer contention, explainability, and possible interruption semantics, the runtime needs a clearer ownership contract without a full engine rewrite.
 
 ## Decision
 

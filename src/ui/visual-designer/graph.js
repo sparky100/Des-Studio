@@ -365,7 +365,7 @@ export async function exportCanvasToPng() {
     const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2 });
     return canvas.toDataURL('image/png');
   } catch (err) {
-    console.warn('[DES Studio] Canvas export failed:', err);
+    console.warn('[simmodlr] Canvas export failed:', err);
     return null;
   }
 }

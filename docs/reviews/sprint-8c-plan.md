@@ -35,7 +35,7 @@ The 6 F8C.1 prompt tests specified in the requirements are missing from `tests/l
 | 8C-4 | Add 3 missing `ModelDiffPreview` UI tests | `tests/ui/editors/model-diff-preview.test.jsx` |
 | 8C-5 | Fix chip border colour, background, and add hover state | `src/ui/editors/AiGeneratedModelPanel.jsx` |
 | 8C-6 | Add 2 missing `AiGeneratedModelPanel` UI tests | `tests/ui/editors/ai-generated-model-panel.test.jsx` |
-| 8C-7 | Correct Sprint 8C build plan entry and add document history row | `docs/DES_Studio_Build_Plan.md` |
+| 8C-7 | Correct Sprint 8C build plan entry and add document history row | `docs/simmodlr_Build_Plan.md` |
 
 ---
 
@@ -432,7 +432,7 @@ npm run build
 | `tests/llm/model-builder-prompts.test.js` | Add 6 prompt tests |
 | `tests/ui/editors/model-diff-preview.test.jsx` | Add 3 simulation summary card tests |
 | `tests/ui/editors/ai-generated-model-panel.test.jsx` | Add 2 chip edge-case tests |
-| `docs/DES_Studio_Build_Plan.md` | Correct Sprint 8C status; add document history entry |
+| `docs/simmodlr_Build_Plan.md` | Correct Sprint 8C status; add document history entry |
 
 ---
 

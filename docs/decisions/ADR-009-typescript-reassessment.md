@@ -28,7 +28,7 @@ These areas would benefit from explicit types at module boundaries and schema co
 
 ## Decision
 
-The JavaScript-only rule is retired. DES Studio will adopt TypeScript incrementally, starting at domain/schema boundaries. This is not a rewrite.
+The JavaScript-only rule is retired. simmodlr will adopt TypeScript incrementally, starting at domain/schema boundaries. This is not a rewrite.
 
 Accepted direction:
 

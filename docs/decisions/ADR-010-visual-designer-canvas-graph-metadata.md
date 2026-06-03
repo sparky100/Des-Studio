@@ -19,9 +19,9 @@ The repository currently has no graph/canvas dependency. The dependency list is 
 
 ## Decision
 
-DES Studio will build the final Visual Designer with `@xyflow/react`, the current React Flow package. The older `reactflow` package name must not be used for new work.
+simmodlr will build the final Visual Designer with `@xyflow/react`, the current React Flow package. The older `reactflow` package name must not be used for new work.
 
-The Visual Designer may import the vendor stylesheet `@xyflow/react/dist/style.css`. This is a narrow vendor-CSS exception to the local "inline styles only" rule. All DES Studio-owned visual styling remains inline and token-driven.
+The Visual Designer may import the vendor stylesheet `@xyflow/react/dist/style.css`. This is a narrow vendor-CSS exception to the local "inline styles only" rule. All simmodlr-owned visual styling remains inline and token-driven.
 
 `model_json.graph` will be optional, persisted layout metadata only. It is not a second model format and is not required for execution.
 

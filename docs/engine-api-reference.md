@@ -1,9 +1,9 @@
-# DES Studio — Engine Public API Reference
+# simmodlr — Engine Public API Reference
 
 **Version:** 1.2 (Sprint 58+)
 **Entry point:** `src/engine/public-api.js`
 
-The public API is the stable, documented surface for embedding and extending the DES Studio simulation engine. Internal modules (`phases.js`, `macros.js`, `entities.js`, `conditions.js`) are not part of this surface and may change without notice.
+The public API is the stable, documented surface for embedding and extending the simmodlr simulation engine. Internal modules (`phases.js`, `macros.js`, `entities.js`, `conditions.js`) are not part of this surface and may change without notice.
 
 ---
 
@@ -407,7 +407,7 @@ Attach to any `schedules[]` or `cSchedules[]` entry to bind a parameter to a liv
 
 ## Supabase Edge Functions
 
-DES Studio exposes two Supabase Edge Functions. Both require the `SUPABASE_URL` and `SUPABASE_ANON_KEY` environment variables to be configured in the deployment.
+simmodlr exposes two Supabase Edge Functions. Both require the `SUPABASE_URL` and `SUPABASE_ANON_KEY` environment variables to be configured in the deployment.
 
 ### `POST /functions/v1/import-model`
 
@@ -443,7 +443,7 @@ Import and validate a model JSON from an external system.
 
 ### `POST /functions/v1/llm-proxy`
 
-Proxy for LLM inference (AI Insights, report generation, model builder). **Internal use only** — called by the DES Studio UI. Not intended for direct external consumption.
+Proxy for LLM inference (AI Insights, report generation, model builder). **Internal use only** — called by the simmodlr UI. Not intended for direct external consumption.
 
 **Auth:** Optional Bearer token (rate-limiting is IP-based regardless).
 

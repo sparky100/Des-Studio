@@ -1,4 +1,4 @@
-# DES Studio — Capability Register v1.0
+# simmodlr — Capability Register v1.0
 Sprint baseline: 55a  |  Date: 2026-05-20
 
 All "Supported" statuses are backed by a passing benchmark in the

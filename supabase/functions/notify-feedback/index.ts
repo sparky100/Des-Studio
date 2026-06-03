@@ -53,7 +53,7 @@ function buildEmailHtml(record: Record<string, unknown>): string {
 <html lang="en">
 <head><meta charset="utf-8"><title>New feedback</title></head>
 <body style="font-family:system-ui,sans-serif;font-size:13px;color:#1a1a1a;background:#fff;padding:24px">
-  <h2 style="margin:0 0 16px;font-size:16px;color:#4f46e5">New feedback — DES Studio</h2>
+  <h2 style="margin:0 0 16px;font-size:16px;color:#4f46e5">New feedback — simmodlr</h2>
   <table cellpadding="8" cellspacing="0" style="border-collapse:collapse;width:100%;max-width:560px">
     <tr style="background:#f5f5f5">
       <th align="left" width="140" style="border:1px solid #ddd;font-weight:600">Category</th>
@@ -130,7 +130,7 @@ Deno.serve(async (req: Request) => {
         : body;
 
     const { category } = record as { category?: string };
-    const subject = `[DES Studio Feedback] ${CATEGORY_LABELS[category ?? ""] ?? category ?? "new submission"}`;
+    const subject = `[simmodlr Feedback] ${CATEGORY_LABELS[category ?? ""] ?? category ?? "new submission"}`;
 
     const emailRes = await fetch(RESEND_API_URL, {
       method: "POST",

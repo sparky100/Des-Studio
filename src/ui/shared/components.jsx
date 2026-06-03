@@ -49,7 +49,7 @@ class ErrorBoundaryClass extends Component {
         }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: C.red }}>New version available</div>
           <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>
-            DES Studio has been updated. Reload the page to get the latest version.
+            simmodlr has been updated. Reload the page to get the latest version.
           </div>
           <Btn small variant="primary" onClick={() => window.location.reload()}>Reload page</Btn>
         </div>

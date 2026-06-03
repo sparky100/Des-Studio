@@ -180,7 +180,7 @@ Add focused UI tests for:
 | `src/ui/ModelHistoryTab.jsx` | Run History wording updates and summary-card relabeling |
 | `src/ui/editors/*.jsx` | Targeted empty-state/help-text rewrites |
 | `tests/ui/**/*` | Focused regression tests for labels and layout order |
-| `docs/DES_Studio_Product_Spec.md` | Product requirements for plain-English-first UI and Results presentation order |
+| `docs/simmodlr_Product_Spec.md` | Product requirements for plain-English-first UI and Results presentation order |
 | `docs/sprint-67-plain-language-ux-guide.md` | User-facing guide for the planned wording/layout changes |
 
 ---

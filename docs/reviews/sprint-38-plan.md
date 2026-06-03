@@ -6,7 +6,7 @@
 
 ## Objective
 
-Harden DES Studio for SaaS deployment by adding the minimum viable set of user management features: password recovery, hard quota enforcement, user suspension, a user-facing settings panel, and an admin audit log.
+Harden simmodlr for SaaS deployment by adding the minimum viable set of user management features: password recovery, hard quota enforcement, user suspension, a user-facing settings panel, and an admin audit log.
 
 ## Background
 

@@ -9,7 +9,7 @@ const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", 
  */
 export function extractImportedModelPayload(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    throw new Error("Import must be a DES Studio model JSON object.");
+    throw new Error("Import must be a simmodlr model JSON object.");
   }
   const source = payload.model_json && typeof payload.model_json === "object"
     ? payload.model_json
@@ -59,7 +59,7 @@ export function downloadJsonFile(payload, filename) {
 
 export function buildRunHistoryExportPayload(model, rows = [], exportedAt = new Date().toISOString()) {
   return {
-    schema: "des-studio.run-history.v1",
+    schema: "simmodlr.run-history.v1",
     exportedAt,
     model: { id: model?.id ?? null, name: model?.name ?? "Untitled model" },
     runs: rows.map(row => ({

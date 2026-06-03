@@ -8,7 +8,7 @@ Plan reference: `docs/reviews/sprint-29-pre-sprint-assessment.md`
 
 ## Sprint Summary
 
-Sprint 29 hardened DES Studio's test infrastructure and established a durable analytical
+Sprint 29 hardened simmodlr's test infrastructure and established a durable analytical
 correctness baseline. All 18 pre-existing test failures (deferred F28.0 scope) were diagnosed and
 fixed. The M/M/c (two-server queue) Erlang-C benchmark was created and passes at 2.66% error. A
 reproducibility contract was documented in AGENTS.md. A performance envelope document was
@@ -36,7 +36,7 @@ envelope, and wiring benchmarks into CI.
 | F29.4 — Locked golden regression fixtures | ✅ Complete | `tests/benchmarks/golden.test.js` — 4 tests pinning M/M/1 and M/M/c mean wait to tight analytical windows. |
 | F29.5 — GitHub Actions CI workflow | ✅ Complete | `.github/workflows/ci.yml` with 3 jobs: Vitest suite, analytical benchmarks, production build. |
 | F29.6 — RNG cross-replication independence | ✅ Complete | 3 tests added to `tests/engine/distributions.test.js`. |
-| Sprint documentation | ✅ Complete | AGENTS.md §20–21, `docs/DES_Studio_Build_Plan.md` sprint history and current sprint updated to Sprint 29. |
+| Sprint documentation | ✅ Complete | AGENTS.md §20–21, `docs/simmodlr_Build_Plan.md` sprint history and current sprint updated to Sprint 29. |
 
 ---
 

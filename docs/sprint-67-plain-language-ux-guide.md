@@ -7,7 +7,7 @@
 
 ## Overview
 
-Sprint 67 is a presentation and usability sprint. It does **not** remove advanced simulation capability. Instead, it changes how DES Studio explains that capability:
+Sprint 67 is a presentation and usability sprint. It does **not** remove advanced simulation capability. Instead, it changes how simmodlr explains that capability:
 
 1. **Plain English first**
 2. **Technical detail second**

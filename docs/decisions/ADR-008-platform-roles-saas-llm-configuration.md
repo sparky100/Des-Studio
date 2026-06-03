@@ -9,7 +9,7 @@
 
 ## Context
 
-DES Studio has moved from a single-user modelling tool toward a hosted multi-user product. Existing ADRs cover model ownership, public model access, run permissions, replication, and authoring modes. They do not yet cover:
+simmodlr has moved from a single-user modelling tool toward a hosted multi-user product. Existing ADRs cover model ownership, public model access, run permissions, replication, and authoring modes. They do not yet cover:
 
 - platform roles such as admin users
 - user-specific settings

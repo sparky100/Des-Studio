@@ -2,7 +2,7 @@
 
 *Status: Implemented in Sprint 21 (2026-05-11)*
 
-DES Studio currently runs on Supabase with auth. Adding a SaaS admin layer requires:
+simmodlr currently runs on Supabase with auth. Adding a SaaS admin layer requires:
 - A `platform_config` table for system-wide settings
 - An admin panel UI (protected by `profiles.role = "admin"`)
 - Admin user management (list, suspend, change roles)

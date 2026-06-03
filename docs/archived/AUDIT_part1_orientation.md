@@ -6,7 +6,7 @@
 ## Folder Structure
 
 ```
-Des-Studio/
+simmodlr/
 ├── index.html                  # Vite HTML entry point
 ├── package.json                # NPM config (v7.0.0)
 ├── package-lock.json           # Dependency lockfile

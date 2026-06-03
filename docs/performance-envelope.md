@@ -1,4 +1,4 @@
-# DES Studio — Engine Performance Envelope
+# simmodlr — Engine Performance Envelope
 
 **Last updated:** 2026-05-26
 **Branch:** `main` + local Sprint 72 optimisation worktree

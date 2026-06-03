@@ -13,7 +13,7 @@ Builds on:
 
 ## Goal
 
-Make DES Studio easier to trust when a model behaves unexpectedly.
+Make simmodlr easier to trust when a model behaves unexpectedly.
 
 Sprint 27 is intended to add first-class debugging and explainability support around the existing engine, so a modeller can answer questions like:
 
@@ -235,7 +235,7 @@ For every `ASSIGN` macro execution the engine emits an `arbitration` trace entry
 - The winner (entity paired with server) and the losers with reasons
 - When no match is found: `noMatch=true` with candidate and idle-server counts
 
-Note: The DES Studio engine uses `ASSIGN` (C-event) as the SEIZE equivalent, not a separate `SEIZE` macro. The arbitration contract applies to ASSIGN.
+Note: The simmodlr engine uses `ASSIGN` (C-event) as the SEIZE equivalent, not a separate `SEIZE` macro. The arbitration contract applies to ASSIGN.
 
 ### Condition-debug contract
 

@@ -4,14 +4,14 @@
 >
 > **Correction log (2026-05-16):** Several gaps in this document have since been closed or materially changed. Key corrections:
 > - **Gap 3 (Statistical output)** — CLOSED. Batch-means, Welch warm-up, ANOVA/Tukey HSD, outlier flagging, paired t-test, 1D/2D parametric sweeps all implemented (Sprints 28–33). This is now a *strength*, not a gap.
-> - **Gap 4 (Optimization)** — REFRAMED. The framing "no optimizer — manual trial-and-error only" is no longer accurate and undervalues DES Studio's position. See correction below.
+> - **Gap 4 (Optimization)** — REFRAMED. The framing "no optimizer — manual trial-and-error only" is no longer accurate and undervalues simmodlr's position. See correction below.
 > - **Gap 6 (Cost modelling)** — CLOSED. `COST(expr)` macro, totalCost/costPerServed in all results views (Sprint 36, Sprint 54).
 > - **Gap 9 (Pre-built model library)** — CLOSED. 14 templates across 6 domains with domain metadata, full-text search, and scenario type tagging (Sprint 30).
 > - **Gap 11 (Maturity/validation)** — Improved. 600+ tests, M/M/1 and M/M/c analytical benchmarks, performance envelope documented.
 > - **Gap 12 (Extensibility)** — PARTIALLY CLOSED. SET, SET_ATTR, COST macros; safe arithmetic expression evaluator; public API (Sprints 34–36).
 > - **Summary table row "Optimization: No"** — incorrect. See Gap 4 correction.
 
-# DES Studio — Professional Gap Analysis
+# simmodlr — Professional Gap Analysis
 
 **Date:** 2026-05-08  
 **Comparator set:** Arena, Simio, AnyLogic, FlexSim, ExtendSim  
@@ -21,7 +21,7 @@
 
 ## Verdict
 
-DES Studio is a capable **academic/pedagogical tool** and a solid **prototyping environment** for mid-complexity queueing models. It is **not yet a replacement** for AnyLogic, Simio, or Arena in production environments. The architecture is clean enough that bridging most gaps is architecturally feasible, but each represents significant engineering.
+simmodlr is a capable **academic/pedagogical tool** and a solid **prototyping environment** for mid-complexity queueing models. It is **not yet a replacement** for AnyLogic, Simio, or Arena in production environments. The architecture is clean enough that bridging most gaps is architecturally feasible, but each represents significant engineering.
 
 The single biggest practical gap for professional use is the **absence of an optimizer** — most real-world simulation projects are about finding optimal resource allocations, not just measuring current-state performance.
 
@@ -29,7 +29,7 @@ The single biggest practical gap for professional use is the **absence of an opt
 
 ## Gap Table
 
-| #   | Gap                                   | Severity   | DES Studio                                                                                                            | Professional Tool Baseline                                                                       | Effort to Close                                                  |
+| #   | Gap                                   | Severity   | simmodlr                                                                                                            | Professional Tool Baseline                                                                       | Effort to Close                                                  |
 | --- | ------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
 | 1   | Performance at scale                  | **High**   | JS engine in browser tab. 50K+ entity models will struggle. No compiled execution. No database-backed entity storage. | Compiled engines (C++/Java). Cloud batch execution. Million-entity scale.                        | Very large — requires rearchitecture or SimPy/FastAPI backend    |
 | 2   | Input modeling — distribution fitting | **High**   | User manually picks distribution type and parameters. No automatic fitting.                                           | Auto-fit empirical data to theoretical dists with chi-square/K-S goodness-of-fit.                | Medium — well-understood algorithms, can be browser-side         |
@@ -83,17 +83,17 @@ The single biggest practical gap for professional use is the **absence of an opt
 
 ~~**Current state:** No optimizer. Model parameters (capacity, count, rate) can only be changed manually between runs. No automated search.~~
 
-**Correction:** This assessment is outdated and frames the wrong comparison. DES Studio does not implement OptQuest-style black-box meta-heuristic search (scatter search, tabu, genetic algorithms). It implements a qualitatively different and in key respects *superior* approach for its target users:
+**Correction:** This assessment is outdated and frames the wrong comparison. simmodlr does not implement OptQuest-style black-box meta-heuristic search (scatter search, tabu, genetic algorithms). It implements a qualitatively different and in key respects *superior* approach for its target users:
 
-**DES Studio's AI-driven optimisation approach:**
+**simmodlr's AI-driven optimisation approach:**
 - **Goal specification in natural language** — users describe what they want ("utilisation < 80%, mean wait < 5 min") rather than formulating a numeric objective function
 - **1D/2D parametric sweep** with full visual exploration of the parameter space — the user sees every point, not just the "optimal" one
 - **Goal-feasibility colouring** on SweepChart and Sweep2DGrid — regions that meet all goals are highlighted; the tradeoff surface is visible at a glance (Sprint 43, `evaluateSweepPointGoals()`)
 - **AI narrative explanation** — after a sweep, the AI explains which configurations are best and *why*, in language the decision-maker can present to stakeholders
 - **AI model generation** — the AI can suggest which parameters to vary and can generate model variants that satisfy goal constraints directly (Sprints 43–45)
 
-**Where DES Studio's approach beats OptQuest:**
-| Dimension | OptQuest | DES Studio |
+**Where simmodlr's approach beats OptQuest:**
+| Dimension | OptQuest | simmodlr |
 |-----------|----------|------------|
 | Goal specification | Numeric objective + constraint bounds | Natural language goals |
 | Transparency | Black box — returns a point | Full parameter space visible |
@@ -103,14 +103,14 @@ The single biggest practical gap for professional use is the **absence of an opt
 | AI integration | None | Generates, explains, and compares configurations |
 
 **Where OptQuest still leads:**
-| Dimension | OptQuest | DES Studio |
+| Dimension | OptQuest | simmodlr |
 |-----------|----------|------------|
 | Parameter space size | Handles 10–50 parameters | Practical limit ~4 parameters (combinatorial sweep) |
 | Convergence guarantee | Heuristic convergence | Exhaustive within grid |
 | Multi-objective Pareto | Automated | Visual (2D) or manual |
 | Constraint satisfaction | Formal | Goal-colouring heuristic |
 
-**Revised assessment:** For DES Studio's target users (operations analysts, consultants, students, service system designers), the AI-driven goal-directed sweep is *more useful* than OptQuest because it produces interpretable, explainable results at lower expertise cost. The remaining gap is for expert users needing high-dimensional automated search — a niche that is outside DES Studio's declared positioning. Severity downgraded from **High** to **Low** for the target user base.
+**Revised assessment:** For simmodlr's target users (operations analysts, consultants, students, service system designers), the AI-driven goal-directed sweep is *more useful* than OptQuest because it produces interpretable, explainable results at lower expertise cost. The remaining gap is for expert users needing high-dimensional automated search — a niche that is outside simmodlr's declared positioning. Severity downgraded from **High** to **Low** for the target user base.
 
 ---
 
@@ -200,7 +200,7 @@ The single biggest practical gap for professional use is the **absence of an opt
 
 **Professional baseline:** Arena Process Wizard (guided template), AnyLogic Enterprise Library wizards. Most tools lack LLM integration entirely.
 
-**Path forward:** Already a strength. Continue improving prompt quality and model coherence. This is DES Studio's differentiator.
+**Path forward:** Already a strength. Continue improving prompt quality and model coherence. This is simmodlr's differentiator.
 
 ---
 
@@ -220,4 +220,4 @@ The single biggest practical gap for professional use is the **absence of an opt
 | Collaboration | **No** | Single-user at core. Sharing is basic. Fork-to-run. |
 | Hierarchical modelling | **No** | Flat structure. Not on roadmap. |
 
-**Revised bottom line (2026-05-16):** DES Studio has closed most of the originally identified gaps. The remaining genuine gaps for professional use are **scale/performance** (browser JS engine ceiling) and **high-dimensional automated optimisation** (>4 parameters). For its target market — analysts, consultants, and educators who need interpretable, explainable results from queueing models — DES Studio is now competitive with professional tools in capability and *ahead* in AI integration, accessibility, and result interpretability. The gap-to-production-grade has narrowed from 3–5 major engineering efforts to primarily 1: performance at scale.
+**Revised bottom line (2026-05-16):** simmodlr has closed most of the originally identified gaps. The remaining genuine gaps for professional use are **scale/performance** (browser JS engine ceiling) and **high-dimensional automated optimisation** (>4 parameters). For its target market — analysts, consultants, and educators who need interpretable, explainable results from queueing models — simmodlr is now competitive with professional tools in capability and *ahead* in AI integration, accessibility, and result interpretability. The gap-to-production-grade has narrowed from 3–5 major engineering efforts to primarily 1: performance at scale.

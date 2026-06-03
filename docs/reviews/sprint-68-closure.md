@@ -6,7 +6,7 @@ Plan reference: `docs/reviews/sprint-68-plan.md`
 
 ## Sprint Summary
 
-Sprint 68 delivered first-class model versioning to DES Studio. Modellers can now tag model milestones as named versions, view a structural-change diff between any two model states, restore a past version into the editor, and fork models as scenario baselines with full provenance tracking back to the parent model.
+Sprint 68 delivered first-class model versioning to simmodlr. Modellers can now tag model milestones as named versions, view a structural-change diff between any two model states, restore a past version into the editor, and fork models as scenario baselines with full provenance tracking back to the parent model.
 
 ## Goal
 

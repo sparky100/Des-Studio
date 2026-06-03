@@ -9,7 +9,7 @@
 
 ## Context
 
-DES Studio is a multi-user application. The existing codebase has a
+simmodlr is a multi-user application. The existing codebase has a
 working Supabase Auth implementation with session management in App.jsx,
 a profiles table linked to auth.users, and a models table with user_id
 and is_public columns.

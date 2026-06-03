@@ -86,7 +86,7 @@ async function runDesModelsSelect(buildQuery) {
       throw result.error;
     }
     if (process.env.NODE_ENV === 'development') {
-      throw new Error(`DES Studio schema mismatch: ${result.error.message}`);
+      throw new Error(`simmodlr schema mismatch: ${result.error.message}`);
     }
     console.warn('[DB] schema fallback triggered — missing column or schema mismatch:', result.error?.message || result.error);
     desModelsSelectModeIndex = Math.min(i + 1, DES_MODELS_SELECTS.length - 1);
@@ -299,7 +299,7 @@ export async function saveModel(model, userId) {
   let result = await persist(initialRow);
   if (result.error && isSchemaCompatibilityError(result.error) && errorText(result.error).includes("model_json")) {
     if (process.env.NODE_ENV === 'development') {
-      throw new Error(`DES Studio schema mismatch: ${result.error.message}`);
+      throw new Error(`simmodlr schema mismatch: ${result.error.message}`);
     }
     console.warn('[DB] model_json column missing — falling back to legacy save (dataSources will not be persisted):', result.error?.message || result.error);
     desModelsSelectModeIndex = Math.min(1, DES_MODELS_SELECTS.length - 1);
@@ -1413,7 +1413,7 @@ export async function validateDbSchema() {
 
   if (error) {
     console.error(
-      '[DES Studio] validateDbSchema: des_models schema mismatch detected.\n' +
+      '[simmodlr] validateDbSchema: des_models schema mismatch detected.\n' +
       'Expected columns: ' + EXPECTED_COLUMNS.join(', ') + '\n' +
       'Error: ' + (error.message || JSON.stringify(error)) + '\n' +
       'Run the latest Supabase migration or update EXPECTED_COLUMNS in src/db/models.js.'

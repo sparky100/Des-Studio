@@ -6,7 +6,7 @@
 
 ## Context
 
-DES Studio modellers iterate frequently — saving dozens of times during a session. Auto-versioning every save would create noise and make it hard to identify meaningful states. Run records already store `model_snapshot` for reproducibility. The question was whether to add an explicit versioning layer and, if so, how it should relate to run snapshots and model sharing.
+simmodlr modellers iterate frequently — saving dozens of times during a session. Auto-versioning every save would create noise and make it hard to identify meaningful states. Run records already store `model_snapshot` for reproducibility. The question was whether to add an explicit versioning layer and, if so, how it should relate to run snapshots and model sharing.
 
 ## Decision
 

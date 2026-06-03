@@ -9,7 +9,7 @@
 
 ## Goal
 
-All AI assistance in DES Studio currently surfaces through two different patterns that look and behave differently: a full-tab chat experience (Design > Describe) and an overlay panel (Results > Explain). The user experience is inconsistent — the overlay interrupts the workflow, closes on tab change, and is not discoverable from other tabs.
+All AI assistance in simmodlr currently surfaces through two different patterns that look and behave differently: a full-tab chat experience (Design > Describe) and an overlay panel (Results > Explain). The user experience is inconsistent — the overlay interrupts the workflow, closes on tab change, and is not discoverable from other tabs.
 
 Sprint 75 replaces the overlay with a **persistent right sidebar** that:
 - Opens from a toggle button always visible in the tab bar

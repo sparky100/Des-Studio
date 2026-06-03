@@ -7,7 +7,7 @@
 
 ## Overview
 
-Sprint 43 delivers two interconnected capabilities that make DES Studio's analytical intelligence genuinely actionable:
+Sprint 43 delivers two interconnected capabilities that make simmodlr's analytical intelligence genuinely actionable:
 
 1. **Quantified AI Suggestions** — the suggestion prompt now follows a mandatory 6-step framework and outputs structured, specific, theory-grounded recommendations rather than qualitative advice.
 2. **Goal-Driven Sweep** — sweep charts and tables now evaluate every parameter point against the model's performance goals, highlighting the feasible region and the best-performing feasible configuration.

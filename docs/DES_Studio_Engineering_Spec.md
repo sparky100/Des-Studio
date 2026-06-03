@@ -1,4 +1,4 @@
-# DES Studio — Engineering Specification
+# simmodlr — Engineering Specification
 
 **Version:** 7.1.0  
 **Date:** 2026-06-02  
@@ -25,7 +25,7 @@
 
 ### 1.1 Overview
 
-DES Studio is a single-page application with a pure-JavaScript simulation engine, a React frontend, and a Supabase (PostgreSQL) backend. The engine has zero runtime dependencies on React or the DOM: it can execute in the browser main thread, a Web Worker, or Node.js without modification.
+simmodlr is a single-page application with a pure-JavaScript simulation engine, a React frontend, and a Supabase (PostgreSQL) backend. The engine has zero runtime dependencies on React or the DOM: it can execute in the browser main thread, a Web Worker, or Node.js without modification.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -618,8 +618,8 @@ Web Speech API voice input is available in three components: `HelpAssistant.jsx`
 ### 5.1 Local setup
 
 ```bash
-git clone git@github.com:sparky100/des-studio.git
-cd des-studio
+git clone git@github.com:sparky100/simmodlr.git
+cd simmodlr
 npm install
 cp .env.example .env.local        # fill in VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
 npm run dev                        # Vite dev server → http://localhost:5173

@@ -9,7 +9,7 @@
 
 ## Context for Claude Code
 
-Read `DES_Studio_Build_Plan.md` before doing anything else.
+Read `simmodlr_Build_Plan.md` before doing anything else.
 
 Sprint 9B is complete but the build plan still shows it as 🔄 In progress.
 Before starting any feature work, update the build plan as follows:
@@ -50,8 +50,8 @@ and proactive refinement chips after each build.
 | F8C.2 | Confirmation step in chat panel | `src/ui/editors/index.jsx` |
 | F8C.3 | Plain-English outcome card | `src/ui/editors/ModelDiffPreview.jsx` |
 | F8C.4 | Proactive refinement chips | `src/ui/editors/index.jsx` |
-| F8C.5 | Documentation update | `docs/DES_Studio_User_Guide.md`, `docs/DES_Studio_Engineering_Spec.md` |
-| F8C.6 | Build plan update | `DES_Studio_Build_Plan.md` |
+| F8C.5 | Documentation update | `docs/simmodlr_User_Guide.md`, `docs/simmodlr_Engineering_Spec.md` |
+| F8C.6 | Build plan update | `simmodlr_Build_Plan.md` |
 
 **Sequence:** F8C.1 must complete before F8C.2–F8C.4. F8C.2, F8C.3, and
 F8C.4 are independent of each other once F8C.1 is done. F8C.5 and F8C.6
@@ -472,11 +472,11 @@ Add UI tests (tests/ui/editors/):
 
 ## F8C.5 — Documentation Update
 
-**Files:** `docs/DES_Studio_User_Guide.md`, `docs/DES_Studio_Engineering_Spec.md`
+**Files:** `docs/simmodlr_User_Guide.md`, `docs/simmodlr_Engineering_Spec.md`
 
 ```
-Read docs/DES_Studio_User_Guide.md in full.
-Read docs/DES_Studio_Engineering_Spec.md — find the LLM Integration
+Read docs/simmodlr_User_Guide.md in full.
+Read docs/simmodlr_Engineering_Spec.md — find the LLM Integration
 section (§6 or equivalent) covering the model-builder prompt contract.
 
 Do not modify any sections other than those specified below.
@@ -598,10 +598,10 @@ Do not modify any other sections of either document.
 
 ## F8C.6 — Build Plan Update
 
-**File:** `DES_Studio_Build_Plan.md`
+**File:** `simmodlr_Build_Plan.md`
 
 ```
-Read DES_Studio_Build_Plan.md in full before making any changes.
+Read simmodlr_Build_Plan.md in full before making any changes.
 
 STEP 1: CLOSE SPRINT 9B
 -----------------------
@@ -656,7 +656,7 @@ feature table structure, checklist format, status icons).
   **Prerequisite:** Sprint 9B complete
   **Files changed:** src/llm/model-builder-prompts.js,
   src/ui/editors/ModelDiffPreview.jsx, src/ui/editors/index.jsx (AI tab only),
-  docs/DES_Studio_User_Guide.md, docs/DES_Studio_Engineering_Spec.md
+  docs/simmodlr_User_Guide.md, docs/simmodlr_Engineering_Spec.md
 
   Feature table (use this exact content):
 
@@ -781,9 +781,9 @@ npm run build
 - [ ] Full test suite passes with zero failures (`npm test -- --run`)
 - [ ] Production build succeeds (`npm run build`)
 - [ ] Manual verification checklist completed in browser
-- [ ] `DES_Studio_Build_Plan.md` updated with sprint entry and history
-- [ ] `docs/DES_Studio_User_Guide.md` updated
-- [ ] `docs/DES_Studio_Engineering_Spec.md` updated
+- [ ] `simmodlr_Build_Plan.md` updated with sprint entry and history
+- [ ] `docs/simmodlr_User_Guide.md` updated
+- [ ] `docs/simmodlr_Engineering_Spec.md` updated
 - [ ] No engine, schema, or dependency changes introduced
 
 ---

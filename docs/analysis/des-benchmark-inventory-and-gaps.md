@@ -64,7 +64,7 @@ That is enough structure to support future compute-sizing work without adding a 
 
 ### `package.json` scripts
 
-Defined in [package.json](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/package.json:13):
+Defined in [package.json](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/package.json:13):
 
 - `npm run bench`
   - runs `vitest run tests/engine/benchmarks --environment node --reporter verbose`
@@ -105,7 +105,7 @@ Defined in [package.json](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/
 
 ### Shared local timing scenarios
 
-Defined in [tests/engine/benchmark-scenarios.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/tests/engine/benchmark-scenarios.js):
+Defined in [tests/engine/benchmark-scenarios.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/tests/engine/benchmark-scenarios.js):
 
 - `mm1-small`
 - `mm1-high-util`
@@ -121,7 +121,7 @@ Defined in [tests/engine/benchmark-scenarios.js](C:/Users/parki/OneDrive/Documen
 
 ### Template models that could become future benchmarks
 
-From [src/engine/templates.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/templates.js):
+From [src/engine/templates.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/templates.js):
 
 - `mm1`
 - `tfl-station-plan`
@@ -135,7 +135,7 @@ These are useful because they already encode realistic DES structures without ne
 
 ### Engine-side runtime metrics
 
-Returned from [src/engine/index.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/index.js:1144):
+Returned from [src/engine/index.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/index.js:1144):
 
 - `wall_clock_ms`
   - set to `null` in engine, then filled in UI/timing runner
@@ -149,12 +149,12 @@ Returned from [src/engine/index.js](C:/Users/parki/OneDrive/Documents/Projects/D
 
 ### UI/batch aggregation
 
-- single-run `wall_clock_ms` is attached in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:615)
-- batch aggregate runtime metrics are built in [src/ui/execute/executeHelpers.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/executeHelpers.js:42)
+- single-run `wall_clock_ms` is attached in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:615)
+- batch aggregate runtime metrics are built in [src/ui/execute/executeHelpers.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/executeHelpers.js:42)
 
 ### Persistence
 
-- `runtimeMetrics` is persisted inside `results_json` in [src/db/models.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/db/models.js:387)
+- `runtimeMetrics` is persisted inside `results_json` in [src/db/models.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/db/models.js:387)
 
 ### Metrics directly used by the timing runner
 
@@ -172,19 +172,19 @@ Returned from [src/engine/index.js](C:/Users/parki/OneDrive/Documents/Projects/D
 
 ### Vitest benchmark gate
 
-- [tests/engine/benchmarks/benchmarks.test.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/tests/engine/benchmarks/benchmarks.test.js)
+- [tests/engine/benchmarks/benchmarks.test.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/tests/engine/benchmarks/benchmarks.test.js)
   - complete benchmark register with 8 analytical and qualitative correctness gates
-- [tests/engine/benchmarks/performance.test.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/tests/engine/benchmarks/performance.test.js)
+- [tests/engine/benchmarks/performance.test.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/tests/engine/benchmarks/performance.test.js)
   - wall-clock performance threshold on a complex multi-queue model
 
 ### Standalone analytical scripts
 
-- [tests/engine/mm1_benchmark.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/tests/engine/mm1_benchmark.js)
-- [tests/engine/mmc_benchmark.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/tests/engine/mmc_benchmark.js)
+- [tests/engine/mm1_benchmark.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/tests/engine/mm1_benchmark.js)
+- [tests/engine/mmc_benchmark.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/tests/engine/mmc_benchmark.js)
 
 ### Local timing / stress runner
 
-- [tests/engine/perf_timing.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/tests/engine/perf_timing.js)
+- [tests/engine/perf_timing.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/tests/engine/perf_timing.js)
   - includes C-heavy scenarios and optional queue-stress scenario
 
 ### Adjacent tests with performance relevance
@@ -204,20 +204,20 @@ These are not benchmark runners, but they matter for compute-sizing safety.
 
 ### Primary benchmark / envelope docs
 
-- [docs/performance-envelope.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/performance-envelope.md)
+- [docs/performance-envelope.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/performance-envelope.md)
   - authoritative performance ceiling and benchmark pass/fail reference
-- [docs/analysis/des-benchmark-suite.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/des-benchmark-suite.md)
+- [docs/analysis/des-benchmark-suite.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/des-benchmark-suite.md)
   - explains how the local timing runner was extended without creating a second framework
 
 ### Architecture and sizing reviews
 
-- [docs/analysis/three-phase-engine-efficiency-review.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/three-phase-engine-efficiency-review.md)
-- [docs/analysis/browser-simulation-performance-review.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/browser-simulation-performance-review.md)
-- [docs/analysis/des-runtime-execution-map.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/des-runtime-execution-map.md)
-- [docs/analysis/des-runtime-instrumentation-plan.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/des-runtime-instrumentation-plan.md)
-- [docs/analysis/des-runtime-metrics-implementation.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/des-runtime-metrics-implementation.md)
-- [docs/analysis/des-run-complexity-estimator.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/des-run-complexity-estimator.md)
-- [docs/architecture/des-run-admission-rules.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/architecture/des-run-admission-rules.md)
+- [docs/analysis/three-phase-engine-efficiency-review.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/three-phase-engine-efficiency-review.md)
+- [docs/analysis/browser-simulation-performance-review.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/browser-simulation-performance-review.md)
+- [docs/analysis/des-runtime-execution-map.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/des-runtime-execution-map.md)
+- [docs/analysis/des-runtime-instrumentation-plan.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/des-runtime-instrumentation-plan.md)
+- [docs/analysis/des-runtime-metrics-implementation.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/des-runtime-metrics-implementation.md)
+- [docs/analysis/des-run-complexity-estimator.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/des-run-complexity-estimator.md)
+- [docs/architecture/des-run-admission-rules.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/architecture/des-run-admission-rules.md)
 
 ### Sprint/performance planning docs
 

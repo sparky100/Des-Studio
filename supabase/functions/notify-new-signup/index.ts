@@ -52,17 +52,17 @@ async function sendEmail(
 ): Promise<void> {
   const signupDate = new Date(signupAt).toUTCString();
   const body = {
-    from: "DES Studio <noreply@updates.simmodlr.app>",
+    from: "simmodlr <noreply@updates.simmodlr.app>",
     to: [toEmail],
     subject: `New signup: ${userEmail}`,
     text: [
-      "New user signup on DES Studio",
+      "New user signup on simmodlr",
       "",
       `Email:     ${userEmail}`,
       `User ID:   ${userId}`,
       `Signed up: ${signupDate}`,
       "",
-      "— DES Studio Operator Notification",
+      "— simmodlr Operator Notification",
     ].join("\n"),
   };
 
@@ -84,7 +84,7 @@ async function sendEmail(
 async function sendSlack(webhookUrl: string, userEmail: string, signupAt: string): Promise<void> {
   const signupDate = new Date(signupAt).toUTCString();
   const payload = {
-    text: `🎉 New DES Studio signup: *${userEmail}* at ${signupDate}`,
+    text: `🎉 New simmodlr signup: *${userEmail}* at ${signupDate}`,
   };
 
   const res = await fetch(webhookUrl, {

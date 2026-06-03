@@ -1,4 +1,4 @@
-# DES Studio — Template Models Guide
+# simmodlr — Template Models Guide
 
 Templates are pre-built simulation models available in the **Templates** tab of your library. Clicking a template saves a private copy to your account and opens it with auto-execute enabled. Results appear within seconds, so you can explore the model before modifying anything.
 
@@ -384,7 +384,7 @@ Try modifying the schedule rows to add a no-show (remove a row) or a late arriva
 
 ## Using Templates with AI Insights
 
-Every template is designed to work immediately with DES Studio's AI Insights panel. Here is the recommended workflow:
+Every template is designed to work immediately with simmodlr's AI Insights panel. Here is the recommended workflow:
 
 **Step 1 — Open and auto-run.** Click a template in the Templates tab. The model opens and runs automatically. Results populate within seconds. Do not change anything yet — look at the baseline results first.
 
@@ -406,7 +406,7 @@ Every template is designed to work immediately with DES Studio's AI Insights pan
 
 ## Extending Templates
 
-When you open a template, DES Studio saves a **private copy** to your account. The original template is unchanged. You own the copy and can modify it freely.
+When you open a template, simmodlr saves a **private copy** to your account. The original template is unchanged. You own the copy and can modify it freely.
 
 **How to customise your copy:**
 

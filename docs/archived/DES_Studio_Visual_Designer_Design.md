@@ -1,4 +1,4 @@
-# DES Studio — Visual Designer: Confirmed Design
+# simmodlr — Visual Designer: Confirmed Design
 *Entity Lifecycle Designer — Authoring Modes and Visual Designer Plan*
 *Current version: 3.1 | Last updated: 2026-05-05*
 
@@ -10,7 +10,7 @@
 |---|---|---|---|
 | 1.0 | 2026-04-30 | — | Initial design document — three options presented for review |
 | 2.0 | 2026-04-30 | — | Decision confirmed: phased approach. Tab editors (Phase 1) → Split-pane hybrid (Phase 2) → React Flow canvas (Phase 3). Coexistence of both modes documented. |
-| 3.0 | 2026-05-04 | — | ADR-007 accepted: DES Studio has three authoring modes over one canonical `model_json`. The split-pane SVG hybrid phase is retired; the visual designer should be planned as the final graph-first authoring surface. |
+| 3.0 | 2026-05-04 | — | ADR-007 accepted: simmodlr has three authoring modes over one canonical `model_json`. The split-pane SVG hybrid phase is retired; the visual designer should be planned as the final graph-first authoring surface. |
 | 3.1 | 2026-05-05 | — | ADR-010 accepted: Sprint 9 uses `@xyflow/react`; `model_json.graph` is optional layout metadata only; visual topology is derived from canonical model logic; SVG Phase 2 prompts remain historical only. |
 | | | | *(add a row each time this document is updated)* |
 
@@ -20,7 +20,7 @@
 
 ## Decision Record
 
-**Confirmed approach:** DES Studio supports three first-class authoring modes over one canonical `model_json`:
+**Confirmed approach:** simmodlr supports three first-class authoring modes over one canonical `model_json`:
 
 1. Forms/Tabs
 2. AI Generated Model
@@ -41,7 +41,7 @@ The same principle applies to the UI: the existing tab editors are working and r
 **Sprint 9A accepted decisions:**
 
 - Use `@xyflow/react` for the final graph-first Visual Designer.
-- Allow the required vendor stylesheet `@xyflow/react/dist/style.css` as a narrow exception; DES Studio-owned styles still use inline token-driven style objects.
+- Allow the required vendor stylesheet `@xyflow/react/dist/style.css` as a narrow exception; simmodlr-owned styles still use inline token-driven style objects.
 - Persist `model_json.graph` only as optional visual layout metadata.
 - Derive graph topology from canonical DES model logic rather than storing a second graph model.
 - Reuse small editor building blocks in the inspector; do not embed full tab editors inside graph nodes.
@@ -69,7 +69,7 @@ The same principle applies to the UI: the existing tab editors are working and r
 
 [Supersedes v2.0 phased SVG hybrid strategy — see ADR-007.]
 
-DES Studio has one canonical model format and three authoring modes.
+simmodlr has one canonical model format and three authoring modes.
 
 | Authoring mode | Purpose | Canonical data |
 |---|---|---|
@@ -195,7 +195,7 @@ The model must be a Directed Acyclic Graph. These rules are enforced in real tim
 **Completed:** 2026-05-03
 **Notes:** Forms/tabs are the stable manual authoring mode. Keep this section as historical traceability for the original visual-designer dependency plan.
 
-Phase 1 is entirely covered by the existing sprint plan. Follow the build plan prompts for Sprints 1 and 2 from `docs/DES_Studio_Build_Plan.md`.
+Phase 1 is entirely covered by the existing sprint plan. Follow the build plan prompts for Sprints 1 and 2 from `docs/simmodlr_Build_Plan.md`.
 
 ### What Phase 1 delivers
 
@@ -540,7 +540,7 @@ import { ReactFlow, MiniMap, Controls, Background, Handle, Position } from '@xyf
 import '@xyflow/react/dist/style.css';
 ```
 
-The stylesheet import is a vendor-CSS exception accepted by ADR-010. DES Studio-owned node styling remains inline and token-driven.
+The stylesheet import is a vendor-CSS exception accepted by ADR-010. simmodlr-owned node styling remains inline and token-driven.
 
 ### New file: `FlowDiagramReactFlow.jsx`
 
@@ -596,11 +596,11 @@ LEFT SIDEBAR
 
 ## 12. Claude Code Prompts by Phase
 
-[Superseded in v3.1 by Sprint 9 planning in `docs/DES_Studio_Build_Plan.md`. Prompts below are historical unless explicitly marked current.]
+[Superseded in v3.1 by Sprint 9 planning in `docs/simmodlr_Build_Plan.md`. Prompts below are historical unless explicitly marked current.]
 
 ### Phase 1 — Sprints 1 and 2
 
-No new prompts needed. Follow the existing Sprint 1 and Sprint 2 prompts in `docs/DES_Studio_Build_Plan.md` exactly.
+No new prompts needed. Follow the existing Sprint 1 and Sprint 2 prompts in `docs/simmodlr_Build_Plan.md` exactly.
 
 ---
 
@@ -609,7 +609,7 @@ No new prompts needed. Follow the existing Sprint 1 and Sprint 2 prompts in `doc
 [Historical only — do not use for Sprint 9. The SVG hybrid bridge is retired.]
 
 ```
-We are starting Sprint 3 of DES Studio.
+We are starting Sprint 3 of simmodlr.
 
 Completed in Sprints 1–2: [paste completed feature list]
 
@@ -764,7 +764,7 @@ Tab editor must be pixel-identical in 'tabs' mode.
 ### Sprint 9 — Current Planning Prompt *(run in claude.ai)*
 
 ```
-We are planning Sprint 9 of the DES Studio visual designer.
+We are planning Sprint 9 of the simmodlr visual designer.
 
 ADR-007 and ADR-010 are accepted.
 
@@ -801,7 +801,7 @@ Definition of done:
 ### Sprint 9 — Start Prompt for Claude Code
 
 ```
-Re-read CLAUDE.md, ADR-007, ADR-010, and docs/DES_Studio_Visual_Designer_Design.md.
+Re-read CLAUDE.md, ADR-007, ADR-010, and docs/simmodlr_Visual_Designer_Design.md.
 Sprint 9 implements the final graph-first Visual Designer with @xyflow/react.
 
 Before writing any code:

@@ -8,11 +8,11 @@ Plan reference:
 
 ## Sprint Summary
 
-Sprint 26 strengthened DES Studio's engine-level waiting and resource semantics without rewriting the runtime. The sprint made active service claims explicit and mirrored, introduced an explicit waiting-ownership contract, tightened stale-claim and stale-waiting protections, documented the deferred interruption/preemption boundary, and added focused regression coverage for contention, routing, recirculation, and lifecycle cleanup.
+Sprint 26 strengthened simmodlr's engine-level waiting and resource semantics without rewriting the runtime. The sprint made active service claims explicit and mirrored, introduced an explicit waiting-ownership contract, tightened stale-claim and stale-waiting protections, documented the deferred interruption/preemption boundary, and added focused regression coverage for contention, routing, recirculation, and lifecycle cleanup.
 
 ## Goal
 
-Expand DES Studio's resource and waiting semantics while preserving deterministic Three-Phase behaviour and the browser-native JavaScript runtime.
+Expand simmodlr's resource and waiting semantics while preserving deterministic Three-Phase behaviour and the browser-native JavaScript runtime.
 
 ## Delivery Status
 
@@ -41,11 +41,11 @@ Expand DES Studio's resource and waiting semantics while preserving deterministi
 - Added ADRs for:
   - explicit claim/waiting ownership direction (`ADR-013`)
   - explicit preemption/interruption deferral (`ADR-014`)
-- Added modeller-facing guidance in `docs/DES_Studio_User_Guide.md`.
-- Added Sprint 26 capability guidance in [sprint-26-capability-guide.md](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/reviews/sprint-26-capability-guide.md).
+- Added modeller-facing guidance in `docs/simmodlr_User_Guide.md`.
+- Added Sprint 26 capability guidance in [sprint-26-capability-guide.md](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/reviews/sprint-26-capability-guide.md).
 - Added sample models:
-  - [priority-handoff-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/examples/sprint-26/priority-handoff-demo.json)
-  - [recirculation-exit-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/examples/sprint-26/recirculation-exit-demo.json)
+  - [priority-handoff-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/examples/sprint-26/priority-handoff-demo.json)
+  - [recirculation-exit-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/examples/sprint-26/recirculation-exit-demo.json)
 
 ## Deferred or Removed Scope
 
@@ -104,7 +104,7 @@ Record the modeller-facing guidance and example models created to explain Sprint
 
 - Completed:
   - authoritative waiting/resource/cancellation contract snapshot added to the Sprint 26 plan
-  - user-facing waiting/resource ownership guidance added to `docs/DES_Studio_User_Guide.md`
+  - user-facing waiting/resource ownership guidance added to `docs/simmodlr_User_Guide.md`
   - capability guide added at `docs/reviews/sprint-26-capability-guide.md`
 
 ### Sample models / examples

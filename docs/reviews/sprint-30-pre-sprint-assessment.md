@@ -31,7 +31,7 @@ fields beyond `id`, `name`, and an inline `description` string.
 
 No template has a `paramGuide`, `limitations`, or `domainTag` field. Each has only an inline
 `description` string (one or two sentences). Human-readable narrative exists in two external
-documents (`docs/Template Models Guide.md` and `docs/DES_Studio_Template_Models.md`) but is not
+documents (`docs/Template Models Guide.md` and `docs/simmodlr_Template_Models.md`) but is not
 surfaced in the UI.
 
 | Name | Has description? | Has param guide? | Has limitations note? | Has domain tag? |
@@ -101,7 +101,7 @@ are not surfaced in the UI.
 
 **ABSENT.** Searching `src/ui/` for "help", "guide", "documentation" returns no matching
 components. The `ModelDetail.jsx` tab list (lines 611–625) has no Help or Guide tab. The user
-guide exists at `docs/DES_Studio_User_Guide.md` but is not linked from the UI.
+guide exists at `docs/simmodlr_User_Guide.md` but is not linked from the UI.
 
 ### 2d. Tutorial / walkthrough flows
 
@@ -129,7 +129,7 @@ in the UI.
 
 **Existing documentation assets** that would feed Sprint 30:
 - `docs/Template Models Guide.md` — human-readable guide + macro quick reference for all 10 templates
-- `docs/DES_Studio_Template_Models.md` — technical audit with flow diagrams and issue notes
+- `docs/simmodlr_Template_Models.md` — technical audit with flow diagrams and issue notes
 - `docs/reviews/sprint-26-capability-guide.md` — modelling patterns for resource/waiting semantics
 - `docs/reviews/sprint-27-capability-guide.md` — debugging/explainability workflow
 - `docs/examples/sprint-26/` — two sample JSON models (`priority-handoff-demo.json`, `recirculation-exit-demo.json`)
@@ -270,7 +270,7 @@ Community, Templates) are rendered without search capability.
 |---|---|---|
 | First-run onboarding (F5.8) | PARTIAL | `FirstRunPanel` in `App.jsx` shows two CTA buttons. `StarterGuide` modal in `ModelDetail.jsx` shows three path choices. Neither is a guided walkthrough. |
 | "What can I model?" / capability guide | ABSENT | No in-app component. Capability guide docs exist as engineering documents only. |
-| Modelling Guide / help panel | ABSENT | No Help or Guide tab in ModelDetail. User guide at `docs/DES_Studio_User_Guide.md` not linked from UI. |
+| Modelling Guide / help panel | ABSENT | No Help or Guide tab in ModelDetail. User guide at `docs/simmodlr_User_Guide.md` not linked from UI. |
 | Tutorial / walkthrough flows | ABSENT | No step-by-step tutorial or worked example flow exists. |
 | docs/patterns/ directory | ABSENT | Directory does not exist. |
 | In-app modelling intent mapping | ABSENT | `docs/Template Models Guide.md` is the closest asset but is not surfaced in the UI. |

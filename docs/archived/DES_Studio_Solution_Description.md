@@ -1,8 +1,8 @@
-> **SUPERSEDED** — This document overlaps with `DES_Studio_Specification.md` and both have been
+> **SUPERSEDED** — This document overlaps with `simmodlr_Specification.md` and both have been
 > superseded by `AGENTS.md` which contains the current authoritative specification.
 > Date superseded: 2026-05-15
 
-# DES Studio — Solution Description
+# simmodlr — Solution Description
 *A Professional Discrete Event Simulation Modelling Tool*
 *Document version 1.0 | Based on: Specification v1, Full Codebase Audit 2026-04-30, Sprint Plan v2.0*
 
@@ -10,7 +10,7 @@
 
 ## Contents
 
-1. [What DES Studio Is](#1-what-des-studio-is)
+1. [What simmodlr Is](#1-what-simmodlr-is)
 2. [The Three-Phase Method](#2-the-three-phase-method)
 3. [System Architecture](#3-system-architecture)
 4. [What Was Built and What Was Found](#4-what-was-built-and-what-was-found)
@@ -27,9 +27,9 @@
 
 ---
 
-## 1. What DES Studio Is
+## 1. What simmodlr Is
 
-DES Studio is a browser-based discrete event simulation (DES) modelling tool. It enables simulation practitioners to build, validate, and run stochastic models of real-world systems — manufacturing lines, healthcare pathways, logistics networks, service operations — without writing code.
+simmodlr is a browser-based discrete event simulation (DES) modelling tool. It enables simulation practitioners to build, validate, and run stochastic models of real-world systems — manufacturing lines, healthcare pathways, logistics networks, service operations — without writing code.
 
 A modeller defines how entities (customers, jobs, patients) move through a system: where they arrive, where they wait, what activities consume them, what resources they use, and what conditions control the flow. The tool executes the model using the **Three-Phase Method** developed by Professor Pidd, a rigorous simulation execution protocol used in professional practice.
 
@@ -41,13 +41,13 @@ A modeller defines how entities (customers, jobs, patients) move through a syste
 - **Run history and result visualisation** including visual execution view, step log, and entity status
 - **Parallel replication** (planned) with live confidence interval streaming
 
-DES Studio is built to be extended. The distribution system is open and pluggable. The macro vocabulary is formally specified. Architectural decisions are recorded in ADRs so every non-obvious choice has a documented rationale.
+simmodlr is built to be extended. The distribution system is open and pluggable. The macro vocabulary is formally specified. Architectural decisions are recorded in ADRs so every non-obvious choice has a documented rationale.
 
 ---
 
 ## 2. The Three-Phase Method
 
-The Three-Phase Method is the execution protocol at the heart of DES Studio. It was chosen specifically because it correctly handles the interaction between deterministic scheduled events (B-Events) and conditional state-dependent events (C-Events) — something that SimPy's standard process/resource model does not enforce structurally.
+The Three-Phase Method is the execution protocol at the heart of simmodlr. It was chosen specifically because it correctly handles the interaction between deterministic scheduled events (B-Events) and conditional state-dependent events (C-Events) — something that SimPy's standard process/resource model does not enforce structurally.
 
 ### The simulation clock and the Future Events List
 
@@ -113,7 +113,7 @@ Without the restart rule — firing Phase C events in sequence without restartin
 
 ### Current architecture (as audited)
 
-DES Studio is a **browser-only single-page application**. The simulation engine runs on the browser's main thread. There is no backend server.
+simmodlr is a **browser-only single-page application**. The simulation engine runs on the browser's main thread. There is no backend server.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -305,7 +305,7 @@ Production readiness
 
 ## 5. The Entity and Model Data Model
 
-Every simulation model in DES Studio is stored as a JSON object in the `model_json` column of the Supabase `models` table. The schema is formally defined in `docs/addition1_entity_model.md` (Specification Addition 1).
+Every simulation model in simmodlr is stored as a JSON object in the `model_json` column of the Supabase `models` table. The schema is formally defined in `docs/addition1_entity_model.md` (Specification Addition 1).
 
 ![Model Data Structure](img_04_data_model.png)
 *Figure 4: Entity relationship diagram of the model data structure stored in Supabase JSONB.*
@@ -456,7 +456,7 @@ VISUAL EXECUTION VIEW
 
 ## 7. The Execution Engine
 
-The engine (`src/engine/`) is the core intellectual property of DES Studio. It is pure JavaScript — no React, no DOM, no Supabase. It is fully unit-tested in a node environment.
+The engine (`src/engine/`) is the core intellectual property of simmodlr. It is pure JavaScript — no React, no DOM, no Supabase. It is fully unit-tested in a node environment.
 
 ### Engine architecture
 
@@ -819,7 +819,7 @@ LIVE CI DASHBOARD (updating in real-time)
 
 ## 12. Multi-User Architecture
 
-DES Studio is a multi-user application. Authentication is managed by Supabase Auth. Every model belongs to exactly one user.
+simmodlr is a multi-user application. Authentication is managed by Supabase Auth. Every model belongs to exactly one user.
 
 ### Data isolation
 
@@ -884,7 +884,7 @@ docs/
 ├── addition1_entity_model.md     Entity schema, macros, distributions,
 │                                 validation rules — read every Sprint 1–3 session
 │
-├── DES_Studio_Build_Plan.md      Sprint features and Claude Code prompts
+├── simmodlr_Build_Plan.md      Sprint features and Claude Code prompts
 │                                 Read at start of every sprint
 │
 ├── AUDIT.md                      Full codebase audit findings with file:line refs

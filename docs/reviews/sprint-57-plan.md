@@ -10,7 +10,7 @@
 
 ## Context
 
-Sprint 57 is the first of a five-sprint programme (57–61) delivering real-time data integration to DES Studio. The full specification and programme roadmap is documented in `docs/reviews/sprint-57-61-real-time-data-integration-plan.md`.
+Sprint 57 is the first of a five-sprint programme (57–61) delivering real-time data integration to simmodlr. The full specification and programme roadmap is documented in `docs/reviews/sprint-57-61-real-time-data-integration-plan.md`.
 
 This sprint delivers only the **engine-layer foundation**: the adapter subsystem and the minimal engine wiring needed to resolve live parameter values. No UI changes are made. No network calls are made during testing. All existing callers of `buildEngine()` continue to work without modification.
 

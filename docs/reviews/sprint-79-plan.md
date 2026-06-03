@@ -68,5 +68,5 @@ The early-return path (no chart data available) also gets collapsible summary an
 | `src/ui/execute/BottomPanel.jsx` | localStorage initialisers for collapsed/height/tab; persist on change; S/M/L preset pills |
 | `src/ui/results/ResultsWorkspace.jsx` | `SECTION_DEFAULTS` constant, `SectionHeader` component, `sectionsOpen` state, `toggleSection` handler, 5 collapsible section wrappers |
 | `docs/reviews/sprint-79-plan.md` | This document |
-| `docs/DES_Studio_Build_Plan.md` | Sprint 79 entry added |
+| `docs/simmodlr_Build_Plan.md` | Sprint 79 entry added |
 | `AGENTS.md` | Sprint pointer updated to Sprint 79 |

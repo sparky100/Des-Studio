@@ -1,21 +1,21 @@
-# DES Studio — LLM Model Generation Guide
+# simmodlr — LLM Model Generation Guide
 
 **Version:** 1.0.0
 
-## What is DES Studio?
+## What is simmodlr?
 
-DES Studio is a browser-based discrete-event simulation (DES) modelling tool. You describe a model in structured JSON  (entities, queues, events, distributions) and the Three-Phase engine simulates it. This guide helps you use a large language model to generate valid model JSON.
+simmodlr is a browser-based discrete-event simulation (DES) modelling tool. You describe a model in structured JSON  (entities, queues, events, distributions) and the Three-Phase engine simulates it. This guide helps you use a large language model to generate valid model JSON.
 
 ## How to Use This Guide
 
 1. Provide **both** of these files to your LLM conversation:
    - This guide (below)
-   - The **DES Studio Model Schema Reference** (`docs/model-schema-for-llm.md`)
+   - The **simmodlr Model Schema Reference** (`docs/model-schema-for-llm.md`)
 2. Then ask the LLM to generate a model for your scenario.
 
 ## Magic-Link Import
 
-The LLM should produce an import URL so you can open the model directly in DES Studio.
+The LLM should produce an import URL so you can open the model directly in simmodlr.
 
 **App URL:** `https://des.simmodlr.app`
 
@@ -57,9 +57,9 @@ console.log(encodeModelLink(model));
 ## Example Prompt
 
 ```
-You are a discrete-event simulation modeller. Using the DES Studio schema and guide provided:
+You are a discrete-event simulation modeller. Using the simmodlr schema and guide provided:
 
-1. Generate a valid DES Studio model JSON for [describe your scenario here]
+1. Generate a valid simmodlr model JSON for [describe your scenario here]
 2. Output only the JSON object — no prose, no markdown fences
 3. All validation rules in §10 must be satisfied
 4. Use realistic parameter values for the domain
@@ -67,7 +67,7 @@ You are a discrete-event simulation modeller. Using the DES Studio schema and gu
 6. Add goals if the scenario has obvious performance targets
 ```
 
-After generation, ask the LLM to also provide a magic-link import URL using the encoding recipe above. Open the link in your browser — DES Studio shows a pre-flight preview card. Review and save to your library with one click.
+After generation, ask the LLM to also provide a magic-link import URL using the encoding recipe above. Open the link in your browser — simmodlr shows a pre-flight preview card. Review and save to your library with one click.
 
 ---
 

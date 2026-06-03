@@ -1,4 +1,4 @@
-# DES Studio — Sprint 26-31 Roadmap and Modelling Scenario Coverage
+# simmodlr — Sprint 26-31 Roadmap and Modelling Scenario Coverage
 
 Last updated: 2026-05-14
 
@@ -6,7 +6,7 @@ Last updated: 2026-05-14
 
 This document turns the open-source gap analysis into a concrete next-sprint roadmap and pairs it with a modelling-scenario coverage view:
 
-- what DES Studio can model well today
+- what simmodlr can model well today
 - what it can model only partially or awkwardly
 - what it cannot currently support in a credible way
 - which missing scenarios appear to offer the highest product value
@@ -15,7 +15,7 @@ This is a planning document, not an implementation record.
 
 ## Executive Summary
 
-After Sprint 31, DES Studio has a strong correctness baseline, comprehensive debugging/explainability support, and live observability features. The next challenge is to deepen resource reliability modelling (preemption, breakdowns) and expand entity composition capabilities (splitting, co-seize, matching).
+After Sprint 31, simmodlr has a strong correctness baseline, comprehensive debugging/explainability support, and live observability features. The next challenge is to deepen resource reliability modelling (preemption, breakdowns) and expand entity composition capabilities (splitting, co-seize, matching).
 
 The recommended next sequence is:
 
@@ -80,7 +80,7 @@ This is the biggest structural gap relative to mature tools. Many higher-value m
 
 ## Sprint 27 — Simulation Debugging and Explainability
 
-**Goal:** Make DES Studio easier to trust when models become difficult.
+**Goal:** Make simmodlr easier to trust when models become difficult.
 
 ### Why this sprint follows Sprint 26
 
@@ -116,7 +116,7 @@ Once semantics get richer, modellers need better visibility into why the engine 
 
 ## Sprint 28 — Experiments and Statistical Workbench
 
-**Goal:** Promote DES Studio from “can run experiments” to “can support a serious study workflow.”
+**Goal:** Promote simmodlr from “can run experiments” to “can support a serious study workflow.”
 
 ### Why this sprint follows debugging
 
@@ -139,7 +139,7 @@ Statistical work is much more valuable once the modeller can trust and explain t
 
 ### Main value
 
-- moves DES Studio toward study-grade output
+- moves simmodlr toward study-grade output
 - improves repeatability and collaboration
 - increases value for teaching, consulting, and decision support
 
@@ -245,7 +245,7 @@ This section is based on the current documented capability set after Sprints 10-
 
 It does **not** assume support for behaviours that are not clearly represented in the current model vocabulary or completed sprint record.
 
-## Scenarios DES Studio can model well today
+## Scenarios simmodlr can model well today
 
 | Scenario class | Coverage | Why it fits well |
 |---|---|---|
@@ -258,7 +258,7 @@ It does **not** assume support for behaviours that are not clearly represented i
 | Scenario comparison and parameter exploration | Strong | Replications, 1D sweeps, 2D sweeps, and comparison tooling exist. |
 | Teaching/demo DES models | Strong | The UI, templates, and workflow shell are well-suited to guided modelling. |
 
-## Scenarios DES Studio can support, but only partially or awkwardly
+## Scenarios simmodlr can support, but only partially or awkwardly
 
 | Scenario class | Coverage | Current limitation | Value if improved |
 |---|---|---|---|
@@ -269,7 +269,7 @@ It does **not** assume support for behaviours that are not clearly represented i
 | Logistics flows with capacity and staging constraints | Partial | Process-flow modelling is possible, but movement/storage semantics are relatively shallow | Medium-High |
 | Analytical experimentation studies | Partial | Experiments exist, but saved study management and deeper statistical tooling are still limited | High |
 
-## Scenarios DES Studio cannot currently support well
+## Scenarios simmodlr cannot currently support well
 
 | Scenario class | Why not currently credible | Relative value |
 |---|---|---|
@@ -318,7 +318,7 @@ These appear to offer the best product return if addressed, balancing likely use
 
 ### Strongest current positioning
 
-DES Studio is currently strongest as:
+simmodlr is currently strongest as:
 
 - a browser-native structured DES modeller
 - a teaching and onboarding tool for process-flow simulation
@@ -327,7 +327,7 @@ DES Studio is currently strongest as:
 
 ### Risky positioning today
 
-DES Studio should be cautious about claiming parity with broader simulation environments for:
+simmodlr should be cautious about claiming parity with broader simulation environments for:
 
 - interruption-heavy systems
 - reliability/maintenance-rich industrial systems
@@ -366,6 +366,6 @@ The recommended Sprint 26-30 sequence is sound because it compounds:
 - evidence-backed product confidence
 - reusable scenario assets
 
-The scenario assessment suggests DES Studio already has a strong foundation for queueing, service, routing, batching, and experimental exploration. The highest-value missing capabilities are not random extras; they cluster around richer resource semantics, interruptions, causal debugging, and serious study workflows.
+The scenario assessment suggests simmodlr already has a strong foundation for queueing, service, routing, batching, and experimental exploration. The highest-value missing capabilities are not random extras; they cluster around richer resource semantics, interruptions, causal debugging, and serious study workflows.
 
 That is where the next roadmap should stay focused.

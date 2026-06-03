@@ -29,10 +29,10 @@ describe("AboutModal", () => {
 
   // ── Static content ────────────────────────────────────────────────────────
 
-  it("renders the app name DES Studio", () => {
+  it("renders the app name simmodlr", () => {
     render(<AboutModal {...DEFAULT_PROPS} />);
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("DES Studio");
+    expect(dialog).toHaveTextContent("simmodlr");
   });
 
   it("renders a version string in the Version row", () => {

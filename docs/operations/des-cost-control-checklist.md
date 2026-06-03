@@ -1,7 +1,7 @@
 # DES Cost-Control Checklist
 
 Date: 2026-05-26  
-Scope: Practical operations checklist for the current DES Studio codebase.
+Scope: Practical operations checklist for the current simmodlr codebase.
 
 ## Existing Benchmark Baseline
 
@@ -42,8 +42,8 @@ Scope: Practical operations checklist for the current DES Studio codebase.
 ### Browser
 
 - DES engine execution runs in the browser today, not in Supabase Edge Functions and not in Cloudflare Workers.
-- Single-run execution happens on the browser main thread in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:602).
-- Replication batches already use browser Web Workers via [src/engine/replication-runner.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/replication-runner.js:69) and [src/engine/worker.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/worker.js:3).
+- Single-run execution happens on the browser main thread in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:602).
+- Replication batches already use browser Web Workers via [src/engine/replication-runner.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/replication-runner.js:69) and [src/engine/worker.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/worker.js:3).
 
 ### Supabase
 
@@ -52,20 +52,20 @@ Scope: Practical operations checklist for the current DES Studio codebase.
 - DB-level quota triggers already exist for:
   - max models per user
   - max runs per model
-  - see [20260515000000_sprint38_user_management.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260515000000_sprint38_user_management.sql:103)
+  - see [20260515000000_sprint38_user_management.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260515000000_sprint38_user_management.sql:103)
 
 ### Cloudflare
 
 - No Cloudflare Worker runtime was found in this repo.
 - Cloudflare’s practical role here is static frontend hosting and caching, not DES compute.
-- See [cloudflare-des-runtime-review.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/cloudflare-des-runtime-review.md).
+- See [cloudflare-des-runtime-review.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/cloudflare-des-runtime-review.md).
 
 ## Checklist
 
 ### 1. What should run in the browser
 
 - Keep small and moderate DES runs in the browser.
-  - This already matches the current architecture in [des-runtime-execution-map.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/des-runtime-execution-map.md).
+  - This already matches the current architecture in [des-runtime-execution-map.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/des-runtime-execution-map.md).
 - Keep single-user model editing, local validation, results exploration, exports, and report generation browser-side.
 - Keep replication batches in browser Web Workers for now, not on the main thread.
 - Prefer browser execution for:
@@ -86,9 +86,9 @@ Operational rule:
 - Lightweight authenticated API tasks only.
 - Good current uses:
   - `import-model` for auth + model normalization + validation + insert
-    - [supabase/functions/import-model/index.ts](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/functions/import-model/index.ts)
+    - [supabase/functions/import-model/index.ts](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/functions/import-model/index.ts)
   - `llm-proxy` for outbound LLM proxying and per-request rate limiting
-    - [supabase/functions/llm-proxy/index.ts](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/functions/llm-proxy/index.ts)
+    - [supabase/functions/llm-proxy/index.ts](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/functions/llm-proxy/index.ts)
   - email/notification tasks
     - `notify-feedback`
     - `notify-new-signup`
@@ -123,7 +123,7 @@ Operational rule:
 
 Recommended target architecture:
 
-- follow [des-dedicated-worker-architecture.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/architecture/des-dedicated-worker-architecture.md)
+- follow [des-dedicated-worker-architecture.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/architecture/des-dedicated-worker-architecture.md)
 - keep Supabase as auth/storage/control plane
 - keep Cloudflare as frontend/static hosting
 - move only the expensive compute path out of browser/serverless request handlers
@@ -131,7 +131,7 @@ Recommended target architecture:
 ### 5. Storage controls
 
 - Treat `simulation_runs.results_json` as the primary storage-risk surface.
-  - Save path: [src/db/models.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/db/models.js:351)
+  - Save path: [src/db/models.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/db/models.js:351)
 - Keep top-level SQL columns for history/search/filter use:
   - `replications`
   - `seed`
@@ -151,14 +151,14 @@ Checklist:
 
 Supporting references:
 
-- [supabase-des-compute-and-storage-review.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/supabase-des-compute-and-storage-review.md)
-- [des-results-storage-strategy.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/architecture/des-results-storage-strategy.md)
+- [supabase-des-compute-and-storage-review.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/supabase-des-compute-and-storage-review.md)
+- [des-results-storage-strategy.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/architecture/des-results-storage-strategy.md)
 
 ### 6. Result retention controls
 
 - Keep all run rows only if payload richness is controlled.
 - Use `archived` for UI-level organization now.
-  - migration: [20260514000001_simulation_runs_organisation.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260514000001_simulation_runs_organisation.sql)
+  - migration: [20260514000001_simulation_runs_organisation.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260514000001_simulation_runs_organisation.sql)
 - Prefer a tiered retention policy:
   - recent small runs: keep richer payloads
   - large runs: summary-first persistence
@@ -166,7 +166,7 @@ Supporting references:
 
 Important current constraint:
 
-- `results_json` is immutable after insert under [PR-001_run_record_integrity.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/PR-001_run_record_integrity.sql:36)
+- `results_json` is immutable after insert under [PR-001_run_record_integrity.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/PR-001_run_record_integrity.sql:36)
 
 Operational rule:
 
@@ -187,11 +187,11 @@ Current repo assets already point toward limit enforcement:
     - `maxReplications`
     - `maxSweepPoints`
     - `maxSimTime`
-  - see [20260511000002_create_platform_config.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260511000002_create_platform_config.sql:15)
+  - see [20260511000002_create_platform_config.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260511000002_create_platform_config.sql:15)
 - Execute currently blocks only:
   - non-positive replications
   - warm-up >= maxSimTime
-  - see [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:191)
+  - see [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:191)
 
 Recommended controls:
 
@@ -202,14 +202,14 @@ Recommended controls:
 
 Recommended policy source:
 
-- [des-run-admission-rules.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/architecture/des-run-admission-rules.md)
+- [des-run-admission-rules.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/architecture/des-run-admission-rules.md)
 
 ### 8. Logging limits
 
 - Keep browser logs and DB-stored traces separate conceptually.
 - Raw UI log/history is useful for local explanation, but expensive as a storage default.
 - Current trace is already capped at 1,000 records.
-  - see [src/simulation/traceCollector.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/simulation/traceCollector.js)
+  - see [src/simulation/traceCollector.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/simulation/traceCollector.js)
 
 Checklist:
 
@@ -222,7 +222,7 @@ Checklist:
 ### 9. Import size limits
 
 - `import-model` currently normalizes and validates a full model payload, then inserts it.
-  - [supabase/functions/import-model/index.ts](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/functions/import-model/index.ts:214)
+  - [supabase/functions/import-model/index.ts](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/functions/import-model/index.ts:214)
 - The repo does not currently enforce a clear request-size ceiling for imports.
 
 Recommended controls:
@@ -239,7 +239,7 @@ Practical rule:
 ### 10. API rate limits
 
 - LLM proxy already has an in-memory per-hour rate limit keyed by auth header or forwarded IP.
-  - [supabase/functions/llm-proxy/index.ts](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/functions/llm-proxy/index.ts:21)
+  - [supabase/functions/llm-proxy/index.ts](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/functions/llm-proxy/index.ts:21)
   - default is 25 per hour if not configured otherwise
   - config can be read from `platform_config`
 
@@ -262,8 +262,8 @@ Already present:
 
 References:
 
-- quota triggers: [20260515000000_sprint38_user_management.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260515000000_sprint38_user_management.sql:117)
-- admin audit log + RPC: [20260515000000_sprint38_user_management.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260515000000_sprint38_user_management.sql:14), [20260515000000_sprint38_user_management.sql](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/supabase/migrations/20260515000000_sprint38_user_management.sql:56)
+- quota triggers: [20260515000000_sprint38_user_management.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260515000000_sprint38_user_management.sql:117)
+- admin audit log + RPC: [20260515000000_sprint38_user_management.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260515000000_sprint38_user_management.sql:14), [20260515000000_sprint38_user_management.sql](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/supabase/migrations/20260515000000_sprint38_user_management.sql:56)
 - RLS fixes: `20260510090003_fix_des_models_rls.sql`, `20260510090004_fix_rls_recursion.sql`
 
 Recommended additions:
@@ -325,7 +325,7 @@ Add telemetry for:
 
 Use the existing runtime metrics block as the base for that future telemetry path:
 
-- [des-runtime-metrics-implementation.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/analysis/des-runtime-metrics-implementation.md)
+- [des-runtime-metrics-implementation.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/analysis/des-runtime-metrics-implementation.md)
 
 ## Recommended Immediate Actions
 

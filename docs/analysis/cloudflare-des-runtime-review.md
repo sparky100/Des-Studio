@@ -45,8 +45,8 @@ That means the main Cloudflare concerns are:
 ### What I found
 
 - Vite frontend build only:
-  - [package.json](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/package.json)
-  - [vite.config.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/vite.config.js)
+  - [package.json](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/package.json)
+  - [vite.config.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/vite.config.js)
 - no `wrangler.toml`
 - no `functions/` directory for Cloudflare Pages Functions
 - no Cloudflare Worker source files
@@ -56,7 +56,7 @@ That means the main Cloudflare concerns are:
 
 ### Practical conclusion
 
-If DES Studio is deployed on Cloudflare, Cloudflare is most likely serving:
+If simmodlr is deployed on Cloudflare, Cloudflare is most likely serving:
 
 - `index.html`
 - built JS/CSS/image assets from `dist/`
@@ -128,7 +128,7 @@ Model import links are encoded as:
 
 Source:
 
-- [importLink.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/utils/importLink.js)
+- [importLink.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/utils/importLink.js)
 
 Important nuance:
 
@@ -233,7 +233,7 @@ Recommendation:
 
 The codebase does have client-side caching, but not Cloudflare edge caching:
 
-- REST live-data adapter TTL cache in [RestAdapter.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/adapters/RestAdapter.js)
+- REST live-data adapter TTL cache in [RestAdapter.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/adapters/RestAdapter.js)
 - session-scoped secret storage via `sessionStorage`
 - local anonymous persistence via `localStorage`
 

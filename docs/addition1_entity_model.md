@@ -1,4 +1,4 @@
-# DES Studio — Entity Model, Attribute Schema & Action Vocabulary
+# simmodlr — Entity Model, Attribute Schema & Action Vocabulary
 
 > **Foundational Reference:** This document defines the entity model, attribute schema, and original action vocabulary for Sprints 1-3. It remains authoritative for entity class definitions, attribute types, and the core macro patterns.
 >
@@ -39,7 +39,7 @@ The modeller defines one or more Entity Classes in the model editor. Each class 
 | `colour` | hex string | No | Colour used to render entity tokens in the visual execution view. Defaults to `#4A90D9`. |
 | `attributes` | Attribute[] | Yes | Ordered list of typed attributes the entity carries. May be an empty array if no attributes are needed. |
 | `arrivalSource` | string | Yes | ID of the Source node that generates this entity class. One class per Source. |
-| `role` | enum | Yes in DES Studio implementation | `customer` for arriving entities or `server` for pre-created resources. |
+| `role` | enum | Yes in simmodlr implementation | `customer` for arriving entities or `server` for pre-created resources. |
 | `count` | number | Server only | Static server capacity when no `shiftSchedule` is present. |
 | `shiftSchedule` | ShiftPeriod[] | No | Time-varying server capacity. If present, the first period defines initial capacity and overrides `count`. |
 
@@ -598,7 +598,7 @@ Piecewise time-varying distribution:
 }
 ```
 
-DES Studio stores UI-authored piecewise distributions in the existing schedule shape as `dist: "Piecewise"` with `distParams.periods[]`. The engine accepts both the lower-case schema form above and the UI form.
+simmodlr stores UI-authored piecewise distributions in the existing schedule shape as `dist: "Piecewise"` with `distParams.periods[]`. The engine accepts both the lower-case schema form above and the UI form.
 
 ### 6.3 CSV Import Rules
 

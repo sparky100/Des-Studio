@@ -1,4 +1,4 @@
-# DES Studio — Template Model Definitions
+# simmodlr — Template Model Definitions
 
 *Analysis of all 10 pre-built template models. Documents entity types, events, effects, conditions, queues, and identified issues.*
 

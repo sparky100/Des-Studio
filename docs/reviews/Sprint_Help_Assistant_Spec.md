@@ -1,8 +1,8 @@
-# DES Studio — Help Assistant Sprint Specification
+# simmodlr — Help Assistant Sprint Specification
 
 *Document type: Sprint Specification + Claude Code Prompts*
 *Created: 2026-05-22*
-*Prerequisite: Read `docs/DES_Studio_Build_Plan.md` to determine the correct sprint number
+*Prerequisite: Read `docs/simmodlr_Build_Plan.md` to determine the correct sprint number
 before executing any prompt. The sprint number used throughout this document is
 referred to as **Sprint N**. Claude Code must replace every occurrence of `Sprint N`
 and `SN` with the actual next sprint number found in the live build plan.*
@@ -11,13 +11,13 @@ and `SN` with the actual next sprint number found in the live build plan.*
 
 ## 1. Goal
 
-Add a **Contextual Help Assistant** to DES Studio — a persistent, conversational
+Add a **Contextual Help Assistant** to simmodlr — a persistent, conversational
 panel that allows users to ask natural-language questions about the tool and receive
 grounded, specific answers at any point during their session.
 
 This is **separate** from the existing AI Insights panel (which is scoped to
 results analysis and requires a completed run). The Help Assistant is available
-in every view and answers questions about how to use DES Studio, what modelling
+in every view and answers questions about how to use simmodlr, what modelling
 constructs mean, and how to diagnose common problems.
 
 ---
@@ -30,7 +30,7 @@ constructs mean, and how to diagnose common problems.
    injected into every prompt, enabling grounded answers without the user needing
    to explain their situation.
 3. **Grounded in authoritative documentation.** A condensed reference covering
-   DES Studio's macros, distributions, queue disciplines, experiment controls,
+   simmodlr's macros, distributions, queue disciplines, experiment controls,
    and the Three-Phase concept is embedded in the system prompt.
 4. **Reuses existing LLM infrastructure.** All calls route through the existing
    `llm-proxy` Supabase Edge Function with `kind: "help"` — no new backend work.
@@ -101,16 +101,16 @@ buildHelpPrompt(question, helpContext)
 **System prompt** (fixed, embedded at build time — not fetched at runtime):
 
 ```
-You are a helpful assistant embedded in DES Studio, a browser-based
+You are a helpful assistant embedded in simmodlr, a browser-based
 discrete-event simulation tool implementing Pidd's Three-Phase Approach.
 
-Answer questions about how to use DES Studio accurately and concisely
+Answer questions about how to use simmodlr accurately and concisely
 (100–200 words unless a longer explanation is clearly needed).
 Base your answers on the reference material below.
-If the user's question is outside the scope of DES Studio, say so briefly
+If the user's question is outside the scope of simmodlr, say so briefly
 and redirect them to the relevant section.
 
---- DES STUDIO REFERENCE ---
+--- simmodlr REFERENCE ---
 
 CORE CONCEPTS
 - Three-Phase simulation: Phase A advances the clock to the next B-Event time.
@@ -253,7 +253,7 @@ hour).
 - Panel header: "Help" with a `×` close button (`aria-label="Close help panel"`).
 - Panel body: three sections stacked vertically:
   1. **Question input** — text input with placeholder *"Ask a question about
-     DES Studio…"* and a **Send** button. Keyboard: Enter submits.
+     simmodlr…"* and a **Send** button. Keyboard: Enter submits.
   2. **Suggested questions** — 3–4 chips/buttons rendered from
      `SUGGESTED_QUESTIONS[currentView]`. Clicking a chip populates the input
      and submits immediately.
@@ -279,7 +279,7 @@ The `HelpPanel` maintains its own local state:
 ## 6. Implementation Prompts for Claude Code
 
 Each prompt is designed to complete in under 2 minutes. Run them sequentially.
-**Before starting FSN.1, read the live `docs/DES_Studio_Build_Plan.md` to
+**Before starting FSN.1, read the live `docs/simmodlr_Build_Plan.md` to
 confirm the correct sprint number and replace all `SN` references below.**
 
 ---
@@ -299,7 +299,7 @@ Create src/ui/help/HelpPanel.jsx (new file):
   - Drawer component, 340px wide, right-aligned, full viewport height.
   - Props: { isOpen, onClose, currentView, modelSummary }
   - Header: "Help" text + × close button (aria-label="Close help panel").
-  - Body section 1: text input (placeholder "Ask a question about DES Studio…")
+  - Body section 1: text input (placeholder "Ask a question about simmodlr…")
     + Send button. Enter key submits. Input and button disabled while loading.
   - Body section 2: suggested questions area — receives suggestedQuestions prop
     (string[]). Renders each as a clickable chip. Clicking populates and submits.
@@ -378,7 +378,7 @@ Add to src/llm/prompts.js (do not rewrite the file — add the new export only):
   Export buildHelpPrompt(question, helpContext):
     - Returns a messages array in the provider-neutral format established by
       contracts.js (or plain { system, userMessage } if contracts.js is absent).
-    - System prompt: embed the full DES Studio reference text from the sprint
+    - System prompt: embed the full simmodlr reference text from the sprint
       specification. The reference is hardcoded in prompts.js — it is NOT
       fetched at runtime.
     - User message: includes currentView, serialised modelSummary (or
@@ -477,7 +477,7 @@ npm test -- help                         # Help prompt and context tests pass
 npm run build                            # Succeeds
 
 # Manual checks:
-# 1. Open DES Studio — confirm ? button visible in nav bar in all views
+# 1. Open simmodlr — confirm ? button visible in nav bar in all views
 # 2. Click ? — confirm panel opens with suggested questions for current view
 # 3. Navigate to a different view — confirm suggested questions update
 # 4. Ask "How do I configure a warm-up period?" — confirm streamed response
@@ -494,7 +494,7 @@ npm run build                            # Succeeds
 ## 8. Build Plan Update Instructions
 
 After all three prompts complete and the completion gate passes, Claude Code must
-update `docs/DES_Studio_Build_Plan.md` as follows:
+update `docs/simmodlr_Build_Plan.md` as follows:
 
 1. **Document History table** — add a new row:
    ```
@@ -514,20 +514,20 @@ update `docs/DES_Studio_Build_Plan.md` as follows:
 3. **Direction of Travel table** — add or update a row:
    ```
    | In-product help | ✅ Complete | Sprint N adds conversational Help Assistant
-   panel, grounded in DES Studio documentation, available from all views. |
+   panel, grounded in simmodlr documentation, available from all views. |
    ```
 
 4. **User Guide reference** — add a note in the sprint completion notes:
    ```
    User Guide section 11 (Help Assistant) should be added to
-   DES_Studio_User_Guide.md in a follow-on documentation pass.
+   simmodlr_User_Guide.md in a follow-on documentation pass.
    ```
 
 ---
 
 ## 9. User Guide Addendum
 
-The following section should be appended to `docs/DES_Studio_User_Guide.md`
+The following section should be appended to `docs/simmodlr_User_Guide.md`
 after Sprint N completes. Claude Code should add it as **Section 11** (or the
 next available section number).
 
@@ -535,7 +535,7 @@ next available section number).
 ## 11. Help Assistant
 
 The Help Assistant is a conversational panel that answers questions about
-DES Studio at any point during your session. It is available from every view
+simmodlr at any point during your session. It is available from every view
 via the **?** button in the navigation bar.
 
 ### 11.1 Opening the panel
@@ -546,7 +546,7 @@ Assistant drawer. Click **×** or click **?** again to close it.
 ### 11.2 Asking a question
 
 Type your question in the input field and press **Enter** or click **Send**.
-The assistant streams a response grounded in DES Studio's documentation and
+The assistant streams a response grounded in simmodlr's documentation and
 your current model context.
 
 Example questions:
@@ -570,7 +570,7 @@ you close and re-open the panel.
 
 ### 11.5 Relationship to AI Insights
 
-The Help Assistant answers questions about **how to use DES Studio** and
+The Help Assistant answers questions about **how to use simmodlr** and
 **modelling concepts**. The AI Insights panel (available in the Execute view
 after a run) analyses **your specific simulation results** — interpreting
 KPIs, suggesting model improvements, and comparing runs. The two panels

@@ -1117,7 +1117,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     terminationCondition: terminationMode === "condition" ? terminationCondition : null,
   }), [modelId, effectiveRunLabel, replications, warmupPeriod, maxSimTime, terminationMode, terminationCondition]);
   const exportPartial = partialBatchStatus && replicationResults.length > 0;
-  const resultFilenameBase = `des-studio-results-${slugifyResultName(model.name)}${exportPartial ? "-partial" : ""}-${timestampForFilename()}`;
+  const resultFilenameBase = `simmodlr-results-${slugifyResultName(model.name)}${exportPartial ? "-partial" : ""}-${timestampForFilename()}`;
   const comparisonRuns = useMemo(() => {
     const savedRuns = savedRunHistory.map(row => ({
       id: `saved-${row.id}`,

@@ -1,4 +1,4 @@
-# DES Studio — Product Specification
+# simmodlr — Product Specification
 
 **Version:** 7.0.0  
 **Date:** 2026-06-02  
@@ -26,7 +26,7 @@ Operations teams — in hospitals, logistics networks, call centres, public tran
 
 The honest answer to these questions requires discrete-event simulation. But traditional DES tools require software engineering skill to use: scenario logic is expressed in procedural code, statistical machinery must be configured by hand, and results are buried in data files that require further tooling to interpret. This places rigorous simulation out of reach for most operations analysts and makes the modelling cycle take days when it should take hours.
 
-DES Studio exists to close that gap. It brings production-grade DES — the Three-Phase method, seeded parallel replications, confidence intervals, parametric sweeps, and statistical tests — to a browser-based, no-code interface. A domain expert who understands queues should be able to build, run, and present a credible model in an afternoon.
+simmodlr exists to close that gap. It brings production-grade DES — the Three-Phase method, seeded parallel replications, confidence intervals, parametric sweeps, and statistical tests — to a browser-based, no-code interface. A domain expert who understands queues should be able to build, run, and present a credible model in an afternoon.
 
 ---
 
@@ -36,7 +36,7 @@ DES Studio exists to close that gap. It brings production-grade DES — the Thre
 
 **Who they are.** An analyst inside a hospital, local authority, logistics hub, call centre, or utility. They are responsible for recommending staffing levels, capacity investments, or process redesigns. They understand queueing concepts (utilisation, wait time, throughput) but are not software developers.
 
-**What they need from DES Studio.** Evidence for a decision: "we need three more nurses on the morning shift." That evidence must include confidence intervals (so it is statistically defensible), scenario comparisons (so alternatives are explored), and a format that can be shared with a manager who will not run the model themselves.
+**What they need from simmodlr.** Evidence for a decision: "we need three more nurses on the morning shift." That evidence must include confidence intervals (so it is statistically defensible), scenario comparisons (so alternatives are explored), and a format that can be shared with a manager who will not run the model themselves.
 
 **Primary features.** **Define** editors (structured forms for each model element type) for precise model control; multi-replication runner for statistical confidence; Parametric Sweep with Goal Feasibility to find the minimum staffing that meets a service-level target; the Results view for KPI summaries; Share link and QR code for presenting results to decision-makers.
 
@@ -46,7 +46,7 @@ DES Studio exists to close that gap. It brings production-grade DES — the Thre
 
 **Who they are.** An undergraduate or postgraduate in industrial engineering, operations research, or health informatics. They are learning DES for the first time and need to connect theory (M/M/c queues, Erlang-C, Little's Law) to observable behaviour.
 
-**What they need from DES Studio.** A low-risk environment to experiment. Start from a working example, change one parameter, see what happens, and understand *why*. The AI-generated narrative after a run should explain behaviour, not just report numbers.
+**What they need from simmodlr.** A low-risk environment to experiment. Start from a working example, change one parameter, see what happens, and understand *why*. The AI-generated narrative after a run should explain behaviour, not just report numbers.
 
 **Primary features.** Template Library (especially M/M/1 and ER Triage) as learning scaffolds; AI Generator to bootstrap unfamiliar scenarios; Results → Explain for building intuition; Execute canvas to watch entity flow animate in real time; wait-time histograms to understand distributions visually.
 
@@ -56,7 +56,7 @@ DES Studio exists to close that gap. It brings production-grade DES — the Thre
 
 **Who they are.** A management consultant who builds models for clients, or a senior executive who needs to view and share a colleague's results. They may not build models themselves, but they must read results, validate realism, and distribute findings.
 
-**What they need from DES Studio.** A polished, self-contained results view openable without a login, shareable via QR code, and readable without simulation background. KPI cards must tell an immediate pass/fail story against agreed service-level targets.
+**What they need from simmodlr.** A polished, self-contained results view openable without a login, shareable via QR code, and readable without simulation background. KPI cards must tell an immediate pass/fail story against agreed service-level targets.
 
 **Primary features.** Share link with configurable widget visibility; QR code for presentations; read-only public dashboard; goal-aware KPI cards (green/red against targets); Export CSV for PowerPoint; Senior Management report in plain English.
 
@@ -66,7 +66,7 @@ DES Studio exists to close that gap. It brings production-grade DES — the Thre
 
 ### Must-have
 
-These are non-negotiable. Removing any one of them makes DES Studio no longer a simulation platform.
+These are non-negotiable. Removing any one of them makes simmodlr no longer a simulation platform.
 
 | # | Feature | Description |
 |---|---------|-------------|
@@ -123,7 +123,7 @@ Valuable additions already partially implemented or planned for near-term sprint
 
 | # | Feature | Rationale |
 |---|---------|-----------|
-| W1 | **Agent-based simulation** | Fundamentally different modelling paradigm; outside DES Studio's scope. |
+| W1 | **Agent-based simulation** | Fundamentally different modelling paradigm; outside simmodlr's scope. |
 | W2 | **Continuous simulation (ODE solver)** | DES is discrete by design; continuous equations require a different engine. |
 | W3 | **Code editor / scripting** | A deliberate non-goal. All logic is expressed through structured UI and Predicate Builder. |
 | W4 | **Native mobile app** | Responsive web layout covers tablet use; full mobile authoring is deprioritised. |
@@ -207,7 +207,7 @@ Valuable additions already partially implemented or planned for near-term sprint
 
 ## 6. Plain-English Interaction Standard
 
-DES Studio is built for advanced modellers but must not alienate users who encounter it for the first time. All user-facing text — labels, headings, buttons, empty states, result summaries — follows this hierarchy:
+simmodlr is built for advanced modellers but must not alienate users who encounter it for the first time. All user-facing text — labels, headings, buttons, empty states, result summaries — follows this hierarchy:
 
 1. **Primary wording in everyday language.** Describe the purpose of the option or result.
 2. **Technical detail as support.** Keep domain terms, validation codes, raw IDs, and distribution names in helper text, tooltips, or expandable sections.

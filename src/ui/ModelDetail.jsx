@@ -754,7 +754,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       catch { /* no schedule table yet — export inline rows as-is */ }
     }
     const payload = buildModelExportPayload(model, new Date().toISOString(), schedules);
-    downloadJsonFile(payload, `des-studio-${slugifyModelName(model.name)}.json`);
+    downloadJsonFile(payload, `simmodlr-${slugifyModelName(model.name)}.json`);
   };
 
   const hasResultsPayload = row => {

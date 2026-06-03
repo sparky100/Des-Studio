@@ -52,8 +52,8 @@
 | `src/ui/editors/EntityTypeEditor.jsx` | Reframed help text in plain English with technical detail secondary. |
 | `src/ui/editors/StateVarEditor.jsx` | Simplified reset-after-warm-up wording. |
 | `AGENTS.md` | Updated sprint tracking; added the Plain-English Presentation Rule and the plain-English-first UI requirement. |
-| `docs/DES_Studio_Build_Plan.md` | Added Sprint 67 as a planned sprint; added checkpoint note recording the documentation package and baseline regression pass. |
-| `docs/DES_Studio_Product_Spec.md` | Added product-level plain-English-first UI requirement and Results presentation ordering requirements. |
+| `docs/simmodlr_Build_Plan.md` | Added Sprint 67 as a planned sprint; added checkpoint note recording the documentation package and baseline regression pass. |
+| `docs/simmodlr_Product_Spec.md` | Added product-level plain-English-first UI requirement and Results presentation ordering requirements. |
 | `docs/reviews/sprint-67-plan.md` | Created full Sprint 67 plan with tasks, scope, acceptance criteria, and exit gate. |
 | `docs/reviews/sprint-67-closure.md` | Created and then finalized this documentation-pass closure record. |
 | `docs/sprint-67-plain-language-ux-guide.md` | Added planned capability guide describing the intended wording and Results-layout changes. |
@@ -100,4 +100,4 @@
 
 - Resolve the unrelated `xlsx` dependency/import issue so build and UI tests can run cleanly again.
 - Run focused UI tests and browser smoke checks once the `xlsx` blocker is cleared.
-- Update `docs/DES_Studio_User_Guide.md` after the implemented Sprint 67 wording/layout changes are released.
+- Update `docs/simmodlr_User_Guide.md` after the implemented Sprint 67 wording/layout changes are released.

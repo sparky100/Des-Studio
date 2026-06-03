@@ -1,8 +1,8 @@
-# DES Studio
+# simmodlr
 
-![Benchmark Gate](https://github.com/sparky100/Des-Studio/actions/workflows/benchmark-gate.yml/badge.svg)
+![Benchmark Gate](https://github.com/sparky100/simmodlr/actions/workflows/benchmark-gate.yml/badge.svg)
 
-DES Studio is a browser-based discrete-event simulation modelling tool built around the Three-Phase Method: Phase A clock advance, Phase B bound events, and Phase C conditional events.
+simmodlr is a browser-based discrete-event simulation modelling tool built around the Three-Phase Method: Phase A clock advance, Phase B bound events, and Phase C conditional events.
 
 The app lets simulation modellers define entity types, queues, B-Events, C-Events, distributions, experiment controls, and replications through structured editors. Models run in the browser, with Supabase used for authentication, model storage, user settings, and run history.
 
@@ -118,11 +118,11 @@ Key rules:
 | Document | Purpose |
 |---|---|
 | `AGENTS.md` | Architectural contract, sprint history, coding conventions, test strategy |
-| `docs/DES_Studio_Build_Plan.md` | Living roadmap, sprint status, implementation prompts |
-| `docs/DES_Studio_User_Guide.md` | End-user guide for modellers |
+| `docs/simmodlr_Build_Plan.md` | Living roadmap, sprint status, implementation prompts |
+| `docs/simmodlr_User_Guide.md` | End-user guide for modellers |
 | `docs/Template Models Guide.md` | Detailed explanations of all 16 template models |
 | `docs/addition1_entity_model.md` | Entity model, macros, distributions, validation schema |
-| `docs/capability-gap-analysis.md` | DES Studio vs professional tools (SimPy, AnyLogic, JaamSim) |
+| `docs/capability-gap-analysis.md` | simmodlr vs professional tools (SimPy, AnyLogic, JaamSim) |
 | `docs/patterns/` | Reusable modelling pattern references (6 patterns) |
 | `docs/decisions/` | Architectural Decision Records (ADR-001 through ADR-014) |
 | `docs/reviews/` | Sprint closure reports, capability guides, pre-sprint assessments |
@@ -130,7 +130,7 @@ Key rules:
 
 ## Macro Vocabulary
 
-DES Studio supports 19 macros across B-Events and C-Events:
+simmodlr supports 19 macros across B-Events and C-Events:
 
 | Macro | Phase | Purpose |
 |---|---|---|

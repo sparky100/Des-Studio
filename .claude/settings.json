@@ -3,7 +3,13 @@
     "allow": [
       "WebSearch",
       "WebFetch(domain:www.anylogic.com)",
-      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\Des-Studio\\\\src\\\\ui\" -Filter \"*result*\" -Recurse -ErrorAction SilentlyContinue)"
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\simmodlr\\\\src\\\\ui\" -Filter \"*result*\" -Recurse -ErrorAction SilentlyContinue)",
+      "Bash(git cherry-pick *)",
+      "Bash(where gh *)",
+      "Bash(git checkout *)",
+      "Bash(git merge claude/sprint-81-deduplication --no-ff -m ' *)",
+      "Bash(git pull *)",
+      "Bash(git stash *)"
     ]
   }
 }

@@ -126,5 +126,5 @@ Six Markdown files, each covering: when to use, structure diagram, macro table, 
 | `tests/engine/templates.test.js` | served>0 assertions, templateMeta validation, new template property tests, domain set validation |
 | `docs/patterns/01–06-*.md` | Created (6 files) |
 | `AGENTS.md` | Sprint history updated; §21 updated to Sprint 30 |
-| `docs/DES_Studio_Build_Plan.md` | Changelog v1.68; sprint history row added |
+| `docs/simmodlr_Build_Plan.md` | Changelog v1.68; sprint history row added |
 | `docs/reviews/sprint-30-closure-report.md` | This file |

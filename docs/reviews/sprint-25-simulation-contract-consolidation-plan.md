@@ -39,7 +39,7 @@ The work should:
 | F25.2 | P0 | Define warm-up semantics for in-flight entities | ✅ Complete | `src/engine/index.js`, `src/engine/macros.js`, tests, docs | Waiting, serving, scheduled-completion, and post-warm-up counting behavior is documented and covered by tests. |
 | F25.3 | P1 | Centralize queue/entity arbitration into one selection service | ✅ Complete | `src/engine/entities.js`, `src/engine/macros.js`, tests | FIFO/LIFO/PRIORITY arbitration is routed through one helper/service for `ASSIGN`, `BATCH`, and `RENEGE_OLDEST` without behavior drift. |
 | F25.4 | P1 | Add contract-level regression coverage | ✅ Complete | `tests/engine/*`, `tests/ui/execute/*` | New tests prove V8 policy, warm-up semantics, and arbitration equivalence. |
-| F25.5 | P2 | SimPy-style documentation follow-through | ✅ Complete | `AGENTS.md`, `docs/DES_Studio_Build_Plan.md`, review docs | Architecture docs explain the JS equivalents of SimPy-style validation, waiting, and arbitration patterns. |
+| F25.5 | P2 | SimPy-style documentation follow-through | ✅ Complete | `AGENTS.md`, `docs/simmodlr_Build_Plan.md`, review docs | Architecture docs explain the JS equivalents of SimPy-style validation, waiting, and arbitration patterns. |
 
 ## Recommended Implementation Order
 

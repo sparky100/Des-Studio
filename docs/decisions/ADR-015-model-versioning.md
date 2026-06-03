@@ -38,7 +38,7 @@ When creating a version, the system auto-detects structural changes and displays
 - **Rejected**: No distinction between "saved work" and "milestone reached"
 
 ### Git-like branching
-- **Rejected**: Too complex for DES Studio's target users
+- **Rejected**: Too complex for simmodlr's target users
 - **Rejected**: Model sharing is at the model level, not version level
 
 ### Version-only sharing

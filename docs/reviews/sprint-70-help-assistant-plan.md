@@ -9,14 +9,14 @@
 
 ## Context
 
-DES Studio users currently have no in-app help beyond the Keyboard Shortcuts modal. When users have questions about:
-- How to use DES Studio features
+simmodlr users currently have no in-app help beyond the Keyboard Shortcuts modal. When users have questions about:
+- How to use simmodlr features
 - DES modelling concepts (queues, events, distributions)
 - Best practices for their specific model
 
 They must leave the application and search external documentation.
 
-This sprint adds a **Help Assistant** — a conversational panel available from every view via the `?` button in the navigation bar. The assistant answers questions grounded in DES Studio's documentation and the user's current model context.
+This sprint adds a **Help Assistant** — a conversational panel available from every view via the `?` button in the navigation bar. The assistant answers questions grounded in simmodlr's documentation and the user's current model context.
 
 ---
 
@@ -30,8 +30,8 @@ This sprint adds a **Help Assistant** — a conversational panel available from 
 | F70.4 | Documentation grounding index | `docs/help-knowledge-base.json` |
 | F70.5 | Suggested questions logic | `src/ui/HelpAssistant.jsx` (internal) |
 | F70.6 | Integration in App.jsx | `src/App.jsx` |
-| F70.7 | Documentation update | `docs/DES_Studio_User_Guide.md` |
-| F70.8 | Build plan update | `docs/DES_Studio_Build_Plan.md` |
+| F70.7 | Documentation update | `docs/simmodlr_User_Guide.md` |
+| F70.8 | Build plan update | `docs/simmodlr_Build_Plan.md` |
 
 **Sequence:** F70.3 (prompt) and F70.4 (knowledge base) must complete before F70.1 (panel). F70.2, F70.5, F70.6 are independent once F70.1 is done. F70.7 and F70.8 run last.
 
@@ -274,14 +274,14 @@ Add a "?" button to the navigation bar that opens the Help Assistant.
 ┌─────────────────────────────────────────────────────────────┐
 │ CURRENT STRUCTURE:                                          │
 │                                                             │
-│ [DES STUDIO logo]  [flex spacer]  [avatar] [Settings]       │
+│ [simmodlr logo]  [flex spacer]  [avatar] [Settings]       │
 │ [Admin if isAdmin] [Sign Out]                               │
 │                                                             │
 │ ─── CHANGE ─────────────────────────────────────────────────│
 │                                                             │
 │ Add "?" button between avatar and Settings button:          │
 │                                                             │
-│ [DES STUDIO logo]  [flex spacer]  [avatar] [?] [Settings]   │
+│ [simmodlr logo]  [flex spacer]  [avatar] [?] [Settings]   │
 │ [Admin if isAdmin] [Sign Out]                               │
 │                                                             │
 │ ─── BEHAVIOUR ─────────────────────────────────────────────│
@@ -355,23 +355,23 @@ Add a "?" button to the navigation bar that opens the Help Assistant.
 ```
 Read src/llm/model-builder-prompts.js — understand prompt structure.
 Read src/llm/apiClient.js — understand callLLMOnce() call signature.
-Read docs/DES_Studio_User_Guide.md — extract key sections.
-Read docs/DES_Studio_Engineering_Spec.md — extract LLM schema section.
+Read docs/simmodlr_User_Guide.md — extract key sections.
+Read docs/simmodlr_Engineering_Spec.md — extract LLM schema section.
 
-Create a system prompt that grounds the LLM in DES Studio knowledge.
+Create a system prompt that grounds the LLM in simmodlr knowledge.
 
 ┌─────────────────────────────────────────────────────────────┐
 │ SYSTEM PROMPT STRUCTURE:                                    │
 │                                                             │
 │ 1. ROLE AND SCOPE                                           │
-│    "You are the DES Studio Help Assistant. You answer       │
-│    questions about how to use DES Studio and about discrete-│
+│    "You are the simmodlr Help Assistant. You answer       │
+│    questions about how to use simmodlr and about discrete-│
 │    event simulation modelling concepts. You are helpful,    │
 │    concise, and practical. You ground your answers in the   │
 │    documentation provided below."                           │
 │                                                             │
 │ 2. KNOWLEDGE BASE — USER GUIDE EXCERPTS                     │
-│    Embed key sections from DES_Studio_User_Guide.md:        │
+│    Embed key sections from simmodlr_User_Guide.md:        │
 │    - Getting started                                        │
 │    - Entity Types                                           │
 │    - Queues and disciplines                                 │
@@ -382,7 +382,7 @@ Create a system prompt that grounds the LLM in DES Studio knowledge.
 │    - Tips and best practices                                │
 │                                                             │
 │ 3. KNOWLEDGE BASE — ENGINEERING SPEC EXCERPTS               │
-│    Embed key concepts from DES_Studio_Engineering_Spec.md:  │
+│    Embed key concepts from simmodlr_Engineering_Spec.md:  │
 │    - Three-Phase Method overview                            │
 │    - Model JSON schema summary                              │
 │    - Macro vocabulary (ARRIVE, ASSIGN, COMPLETE, etc.)      │
@@ -409,10 +409,10 @@ Create a system prompt that grounds the LLM in DES Studio knowledge.
 │    - Reference specific tabs, buttons, and fields by name   │
 │    - If a question is outside your scope (e.g. "How do I    │
 │      install Python?"), politely explain you can only help  │
-│      with DES Studio and DES modelling                      │
+│      with simmodlr and DES modelling                      │
 │                                                             │
 │ 7. SCOPE BOUNDARIES                                         │
-│    - You answer questions about HOW TO USE DES Studio       │
+│    - You answer questions about HOW TO USE simmodlr       │
 │    - You answer questions about DES MODELLING CONCEPTS      │
 │    - You do NOT analyse specific simulation results (that   │
 │      is the AI Insights panel's role in the Execute view)   │
@@ -434,7 +434,7 @@ Create a system prompt that grounds the LLM in DES Studio knowledge.
 │ Add tests (tests/llm/help-assistant-prompt.test.js):        │
 │                                                             │
 │   - buildHelpAssistantSystemPrompt() returns a string       │
-│   - Prompt contains "DES Studio Help Assistant"             │
+│   - Prompt contains "simmodlr Help Assistant"             │
 │   - Prompt contains User Guide excerpts                     │
 │   - Prompt contains Engineering Spec excerpts               │
 │   - Prompt contains LLM schema (macros, distributions)      │
@@ -505,8 +505,8 @@ sections for embedding in the LLM prompt.
 │ ─── GENERATION SCRIPT (OPTIONAL) ──────────────────────────│
 │                                                             │
 │ Create a Node script (scripts/generate-help-kb.js) that:    │
-│ 1. Reads docs/DES_Studio_User_Guide.md                      │
-│ 2. Reads docs/DES_Studio_Engineering_Spec.md                │
+│ 1. Reads docs/simmodlr_User_Guide.md                      │
+│ 2. Reads docs/simmodlr_Engineering_Spec.md                │
 │ 3. Extracts relevant sections by heading match              │
 │ 4. Writes docs/help-knowledge-base.json                     │
 │                                                             │
@@ -679,10 +679,10 @@ Read src/ui/HelpAssistant.jsx (after F70.1 is complete).
 
 ## F70.7 — Documentation Update
 
-**Files:** `docs/DES_Studio_User_Guide.md`
+**Files:** `docs/simmodlr_User_Guide.md`
 
 ```
-Read docs/DES_Studio_User_Guide.md in full.
+Read docs/simmodlr_User_Guide.md in full.
 
 Add a new section §2.X covering the Help Assistant.
 
@@ -696,7 +696,7 @@ Add a new section §2.X covering the Help Assistant.
 │ ## Help Assistant                                           │
 │                                                             │
 │ The Help Assistant is a conversational panel that answers   │
-│ questions about DES Studio at any point during your         │
+│ questions about simmodlr at any point during your         │
 │ session. It is available from every view via the **?**      │
 │ button in the navigation bar.                               │
 │                                                             │
@@ -710,7 +710,7 @@ Add a new section §2.X covering the Help Assistant.
 │                                                             │
 │ Type your question in the input field and press **Enter**   │
 │ or click **Send**. The assistant streams a response         │
-│ grounded in DES Studio's documentation and your current     │
+│ grounded in simmodlr's documentation and your current     │
 │ model context.                                              │
 │                                                             │
 │ Example questions:                                          │
@@ -739,7 +739,7 @@ Add a new section §2.X covering the Help Assistant.
 │ ### Relationship to AI Insights                             │
 │                                                             │
 │ The Help Assistant answers questions about **how to use     │
-│ DES Studio** and **modelling concepts**. The AI Insights    │
+│ simmodlr** and **modelling concepts**. The AI Insights    │
 │ panel (available in the Execute view after a run)           │
 │ analyses **your specific simulation results** —             │
 │ interpreting KPIs, suggesting model improvements, and       │
@@ -768,10 +768,10 @@ Add a new section §2.X covering the Help Assistant.
 
 ## F70.8 — Build Plan Update
 
-**File:** `docs/DES_Studio_Build_Plan.md`
+**File:** `docs/simmodlr_Build_Plan.md`
 
 ```
-Read docs/DES_Studio_Build_Plan.md in full.
+Read docs/simmodlr_Build_Plan.md in full.
 
 ┌─────────────────────────────────────────────────────────────┐
 │ STEP 1: UPDATE MERMAID FLOWCHART                            │
@@ -862,7 +862,7 @@ npm run build
 ### Manual verification checklist (run in browser against dev server)
 
 ```
-1.  Open DES Studio, sign in
+1.  Open simmodlr, sign in
 2.  Verify "?" button visible in top-right navigation bar
 3.  Click "?" — Help Assistant panel slides in from right
 4.  Verify 3-4 suggested questions shown as chips
@@ -891,8 +891,8 @@ npm run build
 - [ ] Full test suite passes with zero failures (`npm test -- --run`)
 - [ ] Production build succeeds (`npm run build`)
 - [ ] Manual verification checklist completed in browser
-- [ ] `docs/DES_Studio_Build_Plan.md` updated with sprint entry and history
-- [ ] `docs/DES_Studio_User_Guide.md` §2.X added
+- [ ] `docs/simmodlr_Build_Plan.md` updated with sprint entry and history
+- [ ] `docs/simmodlr_User_Guide.md` §2.X added
 - [ ] `docs/help-knowledge-base.json` created
 - [ ] No engine, schema, or dependency changes introduced
 

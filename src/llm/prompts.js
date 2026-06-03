@@ -1188,7 +1188,7 @@ export function buildModelQueryPrompt(question, model = {}, history = []) {
     const queues    = (model.queues || []).map(q => q.name).join(', ') || 'none';
     const bEvents   = (model.bEvents || []).slice(0, 8).map(ev => ev.name).join(', ') || 'none';
     const goals     = (model.goals || []).map(g => `${g.label}: target ${g.targetValue} ${g.metric}`).join('; ') || 'none';
-    systemContent = `You are assisting a simulation modeller in DES Studio.
+    systemContent = `You are assisting a simulation modeller in simmodlr.
 
 Model: ${model.name || 'Unnamed'}
 ${model.description ? `Description: ${model.description}\n` : ''}Entity types (customer): ${customers}
@@ -1199,7 +1199,7 @@ Performance goals: ${goals}
 
 Answer questions about this model concisely and precisely. If a question requires running the simulation to answer definitively, say so. Do not invent data not present in the model definition above.`;
   } else {
-    systemContent = `You are assisting a simulation modeller in DES Studio. Answer questions about the model described earlier in this conversation concisely and precisely. Do not invent data.`;
+    systemContent = `You are assisting a simulation modeller in simmodlr. Answer questions about the model described earlier in this conversation concisely and precisely. Do not invent data.`;
   }
 
   const messages = [

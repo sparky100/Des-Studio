@@ -43,7 +43,7 @@ Scope: simulation engine correctness, event scheduling, queue handling, entity l
 
 ## Executive Summary
 
-DES Studio has a recognizable and mostly well-separated discrete-event simulation architecture. The core engine lives under `src/engine/`, the execute UI calls the engine through `buildEngine()` and replication helpers, and persistence is concentrated in `src/db/models.js`. The current implementation preserves the central Three-Phase Method shape: Phase A clock advance, Phase B all-due event firing with tolerance, and Phase C priority restart after each C-event fire.
+simmodlr has a recognizable and mostly well-separated discrete-event simulation architecture. The core engine lives under `src/engine/`, the execute UI calls the engine through `buildEngine()` and replication helpers, and persistence is concentrated in `src/db/models.js`. The current implementation preserves the central Three-Phase Method shape: Phase A clock advance, Phase B all-due event firing with tolerance, and Phase C priority restart after each C-event fire.
 
 The highest risks are narrower than a system rewrite:
 
@@ -239,6 +239,6 @@ Major gaps to add:
 
 ## Final Architectural Assessment
 
-DES Studio's simulation architecture is viable and already has several strong properties: deterministic seeded sampling in engine code, a visible Three-Phase loop, sorted FEL insertion after generated events, queue-discipline support, worker-based replications, and a mostly clean separation between engine and UI.
+simmodlr's simulation architecture is viable and already has several strong properties: deterministic seeded sampling in engine code, a visible Three-Phase loop, sorted FEL insertion after generated events, queue-discipline support, worker-based replications, and a mostly clean separation between engine and UI.
 
 The architecture now needs invariant hardening rather than broad replacement. The best next step is to make the engine's implicit lifecycle and context rules explicit, then carry correctness metadata all the way to UI and persistence. After that, persistence should be reconciled with the canonical `model_json` contract so future simulation constructs can be added without losing model state between authoring modes.

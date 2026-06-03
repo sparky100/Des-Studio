@@ -48,9 +48,9 @@ Items correctly implemented in prior pass (carried forward):
 | `tests/llm/model-builder-prompts.test.js` | Added 6 tests: PHASE A/B/C structural markers, confirm intent present, no-cap assertion, suggestions[] specified |
 | `tests/ui/editors/model-diff-preview.test.jsx` | Added 3 tests: WHO ARRIVES sentence with entity/distribution, null llmExplanation omitted, RESOURCES per-server count |
 | `tests/ui/editors/ai-generated-model-panel.test.jsx` | Added 2 tests: no chips after confirm response, single-item chip array |
-| `docs/DES_Studio_User_Guide.md` | §2.X rewritten: spec-exact WHAT IT DOES paragraph, three numbered steps, four tips |
-| `docs/DES_Studio_Engineering_Spec.md` | §6.10 updated: confirm intent spec-exact wording, suggestions[] type spec, Phase A/B/C + Refine + Explain mode descriptions, no cap language |
-| `docs/DES_Studio_Build_Plan.md` | Sprint 8C entry section added; Sprint History row → ✅ Complete (48 tests); doc history v1.79 updated; forward roadmap row added |
+| `docs/simmodlr_User_Guide.md` | §2.X rewritten: spec-exact WHAT IT DOES paragraph, three numbered steps, four tips |
+| `docs/simmodlr_Engineering_Spec.md` | §6.10 updated: confirm intent spec-exact wording, suggestions[] type spec, Phase A/B/C + Refine + Explain mode descriptions, no cap language |
+| `docs/simmodlr_Build_Plan.md` | Sprint 8C entry section added; Sprint History row → ✅ Complete (48 tests); doc history v1.79 updated; forward roadmap row added |
 | `docs/reviews/sprint-8c-plan.md` | Created — implementation plan with precise code instructions and all 11 test specs |
 | `docs/reviews/sprint-8c-closure.md` | This document |
 

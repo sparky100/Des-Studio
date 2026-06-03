@@ -76,5 +76,5 @@ The 680 px cap was introduced for a narrower viewport assumption. The new formul
 | `src/ui/visual-designer/VisualNodeInspector.jsx` | Added `onClose` prop; close button in inspector header |
 | `src/ui/visual-designer/FlowDiagramReactFlow.jsx` | Canvas height formula updated |
 | `docs/reviews/sprint-78-plan.md` | This document |
-| `docs/DES_Studio_Build_Plan.md` | Sprint 78 entry added to roadmap snapshot |
+| `docs/simmodlr_Build_Plan.md` | Sprint 78 entry added to roadmap snapshot |
 | `AGENTS.md` | Current sprint pointer updated to Sprint 78 |

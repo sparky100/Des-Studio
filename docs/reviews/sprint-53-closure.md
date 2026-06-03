@@ -53,4 +53,4 @@
 
 ## Next Sprint
 
-Sprint 54 — (see `docs/DES_Studio_Build_Plan.md` for upcoming sprints)
+Sprint 54 — (see `docs/simmodlr_Build_Plan.md` for upcoming sprints)

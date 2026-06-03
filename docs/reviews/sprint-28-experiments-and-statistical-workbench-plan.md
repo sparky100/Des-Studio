@@ -15,7 +15,7 @@ Builds on:
 
 ## Goal
 
-Move DES Studio from "can run experiments" to "can support a serious simulation study workflow."
+Move simmodlr from "can run experiments" to "can support a serious simulation study workflow."
 
 Sprint 28 gives modellers the ability to save and restore named experiment configurations, compare runs against each other with confidence, understand CI precision at a glance, diagnose transient behaviour, flag anomalous replications, and organise their run history in a meaningful way.
 
@@ -706,7 +706,7 @@ Sprint 28 delivered a full study-workflow upgrade across two commits on `claude/
 - [x] CI table shows relative precision and sample-size guidance
 - [x] Per-rep table shows outlier flags (code complete; browser verification by QA)
 - [x] Run history search, tags, archive, and delete (code complete; browser verification by QA)
-- [ ] AGENTS.md and DES_Studio_Build_Plan.md updated
+- [ ] AGENTS.md and simmodlr_Build_Plan.md updated
 
 ### Final Test Count
 

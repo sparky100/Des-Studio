@@ -1,4 +1,4 @@
-# DES Studio — UI/UX Review Report
+# simmodlr — UI/UX Review Report
 
 > Reviewed: 2026-05-16  
 > Scope: Full application source — `src/ui/**`, `src/App.jsx`, `index.html`  
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-DES Studio is a purpose-built discrete-event simulation workbench with a coherent dark theme, strong semantic colour coding, and a well-considered token architecture. The product targets technical users (operations researchers, engineers, modellers) and the aesthetic — dense monospace typography, high-contrast dark palette, simulation-domain colour semantics — is appropriate for that audience.
+simmodlr is a purpose-built discrete-event simulation workbench with a coherent dark theme, strong semantic colour coding, and a well-considered token architecture. The product targets technical users (operations researchers, engineers, modellers) and the aesthetic — dense monospace typography, high-contrast dark palette, simulation-domain colour semantics — is appropriate for that audience.
 
 The application has clearly been built iteratively over many sprints, and that shows. The design system foundation is solid but incomplete: colours are well-tokenised, but spacing, typography scale, border-radius, z-index, and shadows are all hardcoded ad-hoc throughout ~18,000 lines of JSX. Three "god components" (App.jsx 863 lines, ModelDetail.jsx 1,410 lines, ExecutePanel/index.jsx ~1,200 lines) carry a disproportionate share of UI logic. Accessibility is partially addressed but has systematic gaps that would fail a WCAG 2.1 AA audit.
 

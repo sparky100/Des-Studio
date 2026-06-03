@@ -13,7 +13,7 @@ Builds on:
 
 ## Goal
 
-Expand DES Studio beyond its current process-flow core with richer resource and waiting semantics, while preserving:
+Expand simmodlr beyond its current process-flow core with richer resource and waiting semantics, while preserving:
 
 - the browser-native JavaScript runtime
 - Pidd's Three-Phase implementation
@@ -265,7 +265,7 @@ This section captures the Sprint 26 resource/waiting contract in one place. It i
 
 - Audited the validation layer and found no immediate missing blocking rule specific to the Sprint 26 contract.
 - Added an authoritative contract snapshot to this sprint plan so waiting/resource/cancellation semantics are no longer only implied by code and tests.
-- Added modeller-facing guidance to `docs/DES_Studio_User_Guide.md`, including the explicit note that first-class preemption/interruption is still unsupported.
+- Added modeller-facing guidance to `docs/simmodlr_User_Guide.md`, including the explicit note that first-class preemption/interruption is still unsupported.
 
 ### Risks / issues
 
@@ -301,10 +301,10 @@ This section captures the Sprint 26 resource/waiting contract in one place. It i
 ### Progress notes
 
 - Added as an explicit sprint-close deliverable at user request.
-- Created [sprint-26-capability-guide.md](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/reviews/sprint-26-capability-guide.md).
+- Created [sprint-26-capability-guide.md](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/reviews/sprint-26-capability-guide.md).
 - Added focused sample import models:
-  - [priority-handoff-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/examples/sprint-26/priority-handoff-demo.json)
-  - [recirculation-exit-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/examples/sprint-26/recirculation-exit-demo.json)
+  - [priority-handoff-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/examples/sprint-26/priority-handoff-demo.json)
+  - [recirculation-exit-demo.json](/C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/examples/sprint-26/recirculation-exit-demo.json)
 - The guide also points to broader existing templates that already demonstrate Sprint 26-relevant patterns.
 
 ### Risks / issues
@@ -317,7 +317,7 @@ Architectural issues must be recorded in ADR form if they change or may change l
 
 | ID | Status | Issue | ADR | Notes |
 |---|---|---|---|---|
-| A26.1 | ✅ Deferred | Should DES Studio support interruption/preemption as a first-class engine concept now, or defer it explicitly? | `ADR-014` | Deferred explicitly so the requirement is preserved without destabilizing Sprint 26. |
+| A26.1 | ✅ Deferred | Should simmodlr support interruption/preemption as a first-class engine concept now, or defer it explicitly? | `ADR-014` | Deferred explicitly so the requirement is preserved without destabilizing Sprint 26. |
 | A26.2 | ✅ Recorded | Should resource claims remain macro-driven only, or evolve toward a more explicit engine-level abstraction? | `ADR-013` | Accepted interim answer: keep the entity/server lifecycle model, but make active claims explicit and mirrored. |
 | A26.3 | ✅ Recorded | What is the canonical ownership model for waiting entities across queue membership, arbitration, and lifecycle state? | `ADR-013` | Waiting ownership is now explicit through `waitingFor`, `waitingSince`, and helper-led lifecycle transitions. |
 

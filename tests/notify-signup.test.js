@@ -14,17 +14,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 function buildEmailPayload(toEmail, userEmail, userId, signupAt) {
   const signupDate = new Date(signupAt).toUTCString();
   return {
-    from: 'DES Studio <noreply@updates.simmodlr.app>',
+    from: 'simmodlr <noreply@updates.simmodlr.app>',
     to: [toEmail],
     subject: `New signup: ${userEmail}`,
     text: [
-      'New user signup on DES Studio',
+      'New user signup on simmodlr',
       '',
       `Email:     ${userEmail}`,
       `User ID:   ${userId}`,
       `Signed up: ${signupDate}`,
       '',
-      '— DES Studio Operator Notification',
+      '— simmodlr Operator Notification',
     ].join('\n'),
   };
 }
@@ -32,7 +32,7 @@ function buildEmailPayload(toEmail, userEmail, userId, signupAt) {
 function buildSlackPayload(userEmail, signupAt) {
   const signupDate = new Date(signupAt).toUTCString();
   return {
-    text: `🎉 New DES Studio signup: *${userEmail}* at ${signupDate}`,
+    text: `🎉 New simmodlr signup: *${userEmail}* at ${signupDate}`,
   };
 }
 
@@ -84,7 +84,7 @@ describe('notify-new-signup — email payload construction', () => {
 
   it('email body contains operator signature', () => {
     const payload = buildEmailPayload(ADMIN_EMAIL, USER_EMAIL, USER_ID, SIGNUP_AT);
-    expect(payload.text).toContain('DES Studio Operator Notification');
+    expect(payload.text).toContain('simmodlr Operator Notification');
   });
 
   it('from address is the platform noreply', () => {

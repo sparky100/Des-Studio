@@ -12,7 +12,7 @@ The visual designer design document originally proposed a phased UI path:
 - add a split-pane SVG hybrid designer
 - later replace the SVG diagram with a React Flow canvas
 
-That plan was useful when the visual designer was considered mainly as an incremental extension of the tab editor. The product direction has since changed. DES Studio now needs three distinct ways to create and edit models:
+That plan was useful when the visual designer was considered mainly as an incremental extension of the tab editor. The product direction has since changed. simmodlr now needs three distinct ways to create and edit models:
 
 - form/tab authoring for precise manual control
 - AI-generated model authoring from natural language
@@ -22,7 +22,7 @@ Building an interim SVG hybrid would create a second visual authoring surface th
 
 ## Decision
 
-DES Studio will support three first-class authoring modes over one canonical `model_json` format:
+simmodlr will support three first-class authoring modes over one canonical `model_json` format:
 
 - Forms/Tabs
 - AI Generated Model
@@ -58,7 +58,7 @@ The split-pane SVG hybrid designer is retired as a required implementation phase
 
 ## Rules added to CLAUDE.md
 
-- DES Studio has one canonical model format: `model_json`.
+- simmodlr has one canonical model format: `model_json`.
 - Forms/Tabs, AI Generated Model, and Visual Designer are authoring modes over the same model data.
 - Do not implement the old split-pane SVG hybrid designer as a required bridge phase.
 - The visual designer should be planned as the final graph-first authoring surface, not as a temporary SVG renderer.

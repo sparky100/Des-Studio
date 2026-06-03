@@ -802,7 +802,7 @@ export function validateModel(model) {
         const mean = parseFloat(p.mean);
         if (Number.isFinite(mean) && mean < 0.001) {
           warn('W-CAP-02',
-            `B-Event '${b.name || b.id}' schedule ${j + 1}: Exponential mean interval = ${mean} (< 0.001). DES Studio models discrete individual entities. For continuous flow or aggregate quantities, consider SD Studio.`,
+            `B-Event '${b.name || b.id}' schedule ${j + 1}: Exponential mean interval = ${mean} (< 0.001). simmodlr models discrete individual entities. For continuous flow or aggregate quantities, consider SD Studio.`,
             'bevents');
         }
       }

@@ -402,7 +402,7 @@ export function HelpAssistant({
             Help Assistant
           </div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-            Ask about DES Studio or modelling concepts
+            Ask about simmodlr or modelling concepts
           </div>
         </div>
         <button

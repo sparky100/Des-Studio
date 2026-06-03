@@ -112,4 +112,4 @@ y = Math.round(pos.y - NODE_HEIGHT / 2)
 - [x] Dagre centre → ReactFlow top-left coordinate conversion applied
 - [x] All 12 graph tests pass
 - [x] Sprint plan and closure committed to `docs/reviews/`
-- [x] `AGENTS.md` and `DES_Studio_Build_Plan.md` updated
+- [x] `AGENTS.md` and `simmodlr_Build_Plan.md` updated

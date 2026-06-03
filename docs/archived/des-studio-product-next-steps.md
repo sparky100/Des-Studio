@@ -1,13 +1,13 @@
-# DES Studio — Product Next Steps
+# simmodlr — Product Next Steps
 
 **Date:** 2026-05-08  
-**Purpose:** Strategic recommendations for turning DES Studio from a capable prototype into a differentiated product.
+**Purpose:** Strategic recommendations for turning simmodlr from a capable prototype into a differentiated product.
 
 ---
 
 ## Core Strategy: Don't Compete Head-On
 
-Do not try to beat AnyLogic, Simio, or Arena at their own game. They have 20+ year head starts, field validation across thousands of sites, and budgets that dwarf this project. Instead, lean into what makes DES Studio unique:
+Do not try to beat AnyLogic, Simio, or Arena at their own game. They have 20+ year head starts, field validation across thousands of sites, and budgets that dwarf this project. Instead, lean into what makes simmodlr unique:
 
 1. **Zero install, browser-based** — share a link, not an installer
 2. **AI-native** — natural language model authoring + run analysis
@@ -30,23 +30,23 @@ Sprint 12 (entity batching + recirculation) closes the last modelling vocabulary
 
 ### 1. Make AI the Hero Feature
 
-The AI model authoring is what separates DES Studio from every other tool. Double down:
+The AI model authoring is what separates simmodlr from every other tool. Double down:
 
 - **Chat-based model refinement.** Let users say "add a second server" and have the AI apply the change to their existing model, not just generate from scratch.
 - **AI scenario suggestions.** After a run, AI should automatically suggest what to try next: "Your triage nurse is the bottleneck. Try adding a second nurse to reduce mean wait from 8.2 to ~4.5 minutes."
 - **Natural language results queries.** "Which queue had the longest wait?" answered directly from the results object — no need to navigate tabs.
 
-**Why this wins:** No competitor has this. Arena/Simio/AnyLogic users still manually interpret output and manually design experiments. DES Studio can offer an AI analyst that connects model → run → insight → next experiment in one loop.
+**Why this wins:** No competitor has this. Arena/Simio/AnyLogic users still manually interpret output and manually design experiments. simmodlr can offer an AI analyst that connects model → run → insight → next experiment in one loop.
 
 ### 2. Drop-in Prototyping — The Killer Use Case
 
-Position DES Studio as the tool an analyst uses *before* deciding whether to build a full AnyLogic model:
+Position simmodlr as the tool an analyst uses *before* deciding whether to build a full AnyLogic model:
 
 - **Export to AnyLogic/Simio/Arena.** Export the canonical `model_json` as a report or intermediate format. This removes the fear of lock-in. "Prototype here; build the production model in your tool of choice."
 - **Pre-built template gallery.** 5–10 curated templates (call center, ER triage, factory line, airport security, data center, fast food drive-through, warehouse picking, outpatient clinic, construction logistics, board game). Each template is a complete runnable model with default parameters.
 - **30-second demo loop.** A new user should go from landing page → running a template → seeing results in under 30 seconds. Currently you need to create an account, create a model, configure B-Events, and hit run. That's too many steps.
 
-**Why this wins:** Spreadsheet modellers currently build fragile Monte Carlo sims in Excel. DES Studio offers a purpose-built tool that is easier to start with than Arena and more powerful than Excel, with no installation friction.
+**Why this wins:** Spreadsheet modellers currently build fragile Monte Carlo sims in Excel. simmodlr offers a purpose-built tool that is easier to start with than Arena and more powerful than Excel, with no installation friction.
 
 ### 3. One-Page Model Dashboard
 
@@ -97,7 +97,7 @@ The fastest way to grow the user base is to reduce the cost of switching from Ex
 
 - A Supabase-backed **public template gallery**. Users publish templates; other users fork and run.
 - **Model cloning count** as a lightweight social proof metric
-- Featured templates by the DES Studio team
+- Featured templates by the simmodlr team
 
 ### 8. Team Workspaces
 
@@ -113,7 +113,7 @@ This is ADR-008's deferred SaaS tenancy. The key insight: you don't need full en
 
 | Feature                        | Why Not                                                          |
 | ------------------------------ | ---------------------------------------------------------------- |
-| 3D visualization               | Entire product on its own. DES Studio should never compete here. |
+| 3D visualization               | Entire product on its own. simmodlr should never compete here. |
 | Custom scripting / plug-in API | Reintroduces security risk. Kills the "no code" promise.         |
 | Mobile app                     | A DES model editor on a phone is a product mistake.              |
 | Real-time animation syncing    | The current step-based execute canvas is fine for analysis.      |
@@ -123,7 +123,7 @@ This is ADR-008's deferred SaaS tenancy. The key insight: you don't need full en
 
 ## Summary: The Pitch
 
-> "DES Studio is to simulation modelling what Figma is to design — browser-native, collaborative, AI-assisted. Prototype a queueing model in 5 minutes, share the results with a URL, and export for production use in AnyLogic. No install, no license server, no learning curve."
+> "simmodlr is to simulation modelling what Figma is to design — browser-native, collaborative, AI-assisted. Prototype a queueing model in 5 minutes, share the results with a URL, and export for production use in AnyLogic. No install, no license server, no learning curve."
 
 The goal is not to replace AnyLogic. The goal is to **expand the market** to people who currently use Excel for stochastic modelling because the professional tools are too expensive, too complex, or too hard to share.
 

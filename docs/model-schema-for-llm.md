@@ -1,4 +1,4 @@
-# DES Studio — Model Schema Reference for LLM Generation
+# simmodlr — Model Schema Reference for LLM Generation
 
 **Version:** 1.4.0
 **Date:** 2026-06-03
@@ -16,14 +16,14 @@
 
 ---
 
-**Purpose:** This file is the authoritative specification for generating valid DES Studio model JSON.
+**Purpose:** This file is the authoritative specification for generating valid simmodlr model JSON.
 Paste it (or reference it) as context when prompting any LLM to create or modify a model.
 
 ---
 
 ## TOP LLM MISTAKES
 
-These are the most common errors LLMs make when generating DES Studio models.
+These are the most common errors LLMs make when generating simmodlr models.
 Read this before writing any model JSON.
 
 | # | Mistake | Fix |
@@ -652,7 +652,7 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 
 ### 6.1 Condition Formats — Two Different Systems
 
-**There are two condition formats in DES Studio. They are NOT interchangeable.**
+**There are two condition formats in simmodlr. They are NOT interchangeable.**
 
 #### Format A — C-event `condition` string (global state predicate)
 
@@ -779,7 +779,7 @@ Performance targets for the AI analysis and optimisation features.
 
 ## 10. Validation Rules Summary
 
-DES Studio runs two validation layers before every simulation. Both block the run on errors.
+simmodlr runs two validation layers before every simulation. Both block the run on errors.
 All generated model JSON MUST pass every blocking rule below.
 
 ### Blocking Errors (run prevented)
@@ -864,7 +864,7 @@ All generated model JSON MUST pass every blocking rule below.
 
 ## 16. Patterns & Anti-Patterns
 
-Common modelling patterns and the mistakes to avoid when generating DES Studio models.
+Common modelling patterns and the mistakes to avoid when generating simmodlr models.
 
 ### 16.1 Terminal Completion (V30, V38)
 
@@ -1327,7 +1327,7 @@ curl -s -X POST \
 }
 ```
 
-- `model` (required): a DES Studio model JSON object matching the schema in §1–§13
+- `model` (required): a simmodlr model JSON object matching the schema in §1–§13
 - `name` (optional): if provided, overrides the `name` field inside `model`
 
 ### Success Response — 201
@@ -1341,7 +1341,7 @@ curl -s -X POST \
 ```
 
 The model is saved as a private model owned by the authenticated user. Open it in the UI at:
-`https://<your-des-studio-url>/#model/<modelId>`
+`https://<your-simmodlr-url>/#model/<modelId>`
 
 ### Error Responses
 
@@ -1640,4 +1640,4 @@ Bind a specific distribution parameter to a field from a live source:
 
 > **Security note:** `authSecret` fields must always contain `{{env.VAR}}` placeholders, never literal tokens or passwords. The actual credential is entered by the user in the browser at session time and is never stored in the database or included in model exports.
 
-For full integration guidance see `docs/DES_Studio_RealTime_Integration_Guide.md`.
+For full integration guidance see `docs/simmodlr_RealTime_Integration_Guide.md`.

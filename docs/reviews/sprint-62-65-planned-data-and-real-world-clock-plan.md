@@ -144,7 +144,7 @@ The adapter fetches the endpoint, converts each activity to an entry in the arri
 | F63.5 | Schedule feed data source UI — type selector exposes `scheduleFeed`; additional fields: entityType, targetBEventId, timeField, attrMap editor | `src/ui/ModelDetail.jsx` (data source form) |
 | F63.6 | `attrMap` editor — key/value pairs mapping API response fields to entity attribute names | new small component |
 | F63.7 | `model-schema-for-llm.md` — add `entityId` convention, `scheduleFeed` type, `attrMap`, `targetBEventId` | `docs/model-schema-for-llm.md` |
-| F63.8 | User Guide — §6 planned data import: XLSX, timestamp conversion, entityId, schedule feed | `docs/DES_Studio_User_Guide.md` |
+| F63.8 | User Guide — §6 planned data import: XLSX, timestamp conversion, entityId, schedule feed | `docs/simmodlr_User_Guide.md` |
 | F63.9 | Vitest: `ScheduleFeedAdapter` — mock endpoint, assert rows[] shape, timestamp conversion, authSecret resolution | `src/engine/adapters/__tests__/` |
 | F63.10 | Vitest: XLSX import — column mapping, header detection, entityId assignment | `src/ui/shared/__tests__/` |
 

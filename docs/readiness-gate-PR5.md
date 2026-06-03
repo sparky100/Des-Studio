@@ -1,4 +1,4 @@
-# DES Studio — Professional Readiness Gate Assessment
+# simmodlr — Professional Readiness Gate Assessment
 Date: 2026-05-20  |  Sprint: Post-PR5  |  Assessor: opencode
 
 ## R1 — Numerical Accuracy
@@ -74,7 +74,7 @@ Export button: present in Execute panel — `handleExportReport()` in `execute/i
 
 **PASS:** R1, R2, R3, R4, and R5 all pass.
 
-"DES Studio v55a satisfies all five requirements of the Studio Platform Professional Readiness Standard v1.0. Results may be presented in professional consultancy work."
+"simmodlr v55a satisfies all five requirements of the Studio Platform Professional Readiness Standard v1.0. Results may be presented in professional consultancy work."
 
 Recommended action: `git tag v-readiness-1.0`
 

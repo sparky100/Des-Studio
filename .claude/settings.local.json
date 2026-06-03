@@ -11,7 +11,7 @@
       "Bash(node_modules/.bin/vitest run *)",
       "Bash(node -e \"import\\('./node_modules/vitest/dist/node.js'\\).then\\(v => console.log\\('ok'\\)\\)\")",
       "Bash(npm test *)",
-      "Bash(cmd /c \"cd c:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\Des-Studio && npm test -- --run 2>&1\")",
+      "Bash(cmd /c \"cd c:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\simmodlr && npm test -- --run 2>&1\")",
       "Bash(node_modules/.bin/vitest.cmd run *)",
       "Bash(node --max-old-space-size=2048 -e ' *)",
       "Bash(node -e ' *)",
@@ -21,17 +21,18 @@
       "Bash(git commit --amend -m ' *)",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('@xyflow/react:', p.dependencies['@xyflow/react'] || p.devDependencies?.['@xyflow/react']\\)\")",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('@xyflow/react:', p.dependencies['@xyflow/react']\\)\")",
-      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\Des-Studio\\\\src\\\\ui\" -Directory)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\simmodlr\\\\src\\\\ui\" -Directory)",
       "Bash(grep -v \"^$\")",
       "Bash(git commit *)",
       "Bash(xargs grep -l \"AI\\\\|aiGenerated\\\\|useAi\")",
       "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__list_projects",
       "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__apply_migration",
       "mcp__bd963c1b-bd7e-4f9b-80bf-ebeffa1cb9ed__execute_sql",
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\Des-Studio\" -Depth 2 -Directory)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\simmodlr\" -Depth 2 -Directory)",
       "Bash(Select-Object FullName)",
       "Bash(awk '{print $NF}')",
-      "Bash(grep -E \"=.*[0-9]{2,}\")"
+      "Bash(grep -E \"=.*[0-9]{2,}\")",
+      "Bash(find \"C:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\simmodlr\\\\docs\" -name \"*library*\" -o -name \"*browse*\" -o -name \"*discover*\" 2>nul)"
     ]
   }
 }

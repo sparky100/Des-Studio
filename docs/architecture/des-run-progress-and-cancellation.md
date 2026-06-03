@@ -40,18 +40,18 @@ Scope: Design only. No application logic changed in this task.
 
 ### Execution paths today
 
-- Single-run execution is synchronous on the browser main thread in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:602). The panel builds an engine and immediately calls `engine.runAll()`, then saves the finished result.
-- Multi-replication execution already uses browser workers through [src/engine/replication-runner.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/replication-runner.js:69) and [src/engine/worker.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/worker.js:3).
-- Batch progress already exists. The runner emits `{ completed, total, running, pending, cancelled, workerCount }` via `onProgress` in [src/engine/replication-runner.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/replication-runner.js:98) and the Execute panel renders that state from [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:473), [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:485), and [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:2265).
-- Batch cancellation already exists. The UI calls `runnerRef.current.cancel()` from [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:676), and the runner terminates active workers in [src/engine/replication-runner.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/engine/replication-runner.js:220).
-- Cancelled batch runs are not persisted today. The current handler sets UI state to cancelled and explicitly says results were not saved in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:581).
-- Failed replications are also not persisted as run records today. Failures surface through `onError` and return the UI to idle in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/ui/execute/index.jsx:575).
+- Single-run execution is synchronous on the browser main thread in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:602). The panel builds an engine and immediately calls `engine.runAll()`, then saves the finished result.
+- Multi-replication execution already uses browser workers through [src/engine/replication-runner.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/replication-runner.js:69) and [src/engine/worker.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/worker.js:3).
+- Batch progress already exists. The runner emits `{ completed, total, running, pending, cancelled, workerCount }` via `onProgress` in [src/engine/replication-runner.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/replication-runner.js:98) and the Execute panel renders that state from [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:473), [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:485), and [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:2265).
+- Batch cancellation already exists. The UI calls `runnerRef.current.cancel()` from [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:676), and the runner terminates active workers in [src/engine/replication-runner.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/engine/replication-runner.js:220).
+- Cancelled batch runs are not persisted today. The current handler sets UI state to cancelled and explicitly says results were not saved in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:581).
+- Failed replications are also not persisted as run records today. Failures surface through `onError` and return the UI to idle in [src/ui/execute/index.jsx](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/ui/execute/index.jsx:575).
 
 ### Storage behaviour today
 
-- Completed runs are stored as `simulation_runs.results_json` through [src/db/models.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/db/models.js:351).
+- Completed runs are stored as `simulation_runs.results_json` through [src/db/models.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/db/models.js:351).
 - There is no explicit run status column or status enum in the current save path. The persisted row assumes a completed result payload.
-- Run history fetches only the latest completed rows and does not currently distinguish cancelled, partial, or failed states in [src/db/models.js](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/src/db/models.js:457).
+- Run history fetches only the latest completed rows and does not currently distinguish cancelled, partial, or failed states in [src/db/models.js](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/src/db/models.js:457).
 
 ### Practical implication
 
@@ -293,7 +293,7 @@ That would make run-history filtering and support diagnostics easier than relyin
 
 #### Future dedicated worker
 
-The same progress envelope can be reused for the architecture proposed in [des-dedicated-worker-architecture.md](C:/Users/parki/OneDrive/Documents/Projects/Des-Studio/docs/architecture/des-dedicated-worker-architecture.md).
+The same progress envelope can be reused for the architecture proposed in [des-dedicated-worker-architecture.md](C:/Users/parki/OneDrive/Documents/Projects/simmodlr/docs/architecture/des-dedicated-worker-architecture.md).
 
 - Browser worker:
   - `postMessage({ type: "RUN_PROGRESS", payload })`
@@ -353,7 +353,7 @@ This keeps the UI contract stable even if the execution location changes.
 
 ## Recommendation
 
-The codebase already has a clear extension point for batch progress and cancellation, so that part should be evolved in place. The larger design decision is single-run execution: if DES Studio wants trustworthy progress and cancellation for long runs, the safest path is to add cooperative engine checkpoints and then move single-run execution onto the same worker-style messaging contract already used for replication batches.
+The codebase already has a clear extension point for batch progress and cancellation, so that part should be evolved in place. The larger design decision is single-run execution: if simmodlr wants trustworthy progress and cancellation for long runs, the safest path is to add cooperative engine checkpoints and then move single-run execution onto the same worker-style messaging contract already used for replication batches.
 
 ## Verification
 

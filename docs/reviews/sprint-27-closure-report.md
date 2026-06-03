@@ -6,11 +6,11 @@ Plan reference: `docs/reviews/sprint-27-simulation-debugging-and-explainability-
 
 ## Sprint Summary
 
-Sprint 27 added first-class simulation debugging and explainability support to DES Studio. Modellers can now trace why events fired, why entities are waiting, why queue/server selections occurred, and navigate between the canvas, logs, and entity inspection surfaces without losing run context.
+Sprint 27 added first-class simulation debugging and explainability support to simmodlr. Modellers can now trace why events fired, why entities are waiting, why queue/server selections occurred, and navigate between the canvas, logs, and entity inspection surfaces without losing run context.
 
 ## Goal
 
-Make DES Studio easier to trust by adding first-class simulation debugging and explainability support around the existing engine and execute surfaces.
+Make simmodlr easier to trust by adding first-class simulation debugging and explainability support around the existing engine and execute surfaces.
 
 ## Delivery Status
 

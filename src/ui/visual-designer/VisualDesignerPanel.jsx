@@ -506,7 +506,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                   title={item.label}
                   aria-label={item.label}
                   onDragStart={e => {
-                    e.dataTransfer.setData("application/des-studio-node", item.type);
+                    e.dataTransfer.setData("application/simmodlr-node", item.type);
                     e.dataTransfer.effectAllowed = "copy";
                   }}
                   onClick={() => addNode(item.type)}
@@ -558,7 +558,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                   draggable={canEdit}
                   disabled={!canEdit}
                   onDragStart={e => {
-                    e.dataTransfer.setData("application/des-studio-node", item.type);
+                    e.dataTransfer.setData("application/simmodlr-node", item.type);
                     e.dataTransfer.effectAllowed = "copy";
                   }}
                   onClick={() => addNode(item.type)}

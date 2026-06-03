@@ -584,7 +584,7 @@ function SeriesDataPreview({ series }) {
   if (!points.length) return null;
   const th = label => <th key={label} scope="col" style={{ padding: "4px 8px", textAlign: "right", color: C.muted, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>{label}</th>;
   const td = (label, value, color = C.text) => <td key={label} style={{ padding: "4px 8px", textAlign: "right", color, fontFamily: FONT, fontSize: 10 }}>{value}</td>;
-  const filename = `des-studio-chart-${slugify(series.label)}.csv`;
+  const filename = `simmodlr-chart-${slugify(series.label)}.csv`;
   return (
     <DataPreviewShell summary={`See the numbers behind this chart (${points.length} points)`} onExport={() => downloadTextFile(buildSeriesCsv(series), filename)}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 260 }}>
@@ -613,7 +613,7 @@ function WaitValuesPreview({ dist }) {
   if (!values.length) return null;
   const th = label => <th key={label} scope="col" style={{ padding: "4px 8px", textAlign: "right", color: C.muted, fontFamily: FONT, fontSize: 11, fontWeight: 700 }}>{label}</th>;
   const td = (label, value, color = C.text) => <td key={label} style={{ padding: "4px 8px", textAlign: "right", color, fontFamily: FONT, fontSize: 10 }}>{value}</td>;
-  const filename = `des-studio-wait-samples-${slugify(dist.label)}.csv`;
+  const filename = `simmodlr-wait-samples-${slugify(dist.label)}.csv`;
   return (
     <DataPreviewShell summary={`See the waiting times behind this chart (${values.length} values)`} onExport={() => downloadTextFile(buildWaitValuesCsv(dist), filename)}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 220 }}>

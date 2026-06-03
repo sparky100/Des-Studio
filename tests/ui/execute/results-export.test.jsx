@@ -84,7 +84,7 @@ describe('results export helpers', () => {
     });
 
     expect(payload).toEqual(expect.objectContaining({
-      schema: 'des-studio.results.v1',
+      schema: 'simmodlr.results.v1',
       status: 'complete',
       exportedAt: '2026-05-04T12:00:00.000Z',
       results: singleResult,

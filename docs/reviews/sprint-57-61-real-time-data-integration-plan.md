@@ -8,7 +8,7 @@
 
 ## Overview
 
-DES Studio currently evaluates all simulation parameters from **static values** baked into the model at design time — distribution means, standard deviations, arrival rates, and service times are constants defined in `bEvents[].schedules[].distParams` and `cEvents[].cSchedules[].distParams`.
+simmodlr currently evaluates all simulation parameters from **static values** baked into the model at design time — distribution means, standard deviations, arrival rates, and service times are constants defined in `bEvents[].schedules[].distParams` and `cEvents[].cSchedules[].distParams`.
 
 This plan specifies the architecture and delivery roadmap for allowing any parameter to be **resolved from a live data source at sample-time**, enabling three new operational patterns:
 
@@ -249,7 +249,7 @@ When a live-data run is active, a banner replaces the normal progress indicator:
 1. Define a REST data source pointing at your operational system's current-state API
 2. Bind the arrival rate mean and service time mean to live fields
 3. Set `liveDataMode: "calibrated_batch"`
-4. Run as normal — DES Studio fetches live values once, then runs all replications with those fixed values
+4. Run as normal — simmodlr fetches live values once, then runs all replications with those fixed values
 5. Results are reproducible: re-running at the same moment gives the same answer
 
 **Best for:** daily calibration of models before a planning session; regular "model health" checks against actuals.
@@ -269,7 +269,7 @@ When a live-data run is active, a banner replaces the normal progress indicator:
 1. Define a `stateSnapshot` data source that returns current queue depths and in-flight entities
 2. Set `liveDataMode: "lookahead"`
 3. Configure the lookahead horizon (e.g., 60 minutes)
-4. Run — DES Studio injects the live snapshot, skips warm-up, and simulates forward 60 minutes under N scenarios
+4. Run — simmodlr injects the live snapshot, skips warm-up, and simulates forward 60 minutes under N scenarios
 5. Compare scenario outputs to choose an intervention
 
 **Best for:** real-time decision support (staffing, routing changes, capacity bursts); "what happens if I do X in the next hour?"
@@ -280,7 +280,7 @@ When a live-data run is active, a banner replaces the normal progress indicator:
 
 - Credentials (API keys, tokens) are **never** written to Supabase. They are entered per session into `sessionStorage` and referenced in the model JSON only as `{{env.VAR}}` placeholders.
 - Data fetched from live sources is **not** persisted in run results or exports — only derived simulation outputs are stored.
-- All live source URLs are user-supplied and user-controlled. DES Studio makes no outbound requests except to URLs explicitly configured by the model owner.
+- All live source URLs are user-supplied and user-controlled. simmodlr makes no outbound requests except to URLs explicitly configured by the model owner.
 - For shared/public models, `dataSources` definitions are visible to all viewers, but credentials are not (they live only in the model owner's session).
 
 ---

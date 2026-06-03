@@ -62,7 +62,7 @@ export function runScenario(scenario) {
 }
 
 export function printHumanReport(results, { includeStress }) {
-  console.log("DES Studio — Engine Benchmark Timing");
+  console.log("simmodlr — Engine Benchmark Timing");
   console.log(`Run date: ${new Date().toISOString()}`);
   console.log(`Stress scenarios: ${includeStress ? "included" : "disabled (use --stress to include)"}`);
   console.log("");

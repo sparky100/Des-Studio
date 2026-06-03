@@ -2,7 +2,7 @@
 > All findings have been incorporated into AGENTS.md and subsequent sprint work.
 > Date superseded: 2026-05-15
 
-# DES Studio — Full Codebase Audit
+# simmodlr — Full Codebase Audit
 
 **Date:** 2026-04-30  
 **Scope:** All 15 source files across `src/engine/`, `src/ui/`, `src/db/`  
@@ -12,7 +12,7 @@
 
 ## 1. Overall Summary
 
-DES Studio is a browser-only single-page React application for building and running Pidd Three-Phase discrete-event simulation models. There is no backend: the simulation engine runs synchronously on the browser's main thread, and persistence is handled entirely by the Supabase JS client. The core Three-Phase engine (`src/engine/`) is the strongest part of the codebase — Phases A, B, and C are explicitly implemented, all five macros (ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE) are correct, and ~120 unit tests cover the engine layer well. The data model is sensible and the form-based editors cover the primary workflow.
+simmodlr is a browser-only single-page React application for building and running Pidd Three-Phase discrete-event simulation models. There is no backend: the simulation engine runs synchronously on the browser's main thread, and persistence is handled entirely by the Supabase JS client. The core Three-Phase engine (`src/engine/`) is the strongest part of the codebase — Phases A, B, and C are explicitly implemented, all five macros (ARRIVE, ASSIGN, COMPLETE, RELEASE, RENEGE) are correct, and ~120 unit tests cover the engine layer well. The data model is sensible and the form-based editors cover the primary workflow.
 
 The principal weaknesses are additive gaps rather than architectural failures. The most serious is a security issue: effect strings entered via the "Custom..." escape hatch in B-event and C-event editors are executed verbatim through `new Function()` (equivalent to `eval`), and because models can be made public and shared with other users, a crafted model could execute arbitrary JavaScript in another user's browser. Beyond security, the engine has two correctness issues: the C-scan restart rule operates at pass granularity rather than strict per-event granularity (deviation from Pidd), and LIFO/Priority queue disciplines are selectable in the UI but never read by the engine — all queues silently behave as FIFO regardless of configuration. The UI layer has no error boundaries, no undo/redo, no model validation before run, and no inline feedback when the model is misconfigured.
 
@@ -211,7 +211,7 @@ A full rebuild would discard working, tested engine code in exchange for nothing
 `CLAUDE.md` is **missing**. A `CLAUDE_WORKFLOW.md` exists but is a generic methodology guide with no project-specific content. Create `CLAUDE.md` in the project root with at minimum:
 
 ```markdown
-# DES Studio
+# simmodlr
 
 ## Project Purpose
 Browser-based discrete-event simulation (DES) studio using Pidd's Three-Phase method.

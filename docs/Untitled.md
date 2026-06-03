@@ -1,12 +1,12 @@
-# DES Studio — Documentation & Test Completeness Rule
+# simmodlr — Documentation & Test Completeness Rule
 
-_Standing rule. Applies to every change made to DES Studio, regardless of size or sprint context._
+_Standing rule. Applies to every change made to simmodlr, regardless of size or sprint context._
 
 ---
 
 ## The Rule
 
-No change to DES Studio is complete until the following obligations have been discharged. Claude Code must treat these as exit conditions, not optional follow-up tasks.
+No change to simmodlr is complete until the following obligations have been discharged. Claude Code must treat these as exit conditions, not optional follow-up tasks.
 
 ---
 
@@ -16,9 +16,9 @@ After any change that affects behaviour, schema, UI, or API, review each of the 
 
 |Document|Update trigger|
 |---|---|
-|`DES_Studio_User_Guide.md`|Any change visible to the end user: new features, renamed controls, changed workflows, new error messages|
-|`DES_Studio_Product_Spec.md`|Any change to product-level capability, scope, or roadmap|
-|`DES_Studio_Engineering_Spec.md`|Any change to engine behaviour, macro signatures, schema, API contracts, or architectural decisions|
+|`simmodlr_User_Guide.md`|Any change visible to the end user: new features, renamed controls, changed workflows, new error messages|
+|`simmodlr_Product_Spec.md`|Any change to product-level capability, scope, or roadmap|
+|`simmodlr_Engineering_Spec.md`|Any change to engine behaviour, macro signatures, schema, API contracts, or architectural decisions|
 |`model-schema-for-llm.md`|Any change to `model_json` structure, validation rules, macro syntax, or LLM-facing schema|
 |In-app help content|Any change to a feature that has corresponding in-app guidance or tooltip text|
 

@@ -4,10 +4,10 @@
 **Date:** 2026-05-16
 
 ## Objective
-Enable two new routes for getting LLM-generated model JSON into DES Studio: (1) a "Paste JSON" option in the UI so users can paste directly without saving a file, and (2) a Supabase Edge Function that exposes a POST endpoint an agent can call programmatically to validate and save a model in one step.
+Enable two new routes for getting LLM-generated model JSON into simmodlr: (1) a "Paste JSON" option in the UI so users can paste directly without saving a file, and (2) a Supabase Edge Function that exposes a POST endpoint an agent can call programmatically to validate and save a model in one step.
 
 ## Background
-The `docs/model-schema-for-llm.md` file (added in the post-Sprint-46 commit) gives any LLM the information it needs to generate a valid DES Studio model JSON. But getting that JSON into the app currently requires: save to a `.json` file → click "Import Model" → pick the file from the file system. This is fine for occasional use but impractical for an AI agent in a loop, and inconvenient for a user who just copied JSON from a chat window.
+The `docs/model-schema-for-llm.md` file (added in the post-Sprint-46 commit) gives any LLM the information it needs to generate a valid simmodlr model JSON. But getting that JSON into the app currently requires: save to a `.json` file → click "Import Model" → pick the file from the file system. This is fine for occasional use but impractical for an AI agent in a loop, and inconvenient for a user who just copied JSON from a chat window.
 
 The import pipeline in `App.jsx` already handles everything downstream: `extractImportedModelPayload()` normalises the envelope, `validateModel()` checks structural correctness, `saveModel()` persists to Supabase. Neither new feature requires new logic — only new entry points into the existing pipeline.
 

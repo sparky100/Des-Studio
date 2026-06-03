@@ -1,4 +1,4 @@
-# DES Studio Help Reference
+# simmodlr Help Reference
 
 **Purpose:** System context for Help Assistant LLM responses  
 **Audience:** LLM consuming as prompt context (machine-readable)  
@@ -10,7 +10,7 @@
 
 ### Three-Phase Method
 
-DES Studio implements Pidd's Three-Phase discrete-event simulation algorithm.
+simmodlr implements Pidd's Three-Phase discrete-event simulation algorithm.
 
 | Phase | Trigger | Behaviour |
 |-------|---------|-----------|
@@ -488,7 +488,7 @@ Create named version snapshots of your model from the **Versions** tab (visible 
 
 | Aspect | Help Assistant | Explain |
 |--------|---------------|-------------|
-| **Purpose** | Answers "How do I use DES Studio?" | Answers "What do my results mean?" |
+| **Purpose** | Answers "How do I use simmodlr?" | Answers "What do my results mean?" |
 | **When available** | Any screen (via ? button) | After completed run (Results → Explain) |
 | **Knowledge base** | Curated help articles, validation rules, macro syntax, distribution guidance | Run results, model JSON, confidence intervals, goal gaps |
 | **Knowledge source** | This help-reference document (curated, versioned alongside docs) | Run results + model JSON passed live at query time |
@@ -529,7 +529,7 @@ Open a schedule and click **Export CSV** to download all rows for editing extern
 
 ### Export and portability
 
-When you export a model as JSON (toolbar → Export Model), schedule rows are automatically embedded in the exported file. The export is self-contained and can be imported to another DES Studio instance.
+When you export a model as JSON (toolbar → Export Model), schedule rows are automatically embedded in the exported file. The export is self-contained and can be imported to another simmodlr instance.
 
 ### B-event schedule link
 

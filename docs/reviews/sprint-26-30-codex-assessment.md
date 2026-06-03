@@ -15,7 +15,7 @@ The planned sprints represent a credible path from a capable process-flow modell
 - Experiments without benchmarks (Sprint 29) risk unsupported performance claims.
 - Reusable model libraries (Sprint 30) are most valuable when the underlying engine is broad enough to make them worthwhile.
 
-**The scenario coverage assessment is honest.** It correctly identifies where DES Studio is strong (queueing, multi-step flows, batching, sweeps) and where it is weak (preemption, store/container semantics, reliability modelling, synchronisation). Calling out "risky positioning" areas explicitly is a useful guard against overreach.
+**The scenario coverage assessment is honest.** It correctly identifies where simmodlr is strong (queueing, multi-step flows, batching, sweeps) and where it is weak (preemption, store/container semantics, reliability modelling, synchronisation). Calling out "risky positioning" areas explicitly is a useful guard against overreach.
 
 **The product positioning recommendation is sensible.** Becoming excellent at structured operational DES (service systems, healthcare flows, logistics, manufacturing process flow with contention) before expanding into general-simulation breadth is the right strategy for a browser-native tool with a small dependency footprint.
 
@@ -48,4 +48,4 @@ The Sprint 26-30 roadmap is the strongest-looking plan in the project's history.
 4. Measure and build confidence
 5. Package into reusable value
 
-If the team executes these five sprints without scope creep, DES Studio will have closed the largest gaps relative to established open-source tools while preserving its browser-native differentiation. The main risk is not the direction — it is whether each sprint is given enough room to deliver its full value chain (engine + guidance + examples) rather than cutting the user-facing piece to meet a deadline.
+If the team executes these five sprints without scope creep, simmodlr will have closed the largest gaps relative to established open-source tools while preserving its browser-native differentiation. The main risk is not the direction — it is whether each sprint is given enough room to deliver its full value chain (engine + guidance + examples) rather than cutting the user-facing piece to meet a deadline.
