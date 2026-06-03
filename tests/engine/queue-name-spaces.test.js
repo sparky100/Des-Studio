@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildEngine } from "../../src/engine/index.js";
+import { twoStageClinicModel } from "../__helpers__/twoStageModel.js";
 
 describe("queue names with spaces", () => {
   it("runs ARRIVE, ASSIGN, and queue conditions that reference a spaced queue name", () => {
@@ -43,61 +44,7 @@ describe("queue names with spaces", () => {
   });
 
   it("runs a two-stage model that releases a patient into a second spaced queue", () => {
-    const model = {
-      entityTypes: [
-        { id: "patient", name: "Patient", role: "customer", attrDefs: [] },
-        { id: "triage", name: "Triage Nurse", role: "server", count: 1, attrDefs: [] },
-        { id: "consultant", name: "Consultant", role: "server", count: 1, attrDefs: [] },
-      ],
-      queues: [
-        { id: "triage-q", name: "Triage Queue", customerType: "Patient", discipline: "FIFO" },
-        { id: "consult-q", name: "Consultant Queue", customerType: "Patient", discipline: "FIFO" },
-      ],
-      stateVariables: [],
-      bEvents: [
-        {
-          id: "arrive",
-          name: "Patient Arrival",
-          scheduledTime: "0",
-          effect: "ARRIVE(Patient, Triage Queue)",
-          schedules: [],
-        },
-        {
-          id: "triage-complete",
-          name: "Triage Complete",
-          scheduledTime: "9999",
-          effect: "RELEASE(Triage Nurse, Consultant Queue)",
-          schedules: [],
-        },
-        {
-          id: "consult-complete",
-          name: "Consultation Complete",
-          scheduledTime: "9999",
-          effect: "COMPLETE()",
-          schedules: [],
-        },
-      ],
-      cEvents: [
-        {
-          id: "start-triage",
-          name: "Start Triage",
-          priority: 1,
-          condition: "queue(Triage Queue).length > 0 AND idle(Triage Nurse).count > 0",
-          effect: "ASSIGN(Triage Queue, Triage Nurse)",
-          cSchedules: [{ eventId: "triage-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
-        },
-        {
-          id: "start-consult",
-          name: "Start Consultation",
-          priority: 2,
-          condition: "queue(Consultant Queue).length > 0 AND idle(Consultant).count > 0",
-          effect: "ASSIGN(Consultant Queue, Consultant)",
-          cSchedules: [{ eventId: "consult-complete", dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }],
-        },
-      ],
-    };
-
-    const result = buildEngine(model, 123, 0, 5).runAll();
+    const result = buildEngine(twoStageClinicModel, 123, 0, 5).runAll();
 
     expect(result.summary.served).toBe(1);
     expect(result.log.some(entry => String(entry.message).includes("Triage Complete"))).toBe(true);

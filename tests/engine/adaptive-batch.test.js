@@ -1,48 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { runAdaptiveBatch } from '../../src/engine/adaptive-batch.js';
+import { makeMM1Model } from './__helpers__/benchmarkFixtures.js';
 
 // M/M/1: λ=0.9, μ=1.0, ρ=0.9 — E[W] = 9.0
 const LAMBDA = 0.9;
 const MU = 1.0;
+const mm1Model = makeMM1Model(LAMBDA, MU);
 
-const mm1Model = {
-  entityTypes: [
-    { id: 'et_cust', name: 'Customer', role: 'customer', count: 0, attrDefs: [] },
-    { id: 'et_srv',  name: 'Server',   role: 'server',   count: 1, attrDefs: [] },
-  ],
-  stateVariables: [],
-  bEvents: [
-    {
-      id: 'b_arrive',
-      name: 'Arrival',
-      scheduledTime: '0',
-      effect: 'ARRIVE(Customer)',
-      schedules: [{ eventId: 'b_arrive', dist: 'Exponential', distParams: { mean: String(1 / LAMBDA) } }],
-    },
-    {
-      id: 'b_complete',
-      name: 'Complete',
-      scheduledTime: '9999',
-      effect: 'COMPLETE()',
-      schedules: [],
-    },
-  ],
-  cEvents: [
-    {
-      id: 'c_seize',
-      name: 'Seize',
-      condition: 'queue(Customer).length > 0 AND idle(Server).count > 0',
-      effect: 'ASSIGN(Customer, Server)',
-      cSchedules: [{
-        eventId: 'b_complete',
-        dist: 'Exponential',
-        distParams: { mean: String(1 / MU) },
-        useEntityCtx: true,
-      }],
-    },
-  ],
-  queues: [],
-};
 
 describe('runAdaptiveBatch', () => {
   test('accumulates results across rounds and reports final CI', async () => {

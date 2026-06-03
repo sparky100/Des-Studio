@@ -8,6 +8,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { buildEngine } from '../../../src/engine/index.js';
+import { makeMM1Model, runUntilServed } from '../__helpers__/benchmarkFixtures.js';
 
 // ── Utility helpers ──────────────────────────────────────────────────────────
 
@@ -25,58 +26,38 @@ function runReps(model, reps, baseSeed, warmupPeriod, maxSimTime) {
   return results;
 }
 
-// Slice-based warmup helper (matches golden.test.js approach: high warmupPeriod so
-// it never fires, then manually discard first N entities by arrival order).
-function runUntilServed(model, targetServed, seed, warmup) {
-  const engine = buildEngine(model, seed, 999999);
-  let steps = 0;
-  while (steps < 500000) {
-    const { done } = engine.step();
-    steps++;
-    if (done) break;
-    if (steps % 50 === 0 && engine.getSnap().served >= targetServed) break;
-  }
-  const snap = engine.getSnap();
-  const allDone = snap.entities
-    .filter(e => e.role !== 'server' && e.status === 'done')
-    .sort((a, b) => a.arrivalTime - b.arrivalTime);
-  const steadyDone = allDone.slice(warmup);
-  const waits = steadyDone.map(e => (e.serviceStart || 0) - e.arrivalTime);
-  return waits.reduce((a, b) => a + b, 0) / waits.length;
-}
-
 // ── Shared base model builders ───────────────────────────────────────────────
 
-function mm1Model() {
+function mm1Model() { return makeMM1Model(0.9, 1.0); }
+
+function makePriorityQueueModel(arrivalMean) {
   return {
     entityTypes: [
-      { id: 'et_cust', name: 'Customer', role: 'customer', count: 0, attrDefs: [] },
-      { id: 'et_srv',  name: 'Server',   role: 'server',   count: 1, attrDefs: [] },
+      { id: 'et_hp', name: 'HighPriority', role: 'customer', count: 0,
+        attrDefs: [{ name: 'priority', dist: 'Fixed', distParams: { value: '1' } }] },
+      { id: 'et_lp', name: 'LowPriority', role: 'customer', count: 0,
+        attrDefs: [{ name: 'priority', dist: 'Fixed', distParams: { value: '2' } }] },
+      { id: 'et_srv', name: 'Server', role: 'server', count: 1, attrDefs: [] },
     ],
     stateVariables: [],
+    queues: [
+      { id: 'q_svc', name: 'Service Queue', customerType: 'HighPriority', discipline: 'PRIORITY' },
+    ],
     bEvents: [
-      {
-        id: 'b_arrive', name: 'Arrival', scheduledTime: '0',
-        effect: 'ARRIVE(Customer)',
-        schedules: [{ eventId: 'b_arrive', dist: 'Exponential', distParams: { mean: String(1 / 0.9) } }],
-      },
-      {
-        id: 'b_complete', name: 'Complete', scheduledTime: '9999',
-        effect: 'COMPLETE()',
-        schedules: [],
-      },
+      { id: 'b_hp_arrive', name: 'HP Arrival', scheduledTime: '0',
+        effect: 'ARRIVE(HighPriority, Service Queue)',
+        schedules: [{ eventId: 'b_hp_arrive', dist: 'Exponential', distParams: { mean: arrivalMean } }] },
+      { id: 'b_lp_arrive', name: 'LP Arrival', scheduledTime: '0',
+        effect: 'ARRIVE(LowPriority, Service Queue)',
+        schedules: [{ eventId: 'b_lp_arrive', dist: 'Exponential', distParams: { mean: arrivalMean } }] },
+      { id: 'b_complete', name: 'Complete', scheduledTime: '9999', effect: 'COMPLETE()', schedules: [] },
     ],
     cEvents: [
-      {
-        id: 'c_seize', name: 'Seize',
-        condition: 'queue(Customer).length > 0 AND idle(Server).count > 0',
-        effect: 'ASSIGN(Customer, Server)',
-        cSchedules: [
-          { eventId: 'b_complete', dist: 'Exponential', distParams: { mean: '1.0' }, useEntityCtx: true },
-        ],
-      },
+      { id: 'c_seize', name: 'Seize',
+        condition: 'queue(Service Queue).length > 0 AND idle(Server).count > 0',
+        effect: 'ASSIGN(Service Queue, Server)',
+        cSchedules: [{ eventId: 'b_complete', dist: 'Exponential', distParams: { mean: '1.0' }, useEntityCtx: true }] },
     ],
-    queues: [],
   };
 }
 
@@ -277,52 +258,7 @@ describe('Benchmark 5 — Priority queue ordering (HP.avgWait < LP.avgWait)', ()
   const BASE_SEED = 600;
   const MAX_SIM = 10000;
 
-  function priorityModel() {
-    return {
-      entityTypes: [
-        {
-          id: 'et_hp', name: 'HighPriority', role: 'customer', count: 0,
-          attrDefs: [{ name: 'priority', dist: 'Fixed', distParams: { value: '1' } }],
-        },
-        {
-          id: 'et_lp', name: 'LowPriority', role: 'customer', count: 0,
-          attrDefs: [{ name: 'priority', dist: 'Fixed', distParams: { value: '2' } }],
-        },
-        { id: 'et_srv', name: 'Server', role: 'server', count: 1, attrDefs: [] },
-      ],
-      stateVariables: [],
-      queues: [
-        { id: 'q_svc', name: 'Service Queue', customerType: 'HighPriority', discipline: 'PRIORITY' },
-      ],
-      bEvents: [
-        {
-          id: 'b_hp_arrive', name: 'HP Arrival', scheduledTime: '0',
-          effect: 'ARRIVE(HighPriority, Service Queue)',
-          schedules: [{ eventId: 'b_hp_arrive', dist: 'Exponential', distParams: { mean: '2.5' } }],
-        },
-        {
-          id: 'b_lp_arrive', name: 'LP Arrival', scheduledTime: '0',
-          effect: 'ARRIVE(LowPriority, Service Queue)',
-          schedules: [{ eventId: 'b_lp_arrive', dist: 'Exponential', distParams: { mean: '2.5' } }],
-        },
-        {
-          id: 'b_complete', name: 'Complete', scheduledTime: '9999',
-          effect: 'COMPLETE()',
-          schedules: [],
-        },
-      ],
-      cEvents: [
-        {
-          id: 'c_seize', name: 'Seize',
-          condition: 'queue(Service Queue).length > 0 AND idle(Server).count > 0',
-          effect: 'ASSIGN(Service Queue, Server)',
-          cSchedules: [
-            { eventId: 'b_complete', dist: 'Exponential', distParams: { mean: '1.0' }, useEntityCtx: true },
-          ],
-        },
-      ],
-    };
-  }
+  function priorityModel() { return makePriorityQueueModel('2.5'); }
 
   test('HP mean wait is strictly less than LP mean wait across 20 replications', { timeout: 60000 }, () => {
     const model = priorityModel();
@@ -358,52 +294,7 @@ describe('Benchmark 6 — PREEMPT correctness: LP avgWait > M/M/1 baseline (9.0)
   const BASE_SEED = 700;
   const MAX_SIM = 20000;
 
-  function preemptModel() {
-    return {
-      entityTypes: [
-        {
-          id: 'et_hp', name: 'HighPriority', role: 'customer', count: 0,
-          attrDefs: [{ name: 'priority', dist: 'Fixed', distParams: { value: '1' } }],
-        },
-        {
-          id: 'et_lp', name: 'LowPriority', role: 'customer', count: 0,
-          attrDefs: [{ name: 'priority', dist: 'Fixed', distParams: { value: '2' } }],
-        },
-        { id: 'et_srv', name: 'Server', role: 'server', count: 1, attrDefs: [] },
-      ],
-      stateVariables: [],
-      queues: [
-        { id: 'q_svc', name: 'Service Queue', customerType: 'HighPriority', discipline: 'PRIORITY' },
-      ],
-      bEvents: [
-        {
-          id: 'b_hp_arrive', name: 'HP Arrival', scheduledTime: '0',
-          effect: 'ARRIVE(HighPriority, Service Queue)',
-          schedules: [{ eventId: 'b_hp_arrive', dist: 'Exponential', distParams: { mean: String(1 / 0.45) } }],
-        },
-        {
-          id: 'b_lp_arrive', name: 'LP Arrival', scheduledTime: '0',
-          effect: 'ARRIVE(LowPriority, Service Queue)',
-          schedules: [{ eventId: 'b_lp_arrive', dist: 'Exponential', distParams: { mean: String(1 / 0.45) } }],
-        },
-        {
-          id: 'b_complete', name: 'Complete', scheduledTime: '9999',
-          effect: 'COMPLETE()',
-          schedules: [],
-        },
-      ],
-      cEvents: [
-        {
-          id: 'c_seize', name: 'Seize',
-          condition: 'queue(Service Queue).length > 0 AND idle(Server).count > 0',
-          effect: 'ASSIGN(Service Queue, Server)',
-          cSchedules: [
-            { eventId: 'b_complete', dist: 'Exponential', distParams: { mean: '1.0' }, useEntityCtx: true },
-          ],
-        },
-      ],
-    };
-  }
+  function preemptModel() { return makePriorityQueueModel(String(1 / 0.45)); }
 
   test('LP mean wait > 9.0 (M/M/1 baseline) across 15 replications', { timeout: 60000 }, () => {
     const model = preemptModel();
