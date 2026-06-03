@@ -183,6 +183,7 @@ interface ModelJson {
   stateVariables: StateVariable[];
   containerTypes: ContainerType[];
   dataSources: DataSource[];
+  sections?: Section[];                 // named groupings for authoring/visualisation (engine-agnostic)
 
   experimentDefaults: {
     replications: number;
@@ -193,6 +194,15 @@ interface ModelJson {
 
   graph?: GraphMetadata;                // @xyflow/react layout (ADR-010)
   performanceGoals?: PerformanceGoal[];
+}
+
+interface Section {
+  id: string;
+  name: string;
+  color: string;                        // CSS hex colour
+  memberIds: string[];                  // queue/entityType/bEvent/cEvent IDs
+  entryQueues: string[];                // subset of memberIds — queues where entities arrive from other sections
+  exitQueues: string[];                 // subset of memberIds — queues where entities leave to other sections
 }
 ```
 

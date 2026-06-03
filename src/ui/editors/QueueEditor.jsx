@@ -1,12 +1,14 @@
 import { useState } from "react";
 ;
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty } from "../shared/components.jsx";
+import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
+const QueueEditor = ({queues=[], entityTypes=[], sections=[], onChange}) => {
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
+  const [activeSectionId,setActiveSectionId]=useState("all");
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(queues.map(q=>q.id)));
@@ -45,12 +47,14 @@ const QueueEditor = ({queues=[], entityTypes=[], onChange}) => {
   });
 
   const lcFilter=filterText.toLowerCase();
-  const filtered=lcFilter?queues.filter(q=>(q.name||"").toLowerCase().includes(lcFilter)):queues;
+  const sectionFiltered=filterBySection(queues, sections, activeSectionId);
+  const filtered=lcFilter?sectionFiltered.filter(q=>(q.name||"").toLowerCase().includes(lcFilter)):sectionFiltered;
   const effectiveExpanded=lcFilter?new Set(filtered.map(q=>q.id)):expandedIds;
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
       <SH label="Queues" color={C.cEvent}><Btn small variant="ghost" onClick={add}>+ Add Queue</Btn></SH>
+      <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
       {queues.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"

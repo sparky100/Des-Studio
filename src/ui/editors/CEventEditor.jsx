@@ -3,13 +3,14 @@ import { normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker } from "../shared/components.jsx";
 import { ConditionBuilder, buildConditionStr } from "./ConditionBuilder.jsx";
 import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
-import { EffectPicker, assignOptions, displayEventName } from "./helpers.jsx";
+import { EffectPicker, assignOptions, displayEventName, SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[]})=>{
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[]})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
+  const [activeSectionId,setActiveSectionId]=useState("all");
 
   const toggleExpand=(id)=>setExpandedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
   const expandAll=()=>setExpandedIds(new Set(events.map(e=>e.id)));
@@ -68,7 +69,8 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
   };
 
   const lcFilter=filterText.toLowerCase();
-  const filtered=lcFilter?events.filter(ev=>(ev.name||"").toLowerCase().includes(lcFilter)):events;
+  const sectionFiltered=filterBySection(events, sections, activeSectionId);
+  const filtered=lcFilter?sectionFiltered.filter(ev=>(ev.name||"").toLowerCase().includes(lcFilter)):sectionFiltered;
   const effectiveExpanded=lcFilter?new Set(filtered.map(e=>e.id)):expandedIds;
 
   return (
@@ -76,6 +78,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
       <SH label="C-Events  (Conditional — evaluated in Phase C)" color={C.cEvent}>
         <Btn small variant="ghost" onClick={add}>+ Add C-Event</Btn>
       </SH>
+      <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
       {events.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"

@@ -1494,6 +1494,35 @@ describe('Sprint 71 — persistence layer', () => {
       });
       expect(result.parentModelId).toBeNull();
     });
+
+    it('round-trips sections[] through model_json', () => {
+      const sections = [
+        { id: 'sec_a', name: 'Section A', color: '#4A90D9', memberIds: ['q1', 'et1'], entryQueues: ['q1'], exitQueues: [] },
+      ];
+      const result = norm({
+        id: 'x',
+        name: 'Sectioned Model',
+        entity_types: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: { sections },
+      });
+      expect(result.sections).toEqual(sections);
+    });
+
+    it('defaults sections to empty array when absent from model_json', () => {
+      const result = norm({
+        id: 'x',
+        name: 'No Sections',
+        entity_types: [],
+        b_events: [],
+        c_events: [],
+        queues: [],
+        model_json: {},
+      });
+      expect(result.sections).toEqual([]);
+    });
   });
 
   // ── Sprint 71.2 — NODE_ENV guard: schema mismatch throws in dev ───────────

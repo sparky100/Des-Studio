@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
-import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker } from "./helpers.jsx";
+import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker, SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],sections=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
+  const [activeSectionId,setActiveSectionId]=useState("all");
   const cardRefs=useRef({});
 
   useEffect(()=>{
@@ -49,12 +50,14 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
   const remS=(i,j)=>{const n=[...events];n[i]={...n[i],schedules:n[i].schedules.filter((_,idx)=>idx!==j)};onChange(n);};
 
   const lcFilter=filterText.toLowerCase();
-  const filtered=lcFilter?events.filter(ev=>(ev.name||"").toLowerCase().includes(lcFilter)):events;
+  const sectionFiltered=filterBySection(events, sections, activeSectionId);
+  const filtered=lcFilter?sectionFiltered.filter(ev=>(ev.name||"").toLowerCase().includes(lcFilter)):sectionFiltered;
   const effectiveExpanded=lcFilter?new Set(filtered.map(e=>e.id)):expandedIds;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
       <SH label="B-Events (Bound)" color={C.bEvent}><Btn small variant="ghost" onClick={add}>+ Add B-Event</Btn></SH>
+      <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
       {events.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"
