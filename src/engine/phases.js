@@ -195,7 +195,7 @@ export function fireBEvent(ev, ctx) {
       cust.outcome = {
         status: "completed",
         routeId: `route-exit:${ev.id || ev.name || "unknown"}`,
-        routeLabel: "Exit",
+        routeLabel: ev.name || "Exit",
         endedBy: "direct-routing",
         ...evTail,
       };

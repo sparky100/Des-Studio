@@ -158,7 +158,7 @@ export function deriveGraphFromModel(model = {}) {
       // capacity set but no overflow destination — show an exit sink
       const exitId = `sink:overflow-exit-${queue.id || queue.name}`;
       if (!nodes.find(n => n.id === exitId)) {
-        nodes.push({ id: exitId, type: VISUAL_NODE_TYPES.SINK, refId: null, label: "Exit", sublabel: "Overflow exit" });
+        nodes.push({ id: exitId, type: VISUAL_NODE_TYPES.SINK, refId: null, label: queue.name ? `${queue.name} Overflow` : "Exit", sublabel: "Overflow exit" });
       }
       edges.push({ id: edgeId(fromId, exitId, "overflow"), from: fromId, to: exitId, source: "overflow", label: "overflow" });
     }
@@ -237,7 +237,7 @@ export function deriveGraphFromModel(model = {}) {
             id: syntheticId,
             type: VISUAL_NODE_TYPES.SINK,
             refId: routeExitRefId,
-            label: "Exit",
+            label: bEvent.name || "Exit",
             sublabel: "Direct exit",
           });
         }

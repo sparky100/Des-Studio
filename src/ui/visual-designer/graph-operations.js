@@ -1157,7 +1157,8 @@ export function updateVisualNode(model, node, patch = {}) {
     });
   }
   if (node.type === VISUAL_NODE_TYPES.SINK) {
-    next.bEvents = updateByRef(next.bEvents, node.refId, event => ({
+    const sinkRefId = node.refId?.startsWith("route-exit:") ? node.refId.slice("route-exit:".length) : node.refId;
+    next.bEvents = updateByRef(next.bEvents, sinkRefId, event => ({
       ...event,
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.terminalMacro !== undefined ? { effect: `${patch.terminalMacro}()` } : {}),
