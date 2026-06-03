@@ -346,7 +346,7 @@ export function DiagnosticsTab({ model, results, onGoToNode }) {
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 48, gap: 12 }}>
         <div style={{ fontSize: 14, color: C.muted, fontFamily: FONT, textAlign: "center" }}>
-          Run the model to enable diagnostics.
+          Run the model to enable Model Assistant diagnostics.
         </div>
       </div>
     );

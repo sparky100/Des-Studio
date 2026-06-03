@@ -196,6 +196,16 @@ export function ModelTabBar({
               {renderIssueBadge(tabIssueCounts["validate"], "validate")}
             </button>
           )}
+          {onToggleAiSidebar && (
+            <button type="button" aria-pressed={aiSidebarOpen}
+              onClick={onToggleAiSidebar}
+              style={btnTabStyle(aiSidebarOpen)}
+              title="Ask for help explaining or improving this model"
+            >
+              <span aria-hidden="true" style={{ fontWeight: 800 }}>?</span>
+              Model Assistant
+            </button>
+          )}
         </div>
 
         {/* Define sub-bar — shown when any define tab is active */}

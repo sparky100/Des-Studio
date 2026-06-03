@@ -2251,7 +2251,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             View Results →
           </Btn>
         )}
-        <Btn variant={diagnosticsPanelOpen ? "primary" : "ghost"} onClick={() => setDiagnosticsPanelOpen(open => !open)}>Diagnostics</Btn>
+        <Btn variant={diagnosticsPanelOpen ? "primary" : "ghost"} onClick={() => setDiagnosticsPanelOpen(open => !open)}>Model Assistant</Btn>
         <div style={{ position: "relative", display: "flex", gap: 6 }}>
           {/* Export Data popover */}
           {showExportPopover && (
@@ -3026,10 +3026,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
             position: "sticky", top: 0, background: C.panel, zIndex: 1,
           }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>Diagnostics</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>Model Assistant</div>
             <button
               type="button"
-              aria-label="Close diagnostics"
+              aria-label="Close Model Assistant"
               onClick={() => setDiagnosticsPanelOpen(false)}
               style={{ background: "none", border: "none", color: C.muted, fontSize: 16, cursor: "pointer", padding: "0 4px" }}
             >✕</button>
