@@ -2,6 +2,26 @@ function finiteValues(values = []) {
   return values.filter(value => Number.isFinite(value));
 }
 
+export function buildWaitDistEntry(sorted) {
+  const n   = sorted.length;
+  const pct = (p) => sorted[Math.min(Math.floor(p * n), n - 1)];
+  return {
+    n,
+    mean:   +(sorted.reduce((s, v) => s + v, 0) / n).toFixed(4),
+    p50:    +pct(0.50).toFixed(4),
+    p90:    +pct(0.90).toFixed(4),
+    p95:    +pct(0.95).toFixed(4),
+    p99:    +pct(0.99).toFixed(4),
+    values: sorted.map(v => +v.toFixed(4)),
+  };
+}
+
+export function finalizeWeightedStats(o) {
+  o.avgWait    = o._waitN    > 0 ? +(o._waitSum    / o._waitN).toFixed(4)    : null;
+  o.avgSojourn = o._sojournN > 0 ? +(o._sojournSum / o._sojournN).toFixed(4) : null;
+  delete o._waitSum; delete o._waitN; delete o._sojournSum; delete o._sojournN;
+}
+
 export function mean(values = []) {
   const finite = finiteValues(values);
   if (!finite.length) return null;
