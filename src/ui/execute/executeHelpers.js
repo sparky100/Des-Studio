@@ -103,6 +103,29 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       )
     : undefined;
 
+  // Aggregate per-section stats across replications (weighted by entity count)
+  const sectionAcc = {};
+  const journeyAcc = {};
+  for (const s of summaries) {
+    for (const [secId, sec] of Object.entries(s.sections || {})) {
+      if (!sectionAcc[secId]) sectionAcc[secId] = { count: 0, _sojournSum: 0, entitiesIn: 0, entitiesOut: 0 };
+      sectionAcc[secId].count      += sec.count      || 0;
+      sectionAcc[secId]._sojournSum += (sec.avgSojourn || 0) * (sec.count || 0);
+      sectionAcc[secId].entitiesIn  += sec.entitiesIn  || 0;
+      sectionAcc[secId].entitiesOut += sec.entitiesOut || 0;
+    }
+    for (const [key, count] of Object.entries(s.journeys || {})) {
+      journeyAcc[key] = (journeyAcc[key] || 0) + count;
+    }
+  }
+  const sections = Object.keys(sectionAcc).length
+    ? Object.fromEntries(Object.entries(sectionAcc).map(([id, acc]) => {
+        const { _sojournSum, ...rest } = acc;
+        return [id, { ...rest, avgSojourn: acc.count > 0 ? +(_sojournSum / acc.count).toFixed(4) : null }];
+      }))
+    : undefined;
+  const journeys = Object.keys(journeyAcc).length ? journeyAcc : undefined;
+
   // Aggregate waitDist across all replications by pooling raw values per queue
   const waitDistAcc = {};
   for (const payload of replicationPayloads) {
@@ -205,6 +228,8 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
       maxSimTime: maxTime,
       outcomes: Object.keys(outcomeAcc).length ? outcomeAcc : undefined,
       perResource,
+      sections,
+      journeys,
     },
   };
 }
