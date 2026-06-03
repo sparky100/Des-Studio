@@ -59,7 +59,8 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
     );
   }
 
-  const bEvent = (model.bEvents || []).find(event => event.id === node.refId);
+  const bEventRefId = node.refId?.startsWith("route-exit:") ? node.refId.slice("route-exit:".length) : node.refId;
+  const bEvent = (model.bEvents || []).find(event => event.id === bEventRefId);
   const cEvent = (model.cEvents || []).find(event => event.id === node.refId);
   const queue = (model.queues || []).find(item => item.id === node.refId);
   const sourceCustomer = effectValue(bEvent?.effect, /ARRIVE\(([^,)]+)/i);
@@ -203,10 +204,12 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
       {node.type === VISUAL_NODE_TYPES.SINK && bEvent && (
         <>
           <Field label="Sink name" value={bEvent.name} onChange={canEdit ? value => onPatchNode(node, { name: value }) : null} />
-          <SelectField label="Terminal macro" value={sinkMacro} disabled={!canEdit} onChange={value => onPatchNode(node, { terminalMacro: value })}>
-            <option value="COMPLETE">COMPLETE</option>
-            <option value="RENEGE">RENEGE</option>
-          </SelectField>
+          {!node.refId?.startsWith("route-exit:") && (
+            <SelectField label="Terminal macro" value={sinkMacro} disabled={!canEdit} onChange={value => onPatchNode(node, { terminalMacro: value })}>
+              <option value="COMPLETE">COMPLETE</option>
+              <option value="RENEGE">RENEGE</option>
+            </SelectField>
+          )}
         </>
       )}
 
