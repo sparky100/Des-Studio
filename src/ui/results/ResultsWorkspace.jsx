@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { alpha } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { csvEscape, downloadTextFile } from "../shared/utils.js";
@@ -1041,11 +1041,11 @@ function JourneysPanel({ queueJourneys, C, FONT }) {
           <div key={path} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
               {queues.map((q, i) => (
-                <React.Fragment key={i}>
+                <Fragment key={i}>
                   {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
                   <span style={{ fontFamily: FONT, fontSize: 10, color: C.text, background: C.bg,
                     border: `1px solid ${C.border}`, borderRadius: 3, padding: "1px 5px" }}>{q}</span>
-                </React.Fragment>
+                </Fragment>
               ))}
               <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
                 {count} ({pct}%)
@@ -1177,11 +1177,11 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
                   <div key={key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                       {names.map((name, i) => (
-                        <React.Fragment key={i}>
+                        <Fragment key={i}>
                           {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
                           <span style={{ fontFamily: FONT, fontSize: 10, color: C.text, background: C.bg,
                             border: `1px solid ${C.border}`, borderRadius: 3, padding: "1px 5px" }}>{name}</span>
-                        </React.Fragment>
+                        </Fragment>
                       ))}
                       <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
                         {count} ({pct}%)
