@@ -337,7 +337,7 @@ When an entity leaves the model through a terminal path, the engine records how 
   "outcome": {
     "status": "completed",
     "routeId": "route-exit:b_triage_done",
-    "routeLabel": "Exit",
+    "routeLabel": "Triage Done",
     "endedBy": "direct-routing",
     "endedAt": 42.5,
     "sourceEventId": "b_triage_done",
@@ -348,9 +348,9 @@ When an entity leaves the model through a terminal path, the engine records how 
 
 Terminal macros and routes set this field as follows:
 
-- `COMPLETE()` sets `status: "completed"` with an `event:<BEventId>` route.
+- `COMPLETE()` sets `status: "completed"` with an `event:<BEventId>` route. `routeLabel` is set to the B-Event name.
 - `RENEGE(ctx)` and `RENEGE_OLDEST(...)` set `status: "reneged"`.
-- A conditional or probabilistic `RELEASE(...)` route with `queueName: null` sets `status: "completed"` with a `route-exit:<BEventId>` route.
+- A conditional or probabilistic `RELEASE(...)` route with `queueName: null` sets `status: "completed"` with a `route-exit:<BEventId>` route. `routeLabel` is derived from the B-Event name (e.g. `"Triage Done"`), making multiple direct-exit sinks distinguishable in results.
 - A loop guard with no `exitQueueName` sets `status: "completed"` with a `loop-exit:<BEventId>` route.
 
 Run summaries aggregate these into `summary.outcomes`, keyed by `routeId`, so Results, reports, exports, and AI analysis can distinguish "completed via consultation" from "discharged at triage" even when both count toward `summary.served`.
