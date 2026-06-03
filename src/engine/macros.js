@@ -11,7 +11,7 @@
 
 import { sampleAttrs } from "./distributions.js";
 import { evaluatePredicate } from "./conditions.js";
-import { claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState, selectWaiting, listWaiting } from "./entities.js";
+import { claimServerForEntity, releaseServerClaim, markEntityWaiting, clearWaitingState, selectWaiting, listWaiting, preemptCustomer, repairServers } from "./entities.js";
 
 // ── Private helpers shared across multiple macros ────────────────────────────
 
@@ -42,16 +42,6 @@ function updateContainerMinMax(state, cName, newLevel) {
   if (newLevel > (state[maxKey] ?? newLevel)) state[maxKey] = newLevel;
 }
 
-function preemptCustomer(cust, srv, clock, noteQueueDepth) {
-  const scheduledDuration = srv._scheduledDuration || 0;
-  const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
-  cust._remainingService  = remainingService;
-  releaseServerClaim(cust, srv, clock);
-  clearWaitingState(cust);
-  markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
-  noteQueueDepth?.(cust.queue);
-  return remainingService;
-}
 
 function resolveContextEntity(ctx) {
   const custId = ctx.getLastCustId();
@@ -882,14 +872,7 @@ export const MACROS = [
         e.role === "server" && normName(e.type) === key && e.status === "failed"
       );
 
-      let repairedCount = 0;
-      for (const srv of failedServers) {
-        const failedAt = srv._failedAt;
-        srv.status = "idle";
-        srv._failedAt = undefined;
-        srv._downtime = failedAt != null ? +(clock - failedAt).toFixed(4) : 0;
-        repairedCount++;
-      }
+      const repairedCount = repairServers(failedServers, clock);
 
       if (repairedCount === 0) {
         msgs.push(`REPAIR(${sType}): no failed servers found`);

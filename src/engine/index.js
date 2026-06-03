@@ -9,8 +9,9 @@
 //   const felSz  = engine.getFelSize()    // events in FEL
 
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
+import { buildWaitDistEntry, finalizeWeightedStats } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
-import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting }   from "./entities.js";
+import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers } from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
@@ -827,16 +828,8 @@ const cycleLog = [];
         let failedCount = 0;
         for (const srv of servers) {
           if (srv.status === "busy" || srv.status === "serving") {
-            const custId = srv.currentCustId;
-            const cust = entities.find(e => e.id === custId);
-            if (cust) {
-              const scheduledDuration = srv._scheduledDuration || 0;
-              const remainingService = Math.max(0, scheduledDuration - (clock - (cust.serviceStart || clock)));
-              cust._remainingService = remainingService;
-              releaseServerClaim(cust, srv, clock);
-              clearWaitingState(cust);
-              markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
-            }
+            const cust = entities.find(e => e.id === srv.currentCustId);
+            if (cust) preemptCustomer(cust, srv, clock, null);
           }
           srv.status = "failed";
           srv._failedAt = clock;
@@ -854,14 +847,7 @@ const cycleLog = [];
         const failedServers = entities.filter(e =>
           e.role === "server" && e.type.trim().toLowerCase() === key && e.status === "failed"
         );
-        let repairedCount = 0;
-        for (const srv of failedServers) {
-          const failedAt = srv._failedAt;
-          srv.status = "idle";
-          srv._failedAt = undefined;
-          srv._downtime = failedAt != null ? +(clock - failedAt).toFixed(4) : 0;
-          repairedCount++;
-        }
+        const repairedCount = repairServers(failedServers, clock);
         const msg = `REPAIR: ${repairedCount} ${sType} server(s) restored at t=${clock.toFixed(3)}`;
         cycleLog.push({ phase: "B", time: clock, message: msg });
         log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: failedServers.map(s => s.id) } }));
@@ -1142,18 +1128,8 @@ const cycleLog = [];
     const dist = {};
     for (const [q, waits] of Object.entries(byQueue)) {
       const sorted = [...waits].sort((a, b) => a - b);
-      const n = sorted.length;
-      if (n === 0) continue;
-      const pct = (p) => sorted[Math.min(Math.floor(p * n), n - 1)];
-      dist[q] = {
-        n,
-        mean: +(sorted.reduce((s, v) => s + v, 0) / n).toFixed(4),
-        p50:  +pct(0.50).toFixed(4),
-        p90:  +pct(0.90).toFixed(4),
-        p95:  +pct(0.95).toFixed(4),
-        p99:  +pct(0.99).toFixed(4),
-        values: sorted.map(v => +v.toFixed(4)),
-      };
+      if (sorted.length === 0) continue;
+      dist[q] = buildWaitDistEntry(sorted);
     }
     return dist;
   }
@@ -1219,11 +1195,7 @@ const cycleLog = [];
       const sojourn = endTime != null ? truncateInterval(entity.arrivalTime, endTime) : null;
       if (Number.isFinite(sojourn)) { outcomes[routeId]._sojournSum += sojourn; outcomes[routeId]._sojournN++; }
     }
-    for (const o of Object.values(outcomes)) {
-      o.avgWait    = o._waitN    > 0 ? +(o._waitSum    / o._waitN).toFixed(4)    : null;
-      o.avgSojourn = o._sojournN > 0 ? +(o._sojournSum / o._sojournN).toFixed(4) : null;
-      delete o._waitSum; delete o._waitN; delete o._sojournSum; delete o._sojournN;
-    }
+    for (const o of Object.values(outcomes)) finalizeWeightedStats(o);
 
     const elapsed = clock - _statsResetTime;
     const perResource = {};

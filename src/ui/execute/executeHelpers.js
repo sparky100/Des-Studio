@@ -2,6 +2,7 @@
 
 import { TOKEN_COLORS } from "../shared/tokens.js";
 import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
+import { buildWaitDistEntry, finalizeWeightedStats } from "../../engine/statistics.js";
 
 export const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
 export const CI_METRICS = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.served", "summary.reneged", "summary.totalCost", "summary.costPerServed"];
@@ -80,11 +81,7 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
       if (Number.isFinite(outcome.avgSojourn)) { outcomeAcc[routeId]._sojournSum += outcome.avgSojourn * n; outcomeAcc[routeId]._sojournN += n; }
     }
   }
-  for (const o of Object.values(outcomeAcc)) {
-    o.avgWait    = o._waitN    > 0 ? +(o._waitSum    / o._waitN).toFixed(4)    : null;
-    o.avgSojourn = o._sojournN > 0 ? +(o._sojournSum / o._sojournN).toFixed(4) : null;
-    delete o._waitSum; delete o._waitN; delete o._sojournSum; delete o._sojournN;
-  }
+  for (const o of Object.values(outcomeAcc)) finalizeWeightedStats(o);
 
   // Average perResource utilisation across replications
   const perResourceAcc = {};
@@ -119,17 +116,7 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
   const waitDist = Object.keys(waitDistAcc).length
     ? Object.fromEntries(Object.entries(waitDistAcc).map(([qName, vals]) => {
         const sorted = [...vals].sort((a, b) => a - b);
-        const n = sorted.length;
-        const pct = (p) => sorted[Math.min(Math.floor(p * n), n - 1)];
-        return [qName, {
-          n,
-          mean: +(sorted.reduce((s, v) => s + v, 0) / n).toFixed(4),
-          p50:  +pct(0.50).toFixed(4),
-          p90:  +pct(0.90).toFixed(4),
-          p95:  +pct(0.95).toFixed(4),
-          p99:  +pct(0.99).toFixed(4),
-          values: sorted.map(v => +v.toFixed(4)),
-        }];
+        return [qName, buildWaitDistEntry(sorted)];
       }))
     : lastResult?.waitDist;
 

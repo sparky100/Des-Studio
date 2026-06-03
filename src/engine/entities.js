@@ -221,6 +221,29 @@ export function releaseServerClaim(customer, server, clock) {
   return true;
 }
 
+export function preemptCustomer(cust, srv, clock, noteQueueDepth) {
+  const scheduledDuration = srv._scheduledDuration || 0;
+  const remainingService  = Math.max(0, scheduledDuration - (clock - (cust.serviceStart ?? clock)));
+  cust._remainingService  = remainingService;
+  releaseServerClaim(cust, srv, clock);
+  clearWaitingState(cust);
+  markEntityWaiting(cust, clock, cust.lastQueue || cust.queue);
+  noteQueueDepth?.(cust.queue);
+  return remainingService;
+}
+
+export function repairServers(failedServers, clock) {
+  let count = 0;
+  for (const srv of failedServers) {
+    const failedAt   = srv._failedAt;
+    srv.status       = "idle";
+    srv._failedAt    = undefined;
+    srv._downtime    = failedAt != null ? +(clock - failedAt).toFixed(4) : 0;
+    count++;
+  }
+  return count;
+}
+
 export function findQueueConfig(model, token) {
   const key = norm(token);
   return (model?.queues || []).find(queue => norm(queue.name) === key || norm(queue.customerType) === key) || null;
