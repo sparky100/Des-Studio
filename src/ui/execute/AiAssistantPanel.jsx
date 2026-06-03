@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 ;
-import { Btn } from "../shared/components.jsx";
+import { Btn, MicIcon, ArrowUpIcon } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
 import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt } from "../../llm/prompts.js";
@@ -351,6 +351,9 @@ export const AiAssistantPanel = ({
   const [refineCardStatus, setRefineCardStatus] = useState({});
   const [refineCardResults, setRefineCardResults] = useState({});
   const [modelQueryText, setModelQueryText] = useState("");
+  const [listening, setListening] = useState(false);
+  const [micTarget, setMicTarget] = useState("model"); // "model" | "query"
+  const recognitionRef = useRef(null);
   const abortRef = useRef(null);
   const responseAreaRef = useRef(null);
   const actionFnsRef = useRef({});
@@ -478,13 +481,68 @@ export const AiAssistantPanel = ({
     setVerifyResults({});
   };
 
+  const toggleListening = (target) => {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = (event) => {
+      let transcript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) transcript += event.results[i][0].transcript;
+      }
+      if (transcript) {
+        if (target === "query") {
+          setQueryText(prev => prev + (prev.trim() ? " " : "") + transcript);
+        } else {
+          setModelQueryText(prev => prev + (prev.trim() ? " " : "") + transcript);
+        }
+      }
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognition.start();
+    recognitionRef.current = recognition;
+    setMicTarget(target);
+    setListening(true);
+  };
+
   const runModelQuery = useCallback((question) => {
-    if (!question.trim()) return;
+    if (!question.trim() || isStreaming) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     const messages = buildModelQueryPrompt(question, model, conversationHistory);
     setConversationHistory(prev => [...prev, { role: "user", content: question }]);
     setModelQueryText("");
-    runPrompt(messages, "modelQuery");
-  }, [model, conversationHistory, runPrompt]);
+    setResponse("");
+    setError("");
+    setStatus("streaming");
+    setActiveKind("modelQuery");
+    let accumulated = "";
+    streamNarrative(messages, {
+      signal: controller.signal,
+      onToken: token => { accumulated += token; setResponse(accumulated); },
+      onComplete: () => {
+        abortRef.current = null;
+        setConversationHistory(prev => [...prev, { role: "assistant", content: accumulated }]);
+        setResponse("");
+        setStatus("complete");
+      },
+      onError: err => {
+        abortRef.current = null;
+        setError(err?.message || "Query unavailable");
+        setStatus("error");
+      },
+    });
+  }, [model, conversationHistory, isStreaming]);
 
   const explainResults = () => {
     runPrompt(buildExplainResultsPrompt(model, exportConfig, {
@@ -864,9 +922,9 @@ export const AiAssistantPanel = ({
           <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
             ASK ABOUT THIS MODEL
           </label>
-          <div style={{ display: "flex", gap: 6 }}>
-            <input
-              type="text"
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <textarea
+              rows={2}
               value={modelQueryText}
               onChange={e => setModelQueryText(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); runModelQuery(modelQueryText); } }}
@@ -874,11 +932,44 @@ export const AiAssistantPanel = ({
               placeholder="e.g. How many queues does this model have?"
               style={{
                 flex: 1, background: C.bg, border: `1px solid ${C.border}`,
-                borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px",
+                borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12,
+                padding: "7px 8px", resize: "none", outline: "none",
+                opacity: isStreaming ? 0.6 : 1,
               }}
             />
-            <Btn small variant="primary" onClick={() => runModelQuery(modelQueryText)}
-              disabled={!modelQueryText.trim() || isStreaming} ariaLabel="Ask">Ask</Btn>
+            <button
+              type="button"
+              aria-label={listening && micTarget === "model" ? "Stop voice input" : "Start voice input"}
+              onClick={() => toggleListening("model")}
+              disabled={isStreaming}
+              style={{
+                width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                background: (listening && micTarget === "model") ? C.red + "22" : "transparent",
+                border: `1px solid ${(listening && micTarget === "model") ? C.red : C.border}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: isStreaming ? "not-allowed" : "pointer",
+                opacity: isStreaming ? 0.45 : 1, transition: "all .15s",
+              }}
+            >
+              <MicIcon size={15} color={(listening && micTarget === "model") ? C.red : C.muted} />
+            </button>
+            <button
+              type="button"
+              aria-label="Send"
+              onClick={() => runModelQuery(modelQueryText)}
+              disabled={!modelQueryText.trim() || isStreaming}
+              style={{
+                width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                background: !modelQueryText.trim() || isStreaming ? C.muted : C.accent,
+                border: "none",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: !modelQueryText.trim() || isStreaming ? "not-allowed" : "pointer",
+                opacity: !modelQueryText.trim() || isStreaming ? 0.35 : 1,
+                transition: "opacity .12s, background .12s",
+              }}
+            >
+              <ArrowUpIcon size={16} color={C.bg} />
+            </button>
           </div>
         </div>
       )}
@@ -942,35 +1033,55 @@ export const AiAssistantPanel = ({
         <label htmlFor="query-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
           ASK A QUESTION
         </label>
-        <div style={{ display: "flex", gap: 6 }}>
-          <input
+        <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+          <textarea
             id="query-input"
-            type="text"
+            rows={2}
             value={queryText}
             onChange={event => setQueryText(event.target.value)}
             onKeyDown={handleQueryKeyDown}
             disabled={!results || isStreaming}
-            placeholder={results ? "e.g. Which queue had the longest wait?" : "Run the model first..."}
+            placeholder={results ? "e.g. Which queue had the longest wait?" : "Run the model first…"}
             style={{
-              flex: 1,
-              background: C.bg,
-              border: `1px solid ${C.border}`,
-              borderRadius: 5,
-              color: C.text,
-              fontFamily: FONT,
-              fontSize: 12,
-              padding: "7px 8px",
+              flex: 1, background: C.bg, border: `1px solid ${C.border}`,
+              borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12,
+              padding: "7px 8px", resize: "none", outline: "none",
+              opacity: (!results || isStreaming) ? 0.6 : 1,
             }}
           />
-          <Btn
-            small
-            variant="primary"
+          <button
+            type="button"
+            aria-label={listening && micTarget === "query" ? "Stop voice input" : "Start voice input"}
+            onClick={() => toggleListening("query")}
+            disabled={!results || isStreaming}
+            style={{
+              width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+              background: (listening && micTarget === "query") ? C.red + "22" : "transparent",
+              border: `1px solid ${(listening && micTarget === "query") ? C.red : C.border}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: (!results || isStreaming) ? "not-allowed" : "pointer",
+              opacity: (!results || isStreaming) ? 0.45 : 1, transition: "all .15s",
+            }}
+          >
+            <MicIcon size={15} color={(listening && micTarget === "query") ? C.red : C.muted} />
+          </button>
+          <button
+            type="button"
+            aria-label="Send"
             onClick={() => runQuery(queryText)}
             disabled={!results || !queryText.trim() || isStreaming}
-            ariaLabel="Ask question"
+            style={{
+              width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+              background: (!results || !queryText.trim() || isStreaming) ? C.muted : C.accent,
+              border: "none",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: (!results || !queryText.trim() || isStreaming) ? "not-allowed" : "pointer",
+              opacity: (!results || !queryText.trim() || isStreaming) ? 0.35 : 1,
+              transition: "opacity .12s, background .12s",
+            }}
           >
-            Ask
-          </Btn>
+            <ArrowUpIcon size={16} color={C.bg} />
+          </button>
         </div>
       </div>}
 
@@ -1048,35 +1159,55 @@ export const AiAssistantPanel = ({
           <label htmlFor="results-followup-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
             FOLLOW-UP QUESTION
           </label>
-          <div style={{ display: "flex", gap: 6 }}>
-            <input
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+            <textarea
               id="results-followup-input"
-              type="text"
+              rows={2}
               value={queryText}
               onChange={event => setQueryText(event.target.value)}
               onKeyDown={handleQueryKeyDown}
               disabled={!results || isStreaming}
               placeholder={results ? "Ask a follow-up question…" : "Run the model first…"}
               style={{
-                flex: 1,
-                background: C.bg,
-                border: `1px solid ${C.border}`,
-                borderRadius: 5,
-                color: C.text,
-                fontFamily: FONT,
-                fontSize: 12,
-                padding: "7px 8px",
+                flex: 1, background: C.bg, border: `1px solid ${C.border}`,
+                borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12,
+                padding: "7px 8px", resize: "none", outline: "none",
+                opacity: (!results || isStreaming) ? 0.6 : 1,
               }}
             />
-            <Btn
-              small
-              variant="primary"
+            <button
+              type="button"
+              aria-label={listening && micTarget === "query" ? "Stop voice input" : "Start voice input"}
+              onClick={() => toggleListening("query")}
+              disabled={!results || isStreaming}
+              style={{
+                width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                background: (listening && micTarget === "query") ? C.red + "22" : "transparent",
+                border: `1px solid ${(listening && micTarget === "query") ? C.red : C.border}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: (!results || isStreaming) ? "not-allowed" : "pointer",
+                opacity: (!results || isStreaming) ? 0.45 : 1, transition: "all .15s",
+              }}
+            >
+              <MicIcon size={15} color={(listening && micTarget === "query") ? C.red : C.muted} />
+            </button>
+            <button
+              type="button"
+              aria-label="Send follow-up"
               onClick={() => runQuery(queryText)}
               disabled={!results || !queryText.trim() || isStreaming}
-              ariaLabel="Ask follow-up question"
+              style={{
+                width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                background: (!results || !queryText.trim() || isStreaming) ? C.muted : C.accent,
+                border: "none",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: (!results || !queryText.trim() || isStreaming) ? "not-allowed" : "pointer",
+                opacity: (!results || !queryText.trim() || isStreaming) ? 0.35 : 1,
+                transition: "opacity .12s, background .12s",
+              }}
             >
-              Ask
-            </Btn>
+              <ArrowUpIcon size={16} color={C.bg} />
+            </button>
           </div>
         </div>
       )}
