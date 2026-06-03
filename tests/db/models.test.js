@@ -1441,7 +1441,25 @@ describe('Sprint 71 — persistence layer', () => {
     });
   });
 
-  // ── 71.1.4  Null / undefined field handling ───────────────────────────────
+  // ── 71.1.4  Round-trip: model_json.sections survives saveModel insert ────
+  describe('round-trip — model_json.sections survives saveModel insert', () => {
+    it('the insert payload model_json contains sections from the input object', async () => {
+      const sections = [
+        { id: 'sec_1', name: 'Triage', color: '#4A90D9', memberIds: ['q1'], entryQueues: [], exitQueues: ['q1'] },
+      ];
+      const model = { name: 'Sections RT', entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [], sections };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'sec-rt-id', name: model.name, owner_id: 'u1' }, error: null,
+      });
+      await saveModel(model, 'u1');
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json.sections).toEqual(sections);
+    });
+  });
+
+  // ── 71.1.5  Null / undefined field handling ───────────────────────────────
   describe('norm() — null and undefined field handling', () => {
     it('defaults dataSources to [] when model_json has no dataSources', () => {
       const result = norm({
