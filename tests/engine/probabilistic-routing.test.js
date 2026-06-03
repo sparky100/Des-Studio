@@ -130,11 +130,11 @@ describe("RELEASE — engine integration", () => {
     expect(patient?.outcome).toEqual(expect.objectContaining({
       status: "completed",
       routeId: "route-exit:be-release",
-      routeLabel: "Exit",
+      routeLabel: "Released",
       endedBy: "direct-routing",
     }));
     expect(result.summary.outcomes["route-exit:be-release"]).toEqual(expect.objectContaining({
-      routeLabel: "Exit",
+      routeLabel: "Released",
       status: "completed",
       endedBy: "direct-routing",
       count: 1,
