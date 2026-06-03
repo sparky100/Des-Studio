@@ -776,9 +776,7 @@ export const AiAssistantPanel = ({
   };
 
   const focusedAction = isResultsContext ? activeMode : null;
-  const panelTitle = (sidebar || mobileFullscreen)
-    ? "Model Assistant"
-    : (embedded || overlay ? "Analyse Results" : "Model Assistant");
+  const panelTitle = "Model Assistant";
   const innerStyle = sidebar
     ? { flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
     : mobileFullscreen
@@ -786,7 +784,7 @@ export const AiAssistantPanel = ({
     : { display: "contents" };
 
   return (
-    <aside aria-label="AI assistant" style={overlayStyle}>
+    <aside aria-label="Model Assistant" style={overlayStyle}>
       {sidebar && (
         <div
           onMouseDown={startDrag}
@@ -819,12 +817,12 @@ export const AiAssistantPanel = ({
         <div>
           <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{panelTitle}</div>
           {(sidebar || mobileFullscreen) && !focusedAction && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{isResultsContext ? "Analyse and refine simulation results." : "Ask questions about this model."}</div>}
-          {!embedded && !overlay && !sidebar && !mobileFullscreen && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Ask questions about the latest run.</div>}
+          {!embedded && !overlay && !sidebar && !mobileFullscreen && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{isResultsContext ? "Analyse and refine simulation results." : "Ask questions about this model."}</div>}
         </div>
         {(overlay || sidebar || mobileFullscreen || (!embedded && onClose)) && onClose && (
           <button
             type="button"
-            aria-label="Close AI assistant"
+            aria-label="Close Model Assistant"
             onClick={onClose}
             style={{ background: "none", border: "none", color: C.muted, fontSize: 16, cursor: "pointer", padding: "0 4px" }}
           >✕</button>

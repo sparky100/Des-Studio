@@ -322,7 +322,7 @@ export function HelpAssistant({
           setIsLoading(false);
         },
         onError: err => {
-          setError(err?.message || 'Failed to get response from Help Assistant');
+          setError(err?.message || 'Failed to get response from Model Assistant');
           setIsLoading(false);
         },
       }
@@ -372,7 +372,7 @@ export function HelpAssistant({
     <div
       role="dialog"
       aria-modal="true"
-      aria-labelledby="help-assistant-title"
+      aria-labelledby="model-assistant-title"
       style={{
         position: 'fixed',
         top: 0,
@@ -398,16 +398,16 @@ export function HelpAssistant({
         flexShrink: 0,
       }}>
         <div>
-          <div id="help-assistant-title" style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
-            Help Assistant
+          <div id="model-assistant-title" style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+            Model Assistant
           </div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-            Ask about simmodlr or modelling concepts
+            Ask about this model, simmodlr, or modelling concepts
           </div>
         </div>
         <button
           type="button"
-          aria-label="Close help"
+          aria-label="Close Model Assistant"
           onClick={onClose}
           style={{
             background: 'none',

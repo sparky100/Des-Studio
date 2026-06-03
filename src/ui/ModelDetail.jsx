@@ -1269,7 +1269,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 small
                 variant={aiSidebarOpen?"primary":"ghost"}
                 onClick={()=>{if(aiSidebarOpen){setAiSidebarOpen(false);setAiAction(null);}else{setAiSidebarOpen(true);setAiAction("explain");setAiSeq(s=>s+1);}}}
-              >Analyse</Btn>
+              >Model Assistant</Btn>
               {latestResults && (
                 <>
                   <Btn small variant="ghost" onClick={handleResultsExportJson} title="Download results as JSON">Export Results</Btn>

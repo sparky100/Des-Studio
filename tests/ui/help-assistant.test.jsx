@@ -1,11 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HelpAssistant } from "../../src/ui/HelpAssistant.jsx";
 
 // Mock the LLM client
 vi.mock("../../src/llm/apiClient.js", () => ({
-  callLLMOnce: vi.fn(),
+  streamNarrative: vi.fn(),
 }));
 
 describe("HelpAssistant", () => {
@@ -18,20 +18,42 @@ describe("HelpAssistant", () => {
     validation: null,
   };
 
+  const mockStreamSuccess = async (text = "Here's how you do it...") => {
+    const { streamNarrative } = await import("../../src/llm/apiClient.js");
+    streamNarrative.mockImplementation((_payload, handlers) => {
+      handlers.onToken?.(text);
+      handlers.onComplete?.();
+    });
+    return streamNarrative;
+  };
+
+  const mockStreamError = async (message = "Network error") => {
+    const { streamNarrative } = await import("../../src/llm/apiClient.js");
+    streamNarrative.mockImplementation((_payload, handlers) => {
+      handlers.onError?.(new Error(message));
+    });
+    return streamNarrative;
+  };
+
+  beforeEach(async () => {
+    const { streamNarrative } = await import("../../src/llm/apiClient.js");
+    streamNarrative.mockReset();
+  });
+
   it("renders when isOpen = true", () => {
     render(<HelpAssistant {...defaultProps} />);
-    expect(screen.getByLabelText("Help Assistant")).toBeInTheDocument();
+    expect(screen.getByText("Model Assistant")).toBeInTheDocument();
   });
 
   it("does not render when isOpen = false", () => {
     render(<HelpAssistant {...defaultProps} isOpen={false} />);
-    expect(screen.queryByLabelText("Help Assistant")).not.toBeInTheDocument();
+    expect(screen.queryByText("Model Assistant")).not.toBeInTheDocument();
   });
 
   it("close button calls onClose callback", async () => {
     const onClose = vi.fn();
     render(<HelpAssistant {...defaultProps} onClose={onClose} />);
-    const closeButton = screen.getByLabelText("Close help");
+    const closeButton = screen.getByLabelText("Close Model Assistant");
     await userEvent.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -59,21 +81,19 @@ describe("HelpAssistant", () => {
   });
 
   it("clicking a suggested question submits it", async () => {
-    const { callLLMOnce } = await import("../../src/llm/apiClient.js");
-    callLLMOnce.mockResolvedValue("Here's how you do it...");
+    const streamNarrative = await mockStreamSuccess();
 
     render(<HelpAssistant {...defaultProps} currentTab="entities" />);
     const questionButton = screen.getByText(/How do I add a priority attribute/i);
     await userEvent.click(questionButton);
 
     await waitFor(() => {
-      expect(callLLMOnce).toHaveBeenCalled();
+      expect(streamNarrative).toHaveBeenCalled();
     });
   });
 
   it("user message appears in conversation after submit", async () => {
-    const { callLLMOnce } = await import("../../src/llm/apiClient.js");
-    callLLMOnce.mockResolvedValue("Here's the answer");
+    await mockStreamSuccess("Here's the answer");
 
     render(<HelpAssistant {...defaultProps} />);
     const textarea = screen.getByPlaceholderText(/e.g. How do I set up exponential arrivals/i);
@@ -84,8 +104,7 @@ describe("HelpAssistant", () => {
   });
 
   it("assistant response appears after LLM returns", async () => {
-    const { callLLMOnce } = await import("../../src/llm/apiClient.js");
-    callLLMOnce.mockResolvedValue("This is the assistant response");
+    await mockStreamSuccess("This is the assistant response");
 
     render(<HelpAssistant {...defaultProps} />);
     const textarea = screen.getByLabelText("Your question");
@@ -98,10 +117,8 @@ describe("HelpAssistant", () => {
   });
 
   it("loading indicator shows while isLoading", async () => {
-    const { callLLMOnce } = await import("../../src/llm/apiClient.js");
-    callLLMOnce.mockImplementation(
-      () => new Promise((resolve) => setTimeout(resolve, 100))
-    );
+    const { streamNarrative } = await import("../../src/llm/apiClient.js");
+    streamNarrative.mockImplementation(() => {});
 
     render(<HelpAssistant {...defaultProps} />);
     const textarea = screen.getByLabelText("Your question");
@@ -111,8 +128,7 @@ describe("HelpAssistant", () => {
   });
 
   it("error message displays if LLM call fails", async () => {
-    const { callLLMOnce } = await import("../../src/llm/apiClient.js");
-    callLLMOnce.mockRejectedValue(new Error("Network error"));
+    await mockStreamError("Network error");
 
     render(<HelpAssistant {...defaultProps} />);
     const textarea = screen.getByLabelText("Your question");
@@ -124,8 +140,7 @@ describe("HelpAssistant", () => {
   });
 
   it("conversation history persists after close/reopen", async () => {
-    const { callLLMOnce } = await import("../../src/llm/apiClient.js");
-    callLLMOnce.mockResolvedValue("Answer");
+    await mockStreamSuccess("Answer");
 
     const { rerender } = render(<HelpAssistant {...defaultProps} />);
     const textarea = screen.getByLabelText("Your question");
@@ -152,15 +167,14 @@ describe("HelpAssistant", () => {
   });
 
   it("Enter key submits question", async () => {
-    const { callLLMOnce } = await import("../../src/llm/apiClient.js");
-    callLLMOnce.mockResolvedValue("Answer");
+    const streamNarrative = await mockStreamSuccess("Answer");
 
     render(<HelpAssistant {...defaultProps} />);
     const textarea = screen.getByLabelText("Your question");
     await userEvent.type(textarea, "Question{Enter}");
 
     await waitFor(() => {
-      expect(callLLMOnce).toHaveBeenCalled();
+      expect(streamNarrative).toHaveBeenCalled();
     });
   });
 
@@ -177,8 +191,7 @@ describe("HelpAssistant", () => {
   });
 
   it("sends workflow mode context to LLM", async () => {
-    const { callLLMOnce } = await import("../../src/llm/apiClient.js");
-    callLLMOnce.mockResolvedValue("Answer");
+    const streamNarrative = await mockStreamSuccess("Answer");
 
     render(
       <HelpAssistant
@@ -191,8 +204,8 @@ describe("HelpAssistant", () => {
     await userEvent.click(questionButton);
 
     await waitFor(() => {
-      expect(callLLMOnce).toHaveBeenCalled();
-      const callArgs = callLLMOnce.mock.calls[0][0];
+      expect(streamNarrative).toHaveBeenCalled();
+      const callArgs = streamNarrative.mock.calls[0][0];
       expect(JSON.stringify(callArgs)).toMatch(/Designing/);
     });
   });

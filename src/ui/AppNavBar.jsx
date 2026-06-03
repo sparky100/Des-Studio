@@ -109,11 +109,11 @@ export function AppNavBar({
           <InfoIcon />
         </button>
 
-        {/* Help (?) button */}
+        {/* Model Assistant (?) button */}
         <button
           type="button"
-          aria-label="Help"
-          title="Help"
+          aria-label="Model Assistant"
+          title="Model Assistant"
           onClick={onHelpOpen}
           style={navBtnStyle}
         >
