@@ -98,7 +98,7 @@ High-value features that are complete but whose absence would degrade the platfo
 | S7 | **Share / public dashboard** | Public link, QR code, embeddable widget. Read-only. No login required for viewers. |
 | S8 | **Model versioning** | Explicit milestones with notes. Version history panel. Structural change detection. Run records reference version snapshot. |
 | S9 | **Model Assistant (AI)** | Persistent sidebar. Focused views: Explain Results, Compare Runs, Refine Plan. Context-aware Q&A. |
-| S10 | **Template library** | 22 pre-built templates covering healthcare, logistics, transport, manufacturing, and service industries. |
+| S10 | **Template library** | 22 pre-built templates covering healthcare, logistics, transport, manufacturing, and service industries. Browsable by domain chip filter and text search. |
 | S11 | **Schedule Manager** | Named timetables (e.g. Weekday, Weekend) stored separately from `model_json` (ADR-016). CSV and Excel/XLSX import, multi-event import, and inline-row migration to named schedules. Schedule selector in Execute panel. |
 | S12 | **Resource failures** | FAIL/REPAIR macros with MTBF/MTTR distributions. V37 validation enforces paired configuration. |
 | S13 | **Voice input** | Microphone button in AI chat dialogs. Uses the Web Speech API to transcribe spoken input into the prompt field. |
@@ -115,7 +115,7 @@ Valuable additions already partially implemented or planned for near-term sprint
 | C1 | **Real-time data adapters** | REST and schedule-feed adapters that bind live data to distribution parameters. |
 | C2 | **Actuals tracking** | Plan vs actual deviation per entity. `avgPlanDeviation` in run summary. |
 | C3 | **Magic-link model import** | Encode a model as a URL. Opening the link shows a pre-flight preview and saves to the library with one click. |
-| C4 | **Community gallery** | Browse, tag, fork, and import public models shared by other users. |
+| C4 | **Community gallery** | Browse, tag, fork, and import public models shared by other users. Tag-filter UI and text search shipped for My Models, Public Library, and Community tabs; curator/fork workflow not yet built. |
 | C5 | **Container resource pools** | FILL/DRAIN macros for bulk resource consumption (e.g. fuel, inventory). Both macros are fully implemented in the engine. |
 | C6 | **Multi-shift rostering** | Named shift patterns bound to resource capacity over time. Currently limited to piecewise NHPP arrivals. |
 

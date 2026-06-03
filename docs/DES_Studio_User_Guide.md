@@ -13,6 +13,7 @@
 2. [Prerequisites](#2-prerequisites)
 3. [Quick Start](#3-quick-start)
 4. [Common Workflows](#4-common-workflows)
+   - 4.0 [Browse and filter the library](#40-browse-and-filter-the-library)
    - 4.1 [Build a model from scratch](#41-build-a-model-from-scratch)
    - 4.2 [Generate a model with AI](#42-generate-a-model-with-ai)
    - 4.3 [Run an experiment and read results](#43-run-an-experiment-and-read-results)
@@ -128,6 +129,24 @@ You have now completed the core DES Studio loop: build → run → analyse → a
 ---
 
 ## 4. Common Workflows
+
+### 4.0 Browse and filter the library
+
+**When to use this.** Your model list has grown and you need to locate a specific model, compare a set of related models, or discover models shared publicly by other users.
+
+The Model Library has four tabs — **My Models**, **Templates**, **Public Library**, and **Community**. The My Models, Public Library, and Community tabs each include a toolbar above the grid with the following controls:
+
+| Control | What it does |
+|---------|-------------|
+| **Search bar** | Filters by name and description as you type. Press ✕ to clear. |
+| **Sort dropdown** | Orders results by Last modified (default), Name A→Z, Most runs, or Version. |
+| **Tag chips** | Appear when any model in the current tab has tags. Click a chip to show only models with that tag; click again to deselect. Multiple chips use OR logic — models matching *any* selected tag are shown. Click **Clear tags** to reset. |
+
+**Clicking a tag chip on a model card** also activates that tag as a filter, so you can drill in from any card without opening a separate filter panel.
+
+**No results after filtering?** A "No models match your filters" message appears with a **Clear filters** button that resets search and tags in one click.
+
+**Adding tags to your models.** Tags are set in the model's settings panel inside the model editor. Give models descriptive tags (e.g. `healthcare`, `queueing`, `high-priority`) to make them easy to find later.
 
 ### 4.1 Build a model from scratch
 

@@ -2042,6 +2042,29 @@ npm run build
 
 ---
 
+### Sprint 80 — Model Library Discovery ✅
+
+**Goal:** Make it fast for users to find and act on models as the library grows, without changing the data model or adding backend queries.
+
+**Status:** ✅ Complete — 2026-06-03
+
+**Scope:**
+- Client-side only — no new DB migrations, no new columns, no changes to fetch logic in `App.jsx` or `db/models.js`
+- Filter state is tab-scoped local state inside `ModelLibrary.jsx`; no new props added to the `ModelLibrary` component
+
+| ID | Feature | Status | Deliverable |
+|---|---|---|---|
+| F80.1 | Search bar | ✅ | Text search on name + description for My Models, Public Library, Community tabs. Clear (✕) button inline. |
+| F80.2 | Sort control | ✅ | Dropdown: Last modified (default), Name A→Z, Most runs, Version. Applied after search/tag filter. |
+| F80.3 | Tag chips (filter row) | ✅ | Dynamic tag chip row derived from union of tags in current tab. Multi-select OR logic. "Clear tags" reset button. |
+| F80.4 | Tag chips (model cards) | ✅ | `ModelCard` renders up to 3 tags inline; "+N more" overflow label. Clicking a chip adds that tag to the active filter. |
+| F80.5 | Empty-after-filter state | ✅ | "No models match your filters" message with one-click "Clear filters" button when search/tags yield zero results but source list is non-empty. |
+| F80.6 | Templates tab unchanged | ✅ | Existing domain filter + search on Templates tab is untouched. |
+
+**Active-tags semantics:** selecting multiple tag chips returns models matching *any* selected tag (OR). This was chosen over AND logic because it better matches the discovery use case — narrowing by AND would too aggressively prune small libraries.
+
+---
+
 *End of build plan. Update after each sprint.*
 *The most important rule: read the existing file before changing it.*
 *Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec — never add a free-text escape hatch.*

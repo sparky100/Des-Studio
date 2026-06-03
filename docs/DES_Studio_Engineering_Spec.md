@@ -295,7 +295,7 @@ CREATE TABLE des_models (
   c_events        JSONB NOT NULL DEFAULT '[]',
   queues          JSONB NOT NULL DEFAULT '[]',
   goals           JSONB NOT NULL DEFAULT '[]',
-  tags            TEXT[],
+  tags            TEXT[],                    -- user-defined tags; surfaced as filterable chips in the Model Library
   model_json      JSONB,                     -- supplementary fields: graph, experimentDefaults, dataSources
   latest_version  INTEGER DEFAULT 0,
   parent_model_id UUID REFERENCES des_models(id),

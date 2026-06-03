@@ -152,6 +152,7 @@ If Codex finds itself rewriting a file that the audit marked as working (✓), s
 | `src/ui/execute/index.jsx` | ExecuteCanvas, BottomPanel, StepLog, EntityTable, run history, replication runner | VisualView retained as fallback for empty models |
 | `src/db/models.js` | Multi-user CRUD wrappers | User-scoped model/run queries, run stats, result persistence, owner-guarded delete |
 | `src/App.jsx` | Auth listener, model library shell | Back button discards silently (Sprint 2) |
+| `src/ui/ModelLibrary.jsx` | Model library browser with search, sort, tag-chip filter (My Models / Public / Community tabs); Templates tab unchanged | Filter state is tab-scoped `useState` inside `ModelLibrary`; no new props on the component |
 | `tests/` | ~120 engine tests passing | UI and DB layers untested |
 
 ---
