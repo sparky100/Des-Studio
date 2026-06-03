@@ -105,6 +105,45 @@ function extractOutcomes(summary = {}) {
   return rows.length ? rows : undefined;
 }
 
+function extractJourneyDigest(results, model = {}) {
+  const summary = results?.summary || {};
+  const out = {};
+
+  const qj = summary.queueJourneys;
+  if (qj && typeof qj === "object") {
+    const rows = Object.entries(qj)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+    const total = rows.reduce((s, [, c]) => s + c, 0);
+    if (rows.length) {
+      out.topQueuePaths = rows.map(([path, count]) => ({
+        path,
+        count,
+        pct: total > 0 ? Math.round(count / total * 100) : 0,
+      }));
+    }
+  }
+
+  const sj = summary.journeys;
+  const sectionById = {};
+  for (const s of model.sections || []) sectionById[s.id] = s.name || s.id;
+  if (sj && typeof sj === "object" && Object.keys(sj).length) {
+    const rows = Object.entries(sj)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8);
+    const total = rows.reduce((s, [, c]) => s + c, 0);
+    if (rows.length) {
+      out.topSectionPaths = rows.map(([key, count]) => ({
+        path: key.split("→").map(id => sectionById[id] || id).join("→"),
+        count,
+        pct: total > 0 ? Math.round(count / total * 100) : 0,
+      }));
+    }
+  }
+
+  return Object.keys(out).length ? out : undefined;
+}
+
 function extractExperiment(experimentConfig = {}) {
   return {
     warmup: experimentConfig.warmupPeriod ?? experimentConfig.warmup ?? 0,
@@ -219,6 +258,8 @@ function buildKpis(model = {}, results = {}) {
     avgWIP: finiteOrNull(summary.avgWIP),
   };
   if (outcomes) kpis.outcomes = outcomes;
+  const journeys = extractJourneyDigest(results, model);
+  if (journeys) kpis.journeys = journeys;
   if (summary.totalCost) kpis.totalCost = finiteOrNull(summary.totalCost);
   if (summary.costPerServed) kpis.costPerServed = finiteOrNull(summary.costPerServed);
   if (summary.containerLevels) kpis.containerLevels = summary.containerLevels;
