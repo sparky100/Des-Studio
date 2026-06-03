@@ -38,7 +38,7 @@ DES Studio exists to close that gap. It brings production-grade DES — the Thre
 
 **What they need from DES Studio.** Evidence for a decision: "we need three more nurses on the morning shift." That evidence must include confidence intervals (so it is statistically defensible), scenario comparisons (so alternatives are explored), and a format that can be shared with a manager who will not run the model themselves.
 
-**Primary features.** Forms/Tabs editors for precise model control; multi-replication runner for statistical confidence; Parametric Sweep with Goal Feasibility to find the minimum staffing that meets a service-level target; the Results view for KPI summaries; Share link and QR code for presenting results to decision-makers.
+**Primary features.** **Define** editors (structured forms for each model element type) for precise model control; multi-replication runner for statistical confidence; Parametric Sweep with Goal Feasibility to find the minimum staffing that meets a service-level target; the Results view for KPI summaries; Share link and QR code for presenting results to decision-makers.
 
 ---
 
@@ -79,7 +79,7 @@ These are non-negotiable. Removing any one of them makes DES Studio no longer a 
 | M7 | **Validation gates** | 38 validation rules (V1–V38). Blocking errors prevent run; warnings proceed with banner. Model Health panel shows live status. |
 | M8 | **Multi-replication runner** | Parallel Web Worker pool. Configurable seed, warm-up period, termination condition, max sim time. |
 | M9 | **Confidence intervals** | 95% CI via batch means. Displayed on all KPI cards for multi-replication runs. |
-| M10 | **Forms/Tabs editor** | Structured UI editors for all model element types. No free-text logic fields. |
+| M10 | **Define editors** | Structured UI editors for all model element types, accessed via the **Define** button in the Design toolbar. Sub-sections: Entity Types, Queues, B-Events, C-Events, Schedules, Model Data. No free-text logic fields. |
 | M11 | **Run history** | Every run saved (summary + model snapshot). Reproducible via stored seed and schedule reference. |
 | M12 | **Supabase persistence** | Models, runs, schedules, and user accounts stored in PostgreSQL with Row-Level Security. |
 
@@ -89,7 +89,7 @@ High-value features that are complete but whose absence would degrade the platfo
 
 | # | Feature | Description |
 |---|---------|-------------|
-| S1 | **Visual Designer** | @xyflow/react drag-and-drop canvas. Writes to the same `model_json` as Forms/Tabs. Supports mouse and touch-friendly multi-select, group move, and bulk delete for larger diagrams. |
+| S1 | **Visual Designer** | @xyflow/react drag-and-drop canvas (**Draw** button). Writes to the same `model_json` as the Define editors. Supports mouse and touch-friendly multi-select, group move, and bulk delete for larger diagrams. |
 | S2 | **AI Generator** | Natural-language model authoring. Four-phase conversation (clarify / confirm / build / refine). Produces complete `model_json`. |
 | S3 | **Execute canvas** | Topology-derived live flow canvas. Entity token animation, queue depth badges, server utilisation overlays. |
 | S4 | **Parametric sweep** | 1D and 2D sweeps with Goal Feasibility line. Two-scenario comparison uses paired-t confidence intervals with Bonferroni correction. Note: tukeyHSD() and oneWayANOVA() are implemented in the engine but not yet wired to the UI. |
@@ -162,7 +162,7 @@ Valuable additions already partially implemented or planned for near-term sprint
 **Acceptance criteria:**
 - AI Generator produces a `model_json` that passes validation with zero blocking errors for a well-described scenario.
 - Refinement loop lets the user describe what is wrong and the AI patches the model without regenerating from scratch.
-- Generated model is immediately editable in Forms/Tabs or Visual Designer.
+- Generated model is immediately editable via **Define** (structured editors) or **Draw** (Visual Designer).
 - Visual Designer users can select multiple nodes, move them as a group, and delete them together without switching to the structured editor.
 
 ---

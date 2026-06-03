@@ -121,7 +121,7 @@ When the run completes, the Results tab opens automatically. Key things to look 
 
 ### Step 5 — Change one parameter and re-run
 
-Go back to the **Design** tab. In the **B-Events** editor, find the arrival B-Event and change the inter-arrival time distribution mean from `10` to `8` (faster arrivals). Click **Save**. Go to **Run** and click **Run** again. Compare the new results with the previous run using **Run History → Compare**.
+Go back to the **Design** tab. Click **Define**, then select **B-Events**. Find the arrival B-Event and change the inter-arrival time distribution mean from `10` to `8` (faster arrivals). Click **Save**. Go to **Run** and click **Run** again. Compare the new results with the previous run using **Run History → Compare**.
 
 You have now completed the core DES Studio loop: build → run → analyse → adjust → re-run.
 
@@ -135,10 +135,19 @@ You have now completed the core DES Studio loop: build → run → analyse → a
 
 1. From the Model Library, click **New Model**.
 2. Give the model a name and description. Click **Create**.
-3. Open the **Design** tab. Work through the editor tabs in order:
+3. Open the **Design** tab. The Design toolbar has four buttons:
 
-   | Tab | What to do |
-   |-----|-----------|
+   | Button | What it does |
+   |--------|-------------|
+   | **Draw** | Opens the canvas-based Visual Designer. Build and rearrange your model graphically. |
+   | **Describe** | Opens the AI Generator. Describe your system in plain English and let the AI create a first draft. |
+   | **Define** | Opens the structured editors. A second bar appears below with six sub-sections — work through them in order: |
+   | **Model Health** | Appears when there are validation issues. Shows errors (red, must fix) and warnings (amber, proceed with caution). |
+
+   When **Define** is active, select each sub-section in the bar below it:
+
+   | Define sub-section | What to do |
+   |--------------------|-----------|
    | **Entity Types** | Add one entity type per distinct object class (e.g. "Customer", "Train"). Set attribute names, types (`number / string / boolean`), and default values. |
    | **Queues** | Add a queue for each waiting point. Set discipline (FIFO, LIFO, PRIORITY, SPT, EDD). Set capacity if finite. |
    | **B-Events** | Add arrival events (with a distribution) and service-completion events. Use the distribution picker to choose Exponential, Uniform, Triangular, Fixed, Erlang, Empirical, or other supported types. |
@@ -148,7 +157,7 @@ You have now completed the core DES Studio loop: build → run → analyse → a
 
    Goals (service-level targets, e.g. "95% of customers wait less than 5 minutes") are set on the **Overview** tab. Results will show green/red against these goals.
 
-4. Watch the **Model Health** panel (bottom of the editor). It runs 38 validation rules continuously and flags errors before you attempt a run. Fix all blocking errors (red) before running; warnings (amber) let you proceed with a caution banner.
+4. The **Model Health** button in the Design toolbar lights up whenever there are validation issues. Click it to see all 38 validation rules and fix any blocking errors (red) before running; warnings (amber) let you proceed with a caution banner.
 5. Click **Save**.
 
 **Tips:**
@@ -156,19 +165,19 @@ You have now completed the core DES Studio loop: build → run → analyse → a
 - If you use a PRIORITY queue discipline, the entity type needs a `priority` attribute of type `number`.
 - B-Events set *when* things happen. C-Events set *what can happen given the current state*. If nothing is happening during a run, check your C-Event conditions.
 
-**Visual Designer.** The **Design** tab also includes a canvas-based Visual Designer for building and rearranging the same model. Use **Pan** mode to move around the diagram. Use **Select** mode, or Shift/Ctrl-click with a mouse, to select more than one node. Once nodes are selected, the toolbar above the canvas shows how many are selected and lets you clear the selection or delete the selected nodes together. Dragging a selected group moves the whole group and saves the updated layout with the model.
+**Visual Designer.** Click **Draw** in the Design toolbar to open the canvas-based Visual Designer and build or rearrange the same model graphically. Use **Pan** mode to move around the diagram. Use **Select** mode, or Shift/Ctrl-click with a mouse, to select more than one node. Once nodes are selected, the toolbar above the canvas shows how many are selected and lets you clear the selection or delete the selected nodes together. Dragging a selected group moves the whole group and saves the updated layout with the model.
 
 ### 4.2 Generate a model with AI
 
 **When to use this.** You have a scenario in mind but do not want to configure every element manually.
 
-1. Open a new model or an existing one. Click the **Design** tab, then select the **Describe** sub-tab.
+1. Open a new model or an existing one. Click the **Design** tab, then click **Describe**.
 2. In the AI Generator panel, type a plain-English description of your system. Be specific:
 
    > "A hospital emergency department with two triage nurses and four doctors. Patients arrive on average every 8 minutes. Triage takes 3–7 minutes; consultation takes 10–25 minutes. High-priority patients are seen before low-priority ones. The target is that 90% of patients are seen within 30 minutes."
 
 3. Click **Generate**. The AI creates a complete `model_json`: entity types, queues, B-Events, C-Events, distributions, and performance goals.
-4. Review the generated model in **Forms/Tabs** or the **Visual Designer**. Check:
+4. Review the generated model using **Define** (structured editors) or **Draw** (Visual Designer). Check:
    - Entity types match your description.
    - Queue disciplines are correct (PRIORITY if you described priority patients).
    - Distribution means are realistic.

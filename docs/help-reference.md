@@ -403,7 +403,7 @@ Open the New Model dialog from the **+ New Model** button. Enter a name and opti
 | Option | Behaviour |
 |--------|-----------|
 | **Draw** | Opens the Visual designer with a starter flow pre-placed on the canvas |
-| **Describe** | Opens the Describe tab; the model name and description are passed as context to the AI |
+| **Describe** | Opens the AI generator (the **Describe** button in the Design toolbar); the model name and description are passed as context to the AI |
 | **Use a template** | Browse pre-built scenario templates |
 | **Import a file** | Upload a `.json` model file |
 | **Paste model** | Paste raw model JSON from clipboard |

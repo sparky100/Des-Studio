@@ -738,6 +738,6 @@ These rules are enforced in code and must not be violated by any PR. They are re
 
 8. **UI-Capability Parity.** Every engine feature is exposed in the UI editors. No engine capability may be exercised only by `model_json` hand-editing or by direct API calls. The UI is the authoritative interface.
 
-9. **One canonical model_json.** All three authoring modes (Forms/Tabs, AI Generator, Visual Designer) write to the same `model_json` object. A change made in one mode is immediately visible in the others. No per-mode model shadow state.
+9. **One canonical model_json.** All three authoring modes (Define editors, Describe / AI Generator, Draw / Visual Designer) write to the same `model_json` object. A change made in one mode is immediately visible in the others. No per-mode model shadow state.
 
 10. **Schema contract.** Any field added to `model_json`, to the DB serialisation in `models.js`, or to the Supabase schema requires a Vitest round-trip test in `tests/db/`. This is a PR gate, not a suggestion.
