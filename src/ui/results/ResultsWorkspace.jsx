@@ -12,7 +12,7 @@ const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 140;
 
-const SECTION_DEFAULTS = { summary: true, bottlenecks: true, sections: true, cost: true, analysis: true, runtime: true };
+const SECTION_DEFAULTS = { summary: true, bottlenecks: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true };
 
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
   const { C, FONT } = useTheme();
@@ -1025,6 +1025,42 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
   );
 }
 
+function JourneysPanel({ queueJourneys, C, FONT }) {
+  const rows = Object.entries(queueJourneys || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15);
+  if (!rows.length) return null;
+  const total = rows.reduce((s, [, c]) => s + c, 0);
+  const maxCount = rows[0][1];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {rows.map(([path, count]) => {
+        const queues = path.split("→");
+        const pct = total > 0 ? Math.round(count / total * 100) : 0;
+        return (
+          <div key={path} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+              {queues.map((q, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
+                  <span style={{ fontFamily: FONT, fontSize: 10, color: C.text, background: C.bg,
+                    border: `1px solid ${C.border}`, borderRadius: 3, padding: "1px 5px" }}>{q}</span>
+                </React.Fragment>
+              ))}
+              <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
+                {count} ({pct}%)
+              </span>
+            </div>
+            <div style={{ height: 3, background: C.border, borderRadius: 2 }}>
+              <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, queues, C, FONT }) {
   const queueNameById = {};
   for (const q of queues || []) { if (q.id && q.name) queueNameById[q.id] = q.name; }
@@ -1173,6 +1209,8 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const sectionStats = results?.summary?.sections;
   const sectionJourneys = results?.summary?.journeys;
   const hasSectionResults = !!(model?.sections?.length && sectionStats);
+  const queueJourneys = results?.summary?.queueJourneys;
+  const hasQueueJourneys = !!queueJourneys && Object.keys(queueJourneys).length > 0;
 
   // ── Shared responsive grid style used by all three chart sections ───────────
   const CHART_GRID = {
@@ -1234,6 +1272,17 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                 C={C}
                 FONT={FONT}
               />
+            </div>
+          </div>
+        )}
+        {hasQueueJourneys && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            <SectionHeader id="journeys" label="Entity Journeys" isOpen={sectionsOpen.journeys} onToggle={toggleSection} />
+            <div id="results-section-journeys" style={{ display: sectionsOpen.journeys ? "block" : "none", paddingTop: 14 }}>
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6, marginBottom: 10 }}>
+                Top queue paths taken by entities through the model, ranked by frequency.
+              </div>
+              <JourneysPanel queueJourneys={queueJourneys} C={C} FONT={FONT} />
             </div>
           </div>
         )}
@@ -1396,7 +1445,20 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         </div>
       )}
 
-      {/* ── 4. Cost summary (only when model tracks costs) ──────────────────── */}
+      {/* ── 4. Entity Journeys ────────────────────────────────────────────────── */}
+      {hasQueueJourneys && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <SectionHeader id="journeys" label="Entity Journeys" isOpen={sectionsOpen.journeys} onToggle={toggleSection} />
+          <div id="results-section-journeys" style={{ display: sectionsOpen.journeys ? "block" : "none", paddingTop: 14 }}>
+            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6, marginBottom: 10 }}>
+              Top queue paths taken by entities through the model, ranked by frequency.
+            </div>
+            <JourneysPanel queueJourneys={queueJourneys} C={C} FONT={FONT} />
+          </div>
+        </div>
+      )}
+
+      {/* ── 5. Cost summary (only when model tracks costs) ──────────────────── */}
       {Number.isFinite(results?.summary?.totalCost) && results.summary.totalCost > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <SectionHeader id="cost" label="Cost Summary" isOpen={sectionsOpen.cost} onToggle={toggleSection} />

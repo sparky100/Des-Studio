@@ -1294,6 +1294,14 @@ const cycleLog = [];
       }
     }
 
+    const queueJourneys = {};
+    for (const entity of customers) {
+      if (!entity.stages?.length) continue;
+      const path = entity.stages.map(s => s.queueName).filter(Boolean).join("→");
+      if (!path) continue;
+      queueJourneys[path] = (queueJourneys[path] || 0) + 1;
+    }
+
     return {
       total:             customers.length,
       served:            served.length,
@@ -1311,6 +1319,7 @@ const cycleLog = [];
       containerLevels:   Object.keys(containerLevels).length ? containerLevels : undefined,
       sections:          Object.keys(sectionStats).length  ? sectionStats  : undefined,
       journeys:          Object.keys(journeys).length      ? journeys      : undefined,
+      queueJourneys:     Object.keys(queueJourneys).length ? queueJourneys : undefined,
       warmupPeriod,
       excludedCount:     _excludedCount,
       phaseCTruncated:   _phaseCTruncated,
