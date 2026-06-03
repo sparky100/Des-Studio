@@ -86,7 +86,28 @@ companionCsv rules:
    fill indefinitely — entities never leave (CHK-013).
 
    ✓ CORRECT: ARRIVE(Patient, Triage Queue) paired with C-event effect "ASSIGN(Triage Queue, Nurse)"
-   ✗ WRONG:   ARRIVE(Patient, Discharge Queue) with no C-event that ASSIGN/BATCH/COSEIZE from it`,
+   ✗ WRONG:   ARRIVE(Patient, Discharge Queue) with no C-event that ASSIGN/BATCH/COSEIZE from it
+
+6. balkCondition and routing[].condition MUST be predicate objects, never strings.
+   The variable field uses dot notation — NOT the parenthesis form used in C-event conditions.
+
+   ✓ CORRECT: "balkCondition": {"variable": "Queue.Triage Queue.length", "operator": ">", "value": 10}
+   ✗ WRONG:   "balkCondition": "queue(Triage Queue).length > 10"  — string form, CHK-011 error
+   ✗ WRONG:   "balkCondition": {"variable": "queue(Triage Queue).length", ...}  — parenthesis form invalid in predicate objects
+
+7. RELEASE() followed immediately by COMPLETE() in the same effect is always broken.
+   RELEASE sets the entity to "waiting" state. COMPLETE requires "serving" state and silently skips.
+   For terminal events: use COMPLETE() alone. For intermediate events: use RELEASE(Server, NextQueue).
+
+   ✓ CORRECT terminal: "effect": ["COMPLETE()"]
+   ✓ CORRECT intermediate: "effect": ["RELEASE(Nurse, Treatment Queue)"]
+   ✗ WRONG: "effect": ["RELEASE(Nurse)", "COMPLETE()"]  — COMPLETE silently skipped, V38 warning
+
+8. RENEGE() argument MUST be exactly ctx — never an entity type name.
+   RENEGE(Patient) silently fails because the engine can't find an entity by type name in this context.
+
+   ✓ CORRECT: "effect": ["RENEGE(ctx)"]
+   ✗ WRONG:   "effect": ["RENEGE(Patient)"]  — V25 error`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:
