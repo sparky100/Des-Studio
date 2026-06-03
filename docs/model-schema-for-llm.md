@@ -1156,10 +1156,27 @@ All other model settings (routing, probabilistic routing, balking, loop guards, 
 - The Visual Designer shows a coloured dot on each node whose `refId` appears in a section's `memberIds`.
 - A dedicated **Sections** tab in the Design area lets users create, rename, recolour, and assign members.
 
+**When sections are appropriate:**
+
+Sections add value when a model has distinct, named stages that an entity passes through sequentially, and when the total number of queues or events makes the flat list hard to navigate. Typical triggers:
+
+| Signal | Example |
+|---|---|
+| ≥ 8 queues or ≥ 15 events | Glasgow Urgent Care Pathway (20 queues, 50+ events) |
+| Multi-stage pathway with named handoff points | NHS 24 → MIU → A&E |
+| Multiple departments or wards modelled in one file | Triage, Observation, Theatres, Recovery |
+| User asks for sub-models, swimlanes, or grouped views | "Can you split this into sections?" |
+
+Sections are **not** needed for:
+- Simple single-flow models (M/M/1, M/M/c, one or two queues)
+- Models where all queues belong to the same logical stage
+- Exploratory or template models
+
 **Rules:**
 - `entryQueues` and `exitQueues` must be subsets of `memberIds` and must reference queue IDs (not other element types).
 - An element appearing in multiple sections is a modelling error (the UI will assign it to the last section that claims it).
-- When generating a model JSON, omit `sections` or set it to `[]` — let the user define groupings after import.
+- When generating a model JSON, you **may** populate `sections[]` if the model is clearly multi-stage (see table above) and element IDs are known. Reference the actual `id` values of the queues and events you defined earlier in the JSON — do not invent IDs.
+- If you are unsure which elements belong to which stage, omit `sections` or set it to `[]` and note in your response that the user can assign sections via the Sections tab.
 
 ---
 
