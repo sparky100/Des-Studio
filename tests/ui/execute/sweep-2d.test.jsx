@@ -98,6 +98,12 @@ function openSweepSection() {
   fireEvent.click(header.closest('div') || header);
 }
 
+function setup2DPanel() {
+  render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
+  openSweepSection();
+  fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
+}
+
 function selectParamFromDropdown(ariaLabel, optionText) {
   const select = screen.getByRole('combobox', { name: ariaLabel });
   fireEvent.change(select, { target: { value: optionText } });
@@ -141,10 +147,7 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
   });
 
   it('validation blocks run when 2D grid exceeds 50 points', () => {
-    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-    openSweepSection();
-
-    fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
+    setup2DPanel();
 
     // Select parameter X
     const selectX = screen.getByRole('combobox', { name: /sweep parameter x/i });
@@ -183,16 +186,9 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     ]);
     mock2DSweepRunner(results);
 
-    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-    openSweepSection();
-
-    fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
-
-    const selectX = screen.getByRole('combobox', { name: /sweep parameter x/i });
-    fireEvent.change(selectX, { target: { value: 'entityTypeCount|et_server|' } });
-
-    const selectY = screen.getByRole('combobox', { name: /sweep parameter y/i });
-    fireEvent.change(selectY, { target: { value: 'queueCapacity|q_wait|' } });
+    setup2DPanel();
+    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter x/i }), { target: { value: 'entityTypeCount|et_server|' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter y/i }), { target: { value: 'queueCapacity|q_wait|' } });
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
@@ -224,16 +220,9 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     ]);
     mock2DSweepRunner(results);
 
-    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-    openSweepSection();
-
-    fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
-
-    const selectX = screen.getByRole('combobox', { name: /sweep parameter x/i });
-    fireEvent.change(selectX, { target: { value: 'entityTypeCount|et_server|' } });
-
-    const selectY = screen.getByRole('combobox', { name: /sweep parameter y/i });
-    fireEvent.change(selectY, { target: { value: 'queueCapacity|q_wait|' } });
+    setup2DPanel();
+    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter x/i }), { target: { value: 'entityTypeCount|et_server|' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter y/i }), { target: { value: 'queueCapacity|q_wait|' } });
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
@@ -286,16 +275,9 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
       return { cancel: vi.fn() };
     });
 
-    render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
-    openSweepSection();
-
-    fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
-
-    const selectX = screen.getByRole('combobox', { name: /sweep parameter x/i });
-    fireEvent.change(selectX, { target: { value: 'entityTypeCount|et_server|' } });
-
-    const selectY = screen.getByRole('combobox', { name: /sweep parameter y/i });
-    fireEvent.change(selectY, { target: { value: 'queueCapacity|q_wait|' } });
+    setup2DPanel();
+    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter x/i }), { target: { value: 'entityTypeCount|et_server|' } });
+    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter y/i }), { target: { value: 'queueCapacity|q_wait|' } });
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
