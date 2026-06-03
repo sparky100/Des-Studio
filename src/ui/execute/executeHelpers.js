@@ -126,6 +126,14 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
     : undefined;
   const journeys = Object.keys(journeyAcc).length ? journeyAcc : undefined;
 
+  const queueJourneyAcc = {};
+  for (const s of summaries) {
+    for (const [key, count] of Object.entries(s.queueJourneys || {})) {
+      queueJourneyAcc[key] = (queueJourneyAcc[key] || 0) + count;
+    }
+  }
+  const queueJourneys = Object.keys(queueJourneyAcc).length ? queueJourneyAcc : undefined;
+
   // Aggregate waitDist across all replications by pooling raw values per queue
   const waitDistAcc = {};
   for (const payload of replicationPayloads) {
@@ -230,6 +238,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
       perResource,
       sections,
       journeys,
+      queueJourneys,
     },
   };
 }
