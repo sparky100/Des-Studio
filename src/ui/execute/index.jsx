@@ -30,7 +30,6 @@ import { qrSvg } from "../share/qr.js";
 import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
-import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
 import { generateReport, sanitizeFilename } from '../../reports/index.js';
@@ -157,7 +156,7 @@ async function doCloudSave(saveFn, {
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, schedulesVersion = 0 }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null }) => {
   const { C, FONT } = useTheme();
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
@@ -188,7 +187,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [executeSection, setExecuteSection] = useState("run");
   const [hideRunReadiness, setHideRunReadiness] = useState(false);
   const [showRunSetup, setShowRunSetup] = useState(false);
-  const [diagnosticsPanelOpen, setDiagnosticsPanelOpen] = useState(false);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
   const [runHistoryStatus, setRunHistoryStatus] = useState("idle");
   const [runHistoryError, setRunHistoryError] = useState("");
@@ -2251,7 +2249,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             View Results →
           </Btn>
         )}
-        <Btn variant={diagnosticsPanelOpen ? "primary" : "ghost"} onClick={() => setDiagnosticsPanelOpen(open => !open)}>Model Assistant</Btn>
+        <Btn variant={modelAssistantOpen ? "primary" : "ghost"} onClick={() => onOpenModelAssistant?.()}>Model Assistant</Btn>
         <div style={{ position: "relative", display: "flex", gap: 6 }}>
           {/* Export Data popover */}
           {showExportPopover && (
@@ -3005,43 +3003,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         return <VisualView snap={currentSnap} model={model} summary={results?.summary} />;
       })()}
         </>
-      )}
-      {diagnosticsPanelOpen && (
-        <div style={{
-          width: 380, minWidth: 320, maxWidth: 420, flexShrink: 0,
-          background: C.panel,
-          border: `1px solid ${C.border}`,
-          borderRadius: 8,
-          display: "flex", flexDirection: "column",
-          maxHeight: "calc(100vh - 120px)",
-          overflowY: "auto",
-          position: "fixed",
-          right: 16,
-          top: 96,
-          zIndex: 60,
-          boxShadow: "0 10px 28px rgba(0,0,0,0.35)",
-        }}>
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "10px 14px", borderBottom: `1px solid ${C.border}`,
-            position: "sticky", top: 0, background: C.panel, zIndex: 1,
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FONT }}>Model Assistant</div>
-            <button
-              type="button"
-              aria-label="Close Model Assistant"
-              onClick={() => setDiagnosticsPanelOpen(false)}
-              style={{ background: "none", border: "none", color: C.muted, fontSize: 16, cursor: "pointer", padding: "0 4px" }}
-            >✕</button>
-          </div>
-          <div style={{ padding: 14 }}>
-            <DiagnosticsTab
-              model={model}
-              results={results}
-              onGoToNode={setSelectedNodeLabel}
-            />
-          </div>
-        </div>
       )}
       {/* Share Modal */}
       {showShareModal && (

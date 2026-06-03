@@ -7,6 +7,7 @@ import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
 import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt } from "../../llm/prompts.js";
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 function ConfidenceBadge({ confidence }) {
@@ -293,6 +294,7 @@ export const AiAssistantPanel = ({
   activeTab = null,
   inline = false,
   triggerAction = null, // { action: "explain"|"compare"|"refine", seq: number }
+  onDiagnosticsNodeSelect = null,
 }) => {
   const { C, FONT } = useTheme();
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -319,7 +321,8 @@ export const AiAssistantPanel = ({
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
   }, [sidebarWidth]);
-  const isResultsContext = ['results', 'execute'].includes(activeTab);
+  const isRunContext = activeTab === "execute";
+  const isResultsContext = activeTab === "results";
   const toast = useToast();
   const [activeMode, setActiveMode] = useState(triggerAction?.action || "explain");
 
@@ -777,6 +780,11 @@ export const AiAssistantPanel = ({
 
   const focusedAction = isResultsContext ? activeMode : null;
   const panelTitle = "Model Assistant";
+  const panelSubtitle = isRunContext
+    ? "Debug and diagnose simulation runs."
+    : isResultsContext
+    ? "Analyse and refine simulation results."
+    : "Ask questions about this model.";
   const innerStyle = sidebar
     ? { flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
     : mobileFullscreen
@@ -816,8 +824,8 @@ export const AiAssistantPanel = ({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottom: `1px solid ${C.border}`, paddingBottom: 10 }}>
         <div>
           <div style={{ fontSize: 13, color: C.text, fontFamily: FONT, fontWeight: 700 }}>{panelTitle}</div>
-          {(sidebar || mobileFullscreen) && !focusedAction && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{isResultsContext ? "Analyse and refine simulation results." : "Ask questions about this model."}</div>}
-          {!embedded && !overlay && !sidebar && !mobileFullscreen && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{isResultsContext ? "Analyse and refine simulation results." : "Ask questions about this model."}</div>}
+          {(sidebar || mobileFullscreen) && !focusedAction && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{panelSubtitle}</div>}
+          {!embedded && !overlay && !sidebar && !mobileFullscreen && <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{panelSubtitle}</div>}
         </div>
         {(overlay || sidebar || mobileFullscreen || (!embedded && onClose)) && onClose && (
           <button
@@ -829,6 +837,14 @@ export const AiAssistantPanel = ({
         )}
       </div>
 
+      {isRunContext ? (
+        <DiagnosticsTab
+          model={model}
+          results={results}
+          onGoToNode={onDiagnosticsNodeSelect || (() => {})}
+        />
+      ) : (
+      <>
       {/* Mode tabs — shown when in results context */}
       {isResultsContext && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1009,8 +1025,10 @@ export const AiAssistantPanel = ({
           </div>
       </div>}
 
+      </>
+      )}
       </div>
-      {(isStreaming || status === "complete") && (
+      {!isRunContext && (isStreaming || status === "complete") && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "8px 14px", borderTop: `1px solid ${C.border}` }}>
           {isStreaming && <Btn small variant="danger" onClick={stopStream}>Stop</Btn>}
           {status === "complete" && (response || conversationHistory.length > 0) && <Btn small variant="ghost" onClick={copyResponse}>Copy</Btn>}
