@@ -31,7 +31,9 @@ function DesNode({ data, selected }) {
       position: "relative",
       width: 142,
       minHeight: 68,
-      background: C.surface,
+      background: data.sectionColor && !hasError
+        ? `linear-gradient(${data.sectionColor}18, ${data.sectionColor}18), ${C.surface}`
+        : C.surface,
       border: `1.5px solid ${hasError && !selected ? C.red : selected ? color : `${color}44`}`,
       borderLeft: `4px solid ${hasError && !selected ? C.red : color}`,
       borderRadius: 6,
@@ -75,13 +77,14 @@ function DesNode({ data, selected }) {
           title={`Section: ${data.sectionId || ""}`}
           style={{
             position: "absolute",
-            top: -4,
-            right: -4,
-            width: 10,
-            height: 10,
+            top: -5,
+            right: -5,
+            width: 13,
+            height: 13,
             borderRadius: "50%",
             background: data.sectionColor,
-            border: `1.5px solid ${C.bg}`,
+            border: `2px solid ${C.bg}`,
+            boxShadow: `0 0 0 1px ${data.sectionColor}88`,
           }}
         />
       )}
