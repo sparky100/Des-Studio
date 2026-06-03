@@ -1242,6 +1242,58 @@ const cycleLog = [];
       ? +(plannedEntities.reduce((s, e) => s + (e.arrivalTime - e._plannedTime), 0) / plannedEntities.length).toFixed(4)
       : null;
 
+    // Per-section metrics
+    const sectionStats = {};
+    const journeys = {};
+    if (runtimeModel.sections?.length) {
+      const queueIdByName = {};
+      for (const q of runtimeModel.queues || []) {
+        if (q.id && q.name) queueIdByName[q.name.trim().toLowerCase()] = q.id;
+      }
+      const sectionMemberSet = {};
+      const sectionEntrySet = {};
+      const sectionExitSet = {};
+      for (const sec of runtimeModel.sections) {
+        sectionMemberSet[sec.id] = new Set(sec.memberIds || []);
+        sectionEntrySet[sec.id]  = new Set(sec.entryQueues || []);
+        sectionExitSet[sec.id]   = new Set(sec.exitQueues || []);
+        sectionStats[sec.id] = { count: 0, _sojournSum: 0, entitiesIn: 0, entitiesOut: 0 };
+      }
+      for (const entity of customers) {
+        if (!entity.stages?.length) continue;
+        const visitedSections = [];
+        let lastSection = null;
+        for (const sec of runtimeModel.sections) {
+          let sojourn = 0, didVisit = false, didEnter = false, didExit = false;
+          for (const stage of entity.stages) {
+            const qid = queueIdByName[stage.queueName?.trim().toLowerCase()];
+            if (!qid || !sectionMemberSet[sec.id].has(qid)) continue;
+            didVisit = true;
+            sojourn += truncateInterval(stage.waitStartedAt, stage.serviceStartedAt)
+                     + truncateInterval(stage.serviceStartedAt, stage.serviceEndedAt);
+            if (sectionEntrySet[sec.id].has(qid)) didEnter = true;
+            if (sectionExitSet[sec.id].has(qid)) didExit = true;
+          }
+          if (didVisit) {
+            sectionStats[sec.id].count++;
+            sectionStats[sec.id]._sojournSum += sojourn;
+            if (didEnter) sectionStats[sec.id].entitiesIn++;
+            if (didExit)  sectionStats[sec.id].entitiesOut++;
+            if (sec.id !== lastSection) { visitedSections.push(sec.id); lastSection = sec.id; }
+          }
+        }
+        if (visitedSections.length > 1) {
+          const key = visitedSections.join("→");
+          journeys[key] = (journeys[key] || 0) + 1;
+        }
+      }
+      for (const sec of runtimeModel.sections) {
+        const s = sectionStats[sec.id];
+        s.avgSojourn = s.count > 0 ? +(s._sojournSum / s.count).toFixed(4) : null;
+        delete s._sojournSum;
+      }
+    }
+
     return {
       total:             customers.length,
       served:            served.length,
@@ -1254,9 +1306,11 @@ const cycleLog = [];
       totalCost:         +totalCost.toFixed(4),
       costPerServed,
       avgPlanDeviation,
-      outcomes:       Object.keys(outcomes).length ? outcomes : undefined,
-      perResource:       Object.keys(perResource).length ? perResource : undefined,
+      outcomes:          Object.keys(outcomes).length      ? outcomes      : undefined,
+      perResource:       Object.keys(perResource).length   ? perResource   : undefined,
       containerLevels:   Object.keys(containerLevels).length ? containerLevels : undefined,
+      sections:          Object.keys(sectionStats).length  ? sectionStats  : undefined,
+      journeys:          Object.keys(journeys).length      ? journeys      : undefined,
       warmupPeriod,
       excludedCount:     _excludedCount,
       phaseCTruncated:   _phaseCTruncated,
