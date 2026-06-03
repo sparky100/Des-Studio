@@ -2,6 +2,8 @@
 import { useState } from "react";
 import { alpha } from "./shared/tokens.js";
 import { Btn, Empty } from "./shared/components.jsx";
+import { csvEscape, downloadTextFile, downloadJsonFile, buildRunHistoryExportPayload, buildRunHistoryCsv } from "./shared/utils.js";
+import { ScenarioComparisonTable } from "./shared/ScenarioComparisonTable.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { fetchRunHistory, getRun, updateRunLabel, updateRunTags, archiveRun, unarchiveRun, deleteSimulationRun, revokeShareLink, createShareLink, fetchModelSchedules, buildSchedulesMap } from "../db/models.js";
 import { fetchLocalRunHistory } from "../db/local.js";
@@ -21,73 +23,6 @@ function slugifyModelName(name = "") {
     .replace(/^-+|-+$/g, "") || "untitled";
 }
 
-function csvEscape(value) {
-  if (value == null) return "";
-  const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function downloadTextFile(content, filename, type) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  try { link.click(); } finally { link.remove(); URL.revokeObjectURL(url); }
-}
-
-function downloadJsonFile(payload, filename) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  try { link.click(); } finally { link.remove(); URL.revokeObjectURL(url); }
-}
-
-function buildRunHistoryCsv(rows = []) {
-  const table = [[
-    "runLabel","ranAt","seed","replications","warmupPeriod","maxSimulationTime",
-    "totalArrived","totalServed","totalReneged","renegeRate","avgWaitTime","avgServiceTime","durationMs",
-  ]];
-  for (const row of rows) {
-    table.push([
-      row.run_label || "", row.ran_at, row.seed ?? "", row.replications ?? 1,
-      row.warmup_period ?? "", row.max_simulation_time ?? "",
-      row.total_arrived ?? 0, row.total_served ?? 0, row.total_reneged ?? 0,
-      row.renege_rate ?? "", row.avg_wait_time ?? "", row.avg_service_time ?? "",
-      row.duration_ms ?? "",
-    ]);
-  }
-  return table.map(row => row.map(csvEscape).join(",")).join("\n");
-}
-
-function buildRunHistoryExportPayload(model, rows = [], exportedAt = new Date().toISOString()) {
-  return {
-    schema: "des-studio.run-history.v1",
-    exportedAt,
-    model: { id: model?.id ?? null, name: model?.name ?? "Untitled model" },
-    runs: rows.map(row => ({
-      id: row.id,
-      runLabel: row.run_label || "",
-      ranAt: row.ran_at,
-      seed: row.seed ?? null,
-      replications: row.replications ?? 1,
-      warmupPeriod: row.warmup_period ?? null,
-      maxSimulationTime: row.max_simulation_time ?? null,
-      totalArrived: row.total_arrived ?? 0,
-      totalServed: row.total_served ?? 0,
-      totalReneged: row.total_reneged ?? 0,
-      renegeRate: row.renege_rate ?? null,
-      avgWaitTime: row.avg_wait_time ?? null,
-      avgServiceTime: row.avg_service_time ?? null,
-      durationMs: row.duration_ms ?? null,
-      resultsJson: row.results_json ?? null,
-    })),
-  };
-}
 
 const hasResultsPayload = row => {
   const json = row?.results_json;
@@ -362,46 +297,7 @@ export function ModelHistoryTab({
       {selectedComparison && !selectedComparison.error && (
         <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", flexDirection: "column", gap: 12, marginBottom: 12 }}>
           <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>RUN COMPARISON</span>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
-              <thead>
-                <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                  <th scope="col" style={{ padding: "6px 8px" }}>KPI</th>
-                  <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{selectedComparison.labels?.a}</th>
-                  <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{selectedComparison.labels?.b}</th>
-                  <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
-                  <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
-                  <th scope="col" style={{ padding: "6px 8px" }}>Significant?</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedComparison.comparisons?.map((c, i) => {
-                  const mA = selectedComparison.meansA?.[c.metric];
-                  const mB = selectedComparison.meansB?.[c.metric];
-                  return (
-                    <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                      <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
-                      <td style={{ padding: "6px 8px", textAlign: "right" }}>{mA != null ? fmt(mA) : "—"}</td>
-                      <td style={{ padding: "6px 8px", textAlign: "right" }}>{mB != null ? fmt(mB) : "—"}</td>
-                      <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
-                        {c.meanDiff != null ? (c.meanDiff > 0 ? "+" : "") + fmt(c.meanDiff) : "—"}
-                      </td>
-                      <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>
-                        {c.lower != null && c.upper != null ? `[${fmt(c.lower)}, ${fmt(c.upper)}]` : "—"}
-                      </td>
-                      <td style={{ padding: "6px 8px" }}>
-                        {c.significant95 ? (
-                          <span style={{ color: c.significant99 ? C.green : C.amber, fontWeight: 700 }}>
-                            {c.significant99 ? "Yes (99%)" : "Yes (95%)"}
-                          </span>
-                        ) : <span style={{ color: C.muted }}>No</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ScenarioComparisonTable comparison={selectedComparison} />
         </div>
       )}
 

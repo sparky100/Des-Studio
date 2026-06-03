@@ -2,6 +2,7 @@
 import { lazy, Suspense, useState, useEffect, useMemo, useRef, useCallback } from "react";
 import pkg from '../../package.json';
 import { RADIUS, Z, alpha } from "./shared/tokens.js";
+import { csvEscape, downloadTextFile, downloadJsonFile, buildRunHistoryExportPayload, buildRunHistoryCsv } from "./shared/utils.js";
 import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./shared/components.jsx";
 import { useToast } from "./shared/ToastContext.jsx";
 import { useViewport } from "./shared/hooks.js";
@@ -150,107 +151,7 @@ function inlineSchedulesForExport(model, schedules = []) {
   };
 }
 
-function downloadJsonFile(payload, filename) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  try {
-    link.click();
-  } finally {
-    link.remove();
-    URL.revokeObjectURL(url);
-  }
-}
 
-function csvEscape(value) {
-  if (value == null) return "";
-  const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-function downloadTextFile(content, filename, type) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  try {
-    link.click();
-  } finally {
-    link.remove();
-    URL.revokeObjectURL(url);
-  }
-}
-
-function buildRunHistoryExportPayload(model, rows = [], exportedAt = new Date().toISOString()) {
-  return {
-    schema: "des-studio.run-history.v1",
-    exportedAt,
-    model: {
-      id: model?.id ?? null,
-      name: model?.name ?? "Untitled model",
-    },
-    runs: rows.map(row => ({
-      id: row.id,
-      runLabel: row.run_label || "",
-      ranAt: row.ran_at,
-      seed: row.seed ?? null,
-      replications: row.replications ?? 1,
-      warmupPeriod: row.warmup_period ?? null,
-      maxSimulationTime: row.max_simulation_time ?? null,
-      totalArrived: row.total_arrived ?? 0,
-      totalServed: row.total_served ?? 0,
-      totalReneged: row.total_reneged ?? 0,
-      renegeRate: row.renege_rate ?? null,
-      avgWaitTime: row.avg_wait_time ?? null,
-      avgServiceTime: row.avg_service_time ?? null,
-      durationMs: row.duration_ms ?? null,
-      resultsJson: row.results_json ?? null,
-    })),
-  };
-}
-
-function buildRunHistoryCsv(rows = []) {
-  const table = [[
-    "runLabel",
-    "ranAt",
-    "seed",
-    "replications",
-    "warmupPeriod",
-    "maxSimulationTime",
-    "totalArrived",
-    "totalServed",
-    "totalReneged",
-    "renegeRate",
-    "avgWaitTime",
-    "avgServiceTime",
-    "durationMs",
-  ]];
-
-  for (const row of rows) {
-    table.push([
-      row.run_label || "",
-      row.ran_at,
-      row.seed ?? "",
-      row.replications ?? 1,
-      row.warmup_period ?? "",
-      row.max_simulation_time ?? "",
-      row.total_arrived ?? 0,
-      row.total_served ?? 0,
-      row.total_reneged ?? 0,
-      row.renege_rate ?? "",
-      row.avg_wait_time ?? "",
-      row.avg_service_time ?? "",
-      row.duration_ms ?? "",
-    ]);
-  }
-
-  return table.map(row => row.map(csvEscape).join(",")).join("\n");
-}
 
 function preferMetricValue(primary, fallback) {
   if (fallback == null) return primary ?? null;

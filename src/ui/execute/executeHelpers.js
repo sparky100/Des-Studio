@@ -1,8 +1,9 @@
 // ui/execute/executeHelpers.js — Pure helper constants and functions (no React dependency)
 
 import { TOKEN_COLORS } from "../shared/tokens.js";
-import { slugifyResultName, timestampForFilename } from "../shared/utils.js";
+import { slugifyResultName, timestampForFilename, csvEscape, downloadTextFile } from "../shared/utils.js";
 import { buildWaitDistEntry, finalizeWeightedStats } from "../../engine/statistics.js";
+export { downloadTextFile };
 
 export const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
 export const CI_METRICS = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.served", "summary.reneged", "summary.totalCost", "summary.costPerServed"];
@@ -258,12 +259,6 @@ export function buildResultsExportPayload({
   };
 }
 
-function csvEscape(value) {
-  if (value == null) return "";
-  const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
 export function buildResultsCsv({ results, replicationResults = [], aggregateStats = {}, config = {} } = {}) {
   const rows = [["runLabel", "replicationIndex", "seed", "served", "reneged", "avgWait", "avgSvc", "avgSojourn", "finalTime"]];
 
@@ -319,15 +314,6 @@ export function buildResultsCsv({ results, replicationResults = [], aggregateSta
   return rows.map(row => row.map(csvEscape).join(",")).join("\n");
 }
 
-export function downloadTextFile(content, filename, type) {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
 
 export function formatRunTimestamp(date = new Date()) {
   return new Intl.DateTimeFormat("en-GB", {
