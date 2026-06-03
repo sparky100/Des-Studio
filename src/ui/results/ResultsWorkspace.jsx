@@ -1031,6 +1031,10 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
   const sectionById = {};
   for (const s of sectionsDef || []) sectionById[s.id] = s;
 
+  // waitDist keys come from engine scripts (case may differ from q.name) — normalise for lookup
+  const waitDistNorm = {};
+  for (const [k, v] of Object.entries(waitDist || {})) waitDistNorm[k.trim().toLowerCase()] = v;
+
   const fmtT = v => v == null ? "—" : formatNumber(v, 1);
 
   const journeyRows = Object.entries(journeys || {})
@@ -1050,7 +1054,7 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
         const memberQueueRows = (sec.memberIds || [])
           .map(id => {
             const name = queueNameById[id];
-            const dist = name && waitDist?.[name];
+            const dist = name && waitDistNorm[name.trim().toLowerCase()];
             return dist ? { name, dist } : null;
           })
           .filter(Boolean);
