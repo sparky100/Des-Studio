@@ -25,6 +25,7 @@ import { getRunAdmission } from "../../engine/run-admission.js";
 import { enumerateSweepableParams, generate2DSweepValues } from "../../engine/sweep-params.js";
 import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
+import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
 import { qrSvg } from "../share/qr.js";
 import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
@@ -2122,50 +2123,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       </Btn>
                     </div>
 
-                    {comparisonResult && (
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
-                          <thead>
-                            <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                              <th scope="col" style={{ padding: "6px 8px" }}>KPI</th>
-                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.a}</th>
-                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.b}</th>
-                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
-                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
-                              <th scope="col" style={{ padding: "6px 8px" }}>Significant?</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {comparisonResult.comparisons.map((c, i) => {
-                              const meanA = comparisonResult.meansA?.[c.metric];
-                              const meanB = comparisonResult.meansB?.[c.metric];
-                              return (
-                                <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                                  <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
-                                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanA != null ? fmt(meanA) : "—"}</td>
-                                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanB != null ? fmt(meanB) : "—"}</td>
-                                  <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
-                                    {c.meanDiff != null ? (c.meanDiff > 0 ? "+" : "") + fmt(c.meanDiff) : "—"}
-                                  </td>
-                                  <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>
-                                    {c.lower != null && c.upper != null ? `[${fmt(c.lower)}, ${fmt(c.upper)}]` : "—"}
-                                  </td>
-                                  <td style={{ padding: "6px 8px" }}>
-                                    {c.significant95 ? (
-                                      <span style={{ color: c.significant99 ? C.green : C.amber, fontWeight: 700 }}>
-                                        {c.significant99 ? "Yes (99%)" : "Yes (95%)"}
-                                      </span>
-                                    ) : (
-                                      <span style={{ color: C.muted }}>No</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                    {comparisonResult && <ScenarioComparisonTable comparison={comparisonResult} />}
                   </div>
                 )}
 
@@ -2216,50 +2174,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       </Btn>
                     </div>
 
-                    {comparisonResult && (
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left" }}>
-                          <thead>
-                            <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                              <th scope="col" style={{ padding: "6px 8px" }}>KPI</th>
-                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.a}</th>
-                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>{comparisonResult.labels.b}</th>
-                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>Difference</th>
-                              <th scope="col" style={{ padding: "6px 8px", textAlign: "right" }}>95% CI</th>
-                              <th scope="col" style={{ padding: "6px 8px" }}>Significant?</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {comparisonResult.comparisons.map((c, i) => {
-                              const meanA = comparisonResult.meansA?.[c.metric];
-                              const meanB = comparisonResult.meansB?.[c.metric];
-                              return (
-                                <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                                  <td style={{ padding: "6px 8px", color: C.accent }}>{METRIC_LABELS[c.metric] || c.metric}</td>
-                                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanA != null ? fmt(meanA) : "—"}</td>
-                                  <td style={{ padding: "6px 8px", textAlign: "right" }}>{meanB != null ? fmt(meanB) : "—"}</td>
-                                  <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: c.significant95 ? (c.meanDiff > 0 ? C.green : C.red) : C.muted }}>
-                                    {c.meanDiff != null ? (c.meanDiff > 0 ? "+" : "") + fmt(c.meanDiff) : "—"}
-                                  </td>
-                                  <td style={{ padding: "6px 8px", textAlign: "right", color: C.muted, fontSize: 11 }}>
-                                    {c.lower != null && c.upper != null ? `[${fmt(c.lower)}, ${fmt(c.upper)}]` : "—"}
-                                  </td>
-                                  <td style={{ padding: "6px 8px" }}>
-                                    {c.significant95 ? (
-                                      <span style={{ color: c.significant99 ? C.green : C.amber, fontWeight: 700 }}>
-                                        {c.significant99 ? "Yes (99%)" : "Yes (95%)"}
-                                      </span>
-                                    ) : (
-                                      <span style={{ color: C.muted }}>No</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                    {comparisonResult && <ScenarioComparisonTable comparison={comparisonResult} />}
                   </div>
                 )}
               </div>

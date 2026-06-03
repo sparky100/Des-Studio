@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { alpha } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
+import { csvEscape, downloadTextFile } from "../shared/utils.js";
 import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../engine/statistics.js";
 import { buildResultsViewModel } from "./resultsViewModel.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -70,11 +71,6 @@ function SectionHeader({ id, label, badge, isOpen, onToggle }) {
   );
 }
 
-function csvEscape(value) {
-  if (value == null) return "";
-  const text = String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
 
 function slugify(value = "") {
   return String(value || "data")
@@ -120,21 +116,6 @@ function normaliseReplicationResults(replicationResults, results) {
   return [];
 }
 
-function downloadTextFile(content, filename, type = "text/csv;charset=utf-8") {
-  if (typeof document === "undefined" || typeof URL === "undefined") return;
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  try {
-    link.click();
-  } finally {
-    link.remove();
-    URL.revokeObjectURL(url);
-  }
-}
 
 export function buildSeriesCsv(series = {}) {
 
