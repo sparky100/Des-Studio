@@ -12,7 +12,7 @@ const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 140;
 
-const SECTION_DEFAULTS = { summary: true, bottlenecks: true, cost: true, analysis: true, runtime: true };
+const SECTION_DEFAULTS = { summary: true, bottlenecks: true, sections: true, cost: true, analysis: true, runtime: true };
 
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
   const { C, FONT } = useTheme();
@@ -1025,6 +1025,120 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
   );
 }
 
+function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, queues, C, FONT }) {
+  const queueNameById = {};
+  for (const q of queues || []) { if (q.id && q.name) queueNameById[q.id] = q.name; }
+  const sectionById = {};
+  for (const s of sectionsDef || []) sectionById[s.id] = s;
+
+  const fmtT = v => v == null ? "—" : formatNumber(v, 1);
+
+  const journeyRows = Object.entries(journeys || {})
+    .sort((a, b) => b[1] - a[1])
+    .map(([key, count]) => {
+      const label = key.split("→")
+        .map(id => sectionById[id]?.name || id)
+        .join(" → ");
+      return { key, label, count };
+    });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {(sectionsDef || []).map(sec => {
+        const stats = sectionStats?.[sec.id];
+        if (!stats) return null;
+        const memberQueueRows = (sec.memberIds || [])
+          .map(id => {
+            const name = queueNameById[id];
+            const dist = name && waitDist?.[name];
+            return dist ? { name, dist } : null;
+          })
+          .filter(Boolean);
+        const hasEntry = (sec.entryQueues || []).length > 0;
+        const hasExit  = (sec.exitQueues  || []).length > 0;
+        return (
+          <div key={sec.id} style={{
+            background: C.surface,
+            border: `1px solid ${sec.color}33`,
+            borderLeft: `3px solid ${sec.color}`,
+            borderRadius: 6,
+            padding: "10px 12px",
+            display: "flex", flexDirection: "column", gap: 8,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: sec.color, flexShrink: 0 }} />
+              <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: C.text, flex: 1 }}>
+                {sec.name || sec.id}
+              </span>
+              <span style={{ fontFamily: FONT, fontSize: 11, color: C.muted }}>
+                {stats.count} {stats.count === 1 ? "entity" : "entities"}
+              </span>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ background: `${sec.color}18`, border: `1px solid ${sec.color}44`, borderRadius: 4, padding: "3px 8px" }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>AVG TIME IN SECTION  </span>
+                <span style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 700 }}>{fmtT(stats.avgSojourn)}</span>
+              </div>
+              {hasEntry && (
+                <div style={{ background: "#27AE6018", border: "1px solid #27AE6044", borderRadius: 4, padding: "3px 8px" }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>IN  </span>
+                  <span style={{ fontFamily: FONT, fontSize: 11, color: "#27AE60", fontWeight: 700 }}>{stats.entitiesIn}</span>
+                </div>
+              )}
+              {hasExit && (
+                <div style={{ background: "#E74C3C18", border: "1px solid #E74C3C44", borderRadius: 4, padding: "3px 8px" }}>
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>OUT  </span>
+                  <span style={{ fontFamily: FONT, fontSize: 11, color: "#E74C3C", fontWeight: 700 }}>{stats.entitiesOut}</span>
+                </div>
+              )}
+            </div>
+
+            {memberQueueRows.length > 0 && (
+              <div>
+                <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>QUEUE WAIT TIMES</div>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
+                  <thead>
+                    <tr>
+                      {["Queue", "Mean", "P50", "P95"].map(h => (
+                        <th key={h} style={{ textAlign: h === "Queue" ? "left" : "right", color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {memberQueueRows.map(({ name, dist }) => (
+                      <tr key={name}>
+                        <td style={{ color: C.text, paddingTop: 3, paddingRight: 8, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</td>
+                        <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingRight: 8 }}>{fmtT(dist.mean)}</td>
+                        <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingRight: 8 }}>{fmtT(dist.p50)}</td>
+                        <td style={{ color: C.text, textAlign: "right", paddingTop: 3 }}>{fmtT(dist.p95)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {journeyRows.length > 0 && (
+        <div style={{ marginTop: 4 }}>
+          <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>ENTITY PATHWAYS ACROSS SECTIONS</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {journeyRows.map(({ key, label, count }) => (
+              <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: FONT, fontSize: 11 }}>
+                <span style={{ flex: 1, color: C.text }}>{label}</span>
+                <span style={{ color: C.muted, flexShrink: 0 }}>{count} {count === 1 ? "entity" : "entities"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ResultsWorkspace({ results, model, replicationResults = [], warmupDetection = null }) {
   const { C, FONT } = useTheme();
   const CHART_COLORS = [C.accent, C.bEvent, C.purple, C.green, C.red, C.server];
@@ -1051,6 +1165,10 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     : [];
   const analysisInputs = normaliseReplicationResults(replicationResults, results);
   const hasAnalysisInputs = analysisInputs.length > 0 || (warmupDetection?.series || []).length > 0 || results?.aggregateStats;
+
+  const sectionStats = results?.summary?.sections;
+  const sectionJourneys = results?.summary?.journeys;
+  const hasSectionResults = !!(model?.sections?.length && sectionStats);
 
   // ── Shared responsive grid style used by all three chart sections ───────────
   const CHART_GRID = {
@@ -1096,6 +1214,22 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                   );
                 })}
               </div>
+            </div>
+          </div>
+        )}
+        {hasSectionResults && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            <SectionHeader id="sections" label="Sections" isOpen={sectionsOpen.sections} onToggle={toggleSection} />
+            <div id="results-section-sections" style={{ display: sectionsOpen.sections ? "block" : "none", paddingTop: 14 }}>
+              <SectionResultsPanel
+                sectionsDef={model.sections}
+                sectionStats={sectionStats}
+                journeys={sectionJourneys}
+                waitDist={results.waitDist}
+                queues={model.queues}
+                C={C}
+                FONT={FONT}
+              />
             </div>
           </div>
         )}
@@ -1240,7 +1374,25 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         </div>
       )}
 
-      {/* ── 3. Cost summary (only when model tracks costs) ──────────────────── */}
+      {/* ── 3. Per-section results ─────────────────────────────────────────── */}
+      {hasSectionResults && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          <SectionHeader id="sections" label="Sections" isOpen={sectionsOpen.sections} onToggle={toggleSection} />
+          <div id="results-section-sections" style={{ display: sectionsOpen.sections ? "block" : "none", paddingTop: 14 }}>
+            <SectionResultsPanel
+              sectionsDef={model.sections}
+              sectionStats={sectionStats}
+              journeys={sectionJourneys}
+              waitDist={results.waitDist}
+              queues={model.queues}
+              C={C}
+              FONT={FONT}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── 4. Cost summary (only when model tracks costs) ──────────────────── */}
       {Number.isFinite(results?.summary?.totalCost) && results.summary.totalCost > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <SectionHeader id="cost" label="Cost Summary" isOpen={sectionsOpen.cost} onToggle={toggleSection} />
