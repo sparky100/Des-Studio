@@ -1,7 +1,7 @@
 # DES Studio — Model Schema Reference for LLM Generation
 
-**Version:** 1.3.2
-**Date:** 2026-06-01
+**Version:** 1.4.0
+**Date:** 2026-06-03
 **Sprint baseline:** Sprint 71
 
 | Version | Date | Sprint | Changes |
@@ -12,6 +12,7 @@
 | v1.3.0 | 2026-05-24 | Sprint 71 | Added `openSky` data source type to §15 (OpenSky Network real-time adapter); added §15.1 `openSky` field reference and supported airports table; added "Airport Arrivals" model pattern to §11 |
 | v1.3.1 | 2026-06-01 | Docs correction | Clarified probabilistic arrival splitting: use separate ARRIVE B-events with proportional inter-arrival means; never use `probabilisticRouting` on ARRIVE events |
 | v1.3.2 | 2026-06-01 | Results contract | Added `entity.outcome` and `summary.outcomes` journey-conclusion result metadata for terminal route reporting and AI analysis |
+| v1.4.0 | 2026-06-03 | Schema review | DES best-practice and consistency review: added V39 to §10 blocking errors; corrected V30/V31 to include RELEASE(); fixed balkCondition variable format in §16.13; added `terminationCondition` to §1; corrected §16.3 queue naming rule; added SPT/EDD/PRIORITY(attrName) attribute requirements to §3; added Empirical non-empty constraint to §4; added SPLIT/FILL/SPLIT to §5/§6 macro tables; added Normal distribution caveat to §4; added LIFO caveat to §3; expanded §16.6 with steady-state vs terminating guidance; added replication and stability best-practice notes; added §6.1 state variable and container predicates; added UI-parity notes for JSON-only settings |
 
 ---
 
@@ -20,24 +21,25 @@ Paste it (or reference it) as context when prompting any LLM to create or modify
 
 ---
 
-## TOP 10 LLM MISTAKES
+## TOP LLM MISTAKES
 
 These are the most common errors LLMs make when generating DES Studio models.
 Read this before writing any model JSON.
 
 | # | Mistake | Fix |
 |---|---------|------|
-| 1 | `probabilisticRouting` on ARRIVE B-events | ARRIVE events route entities via their effect macro — never via routing tables. For arrival splits, create one ARRIVE B-event per stream and set each Exponential mean to `baseMean / probability`. |
-| 2 | `"effect": ["RELEASE(Server)", "COMPLETE()"]` | `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped. Use `"effect": ["COMPLETE()"]` alone — COMPLETE releases the server automatically. |
+| 1 | `probabilisticRouting` on ARRIVE B-events | ARRIVE events route entities via their effect macro — never via routing tables. For arrival splits, create one ARRIVE B-event per stream and set each Exponential mean to `baseMean / probability`. Blocked by V39. |
+| 2 | `"effect": ["RELEASE(Server)", "COMPLETE()"]` | `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped. Use `"effect": ["COMPLETE()"]` alone — COMPLETE releases the server automatically. Warning V38. |
 | 3 | Missing `useEntityCtx: true` on cSchedules | Without this, the target B-event can't identify the entity. Always add `"useEntityCtx": true` to every `cSchedules[]` entry. |
-| 4 | `balkCondition` as a string | Must be a predicate object: `{ "variable": "...", "operator": "...", "value": "..." }`. Never a string expression. |
-| 5 | `routing[].condition` as a string | Same as #4 — must be a predicate object, never a string. |
+| 4 | `balkCondition` as a string | Must be a predicate object: `{ "variable": "Queue.Name.length", "operator": ">", "value": 5 }`. Never a string expression. Blocked by CHK-011. |
+| 5 | `routing[].condition` as a string | Same as #4 — must be a predicate object, never a string. Blocked by CHK-012. |
 | 6 | `"effect"` as a bare string | Must be an array: `"effect": ["ARRIVE(Customer)"]` — never `"effect": "ARRIVE(Customer)"`. |
-| 7 | `scheduledTime` as a number | Must be a string: `"scheduledTime": "0"` — never `"scheduledTime": 0`. |
-| 8 | Distribution params as numbers | Must be strings: `"distParams": { "mean": "5" }` — never `{ "mean": 5 }`. |
-| 9 | `RENEGE(Patient)` instead of `RENEGE(ctx)` | Always use `RENEGE(ctx)`. The entity-type form silently fails (validation V25). |
-| 10 | No `COMPLETE()` or `RENEGE()` sink | Every model needs at least one exit path. Missing sinks = entities accumulate forever (validation V8, CHK-002). |
-| 11 | Queue fed but no C-event consumes it | Every queue receiving entities via `ARRIVE()`, `RELEASE()`, or routing must have a C-event whose `effect` includes `ASSIGN(QueueName,...)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH`. Otherwise entities accumulate forever (CHK-013). |
+| 7 | `scheduledTime` as a number | Must be a string: `"scheduledTime": "0"` — never `"scheduledTime": 0`. Blocked by V26. |
+| 8 | Distribution params as numbers | Must be strings: `"distParams": { "mean": "5" }` — never `{ "mean": 5 }`. Blocked by V5. |
+| 9 | `RENEGE(Patient)` instead of `RENEGE(ctx)` | Always use `RENEGE(ctx)`. The entity-type form silently fails. Blocked by V25. |
+| 10 | No `COMPLETE()` or `RENEGE()` sink | Every model needs at least one exit path. Missing sinks = entities accumulate forever. Blocked by V8 / CHK-002. |
+| 11 | Queue fed but no C-event consumes it | Every queue receiving entities via `ARRIVE()`, `RELEASE()`, or routing must have a C-event whose `effect` includes `ASSIGN(QueueName,...)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH`. Warning CHK-013. |
+| 12 | `RENEGE_OLDEST(CustomerType)` with non-existent type | The customer type argument must exactly match a defined entity type name (case-sensitive). A typo silently does nothing. |
 
 ---
 
@@ -60,7 +62,8 @@ Read this before writing any model JSON.
     "maxSimTime": 500,
     "warmupPeriod": 0,
     "replications": 5,
-    "liveDataMode": null
+    "liveDataMode": null,
+    "terminationCondition": null
   },
   "dataSources": []
 }
@@ -75,6 +78,10 @@ Read this before writing any model JSON.
 | `visibility` | `"private"` \| `"public"` | No | Default `"private"` |
 | `timeUnit` | `"seconds"` \| `"minutes"` \| `"hours"` \| `"days"` | No | Defines what one simulation clock unit represents. Default `"minutes"`. Shown in reports and AI narrative. |
 | `epoch` | ISO 8601 datetime string, e.g. `"2026-05-18T08:00:00"` | No | Anchors simulation time zero to a real-world calendar datetime. Absent means abstract simulation time (no wall-clock anchor). When set, enables: (1) simulation time ↔ calendar datetime conversion throughout the engine; (2) automatic parsing of `HH:MM` or ISO datetime values in the `time` column of CSV imports; (3) display of the real-world period in reports and experiment controls. **Required when importing a CSV whose time column contains `HH:MM` or ISO datetime strings.** |
+| `experimentDefaults.maxSimTime` | number | No | Simulation end time in `timeUnit` units. Default 500. Set to 0 or omit to rely solely on `terminationCondition`. |
+| `experimentDefaults.warmupPeriod` | number | No | Time before statistics collection begins. Must be < `maxSimTime` (V35). Default 0. |
+| `experimentDefaults.replications` | integer | No | Number of independent runs for statistical averaging. Must be ≥ 1 (V34). Default 1. Use 10–30 for reliable confidence intervals. |
+| `experimentDefaults.terminationCondition` | string \| null | No | Stop expression evaluated after each event, e.g. `"summary.served >= 100"`. When set, the run stops when the condition becomes true — regardless of `maxSimTime`. Editable in the UI's Execute panel → Run Configuration tab. Set `null` or omit for pure time-bounded runs. Warning V16 fires if neither `maxSimTime` nor `terminationCondition` is configured. |
 | `experimentDefaults.liveDataMode` | `null` \| `"calibrated_batch"` \| `"rolling"` \| `"lookahead"` | No | Live-data run mode. `null` = static (default). See §15 for live data. |
 | `dataSources` | array | No | Live data source definitions. See §15. |
 
@@ -117,12 +124,12 @@ Every model has entity types. There are two roles: **customer** (flows through t
 
 - `name` must be unique across all entity types.
 - `role` is `"customer"` or `"server"`.
-- Customer `count` is always `0` — arrivals are generated by `ARRIVE()`.
-- Server `count` must be an integer ≥ 1.
-- `attrDefs[].name` must be unique within the entity type.
-- `attrDefs[].name` must not start with `Resource` or `Queue` (reserved namespaces).
+- Customer `count` must be `0` (or omitted) — arrivals are generated by `ARRIVE()`, not by a pre-populated count. Setting a non-zero `count` on a customer entity is a modelling error; the field is ignored for customers.
+- Server `count` must be an integer ≥ 1 (V19). This is the initial pool size; use `shiftSchedule` for time-varying capacity.
+- `attrDefs[].name` must be unique within the entity type (V2).
+- `attrDefs[].name` must not start with `Resource` or `Queue` (reserved namespaces — V10).
 - `attrDefs[].valueType` is `"number"`, `"string"`, or `"boolean"`.
-- `attrDefs[].defaultValue` must match the declared `valueType`.
+- `attrDefs[].defaultValue` must match the declared `valueType` (V3).
   - `number` → numeric string or number, e.g. `"3"` or `3`
   - `boolean` → `"true"` or `"false"` (string)
   - `string` → any string
@@ -219,15 +226,16 @@ Queues are waiting areas for customers.
 ### Rules
 
 - `name` must be unique across all queues. **Queue names are used as references in macros — they must match exactly (case-sensitive).**
-- `customerType` must match the `name` of a customer entity type.
-- `capacity`: `""` means unlimited. An integer ≥ 1 sets a finite buffer.
+- `customerType` must match the `name` of a customer entity type. This is the field that governs discipline application — the queue `name` is for display only and does not need to match the entity type name.
+- `capacity`: `""` means unlimited. An integer ≥ 1 sets a finite buffer (V20).
 - `discipline`: `"FIFO"` (default), `"LIFO"`, `"PRIORITY"`, `"PRIORITY(attrName)"`, `"SPT"`, or `"EDD"`.
-  - `PRIORITY` requires the customer entity type to have an attribute named **exactly** `priority` of type `number`. Lower numeric value = higher priority.
-  - `PRIORITY(attrName)` uses the named attribute instead of `priority` — e.g. `"PRIORITY(severity)"`. The named attribute must be of type `number`.
-  - `LIFO` selects the most-recently-arrived entity (last in, first out).
-  - `SPT` (Shortest Processing Time) selects the entity with the smallest `serviceTime` or `processingTime` attribute value. FIFO tiebreaker on equal values.
-  - `EDD` (Earliest Due Date) selects the entity with the smallest `dueDate` attribute value. FIFO tiebreaker on equal values.
-- `overflowDestination` (optional): name of another queue to receive overflow entities when this queue is full.
+  - `FIFO` — first in, first out. The default and most appropriate for customer-facing queues.
+  - `LIFO` — last in, first out. Appropriate for stack-based processes (e.g. picking from the top of a physical pile). **Rarely correct for customer queues — verify intent before using.**
+  - `PRIORITY` — requires the customer entity type to have an attribute named **exactly** `priority` of type `number` (V4). Lower numeric value = higher priority. FIFO tiebreaker on equal values.
+  - `PRIORITY(attrName)` — uses the named attribute instead of `priority`, e.g. `"PRIORITY(severity)"`. The named attribute **must** exist on the customer entity type and be of type `number`. A missing or wrong-typed attribute silently falls back to FIFO. **JSON-import only — the UI discipline picker does not expose the `PRIORITY(attrName)` form.**
+  - `SPT` (Shortest Processing Time) — selects the entity with the smallest `serviceTime` or `processingTime` attribute value. The customer entity type **must** define an attribute named `serviceTime` or `processingTime` of type `number`; without it, discipline order is undefined. FIFO tiebreaker. **JSON-import only — not in the UI discipline picker.**
+  - `EDD` (Earliest Due Date) — selects the entity with the smallest `dueDate` attribute value. The customer entity type **must** define an attribute named `dueDate` of type `number`; without it, discipline order is undefined. FIFO tiebreaker. **JSON-import only — not in the UI discipline picker.**
+- `overflowDestination` (optional): name of another queue to receive overflow entities when this queue is full. UI-editable (appears when capacity is set).
 
 ---
 
@@ -237,19 +245,21 @@ Used in B-event schedules, C-event service times, and entity attribute defaults.
 
 | Distribution  | Required params                              | Constraints                        |
 |---------------|----------------------------------------------|------------------------------------|
-| `Fixed`       | `{ "value": "5" }`                           | value is numeric                   |
-| `Exponential` | `{ "mean": "5" }`                            | mean > 0                           |
-| `Uniform`     | `{ "min": "2", "max": "8" }`                 | max > min                          |
-| `Normal`      | `{ "mean": "10", "stddev": "2" }`            | stddev > 0; warn if mean < 2×stddev|
-| `Triangular`  | `{ "min": "2", "mode": "5", "max": "10" }`   | min ≤ mode ≤ max                   |
-| `Erlang`      | `{ "k": "3", "mean": "6" }`                  | k integer ≥ 1; mean > 0            |
-| `Empirical`   | `{ "values": [4, 6, 8, 12] }` (or via CSV import) | Non-empty array; samples uniformly |
-| `Piecewise`   | `{ "periods": [{ "startTime": "0", "dist": "Exponential", "distParams": { "mean": "3" } }, ...] }` | First period must start at 0; sorted ascending |
-| `Schedule`    | `{ "times": [10, 25, 40] }` or `{ "rows": [{ "time": 10, "attrs": { ... } }, ...] }` | Planned absolute arrival times; exhausts and stops |
+| `Fixed`       | `{ "value": "5" }`                           | value is numeric (V5)              |
+| `Exponential` | `{ "mean": "5" }`                            | mean > 0 (V5)                      |
+| `Uniform`     | `{ "min": "2", "max": "8" }`                 | max > min (V5)                     |
+| `Normal`      | `{ "mean": "10", "stddev": "2" }`            | stddev > 0 (V5); warning V11 if mean < 2×stddev — negative samples clamped to 0. **For service times, prefer `Triangular` (bounded expert estimate) or `Erlang` (always positive, right-skewed) over Normal unless data specifically supports it.** |
+| `Triangular`  | `{ "min": "2", "mode": "5", "max": "10" }`   | min ≤ mode ≤ max (V5). **Recommended for service times estimated by experts (best/likely/worst case).** |
+| `Erlang`      | `{ "k": "3", "mean": "6" }`                  | k integer ≥ 1; mean > 0 (V5). **Recommended for multi-phase service processes — always positive, right-skewed like real service times.** |
+| `Empirical`   | `{ "values": [4, 6, 8, 12] }` (or via CSV import) | Non-empty array required; samples uniformly from the list. An empty `values` array will produce no samples (no validation error — treat as a modelling error). |
+| `Piecewise`   | `{ "periods": [{ "startTime": "0", "dist": "Exponential", "distParams": { "mean": "3" } }, ...] }` | First period must start at 0 (V12); periods sorted ascending (V13); nested Piecewise not supported (V12) |
+| `Schedule`    | `{ "times": [10, 25, 40] }` or `{ "rows": [{ "time": 10, "attrs": { ... } }, ...] }` | Planned absolute arrival times; exhausts and stops. Empty rows/times array produces no arrivals (CHK-009). |
 | `ServerAttr`  | `{ "attr": "serviceTime" }`                  | Reads named attribute from matched server entity; returns max(0, value) or 1 if not found |
 | `EntityAttr`  | `{ "attr": "requestedDuration" }`            | Reads named attribute from arriving customer entity; returns value or 0 if not found |
 
 **All numeric parameter values must be strings** (e.g. `"5"`, not `5`).
+
+> **Distribution selection guidance for service times:** Use `Exponential` for memoryless inter-arrival times (Poisson process). Use `Triangular` when you have a best/typical/worst estimate. Use `Erlang` when service consists of multiple identifiable phases. Use `Empirical` when you have historical data. Avoid `Normal` for times that must be non-negative unless mean ≫ stddev.
 
 ---
 
@@ -408,15 +418,18 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | `RELEASE` | `RELEASE(ServerType, QueueName)` | **Intermediate stage only.** Releases a server of type `ServerType`, moves served entity to `QueueName` for the next stage. Sets entity status to `"waiting"`. **Do NOT follow with `COMPLETE()` in the same effect — use `COMPLETE()` alone for terminal events.** |
 | `COMPLETE` | `COMPLETE()` | Marks current entity as served and removes it from the system. Also releases the server automatically — no preceding `RELEASE()` needed. Use this alone as the terminal effect on the final service B-event. |
 | `RENEGE` | `RENEGE(ctx)` | Marks current entity as reneged (abandoned). Always use `ctx` as the argument. |
-| `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch, sends each member to `QueueName`. |
+| `UNBATCH` | `UNBATCH(QueueName)` | Splits a batch entity, sends each member to `QueueName`. `QueueName` must reference a defined queue (V23). Every UNBATCH should be paired with a corresponding BATCH that created the batch entity being unbatched. |
 | `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level. `containerId` must match a declared container `id`. |
 | `PREEMPT` | `PREEMPT(ServerType)` | Interrupts in-progress service; displaced entity re-queues with remaining service time. |
 | `FAIL` | `FAIL(ServerType)` | Marks servers of this type as failed; interrupts in-progress service. Pair with a scheduled `REPAIR` B-event. |
 | `REPAIR` | `REPAIR(ServerType)` | Restores failed servers to idle; triggers a C-scan for waiting entities. |
-| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. |
+| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2; `QueueName` must reference a defined queue. |
 | `SET` | `SET(varName, expression)` | Sets a state variable to an arithmetic expression. Supports `Entity.attrName`, state variables, `clock`, +−×÷, `min`/`max`/`abs`/`round`/`floor`/`ceil`. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to the result of an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost` and the entity's `__cost` attribute. |
+| `PREEMPT` | `PREEMPT(ServerType)` | Interrupts in-progress service for a server of `ServerType`. The displaced entity re-queues with its remaining service time. `ServerType` must match a defined server entity type name. |
+| `FAIL` | `FAIL(ServerType)` | Marks matching servers as failed; interrupts any in-progress service. Pair with a scheduled `REPAIR` B-event. `ServerType` must match a defined server entity type. Note: for random failures, prefer the `mtbfDist`/`mttrDist` failure model on the entity type (§2) — the engine auto-generates FAIL/REPAIR events. |
+| `REPAIR` | `REPAIR(ServerType)` | Restores failed servers to idle. `ServerType` must match a defined server entity type. Triggers a C-scan for waiting entities. |
 
 ### Optional: Conditional Routing Table
 
@@ -625,15 +638,17 @@ The `effect` field on C-events is **always an array of strings**, same as B-even
 
 | Macro | Syntax | Meaning |
 |-------|--------|---------|
-| `ASSIGN` | `ASSIGN(QueueName, ServerType)` | Seizes a server of `ServerType`, starts serving the front entity from `QueueName`. Schedules `cSchedules` B-events. |
-| `BATCH` | `BATCH(QueueName, N)` | Accumulates N entities from `QueueName` into a parent batch entity. N ≥ 2. C-events only. |
-| `COSEIZE` | `COSEIZE(QueueName, Srv1, Srv2, ...)` | Atomically seizes one entity and multiple server types simultaneously. Fails cleanly if any server is unavailable. |
-| `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each queue into a combined batch in `TargetQueue`. |
+| `ASSIGN` | `ASSIGN(QueueName, ServerType)` | Seizes a server of `ServerType`, starts serving the front entity from `QueueName`. Schedules `cSchedules` B-events. Both `QueueName` and `ServerType` must reference defined objects. |
+| `BATCH` | `BATCH(QueueName, N)` | Accumulates N entities from `QueueName` into a parent batch entity. N ≥ 2 (V22). `QueueName` must reference a defined queue. |
+| `COSEIZE` | `COSEIZE(QueueName, Srv1, Srv2, ...)` | Atomically seizes one entity and multiple server types simultaneously. Fails cleanly if any server is unavailable. All server type names must reference defined server entity types. |
+| `MATCH` | `MATCH(TypeA, QueueA, TypeB, QueueB, TargetQueue)` | Pairs one entity from each of `QueueA` and `QueueB` into a combined batch in `TargetQueue`. All queue names must reference defined queues. `TypeA` and `TypeB` must match defined customer entity type names. |
 | `SET` | `SET(variableName, expression)` | Sets a state variable to an arithmetic expression. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost`. |
-| `RENEGE_OLDEST` | `RENEGE_OLDEST(CustomerType)` | Removes the oldest entity of the given type from its queue. Used for max-queue-length policies or timeout eviction. |
-| `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not). |
+| `RENEGE_OLDEST` | `RENEGE_OLDEST(CustomerType)` | Removes the oldest entity of the given type from its queue. `CustomerType` must exactly match a defined customer entity type name (case-sensitive). Used for max-queue-length policies or timeout eviction. |
+| `FILL` | `FILL(containerId, amount)` | Adds `amount` to a container's level (clamped to capacity). `containerId` must match a declared container `id` (V27). |
+| `DRAIN` | `DRAIN(containerId, amount)` | Removes `amount` from a container's level. Level must be ≥ amount (no-op with error if not) (V27). |
+| `SPLIT` | `SPLIT(EntityType, N, QueueName)` | Creates N−1 clones of the context entity and places them in `QueueName`. N must be ≥ 2. `QueueName` must reference a defined queue. |
 
 ### 6.1 Condition Formats — Two Different Systems
 
@@ -650,11 +665,17 @@ Used **only** in `cEvents[].condition`. Written as a string expression.
 | `idle(ServerType).count > 0` | At least one server of type `ServerType` is idle |
 | `busy(ServerType).count > 0` | At least one server of type `ServerType` is busy |
 | `idle(ServerType).count >= N` | At least N servers are idle |
+| `state.variableName > N` | User-defined state variable exceeds threshold. `variableName` must match a `stateVariables[].name`. Supports all comparison operators: `==`, `!=`, `<`, `>`, `<=`, `>=`. |
+| `state.variableName == 1` | User-defined state variable equals a value. Useful for shift/mode flags set via `SET(variableName, ...)`. |
 
 Combine with `AND`, `OR`, `NOT`. Queue and server names must match exactly (case-sensitive).
 
 ```json
 "condition": "queue(Triage Queue).length > 0 AND idle(Nurse).count > 0"
+```
+
+```json
+"condition": "queue(Batch Queue).length >= 5 AND state.batchingEnabled == 1"
 ```
 
 > **This string format is valid ONLY for `cEvents[].condition`.** Do not use it anywhere else.
@@ -712,6 +733,8 @@ Global variables that can be read and written during simulation.
 
 Continuous-level resources (tanks, buffers, stock).
 
+> **UI note:** Container types are currently configured via JSON import only — the UI editor tab is not yet active. Users cannot view or edit containers in the UI after import. When generating models with containers, note this limitation to users.
+
 ```json
 {
   "id": "ct_tank",
@@ -720,10 +743,10 @@ Continuous-level resources (tanks, buffers, stock).
 }
 ```
 
-- `id` must be unique and non-empty. Containers have no separate `name` field — the `id` is both the identifier and the macro argument.
-- `capacity` (optional): maximum level, must be > 0 when set. Omit for unbounded.
-- `initialLevel` (optional, default 0): must be ≥ 0 and ≤ `capacity`.
-- Manipulated by `FILL(id, amount)` and `DRAIN(id, amount)` — the first argument must match the container's `id` exactly (case-insensitive).
+- `id` must be unique and non-empty (V26). Containers have no separate `name` field — the `id` is both the identifier and the macro argument.
+- `capacity` (optional): maximum level, must be > 0 when set (V26). Omit for unbounded.
+- `initialLevel` (optional, default 0): must be ≥ 0 and ≤ `capacity` (V26).
+- Manipulated by `FILL(id, amount)` and `DRAIN(id, amount)` in both B-events and C-events — the first argument must match the container's `id` exactly (case-insensitive) (V27).
 - `DRAIN` is a no-op (with error log) if the current level < amount — levels never go negative.
 
 ---
@@ -794,8 +817,9 @@ All generated model JSON MUST pass every blocking rule below.
 | V26 | Container `id` must be unique and non-empty; `capacity` > 0 when set; `initialLevel` ≥ 0 and ≤ `capacity`. Also: B-event `scheduledTime` must be numeric. |
 | V27 | `FILL` and `DRAIN` macros must reference a declared container `id` |
 | V28 | `epoch`, when set, must be a valid ISO 8601 datetime string (e.g. `"2026-05-18T08:00:00"`) |
-| V30 | If `probabilisticRouting` contains a `null` (exit) branch, the B-event's effect **must** include `COMPLETE()` or `RENEGE(ctx)` — otherwise entities routed to exit aren't counted as served |
-| V31 | If `routing` (conditional) contains a `null` (exit) branch, the B-event's effect **must** end with `COMPLETE()` or `RENEGE(ctx)` |
+| V30 | If `probabilisticRouting` contains a `null` (exit) branch, the B-event's effect **must** include `COMPLETE()`, `RENEGE(ctx)`, or `RELEASE()` — otherwise entities routed to exit aren't counted as served. Use `RELEASE()` for mid-network events that free a server; use `COMPLETE()` for terminal events. |
+| V31 | If `routing` (conditional) contains a `null` (exit) branch, the B-event's effect **must** include `COMPLETE()`, `RENEGE(ctx)`, or `RELEASE()`. |
+| V39 | A B-event with an `ARRIVE()` effect **must not** have `probabilisticRouting`. ARRIVE routes entities via its effect argument `ARRIVE(Type, QueueName)` — a routing table on the same event is silently ignored and breaks the model. For arrival splitting, use separate ARRIVE B-events with proportional inter-arrival rates. |
 | V32 | A B-event effect list **must not** contain more than one terminal sink (`COMPLETE` or `RENEGE`). Choose one. |
 | V34 | `experimentDefaults.replications` must be a positive integer (≥ 1) |
 | V35 | `warmupPeriod` must be strictly less than `maxSimTime` |
@@ -871,10 +895,10 @@ Common modelling patterns and the mistakes to avoid when generating DES Studio m
 
 | Pattern | When to Use | Example |
 |---|---|---|
-| **✓ Matching names** | Queue name matches entity type name — discipline honoured | Queue: `"Patient Queue"`, Entity: `"Patient"`, C-Event: `ASSIGN(Patient Queue, Nurse)` |
-| **✗ Mismatched names** | Queue name differs from entity type — silently falls back to FIFO | Queue: `"Waiting Room"`, Entity: `"Patient"` — PRIORITY discipline ignored |
+| **✓ Correct `customerType`** | Queue `customerType` field matches the entity type `name` exactly — discipline honoured | Queue: `{ "name": "Waiting Room", "customerType": "Patient" }` → discipline applied correctly |
+| **✗ Wrong `customerType`** | Queue `customerType` doesn't match any entity type name — discipline behaviour undefined | Queue: `{ "customerType": "Patients" }`, Entity: `"Patient"` — case mismatch, discipline not applied |
 
-**Rule:** Name queues as `"<EntityTypeName> Queue"` to ensure queue discipline (FIFO/LIFO/PRIORITY) is correctly applied.
+**Rule:** It is the queue `customerType` field that binds a queue to an entity type and governs discipline application — **not** the queue name. Queue names are free-form and do not need to match entity type names. Set `customerType` to exactly match the customer entity type's `name` (case-sensitive).
 
 ---
 
@@ -903,15 +927,26 @@ Common modelling patterns and the mistakes to avoid when generating DES Studio m
 
 ### 16.6 Warm-up & Termination
 
+#### Terminating vs Steady-State simulations
+
+Choose the right run type for the system being modelled:
+
+| Type | When to use | Warm-up | Example |
+|---|---|---|---|
+| **Terminating** | System has a natural start and end (e.g. one clinic day, one production shift) | `warmupPeriod: 0` | Hospital opening 08:00–18:00; model starts empty, ends when doors close |
+| **Steady-state** | Assess long-run average behaviour of a system that runs continuously | `warmupPeriod > 0` | Call centre that always has customers; model must "fill up" before statistics are meaningful |
+
+For steady-state runs, set `warmupPeriod` to approximately the time it takes the system to reach typical occupancy. A common heuristic is 10–20× the mean sojourn time. Statistics are only collected after the warm-up ends.
+
 | Pattern | When to Use | Example |
 |---|---|---|
 | **✓ Valid warm-up** | `warmupPeriod < maxSimTime` — statistics collected after warm-up | `warmupPeriod: 50`, `maxSimTime: 500` |
-| **✗ Warm-up ≥ run time** | (Invalid) All statistics excluded — nothing measured | `warmupPeriod: 500`, `maxSimTime: 500` |
+| **✗ Warm-up ≥ run time** | (Invalid V35) All statistics excluded — nothing measured | `warmupPeriod: 500`, `maxSimTime: 500` |
 | **✓ Time termination** | Fixed-duration runs | `maxSimTime: 500` |
-| **✓ Condition termination** | Stop when entity count reached | `terminationCondition: "summary.served >= 100"` |
+| **✓ Condition termination** | Stop when entity count reached | `terminationCondition: "summary.served >= 100"` in `experimentDefaults` |
 | **✗ No termination** | (Warning V16) Run executes until cycle limit | No `maxSimTime` or `terminationCondition` |
 
-**Rule:** Set either `maxSimTime` or `terminationCondition` (or both). Warm-up must be less than run duration.
+**Rule:** Set either `maxSimTime` or `terminationCondition` (or both). Warm-up must be less than run duration (V35).
 
 ---
 
@@ -931,11 +966,19 @@ Common modelling patterns and the mistakes to avoid when generating DES Studio m
 | Pattern | When to Use | Example |
 |---|---|---|
 | **✓ Valid replications** | One or more replications for statistical confidence | `replications: 10` |
-| **✗ Zero replications** | (Invalid) No runs executed | `replications: 0` |
+| **✗ Zero replications** | (Invalid V34) No runs executed | `replications: 0` |
 | **✓ Batch mode** | Multiple replications with aggregated CI | `replications: 20`, `liveDataMode: null` |
 | **✓ Rolling mode** | Live data refresh per event — single replication | `replications: 1`, `liveDataMode: "rolling"` |
 
 **Rule:** `replications` must be a positive integer ≥ 1. Use `replications: 1` for rolling live-data mode.
+
+**How many replications?** Each replication uses an independent random seed — results are independent samples. More replications narrow the confidence interval. Guidelines:
+- 5 replications: acceptable for quick feasibility checks
+- 10 replications: minimum for reporting results
+- 20–30 replications: recommended for systems with high variance or rare events (e.g. reneging, failures)
+- 50+ replications: needed when estimating rare outcomes with confidence
+
+**Seeds and reproducibility:** The engine uses a seeded pseudo-random number generator (Mulberry32). Each replication uses a different derived seed so results are statistically independent, but the full run is deterministic given the same model — re-running with the same settings produces identical output. This supports debugging and regression testing.
 
 ---
 
@@ -992,10 +1035,16 @@ Common modelling patterns and the mistakes to avoid when generating DES Studio m
 
 | Pattern | When to Use | Example |
 |---|---|---|
-| **✓ Predicate objects** | Always encode conditions as JSON predicate objects | `"balkCondition": { "variable": "queue(Waiting Room).length", "operator": ">", "value": "5" }` |
+| **✓ Predicate objects** | Always encode conditions as JSON predicate objects using dot-notation variables | `"balkCondition": { "variable": "Queue.Waiting Room.length", "operator": ">", "value": 5 }` |
 | **✗ String expressions** | (Invalid CHK-011, CHK-012) Strings are not parsed as conditions — silently ignored or crash | `"balkCondition": "queue(Waiting Room).length > 5"` |
+| **✗ Parenthesis variable syntax** | (Invalid) `queue(Name).length` is the C-event string format — invalid in predicate objects | `{ "variable": "queue(Waiting Room).length", ... }` — must be `"Queue.Waiting Room.length"` |
 
-**Rule:** `balkCondition` and `routing[].condition` must be predicate objects `{ "variable": "...", "operator": "...", "value": "..." }`, never string expressions. Valid operators: `==`, `!=`, `<`, `>`, `<=`, `>=`. Valid variable formats: `queue(Name).length`, `idle(Name).count`, `busy(Name).count`, `Entity.attrName`.
+**Rule:** `balkCondition` and `routing[].condition` must be predicate objects `{ "variable": "...", "operator": "...", "value": ... }`, never string expressions. The `variable` field uses **dot notation only**:
+- `Queue.QueueName.length` — current queue length (not `queue(Name).length`)
+- `Entity.attrName` — entity attribute value
+- `Resource.ServerType.status` — server status (`"IDLE"` or `"BUSY"`)
+
+Valid operators: `==`, `!=`, `<`, `>`, `<=`, `>=`. The `value` field type must match the attribute's `valueType` (number for queue length, string for status).
 
 ---
 
@@ -1031,6 +1080,44 @@ Every queue that receives entities must have at least one C-event that consumes 
 | **✗ scheduledTime as number** | (Invalid V26) The engine expects string-encoded numeric values | `"scheduledTime": 0`, `"scheduledTime": 9999` |
 
 **Rule:** Every `scheduledTime` field must be a string representation of a number (e.g., `"0"`, `"10.5"`). Engine validation V26 enforces this.
+
+---
+
+### 16.17 Queue Stability — Traffic Intensity Check
+
+Before finalising any model, verify that each queue stage is stable. A queue is stable only when arrival rate < service capacity. If not, the queue grows without bound and the model runs until its cycle limit rather than reaching meaningful steady-state results.
+
+**Traffic intensity formula for a single stage:** ρ = λ / (c × μ)
+
+- λ = arrival rate (arrivals per time unit) = 1 / mean inter-arrival time
+- c = number of servers at the stage
+- μ = service rate = 1 / mean service time
+- **ρ must be < 1** for a stable queue. ρ ≥ 1 means queue grows forever.
+
+| Pattern | Condition | Example |
+|---|---|---|
+| **✓ Stable** | ρ < 1 — queue reaches steady state | λ=0.5/min, c=1, μ=0.8/min → ρ=0.625 |
+| **⚠ High utilisation** | 0.8 ≤ ρ < 1 — stable but long waits | λ=0.9/min, c=1, μ=1/min → ρ=0.9 |
+| **✗ Unstable** | ρ ≥ 1 — queue grows without bound | λ=1/min, c=1, μ=0.8/min → ρ=1.25 |
+
+**Rule:** Always verify ρ < 1 for each service stage before generating the model. If a user's parameters imply ρ ≥ 1, flag this explicitly: *"With these parameters the queue is unstable — either increase servers (c), reduce arrival rate (λ), or decrease service time to bring ρ below 1."*
+
+For multi-stage pipelines, check each stage independently. Bottleneck identification (the stage with highest ρ) is often the most valuable insight from a DES model.
+
+---
+
+### 16.18 JSON-Only Settings (no UI editor)
+
+Some model fields can only be set at model-generation time (via LLM or JSON import) and **cannot be changed in the UI** after import. When generating models that use these features, tell the user they cannot be adjusted via the UI:
+
+| Setting | Constraint | Workaround |
+|---|---|---|
+| `containerTypes[]` | Container types have no UI editor tab — they cannot be viewed, added, edited, or deleted in the UI | Re-import the model JSON with updated values |
+| `discipline: "SPT"` or `"EDD"` | The UI queue discipline picker only offers FIFO, LIFO, and Priority — SPT and EDD are JSON-import only | Re-import the model JSON to change |
+| `discipline: "PRIORITY(attrName)"` | The UI only supports the default `priority` attribute; custom attribute-name priority is JSON-import only | Re-import the model JSON to change |
+| `paramSource` on schedules | Live data parameter bindings have no UI editor | Re-import the model JSON to change |
+
+All other model settings (routing, probabilistic routing, balking, loop guards, shift schedules, failure models, state variables, goals, data sources, etc.) are editable via the UI after import.
 
 ---
 
