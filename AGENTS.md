@@ -1,15 +1,15 @@
 # simmodlr — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-06-02 | Reflects: Sprint 79 — Consistent Panel Visibility UX + AI-Powered Explore (Adaptive Batch Analysis) complete.*
+*Last updated: 2026-06-04 | Reflects: Sprint 82 planned — Results API & LLM Export Bundle.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Current sprint plan (AI Explore): `docs/reviews/sprint-79-ai-explore-plan.md` — AI-Powered Adaptive Batch Analysis, Explore panel, Apply ↗, per-outcome timing
-- Current sprint plan (Panel UX): `docs/reviews/sprint-79-plan.md` — Consistent Panel Visibility UX (companion Sprint 79 delivery)
-- Previous sprint plan: `docs/reviews/sprint-78-plan.md` — Visual Designer Canvas Visibility
-- Build plan: `docs/simmodlr_Build_Plan.md`
-- Roadmap: `docs/simmodlr_Build_Plan.md`
+- Current sprint plan: `docs/reviews/sprint-82-plan.md` — Results API & LLM Export Bundle
+- Previous sprint plan: `docs/reviews/sprint-81-deduplication-plan.md` — Codebase Deduplication
+- API design spec: `docs/architecture/results-api-design.md` — Results API endpoint schemas and consumer guidance
+- Build plan: `docs/DES_Studio_Build_Plan.md`
+- Roadmap: `docs/DES_Studio_Build_Plan.md`
 
 ---
 
@@ -82,6 +82,10 @@ project root
 │   ├── reports/
 │   │   ├── reportGenerator.js       ← Dual-type (Senior Management / Technical) × dual-format (HTML / Markdown) report generator; exports generateReport(model, results, experimentConfig, runMeta, options) and sanitizeFilename
 │   │   └── index.js                 ← Barrel: re-exports generateReport, sanitizeFilename
+│   ├── llm/
+│   │   ├── prompts.js               ← All LLM prompt builders; exports buildKpis, goalsToPrompt, buildGoalGaps (Sprint 82+)
+│   │   ├── bundleExport.js          ← buildLLMBundle(model, results, config) → uncapped Markdown string (Sprint 82, new)
+│   │   └── apiClient.js             ← streamNarrative, streamCompletion wrappers
 │   ├── db/
 │   │   ├── models.js                ← Supabase CRUD wrappers (incl. ADR-016 model_schedules functions)
 │   │   ├── results-persistence.js   ← buildPersistedResultsJson, withResultsPayloadSize, resolveResultDetailLevel
@@ -1450,7 +1454,9 @@ UI / UX
 | Platform roles and user settings, with SaaS/LLM follow-ons | `docs/decisions/ADR-008-platform-roles-saas-llm-configuration.md` | Before adding admin features, user settings, tenancy/workspace logic, or LLM provider configuration |
 | Incremental TypeScript adoption | `docs/decisions/ADR-009-typescript-reassessment.md` | Before adding TypeScript tooling or beginning schema-heavy/domain-boundary refactors |
 | Schedule data separation | `docs/decisions/ADR-016-schedule-data-separation.md` | Before touching `model_schedules`, `resolveInlineSchedules`, or `buildEngine` schedule options |
-| Build plan with sprint features and prompts | `docs/simmodlr_Build_Plan.md` | Start of every sprint — read current sprint section |
+| Build plan with sprint features and prompts | `docs/DES_Studio_Build_Plan.md` | Start of every sprint — read current sprint section |
+| Results API design spec | `docs/architecture/results-api-design.md` | Before implementing `supabase/functions/results-api/` or any endpoint that reads `simulation_runs` or `sweeps` |
+| Sprint 82 plan | `docs/reviews/sprint-82-plan.md` | Before implementing Results API or LLM Export Bundle |
 | Full codebase audit findings | `docs/AUDIT.md` | When investigating a known issue — check audit ref before changing |
 
 ---
@@ -1510,6 +1516,9 @@ See `docs/simmodlr_Build_Plan.md` for the full sprint-by-sprint roadmap. Latest 
 | Sprint 73 | ✅ Complete | 2026-05-27 | ADR-016: Separate timetable schedule data from core model JSON — `model_schedules` Supabase table, `resolveInlineSchedules` engine function, `ScheduleManager` UI, schedule selector in Execute panel, re-inline on export, save-timeout feedback, `includeModelSnapshot` explicit flag |
 | Sprint 76 | ✅ Complete | 2026-05-29 | Report Amendments: entity name substitution (`getEntityName`), integer counts (`formatInt`), per-stage service breakdown (`computePerQueueServiceTimes`), angled queue chart labels, wrapped resource chart labels (`wrapSvgLabel`), Scope & Methodology section (`buildMethodology`, `detectArrivalMode`), results intro paragraph, goal status badge in executive summary, model diagram wired through `generateReport` |
 | Sprint 75 | ✅ Complete | 2026-05-29 | Persistent AI Sidebar: `✦ AI` toggle in tab bar, flex-row sidebar layout, `AiAssistantPanel` sidebar mode, context-aware view (results vs design tabs), model Q&A via `buildModelQueryPrompt`, Explain button opens sidebar, overlay path retired, Esc dismiss, mobile auto-close |
+| Sprint 80 | ⬜ Planned | — | Visual Designer Multi-Select, Bulk Move, and Bulk Delete |
+| Sprint 81 | 🔄 In progress | — | Codebase Deduplication — 460 clone groups, 9,453 duplicated lines |
+| Sprint 82 | ⬜ Planned | — | Results API (read-only Edge Function, JWT + share-token auth, 3 routes) and LLM Export Bundle (`buildLLMBundle`, "LLM Bundle (.md)" in Export… popover) |
 
 ---
 
@@ -1814,6 +1823,20 @@ Three security-definer functions live in `public` schema:
 | `get_signup_counts(p_days int)` | Table of day/count rows | Checks `is_platform_admin()` |
 
 Client-side functions are in `src/db/models.js`: `fetchAdminUserStats`, `fetchPlatformStats`, `fetchSignupCounts`, `updateUserPlan`.
+
+### results-api Edge Function (Sprint 82)
+
+`supabase/functions/results-api/index.ts` — read-only REST API over saved simulation run results. **No writes to any table.**
+
+| Route | Auth | Returns |
+|---|---|---|
+| `GET /runs/:runId` | JWT Bearer or `?shareToken=<token>` | Full run record + `results_json` |
+| `GET /runs?modelId=:modelId` | JWT Bearer | Metadata list (up to 100, `ran_at DESC`) |
+| `GET /sweeps/:sweepId` | JWT Bearer | Full sweep record |
+
+Auth pattern: identical to `import-model` — `authClient.auth.getUser(token)` for JWT; inline share-link token lookup for `?shareToken=`. Returns 401 on invalid JWT, 403 on invalid/expired share token, 404 when run not found or owned by another user.
+
+Full response schemas: `docs/architecture/results-api-design.md`.
 
 ### notify-new-signup Edge Function
 `supabase/functions/notify-new-signup/index.ts` — receives a database webhook POST on INSERT to `auth.users`. Sends an email via Resend API and optionally a Slack message.
