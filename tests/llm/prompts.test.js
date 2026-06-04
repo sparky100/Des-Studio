@@ -636,6 +636,29 @@ describe("Sprint 46 — AI apply & verify", () => {
       expect(gaps[0].current).toBeNull();
       expect(gaps[0].gap).toBeNull();
     });
+
+    it("single-run fallback: uses summary when aggregateStats is empty", () => {
+      // Simulates a 1-replication run: aggregateStats is empty but summary has values.
+      const summary = { avgWait: 2.1, served: 120 };
+      const gaps = buildGoalGaps(goalModel, {}, summary);
+      // avgWait goal: metric = "summary.avgWait", target = 3, op = "<"
+      // current should fall back to summary.avgWait = 2.1 → MET
+      expect(gaps[0].current).toBeCloseTo(2.1);
+      expect(gaps[0].met).toBe(true);
+      // served goal: metric = "summary.served", target = 100, op = ">="
+      // current should fall back to summary.served = 120 → MET
+      expect(gaps[1].current).toBeCloseTo(120);
+      expect(gaps[1].met).toBe(true);
+    });
+
+    it("single-run fallback: missed goal", () => {
+      const summary = { avgWait: 5.0, served: 80 };
+      const gaps = buildGoalGaps(goalModel, {}, summary);
+      expect(gaps[0].met).toBe(false);
+      expect(gaps[0].current).toBeCloseTo(5.0);
+      expect(gaps[0].gap).toBeCloseTo(2.0); // 5.0 - 3 = 2.0
+      expect(gaps[1].met).toBe(false);
+    });
   });
 
   describe("parseSuggestionResponse", () => {

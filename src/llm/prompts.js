@@ -338,7 +338,7 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     ...(shiftCapacity.length ? { shiftCapacity } : {}),
   };
 
-  const goalGaps = buildGoalGaps(model, agg);
+  const goalGaps = buildGoalGaps(model, agg, getSummary(results));
   const goalsInstr = goalGaps?.length
     ? ` Performance goals were set. For each goal use this format: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])". Cite exact numbers from the goalGaps data.`
     : "";
@@ -486,11 +486,33 @@ const GOAL_STAT_KEY = {
   totalCost:  "summary.totalCost",
 };
 
-export function buildGoalGaps(model = {}, aggregateStats = {}) {
+// Goal metric paths (as stored in model.goals[].metric) → key in the single-run
+// summary object.  Goals use the full "summary.*" path that matches aggregateStats;
+// the mapping strips the prefix so we can read from results.summary directly.
+const GOAL_SUMMARY_KEY = {
+  'summary.avgWait':    'avgWait',
+  'summary.avgSvc':     'avgSvc',
+  'summary.avgSojourn': 'avgSojourn',
+  'summary.served':     'served',
+  'summary.reneged':    'reneged',
+  'summary.totalCost':  'totalCost',
+  // Legacy short-form keys (stored in older models)
+  avgWait:    'avgWait',
+  avgSvc:     'avgSvc',
+  avgSojourn: 'avgSojourn',
+  served:     'served',
+  reneged:    'reneged',
+  totalCost:  'totalCost',
+};
+
+export function buildGoalGaps(model = {}, aggregateStats = {}, summary = {}) {
   const goals = model.goals || [];
   if (!goals.length) return null;
   return goals.filter(g => g.metric && g.target).map(g => {
-    const current = finiteOrNull(aggregateStats[g.metric]?.mean);
+    // For multi-replication runs use the CI mean; fall back to the single-run
+    // summary value so goals are never reported as "unknown" on a 1-rep run.
+    const current = finiteOrNull(aggregateStats[g.metric]?.mean)
+                 ?? finiteOrNull(summary[GOAL_SUMMARY_KEY[g.metric] ?? g.metric]);
     const target = parseFloat(g.target);
     const op = g.operator || "<";
     let met = false;
@@ -573,7 +595,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
   }));
 
   const kpis = buildKpis(model, results);
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, getSummary(results));
 
   // CI data from aggregateStats (replications)
   const agg = results.aggregateStats || {};
@@ -691,7 +713,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     confidenceIntervals: confidenceIntervals.length ? confidenceIntervals : undefined,
   };
 
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, getSummary(results));
   if (goalGaps?.length) payload.goalGaps = goalGaps;
 
   const goalsInstr = goalGaps?.length
@@ -959,7 +981,7 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
     "Distinguish clearly between recommendations that are within current capacity and any constraints that make full goal attainment infeasible.",
   ].join(" ");
 
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, getSummary(results));
   const queues = extractQueues(model, results);
   const kpiSummary = queues.map(q => ({
     name: q.name,
@@ -1178,7 +1200,7 @@ export function buildReportRecommendationsPrompt(model = {}, results = {}) {
     "confidence is HIGH when supported by replicated CI data, MEDIUM for single-run results, LOW when inferred.",
   ].join(" ");
 
-  const goalGaps = buildGoalGaps(model, results.aggregateStats || {});
+  const goalGaps = buildGoalGaps(model, results.aggregateStats || {}, getSummary(results));
   const entityAnomalies = extractEntityAnomalies(results);
   const queues = extractQueues(model, results);
   const resources = extractResources(model, summary);

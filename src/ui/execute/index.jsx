@@ -1258,7 +1258,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }, [results, replicationResults, aggregateStats, exportConfig, resultFilenameBase]);
 
   const exportLLMBundle = useCallback(() => {
-    setSaveStatus({ state: 'saving', message: 'Preparing LLM bundle…' });
+    setSaveStatus({ state: 'saving', message: 'Preparing AI tools export…' });
     const bundleConfig = {
       runLabel: exportConfig.runLabel,
       replications: exportConfig.replications,

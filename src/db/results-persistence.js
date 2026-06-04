@@ -150,6 +150,13 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson._experiment_config = config.runRecord.experiment_config;
     }
   }
+  // Allow callers (e.g. AdaptiveBatchPanel) to embed _experiment_config directly
+  // without needing a full runRecord.  This ensures the replication count and run
+  // parameters stored in results_json always reflect the actual executed values,
+  // never a fallback reconstructed from the wrong field (e.g. initial-batch size).
+  if (!resultsJson._experiment_config && config.experimentConfig) {
+    resultsJson._experiment_config = config.experimentConfig;
+  }
   if (config.requestedCollectTimeSeries !== undefined) {
     resultsJson._requested_collect_time_series = !!config.requestedCollectTimeSeries;
   }

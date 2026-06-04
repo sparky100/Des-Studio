@@ -225,6 +225,9 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
     snap: { clock: finalTime },
     timeSeries: averageBatchTimeSeries(replicationPayloads),
     waitDist,
+    runtimeMetrics: {
+      replications: replicationPayloads.length,
+    },
     summary: {
       total,
       served,

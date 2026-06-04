@@ -280,8 +280,17 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (queueJourneys && Object.keys(queueJourneys).length) {
     lines.push('### Queue Journey Paths');
     lines.push('');
-    lines.push('| Journey (queue sequence) | Count |');
-    lines.push('|--------------------------|-------|');
+    lines.push(
+      'Each row shows the sequence of queues an entity passed through before leaving the system. ' +
+      'The final label is the name of the C-event that completed the entity ' +
+      '(e.g. "Minors Treatment Complete"). ' +
+      'If the final label reads **"Completed"** it means the completion event has no specific name — ' +
+      'the entity was still fully served by a C-event; the label is a generic fallback, ' +
+      '**not** an indicator that the entity was truncated or left unserved.'
+    );
+    lines.push('');
+    lines.push('| Journey (queue sequence → outcome) | Count |');
+    lines.push('|------------------------------------|-------|');
     const sorted = Object.entries(queueJourneys).sort(([, a], [, b]) => b - a);
     for (const [path, count] of sorted) {
       lines.push(`| ${path} | ${count} |`);

@@ -1398,6 +1398,8 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
             <div id="results-section-journeys" style={{ display: sectionsOpen.journeys ? "block" : "none", paddingTop: 14 }}>
               <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6, marginBottom: 10 }}>
                 Top queue paths taken by entities through the model, ranked by frequency.
+                The final label is the name of the C-event that completed each entity.
+                A label of <strong>Completed</strong> is a generic fallback — the entity was still fully served; it just means the completion event has no specific name in the model.
               </div>
               <JourneysPanel queueJourneys={queueJourneys} C={C} FONT={FONT} />
             </div>
@@ -1572,6 +1574,8 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
           <div id="results-section-journeys" style={{ display: sectionsOpen.journeys ? "block" : "none", paddingTop: 14 }}>
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6, marginBottom: 10 }}>
               Top queue paths taken by entities through the model, ranked by frequency.
+              The final label is the name of the C-event that completed each entity.
+              A label of <strong>Completed</strong> is a generic fallback — the entity was still fully served; it just means the completion event has no specific name in the model.
             </div>
             <JourneysPanel queueJourneys={queueJourneys} C={C} FONT={FONT} />
           </div>
