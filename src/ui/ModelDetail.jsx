@@ -17,6 +17,7 @@ import { AiAssistantPanel } from "./execute/AiAssistantPanel.jsx";
 import { LogViewer } from "./execute/LogViewer.jsx";
 import { EntitySummaryTable } from "./execute/SweepViews.jsx";
 import { CsvImportModal } from "./CsvImportModal.jsx";
+import { SimPyExportModal } from "./editors/SimPyExportModal.jsx";
 import { ResultsWorkspace } from "./results/ResultsWorkspace.jsx";
 import { ModelHistoryTab } from "./ModelHistoryTab.jsx";
 import { ModelCard, NewModelModal } from "./ModelLibrary.jsx";
@@ -424,6 +425,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [historyShowArchived,setHistoryShowArchived]=useState(false);
   const [shareLinksMap,setShareLinksMap]=useState({});
   const [showCsvImport,setShowCsvImport]=useState(false);
+  const [showSimPyExport,setShowSimPyExport]=useState(false);
   const [latestResults,setLatestResults]=useState(null);
   const [latestReplicationResults,setLatestReplicationResults]=useState([]);
   const [latestWarmupDetection,setLatestWarmupDetection]=useState(null);
@@ -985,6 +987,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         past={past} future={future} currentVersion={currentVersion}
         onBack={handleBack} onUndo={undo} onRedo={redo} onSave={save} onDiscard={discard}
         onHelpOpen={overrides.onHelpOpen}
+        onExportSimPy={()=>setShowSimPyExport(true)}
       />
       <ModelTabBar
         tab={tab} setTab={setTab}
@@ -1104,6 +1107,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               />
             )}
           </div>)
+        )}
+        {showSimPyExport&&(
+          <SimPyExportModal model={model} onClose={()=>setShowSimPyExport(false)}/>
         )}
         {tab==="state"&&renderAuthoringShell(
           <div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
@@ -1419,6 +1425,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                   <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>Download a portable copy of this model definition.</div>
                 </div>
                 <Btn small variant="ghost" onClick={exportJson}>Export Model</Btn>
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12}}>
+                <div>
+                  <div style={{fontSize:12,color:C.text,fontFamily:FONT,fontWeight:700,marginBottom:4}}>SimPy Python</div>
+                  <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>Export this model as a runnable SimPy simulation script.</div>
+                </div>
+                <Btn small variant="ghost" onClick={()=>setShowSimPyExport(true)}>Export SimPy</Btn>
               </div>
             </section>
             <section aria-label="Collaborator access" style={{display:"flex",flexDirection:"column",gap:4}}>

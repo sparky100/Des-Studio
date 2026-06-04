@@ -3,7 +3,7 @@
 import { Tag, Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
-export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion }) {
+export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future, onBack, onUndo, onRedo, onSave, onDiscard, currentVersion, onExportSimPy }) {
   const { C, FONT } = useTheme();
   return (
     <div style={{
@@ -33,6 +33,12 @@ export function ModelDetailHeader({ model, canEdit, dirty, saving, past, future,
         <Btn small variant="ghost" onClick={onRedo} disabled={!future.length}
           title="Redo the last undone model edit (Ctrl+Shift+Z)" ariaLabel="Redo last model edit">
           ↪ Redo
+        </Btn>
+      )}
+      {onExportSimPy && (
+        <Btn small variant="ghost" onClick={onExportSimPy}
+          title="Export this model as a runnable SimPy Python script" ariaLabel="Export as SimPy">
+          ⬇ SimPy
         </Btn>
       )}
       {canEdit && dirty && (

@@ -105,6 +105,7 @@ High-value features that are complete but whose absence would degrade the platfo
 | S14 | **Explore / AdaptiveBatchPanel** | AI-driven bottleneck analysis panel. Runs adaptive replication stepping (increasing batch size until 95% CI is within ±5% of the mean), surfaces bottleneck resources and queues, and provides an Apply-to-model action. |
 | S15 | **Run admission tier system** | Per-user run tier controls replication depth: Free (10 reps), Standard (30 reps), Pro (100 reps). Enforced before each run. |
 | S16 | **Per-outcome metrics** | avgWait and avgSojourn reported per journey outcome in run results, enabling comparison across routing branches. |
+| S17 | **SimPy Python export** | One-click export of any model as a runnable SimPy `.py` script. Category 1 (fully runnable) for models using standard macros; Category 2 (annotated TODO stubs) for models containing RENEGE, BATCH, MATCH, FAIL, REPAIR, PREEMPT, or RENEGE_OLDEST. Available from the header bar (⬇ SimPy button) and from the Access tab → Export section. No round-trip import; no new npm dependencies. |
 
 ### Could-have
 
@@ -187,6 +188,19 @@ Valuable additions already partially implemented or planned for near-term sprint
 - Results chart plots mean ± CI for each value.
 - Goal Feasibility overlay shows where the target is met.
 - Two-scenario comparison uses paired-t confidence intervals with Bonferroni correction to identify statistically distinguishable configurations.
+
+---
+
+### US-6 — Export for Python practitioners
+
+> *As a simulation researcher or Python developer, I want to export a model I built in simmodlr as a runnable SimPy Python script, so that I can use it as the basis for more complex experiments in code — adding custom distributions, logging, or integration with real data pipelines — without having to translate the model by hand.*
+
+**Acceptance criteria:**
+- Every valid model produces a `.py` file that runs without errors after `pip install simpy`.
+- Category 1 scripts require no manual editing; the output is self-contained and correct.
+- Category 2 scripts identify which macros need manual completion and provide a commented pattern for each.
+- The export is available from both the header bar and the Access tab.
+- Filename is derived from the model name (kebab-case slug + `_simpy.py`).
 
 ---
 

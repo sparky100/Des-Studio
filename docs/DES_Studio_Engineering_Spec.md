@@ -118,6 +118,7 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 | `adapters/` | Real-time data sources: RestAdapter, ScheduleFeedAdapter, ActualsStreamAdapter |
 | `adapters/OpenSkyAdapter.js` | OpenSky real-time flight data adapter |
 | `adapters/mockAdapter.js` | Mock adapter for testing |
+| `simpy-export.js` | Pure-function SimPy Python export (Sprint 80). No React, no DOM, no Supabase. See §3.5 for API and design. |
 
 ### 1.4 Three-Phase execution loop
 
@@ -551,6 +552,71 @@ The report pipeline:
 3. Builds Scope & Methodology section (`buildMethodology`).
 4. Calls `llm-proxy` for AI-written narrative sections (executive summary, interpretation, recommendations).
 5. Assembles final HTML or Markdown string.
+
+### 3.7 SimPy Python export (src/engine/simpy-export.js)
+
+Added in Sprint 80. Pure JavaScript function — no React, no DOM, no Supabase dependency. May be called from the engine layer, a Web Worker, or a UI component.
+
+#### Public API
+
+```typescript
+function exportToSimPy(model: ModelJson): {
+  script: string;        // complete Python source
+  category: 1 | 2;      // 1 = fully runnable; 2 = contains TODO stubs
+  todoMacros: string[];  // sorted list of macros requiring manual completion
+}
+```
+
+#### Category rules
+
+| Category | Condition | Action |
+|----------|-----------|--------|
+| 1 | No macro in `TODO_MACRO_SET` detected in any effect field | Script is complete and runs as-is after `pip install simpy` |
+| 2 | One or more macros from `TODO_MACRO_SET` found | Each unsupported macro is replaced with an annotated `# TODO` stub; the rest of the script is complete |
+
+`TODO_MACRO_SET = { RENEGE, BATCH, RENEGE_OLDEST, MATCH, FAIL, REPAIR, PREEMPT }`
+
+Every model produces a script — there is no "cannot export" path.
+
+#### Generated script structure
+
+```
+docstring           (model name, date, category, TODO list)
+imports             (simpy, random, math, statistics, dataclasses)
+configuration       (MAX_SIM_TIME, WARMUP_PERIOD, REPLICATIONS, BASE_SEED)
+distribution fns    (_exp, _uniform, _normal, _triangular, _fixed, _erlang, _lognormal)
+state variables     (module-level Python vars from model.stateVariables)
+entity @dataclasses (one per customer entity type; fallback Entity if none)
+Stats class         (served[], reneged[], total_cost)
+arrival generators  (one per B-event containing ARRIVE)
+service pairs       (monitor fn + serve fn per C-event with ASSIGN or COSEIZE)
+shift managers      (one per server entity type with shiftSchedule)
+TODO stubs          (category 2 only — pattern comments for each unsupported macro)
+run_replication()   (wires env, stores, resources, containers, processes)
+__main__ block      (replication loop, per-rep print, summary table)
+```
+
+#### C-event → B-event routing resolution
+
+Service routing is resolved by reading `cEvent.cSchedules[0].eventId` to find the completion B-event by ID. If that lookup fails, a heuristic fallback finds the single B-event with `COMPLETE()` in its effect and no `schedules`. The completion B-event's `routing`, `probabilisticRouting`, and `defaultQueueName` fields generate the post-service routing block.
+
+#### COSEIZE translation
+
+`COSEIZE(queue, resA, resB, ...)` translates to `simpy.AllOf(env, [reqA, reqB, ...])` — simultaneous multi-resource seize. Resources are released in a `finally` block.
+
+#### DRAIN semantic note
+
+DES Studio `DRAIN` fails immediately if container level < amount (guard). SimPy `Container.get()` blocks until sufficient level is available. The generated script includes an inline comment noting this divergence. `DRAIN` is not in `TODO_MACRO_SET` because the script remains runnable; the comment directs users to add an explicit level check if fail-fast behaviour is required.
+
+#### UI integration
+
+- `src/ui/editors/SimPyExportModal.jsx` — calls `exportToSimPy(model)` on mount; shows category badge, TODO macro list, filename, and Download button.
+- `src/ui/ModelDetailHeader.jsx` — `onExportSimPy` prop; renders ⬇ SimPy button (no `canEdit` guard — export is read-only).
+- `src/ui/ModelDetail.jsx` — `showSimPyExport` state; Export SimPy row in Access tab → Export section.
+
+#### Test coverage
+
+`tests/engine/simpy-export.test.js` — 53 Vitest assertions covering: category classification, TODO macro detection, header docstring, configuration constants, arrival/service/COSEIZE generation, entity dataclasses, resources, stores, containers, state variables, run_replication, main block, TODO stubs, multi-stage routing, empty model edge case.
 
 ---
 
