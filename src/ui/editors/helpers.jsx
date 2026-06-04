@@ -102,10 +102,10 @@ const assignOptions = (entityTypes, stateVariables=[], queues=[], contextName=""
       opts.push({label:`SET ${v} = ${v} + 1`,value:`SET(${v}, ${v} + 1)`});
     });
   }
-  // SET_ATTR entity attribute
-  const custAttrs=(entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).map(a=>a.name).filter(Boolean));
+  // SET_ATTR entity attribute (mutable only)
+  const custAttrs=(entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean));
   if(custAttrs.length>0){
-    opts.push({label:'── SET_ATTR entity attribute ──',value:'',disabled:true});
+    opts.push({label:'── SET_ATTR (mutable entity attributes) ──',value:'',disabled:true});
     custAttrs.forEach(a=>{
       opts.push({label:`SET_ATTR ${a} = 0`,value:`SET_ATTR(${a}, 0)`});
       opts.push({label:`SET_ATTR ${a} = Entity.${a} + 1`,value:`SET_ATTR(${a}, Entity.${a} + 1)`});
@@ -195,12 +195,13 @@ const bEffectOptions = (entityTypes, queues=[], stateVariables=[], containerType
       opts.push({label:`SET ${v} = ${v} + 1`,value:`SET(${v}, ${v} + 1)`});
     });
   }
-  // SET_ATTR entity attribute
-  const custAttrs=(entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).map(a=>a.name).filter(Boolean));
+  // SET_ATTR entity attribute (mutable only)
+  const custAttrs=(entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean));
   if(custAttrs.length>0){
-    opts.push({label:'── SET_ATTR entity attribute ──',value:'',disabled:true});
+    opts.push({label:'── SET_ATTR (mutable entity attributes) ──',value:'',disabled:true});
     custAttrs.forEach(a=>{
       opts.push({label:`SET_ATTR ${a} = 0`,value:`SET_ATTR(${a}, 0)`});
+      opts.push({label:`SET_ATTR ${a} = Entity.${a} + 1`,value:`SET_ATTR(${a}, Entity.${a} + 1)`});
     });
   }
   // COST
@@ -320,7 +321,7 @@ const EffectPicker = ({effects, options, onChange}) => {
               background:cfg.color+'18',border:`1px solid ${cfg.color}44`,
               borderRadius:5,padding:'3px 8px',fontFamily:FONT,fontSize:11,color:cfg.color}}>
               <span style={{whiteSpace:'nowrap'}}
-                title={display}>{display}</span>
+                title={/^SET_ATTR\s*\(/i.test(eff)?`${display} — requires entity context (must follow ARRIVE, ASSIGN, or COSEIZE)`:display}>{display}</span>
               <button onClick={()=>remove(j)} aria-label={`Remove effect ${j+1}`}
                 style={{background:'none',border:'none',color:cfg.color,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,flexShrink:0}}>✕</button>
             </span>

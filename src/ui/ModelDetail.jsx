@@ -7,7 +7,7 @@ import { Tag, Avatar, Btn, Field, SH, InfoBox, Empty, ErrorBoundary } from "./sh
 import { useToast } from "./shared/ToastContext.jsx";
 import { useViewport } from "./shared/hooks.js";
 import { SkeletonPanel } from "./shared/SkeletonPanel.jsx";
-import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor } from "./editors/index.jsx";
+import { EntityTypeEditor, StateVarEditor, BEventEditor, CEventEditor, QueueEditor, ContainerEditor } from "./editors/index.jsx";
 import { SectionEditor } from "./editors/SectionEditor.jsx";
 import { ScheduleManager } from "./editors/ScheduleManager.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
@@ -40,7 +40,7 @@ import { AdaptiveBatchPanel }               from "./execute/AdaptiveBatchPanel.j
 import { normalizeModelConditions }         from "../model/conditionFormat.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "graph", "experimentDefaults"];
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "graph", "experimentDefaults"];
 
 const AuthoringWorkflowShell = ({ mode, children }) => (
   <section aria-label={`${mode.label} authoring shell`} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -853,6 +853,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     {id:"ai",label:"Describe"},
     {id:"entities",label:"Entity Types"},
     {id:"queues",label:"Queues"},
+    {id:"containers",label:"Containers"},
     {id:"bevents",label:"B-Events"},
     {id:"cevents",label:"C-Events"},
     {id:"sections",label:"Sections"},
@@ -867,7 +868,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const selectableTabs = TABS.filter(t => !t.disabled);
   const NAV_MODES=[
     {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
-    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","sections","schedules","state","validate"]},
+    {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","containers","bevents","cevents","sections","schedules","state","validate"]},
     {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
     {id:"results",label:"Results",primaryTab:"results",tabs:["results"]},
     ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
@@ -878,7 +879,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const DISPLAY_MODES = isMobileLayout
       ? [
         {id:"overview",label:"Overview",primaryTab:"overview",tabs:["overview"]},
-        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","bevents","cevents","sections","schedules","state","validate"]},
+        {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","containers","bevents","cevents","sections","schedules","state","validate"]},
         {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
         {id:"results",label:"Results",primaryTab:"results",tabs:["results"]},
       ]
@@ -1145,10 +1146,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             </div>
           </div>
         )}
-        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}}/></div>)}
-        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
+        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}}/></div>)}
+        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
         {tab==="sections"&&renderAuthoringShell(<div style={{maxWidth:900}}><SectionEditor sections={model.sections||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} bEvents={model.bEvents||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("sections",v):()=>{}}/></div>)}
-        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
+        {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} dataSources={model.dataSources||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
           setModel(next);
           try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Schedule moved and model saved"); } catch { toast.error("Schedule moved but model save failed — please save manually"); }
@@ -1169,6 +1170,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           }
           setWholeModel(updated);
         }:()=>{}}/></div>)}
+        {tab==="containers"&&renderAuthoringShell(<div style={{maxWidth:900}}><ContainerEditor containers={model.containerTypes||[]} onChange={canEdit?v=>setField("containerTypes",v):()=>{}}/></div>)}
 
         {tab==="validate"&&(
           <div style={{maxWidth:1000,display:"flex",flexDirection:"column",gap:14}}>

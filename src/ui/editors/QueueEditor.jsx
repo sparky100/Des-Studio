@@ -4,6 +4,17 @@ import { Tag, Btn, CommitInput, SH, InfoBox, Empty } from "../shared/components.
 import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
+const disciplineBase = d => {
+  if (!d || d.toUpperCase() === 'FIFO') return 'FIFO';
+  const m = String(d).match(/^PRIORITY\((\w+)\)$/i);
+  if (m) return m[1].toLowerCase() === 'priority' ? 'PRIORITY' : 'PRIORITY_ATTR';
+  return String(d).toUpperCase();
+};
+const disciplineAttr = d => {
+  const m = String(d || '').match(/^PRIORITY\((\w+)\)$/i);
+  return m ? m[1] : 'priority';
+};
+
 const QueueEditor = ({queues=[], entityTypes=[], sections=[], onChange}) => {
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
@@ -109,15 +120,27 @@ const QueueEditor = ({queues=[], entityTypes=[], sections=[], onChange}) => {
                     {customerTypes.map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-                <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:120}}>
+                <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:160}}>
                   <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.2,fontWeight:700}}>DISCIPLINE</span>
-                  <select value={q.discipline||'FIFO'} onChange={e=>upd(i,'discipline',e.target.value)}
-                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
-                      color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
-                    <option value='FIFO'>FIFO</option>
-                    <option value='LIFO'>LIFO</option>
-                    <option value='Priority'>Priority</option>
+                  <select value={disciplineBase(q.discipline)} onChange={e=>{
+                    const v=e.target.value;
+                    upd(i,'discipline',v==='PRIORITY_ATTR'?`PRIORITY(${disciplineAttr(q.discipline)||'priority'})`:v);
+                  }} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                    color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:'100%'}}>
+                    <option value='FIFO'>FIFO — First In, First Out</option>
+                    <option value='LIFO'>LIFO — Last In, First Out</option>
+                    <option value='PRIORITY'>Priority (uses "priority" attr)</option>
+                    <option value='PRIORITY_ATTR'>Priority (custom attribute)…</option>
+                    <option value='SPT'>SPT — Shortest Processing Time</option>
+                    <option value='EDD'>EDD — Earliest Due Date</option>
                   </select>
+                  {disciplineBase(q.discipline)==='PRIORITY_ATTR'&&(
+                    <input value={disciplineAttr(q.discipline)}
+                      onChange={e=>upd(i,'discipline',`PRIORITY(${e.target.value})`)}
+                      placeholder="attrName (e.g. severity)"
+                      style={{background:'transparent',border:`1px solid ${C.border}`,borderRadius:4,
+                        color:C.amber,fontFamily:FONT,fontSize:11,padding:'4px 7px',outline:'none'}}/>
+                  )}
                 </div>
               </div>
 

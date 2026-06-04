@@ -94,6 +94,10 @@ const AttrEditor = ({attrs=[], onChange, role='customer'}) => {
                   <option value="false">false</option>
                 </select>
               )}
+              <label style={{display:'flex',alignItems:'center',gap:3,fontSize:10,color:C.muted,fontFamily:FONT,cursor:'pointer',userSelect:'none'}}>
+                <input type="checkbox" checked={a.mutable!==false} onChange={e=>upd(i,{mutable:e.target.checked})}/>
+                mutable
+              </label>
               <Btn small variant="danger" ariaLabel={`Remove attribute ${a.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
             </div>
             {/* Preview */}

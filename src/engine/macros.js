@@ -1113,6 +1113,14 @@ export const MACROS = [
         msgs.push(`SET_ATTR(${attrName}): no context entity — use after ARRIVE, ASSIGN, or COSEIZE`);
         return;
       }
+      const _et = (ctx.model?.entityTypes || []).find(
+        t => (t.name || '').trim().toLowerCase() === (entity.type || '').toLowerCase()
+      );
+      const _attrDef = (_et?.attrDefs || []).find(a => a.name === attrName);
+      if (_attrDef?.mutable === false) {
+        msgs.push(`SET_ATTR(${attrName}): attribute is immutable — write skipped`);
+        return;
+      }
       if (!entity.attrs) entity.attrs = {};
       const value = evalEntityExpr(expr, { state, clock, entity });
       entity.attrs[attrName] = value;

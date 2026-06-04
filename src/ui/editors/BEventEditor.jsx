@@ -3,7 +3,7 @@ import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPa
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker, SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],sections=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],sections=[],containerTypes=[],dataSources=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -174,7 +174,7 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>EFFECTS</span>
                 <EffectPicker
                   effects={effects}
-                  options={bEffectOptions(entityTypes,queues,stateVariables)}
+                  options={bEffectOptions(entityTypes,queues,stateVariables,containerTypes)}
                   onChange={updEffects}
                 />
               </div>
@@ -437,6 +437,26 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                           attrDefs={(()=>{const arrM=(Array.isArray(ev.effect)?ev.effect.join(";"):ev.effect||"").match(/ARRIVE\s*\(\s*([^,)]+)/i);const tName=arrM?.[1]?.trim();return tName?(entityTypes.find(t=>t.name?.trim()===tName)?.attrDefs||[]):[];})()}
                           epoch={epoch} timeUnit={timeUnit}/>
                       </>
+                    )}
+                    {dataSources.length>0&&!s.rows?.length&&s.dist&&s.dist!=="Schedule"&&(
+                      <details style={{fontSize:11,color:C.muted,fontFamily:FONT}}>
+                        <summary style={{cursor:"pointer",userSelect:"none"}}>Live parameter binding{s.paramSource?.sourceId?` (${s.paramSource.sourceId})`:""}</summary>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6,alignItems:"center"}}>
+                          <select value={s.paramSource?.sourceId||""} onChange={e=>{const v=e.target.value;updS(i,j,{paramSource:v?{...(s.paramSource||{}),sourceId:v}:undefined});}}
+                            style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 7px"}}>
+                            <option value="">— none —</option>
+                            {dataSources.map(ds=><option key={ds.id} value={ds.id}>{ds.label||ds.id}</option>)}
+                          </select>
+                          {s.paramSource?.sourceId&&<>
+                            <input value={s.paramSource?.field||""} onChange={e=>updS(i,j,{paramSource:{...s.paramSource,field:e.target.value}})}
+                              placeholder="field" style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 7px",width:100}}/>
+                            <input value={s.paramSource?.targetParam||""} onChange={e=>updS(i,j,{paramSource:{...s.paramSource,targetParam:e.target.value||undefined}})}
+                              placeholder="param (e.g. mean)" style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 7px",width:120}}/>
+                            <input type="number" value={s.paramSource?.fallback??""} onChange={e=>updS(i,j,{paramSource:{...s.paramSource,fallback:e.target.value===''?undefined:Number(e.target.value)}})}
+                              placeholder="fallback" style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.amber,fontFamily:FONT,fontSize:11,padding:"4px 7px",width:80}}/>
+                          </>}
+                        </div>
+                      </details>
                     )}
                     <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:s.isRenege?C.reneged:C.muted,fontFamily:FONT,fontSize:11,fontWeight:600}}>
                       <input type="checkbox" checked={!!s.isRenege} onChange={e=>updS(i,j,{isRenege:e.target.checked})} style={{accentColor:C.reneged}}/>

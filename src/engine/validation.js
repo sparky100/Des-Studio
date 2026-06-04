@@ -809,6 +809,70 @@ export function validateModel(model) {
     });
   });
 
+  // ── V40: SET_ATTR targets undeclared attribute (warning) ──────────────────
+  // ── V41: SET_ATTR targets immutable attribute (error) ─────────────────────
+  // ── V44: SET_ATTR with no preceding context macro (warning) ───────────────
+  {
+    const allAttrDefs = (entityTypes).flatMap(et => (et.attrDefs || []));
+    const declaredNames = new Set(allAttrDefs.map(a => (a.name || '').trim()).filter(Boolean));
+    const immutableNames = new Set(
+      allAttrDefs.filter(a => a.mutable === false).map(a => (a.name || '').trim()).filter(Boolean)
+    );
+    const CTX_MACRO_RE = /(?:ARRIVE|ASSIGN|SEIZE|COSEIZE|BATCH|SPLIT)\s*\(/i;
+
+    const checkEffects = (events, tab) => {
+      events.forEach(ev => {
+        const text = effectText(ev.effect);
+        if (!text) return;
+        const parts = text.split(';').map(s => s.trim()).filter(Boolean);
+        let hasCtx = false;
+        parts.forEach(part => {
+          if (CTX_MACRO_RE.test(part)) { hasCtx = true; return; }
+          const m = part.match(/^SET_ATTR\s*\(\s*(?:Entity\.)?(\w+)/i);
+          if (!m) return;
+          const attrName = m[1];
+          if (immutableNames.has(attrName)) {
+            err('V41', `SET_ATTR(${attrName}) in '${ev.name || ev.id}': attribute is immutable.`, tab);
+          } else if (!declaredNames.has(attrName)) {
+            warn('V40', `SET_ATTR(${attrName}) in '${ev.name || ev.id}': attribute '${attrName}' is not declared on any entity class.`, tab);
+          }
+          if (!hasCtx) {
+            warn('V44', `SET_ATTR(${attrName}) in '${ev.name || ev.id}' has no preceding ARRIVE/ASSIGN/COSEIZE — write will be skipped at runtime.`, tab);
+          }
+        });
+      });
+    };
+    checkEffects(bEvents, 'bevents');
+    checkEffects(cEvents, 'cevents');
+  }
+
+  // ── V42: SPT discipline but entity has no serviceTime / processingTime ─────
+  // ── V43: EDD discipline but entity has no dueDate ─────────────────────────
+  queues.forEach(q => {
+    const d = (q.discipline || '').toUpperCase();
+    const ct = entityTypes.find(et =>
+      (et.name || '').trim().toLowerCase() === (q.customerType || '').trim().toLowerCase()
+    );
+    if (d === 'SPT') {
+      if (ct) {
+        const hasAttr = (ct.attrDefs || []).some(a => {
+          const n = (a.name || '').trim().toLowerCase();
+          return n === 'servicetime' || n === 'processingtime';
+        });
+        if (!hasAttr) {
+          warn('V42', `Queue '${q.name}' uses SPT discipline but entity class '${ct.name}' has no 'serviceTime' or 'processingTime' attribute.`, 'queues');
+        }
+      }
+    } else if (d === 'EDD') {
+      if (ct) {
+        const hasDueDate = (ct.attrDefs || []).some(a => (a.name || '').trim().toLowerCase() === 'duedate');
+        if (!hasDueDate) {
+          warn('V43', `Queue '${q.name}' uses EDD discipline but entity class '${ct.name}' has no 'dueDate' attribute.`, 'queues');
+        }
+      }
+    }
+  });
+
   return { errors, warnings };
 }
 

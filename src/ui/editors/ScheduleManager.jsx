@@ -125,7 +125,7 @@ function ScheduleRow({ sched, bEvents, isSelected, onSelect, onSetDefault, onDel
 
 // ── ScheduleDetail: view/edit a single schedule ───────────────────────────────
 
-function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, epoch, timeUnit, onUpdateBEvents, onGoToBEvent }) {
+function ScheduleDetail({ sched, onBack, onSave, canEdit, bEvents, dataSources = [], epoch, timeUnit, onUpdateBEvents, onGoToBEvent }) {
   const { C, FONT } = useTheme();
   const thStyle = {
     padding: "6px 10px", textAlign: "left", fontWeight: 600, fontSize: "11px",
@@ -801,7 +801,7 @@ function InlineRowsBanner({ modelId, userId, bEvents, onExtracted }) {
 
 // ── ScheduleManager (exported) ────────────────────────────────────────────────
 
-export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch, timeUnit = "minutes", onBEventsExtracted, onUpdateBEvents, focusScheduleId, onFocusHandled, onGoToBEvent }) {
+export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], dataSources = [], epoch, timeUnit = "minutes", onBEventsExtracted, onUpdateBEvents, focusScheduleId, onFocusHandled, onGoToBEvent }) {
   const { C, FONT } = useTheme();
   const [schedules, setSchedules] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -895,6 +895,7 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], epoch,
         <ScheduleDetail
           sched={selectedSched}
           bEvents={bEvents}
+          dataSources={dataSources}
           epoch={epoch}
           timeUnit={timeUnit}
           canEdit={canEdit}

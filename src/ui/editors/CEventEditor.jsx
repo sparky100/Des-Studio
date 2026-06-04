@@ -6,7 +6,7 @@ import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 import { EffectPicker, assignOptions, displayEventName, SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[]})=>{
+const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[]})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -183,7 +183,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                 <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1.5,fontWeight:700}}>EFFECTS</span>
                 <EffectPicker
                   effects={Array.isArray(ev.effect) ? ev.effect.filter(Boolean) : (ev.effect ? ev.effect.split(';').map(s=>s.trim()).filter(Boolean) : [])}
-                  options={assignOptions(entityTypes, stateVariables, queues, ev.name)}
+                  options={assignOptions(entityTypes, stateVariables, queues, ev.name, containerTypes)}
                   onChange={arr=>upd(i,'effect',arr)}
                 />
               </div>
