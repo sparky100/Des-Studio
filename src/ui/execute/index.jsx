@@ -14,6 +14,7 @@ import { fetchRunHistory, saveSimulationRun, fetchUserSettings, saveUserSettings
 import { buildRunRecord, updateRunNarrative, compareResults } from "../../db/runRecord.js";
 import { callLLMOnce } from "../../llm/apiClient.js";
 import { buildNarrativePrompt, buildModelDescriptionPrompt } from "../../llm/prompts.js";
+import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { saveLocalRun, fetchLocalRunHistory } from "../../db/local.js";
 import { BottomPanel } from "./BottomPanel.jsx";
 import { ResultsWorkspace } from "../results/ResultsWorkspace.jsx";
@@ -1246,6 +1247,24 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setTimeout(() => setSaveStatus(null), 4000);
   }, [results, replicationResults, aggregateStats, exportConfig, resultFilenameBase]);
 
+  const exportLLMBundle = useCallback(() => {
+    setSaveStatus({ state: 'saving', message: 'Preparing LLM bundle…' });
+    const bundleConfig = {
+      runLabel: exportConfig.runLabel,
+      replications: exportConfig.replications,
+      maxSimTime: exportConfig.maxSimTime,
+      warmupPeriod: exportConfig.warmupPeriod,
+      seed: exportConfig.seed,
+      ranAt: new Date().toISOString(),
+    };
+    const activeResults = results || (replicationResults.length ? replicationResults[replicationResults.length - 1]?.result : null);
+    const bundleResults = { ...activeResults, aggregateStats, replications: replicationResults.map(p => ({ replicationIndex: p.replicationIndex, seed: p.seed, summary: p.result?.summary ?? p.summary ?? {} })) };
+    const md = buildLLMBundle(model, bundleResults, bundleConfig);
+    downloadTextFile(md, `${resultFilenameBase}-llm-bundle.md`, "text/markdown;charset=utf-8");
+    setSaveStatus({ state: 'success', message: '✓ LLM bundle downloaded' });
+    setTimeout(() => setSaveStatus(null), 4000);
+  }, [model, results, replicationResults, aggregateStats, exportConfig, resultFilenameBase]);
+
   const assembleRunMeta = (runId) => {
     const rec = savedRunHistory.find(r => r.id === runId);
     const rj = rec?.results_json || {};
@@ -2314,6 +2333,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               }} disabled={!Object.values({ json: exportFormats.json, csv: exportFormats.csv }).some(Boolean)}>
                 Download
               </Btn>
+              <div style={{ height: 1, background: C.border, margin: "2px 0" }} />
+              <Btn variant="ghost" small onClick={() => { exportLLMBundle(); setShowExportPopover(false); }}>
+                LLM Bundle (.md)
+              </Btn>
+              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.4 }}>
+                Model + results as Markdown — paste into any LLM.
+              </div>
             </div>
           )}
 

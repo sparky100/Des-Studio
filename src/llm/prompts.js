@@ -241,7 +241,7 @@ function extractEntityAnomalies(results = {}) {
   };
 }
 
-function buildKpis(model = {}, results = {}) {
+export function buildKpis(model = {}, results = {}) {
   const summary = getSummary(results);
   const outcomes = extractOutcomes(summary);
   const kpis = {
@@ -268,7 +268,7 @@ function buildKpis(model = {}, results = {}) {
   return kpis;
 }
 
-function goalsToPrompt(model = {}) {
+export function goalsToPrompt(model = {}) {
   const goals = model.goals || [];
   if (!goals.length) return null;
   return goals.filter(g => g.metric && g.target).map(g => ({

@@ -1,10 +1,11 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
 import { alpha } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
-import { csvEscape, downloadTextFile } from "../shared/utils.js";
+import { csvEscape, downloadTextFile, slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../engine/statistics.js";
 import { buildResultsViewModel } from "./resultsViewModel.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { buildLLMBundle } from "../../llm/bundleExport.js";
 
 const HIST_W = 360;
 const HIST_H = 140;
@@ -1234,6 +1235,30 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   });
 
   const chartModel = useMemo(() => buildResultsViewModel(results, model), [results, model]);
+
+  const handleExportLLMBundle = useCallback(() => {
+    const expConfig = results?._experiment_config || {};
+    const config = {
+      engineVersion: results?._engine_version,
+      prngAlgorithm: results?._prng_algorithm,
+      baseSeed: results?._base_seed,
+      replications: expConfig.replications,
+      maxSimTime: expConfig.maxSimTime,
+      warmupPeriod: expConfig.warmupPeriod,
+      seed: expConfig.seed,
+    };
+    const bundleResults = {
+      ...results,
+      aggregateStats: results?.aggregateStats || {},
+      replications: replicationResults.map(p => ({
+        replicationIndex: p.replicationIndex,
+        seed: p.seed,
+        summary: p.result?.summary ?? p.summary ?? {},
+      })),
+    };
+    const filename = `simmodlr-llm-bundle-${slugifyResultName(model?.name || 'model')}-${timestampForFilename()}.md`;
+    downloadTextFile(buildLLMBundle(model, bundleResults, config), filename, "text/markdown;charset=utf-8");
+  }, [model, results, replicationResults]);
   const queueSection = chartModel.chartSections.find(section => section.id === "queue-depth");
   const serverSection = chartModel.chartSections.find(section => section.id === "server-utilization");
   const waitSection = chartModel.chartSections.find(section => section.id === "wait-distribution");
@@ -1341,6 +1366,9 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: 2 }}>
+        <Btn variant="ghost" small onClick={handleExportLLMBundle}>Export LLM Bundle (.md)</Btn>
+      </div>
 
       {/* ── 1. Headline KPIs ───────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
