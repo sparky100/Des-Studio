@@ -25,7 +25,9 @@ EXCEPTION — REFINEMENT OF AN EXISTING MODEL: When a "Current model:" section i
 
 When you have enough specific information, summarise your understanding of the system in plain English and ask the user to confirm before building. Only generate the model JSON after confirmation.
 
-Do not invent macros, distribution types, or field names outside the schema defined below. All distParams values must be strings.`,
+Do not invent macros, distribution types, or field names outside the schema defined below. All distParams values must be strings.
+
+IMPORTANT — SECTIONS FOR LARGE MODELS: When building a model with 8 or more queues, OR with 3 or more distinct stages/departments, you MUST include a populated sections[] in the proposedModel. Do not generate a flat model without sections when the system clearly has named stages. See the SCHEMA REFERENCE §11.1 for the correct section fields (memberIds, entryQueues, exitQueues, color) — never use elementIds.`,
 
     // PART 3 — Response format
     `RESPONSE FORMAT:

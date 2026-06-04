@@ -40,6 +40,7 @@ Read this before writing any model JSON.
 | 10 | No `COMPLETE()` or `RENEGE()` sink | Every model needs at least one exit path. Missing sinks = entities accumulate forever. Blocked by V8 / CHK-002. |
 | 11 | Queue fed but no C-event consumes it | Every queue receiving entities via `ARRIVE()`, `RELEASE()`, or routing must have a C-event whose `effect` includes `ASSIGN(QueueName,...)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH`. Warning CHK-013. |
 | 12 | `RENEGE_OLDEST(CustomerType)` with non-existent type | The customer type argument must exactly match a defined entity type name (case-sensitive). A typo silently does nothing. |
+| 13 | Missing `sections[]` on large models | Any model with ≥8 queues or ≥3 named stages MUST include a populated `sections[]`. Use `memberIds` (not `elementIds`). Mark cross-section queues with `entryQueues` and `exitQueues`. See §11.1. |
 
 ---
 
@@ -864,6 +865,250 @@ All generated model JSON MUST pass every blocking rule below.
 
 ---
 
+## 11. Common Patterns
+
+### 11.1 Sections (Large-Model Organisation)
+
+`sections[]` is an optional metadata layer that groups queues, entity types, B-events, and C-events into named, coloured swimlanes. The simulation engine ignores sections entirely — they are authoring and visualisation aids only.
+
+```json
+"sections": [
+  {
+    "id": "sec_nhs24",
+    "name": "NHS 24 / 111 Triage",
+    "color": "#4A90D9",
+    "memberIds": ["q_nhs24_call", "q_nhs24_clinical", "et_call_handler", "b_arrive_111", "c_assign_handler"],
+    "entryQueues": ["q_nhs24_call"],
+    "exitQueues":  ["q_nhs24_clinical"]
+  },
+  {
+    "id": "sec_miu",
+    "name": "Minor Injuries Unit",
+    "color": "#27AE60",
+    "memberIds": ["q_miu_wait", "q_miu_treatment", "et_miu_nurse", "c_assign_miu", "b_complete_miu"],
+    "entryQueues": ["q_miu_wait"],
+    "exitQueues":  []
+  }
+]
+```
+
+Notice the handoff: `q_nhs24_clinical` is in `exitQueues` for the NHS 24 section, and `q_miu_wait` is in `entryQueues` for the MIU section. These are the queues that sit on the boundary — entities leave one section through its exitQueue and arrive at the next section via its entryQueue.
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | string | Unique section ID (e.g. `"sec_nhs24"`) |
+| `name` | string | Human-readable label shown in filter tabs and swimlane headers |
+| `color` | string | CSS hex colour used for swimlane background and filter tab indicators |
+| `memberIds` | string[] | IDs of queues, entity types, B-events, and/or C-events that belong to this section. Each element may appear in at most one section. |
+| `entryQueues` | string[] | Subset of `memberIds` — queues where entities arrive from another section |
+| `exitQueues` | string[] | Subset of `memberIds` — queues where entities leave to another section |
+
+**entryQueues / exitQueues semantics:**
+- `entryQueues` marks the **arrival boundary** — queues where entities first enter this section coming from another section (or from outside the model).
+- `exitQueues` marks the **departure boundary** — queues that feed into another section's `entryQueues`.
+- A queue that only exists inside one section (no cross-section flow) appears in `memberIds` but NOT in `entryQueues` or `exitQueues`.
+- A terminal section (last stage, entities complete here) has no `exitQueues`.
+
+**Anti-pattern — `elementIds`:** An earlier draft used `elementIds` instead of `memberIds`. This field name is silently ignored. Always use `memberIds`.
+
+```
+✓ CORRECT:   "memberIds": ["q_triage", "et_patient"]
+✗ WRONG:     "elementIds": ["q_triage", "et_patient"]
+```
+
+**Effect on the UI:**
+- Each editor (Entity Types, Queues, B-Events, C-Events) shows a section filter tab strip; clicking a tab hides all rows not in that section.
+- The Visual Designer shows a coloured dot on each node whose `refId` appears in a section's `memberIds`.
+- A dedicated **Sections** tab in the Design area lets users create, rename, recolour, and assign members.
+
+**When sections are appropriate:**
+
+Sections add value when a model has distinct, named stages that an entity passes through sequentially, and when the total number of queues or events makes the flat list hard to navigate. Typical triggers:
+
+| Signal | Example |
+|---|---|
+| ≥ 8 queues or ≥ 15 events | Glasgow Urgent Care Pathway (20 queues, 50+ events) |
+| Multi-stage pathway with named handoff points | NHS 24 → MIU → A&E |
+| Multiple departments or wards modelled in one file | Triage, Observation, Theatres, Recovery |
+| User asks for sub-models, swimlanes, or grouped views | "Can you split this into sections?" |
+
+Sections are **not** needed for:
+- Simple single-flow models (M/M/1, M/M/c, one or two queues)
+- Models where all queues belong to the same logical stage
+- Exploratory or template models
+
+**Rules:**
+- `entryQueues` and `exitQueues` must be subsets of `memberIds` and must reference queue IDs (not other element types).
+- An element appearing in multiple sections is a modelling error (the UI will assign it to the last section that claims it).
+- When generating a model JSON, you **SHOULD** populate `sections[]` if the model is clearly multi-stage (≥8 queues or ≥3 named stages). Omitting sections from a large model is a missed usability opportunity — always include them when the structure is clear. Reference the actual `id` values of the queues and events you defined earlier in the JSON — do not invent IDs.
+- If you are unsure which elements belong to which stage, omit `sections` or set it to `[]` and note in your response that the user can assign sections via the Sections tab.
+
+---
+
+### Single-server queue (M/M/1)
+
+```json
+{
+  "name": "M/M/1 Queue",
+  "entityTypes": [
+    { "id": "et_cust", "name": "Customer", "role": "customer", "count": 0, "attrDefs": [] },
+    { "id": "et_srv",  "name": "Server",   "role": "server",   "count": 1, "attrDefs": [] }
+  ],
+  "queues": [
+    { "id": "q_cust", "name": "Customer", "customerType": "Customer", "capacity": "", "discipline": "FIFO" }
+  ],
+  "bEvents": [
+    { "id": "b_arrive",   "name": "Arrival",   "scheduledTime": "0",    "effect": ["ARRIVE(Customer, Customer)"],
+      "schedules": [{ "eventId": "b_arrive", "dist": "Exponential", "distParams": { "mean": "1.111" } }] },
+    { "id": "b_complete", "name": "Complete",  "scheduledTime": "9999", "effect": ["COMPLETE()"], "schedules": [] }
+  ],
+  "cEvents": [
+    { "id": "c_seize", "name": "Seize Server", "priority": 1,
+      "condition": "queue(Customer).length > 0 AND idle(Server).count > 0",
+      "effect": ["ASSIGN(Customer, Server)"],
+      "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "1" }, "useEntityCtx": true }] }
+  ],
+  "stateVariables": [],
+  "goals": [],
+  "containerTypes": [],
+  "experimentDefaults": { "maxSimTime": 500, "warmupPeriod": 50, "replications": 10 }
+}
+```
+
+### Probabilistic acuity splitting (ARRIVE routing anti-pattern)
+
+**Use case:** Arriving entities must be split into high/low priority queues by probability.
+**Anti-pattern:** Adding `probabilisticRouting` to an ARRIVE B-event — ARRIVE routes via its effect argument, so the routing table is silently ignored.
+
+**Correct pattern:** Use two ARRIVE events, each with a rate proportional to the split:
+
+```json
+{
+  "name": "ED Triage — Correct Acuity Split",
+  "entityTypes": [
+    { "id": "et_patient", "name": "Patient", "role": "customer", "count": 0, "attrDefs": [] },
+    { "id": "et_doc",     "name": "Clinician", "role": "server",  "count": 3, "attrDefs": [] }
+  ],
+  "queues": [
+    { "id": "q_high", "name": "High Acuity Queue", "customerType": "Patient", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_low",  "name": "Low Acuity Queue",  "customerType": "Patient", "capacity": "", "discipline": "FIFO" }
+  ],
+  "bEvents": [
+    { "id": "b_arrive_high", "name": "High Acuity Arrival", "scheduledTime": "0",
+      "effect": ["ARRIVE(Patient, High Acuity Queue)"],
+      "schedules": [{ "eventId": "b_arrive_high", "dist": "Exponential", "distParams": { "mean": "16.667" } }] },
+    { "id": "b_arrive_low", "name": "Low Acuity Arrival", "scheduledTime": "0",
+      "effect": ["ARRIVE(Patient, Low Acuity Queue)"],
+      "schedules": [{ "eventId": "b_arrive_low", "dist": "Exponential", "distParams": { "mean": "7.143" } }] },
+    { "id": "b_complete", "name": "Treatment Done", "scheduledTime": "9999",
+      "effect": ["COMPLETE()"], "schedules": [] }
+  ],
+  "cEvents": [
+    { "id": "c_high", "name": "High Acuity Care", "priority": 1,
+      "condition": "queue(High Acuity Queue).length > 0 AND idle(Clinician).count > 0",
+      "effect": ["ASSIGN(High Acuity Queue, Clinician)"],
+      "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "13" }, "useEntityCtx": true }] },
+    { "id": "c_low", "name": "Low Acuity Care", "priority": 2,
+      "condition": "queue(Low Acuity Queue).length > 0 AND idle(Clinician).count > 0",
+      "effect": ["ASSIGN(Low Acuity Queue, Clinician)"],
+      "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "13" }, "useEntityCtx": true }] }
+  ],
+  "experimentDefaults": { "maxSimTime": 500, "warmupPeriod": 50, "replications": 10 }
+}
+```
+
+**Key rule for splitting arrivals:** Base arrival rate = 1 patient per 5 min = 12/hr. High acuity = 30% = 1 per 16.667 min. Low acuity = 70% = 1 per 7.143 min. Create one ARRIVE B-event per acuity group, each with its own schedule and proportional rate. Never use `probabilisticRouting` on an ARRIVE event.
+
+---
+
+### Two-stage pipeline (RELEASE pattern)
+
+For multi-stage models, use `RELEASE(ServerType, NextQueueName)` at the end of stage 1 to hand the entity to stage 2:
+
+- Stage 1 completion B-event: `"effect": ["RELEASE(Nurse, Treatment Queue)"]`
+- Stage 2 C-event: `"condition": "queue(Treatment Queue).length > 0 AND idle(Doctor).count > 0"`, `"effect": ["ASSIGN(Treatment Queue, Doctor)"]`
+- Stage 2 completion B-event: `"effect": ["COMPLETE()"]`
+
+### Airport arrivals with live OpenSky data
+
+A two-stage ground-handling model where aircraft arrival rate is driven by real-time data from the OpenSky Network (see §15.1 for full `openSky` adapter reference).
+
+```json
+{
+  "name": "Airport Arrivals — Live (OpenSky)",
+  "description": "Real-time aircraft arrival and ground-handling model. Arrival inter-arrival times are pulled live from OpenSky for EGLL. Gate controllers assign stands (2–8 min), ground crews perform turnaround (25–90 min).",
+  "timeUnit": "minutes",
+  "entityTypes": [
+    { "id": "et_aircraft",  "name": "Aircraft",        "role": "customer", "count": 0, "attrDefs": [] },
+    { "id": "et_gate_ctrl", "name": "Gate Controller", "role": "server",   "count": 3, "attrDefs": [] },
+    { "id": "et_gnd_crew",  "name": "Ground Crew",     "role": "server",   "count": 5, "attrDefs": [] }
+  ],
+  "queues": [
+    { "id": "q_holding",    "name": "Holding Stack",  "customerType": "Aircraft", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_turnaround", "name": "Turnaround Bay", "customerType": "Aircraft", "capacity": "", "discipline": "FIFO" }
+  ],
+  "bEvents": [
+    { "id": "b_arrive", "name": "Aircraft Arrives", "scheduledTime": "0",
+      "effect": ["ARRIVE(Aircraft, Holding Stack)"],
+      "schedules": [{
+        "eventId": "b_arrive",
+        "dist": "Exponential",
+        "distParams": { "mean": "3.5" },
+        "paramSource": { "sourceId": "ds_opensky", "field": "interArrivalMean", "targetParam": "mean", "fallback": "3.5" }
+      }]
+    },
+    { "id": "b_gate_done",       "name": "Gate Assigned",     "scheduledTime": "9999", "effect": ["RELEASE(Gate Controller, Turnaround Bay)"], "schedules": [] },
+    { "id": "b_turnaround_done", "name": "Turnaround Complete","scheduledTime": "9999", "effect": ["COMPLETE()"], "schedules": [] }
+  ],
+  "cEvents": [
+    { "id": "c_assign_gate", "name": "Assign Gate", "priority": 1,
+      "condition": "queue(Holding Stack).length > 0 AND idle(Gate Controller).count > 0",
+      "effect": ["ASSIGN(Holding Stack, Gate Controller)"],
+      "cSchedules": [{ "eventId": "b_gate_done", "dist": "Uniform", "distParams": { "min": "2", "max": "8" }, "useEntityCtx": true }]
+    },
+    { "id": "c_start_turnaround", "name": "Start Turnaround", "priority": 2,
+      "condition": "queue(Turnaround Bay).length > 0 AND idle(Ground Crew).count > 0",
+      "effect": ["ASSIGN(Turnaround Bay, Ground Crew)"],
+      "cSchedules": [{ "eventId": "b_turnaround_done", "dist": "Triangular", "distParams": { "min": "25", "mode": "45", "max": "90" }, "useEntityCtx": true }]
+    }
+  ],
+  "goals": [
+    { "metric": "summary.avgSojourn", "operator": "<=", "target": 90, "label": "Mean sojourn ≤ 90 min" },
+    { "metric": "summary.avgWait",    "operator": "<",  "target": 15, "label": "Mean holding wait < 15 min" }
+  ],
+  "dataSources": [{
+    "id": "ds_opensky", "label": "OpenSky Network — Live Arrivals",
+    "type": "openSky", "url": "https://opensky-network.org/api/states/all",
+    "airportIcao": "EGLL", "radiusNm": 50, "refreshSecs": 30
+  }],
+  "experimentDefaults": { "maxSimTime": 480, "warmupPeriod": 60, "replications": 5, "liveDataMode": "calibrated_batch" }
+}
+```
+
+**Change airport:** edit `dataSources[0].airportIcao` to any supported ICAO code (see §15.1). The fallback `"3.5"` minutes keeps the model runnable offline.
+
+---
+
+### Reneging (Abandonment)
+
+Add a renege schedule to the arrival B-event. The renege fires if the entity hasn't been served within the timeout:
+
+```json
+{
+  "eventId": "b_renege",
+  "dist": "Exponential",
+  "distParams": { "mean": "15" },
+  "isRenege": true
+}
+```
+
+And the renege B-event:
+```json
+{ "id": "b_renege", "name": "Renege", "scheduledTime": "9999", "effect": ["RENEGE(ctx)"], "schedules": [] }
+```
+
+---
+
 ## 16. Patterns & Anti-Patterns
 
 Common modelling patterns and the mistakes to avoid when generating simmodlr models.
@@ -1120,227 +1365,6 @@ Some model fields can only be set at model-generation time (via LLM or JSON impo
 | `paramSource` on schedules | Live data parameter bindings have no UI editor | Re-import the model JSON to change |
 
 All other model settings (routing, probabilistic routing, balking, loop guards, shift schedules, failure models, state variables, goals, data sources, etc.) are editable via the UI after import.
-
----
-
-## 11. Common Patterns
-
-### 11.1 Sections (Large-Model Organisation)
-
-`sections[]` is an optional metadata layer that groups queues, entity types, B-events, and C-events into named, coloured swimlanes. The simulation engine ignores sections entirely — they are authoring and visualisation aids only.
-
-```json
-"sections": [
-  {
-    "id": "sec_nhs24",
-    "name": "NHS 24 / 111 Triage",
-    "color": "#4A90D9",
-    "memberIds": ["q_nhs24_call", "q_nhs24_clinical", "et_call_handler"],
-    "entryQueues": ["q_nhs24_call"],
-    "exitQueues":  ["q_miu_appt", "q_ae_referred"]
-  }
-]
-```
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | string | Unique section ID (e.g. `"sec_nhs24"`) |
-| `name` | string | Human-readable label shown in filter tabs and swimlane headers |
-| `color` | string | CSS hex colour used for swimlane background and filter tab indicators |
-| `memberIds` | string[] | IDs of queues, entity types, B-events, and/or C-events that belong to this section. Each element may appear in at most one section. |
-| `entryQueues` | string[] | Subset of `memberIds` — queues where entities arrive from another section |
-| `exitQueues` | string[] | Subset of `memberIds` — queues where entities leave to another section |
-
-**Effect on the UI:**
-- Each editor (Entity Types, Queues, B-Events, C-Events) shows a section filter tab strip; clicking a tab hides all rows not in that section.
-- The Visual Designer shows a coloured dot on each node whose `refId` appears in a section's `memberIds`.
-- A dedicated **Sections** tab in the Design area lets users create, rename, recolour, and assign members.
-
-**When sections are appropriate:**
-
-Sections add value when a model has distinct, named stages that an entity passes through sequentially, and when the total number of queues or events makes the flat list hard to navigate. Typical triggers:
-
-| Signal | Example |
-|---|---|
-| ≥ 8 queues or ≥ 15 events | Glasgow Urgent Care Pathway (20 queues, 50+ events) |
-| Multi-stage pathway with named handoff points | NHS 24 → MIU → A&E |
-| Multiple departments or wards modelled in one file | Triage, Observation, Theatres, Recovery |
-| User asks for sub-models, swimlanes, or grouped views | "Can you split this into sections?" |
-
-Sections are **not** needed for:
-- Simple single-flow models (M/M/1, M/M/c, one or two queues)
-- Models where all queues belong to the same logical stage
-- Exploratory or template models
-
-**Rules:**
-- `entryQueues` and `exitQueues` must be subsets of `memberIds` and must reference queue IDs (not other element types).
-- An element appearing in multiple sections is a modelling error (the UI will assign it to the last section that claims it).
-- When generating a model JSON, you **may** populate `sections[]` if the model is clearly multi-stage (see table above) and element IDs are known. Reference the actual `id` values of the queues and events you defined earlier in the JSON — do not invent IDs.
-- If you are unsure which elements belong to which stage, omit `sections` or set it to `[]` and note in your response that the user can assign sections via the Sections tab.
-
----
-
-### Single-server queue (M/M/1)
-
-```json
-{
-  "name": "M/M/1 Queue",
-  "entityTypes": [
-    { "id": "et_cust", "name": "Customer", "role": "customer", "count": 0, "attrDefs": [] },
-    { "id": "et_srv",  "name": "Server",   "role": "server",   "count": 1, "attrDefs": [] }
-  ],
-  "queues": [
-    { "id": "q_cust", "name": "Customer", "customerType": "Customer", "capacity": "", "discipline": "FIFO" }
-  ],
-  "bEvents": [
-    { "id": "b_arrive",   "name": "Arrival",   "scheduledTime": "0",    "effect": ["ARRIVE(Customer, Customer)"],
-      "schedules": [{ "eventId": "b_arrive", "dist": "Exponential", "distParams": { "mean": "1.111" } }] },
-    { "id": "b_complete", "name": "Complete",  "scheduledTime": "9999", "effect": ["COMPLETE()"], "schedules": [] }
-  ],
-  "cEvents": [
-    { "id": "c_seize", "name": "Seize Server", "priority": 1,
-      "condition": "queue(Customer).length > 0 AND idle(Server).count > 0",
-      "effect": ["ASSIGN(Customer, Server)"],
-      "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "1" }, "useEntityCtx": true }] }
-  ],
-  "stateVariables": [],
-  "goals": [],
-  "containerTypes": [],
-  "experimentDefaults": { "maxSimTime": 500, "warmupPeriod": 50, "replications": 10 }
-}
-```
-
-### Probabilistic acuity splitting (ARRIVE routing anti-pattern)
-
-**Use case:** Arriving entities must be split into high/low priority queues by probability.
-**Anti-pattern:** Adding `probabilisticRouting` to an ARRIVE B-event — ARRIVE routes via its effect argument, so the routing table is silently ignored.
-
-**Correct pattern:** Use two ARRIVE events, each with a rate proportional to the split:
-
-```json
-{
-  "name": "ED Triage — Correct Acuity Split",
-  "entityTypes": [
-    { "id": "et_patient", "name": "Patient", "role": "customer", "count": 0, "attrDefs": [] },
-    { "id": "et_doc",     "name": "Clinician", "role": "server",  "count": 3, "attrDefs": [] }
-  ],
-  "queues": [
-    { "id": "q_high", "name": "High Acuity Queue", "customerType": "Patient", "capacity": "", "discipline": "FIFO" },
-    { "id": "q_low",  "name": "Low Acuity Queue",  "customerType": "Patient", "capacity": "", "discipline": "FIFO" }
-  ],
-  "bEvents": [
-    { "id": "b_arrive_high", "name": "High Acuity Arrival", "scheduledTime": "0",
-      "effect": ["ARRIVE(Patient, High Acuity Queue)"],
-      "schedules": [{ "eventId": "b_arrive_high", "dist": "Exponential", "distParams": { "mean": "16.667" } }] },
-    { "id": "b_arrive_low", "name": "Low Acuity Arrival", "scheduledTime": "0",
-      "effect": ["ARRIVE(Patient, Low Acuity Queue)"],
-      "schedules": [{ "eventId": "b_arrive_low", "dist": "Exponential", "distParams": { "mean": "7.143" } }] },
-    { "id": "b_complete", "name": "Treatment Done", "scheduledTime": "9999",
-      "effect": ["COMPLETE()"], "schedules": [] }
-  ],
-  "cEvents": [
-    { "id": "c_high", "name": "High Acuity Care", "priority": 1,
-      "condition": "queue(High Acuity Queue).length > 0 AND idle(Clinician).count > 0",
-      "effect": ["ASSIGN(High Acuity Queue, Clinician)"],
-      "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "13" }, "useEntityCtx": true }] },
-    { "id": "c_low", "name": "Low Acuity Care", "priority": 2,
-      "condition": "queue(Low Acuity Queue).length > 0 AND idle(Clinician).count > 0",
-      "effect": ["ASSIGN(Low Acuity Queue, Clinician)"],
-      "cSchedules": [{ "eventId": "b_complete", "dist": "Exponential", "distParams": { "mean": "13" }, "useEntityCtx": true }] }
-  ],
-  "experimentDefaults": { "maxSimTime": 500, "warmupPeriod": 50, "replications": 10 }
-}
-```
-
-**Key rule for splitting arrivals:** Base arrival rate = 1 patient per 5 min = 12/hr. High acuity = 30% = 1 per 16.667 min. Low acuity = 70% = 1 per 7.143 min. Create one ARRIVE B-event per acuity group, each with its own schedule and proportional rate. Never use `probabilisticRouting` on an ARRIVE event.
-
----
-
-### Two-stage pipeline (RELEASE pattern)
-
-For multi-stage models, use `RELEASE(ServerType, NextQueueName)` at the end of stage 1 to hand the entity to stage 2:
-
-- Stage 1 completion B-event: `"effect": ["RELEASE(Nurse, Treatment Queue)"]`
-- Stage 2 C-event: `"condition": "queue(Treatment Queue).length > 0 AND idle(Doctor).count > 0"`, `"effect": ["ASSIGN(Treatment Queue, Doctor)"]`
-- Stage 2 completion B-event: `"effect": ["COMPLETE()"]`
-
-### Airport arrivals with live OpenSky data
-
-A two-stage ground-handling model where aircraft arrival rate is driven by real-time data from the OpenSky Network (see §15.1 for full `openSky` adapter reference).
-
-```json
-{
-  "name": "Airport Arrivals — Live (OpenSky)",
-  "description": "Real-time aircraft arrival and ground-handling model. Arrival inter-arrival times are pulled live from OpenSky for EGLL. Gate controllers assign stands (2–8 min), ground crews perform turnaround (25–90 min).",
-  "timeUnit": "minutes",
-  "entityTypes": [
-    { "id": "et_aircraft",  "name": "Aircraft",        "role": "customer", "count": 0, "attrDefs": [] },
-    { "id": "et_gate_ctrl", "name": "Gate Controller", "role": "server",   "count": 3, "attrDefs": [] },
-    { "id": "et_gnd_crew",  "name": "Ground Crew",     "role": "server",   "count": 5, "attrDefs": [] }
-  ],
-  "queues": [
-    { "id": "q_holding",    "name": "Holding Stack",  "customerType": "Aircraft", "capacity": "", "discipline": "FIFO" },
-    { "id": "q_turnaround", "name": "Turnaround Bay", "customerType": "Aircraft", "capacity": "", "discipline": "FIFO" }
-  ],
-  "bEvents": [
-    { "id": "b_arrive", "name": "Aircraft Arrives", "scheduledTime": "0",
-      "effect": ["ARRIVE(Aircraft, Holding Stack)"],
-      "schedules": [{
-        "eventId": "b_arrive",
-        "dist": "Exponential",
-        "distParams": { "mean": "3.5" },
-        "paramSource": { "sourceId": "ds_opensky", "field": "interArrivalMean", "targetParam": "mean", "fallback": "3.5" }
-      }]
-    },
-    { "id": "b_gate_done",       "name": "Gate Assigned",     "scheduledTime": "9999", "effect": ["RELEASE(Gate Controller, Turnaround Bay)"], "schedules": [] },
-    { "id": "b_turnaround_done", "name": "Turnaround Complete","scheduledTime": "9999", "effect": ["COMPLETE()"], "schedules": [] }
-  ],
-  "cEvents": [
-    { "id": "c_assign_gate", "name": "Assign Gate", "priority": 1,
-      "condition": "queue(Holding Stack).length > 0 AND idle(Gate Controller).count > 0",
-      "effect": ["ASSIGN(Holding Stack, Gate Controller)"],
-      "cSchedules": [{ "eventId": "b_gate_done", "dist": "Uniform", "distParams": { "min": "2", "max": "8" }, "useEntityCtx": true }]
-    },
-    { "id": "c_start_turnaround", "name": "Start Turnaround", "priority": 2,
-      "condition": "queue(Turnaround Bay).length > 0 AND idle(Ground Crew).count > 0",
-      "effect": ["ASSIGN(Turnaround Bay, Ground Crew)"],
-      "cSchedules": [{ "eventId": "b_turnaround_done", "dist": "Triangular", "distParams": { "min": "25", "mode": "45", "max": "90" }, "useEntityCtx": true }]
-    }
-  ],
-  "goals": [
-    { "metric": "summary.avgSojourn", "operator": "<=", "target": 90, "label": "Mean sojourn ≤ 90 min" },
-    { "metric": "summary.avgWait",    "operator": "<",  "target": 15, "label": "Mean holding wait < 15 min" }
-  ],
-  "dataSources": [{
-    "id": "ds_opensky", "label": "OpenSky Network — Live Arrivals",
-    "type": "openSky", "url": "https://opensky-network.org/api/states/all",
-    "airportIcao": "EGLL", "radiusNm": 50, "refreshSecs": 30
-  }],
-  "experimentDefaults": { "maxSimTime": 480, "warmupPeriod": 60, "replications": 5, "liveDataMode": "calibrated_batch" }
-}
-```
-
-**Change airport:** edit `dataSources[0].airportIcao` to any supported ICAO code (see §15.1). The fallback `"3.5"` minutes keeps the model runnable offline.
-
----
-
-### Reneging (Abandonment)
-
-Add a renege schedule to the arrival B-event. The renege fires if the entity hasn't been served within the timeout:
-
-```json
-{
-  "eventId": "b_renege",
-  "dist": "Exponential",
-  "distParams": { "mean": "15" },
-  "isRenege": true
-}
-```
-
-And the renege B-event:
-```json
-{ "id": "b_renege", "name": "Renege", "scheduledTime": "9999", "effect": ["RENEGE(ctx)"], "schedules": [] }
-```
 
 ---
 
