@@ -12,6 +12,7 @@ import { compareResults } from "../db/runRecord.js";
 import { compareScenarios } from "../engine/statistics.js";
 import { CI_METRICS, METRIC_LABELS, fmt } from "./execute/executeHelpers.js";
 import { buildModelDiff, ModelDiffPreview } from "./editors/ModelDiffPreview.jsx";
+import { buildLLMBundle } from "../llm/bundleExport.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
 function slugifyModelName(name = "") {
@@ -168,6 +169,28 @@ export function ModelHistoryTab({
     const csv = buildRunHistoryCsv(historyRows);
     downloadTextFile(csv, `simmodlr-run-history-${slugifyModelName(model?.name)}.csv`, "text/csv;charset=utf-8");
     toast.success(`Exported ${historyRows.length} run${historyRows.length !== 1 ? "s" : ""} as CSV`);
+  };
+
+  const handleExportLLMBundle = (row) => {
+    const json = row.results_json || {};
+    const expConfig = json._experiment_config || {};
+    const config = {
+      runLabel: row.run_label || row.runLabel,
+      ranAt: row.ran_at || row.ranAt,
+      engineVersion: json._engine_version,
+      prngAlgorithm: json._prng_algorithm || 'mulberry32',
+      baseSeed: json._base_seed,
+      replications: row.replications ?? expConfig.replications,
+      maxSimTime: row.max_simulation_time ?? expConfig.maxSimTime,
+      warmupPeriod: row.warmup_period ?? expConfig.warmupPeriod,
+      seed: row.seed ?? expConfig.seed,
+    };
+    const bundleResults = { ...json, replications: json.replications || [] };
+    const md = buildLLMBundle(model, bundleResults, config);
+    const name = slugifyModelName(model?.name);
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    downloadTextFile(md, `simmodlr-llm-bundle-${name}-${ts}.md`, "text/markdown;charset=utf-8");
+    setMoreMenuId(null);
   };
 
   const exportSelectedCsv = () => {
@@ -511,6 +534,12 @@ export function ModelHistoryTab({
                                     disabled={reproduceState[row.id]?.status === 'running'}
                                     style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
                                   >{reproduceState[row.id]?.status === 'running' ? 'Running…' : 'Reproduce'}</button>
+                                  {hasResultsPayload(row) && (
+                                    <button
+                                      onClick={() => handleExportLLMBundle(row)}
+                                      style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
+                                    >Export LLM Bundle (.md)</button>
+                                  )}
                                   {shareLinksMap?.[row.id] ? (
                                     <>
                                       <button
