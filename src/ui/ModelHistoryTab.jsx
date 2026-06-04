@@ -538,7 +538,7 @@ export function ModelHistoryTab({
                                     <button
                                       onClick={() => handleExportLLMBundle(row)}
                                       style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", padding: "6px 10px", fontSize: 12, fontFamily: FONT, color: C.text, cursor: "pointer", borderRadius: 4 }}
-                                    >Export LLM Bundle (.md)</button>
+                                    >Export for AI tools (.md)</button>
                                   )}
                                   {shareLinksMap?.[row.id] ? (
                                     <>

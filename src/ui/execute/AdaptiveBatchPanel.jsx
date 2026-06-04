@@ -198,6 +198,13 @@ export function AdaptiveBatchPanel({
             warmupPeriod,
             seed: baseSeedRef.current,
             runLabel: `✦ Explore (${adaptiveResult.finalReps} reps)`,
+            aggregateStats,
+            replicationResults: adaptiveResult.results.map(p => ({
+              replicationIndex: p.replicationIndex,
+              seed: p.seed,
+              summary: p.result?.summary || {},
+              finalTime: p.result?.finalTime,
+            })),
           });
           setSavedRunId(runId);
         } catch { /* non-fatal — proceed to analysis */ }

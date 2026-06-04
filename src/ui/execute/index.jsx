@@ -619,14 +619,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             setLatestRunId(runId);
             storeRunNarrative(runId, model, fullResult);
             void refreshRunHistory();
-            onRunSaved?.();
+            onRunSaved?.(runId);
           }
         } else {
           saveLocalRun(modelId, fullResult, { ...config, runRecord, resultDetailLevel: "full" });
           void refreshRunHistory();
           setSaveStatus({ state: 'success', message: '✓ Results saved' });
           setLog(prev => [...prev, { phase: "SAVE", time: r.snap.clock, message: "✅ Local history record completed." }]);
-          onRunSaved?.();
+          onRunSaved?.(null);
         }
       }
     }
@@ -818,14 +818,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 setLatestRunId(runId);
                 storeRunNarrative(runId, model, batchResult);
                 void refreshRunHistory();
-                onRunSaved?.();
+                onRunSaved?.(runId);
               }
             } else {
               saveLocalRun(modelId, batchResult, { ...batchConfig, runRecord: batchRunRecord, resultDetailLevel: "full" });
               void refreshRunHistory();
               setSaveStatus({ state: 'success', message: '✓ Results saved' });
               setLog(prev => [...prev, { phase: "SAVE", time: batchResult.snap.clock, message: "Replication batch saved locally." }]);
-              onRunSaved?.();
+              onRunSaved?.(null);
             }
           } catch (setupError) {
             setBatchStatus("complete");
@@ -965,14 +965,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         setLatestRunId(runId);
         storeRunNarrative(runId, model, result);
         void refreshRunHistory();
-        onRunSaved?.();
+        onRunSaved?.(runId);
       }
     } else {
       saveLocalRun(modelId, result, { ...config, runRecord: singleRunRecord, resultDetailLevel: "full" });
       void refreshRunHistory();
       setSaveStatus({ state: 'success', message: '✓ Results saved' });
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Local history record completed." }]);
-      onRunSaved?.();
+      onRunSaved?.(null);
     }
   }, [model, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory, storeRunNarrative]);
 
@@ -2352,10 +2352,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               </Btn>
               <div style={{ height: 1, background: C.border, margin: "2px 0" }} />
               <Btn variant="ghost" small onClick={() => { exportLLMBundle(); setShowExportPopover(false); }}>
-                LLM Bundle (.md)
+                Export for AI tools (.md)
               </Btn>
               <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.4 }}>
-                Model + results as Markdown — paste into any LLM.
+                Model + results as Markdown — paste into any AI tool.
               </div>
             </div>
           )}

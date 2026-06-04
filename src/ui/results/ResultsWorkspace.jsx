@@ -258,9 +258,12 @@ function lineSeriesStats(series, yLabel, color, formatValue = v => formatNumber(
 export function SummaryCardGrid({ results, replicationResults = [] }) {
   const { C, FONT } = useTheme();
   const summary = results?.summary || {};
-  // Derive replication count: prefer explicit replicationResults array length,
-  // fall back to single run (1). Used to show per-run averages alongside totals.
-  const repCount = replicationResults.length > 0 ? replicationResults.length : 1;
+  // Derive replication count from prop array; fall back to stored replications field
+  // (array length for normal batches, or number for explore/history-loaded runs).
+  const storedRepCount = Array.isArray(results?.replications)
+    ? results.replications.length
+    : (typeof results?.replications === 'number' && results.replications > 1 ? results.replications : null);
+  const repCount = replicationResults.length > 0 ? replicationResults.length : (storedRepCount || 1);
   const isMultiRep = repCount > 1;
 
   const totalArrived = Number(summary.total ?? summary.arrived ?? summary.totalArrived ?? 0);
@@ -1287,7 +1290,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: 2 }}>
-          <Btn variant="ghost" small onClick={handleExportLLMBundle}>Export LLM Bundle (.md)</Btn>
+          <Btn variant="ghost" small onClick={handleExportLLMBundle}>Export for AI tools (.md)</Btn>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
@@ -1370,7 +1373,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
       <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: 2 }}>
-        <Btn variant="ghost" small onClick={handleExportLLMBundle}>Export LLM Bundle (.md)</Btn>
+        <Btn variant="ghost" small onClick={handleExportLLMBundle}>Export for AI tools (.md)</Btn>
       </div>
 
       {/* ── 1. Headline KPIs ───────────────────────────────────────────────── */}

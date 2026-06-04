@@ -724,7 +724,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     isStarterBlank ? { errors: [], warnings: [] } : validation
   ), [isStarterBlank, validation]);
 
-  const handleRunSaved=()=>{
+  const handleRunSaved=(runId)=>{
     // Increment runs optimistically — do NOT call onRefresh here.
     // onRefresh calls loadData() which sets loading=true, unmounting ModelDetail
     // and losing ExecutePanel state (results, tab position) mid-session.
@@ -740,7 +740,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     if(tab==="results"){
       setHistoryLoading(true);setHistoryError("");
       runHistoryFetcher({ archived: historyShowArchived })
-        .then(rows=>setHistoryRows(rows))
+        .then(rows=>{
+          setHistoryRows(rows);
+          // Sync dropdown to the newly saved run so results panel and dropdown agree
+          if(runId) setSelectedResultsRunId(runId);
+        })
         .catch(e=>setHistoryError(e.message))
         .finally(()=>setHistoryLoading(false));
     }
@@ -775,6 +779,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     const hydratedResults = hydrateResultsFromHistoryRow(row);
     setLatestResults(hydratedResults);
     setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
+    // Populate replication results from stored compact summaries so SummaryCardGrid
+    // can show the correct replication count and per-run averages for saved runs.
+    const storedReps = Array.isArray(hydratedResults?.replications) ? hydratedResults.replications : [];
+    setLatestReplicationResults(storedReps);
   };
 
   const handleResultsExportJson = useCallback(() => {
@@ -860,6 +868,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     const hydratedResults = hydrateResultsFromHistoryRow(row);
     setLatestResults(hydratedResults);
     setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
+    const storedReps = Array.isArray(hydratedResults?.replications) ? hydratedResults.replications : [];
+    setLatestReplicationResults(storedReps);
     if (nextSubtab === "explain") {
       setAiSidebarOpen(true);
       setResultsView("summary");
@@ -992,6 +1002,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         const hydratedResults = hydrateResultsFromHistoryRow(row);
         setLatestResults(hydratedResults);
         setLatestLog(Array.isArray(hydratedResults?.log) ? hydratedResults.log : []);
+        const storedReps = Array.isArray(hydratedResults?.replications) ? hydratedResults.replications : [];
+        setLatestReplicationResults(storedReps);
       }
     }).catch(e=>setHistoryError(e.message))
     .finally(()=>setHistoryLoading(false));
@@ -1315,7 +1327,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               {latestResults && (
                 <>
                   <Btn small variant="ghost" onClick={handleResultsExportJson} title="Download results as JSON">Export Results</Btn>
-                  <Btn small variant="ghost" onClick={handleResultsExportLLMBundle} title="Export model + results as Markdown for LLM analysis">Export LLM Bundle (.md)</Btn>
+                  <Btn small variant="ghost" onClick={handleResultsExportLLMBundle} title="Export model + results as Markdown for analysis in any AI tool">Export for AI tools (.md)</Btn>
                   <Btn small variant="ghost" onClick={() => handleResultsReport('seniorMgmt')} disabled={resultsReportGenerating}>
                     {resultsReportGenerating ? "Generating…" : "Create Report"}
                   </Btn>

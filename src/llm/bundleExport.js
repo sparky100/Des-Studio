@@ -187,8 +187,25 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
   }
 
-  // CI table — present only when aggregateStats exists (multi-replication)
-  const aggregateStats = results.aggregateStats || {};
+  // CI table — present only when aggregateStats exists (multi-replication).
+  // For single-run or explore runs where aggregateStats wasn't stored, synthesise
+  // point estimates from the summary so goals can show PASS/FAIL instead of UNKNOWN.
+  const storedStats = results.aggregateStats && Object.keys(results.aggregateStats).length
+    ? results.aggregateStats
+    : (() => {
+        const s = results.summary || {};
+        const point = (v) => (v != null && Number.isFinite(Number(v)) ? { mean: Number(v), n: 1, lower: null, upper: null, halfWidth: null } : null);
+        const synth = {};
+        if (point(s.avgWait))    synth['summary.avgWait']    = point(s.avgWait);
+        if (point(s.avgSvc))     synth['summary.avgSvc']     = point(s.avgSvc);
+        if (point(s.avgSojourn)) synth['summary.avgSojourn'] = point(s.avgSojourn);
+        if (point(s.served))     synth['summary.served']     = point(s.served);
+        if (point(s.reneged))    synth['summary.reneged']    = point(s.reneged);
+        if (point(s.totalCost))  synth['summary.totalCost']  = point(s.totalCost);
+        if (point(s.costPerServed)) synth['summary.costPerServed'] = point(s.costPerServed);
+        return synth;
+      })();
+  const aggregateStats = storedStats;
   const ciKeys = Object.keys(aggregateStats).filter(k => aggregateStats[k]?.mean != null);
   if (ciKeys.length) {
     lines.push('### Confidence Intervals (95%)');
@@ -229,6 +246,34 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
   }
 
+  // Queue journey paths — shows which queues entities traversed in sequence
+  const queueJourneys = results?.summary?.queueJourneys;
+  if (queueJourneys && Object.keys(queueJourneys).length) {
+    lines.push('### Queue Journey Paths');
+    lines.push('');
+    lines.push('| Journey (queue sequence) | Count |');
+    lines.push('|--------------------------|-------|');
+    const sorted = Object.entries(queueJourneys).sort(([, a], [, b]) => b - a);
+    for (const [path, count] of sorted) {
+      lines.push(`| ${path} | ${count} |`);
+    }
+    lines.push('');
+  }
+
+  // Section performance — sojourn and throughput per model section
+  const sections = results?.summary?.sections;
+  if (sections && Object.keys(sections).length) {
+    lines.push('### Section Performance');
+    lines.push('');
+    lines.push('| Section | Entities in | Entities out | Avg sojourn |');
+    lines.push('|---------|------------|-------------|------------|');
+    for (const [secId, sec] of Object.entries(sections)) {
+      const f = v => v != null ? Number(v).toFixed(2) : '—';
+      lines.push(`| ${secId} | ${sec.entitiesIn ?? '—'} | ${sec.entitiesOut ?? '—'} | ${f(sec.avgSojourn)} |`);
+    }
+    lines.push('');
+  }
+
   if (kpis.warning_phaseCTruncated) {
     lines.push('> **Warning:** Phase C truncation occurred — C-Event scan exceeded 500 iterations in a single clock tick. Review C-Event conditions for possible loops.');
     lines.push('');
@@ -247,12 +292,12 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
     lines.push('## Replication Summary');
     lines.push('');
-    lines.push('| # | Seed | Served | Reneged | Avg wait |');
-    lines.push('|---|------|--------|---------|---------|');
+    lines.push('| # | Seed | Served | Reneged | Avg wait | Avg sojourn |');
+    lines.push('|---|------|--------|---------|---------|------------|');
     for (const rep of replList) {
       const s = rep.summary || {};
-      const avgWait = s.avgWait != null ? Number(s.avgWait).toFixed(2) : '—';
-      lines.push(`| ${rep.replicationIndex ?? '?'} | ${rep.seed ?? '—'} | ${s.served ?? '—'} | ${s.reneged ?? '—'} | ${avgWait} |`);
+      const f = v => v != null ? Number(v).toFixed(2) : '—';
+      lines.push(`| ${rep.replicationIndex ?? '?'} | ${rep.seed ?? '—'} | ${s.served ?? '—'} | ${s.reneged ?? '—'} | ${f(s.avgWait)} | ${f(s.avgSojourn)} |`);
     }
     lines.push('');
   }
