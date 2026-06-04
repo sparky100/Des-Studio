@@ -360,6 +360,39 @@ const FirstRunPanel = ({ onCreateBlank, onBrowseTemplates }) => {
   );
 };
 
+function ModelGrid({
+  models, tabKey, filter, onFilterChange, source, emptyIcon, emptyMsg, firstRun,
+  onOpenModel, onDeleteModel, onCopyModel, onTagClick,
+  currentUserId, profiles,
+  onCreateBlank, onBrowseTemplates,
+}) {
+  if (source.length === 0) {
+    return firstRun
+      ? <FirstRunPanel onCreateBlank={onCreateBlank} onBrowseTemplates={onBrowseTemplates} />
+      : <Empty icon={emptyIcon} msg={emptyMsg} />;
+  }
+  return (
+    <div>
+      <LibraryControls models={source} filter={filter} onFilterChange={onFilterChange} />
+      {models.length === 0
+        ? <FilterEmpty onClear={() => onFilterChange(BLANK_FILTER)} />
+        : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
+          {models.map(m => (
+            <ModelCard key={m.id} model={m}
+              onOpen={() => onOpenModel(m)}
+              onDelete={onDeleteModel}
+              onCopy={onCopyModel}
+              onTagClick={onTagClick}
+              currentUserId={currentUserId}
+              profiles={profiles}
+              currentVersion={m.latestVersion} />
+          ))}
+        </div>
+      }
+    </div>
+  );
+}
+
 export function ModelLibrary({
   myModels, pubModels, communityModels,
   profiles, currentUserId,
@@ -395,34 +428,6 @@ export function ModelLibrary({
     if (tabKey === "my")        setMyFilter(f   => f.tags.includes(tag) ? f : { ...f, tags: [...f.tags, tag] });
     else if (tabKey === "public")    setPubFilter(f  => f.tags.includes(tag) ? f : { ...f, tags: [...f.tags, tag] });
     else if (tabKey === "community") setCommFilter(f => f.tags.includes(tag) ? f : { ...f, tags: [...f.tags, tag] });
-  };
-
-  const ModelGrid = ({ models, tabKey, filter, onFilterChange, source, emptyIcon, emptyMsg, firstRun }) => {
-    if (source.length === 0) {
-      return firstRun
-        ? <FirstRunPanel onCreateBlank={() => setShowNew(true)} onBrowseTemplates={() => setTab("templates")} />
-        : <Empty icon={emptyIcon} msg={emptyMsg} />;
-    }
-    return (
-      <div>
-        <LibraryControls models={source} filter={filter} onFilterChange={onFilterChange} />
-        {models.length === 0
-          ? <FilterEmpty onClear={() => onFilterChange(BLANK_FILTER)} />
-          : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))", gap: 14 }}>
-            {models.map(m => (
-              <ModelCard key={m.id} model={m}
-                onOpen={() => onOpenModel(m)}
-                onDelete={onDeleteModel}
-                onCopy={onCopyModel}
-                onTagClick={tag => addTagFilter(tabKey, tag)}
-                currentUserId={currentUserId}
-                profiles={profiles}
-                currentVersion={m.latestVersion} />
-            ))}
-          </div>
-        }
-      </div>
-    );
   };
 
   return (
@@ -514,21 +519,31 @@ export function ModelLibrary({
           models={visibleMy} tabKey="my"
           filter={myFilter} onFilterChange={setMyFilter}
           source={myModels} firstRun
-          emptyIcon="📁" emptyMsg="No models yet." />
+          emptyIcon="📁" emptyMsg="No models yet."
+          onOpenModel={onOpenModel} onDeleteModel={onDeleteModel} onCopyModel={onCopyModel}
+          onTagClick={tag => addTagFilter("my", tag)}
+          currentUserId={currentUserId} profiles={profiles}
+          onCreateBlank={() => setShowNew(true)} onBrowseTemplates={() => setTab("templates")} />
       )}
       {tab === "public" && (
         <ModelGrid
           models={visiblePub} tabKey="public"
           filter={pubFilter} onFilterChange={setPubFilter}
           source={pubModels}
-          emptyIcon="🌐" emptyMsg="No public models available." />
+          emptyIcon="🌐" emptyMsg="No public models available."
+          onOpenModel={onOpenModel} onDeleteModel={onDeleteModel} onCopyModel={onCopyModel}
+          onTagClick={tag => addTagFilter("public", tag)}
+          currentUserId={currentUserId} profiles={profiles} />
       )}
       {tab === "community" && (
         <ModelGrid
           models={visibleComm} tabKey="community"
           filter={commFilter} onFilterChange={setCommFilter}
           source={communityModels}
-          emptyIcon="🌐" emptyMsg="No community models shared yet." />
+          emptyIcon="🌐" emptyMsg="No community models shared yet."
+          onOpenModel={onOpenModel} onDeleteModel={onDeleteModel} onCopyModel={onCopyModel}
+          onTagClick={tag => addTagFilter("community", tag)}
+          currentUserId={currentUserId} profiles={profiles} />
       )}
 
       {showNew && (
