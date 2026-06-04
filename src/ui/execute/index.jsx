@@ -526,6 +526,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }, [userId, warmupPeriod, maxSimTime, replications, terminationMode]);
 
   const doStep = useCallback(async () => {
+    if (batchStatus !== "idle" || replicationResults.length > 0) {
+      setBatchStatus("idle");
+      setReplicationResults([]);
+      setAggregateStats({});
+    }
     if (!engineRef.current) return;
     setHideRunReadiness(true);
     setExecuteSection("run");
@@ -988,6 +993,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       stopAuto();
     } else {
       setHideRunReadiness(true);
+      if (batchStatus !== "idle" || replicationResults.length > 0) {
+        setBatchStatus("idle");
+        setReplicationResults([]);
+        setAggregateStats({});
+      }
       if (mode === "idle") initEngine();
       setAutoRunning(true);
     }
@@ -1500,7 +1510,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             variant={executeSection === section.id ? "primary" : "ghost"}
             onClick={() => {
               if (section.id === "experiments" && !sweepOpen) setSweepParams(enumerateSweepableParams(model));
-              if (section.id === "run") setHideRunReadiness(false);
+              if (section.id === "run") {
+                setHideRunReadiness(false);
+                if (executeSection !== "run") {
+                  setBatchStatus("idle");
+                  setReplicationResults([]);
+                  setAggregateStats({});
+                }
+              }
               setExecuteSection(section.id);
             }}
           >
@@ -2993,7 +3010,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         </div>
       )}
 
-      {(() => {
+      {batchStatus === "idle" && replicationResults.length === 0 && (() => {
         const hasDerivableGraph = !!(model.queues?.length || model.bEvents?.length || model.cEvents?.length);
         if (hasDerivableGraph) {
           return (
