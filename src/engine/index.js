@@ -1282,8 +1282,9 @@ const cycleLog = [];
             if (sec.id !== lastSection) { visitedSections.push(sec.id); lastSection = sec.id; }
           }
         }
-        if (visitedSections.length > 1) {
-          const key = visitedSections.join("→");
+        if (visitedSections.length > 0) {
+          const sink = entity.outcome?.routeLabel || (entity.status === "reneged" ? "Reneged" : "Completed");
+          const key = [...visitedSections, sink].join("→");
           journeys[key] = (journeys[key] || 0) + 1;
         }
       }
@@ -1297,8 +1298,10 @@ const cycleLog = [];
     const queueJourneys = {};
     for (const entity of customers) {
       if (!entity.stages?.length) continue;
-      const path = entity.stages.map(s => s.queueName).filter(Boolean).join("→");
-      if (!path) continue;
+      const queueParts = entity.stages.map(s => s.queueName).filter(Boolean);
+      if (!queueParts.length) continue;
+      const sink = entity.outcome?.routeLabel || (entity.status === "reneged" ? "Reneged" : "Completed");
+      const path = [...queueParts, sink].join("→");
       queueJourneys[path] = (queueJourneys[path] || 0) + 1;
     }
 
