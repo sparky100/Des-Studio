@@ -40,7 +40,7 @@ import { AdaptiveBatchPanel }               from "./execute/AdaptiveBatchPanel.j
 import { normalizeModelConditions }         from "../model/conditionFormat.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
-const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "graph", "experimentDefaults"];
+const MODEL_JSON_KEYS = ["entityTypes", "stateVariables", "bEvents", "cEvents", "queues", "containerTypes", "goals", "graph", "experimentDefaults"];
 
 const AuthoringWorkflowShell = ({ mode, children }) => (
   <section aria-label={`${mode.label} authoring shell`} style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -95,7 +95,7 @@ function modelJsonFromModel(model = {}) {
       ...acc,
       [key]: Array.isArray(model[key]) ? model[key] : [],
     };
-  }, {});
+  }, { schemaVersion: model.schemaVersion ?? 1 });
   // Preserve live-data and time fields in exported JSON
   if (model.timeUnit)                  json.timeUnit    = model.timeUnit;
   if (model.epoch)                     json.epoch       = model.epoch;

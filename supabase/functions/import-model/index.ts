@@ -37,6 +37,11 @@ function normalizeModel(payload: ModelRecord, nameOverride?: string): ModelRecor
       model[key] = Array.isArray(source[key]) ? source[key] : [];
     }
   }
+  // Scalar settings stored only in model_json
+  if (source.timeUnit) model.timeUnit = source.timeUnit;
+  if (source.epoch)    model.epoch    = source.epoch;
+  if (Array.isArray(source.dataSources)) model.dataSources = source.dataSources;
+  if (Array.isArray(source.sections))    model.sections    = source.sections;
   return model;
 }
 
@@ -97,7 +102,24 @@ function validateModel(model: ModelRecord): { errors: string[]; warnings: string
     queues.map(q => String(q.name || "").trim().toLowerCase()).filter(Boolean)
   );
 
-  // V4: PRIORITY queue requires priority attribute
+  // V3: defaultValue must match declared valueType
+  entityTypes.forEach(et => {
+    ((et.attrDefs as ModelRecord[]) || []).forEach(a => {
+      if (a.defaultValue === undefined || a.defaultValue === "") return;
+      const val = a.defaultValue;
+      if (a.valueType === "number") {
+        if (isNaN(parseFloat(String(val))) || !isFinite(Number(val))) {
+          err("V3", `Attribute '${a.name || "?"}' in '${et.name || "?"}': default value '${val}' is not a valid number.`);
+        }
+      } else if (a.valueType === "boolean") {
+        if (val !== "true" && val !== "false") {
+          err("V3", `Attribute '${a.name || "?"}' in '${et.name || "?"}': default value '${val}' is not 'true' or 'false'.`);
+        }
+      }
+    });
+  });
+
+  // V4: PRIORITY queue requires a numeric priority attribute
   queues.forEach(q => {
     if (String(q.discipline || "FIFO").toUpperCase() !== "PRIORITY") return;
     const ct = entityTypes.find(et =>
@@ -106,11 +128,13 @@ function validateModel(model: ModelRecord): { errors: string[]; warnings: string
     if (!ct) {
       err("V4", `Queue '${q.name}' uses PRIORITY discipline but entity class '${q.customerType || "?"}' was not found.`);
     } else {
-      const hasPriority = ((ct.attrDefs as ModelRecord[]) || []).some(a =>
+      const priorityAttr = ((ct.attrDefs as ModelRecord[]) || []).find(a =>
         String(a.name || "").trim().toLowerCase() === "priority"
       );
-      if (!hasPriority) {
+      if (!priorityAttr) {
         err("V4", `Queue '${q.name}' uses PRIORITY discipline but entity class '${ct.name}' has no 'priority' attribute.`);
+      } else if (priorityAttr.valueType !== "number") {
+        err("V4", `Queue '${q.name}' uses PRIORITY discipline but entity class '${ct.name}' must define 'priority' as a number.`);
       }
     }
   });
@@ -176,6 +200,130 @@ function validateModel(model: ModelRecord): { errors: string[]; warnings: string
       err("V21", `B-Event '${b.name || b.id}' balkProbability '${b.balkProbability}' must be between 0 and 1.`);
     }
   });
+
+  // V5: Distribution parameter bounds
+  function checkDistBounds(dist: string, params: ModelRecord, context: string) {
+    const d = String(dist || "").trim();
+    if (!d || d === "ServerAttr" || d === "EntityAttr" || d === "Piecewise") return;
+    const p = params || {};
+    switch (d) {
+      case "Exponential": {
+        const m = parseFloat(String(p.mean ?? ""));
+        if (isNaN(m) || m <= 0) err("V5", `${context}: Exponential mean must be > 0 (got '${p.mean ?? ""}')`);
+        break;
+      }
+      case "Uniform": {
+        const lo = parseFloat(String(p.min ?? "")), hi = parseFloat(String(p.max ?? ""));
+        if (isNaN(lo) || isNaN(hi)) err("V5", `${context}: Uniform requires numeric min and max.`);
+        else if (hi <= lo) err("V5", `${context}: Uniform max (${hi}) must be > min (${lo}).`);
+        break;
+      }
+      case "Normal": {
+        const s = parseFloat(String(p.stddev ?? ""));
+        if (isNaN(s) || s <= 0) err("V5", `${context}: Normal stddev must be > 0 (got '${p.stddev ?? ""}')`);
+        break;
+      }
+      case "Triangular": {
+        const a = parseFloat(String(p.min ?? "")), c = parseFloat(String(p.mode ?? "")), b = parseFloat(String(p.max ?? ""));
+        if (isNaN(a) || isNaN(c) || isNaN(b)) err("V5", `${context}: Triangular requires numeric min, mode, and max.`);
+        else if (!(a <= c && c <= b)) err("V5", `${context}: Triangular requires min ≤ mode ≤ max (got ${a}, ${c}, ${b}).`);
+        break;
+      }
+      case "Fixed": {
+        const v = parseFloat(String(p.value ?? ""));
+        if (p.value === undefined || p.value === "" || isNaN(v)) err("V5", `${context}: Fixed requires a numeric value (got '${p.value ?? ""}')`);
+        break;
+      }
+      case "Erlang": {
+        const k = parseInt(String(p.k ?? ""), 10), m = parseFloat(String(p.mean ?? ""));
+        if (isNaN(k) || k < 1) err("V5", `${context}: Erlang k must be a positive integer (got '${p.k ?? ""}')`);
+        if (isNaN(m) || m <= 0) err("V5", `${context}: Erlang mean must be > 0 (got '${p.mean ?? ""}')`);
+        break;
+      }
+    }
+  }
+  bEvents.forEach(b => {
+    ((b.schedules as ModelRecord[]) || []).forEach((s, j) => {
+      if (s.rows || s.times) return;
+      if (s.dist) checkDistBounds(String(s.dist), (s.distParams as ModelRecord) || {}, `B-Event '${b.name || b.id}' schedule ${j + 1}`);
+    });
+  });
+  cEvents.forEach(c => {
+    ((c.cSchedules as ModelRecord[]) || []).forEach((s, j) => {
+      if (s.dist) checkDistBounds(String(s.dist), (s.distParams as ModelRecord) || {}, `C-Event '${c.name || c.id}' schedule ${j + 1}`);
+    });
+  });
+
+  // V10: Attribute names must not collide with built-in namespaces
+  entityTypes.forEach(et => {
+    ((et.attrDefs as ModelRecord[]) || []).forEach(a => {
+      const name = String(a.name || "").trim();
+      if (!name) return;
+      if (/^(Resource|Queue)\b/i.test(name)) {
+        err("V10", `Attribute '${name}' in entity class '${et.name || "?"}' conflicts with the built-in 'Resource' or 'Queue' namespace.`);
+      }
+    });
+  });
+
+  // V25: RENEGE() argument must be exactly 'ctx'
+  const checkRenege = (events: ModelRecord[], prefix: string) => {
+    events.forEach(ev => {
+      const text = effectText(ev.effect);
+      const m = text.match(/\bRENEGE\(\s*([^)]+)\s*\)/i);
+      if (m && m[1].trim().toLowerCase() !== "ctx") {
+        err("V25", `${prefix} '${ev.name || ev.id}' uses RENEGE('${m[1].trim()}') — must be RENEGE(ctx).`);
+      }
+    });
+  };
+  checkRenege(bEvents, "B-Event");
+  checkRenege(cEvents, "C-Event");
+
+  // V26: Container id/capacity/initialLevel validity
+  const containerTypes = (model.containerTypes as ModelRecord[]) || [];
+  const containerIds = new Set<string>();
+  containerTypes.forEach((ct, i) => {
+    const id = String(ct.id || "").trim();
+    if (!id) {
+      err("V26", `Container at position ${i + 1} has an empty id.`);
+    } else if (containerIds.has(id.toLowerCase())) {
+      err("V26", `Duplicate container id: '${id}'.`);
+    } else {
+      containerIds.add(id.toLowerCase());
+    }
+    const cap = parseFloat(String(ct.capacity ?? ""));
+    if (!isNaN(cap) && cap <= 0) err("V26", `Container '${id || i + 1}': capacity must be > 0.`);
+    const init = parseFloat(String(ct.initialLevel ?? ""));
+    if (!isNaN(init)) {
+      if (init < 0) err("V26", `Container '${id || i + 1}': initialLevel must be >= 0.`);
+      if (!isNaN(cap) && cap > 0 && init > cap) err("V26", `Container '${id || i + 1}': initialLevel (${init}) exceeds capacity (${cap}).`);
+    }
+  });
+
+  // V27: FILL/DRAIN must reference a declared container
+  const checkContainerRefs = (events: ModelRecord[], prefix: string) => {
+    events.forEach(ev => {
+      const text = effectText(ev.effect);
+      const hits = text.match(/\b(FILL|DRAIN)\([^)]+\)/gi) || [];
+      hits.forEach(hit => {
+        const inner = hit.match(/\b(FILL|DRAIN)\(([^,)]+)/i);
+        if (!inner) return;
+        const name = inner[2].trim();
+        if (!containerIds.has(name.toLowerCase())) {
+          err("V27", `${prefix} '${ev.name || ev.id}' ${inner[1].toUpperCase()} references undeclared container '${name}'.`);
+        }
+      });
+    });
+  };
+  checkContainerRefs(bEvents, "B-Event");
+  checkContainerRefs(cEvents, "C-Event");
+
+  // V28: epoch must be a valid ISO 8601 datetime when set
+  if (model.epoch != null && model.epoch !== "") {
+    const d = new Date(String(model.epoch));
+    if (isNaN(d.getTime())) {
+      err("V28", `Model epoch '${model.epoch}' is not a valid ISO 8601 datetime.`);
+    }
+  }
 
   return { errors, warnings };
 }
@@ -258,9 +406,14 @@ Deno.serve(async (request: Request) => {
       bEvents:            model.bEvents            || [],
       cEvents:            model.cEvents            || [],
       queues:             model.queues             || [],
+      containerTypes:     model.containerTypes     || [],
       graph:              model.graph              || null,
       experimentDefaults: model.experimentDefaults || {},
       goals:              model.goals              || [],
+      timeUnit:           model.timeUnit           || "minutes",
+      epoch:              model.epoch              || null,
+      ...(Array.isArray(model.dataSources) && model.dataSources.length ? { dataSources: model.dataSources } : {}),
+      ...(Array.isArray(model.sections)    && model.sections.length    ? { sections:    model.sections }    : {}),
     },
     owner_id: user.id,
   };

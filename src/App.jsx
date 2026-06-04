@@ -469,10 +469,9 @@ export default function App({ onThemeChange }){
         warnings={pendingImport.warnings}
         user={session?.user||null}
         onSave={async()=>{
-          const saved=await saveModel({
-            ...pendingImport.model,
-            name:pendingImport.model.name||'Imported Model',
-          },uid)
+          const normalised=extractImportedModelPayload(pendingImport.model)
+          normalised.name=pendingImport.model.name||normalised.name||'Imported Model'
+          const saved=await saveModel(normalised,uid)
           await loadData()
           setPendingImport(null)
           if(window.location.hash.startsWith('#import'))window.location.hash=''

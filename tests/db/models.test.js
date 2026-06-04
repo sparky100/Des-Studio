@@ -1543,6 +1543,73 @@ describe('Sprint 71 — persistence layer', () => {
     });
   });
 
+  // ── D-1 fix: containerTypes round-trip ───────────────────────────────────
+  describe('round-trip — model_json.containerTypes survives saveModel insert', () => {
+    it('the insert payload model_json contains containerTypes from the input object', async () => {
+      const containerTypes = [
+        { id: 'tank_a', capacity: 1000, initialLevel: 0 },
+        { id: 'buffer_b' },
+      ];
+      const model = {
+        name: 'Container RT',
+        entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
+        containerTypes,
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'ct-rt-id', name: model.name, owner_id: 'u1' }, error: null,
+      });
+      await saveModel(model, 'u1');
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json.containerTypes).toEqual(containerTypes);
+    });
+
+    it('model_json.containerTypes defaults to [] when not supplied', async () => {
+      const model = {
+        name: 'No Containers',
+        entityTypes: [], stateVariables: [], bEvents: [], cEvents: [], queues: [],
+      };
+      supabase.from('des_models').insert.mockReturnThis();
+      supabase.from('des_models').select.mockReturnThis();
+      supabase.from('des_models').single.mockResolvedValueOnce({
+        data: { id: 'no-ct-id', name: model.name, owner_id: 'u1' }, error: null,
+      });
+      await saveModel(model, 'u1');
+      const insertArg = supabase.from('des_models').insert.mock.calls[0][0];
+      expect(insertArg.model_json.containerTypes).toEqual([]);
+    });
+  });
+
+  describe('norm() — deserialises containerTypes from model_json', () => {
+    it('reads containerTypes from model_json', () => {
+      const containerTypes = [{ id: 'tank_x', capacity: 500 }];
+      const result = norm({
+        id: 'ct-norm-1', name: 'With Containers',
+        entity_types: [], b_events: [], c_events: [], queues: [],
+        model_json: { containerTypes },
+      });
+      expect(result.containerTypes).toEqual(containerTypes);
+    });
+
+    it('defaults containerTypes to [] when absent from model_json', () => {
+      const result = norm({
+        id: 'ct-norm-2', name: 'No Containers',
+        entity_types: [], b_events: [], c_events: [], queues: [],
+        model_json: {},
+      });
+      expect(result.containerTypes).toEqual([]);
+    });
+
+    it('defaults containerTypes to [] when model_json is absent entirely', () => {
+      const result = norm({
+        id: 'ct-norm-3', name: 'Legacy Row',
+        entity_types: [], b_events: [], c_events: [], queues: [],
+      });
+      expect(result.containerTypes).toEqual([]);
+    });
+  });
+
   // ── Sprint 71.2 — NODE_ENV guard: schema mismatch throws in dev ───────────
   describe('runDesModelsSelect — NODE_ENV=development throws on schema mismatch', () => {
     afterEach(() => {
