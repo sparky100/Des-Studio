@@ -1,9 +1,9 @@
 # simmodlr — Engineering Specification
 
-**Version:** 7.1.0  
-**Date:** 2026-06-02  
+**Version:** 7.2.0  
+**Date:** 2026-06-04  
 **Note:** package.json version is 0.9.0-Beta; this document uses an internal engineering version number.  
-**Sprint baseline:** Sprint 80  
+**Sprint baseline:** Sprint 82  
 **Status:** Living document — updated at end of each sprint  
 **Audience:** Engineering team, technical contributors, platform integrators
 
@@ -620,6 +620,70 @@ Web Speech API voice input is available in three components: `HelpAssistant.jsx`
 
 `src/simulation/modelChecker.js` — static model analysis run before execution to detect structural issues beyond the validation rule set.  
 `src/simulation/traceCollector.js` — collects per-entity trace events during step-mode execution for the Step Log panel.
+
+### 4.6 Results API and LLM Export Bundle
+
+#### Results API (`supabase/functions/results-api/index.ts`)
+
+A Deno-based Supabase Edge Function providing read-only programmatic access to saved simulation results. Auth pattern mirrors `import-model/index.ts` (JWT Bearer via `authClient.auth.getUser()`).
+
+**Routes:**
+
+| Route | Auth | Response |
+|-------|------|---------|
+| `GET /runs/:runId` | JWT Bearer **or** `?shareToken=<token>` | DB metadata + full `results_json` |
+| `GET /runs?modelId=:modelId` | JWT Bearer | Array of run summaries (denormalised columns only) |
+| `GET /sweeps/:sweepId` | JWT Bearer | `{id, modelId, createdAt, config, results}` |
+
+**Share token path** (`GET /runs/:runId?shareToken=`): The function looks up the token in `share_links`, validates `revoked_at` and `expires_at`, then fetches the run via `serviceClient` (bypassing RLS). Mirrors the logic of `run_has_active_share()` without a DB function call.
+
+**Error codes:** `401` (missing/invalid JWT or expired share token), `403` (share link revoked or expired), `404` (run/sweep not found or not owned by caller).
+
+**CORS:** `Access-Control-Allow-Origin: *` for read-only GET routes; OPTIONS preflight handled inline.
+
+**Known limitation:** At the default `"minimal"` persistence level, `result.log` is not retained. The response surfaces `logSummary` (4 fields) and records the omission in `_trimmed_fields`. There is currently no UI control to select `"full"` detail level.
+
+**Test file:** `supabase/functions/results-api/index.test.ts` — 8 auth-path tests (valid JWT, missing JWT, expired share token, revoked share token, not-found run, wrong owner, sweep route, modelId list route).
+
+**Deferred:** `?format=flat` CSV-compatible output, API-key pattern, in-function rate limiting, pagination beyond 100 runs.
+
+**Reference:** `docs/architecture/results-api-design.md`
+
+#### LLM Export Bundle (`src/llm/bundleExport.js`)
+
+A pure-JS serialiser that builds a self-contained, uncapped Markdown document combining model definition and run results. Intended for paste-into-LLM analysis.
+
+**Key function:**
+
+```javascript
+export function buildLLMBundle(model = {}, results = {}, config = {}) {
+  // config: { runLabel, ranAt, engineVersion, prngAlgorithm, baseSeed,
+  //           replications, maxSimTime, warmupPeriod, seed }
+  // Returns: UTF-8 Markdown string. No truncation applied.
+}
+```
+
+**Dependencies on `src/llm/prompts.js`:** `buildKpis()`, `goalsToPrompt()`, and `buildGoalGaps()` are the canonical field-selection layer. `buildLLMBundle` imports these three functions to avoid diverging from the in-product AI context. These three functions must be exported from `prompts.js` (Sprint 82 task F82.1 adds the `export` keyword to each).
+
+**`truncateWords()` must not be called** inside `buildLLMBundle`. The 2,000-word cap in `prompts.js` is a hosted-API cost/latency optimisation and is inappropriate for file export.
+
+**Bundle sections:**
+
+| Section | Source |
+|---------|--------|
+| Preamble (~150 words) | Hardcoded DES + Three-Phase context |
+| Model definition | `model.entityTypes`, `model.queues`, `model.bEvents`, `model.cEvents`, `model.performanceGoals` |
+| Experiment configuration | `config` parameter |
+| Headline KPIs | `buildKpis(results.summary)` |
+| Per-queue wait table | `results.summary.waitDist` (percentile summary) |
+| Per-resource utilisation | `results.summary.perResource` |
+| Confidence intervals | `results.aggregateStats` (omitted when absent — single-replication runs) |
+| Goals pass/fail | `goalsToPrompt()` + `buildGoalGaps()` |
+| Replication summary | `results.replications` (omitted when `replications.length === 1`) |
+
+**UI placement:** New `"LLM Bundle (.md)"` option in the Export… popover (`src/ui/execute/index.jsx`). Disabled when no run result is held in component state.
+
+**Test file:** `tests/llm/bundle-export.test.js` — 6 unit tests (basic structure, CI section omitted for single rep, goals table present, no truncation artefacts, preamble present, well-formed Markdown tables).
 
 ---
 

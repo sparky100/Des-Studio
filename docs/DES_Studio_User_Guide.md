@@ -1,8 +1,8 @@
 # simmodlr — User Guide
 
-**Version:** 7.0.0  
-**Date:** 2026-06-02  
-**Sprint baseline:** Sprint 80  
+**Version:** 7.1.0  
+**Date:** 2026-06-04  
+**Sprint baseline:** Sprint 82  
 **Audience:** Simulation practitioners, operations analysts, engineering students
 
 ---
@@ -20,6 +20,7 @@
    - 4.4 [Compare scenarios with a parametric sweep](#44-compare-scenarios-with-a-parametric-sweep)
    - 4.5 [Share results with stakeholders](#45-share-results-with-stakeholders)
    - 4.6 [Additional features](#46-additional-features)
+   - 4.7 [Export results for external analysis](#47-export-results-for-external-analysis)
 5. [Troubleshooting](#5-troubleshooting)
 6. [Glossary](#6-glossary)
 
@@ -282,6 +283,84 @@ Once sections are defined:
 - The Visual Designer shows a small coloured dot on each node that belongs to a section.
 - Sections are pure metadata: the simulation engine is unchanged and all elements remain part of the same flat model.
 
+### 4.7 Export results for external analysis
+
+**When to use this.** You want to analyse results in an external tool — paste into an LLM (Claude, ChatGPT, Gemini), load into a Python notebook, consume from an R script, or connect from a BI tool.
+
+#### LLM Bundle (.md)
+
+The LLM Bundle is a single Markdown file that gives an LLM everything it needs to answer questions about your model and results, with no additional context required.
+
+**Contents of the bundle:**
+
+| Section | What it contains |
+|---------|-----------------|
+| Preamble | Plain-English description of the Three-Phase DES method and how to read the results |
+| Model definition | Entity types and attributes, queues and disciplines, B-Event and C-Event logic, performance goals |
+| Experiment configuration | Replications, warm-up period, max sim time, seed, schedule |
+| Headline KPIs | Average wait, average service time, average sojourn, throughput, renege rate |
+| Per-queue wait table | mean, p50, p90, p95, p99 for every queue |
+| Per-resource utilisation | Utilisation percentage and busy/idle counts for every server |
+| Confidence intervals | 95% CI per KPI (present only for multi-replication runs) |
+| Goals pass/fail | Each performance goal with its target, actual value, and PASS/FAIL status |
+| Replication summary | Seed, served, reneged, and avgWait per replication (for multi-replication runs) |
+
+**Token estimate:** 1,500–2,500 words (2,000–3,300 tokens) for a fully populated model — fits within any current LLM context window.
+
+**How to download:**
+
+1. Complete a run (single replication or multi-replication).
+2. In the Execute panel, click **Export…** in the toolbar.
+3. Select **LLM Bundle (.md)** from the menu.
+4. A `.md` file downloads to your browser's default download folder.
+5. Open your LLM of choice, start a new conversation, and paste the file contents (or upload the file if the LLM supports file upload).
+6. Ask any question — for example: *"Which queue has the longest average wait?"* or *"Does this model meet its service-level target?"*
+
+**The bundle is disabled** (greyed out in the Export… menu) until at least one run has been completed for the current model session.
+
+#### Results API (programmatic access)
+
+For Python, R, or BI tool access to saved run results, the Results API provides authenticated REST endpoints.
+
+**Available routes:**
+
+| Route | Returns |
+|-------|---------|
+| `GET /functions/v1/results-api/runs/:runId` | Full result for one run: metadata + `results_json` payload |
+| `GET /functions/v1/results-api/runs?modelId=:modelId` | List of all runs for a model (summary columns only, no `results_json`) |
+| `GET /functions/v1/results-api/sweeps/:sweepId` | Full sweep result: config + per-point results array |
+
+**Authentication:** Pass your Supabase JWT as a `Bearer` token in the `Authorization` header. Alternatively, append `?shareToken=<token>` to `GET /runs/:runId` for publicly shared runs (no login required).
+
+**Python quick-start:**
+
+```python
+import requests, pandas as pd
+
+headers = {"Authorization": "Bearer YOUR_JWT_TOKEN"}
+base = "https://YOUR_PROJECT.supabase.co/functions/v1/results-api"
+
+run = requests.get(f"{base}/runs/RUN_ID", headers=headers).json()
+reps = pd.json_normalize(run["results"]["replications"])
+print(reps[["replicationIndex", "seed", "summary.avgWait", "summary.served"]])
+```
+
+**R quick-start:**
+
+```r
+library(jsonlite)
+run <- fromJSON(
+  "https://YOUR_PROJECT.supabase.co/functions/v1/results-api/runs/RUN_ID",
+  headers = c(Authorization = "Bearer YOUR_JWT_TOKEN"),
+  simplifyDataFrame = TRUE
+)
+run$results$replications[, c("replicationIndex", "seed")]
+```
+
+**Note on event log availability.** At the default storage level the event log is condensed to a 4-field summary (`logSummary`). Full event-by-event logs are only retained when `resultDetailLevel = "full"` is requested at run time (no UI control exists for this setting in the current release). The API response includes a `_trimmed_fields` array listing any fields that were condensed.
+
+Full API reference: `docs/architecture/results-api-design.md`.
+
 ---
 
 ## 5. Troubleshooting
@@ -334,6 +413,8 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 | Phase C truncation warning appears | C-Event conditions are cycling (firing repeatedly) > 500 times per clock tick | Add a guard condition or simplify the C-Event predicate |
 | Report generation is blank | Results payload is very large; LLM timeout | Reduce replication count; try Markdown format instead of HTML |
 | "Supabase auth failed" on load | `.env.local` credentials missing or expired | Regenerate the anon key in Supabase Dashboard and update `.env.local` |
+| LLM Bundle is missing confidence intervals | The run used only one replication | Run with ≥ 2 replications — the CI section is omitted for single-replication runs because there is no between-replication variance to report |
+| LLM Bundle option is greyed out in Export… | No run has been completed in the current session | Complete at least one run, then the option becomes available |
 
 ---
 
@@ -353,3 +434,5 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 | **Resource** | A capacity-limited service provider (server, machine, nurse, lane). |
 | **Seed** | The starting value for the pseudo-random number generator. The same seed always produces the same sequence of random samples (reproducibility). |
 | **Warm-up period** | The initial phase of a run during which the system is reaching steady state. Statistics collected during warm-up are discarded. |
+| **LLM Bundle** | A structured Markdown document downloaded from the Export… menu that combines model definition, experiment configuration, and full results into a single file. Designed to be pasted into an LLM (Claude, ChatGPT, Gemini) for custom analysis — contains a preamble explaining the Three-Phase DES method so no additional context is needed. |
+| **Results API** | A Supabase Edge Function (`/functions/v1/results-api/`) providing authenticated read-only access to saved run and sweep results via HTTP, for use from Python, R, or BI tools. |
