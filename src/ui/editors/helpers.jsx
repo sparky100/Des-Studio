@@ -268,8 +268,10 @@ const categorizeEffect = (value) => {
 const CAT_ORDER = ['queue','service','state','cost','server','container','other'];
 
 // ── EffectPicker — chips + category-filtered dropdown ─────────────────────────
-const EffectPicker = ({effects, options, onChange}) => {
+const EffectPicker = ({effects, options, onChange, expressionContext}) => {
   const { C, FONT } = useTheme();
+  const stateVars = expressionContext?.stateVars || [];
+  const attrs = expressionContext?.attrs || [];
   const CATEGORY_CONFIG = {
     queue:     {label:'Queue',     color:C.cEvent},
     service:   {label:'Service',   color:C.green},
@@ -281,7 +283,9 @@ const EffectPicker = ({effects, options, onChange}) => {
   };
   const [adding, setAdding] = useState(false);
   const [category, setCategory] = useState('all');
-  const [customText, setCustomText] = useState('');
+  const [exprMacro, setExprMacro] = useState('COST');
+  const [exprName,  setExprName]  = useState('');
+  const [exprValue, setExprValue] = useState('');
 
   const remove = (j) => onChange(effects.filter((_,i)=>i!==j));
   const add = (val) => {
@@ -289,12 +293,18 @@ const EffectPicker = ({effects, options, onChange}) => {
     onChange([...effects, val]);
     setAdding(false);
     setCategory('all');
-    setCustomText('');
+    setExprValue('');
   };
-  const addCustom = () => {
-    const val = customText.trim();
+  const addExpr = () => {
+    if (!exprValue.trim()) return;
+    let val;
+    if (exprMacro === 'COST') val = `COST(${exprValue.trim()})`;
+    else if (exprMacro === 'SET' && exprName) val = `SET(${exprName}, ${exprValue.trim()})`;
+    else if (exprMacro === 'SET_ATTR' && exprName) val = `SET_ATTR(${exprName}, ${exprValue.trim()})`;
     if (!val) return;
     add(val);
+    setExprName('');
+    setExprValue('');
   };
 
   const nonHeader = options.filter(o=>o.value&&!o.disabled);
@@ -360,16 +370,56 @@ const EffectPicker = ({effects, options, onChange}) => {
               <option key={i} value={o.value} disabled={!!o.disabled}>{o.label}</option>
             ))}
           </select>
-          <div style={{display:'flex',gap:6,alignItems:'center'}}>
-            <input
-              value={customText}
-              onChange={e=>setCustomText(e.target.value)}
-              onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addCustom();}}}
-              placeholder="or type e.g. SET_ATTR(priority, 2)"
-              style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
-                color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}
-            />
-            <Btn small variant="ghost" onClick={addCustom} disabled={!customText.trim()}>Add</Btn>
+          {/* Expression macros: SET / SET_ATTR / COST — the only ones needing free-form expressions */}
+          <div style={{display:'flex',flexDirection:'column',gap:6,borderTop:`1px solid ${C.border}`,paddingTop:8}}>
+            <span style={{fontSize:10,color:C.muted,fontFamily:FONT,letterSpacing:1}}>EXPRESSION EFFECTS</span>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+              {stateVars.length>0&&(
+                <button onClick={()=>{setExprMacro('SET');if(!exprName&&stateVars[0])setExprName(stateVars[0]);}}
+                  style={{background:exprMacro==='SET'?C.amber+'22':'transparent',
+                    border:`1px solid ${exprMacro==='SET'?C.amber:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='SET'?C.amber:C.muted,cursor:'pointer',fontWeight:700}}>SET</button>
+              )}
+              {attrs.length>0&&(
+                <button onClick={()=>{setExprMacro('SET_ATTR');if(!exprName&&attrs[0])setExprName(attrs[0]);}}
+                  style={{background:exprMacro==='SET_ATTR'?C.amber+'22':'transparent',
+                    border:`1px solid ${exprMacro==='SET_ATTR'?C.amber:C.border}`,
+                    borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                    color:exprMacro==='SET_ATTR'?C.amber:C.muted,cursor:'pointer',fontWeight:700}}>SET_ATTR</button>
+              )}
+              <button onClick={()=>{setExprMacro('COST');setExprName('');}}
+                style={{background:exprMacro==='COST'?C.server+'22':'transparent',
+                  border:`1px solid ${exprMacro==='COST'?C.server:C.border}`,
+                  borderRadius:4,padding:'3px 10px',fontSize:10,fontFamily:FONT,
+                  color:exprMacro==='COST'?C.server:C.muted,cursor:'pointer',fontWeight:700}}>COST</button>
+            </div>
+            <div style={{display:'flex',gap:6,alignItems:'center'}}>
+              {exprMacro==='SET'&&stateVars.length>0&&(
+                <select value={exprName||stateVars[0]} onChange={e=>setExprName(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
+                    color:C.amber,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:120,flexShrink:0}}>
+                  {stateVars.map(v=><option key={v} value={v}>{v}</option>)}
+                </select>
+              )}
+              {exprMacro==='SET_ATTR'&&attrs.length>0&&(
+                <select value={exprName||attrs[0]} onChange={e=>setExprName(e.target.value)}
+                  style={{background:C.bg,border:`1px solid ${C.amber}55`,borderRadius:4,
+                    color:C.amber,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none',width:120,flexShrink:0}}>
+                  {attrs.map(a=><option key={a} value={a}>{a}</option>)}
+                </select>
+              )}
+              <input
+                value={exprValue}
+                onChange={e=>setExprValue(e.target.value)}
+                onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addExpr();}}}
+                placeholder={exprMacro==='COST'?'e.g. Entity.priority * 2.5':`e.g. ${exprName||stateVars[0]||'x'} + 1`}
+                style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,
+                  color:C.text,fontFamily:FONT,fontSize:12,padding:'6px 8px',outline:'none'}}
+              />
+              <Btn small variant="ghost" onClick={addExpr}
+                disabled={!exprValue.trim()||(exprMacro!=='COST'&&!(exprName||stateVars[0]||attrs[0]))}>Add</Btn>
+            </div>
           </div>
         </div>
       )}

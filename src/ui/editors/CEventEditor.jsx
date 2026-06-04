@@ -184,6 +184,10 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
                 <EffectPicker
                   effects={Array.isArray(ev.effect) ? ev.effect.filter(Boolean) : (ev.effect ? ev.effect.split(';').map(s=>s.trim()).filter(Boolean) : [])}
                   options={assignOptions(entityTypes, stateVariables, queues, ev.name, containerTypes)}
+                  expressionContext={{
+                    stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
+                    attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean))
+                  }}
                   onChange={arr=>upd(i,'effect',arr)}
                 />
               </div>
