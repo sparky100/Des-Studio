@@ -47,6 +47,7 @@ simmodlr is a browser-based discrete-event simulation (DES) platform. It lets yo
 | Debug live simulation state | Execute canvas with entity animation and step-by-step event log |
 | Analyse results | Charts, bottleneck analysis, Welch warm-up test, paired-t confidence intervals with Bonferroni correction |
 | Share results | Public link, QR code, embeddable dashboard |
+| Export model as Python code | **⬇ SimPy** button in the header, or **Access → Export SimPy** — downloads a runnable `.py` file |
 
 ### 1.1 The Three-Phase Method — a brief primer
 
@@ -275,6 +276,12 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
 **Per-outcome results.** The Results tab shows a Journey Outcomes section that breaks down completed entities by route (COMPLETE, RENEGE, and other terminal outcomes), with average wait time and average time in system reported separately per route.
 
+**Export as SimPy Python.** Click **⬇ SimPy** in the model header bar (or go to the **Access** tab and click **Export SimPy**) to download a runnable SimPy `.py` script for the current model.
+
+A dialog shows whether the script is **Category 1** (complete — runs immediately after `pip install simpy`) or **Category 2** (partial — macros that require complex SimPy patterns are replaced with annotated `# TODO` stubs showing the correct pattern). Click **Download .py** to save the file. The filename is derived from the model name.
+
+Use Category 1 exports as standalone Python experiments; use Category 2 exports as scaffolding to complete in your IDE. See the full help guide at `docs/user/simpy-export.md`.
+
 **Sections (large-model organisation).** When a model grows beyond roughly ten queues or twenty events, you can group elements into named *sections* to keep the editors manageable. Open the **Sections** tab (under the Design area) and click **+ Add Section** to create a named, coloured group. Assign queues, entity types, B-events, and C-events to the section using the member checkboxes. For queues that act as handoff points between sections, mark them **IN** (entities arrive from another section) or **OUT** (entities leave to another section).
 
 Once sections are defined:
@@ -353,3 +360,5 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 | **Resource** | A capacity-limited service provider (server, machine, nurse, lane). |
 | **Seed** | The starting value for the pseudo-random number generator. The same seed always produces the same sequence of random samples (reproducibility). |
 | **Warm-up period** | The initial phase of a run during which the system is reaching steady state. Statistics collected during warm-up are discarded. |
+| **SimPy export — Category 1** | A generated `.py` script that requires no manual editing and runs as-is after `pip install simpy`. Produced when all macros in the model have a direct SimPy equivalent. |
+| **SimPy export — Category 2** | A generated `.py` script where one or more macros (RENEGE, BATCH, MATCH, FAIL, REPAIR, PREEMPT, or RENEGE_OLDEST) have been replaced with annotated `# TODO` stubs. The script runs without errors but the stub sections must be completed manually before results are meaningful. |
