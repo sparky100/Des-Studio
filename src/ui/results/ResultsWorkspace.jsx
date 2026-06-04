@@ -1040,13 +1040,21 @@ function JourneysPanel({ queueJourneys, C, FONT }) {
         return (
           <div key={path} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-              {queues.map((q, i) => (
-                <Fragment key={i}>
-                  {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
-                  <span style={{ fontFamily: FONT, fontSize: 10, color: C.text, background: C.bg,
-                    border: `1px solid ${C.border}`, borderRadius: 3, padding: "1px 5px" }}>{q}</span>
-                </Fragment>
-              ))}
+              {queues.map((q, i) => {
+                const isSink = i === queues.length - 1;
+                return (
+                  <Fragment key={i}>
+                    {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
+                    <span style={{
+                      fontFamily: FONT, fontSize: 10,
+                      color: isSink ? C.accent : C.text,
+                      background: isSink ? `${C.accent}18` : C.bg,
+                      border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? C.accent : C.border}`,
+                      borderRadius: 3, padding: "1px 5px",
+                    }}>{q}</span>
+                  </Fragment>
+                );
+              })}
               <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
                 {count} ({pct}%)
               </span>
@@ -1176,13 +1184,21 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
                 return (
                   <div key={key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                      {names.map((name, i) => (
-                        <Fragment key={i}>
-                          {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
-                          <span style={{ fontFamily: FONT, fontSize: 10, color: C.text, background: C.bg,
-                            border: `1px solid ${C.border}`, borderRadius: 3, padding: "1px 5px" }}>{name}</span>
-                        </Fragment>
-                      ))}
+                      {names.map((name, i) => {
+                        const isSink = i === names.length - 1;
+                        return (
+                          <Fragment key={i}>
+                            {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
+                            <span style={{
+                              fontFamily: FONT, fontSize: 10,
+                              color: isSink ? C.accent : C.text,
+                              background: isSink ? `${C.accent}18` : C.bg,
+                              border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? C.accent : C.border}`,
+                              borderRadius: 3, padding: "1px 5px",
+                            }}>{name}</span>
+                          </Fragment>
+                        );
+                      })}
                       <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
                         {count} ({pct}%)
                       </span>
