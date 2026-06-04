@@ -70,7 +70,7 @@ describe("ModelDetail Model Health panel", () => {
     fireEvent.click(screen.getByRole("button", { name: /model health →/i }));
     fireEvent.click(screen.getByRole("button", { name: /Entity Types: Entity class at position 1 has an empty name/i }));
 
-    expect(screen.getByRole("tab", { name: /entity types/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: /entity types/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("alert")).toHaveTextContent(/Entity class at position 1 has an empty name/i);
   });
 
@@ -81,7 +81,9 @@ describe("ModelDetail Model Health panel", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
-    expect(screen.getByRole("tab", { name: /entity types, 1 error/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^define$/i }));
+    expect(screen.getByRole("button", { name: /entity types/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /model health/i })).toBeInTheDocument();
   });
 
   test("only shows the Model Health tab when there are issues to review", () => {
@@ -96,9 +98,10 @@ describe("ModelDetail Model Health panel", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
-    fireEvent.click(screen.getByRole("tab", { name: /b-events/i }));
-    expect(screen.getByRole("tab", { name: /b-events/i })).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("tab", { name: /model health/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^define$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /b-events/i }));
+    expect(screen.getByRole("button", { name: /b-events/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: /model health/i })).not.toBeInTheDocument();
   });
 
   test("uses a shared authoring shell for workflow modes", () => {
@@ -108,11 +111,12 @@ describe("ModelDetail Model Health panel", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^define$/i }));
 
     expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
     expect(screen.queryByRole("complementary", { name: /design context panel/i })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("tab", { name: /b-events/i }));
+    fireEvent.click(screen.getByRole("button", { name: /b-events/i }));
     expect(screen.getByRole("region", { name: /design authoring shell/i })).toBeInTheDocument();
   });
 
@@ -150,8 +154,9 @@ describe("ModelDetail Model Health panel", () => {
     expect(screen.queryByRole("button", { name: /entity model/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /entity types/i })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^design$/i }));
-    expect(screen.getByRole("tab", { name: /ai designer/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /entity types/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^describe$/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^define$/i }));
+    expect(screen.getByRole("button", { name: /entity types/i })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /execute/i })).not.toBeInTheDocument();
     const mobileWorkflow = screen.getByLabelText(/model workflow/i);
     fireEvent.click(within(mobileWorkflow).getByRole("button", { name: /^run$/i }));

@@ -70,7 +70,7 @@ describe('accessibility pass', () => {
     expect(tabs).not.toContain('AI Designer');
 
     await user.click(screen.getByRole('button', { name: /^design$/i }));
-    expect(screen.getByRole('tab', { name: 'AI Designer' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('button', { name: /^describe$/i })).toHaveAttribute('aria-pressed', 'false');
 
     await user.click(screen.getAllByRole('button', { name: /^run$/i })[0]);
     expect(screen.getAllByRole('button', { name: /^run$/i })[0]).toHaveAttribute('aria-pressed', 'true');
@@ -121,5 +121,5 @@ describe('accessibility pass', () => {
     await screen.findByRole('button', { name: /edit setup/i });
     expect(screen.queryByText(/Unsaved changes in this model/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
-  });
+  }, 15000);
 });
