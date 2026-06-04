@@ -199,6 +199,16 @@ export function AdaptiveBatchPanel({
             seed: baseSeedRef.current,
             runLabel: `✦ Explore (${adaptiveResult.finalReps} reps)`,
             aggregateStats,
+            // Embed the experiment config so _experiment_config is written into
+            // results_json and the replication count is never reconstructed from
+            // the wrong fallback (e.g. the initial-batch size of 5).
+            experimentConfig: {
+              replications: adaptiveResult.finalReps,
+              maxSimTime,
+              warmupPeriod,
+              seed: baseSeedRef.current,
+              terminationMode: 'time',
+            },
             replicationResults: adaptiveResult.results.map(p => ({
               replicationIndex: p.replicationIndex,
               seed: p.seed,

@@ -6,6 +6,7 @@ import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../eng
 import { buildResultsViewModel } from "./resultsViewModel.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
+import { buildGoalGaps } from "../../llm/prompts.js";
 
 const HIST_W = 360;
 const HIST_H = 140;
@@ -255,7 +256,7 @@ function lineSeriesStats(series, yLabel, color, formatValue = v => formatNumber(
   ];
 }
 
-export function SummaryCardGrid({ results, replicationResults = [] }) {
+export function SummaryCardGrid({ results, replicationResults = [], model = {} }) {
   const { C, FONT } = useTheme();
   const summary = results?.summary || {};
   // Derive replication count from prop array; fall back to stored replications field
@@ -465,6 +466,53 @@ export function SummaryCardGrid({ results, replicationResults = [] }) {
           </div>
         </>
       )}
+      {(() => {
+        const goals = model.goals || [];
+        if (!goals.length) return null;
+        const storedAgg = results?.aggregateStats && Object.keys(results.aggregateStats).length > 0
+          ? results.aggregateStats : null;
+        const aggForGoals = storedAgg || (() => {
+          const s = results?.summary || {};
+          const pt = v => (v != null && Number.isFinite(Number(v)) ? { mean: Number(v), n: 1 } : null);
+          const out = {};
+          if (pt(s.avgWait))    out['summary.avgWait']    = pt(s.avgWait);
+          if (pt(s.avgSvc))     out['summary.avgSvc']     = pt(s.avgSvc);
+          if (pt(s.avgSojourn)) out['summary.avgSojourn'] = pt(s.avgSojourn);
+          if (pt(s.served))     out['summary.served']     = pt(s.served);
+          if (pt(s.reneged))    out['summary.reneged']    = pt(s.reneged);
+          if (pt(s.totalCost))  out['summary.totalCost']  = pt(s.totalCost);
+          return out;
+        })();
+        const gaps = buildGoalGaps(model, aggForGoals);
+        if (!gaps?.length) return null;
+        return (
+          <>
+            <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
+              GOALS
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {gaps.map(g => {
+                const pass = g.current != null && g.met;
+                const chipColor = g.current == null ? C.muted : pass ? C.green : C.red;
+                const chipLabel = g.current == null ? 'UNKNOWN' : pass ? '✓ PASS' : '✗ FAIL';
+                return (
+                  <div key={g.metric} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
+                    <div style={{ flex: 1, fontFamily: FONT, fontSize: 12, color: C.text }}>{g.label}</div>
+                    {g.current != null && (
+                      <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
+                        {Number(g.current).toFixed(2)} {g.operator} {g.target}
+                      </div>
+                    )}
+                    <div style={{ padding: "2px 8px", borderRadius: 4, background: chipColor + "22", border: `1px solid ${chipColor}55`, fontFamily: FONT, fontSize: 10, fontWeight: 700, color: chipColor, letterSpacing: 0.5 }}>
+                      {chipLabel}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        );
+      })()}
     </section>
   );
 }
@@ -1295,7 +1343,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
           <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
-            <SummaryCardGrid results={results} replicationResults={replicationResults} />
+            <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} />
           </div>
         </div>
         {queuePeaks.length > 0 && (
@@ -1380,7 +1428,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
         <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
         <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
-          <SummaryCardGrid results={results} replicationResults={replicationResults} />
+          <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} />
         </div>
       </div>
 

@@ -160,6 +160,35 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (kpis.costPerServed != null) lines.push(`| Cost per served | ${kpis.costPerServed.toFixed(2)} |`);
   lines.push('');
 
+  // ── End-of-run entity status ──────────────────────────────────────────────
+  // Explicitly report left-in-system entities so an LLM never confuses them
+  // with served entities or infers that they were "terminated by the engine".
+  // Only entities with status "done" are in the served count; waiting/serving
+  // entities are excluded from all wait, sojourn, and served statistics.
+  const entitySummaryArr = results.entitySummary;
+  if (Array.isArray(entitySummaryArr) && entitySummaryArr.length > 0) {
+    const byStatus = {};
+    for (const e of entitySummaryArr) {
+      if (e.role === 'server') continue;
+      byStatus[e.status] = (byStatus[e.status] || 0) + 1;
+    }
+    const stillWaiting  = byStatus.waiting  || 0;
+    const stillServing  = byStatus.serving  || 0;
+    const incomplete    = stillWaiting + stillServing;
+    if (incomplete > 0) {
+      const noun = incomplete === 1 ? 'entity was' : 'entities were';
+      lines.push(
+        `> ⚠ **${incomplete} ${noun} still in the system when the run clock reached the limit** ` +
+        `(${stillWaiting} waiting in queue, ${stillServing} mid-service). ` +
+        `These are **excluded** from the served count, avgWait, and avgSojourn — ` +
+        `they are left-in-system, not "terminated" by the engine. ` +
+        `The served/wait/sojourn figures reflect only entities that completed their ` +
+        `journey before the simulation ended.`
+      );
+      lines.push('');
+    }
+  }
+
   if (kpis.queues && kpis.queues.length) {
     lines.push('### Per-Queue Wait Times');
     lines.push('');
@@ -220,7 +249,7 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
   }
 
-  const goalGaps = buildGoalGaps(model, aggregateStats);
+  const goalGaps = buildGoalGaps(model, aggregateStats, results.summary || {});
   if (goalGaps && goalGaps.length) {
     lines.push('### Goals Assessment');
     lines.push('');
@@ -283,6 +312,25 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
       lines.push(`> **Warning:** ${w}`);
     }
     lines.push('');
+  }
+
+  // ── Queue depth at run-end ────────────────────────────────────────────────
+  // Shows which queues had entities remaining when the clock stopped.
+  const endSnap = results.snap?.byQueue;
+  if (endSnap && typeof endSnap === 'object') {
+    const busyQueues = Object.entries(endSnap).filter(([, q]) => (q.waiting || 0) > 0);
+    if (busyQueues.length > 0) {
+      lines.push('### Queue Depth at Run-End');
+      lines.push('');
+      lines.push('Entities remaining in each queue when the simulation clock stopped.');
+      lines.push('');
+      lines.push('| Queue | Waiting at end |');
+      lines.push('|-------|---------------|');
+      for (const [name, q] of busyQueues) {
+        lines.push(`| ${name} | ${q.waiting} |`);
+      }
+      lines.push('');
+    }
   }
 
   // ── REPLICATION SUMMARY — omitted for single-replication runs ────────────

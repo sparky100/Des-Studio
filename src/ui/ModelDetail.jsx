@@ -737,17 +737,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       statsLoading:false,
       statsError:false,
     }));
-    if(tab==="results"){
-      setHistoryLoading(true);setHistoryError("");
-      runHistoryFetcher({ archived: historyShowArchived })
-        .then(rows=>{
-          setHistoryRows(rows);
-          // Sync dropdown to the newly saved run so results panel and dropdown agree
-          if(runId) setSelectedResultsRunId(runId);
-        })
-        .catch(e=>setHistoryError(e.message))
-        .finally(()=>setHistoryLoading(false));
-    }
+    // Always refresh history and sync the dropdown regardless of which tab is
+    // active.  onRunComplete already cleared the stale run ID; this assigns the
+    // new run's ID as soon as the save completes.
+    setHistoryLoading(true);setHistoryError("");
+    runHistoryFetcher({ archived: historyShowArchived })
+      .then(rows=>{
+        setHistoryRows(rows);
+        // Sync dropdown to the newly saved run so results panel and dropdown agree
+        if(runId) setSelectedResultsRunId(runId);
+      })
+      .catch(e=>setHistoryError(e.message))
+      .finally(()=>setHistoryLoading(false));
     // Intentionally not calling onRefresh() — it triggers a full loadData()
     // which sets loading=true and unmounts ModelDetail, resetting the execute panel.
   };
@@ -1274,6 +1275,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               onRunSaved={handleRunSaved}
               onResultsReady={setLatestResults}
               onRunComplete={({ results, replicationResults, warmupDetection, log }) => {
+                // Clear the stale selected run ID immediately so the dropdown
+                // doesn't point at an old run while the new results are displayed.
+                // handleRunSaved will assign the correct ID once the run is saved.
+                setSelectedResultsRunId("");
                 setLatestResults(results);
                 setLatestReplicationResults(replicationResults || []);
                 setLatestWarmupDetection(warmupDetection || null);
@@ -1355,6 +1360,18 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         return <option key={row.id} value={row.id}>{label}</option>;
                       })}
                     </select>
+                    {/* Show the selected run's label as an explicit badge so it is
+                        visible even when the dropdown is collapsed */}
+                    {selectedResultsRunId && (() => {
+                      const selRow = historyRows.find(r => r.id === selectedResultsRunId);
+                      const selLabel = selRow?.run_label;
+                      if (!selLabel) return null;
+                      return (
+                        <span style={{fontSize:11,color:C.accent,fontFamily:FONT,fontWeight:600,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,padding:"2px 7px"}}>
+                          {selLabel}
+                        </span>
+                      );
+                    })()}
                   </div>
                 )}
                 {latestResults ? (
