@@ -1286,6 +1286,9 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   if (!chartModel.hasTimeSeries && !hasWaitDistributions && !hasAnalysisInputs) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", paddingBottom: 2 }}>
+          <Btn variant="ghost" small onClick={handleExportLLMBundle}>Export LLM Bundle (.md)</Btn>
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
           <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>

@@ -19,6 +19,7 @@ import { EntitySummaryTable } from "./execute/SweepViews.jsx";
 import { CsvImportModal } from "./CsvImportModal.jsx";
 import { SimPyExportModal } from "./editors/SimPyExportModal.jsx";
 import { ResultsWorkspace } from "./results/ResultsWorkspace.jsx";
+import { buildLLMBundle } from "../llm/bundleExport.js";
 import { ModelHistoryTab } from "./ModelHistoryTab.jsx";
 import { ModelCard, NewModelModal } from "./ModelLibrary.jsx";
 
@@ -784,6 +785,29 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
     downloadTextFile(json, `${sanitizeFilename(model.name || 'model')}-${sanitizeFilename(label)}.json`, 'application/json');
   }, [latestResults, historyRows, selectedResultsRunId, model.name]);
 
+  const handleResultsExportLLMBundle = useCallback(() => {
+    if (!latestResults) return;
+    const row = historyRows.find(r => r.id === selectedResultsRunId);
+    const json = latestResults;
+    const expConfig = json._experiment_config || {};
+    const config = {
+      runLabel: row?.run_label,
+      ranAt: row?.ran_at,
+      engineVersion: json._engine_version,
+      prngAlgorithm: json._prng_algorithm || 'mulberry32',
+      baseSeed: json._base_seed,
+      replications: row?.replications ?? expConfig.replications,
+      maxSimTime: row?.max_simulation_time ?? expConfig.maxSimTime,
+      warmupPeriod: row?.warmup_period ?? expConfig.warmupPeriod,
+      seed: row?.seed ?? expConfig.seed,
+    };
+    const bundleResults = { ...json, replications: json.replications || [] };
+    const md = buildLLMBundle(model, bundleResults, config);
+    const name = (model?.name || 'model').replace(/\s+/g, '-').toLowerCase();
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    downloadTextFile(md, `simmodlr-llm-bundle-${name}-${ts}.md`, "text/markdown;charset=utf-8");
+  }, [latestResults, historyRows, selectedResultsRunId, model]);
+
   const handleResultsReport = useCallback(async (type = 'seniorMgmt') => {
     if (!latestResults || resultsReportGenerating) return;
     setResultsReportGenerating(true);
@@ -1291,6 +1315,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               {latestResults && (
                 <>
                   <Btn small variant="ghost" onClick={handleResultsExportJson} title="Download results as JSON">Export Results</Btn>
+                  <Btn small variant="ghost" onClick={handleResultsExportLLMBundle} title="Export model + results as Markdown for LLM analysis">Export LLM Bundle (.md)</Btn>
                   <Btn small variant="ghost" onClick={() => handleResultsReport('seniorMgmt')} disabled={resultsReportGenerating}>
                     {resultsReportGenerating ? "Generating…" : "Create Report"}
                   </Btn>
