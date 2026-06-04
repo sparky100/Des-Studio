@@ -412,6 +412,7 @@ export function ExecuteCanvas({
   kpiSlots = DEFAULT_KPI_SLOTS,
   onKpiSlotChange,
   onNodeSelect,
+  batchActive = false,
 }) {
   const { C, FONT } = useTheme();
   const baseGraph = useMemo(() => deriveGraphFromModel(model), [model]);
@@ -812,7 +813,7 @@ export function ExecuteCanvas({
               </button>
             </Panel>
           )}
-          {!snap && (
+          {!snap && !batchActive && (
             <Panel position="bottom-center">
               <div style={{
                 background: C.surface,

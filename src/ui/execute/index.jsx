@@ -3007,6 +3007,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   kpiSlots={kpiSlots}
                   onKpiSlotChange={handleKpiSlotChange}
                   onNodeSelect={setSelectedNodeLabel}
+                  batchActive={batchActive}
                 />
               </Suspense>
               <BottomPanel
