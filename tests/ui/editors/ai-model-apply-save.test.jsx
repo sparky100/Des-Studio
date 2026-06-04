@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from "vitest";
 import { ModelDetail } from "../../../src/ui/ModelDetail.jsx";
 
 const mockCallModelBuilder = vi.hoisted(() => vi.fn());
+const mockStreamModelBuilder = vi.hoisted(() => vi.fn());
 
 vi.mock("../../../src/llm/apiClient.js", () => ({
   callModelBuilder: mockCallModelBuilder,
+  streamModelBuilder: mockStreamModelBuilder,
 }));
 
 const baseModel = {
@@ -24,6 +26,20 @@ const baseModel = {
 describe("AI generated model apply/save flow", () => {
   it("marks the model dirty and saves using the existing model identity", async () => {
     const handleSave = vi.fn().mockResolvedValue(undefined);
+    const response = {
+      intent: "build",
+      explanation: "Generated a draft.",
+      proposedModel: {
+        id: "generated-id",
+        name: "Generated GP",
+        entityTypes: [{ id: "patient", name: "Patient", role: "customer", attrDefs: [] }],
+        stateVariables: [],
+        bEvents: [],
+        cEvents: [],
+        queues: [],
+      },
+    };
+    mockStreamModelBuilder.mockResolvedValue(response);
     mockCallModelBuilder.mockImplementation((systemPrompt, messages, onComplete) => {
       const response = {
         intent: "build",
@@ -53,11 +69,11 @@ describe("AI generated model apply/save flow", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Design" }));
-    fireEvent.click(screen.getByRole("tab", { name: /ai designer/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^describe$/i }));
     fireEvent.change(screen.getByLabelText(/describe or refine/i), { target: { value: "Create a GP practice" } });
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
     await screen.findByLabelText(/model proposal preview/i);
-    fireEvent.click(screen.getByRole("button", { name: /apply & save all/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^apply & save$/i }));
 
     await waitFor(() => expect(handleSave).toHaveBeenCalledOnce());
     expect(handleSave.mock.calls[0][0]).toEqual(expect.objectContaining({

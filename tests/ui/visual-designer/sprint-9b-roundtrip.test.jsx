@@ -42,6 +42,7 @@ vi.mock('@xyflow/react', () => ({
   MiniMap:      () => null,
   Panel:        ({ children }) => <div>{children}</div>,
   Position:     { Left: 'left', Right: 'right' },
+  SelectionMode: { Full: 'full', Partial: 'partial' },
   useReactFlow: () => ({ fitView: vi.fn() }),
   ReactFlow: ({ nodes = [], children, onNodeClick }) => {
     const source = nodes.find(n => n.id.startsWith('source:'));

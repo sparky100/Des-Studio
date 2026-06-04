@@ -208,7 +208,7 @@ describe('model JSON import', () => {
     const newModelDialog = screen.getByRole('dialog', { name: /new model/i });
     await user.click(within(newModelDialog).getByText(/^Describe$/i).closest('button'));
 
-    expect(await screen.findByRole('tab', { name: 'AI Designer' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByRole('button', { name: /^describe$/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByText(/Get started building your model/i)).not.toBeInTheDocument();
   }, 10000);
 
