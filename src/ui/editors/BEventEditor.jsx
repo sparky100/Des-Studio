@@ -175,6 +175,10 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
                 <EffectPicker
                   effects={effects}
                   options={bEffectOptions(entityTypes,queues,stateVariables,containerTypes)}
+                  expressionContext={{
+                    stateVars: (stateVariables||[]).map(sv=>sv.name).filter(Boolean),
+                    attrs: (entityTypes||[]).filter(e=>e.role==='customer').flatMap(et=>(et.attrDefs||[]).filter(a=>a.mutable!==false).map(a=>a.name).filter(Boolean))
+                  }}
                   onChange={updEffects}
                 />
               </div>
