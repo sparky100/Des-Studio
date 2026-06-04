@@ -1,6 +1,6 @@
 # simmodlr — Build Plan
 *Living document. Update after each sprint completion.*
-*Version: 1.83 | Created: 2026-04-30 | Updated: 2026-05-31 | Grounded in: Full Codebase Audit 2026-04-30*
+*Version: 1.84 | Created: 2026-04-30 | Updated: 2026-06-04 | Grounded in: Full Codebase Audit 2026-04-30*
 *Branch audited: `claude/audit-part-1-orientation-lhK9K`*
 
 ---
@@ -130,6 +130,7 @@ flowchart LR
 | Visual Designer canvas visibility | ✅ Complete | Sprint 78: collapsible Node Palette (44 px icon strip, localStorage persistence), auto-hide + dismissible Inspector (slide animation, re-open handle), canvas height uncapped (clamp 400–900 px). No new dependencies. |
 | Consistent panel visibility UX | ✅ Complete | Sprint 79: BottomPanel state persisted (collapsed/height/tab via localStorage); S/M/L preset height pills; Results Workspace gains 5 collapsible sections (summary, bottlenecks, cost, analysis, runtime) with chevron animation and localStorage persistence. |
 | Performance optimisation | 🔄 Planned | Sprint 72 will remove legacy runtime condition evaluation, migrate old models to predicate JSON, and optimise the Phase C hot path with benchmarks and correctness gates. |
+| Results API & LLM export bundle | ⬜ Planned | Sprint 82: read-only `results-api` Edge Function (JWT + share-token auth, 3 routes); `buildLLMBundle()` Markdown serialiser; "LLM Bundle (.md)" in Export… popover. No schema changes. |
 
 ### Key Issues and Watchpoints
 
@@ -207,6 +208,7 @@ flowchart LR
 | 1.78 | 2026-05-20 | Sprint 68 completed. Model versioning as explicit milestones: `model_versions` table, version history panel, create version dialog, structural change detection, run records reference version. ADR-015 created. 30 new tests. |
 | 1.79 | 2026-05-22 | Sprint 8C complete — AI Generator conversational quality redesign. Three-phase elicitation (Discovery/Confirmation/Build), no fixed question cap, 7-question ordered sequence, Phase B "Here is my understanding" format enforced. Confirmation bubble with one-click sign-off. Simulation summary card (WHO ARRIVES / HOW THEY FLOW / RESOURCES / GOALS) replacing schema diff as primary view. Proactive refinement chips. 11 new tests added (6 prompt, 3 ModelDiffPreview, 2 AiGeneratedModelPanel). User Guide §2.X and Engineering Spec §6.10 updated. |
 | 1.80 | 2026-05-25 | Sprint 72 planned. Added Performance Optimisation sprint plan and closure scaffold, updated AGENTS sprint tracking, and added roadmap/build-plan entries for predicate-only condition execution and Phase C optimisation. |
+| 1.84 | 2026-06-04 | Sprint 82 planned. Pre-sprint assessment completed for Results API (Option 2) and LLM Export Bundle (Option 3). Sprint plan, API design spec, and AGENTS.md tracking updated. |
 
 ---
 

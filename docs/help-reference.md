@@ -645,3 +645,89 @@ When the Model Assistant is open on a non-results tab (entities, queues, B-event
 ### Diagnostics
 
 The **Diagnosis** section (in the Execute panel) uses the same LLM backend. Click **Diagnose** to stream an analysis of validation errors and warnings for the current model configuration.
+
+---
+
+## LLM Bundle Export
+
+### What it is
+
+The LLM Bundle is a structured Markdown file that combines model definition and run results into a self-contained document for paste-into-LLM analysis. It includes a plain-English DES preamble so no additional context is needed when pasting into Claude, ChatGPT, or Gemini.
+
+### How to download
+
+1. Complete a run (any number of replications).
+2. In the Execute panel, click **Export…**.
+3. Select **LLM Bundle (.md)**.
+4. The file downloads immediately. Paste its contents into any LLM interface.
+
+### What the bundle contains
+
+| Section | Contents |
+|---------|---------|
+| Preamble | Three-Phase DES method explanation, how to interpret the results |
+| Model definition | Entity types and attributes, queues (discipline, capacity), B-Events and C-Events, performance goals |
+| Experiment config | Replications, warm-up period, max sim time, seed, schedule name |
+| Headline KPIs | avgWait, avgSvc, avgSojourn, served, reneged, utilisation |
+| Per-queue wait table | mean, p50, p90, p95, p99 for every queue (GitHub-Flavored Markdown pipe table) |
+| Per-resource utilisation | utilisation %, busyCount, idleCount per server |
+| Confidence intervals | 95% CI per KPI — present only for runs with ≥ 2 replications |
+| Goals pass/fail | Each performance goal with target, actual, and PASS/FAIL |
+| Replication summary | seed, served, reneged, avgWait per replication (omitted for single-replication runs) |
+
+**Token estimate:** 1,500–2,500 words (2,000–3,300 tokens) for a fully populated model.
+
+**Availability:** The option is disabled (greyed out) until at least one run has been completed in the current session.
+
+### When confidence intervals are absent
+
+The CI section is omitted for single-replication runs — there is no between-replication variance to report. Run with ≥ 2 replications to include CIs.
+
+---
+
+## Results API
+
+### What it is
+
+A Supabase Edge Function that provides read-only programmatic access to saved run and sweep results. Useful for Python notebook analysis, R scripts, and BI tool integration.
+
+### Authentication
+
+Pass a Supabase JWT as a `Bearer` token in the `Authorization` header. For publicly shared runs, append `?shareToken=<token>` instead.
+
+### Routes
+
+| Route | Returns |
+|-------|---------|
+| `GET /functions/v1/results-api/runs/:runId` | Full result for one run: metadata + `results_json` payload |
+| `GET /functions/v1/results-api/runs?modelId=:modelId` | List of run summaries for a model |
+| `GET /functions/v1/results-api/sweeps/:sweepId` | Full sweep result: config + per-point results array |
+
+### Python quick-start
+
+```python
+import requests, pandas as pd
+
+headers = {"Authorization": "Bearer YOUR_JWT_TOKEN"}
+base = "https://YOUR_PROJECT.supabase.co/functions/v1/results-api"
+
+run = requests.get(f"{base}/runs/RUN_ID", headers=headers).json()
+reps = pd.json_normalize(run["results"]["replications"])
+print(reps[["replicationIndex", "seed", "summary.avgWait", "summary.served"]])
+```
+
+### R quick-start
+
+```r
+library(jsonlite)
+run <- fromJSON(
+  "https://YOUR_PROJECT.supabase.co/functions/v1/results-api/runs/RUN_ID",
+  headers = c(Authorization = "Bearer YOUR_JWT_TOKEN"),
+  simplifyDataFrame = TRUE
+)
+run$results$replications[, c("replicationIndex", "seed")]
+```
+
+### Event log availability
+
+At the default storage level, the event log is condensed to a 4-field `logSummary`. Full event logs are only retained at `resultDetailLevel = "full"` (no UI control). The response includes `_trimmed_fields` listing condensed sections.

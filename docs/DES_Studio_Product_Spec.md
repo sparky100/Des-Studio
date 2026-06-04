@@ -1,8 +1,8 @@
 # simmodlr — Product Specification
 
-**Version:** 7.0.0  
-**Date:** 2026-06-02  
-**Sprint baseline:** Sprint 80  
+**Version:** 7.1.0  
+**Date:** 2026-06-04  
+**Sprint baseline:** Sprint 82  
 **Status:** Living document — reviewed and updated at end of each sprint  
 **Note:** package.json version is 0.9.0-Beta; version alignment with spec version number pending.
 
@@ -119,6 +119,8 @@ Valuable additions already partially implemented or planned for near-term sprint
 | C4 | **Community gallery** | Browse, tag, fork, and import public models shared by other users. Tag-filter UI and text search shipped for My Models, Public Library, and Community tabs; curator/fork workflow not yet built. |
 | C5 | **Container resource pools** | FILL/DRAIN macros for bulk resource consumption (e.g. fuel, inventory). Both macros are fully implemented in the engine. |
 | C6 | **Multi-shift rostering** | Named shift patterns bound to resource capacity over time. Currently limited to piecewise NHPP arrivals. |
+| C7 | **Results API** | Read-only Supabase Edge Function (`supabase/functions/results-api/`) exposing three routes: `GET /runs/:runId`, `GET /runs?modelId=`, `GET /sweeps/:sweepId`. JWT Bearer auth. Share-token pass-through for publicly shared runs. |
+| C8 | **LLM Export Bundle** | One-click Markdown export (`buildLLMBundle()` in `src/llm/bundleExport.js`) combining model definition, experiment configuration, and full results — including per-queue percentile tables, per-resource utilisation, 95% CIs (multi-replication), and goal pass/fail — with a plain-English DES preamble. Accessible via the Export… popover in the Execute panel. |
 
 ### Won't-have (this release)
 
@@ -249,3 +251,4 @@ This standard applies to all new UI text and to the AI-generated narrative in re
 | Dependency CVEs | Tracked | 4 moderate CVEs in Vite/Vitest; fix requires a Vite 8 breaking upgrade — deferred pending ecosystem readiness. |
 | Native mobile authoring | Won't have | Responsive layout covers tablet; full small-screen authoring deprioritised. |
 | Community gallery moderation | Partial | Import/export and tagging implemented; curator workflow and content moderation not yet built. |
+| Event log via Results API | Degraded | At the default `"minimal"` persistence level the event log (`result.log`) is replaced by a 4-field `logSummary`. Full log retrieval requires `resultDetailLevel = "full"` (no UI control exists). The API response surfaces `logSummary` and documents the omission via `_trimmed_fields`. |
