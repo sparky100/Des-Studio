@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Btn, SH } from "../shared/components.jsx";
+import { Btn } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { downloadTextFile, slugifyResultName } from "../shared/utils.js";
 import { exportToSimPy } from "../../engine/simpy-export.js";
