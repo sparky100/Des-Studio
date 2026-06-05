@@ -28,8 +28,6 @@ You are a discrete-event simulation modeller. Using the simmodlr schema and guid
 6. Add goals if the scenario has obvious performance targets
 ```
 
-After generation, ask the LLM to also provide a magic-link import URL using the encoding recipe above. Open the link in your browser — simmodlr shows a pre-flight preview card. Review and save to your library with one click.
-
 ---
 
 *For the full schema reference, provide `docs/model-schema-for-llm.md` alongside this guide to any LLM.*
