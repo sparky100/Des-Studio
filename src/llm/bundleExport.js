@@ -189,6 +189,7 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (kpis.avgService != null) lines.push(`| Average service time | ${kpis.avgService.toFixed(2)} |`);
   if (kpis.avgSojourn != null) lines.push(`| Average sojourn time | ${kpis.avgSojourn.toFixed(2)} |`);
   if (kpis.avgWIP != null) lines.push(`| Average WIP | ${kpis.avgWIP.toFixed(2)} |`);
+  if (kpis.maxSojourn != null) lines.push(`| Max sojourn time | ${kpis.maxSojourn.toFixed(2)} |`);
   if (kpis.totalCost != null) lines.push(`| Total cost | ${kpis.totalCost.toFixed(2)} |`);
   if (kpis.costPerServed != null) lines.push(`| Cost per served | ${kpis.costPerServed.toFixed(2)} |`);
   lines.push('');
@@ -373,6 +374,40 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
   }
 
+  // Container levels — present only when model has container types
+  if (kpis.containerLevels && Object.keys(kpis.containerLevels).length) {
+    lines.push('### Container Levels');
+    lines.push('');
+    lines.push('| Container | Min | Avg | Max | Final |');
+    lines.push('|-----------|-----|-----|-----|-------|');
+    for (const [id, lvl] of Object.entries(kpis.containerLevels)) {
+      const f = v => v != null ? Number(v).toFixed(2) : '—';
+      lines.push(`| ${id} | ${f(lvl.min)} | ${f(lvl.avg)} | ${f(lvl.max)} | ${f(lvl.final)} |`);
+    }
+    lines.push('');
+  }
+
+  // Cross-section journey paths — shows how entities flowed between sections
+  const sectionJourneys = results?.summary?.journeys;
+  if (sectionJourneys && Object.keys(sectionJourneys).length) {
+    const sectionNameById = {};
+    for (const s of model.sections || []) { if (s.id && s.name) sectionNameById[s.id] = s.name; }
+    const countColLabel2 = isMultiRepBundle ? `Avg / run (÷${nReps})` : 'Count';
+    lines.push('### Cross-Section Journey Paths');
+    lines.push('');
+    lines.push('How entities moved between sections (high-level pathway view).');
+    lines.push('');
+    lines.push(`| Section path | ${countColLabel2} |`);
+    lines.push(`|--------------|${'-'.repeat(countColLabel2.length + 2)}|`);
+    const sortedSJ = Object.entries(sectionJourneys).sort(([, a], [, b]) => b - a);
+    for (const [key, count] of sortedSJ) {
+      const label = key.split('→').map(id => sectionNameById[id] || id).join(' → ');
+      const display = isMultiRepBundle ? +(count / nReps).toFixed(1) : count;
+      lines.push(`| ${label} | ${display} |`);
+    }
+    lines.push('');
+  }
+
   if (kpis.warning_phaseCTruncated) {
     lines.push('> **Warning:** Phase C truncation occurred — C-Event scan exceeded 500 iterations in a single clock tick. Review C-Event conditions for possible loops.');
     lines.push('');
@@ -410,12 +445,28 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
     lines.push('## Replication Summary');
     lines.push('');
-    lines.push('| # | Seed | Served | Reneged | Avg wait | Avg sojourn |');
-    lines.push('|---|------|--------|---------|---------|------------|');
+    // Detect which optional columns have any data across all reps
+    const hasSvc     = replList.some(r => r.summary?.avgSvc      != null);
+    const hasWIP     = replList.some(r => r.summary?.avgWIP      != null);
+    const hasCost    = replList.some(r => r.summary?.totalCost   != null);
+    const header = ['#', 'Seed', 'Served', 'Reneged', 'Avg wait', 'Avg sojourn',
+      ...(hasSvc  ? ['Avg service'] : []),
+      ...(hasWIP  ? ['Avg WIP']     : []),
+      ...(hasCost ? ['Total cost']  : []),
+    ];
+    lines.push(`| ${header.join(' | ')} |`);
+    lines.push(`|${header.map(() => '---').join('|')}|`);
     for (const rep of replList) {
       const s = rep.summary || {};
       const f = v => v != null ? Number(v).toFixed(2) : '—';
-      lines.push(`| ${rep.replicationIndex ?? '?'} | ${rep.seed ?? '—'} | ${s.served ?? '—'} | ${s.reneged ?? '—'} | ${f(s.avgWait)} | ${f(s.avgSojourn)} |`);
+      const row = [
+        rep.replicationIndex ?? '?', rep.seed ?? '—',
+        s.served ?? '—', s.reneged ?? '—', f(s.avgWait), f(s.avgSojourn),
+        ...(hasSvc  ? [f(s.avgSvc)]      : []),
+        ...(hasWIP  ? [f(s.avgWIP)]      : []),
+        ...(hasCost ? [f(s.totalCost)]   : []),
+      ];
+      lines.push(`| ${row.join(' | ')} |`);
     }
     lines.push('');
   }
