@@ -83,7 +83,7 @@ function slugify(value = "") {
 }
 
 function formatNumber(value, digits = 1) {
-  if (!Number.isFinite(Number(value))) return "0";
+  if (!Number.isFinite(Number(value))) return "—";
   const rounded = Number(value).toFixed(digits);
   return rounded.includes(".") ? rounded.replace(/\.?0+$/, "") : rounded;
 }
@@ -109,11 +109,19 @@ function getPathValue(source, path) {
   return value;
 }
 
+function addResultWrapper(row) {
+  return row.result ? row : { ...row, result: { summary: row.summary || {} } };
+}
+
 function normaliseReplicationResults(replicationResults, results) {
-  if (Array.isArray(replicationResults) && replicationResults.length) return replicationResults;
-  if (Array.isArray(results?.replicationResults) && results.replicationResults.length) return results.replicationResults;
+  if (Array.isArray(replicationResults) && replicationResults.length) {
+    return replicationResults.map(addResultWrapper);
+  }
+  if (Array.isArray(results?.replicationResults) && results.replicationResults.length) {
+    return results.replicationResults.map(addResultWrapper);
+  }
   if (Array.isArray(results?.replications) && results.replications.length) {
-    return results.replications.map(row => ({ result: { summary: row.summary || {} }, ...row }));
+    return results.replications.map(row => addResultWrapper({ ...row }));
   }
   return [];
 }
@@ -934,7 +942,7 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
     if (values.length < 3) return null;
     return {
       avgWait: computeSummaryStats(values),
-      percentiles: computePercentiles(values),
+      percentiles: computePercentiles(values, [50, 90, 95]),
     };
   }, [replications]);
   const hasAnalysisInputs = replications.length > 0 || (warmupDetection?.series || []).length > 0 || results?.aggregateStats;
