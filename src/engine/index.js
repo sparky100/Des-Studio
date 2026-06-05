@@ -1284,10 +1284,14 @@ const cycleLog = [];
         }
         if (visitedSections.length > 0) {
           const isDone = entity.status === "done" || entity.status === "reneged";
-          const sink = isDone
-            ? (entity.outcome?.routeLabel || (entity.status === "reneged" ? "Reneged" : "Completed"))
-            : "Incomplete";
-          const key = [...visitedSections, sink].join("→");
+          let sink;
+          if (!isDone)                          sink = "Incomplete";
+          else if (entity.outcome?.routeLabel)  sink = entity.outcome.routeLabel;
+          else if (entity.status === "reneged") sink = "Reneged";
+          else                                  sink = null;
+          const key = sink != null
+            ? [...visitedSections, sink].join("→")
+            : visitedSections.join("→");
           journeys[key] = (journeys[key] || 0) + 1;
         }
       }
@@ -1304,10 +1308,12 @@ const cycleLog = [];
       const queueParts = entity.stages.map(s => s.queueName).filter(Boolean);
       if (!queueParts.length) continue;
       const isDone = entity.status === "done" || entity.status === "reneged";
-      const sink = isDone
-        ? (entity.outcome?.routeLabel || (entity.status === "reneged" ? "Reneged" : "Completed"))
-        : "Incomplete";
-      const path = [...queueParts, sink].join("→");
+      let sink;
+      if (!isDone)                          sink = "Incomplete";
+      else if (entity.outcome?.routeLabel)  sink = entity.outcome.routeLabel;
+      else if (entity.status === "reneged") sink = "Reneged";
+      else                                  sink = null;
+      const path = sink != null ? [...queueParts, sink].join("→") : queueParts.join("→");
       queueJourneys[path] = (queueJourneys[path] || 0) + 1;
     }
 
