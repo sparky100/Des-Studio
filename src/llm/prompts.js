@@ -254,19 +254,29 @@ function extractEntityAnomalies(results = {}) {
 export function buildKpis(model = {}, results = {}) {
   const summary = getSummary(results);
   const outcomes = extractOutcomes(summary);
+  const agg = results?.aggregateStats || {};
+
+  // For batch runs, use per-run average from CI stats rather than inflated totals.
+  const resolveCount = (field) => {
+    const ci = agg[`summary.${field}`];
+    return (ci?.n >= 2 && Number.isFinite(ci.mean)) ? ci.mean : summary[field];
+  };
+  const isMultiRep = (agg["summary.served"]?.n ?? 1) > 1;
+
   const kpis = {
     queues: extractQueues(model, results),
     resources: extractResources(model, summary),
-    throughput: finiteOrNull(summary.served ?? summary.throughput),
+    throughput: finiteOrNull(resolveCount("served") ?? summary.throughput),
     totalEntities: finiteOrNull(summary.total),
-    served: finiteOrNull(summary.served),
-    reneged: finiteOrNull(summary.reneged),
+    served: finiteOrNull(resolveCount("served")),
+    reneged: finiteOrNull(resolveCount("reneged")),
     renegedNote: (summary.reneged > 0) ? "Reneged entities left the system before being served (e.g. balked at a full queue or abandoned after waiting too long)." : undefined,
     avgWait: finiteOrNull(summary.avgWait),
     avgService: finiteOrNull(summary.avgSvc),
     avgSojourn: finiteOrNull(summary.avgSojourn),
     maxSojourn: finiteOrNull(summary.maxSojourn),
     avgWIP: finiteOrNull(summary.avgWIP),
+    ...(isMultiRep ? { _batchNote: `Per-run averages across ${agg["summary.served"]?.n} replications` } : {}),
   };
   if (outcomes) kpis.outcomes = outcomes;
   const journeys = extractJourneyDigest(results, model);
