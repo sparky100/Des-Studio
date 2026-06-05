@@ -264,6 +264,25 @@ function lineSeriesStats(series, yLabel, color, formatValue = v => formatNumber(
   ];
 }
 
+function CiBadge({ ci, C, FONT }) {
+  if (!ci?.halfWidth || !ci?.mean || !Number.isFinite(ci.mean) || ci.mean === 0) return null;
+  const relHw = (ci.halfWidth / Math.abs(ci.mean)) * 100;
+  const color = relHw < 10 ? C.green : relHw < 25 ? C.amber : C.red;
+  return (
+    <span
+      title={`±${ci.halfWidth.toFixed(1)} half-width, n=${ci.n} reps`}
+      style={{
+        fontSize: 10, fontWeight: 700, color, fontFamily: FONT,
+        background: `${color}18`, border: `1px solid ${color}44`,
+        borderRadius: 999, padding: "2px 6px",
+        whiteSpace: "nowrap", marginLeft: 5,
+      }}
+    >
+      ±{relHw.toFixed(0)}%
+    </span>
+  );
+}
+
 export function SummaryCardGrid({ results, replicationResults = [], model = {} }) {
   const { C, FONT } = useTheme();
   const summary = results?.summary || {};
@@ -284,6 +303,13 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
   const avgPerRun = (total) =>
     isMultiRep && total > 0 ? Math.round(total / repCount) : null;
 
+  // For count metric cards: prefer aggregateStats.mean (per-run avg from CI) over raw total.
+  const resolveCount = (rawTotal, ciPath) => {
+    const ci = results?.aggregateStats?.[ciPath];
+    if (isMultiRep && ci?.n >= 2 && Number.isFinite(ci.mean)) return ci.mean;
+    return rawTotal;
+  };
+
   const cards = [
     {
       label: "Average wait",
@@ -299,26 +325,35 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     },
     {
       label: "Customers arriving",
-      value: totalArrived > 0 ? formatMetricValue(totalArrived, 0) : "—",
-      avg: avgPerRun(totalArrived),
+      value: totalArrived > 0 ? formatMetricValue(isMultiRep ? Math.round(totalArrived / repCount) : totalArrived, 0) : "—",
+      total: isMultiRep && totalArrived > 0 ? totalArrived : null,
       note: totalArrived > 0
-        ? isMultiRep ? `Total — avg per run across ${repCount} replications.` : "Total arrivals."
+        ? isMultiRep ? `avg / run · ${repCount} replications` : "Total arrivals."
         : "No arrivals recorded.",
       color: C.text,
     },
     {
       label: "Customers served",
-      value: formatMetricValue(served, 0),
-      avg: avgPerRun(served),
+      value: formatMetricValue(resolveCount(served, "summary.served"), 0),
+      ciPath: "summary.served",
+      total: isMultiRep && served > 0 ? served : null,
       note: served > 0
-        ? isMultiRep ? `Total — avg per run across ${repCount} replications.` : "Completed successfully."
+        ? isMultiRep ? `avg / run · ${repCount} replications` : "Completed successfully."
         : "No completed entities yet.",
       color: C.served,
     },
     {
       label: "Customers who left before service",
-      value: leftRate == null ? "—" : `${formatNumber(leftRate, 1)}%`,
-      note: reneged > 0 ? `${reneged} left before being served.` : "No customers left early.",
+      value: isMultiRep && reneged > 0
+        ? formatMetricValue(resolveCount(reneged, "summary.reneged"), 0)
+        : (leftRate == null ? "—" : `${formatNumber(leftRate, 1)}%`),
+      ciPath: reneged > 0 ? "summary.reneged" : null,
+      total: isMultiRep && reneged > 0 ? reneged : null,
+      note: reneged > 0
+        ? (isMultiRep
+            ? (leftRate != null ? `${formatNumber(leftRate, 1)}% abandonment rate.` : "Left before being served.")
+            : `${reneged.toLocaleString()} left before being served.`)
+        : "No customers left early.",
       color: reneged > 0 ? C.reneged : C.green,
     },
   ];
@@ -369,10 +404,15 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
               {card.label.toUpperCase()}
             </div>
-            {card.avg != null ? (
+            {card.total != null ? (
               <div style={{ marginBottom: 5 }}>
-                <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>{card.value}</div>
-                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, marginTop: 3 }}>avg {card.avg.toLocaleString()} per run</div>
+                <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 4 }}>
+                  <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>{card.value}</span>
+                  {card.ciPath && <CiBadge ci={results?.aggregateStats?.[card.ciPath]} C={C} FONT={FONT} />}
+                </div>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>
+                  avg / run · {formatMetricValue(card.total, 0)} total
+                </div>
               </div>
             ) : (
               <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>

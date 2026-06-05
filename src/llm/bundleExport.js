@@ -149,9 +149,10 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   lines.push('');
   lines.push('| Metric | Value |');
   lines.push('|--------|-------|');
+  const batchSuffix = kpis._batchNote ? ` (avg / run)` : "";
   if (kpis.totalEntities != null) lines.push(`| Total entities arrived | ${kpis.totalEntities} |`);
-  if (kpis.served != null) lines.push(`| Entities served | ${kpis.served} |`);
-  if (kpis.reneged != null) lines.push(`| Entities reneged | ${kpis.reneged} |`);
+  if (kpis.served  != null) lines.push(`| Entities served${batchSuffix} | ${kpis.served} |`);
+  if (kpis.reneged != null) lines.push(`| Entities reneged${batchSuffix} | ${kpis.reneged} |`);
   if (kpis.avgWait != null) lines.push(`| Average wait time | ${kpis.avgWait.toFixed(2)} |`);
   if (kpis.avgService != null) lines.push(`| Average service time | ${kpis.avgService.toFixed(2)} |`);
   if (kpis.avgSojourn != null) lines.push(`| Average sojourn time | ${kpis.avgSojourn.toFixed(2)} |`);
@@ -159,6 +160,7 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (kpis.totalCost != null) lines.push(`| Total cost | ${kpis.totalCost.toFixed(2)} |`);
   if (kpis.costPerServed != null) lines.push(`| Cost per served | ${kpis.costPerServed.toFixed(2)} |`);
   lines.push('');
+  if (kpis._batchNote) lines.push(`_${kpis._batchNote}_\n`);
 
   // ── End-of-run entity status ──────────────────────────────────────────────
   // Explicitly report left-in-system entities so an LLM never confuses them
