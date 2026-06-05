@@ -164,15 +164,22 @@ function StageKpisTable({ snap, model }) {
   const outcomeRows = Object.values(outcomes)
     .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
 
-  // Queue journey paths — top-10 paths by frequency, from entity.stages[]
+  // Queue journey paths — top-10 paths by frequency.
+  // Named outcomes and reneged get a labelled sink; in-flight show "active…";
+  // generic completions (no named outcome) have no sink — path ends at last queue.
+  const queueNames = new Set((model.queues || []).map(q => q.name));
   const queueJourneys = {};
   for (const entity of entities) {
     if (entity.role === "server" || !entity.stages?.length) continue;
     const parts = entity.stages.map(s => s.queueName).filter(Boolean);
     if (!parts.length) continue;
-    const sink = entity.outcome?.routeLabel
-      || (entity.status === "reneged" ? "Reneged" : "Completed");
-    const path = [...parts, sink].join("→");
+    const isDone = entity.status === "done" || entity.status === "reneged";
+    let sink;
+    if (!isDone)                          sink = "active…";
+    else if (entity.outcome?.routeLabel)  sink = entity.outcome.routeLabel;
+    else if (entity.status === "reneged") sink = "Reneged";
+    else                                  sink = null;
+    const path = sink != null ? [...parts, sink].join("→") : parts.join("→");
     queueJourneys[path] = (queueJourneys[path] || 0) + 1;
   }
   const totalJourneys = Object.values(queueJourneys).reduce((a, b) => a + b, 0);
@@ -199,6 +206,7 @@ function StageKpisTable({ snap, model }) {
     }
     for (const entity of entities) {
       if (entity.role === "server" || !entity.stages?.length) continue;
+      if (entity.status !== "done" && entity.status !== "reneged") continue;
       for (const sec of modelSections) {
         let sojourn = 0, didVisit = false, didEnter = false, didExit = false;
         for (const stage of entity.stages) {
@@ -363,9 +371,11 @@ function StageKpisTable({ snap, model }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {topPaths.map(([path, count]) => {
               const pct = totalJourneys > 0 ? ((count / totalJourneys) * 100).toFixed(0) : 0;
-              const parts = path.split("→");
-              const sink  = parts[parts.length - 1];
-              const nodes = parts.slice(0, -1);
+              const segs = path.split("→");
+              const lastSeg = segs[segs.length - 1];
+              const hasSink = !queueNames.has(lastSeg);
+              const nodes = hasSink ? segs.slice(0, -1) : segs;
+              const sinkColor = lastSeg === "active…" ? C.amber : C.accent;
               return (
                 <div key={path} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px" }}>
                   <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4, marginBottom: 6 }}>
@@ -377,9 +387,14 @@ function StageKpisTable({ snap, model }) {
                         <span style={{ color: C.muted, fontSize: 10 }}>→</span>
                       </span>
                     ))}
-                    <span style={{ fontSize: 10, fontFamily: FONT, color: C.accent, background: C.bg, border: `1px dashed ${C.accent}`, borderRadius: 4, padding: "2px 6px" }}>
-                      {sink}
-                    </span>
+                    {hasSink && (
+                      <span style={{
+                        fontSize: 10, fontFamily: FONT, borderRadius: 4, padding: "2px 6px",
+                        color: sinkColor, background: C.bg, border: `1px dashed ${sinkColor}`,
+                      }}>
+                        {lastSeg}
+                      </span>
+                    )}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <div style={{ flex: 1, height: 4, background: C.border, borderRadius: 2, overflow: "hidden" }}>
