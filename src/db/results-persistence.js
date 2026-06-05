@@ -1,5 +1,8 @@
+import { buildHistogramFD } from "../engine/statistics.js";
+
 const LARGE_RUN_RISK_LEVELS = new Set(["large", "too_large"]);
 const COMPACT_TIME_SERIES_MAX_POINTS = 200;
+const MINIMAL_TIME_SERIES_MAX_POINTS = 50;   // keep a skeleton for historic charts
 const ENTITY_SUMMARY_TYPE_LIMIT = 12;
 
 function sampleEvenly(items, maxPoints) {
@@ -64,20 +67,32 @@ function buildLogSummary(logEntries = []) {
   };
 }
 
-function summarizeWaitDist(waitDist = {}) {
-  const entries = Object.entries(waitDist || {});
-  return Object.fromEntries(entries.map(([queueName, stats]) => [
-    queueName,
-    stats ? {
-      n: stats.n ?? 0,
-      mean: stats.mean ?? null,
-      p50: stats.p50 ?? null,
-      p90: stats.p90 ?? null,
-      p95: stats.p95 ?? null,
-      p99: stats.p99 ?? null,
+/**
+ * Compact wait-time distribution for "minimal" saves.
+ * Keeps all summary percentiles AND pre-computes Freedman-Diaconis histogram bins
+ * (≤20 bins, ~600 bytes per queue) from the raw values array before dropping it.
+ * This lets the WaitHistogram component render for any saved run, regardless of
+ * detail level, without storing tens of KB of raw observation arrays.
+ */
+function compactifyWaitDist(waitDist = {}) {
+  return Object.fromEntries(Object.entries(waitDist || {}).map(([qName, d]) => [
+    qName,
+    d ? {
+      n:    d.n    ?? 0,
+      mean: d.mean ?? null,
+      p50:  d.p50  ?? null,
+      p90:  d.p90  ?? null,
+      p95:  d.p95  ?? null,
+      p99:  d.p99  ?? null,
+      histogram: Array.isArray(d.values) && d.values.length > 1
+        ? buildHistogramFD(d.values, { maxBins: 20 })
+        : null,
     } : null,
   ]));
 }
+
+// Legacy alias — used only for the payload-size safety guard path below.
+const summarizeWaitDist = compactifyWaitDist;
 
 export function resolveResultDetailLevel(config = {}) {
   if (config.resultDetailLevel === "minimal" || config.resultDetailLevel === "compact" || config.resultDetailLevel === "full") {
@@ -188,12 +203,22 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       trimmedFields.push("entitySummary");
     }
     if (Array.isArray(resultsJson.timeSeries) && resultsJson.timeSeries.length > 0) {
-      delete resultsJson.timeSeries;
-      trimmedFields.push("timeSeries");
+      // Keep a 50-point skeleton so queue-depth and server-utilisation charts
+      // remain functional when viewing saved runs from history.
+      const originalPoints = resultsJson.timeSeries.length;
+      resultsJson.timeSeries = sampleEvenly(resultsJson.timeSeries, MINIMAL_TIME_SERIES_MAX_POINTS);
+      if (resultsJson.timeSeries.length < originalPoints) {
+        resultsJson._time_series_sampling = {
+          originalPoints,
+          savedPoints: resultsJson.timeSeries.length,
+        };
+        trimmedFields.push("timeSeries.sampled");
+      }
     }
     if (resultsJson.waitDist && typeof resultsJson.waitDist === "object") {
-      resultsJson.waitDist = summarizeWaitDist(resultsJson.waitDist);
-      trimmedFields.push("waitDist.values");
+      // Replace raw values arrays with pre-computed histogram bins (~600 bytes/queue).
+      resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
+      trimmedFields.push("waitDist.values→histogram");
     }
     if (Array.isArray(resultsJson.replications) && resultsJson.replications.length > 0) {
       resultsJson.replications = resultsJson.replications.map(replication => ({
@@ -250,9 +275,11 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson.entitySummaryCompact = summarizeEntitySummary(resultsJson.entitySummary);
       delete resultsJson.entitySummary;
     }
-    delete resultsJson.timeSeries;
+    if (Array.isArray(resultsJson.timeSeries) && resultsJson.timeSeries.length > 0) {
+      resultsJson.timeSeries = sampleEvenly(resultsJson.timeSeries, MINIMAL_TIME_SERIES_MAX_POINTS);
+    }
     if (resultsJson.waitDist && typeof resultsJson.waitDist === "object") {
-      resultsJson.waitDist = summarizeWaitDist(resultsJson.waitDist);
+      resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
     }
     if (Array.isArray(resultsJson.replications)) {
       resultsJson.replications = resultsJson.replications.map(r => ({

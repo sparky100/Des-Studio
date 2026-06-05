@@ -118,6 +118,30 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
   }
 
+  // ── Sections definition ───────────────────────────────────────────────────
+  const sectionsDef = model.sections || [];
+  if (sectionsDef.length > 0) {
+    const queueNameById = {};
+    for (const q of model.queues || []) { if (q.id && q.name) queueNameById[q.id] = q.name; }
+    lines.push('### Sections');
+    lines.push('');
+    lines.push(
+      'Sections group queues into logical stages. ' +
+      '**Entry queues** and **exit queues** are the measurement boundary: ' +
+      '`entitiesIn` increments when an entity passes through an entry queue, ' +
+      '`entitiesOut` when it passes through an exit queue. ' +
+      'If no entry/exit queues are configured the counts will be zero even if entities traverse the section.'
+    );
+    lines.push('');
+    lines.push('| Section | Member queues | Entry queues | Exit queues |');
+    lines.push('|---------|---------------|--------------|-------------|');
+    for (const s of sectionsDef) {
+      const names = (ids) => (ids || []).map(id => queueNameById[id] || id).filter(Boolean).join(', ') || '—';
+      lines.push(`| ${s.name || s.id} | ${names(s.memberIds)} | ${names(s.entryQueues)} | ${names(s.exitQueues)} |`);
+    }
+    lines.push('');
+  }
+
   lines.push('---');
   lines.push('');
 
@@ -140,6 +164,14 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   lines.push('');
 
   // ── RESULTS ───────────────────────────────────────────────────────────────
+  // Replication count: used throughout to divide cumulative totals into per-run averages.
+  const nReps = config.replications
+    ?? results?.summary?.numReplications
+    ?? results?.runtimeMetrics?.replications
+    ?? (Array.isArray(results?.replications) ? results.replications.length : null)
+    ?? 1;
+  const isMultiRepBundle = nReps > 1;
+
   lines.push('## Results');
   lines.push('');
 
@@ -157,10 +189,27 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (kpis.avgService != null) lines.push(`| Average service time | ${kpis.avgService.toFixed(2)} |`);
   if (kpis.avgSojourn != null) lines.push(`| Average sojourn time | ${kpis.avgSojourn.toFixed(2)} |`);
   if (kpis.avgWIP != null) lines.push(`| Average WIP | ${kpis.avgWIP.toFixed(2)} |`);
+  if (kpis.maxSojourn != null) lines.push(`| Max sojourn time | ${kpis.maxSojourn.toFixed(2)} |`);
   if (kpis.totalCost != null) lines.push(`| Total cost | ${kpis.totalCost.toFixed(2)} |`);
   if (kpis.costPerServed != null) lines.push(`| Cost per served | ${kpis.costPerServed.toFixed(2)} |`);
+  // Plan deviation — present only in models that use timetable/planned arrivals
+  const avgPlanDeviation = results?.summary?.avgPlanDeviation;
+  if (avgPlanDeviation != null && Number.isFinite(avgPlanDeviation)) {
+    lines.push(`| Avg plan deviation | ${avgPlanDeviation.toFixed(2)} |`);
+  }
   lines.push('');
   if (kpis._batchNote) lines.push(`_${kpis._batchNote}_\n`);
+
+  // Warmup exclusion note — tells the LLM how many entities were discarded during warm-up
+  const excludedCount = results?.summary?.excludedCount;
+  if (excludedCount > 0) {
+    lines.push(
+      `> ⓘ **${excludedCount} ${excludedCount === 1 ? 'entity was' : 'entities were'} present at warm-up cutoff and excluded from statistics.** ` +
+      `This is expected behaviour: entities that arrived during the warm-up period are removed when ` +
+      `the statistics clock resets, so results reflect only the steady-state phase.`
+    );
+    lines.push('');
+  }
 
   // ── End-of-run entity status ──────────────────────────────────────────────
   // Explicitly report left-in-system entities so an LLM never confuses them
@@ -262,6 +311,12 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
       const status = g.current == null ? 'UNKNOWN' : g.met ? '✓ PASS' : '✗ FAIL';
       lines.push(`| ${g.label} | ${g.metric} | ${g.operator} ${g.target} | ${actual} | ${status} |`);
     }
+    if (isMultiRepBundle) {
+      lines.push('');
+      lines.push(
+        '> ⓘ Count goals (served, reneged) and avgWIP are evaluated against the per-replication average, not the cumulative total.'
+      );
+    }
     lines.push('');
   }
 
@@ -291,11 +346,13 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
       '**not** an indicator that the entity was truncated or left unserved.'
     );
     lines.push('');
-    lines.push('| Journey (queue sequence → outcome) | Count |');
-    lines.push('|------------------------------------|-------|');
+    const countColLabel = isMultiRepBundle ? `Avg / run (÷${nReps})` : 'Count';
+    lines.push(`| Journey (queue sequence → outcome) | ${countColLabel} |`);
+    lines.push(`|------------------------------------|${'-'.repeat(countColLabel.length + 2)}|`);
     const sorted = Object.entries(queueJourneys).sort(([, a], [, b]) => b - a);
     for (const [path, count] of sorted) {
-      lines.push(`| ${path} | ${count} |`);
+      const display = isMultiRepBundle ? +(count / nReps).toFixed(1) : count;
+      lines.push(`| ${path} | ${display} |`);
     }
     lines.push('');
   }
@@ -303,13 +360,66 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   // Section performance — sojourn and throughput per model section
   const sections = results?.summary?.sections;
   if (sections && Object.keys(sections).length) {
+    // Resolve section names from model definition when available
+    const sectionNameById = {};
+    for (const s of model.sections || []) { if (s.id && s.name) sectionNameById[s.id] = s.name; }
+
     lines.push('### Section Performance');
     lines.push('');
-    lines.push('| Section | Entities in | Entities out | Avg sojourn |');
-    lines.push('|---------|------------|-------------|------------|');
+    if (isMultiRepBundle) {
+      lines.push(
+        `Counts below are **averages per replication** (÷ ${nReps} runs). ` +
+        '`In`/`Out` are only non-zero when entry/exit queues are configured on the section.'
+      );
+    } else {
+      lines.push(
+        '`In`/`Out` counts are only non-zero when entry/exit queues are configured on the section.'
+      );
+    }
+    lines.push('');
+    const inLabel  = isMultiRepBundle ? 'Avg in / run' : 'Entities in';
+    const outLabel = isMultiRepBundle ? 'Avg out / run' : 'Entities out';
+    lines.push(`| Section | ${inLabel} | ${outLabel} | Avg sojourn |`);
+    lines.push(`|---------|${'-'.repeat(inLabel.length + 2)}|${'-'.repeat(outLabel.length + 2)}|------------|`);
     for (const [secId, sec] of Object.entries(sections)) {
+      const name = sectionNameById[secId] || secId;
       const f = v => v != null ? Number(v).toFixed(2) : '—';
-      lines.push(`| ${secId} | ${sec.entitiesIn ?? '—'} | ${sec.entitiesOut ?? '—'} | ${f(sec.avgSojourn)} |`);
+      const fCount = n => n == null ? '—' : isMultiRepBundle ? +(n / nReps).toFixed(1) : n;
+      lines.push(`| ${name} | ${fCount(sec.entitiesIn)} | ${fCount(sec.entitiesOut)} | ${f(sec.avgSojourn)} |`);
+    }
+    lines.push('');
+  }
+
+  // Container levels — present only when model has container types
+  if (kpis.containerLevels && Object.keys(kpis.containerLevels).length) {
+    lines.push('### Container Levels');
+    lines.push('');
+    lines.push('| Container | Min | Avg | Max | Final |');
+    lines.push('|-----------|-----|-----|-----|-------|');
+    for (const [id, lvl] of Object.entries(kpis.containerLevels)) {
+      const f = v => v != null ? Number(v).toFixed(2) : '—';
+      lines.push(`| ${id} | ${f(lvl.min)} | ${f(lvl.avg)} | ${f(lvl.max)} | ${f(lvl.final)} |`);
+    }
+    lines.push('');
+  }
+
+  // Cross-section journey paths — shows how entities flowed between sections
+  const sectionJourneys = results?.summary?.journeys;
+  if (sectionJourneys && Object.keys(sectionJourneys).length) {
+    const sectionNameById = {};
+    for (const s of model.sections || []) { if (s.id && s.name) sectionNameById[s.id] = s.name; }
+    const countColLabel2 = isMultiRepBundle ? `Avg / run (÷${nReps})` : 'Count';
+    lines.push('### Cross-Section Journey Paths');
+    lines.push('');
+    lines.push('How entities moved between sections (high-level pathway view).');
+    lines.push('');
+    lines.push(`| Section path | ${countColLabel2} |`);
+    lines.push(`|--------------|${'-'.repeat(countColLabel2.length + 2)}|`);
+    const sortedSJ = Object.entries(sectionJourneys).sort(([, a], [, b]) => b - a);
+    for (const [key, count] of sortedSJ) {
+      const label = key.split('→').map(id => sectionNameById[id] || id).join(' → ');
+      const display = isMultiRepBundle ? +(count / nReps).toFixed(1) : count;
+      lines.push(`| ${label} | ${display} |`);
     }
     lines.push('');
   }
@@ -344,6 +454,40 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     }
   }
 
+  // ── Peak queue depths ─────────────────────────────────────────────────────
+  // The maximum instantaneous queue length observed during the run.
+  // Distinct from average wait time — a queue can have low mean wait but spike
+  // to a large peak, indicating transient overload the LLM should flag.
+  const peaksByQueue = results?.runtimeMetrics?.max_queue_length_by_queue;
+  if (peaksByQueue && typeof peaksByQueue === 'object' && Object.keys(peaksByQueue).length) {
+    lines.push('### Peak Queue Depths');
+    lines.push('');
+    lines.push('Maximum instantaneous queue length recorded at any point during the run.');
+    lines.push('');
+    lines.push('| Queue | Peak depth |');
+    lines.push('|-------|-----------|');
+    const sortedPeaks = Object.entries(peaksByQueue).sort(([, a], [, b]) => b - a);
+    for (const [name, peak] of sortedPeaks) {
+      lines.push(`| ${name} | ${peak} |`);
+    }
+    lines.push('');
+  }
+
+  // ── Run scale ─────────────────────────────────────────────────────────────
+  // A compact one-line note showing simulation scale — helps the LLM calibrate
+  // how data-rich the results are and whether performance issues may be transient.
+  const rm = results?.runtimeMetrics;
+  if (rm) {
+    const parts = [];
+    if (rm.events_processed != null) parts.push(`${rm.events_processed.toLocaleString()} events processed`);
+    if (rm.entities_created != null) parts.push(`${rm.entities_created.toLocaleString()} entities created`);
+    if (rm.c_event_scans   != null) parts.push(`${rm.c_event_scans.toLocaleString()} C-event scans`);
+    if (parts.length) {
+      lines.push(`> ⓘ **Run scale:** ${parts.join(' · ')}`);
+      lines.push('');
+    }
+  }
+
   // ── REPLICATION SUMMARY — omitted for single-replication runs ────────────
   const replList = results.replications || [];
   if (replList.length > 1) {
@@ -351,12 +495,28 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
     lines.push('## Replication Summary');
     lines.push('');
-    lines.push('| # | Seed | Served | Reneged | Avg wait | Avg sojourn |');
-    lines.push('|---|------|--------|---------|---------|------------|');
+    // Detect which optional columns have any data across all reps
+    const hasSvc     = replList.some(r => r.summary?.avgSvc      != null);
+    const hasWIP     = replList.some(r => r.summary?.avgWIP      != null);
+    const hasCost    = replList.some(r => r.summary?.totalCost   != null);
+    const header = ['#', 'Seed', 'Served', 'Reneged', 'Avg wait', 'Avg sojourn',
+      ...(hasSvc  ? ['Avg service'] : []),
+      ...(hasWIP  ? ['Avg WIP']     : []),
+      ...(hasCost ? ['Total cost']  : []),
+    ];
+    lines.push(`| ${header.join(' | ')} |`);
+    lines.push(`|${header.map(() => '---').join('|')}|`);
     for (const rep of replList) {
       const s = rep.summary || {};
       const f = v => v != null ? Number(v).toFixed(2) : '—';
-      lines.push(`| ${rep.replicationIndex ?? '?'} | ${rep.seed ?? '—'} | ${s.served ?? '—'} | ${s.reneged ?? '—'} | ${f(s.avgWait)} | ${f(s.avgSojourn)} |`);
+      const row = [
+        rep.replicationIndex ?? '?', rep.seed ?? '—',
+        s.served ?? '—', s.reneged ?? '—', f(s.avgWait), f(s.avgSojourn),
+        ...(hasSvc  ? [f(s.avgSvc)]      : []),
+        ...(hasWIP  ? [f(s.avgWIP)]      : []),
+        ...(hasCost ? [f(s.totalCost)]   : []),
+      ];
+      lines.push(`| ${row.join(' | ')} |`);
     }
     lines.push('');
   }

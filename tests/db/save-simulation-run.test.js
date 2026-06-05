@@ -57,15 +57,19 @@ describe("saveSimulationRun payload metadata", () => {
     const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
     expect(insertPayload.results_json).toEqual(expect.objectContaining({
       _result_detail_level: "minimal",
-      _trimmed_fields: expect.arrayContaining(["log", "entitySummary", "timeSeries", "waitDist.values"]),
+      // timeSeries is now kept as a 50-pt skeleton; waitDist has histogram bins
+      _trimmed_fields: expect.arrayContaining(["log", "entitySummary", "waitDist.values→histogram"]),
       logSummary: expect.objectContaining({ entries: 1, finalMessage: "Run finished" }),
       entitySummaryCompact: expect.objectContaining({ totalEntities: 1 }),
       waitDist: expect.objectContaining({ Main: expect.objectContaining({ n: 2, mean: 3, p99: 4 }) }),
     }));
     expect(insertPayload.results_json.log).toBeUndefined();
     expect(insertPayload.results_json.entitySummary).toBeUndefined();
-    expect(insertPayload.results_json.timeSeries).toBeUndefined();
+    // timeSeries is now retained as a 50-pt sample (not deleted in minimal)
+    expect(insertPayload.results_json.timeSeries).toBeDefined();
+    // raw values array is replaced by pre-computed histogram bins in minimal saves
     expect(insertPayload.results_json.waitDist.Main.values).toBeUndefined();
+    expect(insertPayload.results_json.waitDist.Main.histogram).toBeDefined();
   });
 
   it("stores requested and effective chart-data settings in saved results metadata", async () => {

@@ -232,6 +232,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
       total,
       served,
       reneged,
+      numReplications: replicationPayloads.length,
       avgWait: aggregateStats["summary.avgWait"]?.mean ?? null,
       avgSvc: aggregateStats["summary.avgSvc"]?.mean ?? null,
       avgSojourn: aggregateStats["summary.avgSojourn"]?.mean ?? null,
