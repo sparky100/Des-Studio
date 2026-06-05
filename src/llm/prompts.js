@@ -224,14 +224,19 @@ function extractCEvents(model = {}) {
 
 /**
  * Build a compact sections digest for LLM prompts.
- * Resolves queue IDs to names so the LLM can reason about which queues bound
- * a section, and which are the official entry/exit measurement points.
- * Includes a note on the entry/exit semantics so the LLM knows that
- * entitiesIn/Out counts are only non-zero when these are configured.
+ * Only included for large models (≥8 queues or ≥3 stages) or when sections
+ * are already configured — small single-stage models don't need sections context.
+ * Resolves queue IDs to names and notes if entry/exit queues are unset.
  */
 function buildSectionsDigest(model = {}) {
   const sections = model.sections || [];
-  if (!sections.length) return [];
+  const numQueues = (model.queues || []).length;
+  const isLargeModel = numQueues >= 8 || sections.length >= 3;
+
+  // Only include sections context for large or already-sectioned models
+  if (!sections.length && !isLargeModel) return [];
+  if (!sections.length) return [];   // don't suggest sections just because model is large; only report what's configured
+
   const queueNameById = {};
   for (const q of model.queues || []) {
     if (q.id && q.name) queueNameById[q.id] = q.name;
@@ -242,7 +247,7 @@ function buildSectionsDigest(model = {}) {
     entryQueues:  (s.entryQueues || []).map(id => queueNameById[id] || id).filter(Boolean),
     exitQueues:   (s.exitQueues  || []).map(id => queueNameById[id] || id).filter(Boolean),
     note: (s.entryQueues || []).length === 0
-      ? "No entry queue set — entitiesIn count will be 0"
+      ? "No entry queue configured — entitiesIn count will be 0 in results"
       : null,
   }));
 }

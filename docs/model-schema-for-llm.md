@@ -1,7 +1,7 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 1.4.0
-**Date:** 2026-06-03
+**Version:** 1.5.0
+**Date:** 2026-06-05
 **Sprint baseline:** Sprint 71
 
 | Version | Date | Sprint | Changes |
@@ -13,6 +13,7 @@
 | v1.3.1 | 2026-06-01 | Docs correction | Clarified probabilistic arrival splitting: use separate ARRIVE B-events with proportional inter-arrival means; never use `probabilisticRouting` on ARRIVE events |
 | v1.3.2 | 2026-06-01 | Results contract | Added `entity.outcome` and `summary.outcomes` journey-conclusion result metadata for terminal route reporting and AI analysis |
 | v1.4.0 | 2026-06-03 | Schema review | DES best-practice and consistency review: added V39 to §10 blocking errors; corrected V30/V31 to include RELEASE(); fixed balkCondition variable format in §16.13; added `terminationCondition` to §1; corrected §16.3 queue naming rule; added SPT/EDD/PRIORITY(attrName) attribute requirements to §3; added Empirical non-empty constraint to §4; added SPLIT/FILL/SPLIT to §5/§6 macro tables; added Normal distribution caveat to §4; added LIFO caveat to §3; expanded §16.6 with steady-state vs terminating guidance; added replication and stability best-practice notes; added §6.1 state variable and container predicates; added UI-parity notes for JSON-only settings |
+| v1.5.0 | 2026-06-05 | Results accuracy | **§9 Goals:** added `summary.avgWIP` metric; added batch-mode note on per-replication evaluation of count goals. **§11.1 Sections:** corrected factual error — the engine actively uses `entryQueues`/`exitQueues` to compute `entitiesIn`/`entitiesOut`/`avgSojourn` (was incorrectly stated as "engine ignores sections entirely"); clarified dual purpose (UI organisation + statistical boundary tracking); aligned "large model" threshold with TOP LLM MISTAKES #13 (≥8 queues or ≥3 stages, consistent throughout); added note that sections with empty entry/exit arrays are cosmetic only and produce zero in/out counts. |
 
 ---
 
@@ -772,11 +773,14 @@ Performance targets for the AI analysis and optimisation features.
 | `summary.avgWait` | Mean customer wait time |
 | `summary.avgSvc` | Mean service time |
 | `summary.avgSojourn` | Mean total time in system |
+| `summary.avgWIP` | Average work-in-progress (mean entities in system, Little's Law) |
 | `summary.served` | Total customers served |
 | `summary.reneged` | Total customers who abandoned |
 | `summary.totalCost` | Total cost (requires cost model) |
 
 `operator`: one of `<`, `<=`, `>`, `>=`, `==`
+
+> **Batch-mode note:** For multi-replication runs, count goals (`summary.served`, `summary.reneged`) and `summary.avgWIP` are evaluated against the **per-replication average** (the CI mean), not the cumulative total across all replications.
 
 ---
 
@@ -869,7 +873,13 @@ All generated model JSON MUST pass every blocking rule below.
 
 ### 11.1 Sections (Large-Model Organisation)
 
-`sections[]` is an optional metadata layer that groups queues, entity types, B-events, and C-events into named, coloured swimlanes. The simulation engine ignores sections entirely — they are authoring and visualisation aids only.
+`sections[]` serves two distinct purposes:
+
+1. **UI organisation** — groups queues, entity types, B-events, and C-events into named, coloured swimlanes and filter tabs. Always beneficial for navigation on large models.
+
+2. **Statistical boundary tracking** — the engine reads `entryQueues` and `exitQueues` to count entities crossing section boundaries and compute per-section metrics (`entitiesIn`, `entitiesOut`, `avgSojourn`) that appear in the Results panel and AI exports. **`entryQueues` and `exitQueues` must be set for these counts to be non-zero.** Sections with both arrays empty are cosmetic only.
+
+> **For small models (< 8 queues, single stage):** sections add no value. Omit `sections: []` entirely unless the model has distinct named stages or the user explicitly requests swimlane views.
 
 ```json
 "sections": [
@@ -925,18 +935,18 @@ Notice the handoff: `q_nhs24_clinical` is in `exitQueues` for the NHS 24 section
 
 **When sections are appropriate:**
 
-Sections add value when a model has distinct, named stages that an entity passes through sequentially, and when the total number of queues or events makes the flat list hard to navigate. Typical triggers:
+Sections add value when a model has distinct, named stages that an entity passes through sequentially, and when the total number of queues makes the flat list hard to navigate. Typical triggers (use ≥8 queues OR ≥3 named stages as the threshold):
 
 | Signal | Example |
 |---|---|
-| ≥ 8 queues or ≥ 15 events | Glasgow Urgent Care Pathway (20 queues, 50+ events) |
+| ≥ 8 queues or ≥ 3 named stages | Glasgow Urgent Care Pathway (20 queues) |
 | Multi-stage pathway with named handoff points | NHS 24 → MIU → A&E |
 | Multiple departments or wards modelled in one file | Triage, Observation, Theatres, Recovery |
 | User asks for sub-models, swimlanes, or grouped views | "Can you split this into sections?" |
 
 Sections are **not** needed for:
 - Simple single-flow models (M/M/1, M/M/c, one or two queues)
-- Models where all queues belong to the same logical stage
+- Models with fewer than 8 queues and a single named stage
 - Exploratory or template models
 
 **Rules:**
