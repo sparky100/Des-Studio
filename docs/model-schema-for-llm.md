@@ -596,7 +596,7 @@ C-events fire whenever their condition becomes true. They represent service star
 ### Rules
 
 - `id` must be unique across all C-events.
-- `priority`: integer, lower value = fires first when multiple conditions are simultaneously true.
+- `priority`: integer, lower value = fires first when multiple conditions are simultaneously true. ⚠ **Starvation risk:** if C-events A (priority=1) and B (priority=2) share a resource and A's queue is always non-empty, B will never fire — entities accumulate, `served=0`. Give terminal C-events (discharge, exit) priority=0 so completions are not deferred behind new arrivals.
 - `condition`: predicate expression (see §6.1 below).
 - `effect` must use `ASSIGN` for standard service start.
 - `cSchedules[].eventId` must reference a valid B-event `id`.
@@ -1160,6 +1160,8 @@ Common modelling patterns and the mistakes to avoid when generating simmodlr mod
 | **✗ Condition always true** | C-Event fires every pass — wastes C-scan cycles | `condition: "true"` or no condition on high-priority C-Event |
 
 **Rule:** Lower priority number = higher priority. When a C-Event fires, the scan restarts from priority 1 (Three-Phase restart rule).
+
+**Starvation rule:** Terminal C-events (discharge, checkout, exit) that share a resource with entry/mid-journey C-events must have priority ≤ those C-events. If a discharge C-event has priority=2 but a consultation C-event has priority=1 on the same resource, patients can never complete when the consultation queue is continuously populated — `served=0` results. Assign priority=0 to terminal C-events to prevent this.
 
 ---
 
