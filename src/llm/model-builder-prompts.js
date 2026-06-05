@@ -109,7 +109,19 @@ companionCsv rules:
    RENEGE(Patient) silently fails because the engine can't find an entity by type name in this context.
 
    ✓ CORRECT: "effect": ["RENEGE(ctx)"]
-   ✗ WRONG:   "effect": ["RENEGE(Patient)"]  — V25 error`,
+   ✗ WRONG:   "effect": ["RENEGE(Patient)"]  — V25 error
+
+9. SHARED-RESOURCE PRIORITY STARVATION — terminal C-events must not have a higher
+   priority number than entry/mid-journey C-events on the same resource.
+   If C-event A (priority=1) and C-event B (priority=2) both require resource R, and A's
+   source queue is continuously populated, B will NEVER fire — entities accumulate in the
+   B queue indefinitely, COMPLETE() is never called, served=0.
+   Rule: give end-of-journey C-events (discharge, exit, checkout) priority 0 or at most
+   equal to the earliest C-event sharing the same resource. Clinically: completing a
+   patient's journey must not be deferred behind admitting new patients.
+
+   ✓ CORRECT: c_start_discharge priority=0, c_start_consultation priority=1 (discharge wins)
+   ✗ WRONG:   c_start_discharge priority=2, c_start_consultation priority=1 — discharge starved`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:

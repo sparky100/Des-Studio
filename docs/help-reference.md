@@ -66,6 +66,8 @@ State-triggered events. Fire when condition becomes true. Defined in `cEvents[]`
 - `priority`: Integer; lower fires first
 - `cSchedules[]`: Service duration distributions
 
+**Starvation anti-pattern:** When two C-events share a resource and one has a lower priority number (higher urgency), the other may never fire if the first queue is always populated. Symptom: entities accumulate in mid-journey queues; `served=0` or very low for some replications. Diagnosis: check whether any terminal C-event (discharge, exit) has a higher priority number than an entry C-event on the same resource. Fix: set the terminal C-event priority to 0 (highest) so completions are not deferred indefinitely.
+
 ### State Variables
 
 Model-level numeric counters. Defined in `stateVariables[]` array.
