@@ -32,7 +32,8 @@
       "Bash(Select-Object FullName)",
       "Bash(awk '{print $NF}')",
       "Bash(grep -E \"=.*[0-9]{2,}\")",
-      "Bash(find \"C:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\simmodlr\\\\docs\" -name \"*library*\" -o -name \"*browse*\" -o -name \"*discover*\" 2>nul)"
+      "Bash(find \"C:\\\\Users\\\\parki\\\\OneDrive\\\\Documents\\\\Projects\\\\simmodlr\\\\docs\" -name \"*library*\" -o -name \"*browse*\" -o -name \"*discover*\" 2>nul)",
+      "Bash(git log *)"
     ]
   }
 }

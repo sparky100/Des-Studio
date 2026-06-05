@@ -96,7 +96,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "assessm",
+                "query": "",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -117,7 +117,8 @@
               "title": "Bookmarks"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "horizontal",
@@ -228,6 +229,14 @@
   },
   "active": "14e20ad8a73e5503",
   "lastOpenFiles": [
+    "model-schema-for-llm.md.tmp.34768.bb7dad1245be",
+    "model-schema-for-llm.md.tmp.34768.f22f4abfc73e",
+    "user/simpy-export.md",
+    "user",
+    "reviews/sprint-82-pre-sprint-assessment.md",
+    "reviews/sprint-82-plan.md",
+    "reviews/sprint-80-simpy-export.md",
+    "architecture/results-api-design.md",
     "llm-standalone-guide.md",
     "reviews/sprint-79-plan.md",
     "reviews/sprint-79-ai-explore-plan.md",
@@ -256,14 +265,6 @@
     "operations",
     "analysis/des-lifecycle-validation-update.md",
     "analysis/des-validation-gap-review.md",
-    "architecture/des-run-progress-and-cancellation.md",
-    "architecture/des-dedicated-worker-architecture.md",
-    "architecture/des-results-storage-strategy.md",
-    "analysis/des-benchmark-suite.md",
-    "analysis/three-phase-engine-efficiency-review.md",
-    "analysis/browser-simulation-performance-review.md",
-    "architecture/proposed-migrations/2026-05-26-supabase-run-history-indexes.sql",
-    "architecture/proposed-migrations",
     "Pasted image 20260518105526.png",
     "Pasted image 20260505144753.png"
   ]
