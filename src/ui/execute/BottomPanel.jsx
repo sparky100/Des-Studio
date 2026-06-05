@@ -164,10 +164,11 @@ function StageKpisTable({ snap, model }) {
   const outcomeRows = Object.values(outcomes)
     .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
 
-  // Queue journey paths — top-10 paths by frequency, from entity.stages[]
+  // Queue journey paths — top-10 paths by frequency, completed entities only
   const queueJourneys = {};
   for (const entity of entities) {
     if (entity.role === "server" || !entity.stages?.length) continue;
+    if (entity.status !== "done" && entity.status !== "reneged") continue;
     const parts = entity.stages.map(s => s.queueName).filter(Boolean);
     if (!parts.length) continue;
     const sink = entity.outcome?.routeLabel
@@ -199,6 +200,7 @@ function StageKpisTable({ snap, model }) {
     }
     for (const entity of entities) {
       if (entity.role === "server" || !entity.stages?.length) continue;
+      if (entity.status !== "done" && entity.status !== "reneged") continue;
       for (const sec of modelSections) {
         let sojourn = 0, didVisit = false, didEnter = false, didExit = false;
         for (const stage of entity.stages) {
