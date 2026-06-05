@@ -353,7 +353,7 @@ export function ModelHistoryTab({
                       }}
                     />
                   </th>
-                  {["Date / Time", "Label", "Version", "Runs", "Avg Served", "Reneged", "Avg Wait", "Tags", "Actions"].map(h => (
+                  {["Date / Time", "Label", "Version", "Runs", "Avg Served", "Reneged", "Avg Wait", "Precision", "Tags", "Actions"].map(h => (
                     <th key={h} scope="col" style={{ textAlign: "left", padding: "6px 12px", color: C.muted, borderBottom: `1px solid ${C.border}`, fontSize: 11, letterSpacing: 1, fontWeight: 700, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -445,17 +445,18 @@ export function ModelHistoryTab({
                       <td style={{ padding: "6px 12px", color: row.total_reneged > 0 ? C.reneged : C.muted }}>{row.total_reneged || 0}</td>
                       <td style={{ padding: "6px 12px", color: C.amber }}>
                         {row.avg_wait_time != null ? row.avg_wait_time.toFixed(2) : "—"}t
+                      </td>
+                      <td style={{ padding: "6px 12px" }}>
                         {(() => {
                           const ci = row.results_json?.aggregateStats?.["summary.avgWait"];
-                          if (!ci || ci.halfWidth == null || ci.mean == null || !Number.isFinite(ci.mean) || ci.mean === 0) return null;
+                          if (!ci || ci.halfWidth == null || ci.mean == null || !Number.isFinite(ci.mean) || ci.mean === 0) return <span style={{ color: C.muted }}>—</span>;
                           const relHw = (ci.halfWidth / Math.abs(ci.mean)) * 100;
-                          const conf = Math.max(0, Math.min(100, 100 - relHw));
                           const color = relHw < 10 ? C.green : relHw < 25 ? C.amber : C.red;
                           return (
                             <span
-                              title={`${conf.toFixed(0)}% confidence (±${ci.halfWidth.toFixed(2)}, n=${ci.n})`}
-                              style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, color, background: `${color}18`, border: `1px solid ${color}44`, borderRadius: 999, padding: "1px 5px" }}
-                            >{conf.toFixed(0)}%</span>
+                              title={`±${ci.halfWidth.toFixed(2)} half-width, n=${ci.n} reps`}
+                              style={{ fontSize: 10, fontWeight: 700, color, background: `${color}18`, border: `1px solid ${color}44`, borderRadius: 999, padding: "2px 7px", whiteSpace: "nowrap" }}
+                            >±{relHw.toFixed(0)}%</span>
                           );
                         })()}
                       </td>

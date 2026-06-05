@@ -1299,8 +1299,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                   setAiSidebarOpen(false);
                   setAiAction(null);
                 } else {
-                  setAiAction(null);
                   setAiSidebarOpen(true);
+                  setAiAction("explain");
+                  setAiSeq(s => s + 1);
                 }
               }}
             />

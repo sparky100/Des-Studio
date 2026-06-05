@@ -105,6 +105,14 @@ function extractOutcomes(summary = {}) {
   return rows.length ? rows : undefined;
 }
 
+const JOURNEY_PATH_LEGEND =
+  "Path format: queues/sections visited in order → completion label. " +
+  "Named labels (e.g. 'Discharged', 'ExitA') = explicit named outcome. " +
+  "'Reneged' = entity left before being served (abandoned or timed out). " +
+  "'Incomplete' = entity was still in the system when the simulation ended — " +
+  "these highlight where demand outstripped capacity or where bottlenecks caused entities to get stuck. " +
+  "A path with no terminal label = generic completion with no named outcome (entity finished but was not routed to a named exit).";
+
 function extractJourneyDigest(results, model = {}) {
   const summary = results?.summary || {};
   const out = {};
@@ -121,6 +129,7 @@ function extractJourneyDigest(results, model = {}) {
         count,
         pct: total > 0 ? Math.round(count / total * 100) : 0,
       }));
+      out.pathLegend = JOURNEY_PATH_LEGEND;
     }
   }
 
@@ -138,6 +147,7 @@ function extractJourneyDigest(results, model = {}) {
         count,
         pct: total > 0 ? Math.round(count / total * 100) : 0,
       }));
+      if (!out.pathLegend) out.pathLegend = JOURNEY_PATH_LEGEND;
     }
   }
 
@@ -244,18 +254,29 @@ function extractEntityAnomalies(results = {}) {
 export function buildKpis(model = {}, results = {}) {
   const summary = getSummary(results);
   const outcomes = extractOutcomes(summary);
+  const agg = results?.aggregateStats || {};
+
+  // For batch runs, use per-run average from CI stats rather than inflated totals.
+  const resolveCount = (field) => {
+    const ci = agg[`summary.${field}`];
+    return (ci?.n >= 2 && Number.isFinite(ci.mean)) ? ci.mean : summary[field];
+  };
+  const isMultiRep = (agg["summary.served"]?.n ?? 1) > 1;
+
   const kpis = {
     queues: extractQueues(model, results),
     resources: extractResources(model, summary),
-    throughput: finiteOrNull(summary.served ?? summary.throughput),
+    throughput: finiteOrNull(resolveCount("served") ?? summary.throughput),
     totalEntities: finiteOrNull(summary.total),
-    served: finiteOrNull(summary.served),
-    reneged: finiteOrNull(summary.reneged),
+    served: finiteOrNull(resolveCount("served")),
+    reneged: finiteOrNull(resolveCount("reneged")),
+    renegedNote: (summary.reneged > 0) ? "Reneged entities left the system before being served (e.g. balked at a full queue or abandoned after waiting too long)." : undefined,
     avgWait: finiteOrNull(summary.avgWait),
     avgService: finiteOrNull(summary.avgSvc),
     avgSojourn: finiteOrNull(summary.avgSojourn),
     maxSojourn: finiteOrNull(summary.maxSojourn),
     avgWIP: finiteOrNull(summary.avgWIP),
+    ...(isMultiRep ? { _batchNote: `Per-run averages across ${agg["summary.served"]?.n} replications` } : {}),
   };
   if (outcomes) kpis.outcomes = outcomes;
   const journeys = extractJourneyDigest(results, model);
@@ -1301,6 +1322,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     ? `±${ciSummary.relativeHalfWidth.toFixed(1)}%`
     : "unknown";
 
+  const goalGaps = buildGoalGaps(model, aggregateStats, getSummary(combinedResult));
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
@@ -1328,7 +1350,16 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
         .filter(([, v]) => v && v.n > 0)
         .map(([k, v]) => [k, { n: v.n, mean: finiteOrNull(v.mean), lower: finiteOrNull(v.lower), upper: finiteOrNull(v.upper) }])
     ),
+    ...(goalGaps?.length ? { goalGaps } : {}),
   };
+
+  const goalsInstr = goalGaps?.length
+    ? ` Performance goals were set. For each goal use this format: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])". Cite exact numbers from the goalGaps data.`
+    : "";
+
+  const truncatedInstr = kpis.warning_phaseCTruncated
+    ? " NOTE: Phase C was truncated during this run — some conditional events may not have fired. Mention this caveat in the Confidence Summary."
+    : "";
 
   const instruction =
     "Produce a structured analysis with exactly these four sections:\n" +
@@ -1340,7 +1371,8 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     "Quantify the potential gain where the CI data supports it.\n" +
     "### Confidence Summary\nOne paragraph: state whether results are statistically robust, " +
     "cite the CI and replication count, and flag any caveats from non-convergence or warnings.\n\n" +
-    "NUMBER FORMAT: Express all numeric values to at most 1 decimal place. Express all utilisation values as integer percentages (e.g. '57%' not '57.3%' or '0.57'). Express all time values to at most 1 decimal place.";
+    "NUMBER FORMAT: Express all numeric values to at most 1 decimal place. Express all utilisation values as integer percentages (e.g. '57%' not '57.3%' or '0.57'). Express all time values to at most 1 decimal place." +
+    goalsInstr + truncatedInstr;
 
   return {
     kind: "batch_analysis",

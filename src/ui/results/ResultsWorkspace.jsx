@@ -2,7 +2,7 @@ import { Fragment, useCallback, useMemo, useState } from "react";
 import { alpha } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { csvEscape, downloadTextFile, slugifyResultName, timestampForFilename } from "../shared/utils.js";
-import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../engine/statistics.js";
+import { batchMeansCI, computePercentiles, computeSummaryStats, detectOutliers } from "../../engine/statistics.js";
 import { buildResultsViewModel } from "./resultsViewModel.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
@@ -83,7 +83,7 @@ function slugify(value = "") {
 }
 
 function formatNumber(value, digits = 1) {
-  if (!Number.isFinite(Number(value))) return "0";
+  if (!Number.isFinite(Number(value))) return "—";
   const rounded = Number(value).toFixed(digits);
   return rounded.includes(".") ? rounded.replace(/\.?0+$/, "") : rounded;
 }
@@ -109,11 +109,19 @@ function getPathValue(source, path) {
   return value;
 }
 
+function addResultWrapper(row) {
+  return row.result ? row : { ...row, result: { summary: row.summary || {} } };
+}
+
 function normaliseReplicationResults(replicationResults, results) {
-  if (Array.isArray(replicationResults) && replicationResults.length) return replicationResults;
-  if (Array.isArray(results?.replicationResults) && results.replicationResults.length) return results.replicationResults;
+  if (Array.isArray(replicationResults) && replicationResults.length) {
+    return replicationResults.map(addResultWrapper);
+  }
+  if (Array.isArray(results?.replicationResults) && results.replicationResults.length) {
+    return results.replicationResults.map(addResultWrapper);
+  }
   if (Array.isArray(results?.replications) && results.replications.length) {
-    return results.replications.map(row => ({ result: { summary: row.summary || {} }, ...row }));
+    return results.replications.map(row => addResultWrapper({ ...row }));
   }
   return [];
 }
@@ -256,6 +264,25 @@ function lineSeriesStats(series, yLabel, color, formatValue = v => formatNumber(
   ];
 }
 
+function CiBadge({ ci, C, FONT }) {
+  if (!ci?.halfWidth || !ci?.mean || !Number.isFinite(ci.mean) || ci.mean === 0) return null;
+  const relHw = (ci.halfWidth / Math.abs(ci.mean)) * 100;
+  const color = relHw < 10 ? C.green : relHw < 25 ? C.amber : C.red;
+  return (
+    <span
+      title={`±${ci.halfWidth.toFixed(1)} half-width, n=${ci.n} reps`}
+      style={{
+        fontSize: 10, fontWeight: 700, color, fontFamily: FONT,
+        background: `${color}18`, border: `1px solid ${color}44`,
+        borderRadius: 999, padding: "2px 6px",
+        whiteSpace: "nowrap", marginLeft: 5,
+      }}
+    >
+      ±{relHw.toFixed(0)}%
+    </span>
+  );
+}
+
 export function SummaryCardGrid({ results, replicationResults = [], model = {} }) {
   const { C, FONT } = useTheme();
   const summary = results?.summary || {};
@@ -276,6 +303,13 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
   const avgPerRun = (total) =>
     isMultiRep && total > 0 ? Math.round(total / repCount) : null;
 
+  // For count metric cards: prefer aggregateStats.mean (per-run avg from CI) over raw total.
+  const resolveCount = (rawTotal, ciPath) => {
+    const ci = results?.aggregateStats?.[ciPath];
+    if (isMultiRep && ci?.n >= 2 && Number.isFinite(ci.mean)) return ci.mean;
+    return rawTotal;
+  };
+
   const cards = [
     {
       label: "Average wait",
@@ -291,26 +325,35 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     },
     {
       label: "Customers arriving",
-      value: totalArrived > 0 ? formatMetricValue(totalArrived, 0) : "—",
-      avg: avgPerRun(totalArrived),
+      value: totalArrived > 0 ? formatMetricValue(isMultiRep ? Math.round(totalArrived / repCount) : totalArrived, 0) : "—",
+      total: isMultiRep && totalArrived > 0 ? totalArrived : null,
       note: totalArrived > 0
-        ? isMultiRep ? `Total — avg per run across ${repCount} replications.` : "Total arrivals."
+        ? isMultiRep ? `avg / run · ${repCount} replications` : "Total arrivals."
         : "No arrivals recorded.",
       color: C.text,
     },
     {
       label: "Customers served",
-      value: formatMetricValue(served, 0),
-      avg: avgPerRun(served),
+      value: formatMetricValue(resolveCount(served, "summary.served"), 0),
+      ciPath: "summary.served",
+      total: isMultiRep && served > 0 ? served : null,
       note: served > 0
-        ? isMultiRep ? `Total — avg per run across ${repCount} replications.` : "Completed successfully."
+        ? isMultiRep ? `avg / run · ${repCount} replications` : "Completed successfully."
         : "No completed entities yet.",
       color: C.served,
     },
     {
       label: "Customers who left before service",
-      value: leftRate == null ? "—" : `${formatNumber(leftRate, 1)}%`,
-      note: reneged > 0 ? `${reneged} left before being served.` : "No customers left early.",
+      value: isMultiRep && reneged > 0
+        ? formatMetricValue(resolveCount(reneged, "summary.reneged"), 0)
+        : (leftRate == null ? "—" : `${formatNumber(leftRate, 1)}%`),
+      ciPath: reneged > 0 ? "summary.reneged" : null,
+      total: isMultiRep && reneged > 0 ? reneged : null,
+      note: reneged > 0
+        ? (isMultiRep
+            ? (leftRate != null ? `${formatNumber(leftRate, 1)}% abandonment rate.` : "Left before being served.")
+            : `${reneged.toLocaleString()} left before being served.`)
+        : "No customers left early.",
       color: reneged > 0 ? C.reneged : C.green,
     },
   ];
@@ -361,10 +404,15 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
               {card.label.toUpperCase()}
             </div>
-            {card.avg != null ? (
+            {card.total != null ? (
               <div style={{ marginBottom: 5 }}>
-                <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>{card.value}</div>
-                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, marginTop: 3 }}>avg {card.avg.toLocaleString()} per run</div>
+                <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 4 }}>
+                  <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>{card.value}</span>
+                  {card.ciPath && <CiBadge ci={results?.aggregateStats?.[card.ciPath]} C={C} FONT={FONT} />}
+                </div>
+                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>
+                  avg / run · {formatMetricValue(card.total, 0)} total
+                </div>
               </div>
             ) : (
               <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
@@ -934,7 +982,7 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
     if (values.length < 3) return null;
     return {
       avgWait: computeSummaryStats(values),
-      percentiles: computePercentiles(values),
+      percentiles: computePercentiles(values, [50, 90, 95]),
     };
   }, [replications]);
   const hasAnalysisInputs = replications.length > 0 || (warmupDetection?.series || []).length > 0 || results?.aggregateStats;
@@ -1072,12 +1120,95 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
             </div>
           </div>
         )}
+
+        {replications.length >= 2 && (() => {
+          const waitVals   = replications.map(r => r.result?.summary?.avgWait).filter(Number.isFinite);
+          const svcVals    = replications.map(r => r.result?.summary?.avgSvc).filter(Number.isFinite);
+          const servedVals = replications.map(r => r.result?.summary?.served).filter(Number.isFinite);
+          const outlierWait   = detectOutliers(waitVals);
+          const outlierSvc    = detectOutliers(svcVals);
+          const outlierServed = detectOutliers(servedVals);
+          const minWait   = waitVals.length   ? Math.min(...waitVals)   : null;
+          const maxWait   = waitVals.length   ? Math.max(...waitVals)   : null;
+          const minSvc    = svcVals.length    ? Math.min(...svcVals)    : null;
+          const maxSvc    = svcVals.length    ? Math.max(...svcVals)    : null;
+          const minServed = servedVals.length ? Math.min(...servedVals) : null;
+          const maxServed = servedVals.length ? Math.max(...servedVals) : null;
+          const fmt = (v, d = 1) => Number.isFinite(v) ? formatNumber(v, d) : "—";
+          const cellStyle = { padding: "5px 8px", fontSize: 11, fontFamily: FONT, color: C.text };
+          const hdStyle   = { ...cellStyle, color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, textAlign: "left" };
+          let waitFiniteIdx = 0, svcFiniteIdx = 0, servedFiniteIdx = 0;
+          return (
+            <div>
+              <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
+                PER-RUN BREAKDOWN
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={hdStyle}>Rep</th>
+                      <th style={hdStyle}>Seed</th>
+                      <th style={hdStyle}>Served</th>
+                      <th style={hdStyle}>Reneged</th>
+                      <th style={hdStyle}>Avg wait</th>
+                      <th style={hdStyle}>Avg service</th>
+                      <th style={hdStyle}>Avg sojourn</th>
+                      <th style={hdStyle}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {replications.map((row, rowIdx) => {
+                      const s = row.result?.summary || {};
+                      const wi  = Number.isFinite(s.avgWait)  ? waitFiniteIdx++   : -1;
+                      const si  = Number.isFinite(s.avgSvc)   ? svcFiniteIdx++    : -1;
+                      const sei = Number.isFinite(s.served)   ? servedFiniteIdx++ : -1;
+                      const isWaitOutlier   = wi  >= 0 && outlierWait.outlierIndices.includes(wi);
+                      const isSvcOutlier    = si  >= 0 && outlierSvc.outlierIndices.includes(si);
+                      const isServedOutlier = sei >= 0 && outlierServed.outlierIndices.includes(sei);
+                      const isOutlier = isWaitOutlier || isSvcOutlier || isServedOutlier;
+                      const outlierMsg = [
+                        isWaitOutlier   && `Avg wait outside fence [${fmt(outlierWait.lowerFence)}, ${fmt(outlierWait.upperFence)}]`,
+                        isSvcOutlier    && `Avg service outside fence [${fmt(outlierSvc.lowerFence)}, ${fmt(outlierSvc.upperFence)}]`,
+                        isServedOutlier && `Served outside fence [${fmt(outlierServed.lowerFence, 0)}, ${fmt(outlierServed.upperFence, 0)}]`,
+                      ].filter(Boolean).join("; ");
+                      return (
+                        <tr key={row.replicationIndex ?? rowIdx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                          <td style={cellStyle}>{(row.replicationIndex ?? 0) + 1}</td>
+                          <td style={{ ...cellStyle, color: C.amber }}>{row.seed ?? "—"}</td>
+                          <td style={cellStyle}>{s.served ?? "—"}</td>
+                          <td style={cellStyle}>{s.reneged ?? "—"}</td>
+                          <td style={{ ...cellStyle, color: isWaitOutlier ? C.amber : C.text }}>{fmt(s.avgWait)}</td>
+                          <td style={{ ...cellStyle, color: isSvcOutlier  ? C.amber : C.text }}>{fmt(s.avgSvc)}</td>
+                          <td style={cellStyle}>{fmt(s.avgSojourn)}</td>
+                          <td style={cellStyle}>
+                            {isOutlier && <span title={outlierMsg} style={{ color: C.amber, cursor: "help" }}>⚠</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: `2px solid ${C.border}`, color: C.muted, fontStyle: "italic" }}>
+                      <td style={cellStyle} colSpan={2}>Min / Max</td>
+                      <td style={cellStyle}>{minServed != null ? `${minServed} / ${maxServed}` : "—"}</td>
+                      <td style={cellStyle}>—</td>
+                      <td style={cellStyle}>{minWait != null ? `${fmt(minWait)} / ${fmt(maxWait)}` : "—"}</td>
+                      <td style={cellStyle}>{minSvc  != null ? `${fmt(minSvc)} / ${fmt(maxSvc)}`   : "—"}</td>
+                      <td style={cellStyle} colSpan={2}>—</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </ChartSectionShell>
   );
 }
 
-function JourneysPanel({ queueJourneys, C, FONT }) {
+function JourneysPanel({ queueJourneys, queueNames, C, FONT }) {
   const rows = Object.entries(queueJourneys || {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15);
@@ -1087,21 +1218,25 @@ function JourneysPanel({ queueJourneys, C, FONT }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {rows.map(([path, count]) => {
-        const queues = path.split("→");
+        const segs = path.split("→");
         const pct = total > 0 ? Math.round(count / total * 100) : 0;
+        // Last segment is a real sink only when it isn't itself a queue name
+        const lastSeg = segs[segs.length - 1];
+        const hasSink = !queueNames?.has(lastSeg);
+        const sinkColor = lastSeg === "Incomplete" ? C.amber : C.accent;
         return (
           <div key={path} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-              {queues.map((q, i) => {
-                const isSink = i === queues.length - 1;
+              {segs.map((q, i) => {
+                const isSink = hasSink && i === segs.length - 1;
                 return (
                   <Fragment key={i}>
                     {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
                     <span style={{
                       fontFamily: FONT, fontSize: 10,
-                      color: isSink ? C.accent : C.text,
-                      background: isSink ? `${C.accent}18` : C.bg,
-                      border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? C.accent : C.border}`,
+                      color: isSink ? sinkColor : C.text,
+                      background: isSink ? `${sinkColor}18` : C.bg,
+                      border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
                       borderRadius: 3, padding: "1px 5px",
                     }}>{q}</span>
                   </Fragment>
@@ -1231,21 +1366,26 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
             <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>ENTITY PATHWAYS ACROSS SECTIONS</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {visibleRows.map(({ key, count }) => {
-                const names = key.split("→").map(id => sectionById[id]?.name || id);
+                const rawParts = key.split("→");
+                const names = rawParts.map(id => sectionById[id]?.name || id);
                 const pct = total > 0 ? Math.round(count / total * 100) : 0;
+                // Last segment is a sink only when it isn't itself a known section ID
+                const lastRaw = rawParts[rawParts.length - 1];
+                const hasSink = !sectionById[lastRaw];
+                const sinkColor = lastRaw === "Incomplete" ? C.amber : C.accent;
                 return (
                   <div key={key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                       {names.map((name, i) => {
-                        const isSink = i === names.length - 1;
+                        const isSink = hasSink && i === names.length - 1;
                         return (
                           <Fragment key={i}>
                             {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
                             <span style={{
                               fontFamily: FONT, fontSize: 10,
-                              color: isSink ? C.accent : C.text,
-                              background: isSink ? `${C.accent}18` : C.bg,
-                              border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? C.accent : C.border}`,
+                              color: isSink ? sinkColor : C.text,
+                              background: isSink ? `${sinkColor}18` : C.bg,
+                              border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
                               borderRadius: 3, padding: "1px 5px",
                             }}>{name}</span>
                           </Fragment>
@@ -1398,10 +1538,10 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
             <div id="results-section-journeys" style={{ display: sectionsOpen.journeys ? "block" : "none", paddingTop: 14 }}>
               <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6, marginBottom: 10 }}>
                 Top queue paths taken by entities through the model, ranked by frequency.
-                The final label is the name of the C-event that completed each entity.
-                A label of <strong>Completed</strong> is a generic fallback — the entity was still fully served; it just means the completion event has no specific name in the model.
+                Named sinks show the completion event; <strong style={{ color: C.reneged }}>Reneged</strong> entities left before finishing;
+                <strong style={{ color: C.amber }}> Incomplete</strong> entities were still in the system when the simulation ended.
               </div>
-              <JourneysPanel queueJourneys={queueJourneys} C={C} FONT={FONT} />
+              <JourneysPanel queueJourneys={queueJourneys} queueNames={new Set((model.queues || []).map(q => q.name))} C={C} FONT={FONT} />
             </div>
           </div>
         )}
@@ -1574,10 +1714,10 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
           <div id="results-section-journeys" style={{ display: sectionsOpen.journeys ? "block" : "none", paddingTop: 14 }}>
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6, marginBottom: 10 }}>
               Top queue paths taken by entities through the model, ranked by frequency.
-              The final label is the name of the C-event that completed each entity.
-              A label of <strong>Completed</strong> is a generic fallback — the entity was still fully served; it just means the completion event has no specific name in the model.
+              Named sinks show the completion event; <strong style={{ color: C.reneged }}>Reneged</strong> entities left before finishing;
+              <strong style={{ color: C.amber }}> Incomplete</strong> entities were still in the system when the simulation ended.
             </div>
-            <JourneysPanel queueJourneys={queueJourneys} C={C} FONT={FONT} />
+            <JourneysPanel queueJourneys={queueJourneys} queueNames={new Set((model.queues || []).map(q => q.name))} C={C} FONT={FONT} />
           </div>
         </div>
       )}

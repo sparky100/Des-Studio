@@ -908,6 +908,8 @@ Notice the handoff: `q_nhs24_clinical` is in `exitQueues` for the NHS 24 section
 - `exitQueues` marks the **departure boundary** — queues that feed into another section's `entryQueues`.
 - A queue that only exists inside one section (no cross-section flow) appears in `memberIds` but NOT in `entryQueues` or `exitQueues`.
 - A terminal section (last stage, entities complete here) has no `exitQueues`.
+- For sections that model a service stage, `entryQueues` should contain the queue where entities wait *before* being served (the "in-queue" for this stage). For non-terminal sections, `exitQueues` should contain the queue that acts as the "out-queue" or handoff point — the queue entities join after service, which becomes the next section's `entryQueues`. Example: if "Triage" processes patients and places them into `q_ed_wait` before the "ED" section, then `q_ed_wait` is in Triage's `exitQueues` AND in ED's `entryQueues`.
+- Sections with neither `entryQueues` nor `exitQueues` (both empty) are purely cosmetic groupings — they provide no boundary information for journey analysis. Prefer at least one `entryQueues` entry for any section that has a distinct waiting-to-be-served queue.
 
 **Anti-pattern — `elementIds`:** An earlier draft used `elementIds` instead of `memberIds`. This field name is silently ignored. Always use `memberIds`.
 
