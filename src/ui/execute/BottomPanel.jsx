@@ -118,23 +118,112 @@ function StageKpisTable({ snap, model }) {
   const entities    = snap.entities || [];
   const queues      = model.queues || [];
   const serverTypes = (model.entityTypes || []).filter(et => et.role === "server");
+
+  // Build outcomes — mirror ensureOutcome() from getSummary() so generic "done" entities
+  // are not silently dropped (previously only entities with explicit outcome.routeId appeared)
   const outcomes = {};
   for (const entity of entities) {
-    const outcome = entity?.outcome;
-    if (!outcome?.routeId) continue;
+    if (entity.role === "server") continue;
+    if (entity.status !== "done" && entity.status !== "reneged") continue;
+    const raw = entity.outcome;
+    const outcome = raw?.routeId ? raw : {
+      routeId:    entity.status === "reneged" ? "status:reneged" : "status:done",
+      routeLabel: entity.status === "reneged" ? "Reneged" : "Completed",
+      status:     entity.status === "reneged" ? "reneged" : "completed",
+      endedBy:    "status",
+    };
     if (!outcomes[outcome.routeId]) {
       outcomes[outcome.routeId] = {
-        routeId: outcome.routeId,
+        routeId:    outcome.routeId,
         routeLabel: outcome.routeLabel || outcome.routeId,
-        status: outcome.status || entity.status,
-        endedBy: outcome.endedBy || "unknown",
+        status:     outcome.status || (entity.status === "reneged" ? "reneged" : "completed"),
+        endedBy:    outcome.endedBy || "unknown",
         count: 0,
+        _waitSum: 0, _waitN: 0,
+        _sojournSum: 0, _sojournN: 0,
       };
     }
     outcomes[outcome.routeId].count++;
+    const wait = entity.serviceStart != null && entity.arrivalTime != null
+      ? entity.serviceStart - entity.arrivalTime : null;
+    if (Number.isFinite(wait) && wait >= 0) {
+      outcomes[outcome.routeId]._waitSum += wait;
+      outcomes[outcome.routeId]._waitN++;
+    }
+    const endT = entity.completionTime ?? entity.renegeTime ?? null;
+    const sojourn = endT != null && entity.arrivalTime != null ? endT - entity.arrivalTime : null;
+    if (Number.isFinite(sojourn) && sojourn >= 0) {
+      outcomes[outcome.routeId]._sojournSum += sojourn;
+      outcomes[outcome.routeId]._sojournN++;
+    }
+  }
+  for (const o of Object.values(outcomes)) {
+    o.avgWait    = o._waitN    > 0 ? o._waitSum    / o._waitN    : null;
+    o.avgSojourn = o._sojournN > 0 ? o._sojournSum / o._sojournN : null;
   }
   const outcomeRows = Object.values(outcomes)
     .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
+
+  // Queue journey paths — top-10 paths by frequency, from entity.stages[]
+  const queueJourneys = {};
+  for (const entity of entities) {
+    if (entity.role === "server" || !entity.stages?.length) continue;
+    const parts = entity.stages.map(s => s.queueName).filter(Boolean);
+    if (!parts.length) continue;
+    const sink = entity.outcome?.routeLabel
+      || (entity.status === "reneged" ? "Reneged" : "Completed");
+    const path = [...parts, sink].join("→");
+    queueJourneys[path] = (queueJourneys[path] || 0) + 1;
+  }
+  const totalJourneys = Object.values(queueJourneys).reduce((a, b) => a + b, 0);
+  const topPaths = Object.entries(queueJourneys)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+
+  // Section metrics — computed from entity.stages[] + model.sections definitions
+  const modelSections = model.sections || [];
+  const sectionStats = {};
+  if (modelSections.length > 0) {
+    const queueIdByName = {};
+    for (const q of model.queues || []) {
+      if (q.id && q.name) queueIdByName[q.name.trim().toLowerCase()] = q.id;
+    }
+    const sectionMemberSet = {};
+    const sectionEntrySet  = {};
+    const sectionExitSet   = {};
+    for (const sec of modelSections) {
+      sectionMemberSet[sec.id] = new Set(sec.memberIds  || []);
+      sectionEntrySet[sec.id]  = new Set(sec.entryQueues || []);
+      sectionExitSet[sec.id]   = new Set(sec.exitQueues  || []);
+      sectionStats[sec.id]     = { count: 0, _sojournSum: 0, entitiesIn: 0, entitiesOut: 0 };
+    }
+    for (const entity of entities) {
+      if (entity.role === "server" || !entity.stages?.length) continue;
+      for (const sec of modelSections) {
+        let sojourn = 0, didVisit = false, didEnter = false, didExit = false;
+        for (const stage of entity.stages) {
+          const qid = queueIdByName[stage.queueName?.trim().toLowerCase()];
+          if (!qid || !sectionMemberSet[sec.id].has(qid)) continue;
+          didVisit = true;
+          if (Number.isFinite(stage.stageWait))    sojourn += stage.stageWait;
+          if (Number.isFinite(stage.stageService))  sojourn += stage.stageService;
+          if (sectionEntrySet[sec.id].has(qid)) didEnter = true;
+          if (sectionExitSet[sec.id].has(qid))  didExit  = true;
+        }
+        if (didVisit) {
+          sectionStats[sec.id].count++;
+          sectionStats[sec.id]._sojournSum += sojourn;
+          if (didEnter) sectionStats[sec.id].entitiesIn++;
+          if (didExit)  sectionStats[sec.id].entitiesOut++;
+        }
+      }
+    }
+    for (const sec of modelSections) {
+      const s = sectionStats[sec.id];
+      s.avgSojourn = s.count > 0 ? +(s._sojournSum / s.count).toFixed(2) : null;
+    }
+  }
+  const hasSections = modelSections.length > 0 && Object.values(sectionStats).some(s => s.count > 0);
 
   const panelStyle = {
     background: C.bg,
@@ -240,18 +329,99 @@ function StageKpisTable({ snap, model }) {
             JOURNEY OUTCOMES
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {outcomeRows.map(outcome => (
-              <div key={outcome.routeId} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ color: outcome.status === "reneged" ? C.reneged : C.served, fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>
-                  {outcome.routeLabel}
+            {outcomeRows.map(outcome => {
+              const outcomeColor = outcome.status === "reneged" ? C.reneged : C.served;
+              const hasWait    = Number.isFinite(outcome.avgWait)    && outcome.avgWait    > 0;
+              const hasSojourn = Number.isFinite(outcome.avgSojourn) && outcome.avgSojourn > 0;
+              return (
+                <div key={outcome.routeId} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ color: outcomeColor, fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>
+                    {outcome.routeLabel}
+                  </div>
+                  <div style={metricGridStyle}>
+                    {metricCard("Count", outcome.count, outcomeColor)}
+                    {hasWait    && metricCard("Avg wait",    fmt(outcome.avgWait,    1))}
+                    {hasSojourn && metricCard("Avg time",    fmt(outcome.avgSojourn, 1))}
+                    {metricCard("Source", outcome.endedBy || "—")}
+                  </div>
+                  <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                    {outcome.status === "reneged" ? "Left before completion." : "Completed on this route."}
+                  </div>
                 </div>
-                <div style={metricGridStyle}>
-                  {metricCard("Count", outcome.count, outcome.status === "reneged" ? C.reneged : C.served)}
-                  {metricCard("Status", outcome.status || "—")}
-                  {metricCard("Source", outcome.endedBy || "—")}
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Journey path traces — top-10 paths from entity.stages[] */}
+      {topPaths.length > 0 && (
+        <div style={panelStyle}>
+          <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
+            JOURNEY PATHS
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {topPaths.map(([path, count]) => {
+              const pct = totalJourneys > 0 ? ((count / totalJourneys) * 100).toFixed(0) : 0;
+              const parts = path.split("→");
+              const sink  = parts[parts.length - 1];
+              const nodes = parts.slice(0, -1);
+              return (
+                <div key={path} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4, marginBottom: 6 }}>
+                    {nodes.map((node, i) => (
+                      <span key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ fontSize: 10, fontFamily: FONT, color: C.cEvent, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, padding: "2px 6px" }}>
+                          {node}
+                        </span>
+                        <span style={{ color: C.muted, fontSize: 10 }}>→</span>
+                      </span>
+                    ))}
+                    <span style={{ fontSize: 10, fontFamily: FONT, color: C.accent, background: C.bg, border: `1px dashed ${C.accent}`, borderRadius: 4, padding: "2px 6px" }}>
+                      {sink}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1, height: 4, background: C.border, borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ width: `${pct}%`, height: "100%", background: C.cEvent, borderRadius: 2 }} />
+                    </div>
+                    <span style={{ fontSize: 10, color: C.text, fontFamily: FONT, fontWeight: 700, minWidth: 24 }}>{count}</span>
+                    <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{pct}%</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Section metrics — only shown when model.sections is defined */}
+      {hasSections && (
+        <div style={panelStyle}>
+          <div style={{ fontSize: 10, color: C.purple, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 6 }}>
+            SECTIONS
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {modelSections.map(sec => {
+              const s = sectionStats[sec.id];
+              if (!s || s.count === 0) return null;
+              return (
+                <div key={sec.id} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {sec.color && (
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: sec.color, flexShrink: 0 }} />
+                    )}
+                    <span style={{ color: C.purple, fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>{sec.name || sec.id}</span>
+                  </div>
+                  <div style={metricGridStyle}>
+                    {metricCard("Entities", s.count)}
+                    {s.avgSojourn != null && metricCard("Avg time", fmt(s.avgSojourn, 1))}
+                    {s.entitiesIn  > 0 && metricCard("In",  s.entitiesIn,  C.served)}
+                    {s.entitiesOut > 0 && metricCard("Out", s.entitiesOut, C.reneged)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
