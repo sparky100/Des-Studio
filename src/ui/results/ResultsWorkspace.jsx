@@ -1224,7 +1224,7 @@ function JourneysPanel({ queueJourneys, queueNames, repCount = 1, C, FONT }) {
               })}
               <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
                 {isMultiRep
-                  ? `${+(count / repCount).toFixed(1)} avg/run (${pct}%)`
+                  ? `${+(count / repCount).toFixed(1)} (${pct}%)`
                   : `${count} (${pct}%)`}
               </span>
             </div>
@@ -1252,7 +1252,7 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
 
   const isMultiRep = repCount > 1;
   const fmtCount = (n) => isMultiRep
-    ? `${+(n / repCount).toFixed(1)} avg/run`
+    ? String(+(n / repCount).toFixed(1))
     : String(n);
 
   const [queueOpen, setQueueOpen] = useState({});
@@ -1296,11 +1296,6 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
               <div style={{ width: 10, height: 10, borderRadius: "50%", background: sec.color, flexShrink: 0 }} />
               <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: C.text, flex: 1 }}>
                 {sec.name || sec.id}
-              </span>
-              <span style={{ fontFamily: FONT, fontSize: 11, color: C.muted }}>
-                {isMultiRep
-                  ? `${+(stats.count / repCount).toFixed(1)} avg/run`
-                  : `${stats.count} ${stats.count === 1 ? "entity" : "entities"}`}
               </span>
             </div>
 
@@ -1396,7 +1391,7 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
                         );
                       })}
                       <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
-                        {count} ({pct}%)
+                        {isMultiRep ? +(count / repCount).toFixed(1) : count} ({pct}%)
                       </span>
                     </div>
                     <div style={{ height: 3, background: C.border, borderRadius: 2 }}>
