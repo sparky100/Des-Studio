@@ -1094,14 +1094,16 @@ function JourneysPanel({ queueJourneys, C, FONT }) {
             <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
               {queues.map((q, i) => {
                 const isSink = i === queues.length - 1;
+                const isIncomplete = isSink && q === "Incomplete";
+                const sinkColor = isIncomplete ? C.amber : C.accent;
                 return (
                   <Fragment key={i}>
                     {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
                     <span style={{
                       fontFamily: FONT, fontSize: 10,
-                      color: isSink ? C.accent : C.text,
-                      background: isSink ? `${C.accent}18` : C.bg,
-                      border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? C.accent : C.border}`,
+                      color: isSink ? sinkColor : C.text,
+                      background: isSink ? `${sinkColor}18` : C.bg,
+                      border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
                       borderRadius: 3, padding: "1px 5px",
                     }}>{q}</span>
                   </Fragment>
@@ -1238,14 +1240,16 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
                     <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                       {names.map((name, i) => {
                         const isSink = i === names.length - 1;
+                        const isIncomplete = isSink && name === "Incomplete";
+                        const sinkColor = isIncomplete ? C.amber : C.accent;
                         return (
                           <Fragment key={i}>
                             {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
                             <span style={{
                               fontFamily: FONT, fontSize: 10,
-                              color: isSink ? C.accent : C.text,
-                              background: isSink ? `${C.accent}18` : C.bg,
-                              border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? C.accent : C.border}`,
+                              color: isSink ? sinkColor : C.text,
+                              background: isSink ? `${sinkColor}18` : C.bg,
+                              border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
                               borderRadius: 3, padding: "1px 5px",
                             }}>{name}</span>
                           </Fragment>
