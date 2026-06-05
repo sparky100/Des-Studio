@@ -109,11 +109,19 @@ function getPathValue(source, path) {
   return value;
 }
 
+function addResultWrapper(row) {
+  return row.result ? row : { ...row, result: { summary: row.summary || {} } };
+}
+
 function normaliseReplicationResults(replicationResults, results) {
-  if (Array.isArray(replicationResults) && replicationResults.length) return replicationResults;
-  if (Array.isArray(results?.replicationResults) && results.replicationResults.length) return results.replicationResults;
+  if (Array.isArray(replicationResults) && replicationResults.length) {
+    return replicationResults.map(addResultWrapper);
+  }
+  if (Array.isArray(results?.replicationResults) && results.replicationResults.length) {
+    return results.replicationResults.map(addResultWrapper);
+  }
   if (Array.isArray(results?.replications) && results.replications.length) {
-    return results.replications.map(row => ({ result: { summary: row.summary || {} }, ...row }));
+    return results.replications.map(row => addResultWrapper({ ...row }));
   }
   return [];
 }
