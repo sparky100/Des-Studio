@@ -2,7 +2,7 @@ import { Fragment, useCallback, useMemo, useState } from "react";
 import { alpha } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { csvEscape, downloadTextFile, slugifyResultName, timestampForFilename } from "../shared/utils.js";
-import { batchMeansCI, computePercentiles, computeSummaryStats } from "../../engine/statistics.js";
+import { batchMeansCI, computePercentiles, computeSummaryStats, detectOutliers } from "../../engine/statistics.js";
 import { buildResultsViewModel } from "./resultsViewModel.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
@@ -1072,6 +1072,89 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
             </div>
           </div>
         )}
+
+        {replications.length >= 2 && (() => {
+          const waitVals   = replications.map(r => r.result?.summary?.avgWait).filter(Number.isFinite);
+          const svcVals    = replications.map(r => r.result?.summary?.avgSvc).filter(Number.isFinite);
+          const servedVals = replications.map(r => r.result?.summary?.served).filter(Number.isFinite);
+          const outlierWait   = detectOutliers(waitVals);
+          const outlierSvc    = detectOutliers(svcVals);
+          const outlierServed = detectOutliers(servedVals);
+          const minWait   = waitVals.length   ? Math.min(...waitVals)   : null;
+          const maxWait   = waitVals.length   ? Math.max(...waitVals)   : null;
+          const minSvc    = svcVals.length    ? Math.min(...svcVals)    : null;
+          const maxSvc    = svcVals.length    ? Math.max(...svcVals)    : null;
+          const minServed = servedVals.length ? Math.min(...servedVals) : null;
+          const maxServed = servedVals.length ? Math.max(...servedVals) : null;
+          const fmt = (v, d = 1) => Number.isFinite(v) ? formatNumber(v, d) : "—";
+          const cellStyle = { padding: "5px 8px", fontSize: 11, fontFamily: FONT, color: C.text };
+          const hdStyle   = { ...cellStyle, color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, textAlign: "left" };
+          let waitFiniteIdx = 0, svcFiniteIdx = 0, servedFiniteIdx = 0;
+          return (
+            <div>
+              <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
+                PER-RUN BREAKDOWN
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={hdStyle}>Rep</th>
+                      <th style={hdStyle}>Seed</th>
+                      <th style={hdStyle}>Served</th>
+                      <th style={hdStyle}>Reneged</th>
+                      <th style={hdStyle}>Avg wait</th>
+                      <th style={hdStyle}>Avg service</th>
+                      <th style={hdStyle}>Avg sojourn</th>
+                      <th style={hdStyle}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {replications.map((row, rowIdx) => {
+                      const s = row.result?.summary || {};
+                      const wi  = Number.isFinite(s.avgWait)  ? waitFiniteIdx++   : -1;
+                      const si  = Number.isFinite(s.avgSvc)   ? svcFiniteIdx++    : -1;
+                      const sei = Number.isFinite(s.served)   ? servedFiniteIdx++ : -1;
+                      const isWaitOutlier   = wi  >= 0 && outlierWait.outlierIndices.includes(wi);
+                      const isSvcOutlier    = si  >= 0 && outlierSvc.outlierIndices.includes(si);
+                      const isServedOutlier = sei >= 0 && outlierServed.outlierIndices.includes(sei);
+                      const isOutlier = isWaitOutlier || isSvcOutlier || isServedOutlier;
+                      const outlierMsg = [
+                        isWaitOutlier   && `Avg wait outside fence [${fmt(outlierWait.lowerFence)}, ${fmt(outlierWait.upperFence)}]`,
+                        isSvcOutlier    && `Avg service outside fence [${fmt(outlierSvc.lowerFence)}, ${fmt(outlierSvc.upperFence)}]`,
+                        isServedOutlier && `Served outside fence [${fmt(outlierServed.lowerFence, 0)}, ${fmt(outlierServed.upperFence, 0)}]`,
+                      ].filter(Boolean).join("; ");
+                      return (
+                        <tr key={row.replicationIndex ?? rowIdx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                          <td style={cellStyle}>{(row.replicationIndex ?? 0) + 1}</td>
+                          <td style={{ ...cellStyle, color: C.amber }}>{row.seed ?? "—"}</td>
+                          <td style={cellStyle}>{s.served ?? "—"}</td>
+                          <td style={cellStyle}>{s.reneged ?? "—"}</td>
+                          <td style={{ ...cellStyle, color: isWaitOutlier ? C.amber : C.text }}>{fmt(s.avgWait)}</td>
+                          <td style={{ ...cellStyle, color: isSvcOutlier  ? C.amber : C.text }}>{fmt(s.avgSvc)}</td>
+                          <td style={cellStyle}>{fmt(s.avgSojourn)}</td>
+                          <td style={cellStyle}>
+                            {isOutlier && <span title={outlierMsg} style={{ color: C.amber, cursor: "help" }}>⚠</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: `2px solid ${C.border}`, color: C.muted, fontStyle: "italic" }}>
+                      <td style={cellStyle} colSpan={2}>Min / Max</td>
+                      <td style={cellStyle}>{minServed != null ? `${minServed} / ${maxServed}` : "—"}</td>
+                      <td style={cellStyle}>—</td>
+                      <td style={cellStyle}>{minWait != null ? `${fmt(minWait)} / ${fmt(maxWait)}` : "—"}</td>
+                      <td style={cellStyle}>{minSvc  != null ? `${fmt(minSvc)} / ${fmt(maxSvc)}`   : "—"}</td>
+                      <td style={cellStyle} colSpan={2}>—</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </ChartSectionShell>
   );
