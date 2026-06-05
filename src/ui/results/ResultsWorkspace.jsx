@@ -291,26 +291,26 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     },
     {
       label: "Customers arriving",
-      value: totalArrived > 0 ? formatMetricValue(totalArrived, 0) : "—",
-      avg: avgPerRun(totalArrived),
-      note: totalArrived > 0
-        ? isMultiRep ? `Total — avg per run across ${repCount} replications.` : "Total arrivals."
-        : "No arrivals recorded.",
+      value: totalArrived > 0 ? formatMetricValue(isMultiRep ? Math.round(totalArrived / repCount) : totalArrived, 0) : "—",
+      note: totalArrived > 0 ? (isMultiRep ? null : "Total arrivals.") : "No arrivals recorded.",
       color: C.text,
     },
     {
       label: "Customers served",
-      value: formatMetricValue(served, 0),
-      avg: avgPerRun(served),
-      note: served > 0
-        ? isMultiRep ? `Total — avg per run across ${repCount} replications.` : "Completed successfully."
-        : "No completed entities yet.",
+      value: formatMetricValue(resolveCount(served, "summary.served"), 0),
+      ciPath: "summary.served",
+      note: served > 0 ? (isMultiRep ? null : "Completed successfully.") : "No completed entities yet.",
       color: C.served,
     },
     {
       label: "Customers who left before service",
-      value: leftRate == null ? "—" : `${formatNumber(leftRate, 1)}%`,
-      note: reneged > 0 ? `${reneged} left before being served.` : "No customers left early.",
+      value: isMultiRep && reneged > 0
+        ? formatMetricValue(resolveCount(reneged, "summary.reneged"), 0)
+        : (leftRate == null ? "—" : `${formatNumber(leftRate, 1)}%`),
+      ciPath: reneged > 0 ? "summary.reneged" : null,
+      note: reneged > 0
+        ? (isMultiRep ? null : `${reneged.toLocaleString()} left before being served.`)
+        : "No customers left early.",
       color: reneged > 0 ? C.reneged : C.green,
     },
   ];
@@ -361,19 +361,15 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
               {card.label.toUpperCase()}
             </div>
-            {card.avg != null ? (
-              <div style={{ marginBottom: 5 }}>
-                <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>{card.value}</div>
-                <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, marginTop: 3 }}>avg {card.avg.toLocaleString()} per run</div>
-              </div>
-            ) : (
-              <div style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, marginBottom: 5 }}>
-                {card.value}
+            <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 4, marginBottom: 5 }}>
+              <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>{card.value}</span>
+              {card.ciPath && <CiBadge ci={results?.aggregateStats?.[card.ciPath]} C={C} FONT={FONT} />}
+            </div>
+            {card.note && (
+              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
+                {card.note}
               </div>
             )}
-            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
-              {card.note}
-            </div>
           </div>
         ))}
       </div>
@@ -384,7 +380,8 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
             {outcomeEntries.map(outcome => {
-              const outcomeAvg = avgPerRun(outcome.count);
+              const outcomeAvg = isMultiRep ? avgPerRun(outcome.count) : null;
+              const displayCount = outcomeAvg ?? outcome.count;
               const outcomeColor = outcome.status === "reneged" ? C.reneged : C.served;
               const hasWait    = Number.isFinite(outcome.avgWait)    && outcome.avgWait    > 0;
               const hasSojourn = Number.isFinite(outcome.avgSojourn) && outcome.avgSojourn > 0;
@@ -393,18 +390,9 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                   <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
                     {outcome.routeLabel.toUpperCase()}
                   </div>
-                  {outcomeAvg != null ? (
-                    <div style={{ marginBottom: 6 }}>
-                      <div style={{ fontSize: 18, color: outcomeColor, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>
-                        {formatMetricValue(outcome.count, 0)}
-                      </div>
-                      <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, marginTop: 3 }}>avg {outcomeAvg.toLocaleString()} per run</div>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 18, color: outcomeColor, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>
-                      {formatMetricValue(outcome.count, 0)}
-                    </div>
-                  )}
+                  <div style={{ fontSize: 18, color: outcomeColor, fontFamily: FONT, fontWeight: 700, marginBottom: 6 }}>
+                    {formatMetricValue(displayCount, 0)}
+                  </div>
                   {(hasWait || hasSojourn) && (
                     <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 6, paddingTop: 6, borderTop: `1px solid ${C.border}` }}>
                       {hasWait && (
