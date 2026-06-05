@@ -185,7 +185,10 @@ export function AdaptiveBatchPanel({
       setTotalReps(adaptiveResult.finalReps);
 
       const aggregateStats = summarizeReplicationResults(adaptiveResult.results, CI_METRICS);
-      const combinedResult = makeBatchResult(adaptiveResult.results, aggregateStats, maxSimTime, warmupPeriod);
+      const combinedResult = {
+        ...makeBatchResult(adaptiveResult.results, aggregateStats, maxSimTime, warmupPeriod),
+        aggregateStats,
+      };
       setCombinedBatchResult(combinedResult);
       setReplicationResults(adaptiveResult.results);
 
