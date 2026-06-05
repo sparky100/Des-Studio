@@ -80,7 +80,7 @@ export async function runAdaptiveBatch(options = {}) {
 
   const tierPolicy = RUN_ADMISSION_TIERS[tier] || RUN_ADMISSION_TIERS.free;
   const tierMax = tierPolicy.maxReplications;
-  const initialBatch = Math.min(5, tierMax);
+  const initialBatch = Math.min(10, tierMax);
   const stepSize = Math.max(5, Math.floor(tierMax / 5));
   const kpiPath = selectKpiPath(model);
 

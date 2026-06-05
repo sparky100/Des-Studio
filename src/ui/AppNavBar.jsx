@@ -58,11 +58,12 @@ export function AppNavBar({
       <div style={{
         background: C.surface,
         borderBottom: `1px solid ${C.border}`,
-        padding: "0 24px",
+        padding: "6px 16px",
         display: "flex",
         alignItems: "center",
-        gap: 16,
-        height: 52,
+        flexWrap: "wrap",
+        gap: 8,
+        minHeight: 52,
       }}>
         {/* Brand */}
         <div>

@@ -19,7 +19,7 @@ describe('runAdaptiveBatch', () => {
       targetRelativeCI: 20,  // relaxed threshold for test speed
     });
 
-    expect(result.finalReps).toBeGreaterThanOrEqual(5);
+    expect(result.finalReps).toBeGreaterThanOrEqual(10);
     expect(result.finalReps).toBeLessThanOrEqual(30);
     expect(result.results.length).toBe(result.finalReps);
     expect(result.roundHistory.length).toBeGreaterThanOrEqual(1);
@@ -85,7 +85,7 @@ describe('runAdaptiveBatch', () => {
 
     await runAdaptiveBatch({
       model: mm1Model,
-      tier: 'free',  // max 10 → initial 5 + step 5
+      tier: 'free',  // max 10 → initial 10 (hits tier cap on first round)
       baseSeed: 0,
       warmupPeriod: 0,
       maxSimTime: 100,
