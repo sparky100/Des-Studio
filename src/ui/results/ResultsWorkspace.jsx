@@ -1281,7 +1281,7 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
     ? `${+(n / repCount).toFixed(1)} avg/run`
     : String(n);
 
-  const [queueOpen, setQueueOpen] = React.useState({});
+  const [queueOpen, setQueueOpen] = useState({});
   const toggleQueue = id => setQueueOpen(prev => ({ ...prev, [id]: !prev[id] }));
 
   const journeyRows = Object.entries(journeys || {})
