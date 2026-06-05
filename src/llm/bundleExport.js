@@ -192,8 +192,24 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (kpis.maxSojourn != null) lines.push(`| Max sojourn time | ${kpis.maxSojourn.toFixed(2)} |`);
   if (kpis.totalCost != null) lines.push(`| Total cost | ${kpis.totalCost.toFixed(2)} |`);
   if (kpis.costPerServed != null) lines.push(`| Cost per served | ${kpis.costPerServed.toFixed(2)} |`);
+  // Plan deviation — present only in models that use timetable/planned arrivals
+  const avgPlanDeviation = results?.summary?.avgPlanDeviation;
+  if (avgPlanDeviation != null && Number.isFinite(avgPlanDeviation)) {
+    lines.push(`| Avg plan deviation | ${avgPlanDeviation.toFixed(2)} |`);
+  }
   lines.push('');
   if (kpis._batchNote) lines.push(`_${kpis._batchNote}_\n`);
+
+  // Warmup exclusion note — tells the LLM how many entities were discarded during warm-up
+  const excludedCount = results?.summary?.excludedCount;
+  if (excludedCount > 0) {
+    lines.push(
+      `> ⓘ **${excludedCount} ${excludedCount === 1 ? 'entity was' : 'entities were'} present at warm-up cutoff and excluded from statistics.** ` +
+      `This is expected behaviour: entities that arrived during the warm-up period are removed when ` +
+      `the statistics clock resets, so results reflect only the steady-state phase.`
+    );
+    lines.push('');
+  }
 
   // ── End-of-run entity status ──────────────────────────────────────────────
   // Explicitly report left-in-system entities so an LLM never confuses them
@@ -434,6 +450,40 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
       for (const [name, q] of busyQueues) {
         lines.push(`| ${name} | ${q.waiting} |`);
       }
+      lines.push('');
+    }
+  }
+
+  // ── Peak queue depths ─────────────────────────────────────────────────────
+  // The maximum instantaneous queue length observed during the run.
+  // Distinct from average wait time — a queue can have low mean wait but spike
+  // to a large peak, indicating transient overload the LLM should flag.
+  const peaksByQueue = results?.runtimeMetrics?.max_queue_length_by_queue;
+  if (peaksByQueue && typeof peaksByQueue === 'object' && Object.keys(peaksByQueue).length) {
+    lines.push('### Peak Queue Depths');
+    lines.push('');
+    lines.push('Maximum instantaneous queue length recorded at any point during the run.');
+    lines.push('');
+    lines.push('| Queue | Peak depth |');
+    lines.push('|-------|-----------|');
+    const sortedPeaks = Object.entries(peaksByQueue).sort(([, a], [, b]) => b - a);
+    for (const [name, peak] of sortedPeaks) {
+      lines.push(`| ${name} | ${peak} |`);
+    }
+    lines.push('');
+  }
+
+  // ── Run scale ─────────────────────────────────────────────────────────────
+  // A compact one-line note showing simulation scale — helps the LLM calibrate
+  // how data-rich the results are and whether performance issues may be transient.
+  const rm = results?.runtimeMetrics;
+  if (rm) {
+    const parts = [];
+    if (rm.events_processed != null) parts.push(`${rm.events_processed.toLocaleString()} events processed`);
+    if (rm.entities_created != null) parts.push(`${rm.entities_created.toLocaleString()} entities created`);
+    if (rm.c_event_scans   != null) parts.push(`${rm.c_event_scans.toLocaleString()} C-event scans`);
+    if (parts.length) {
+      lines.push(`> ⓘ **Run scale:** ${parts.join(' · ')}`);
       lines.push('');
     }
   }
