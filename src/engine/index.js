@@ -1261,6 +1261,7 @@ const cycleLog = [];
       }
       for (const entity of customers) {
         if (!entity.stages?.length) continue;
+        if (entity.status !== "done" && entity.status !== "reneged") continue;
         const visitedSections = [];
         let lastSection = null;
         for (const sec of runtimeModel.sections) {
@@ -1298,6 +1299,7 @@ const cycleLog = [];
     const queueJourneys = {};
     for (const entity of customers) {
       if (!entity.stages?.length) continue;
+      if (entity.status !== "done" && entity.status !== "reneged") continue;
       const queueParts = entity.stages.map(s => s.queueName).filter(Boolean);
       if (!queueParts.length) continue;
       const sink = entity.outcome?.routeLabel || (entity.status === "reneged" ? "Reneged" : "Completed");

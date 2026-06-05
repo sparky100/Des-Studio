@@ -164,15 +164,19 @@ function StageKpisTable({ snap, model }) {
   const outcomeRows = Object.values(outcomes)
     .sort((a, b) => b.count - a.count || a.routeLabel.localeCompare(b.routeLabel));
 
-  // Queue journey paths — top-10 paths by frequency, completed entities only
+  // Queue journey paths — top-10 paths by frequency
+  // Completed/reneged get their outcome label as the sink;
+  // in-flight entities show their partial path with an "active" sink so you
+  // can see where entities currently are in the system
   const queueJourneys = {};
   for (const entity of entities) {
     if (entity.role === "server" || !entity.stages?.length) continue;
-    if (entity.status !== "done" && entity.status !== "reneged") continue;
     const parts = entity.stages.map(s => s.queueName).filter(Boolean);
     if (!parts.length) continue;
-    const sink = entity.outcome?.routeLabel
-      || (entity.status === "reneged" ? "Reneged" : "Completed");
+    const isDone = entity.status === "done" || entity.status === "reneged";
+    const sink = isDone
+      ? (entity.outcome?.routeLabel || (entity.status === "reneged" ? "Reneged" : "Completed"))
+      : "active…";
     const path = [...parts, sink].join("→");
     queueJourneys[path] = (queueJourneys[path] || 0) + 1;
   }
@@ -379,7 +383,12 @@ function StageKpisTable({ snap, model }) {
                         <span style={{ color: C.muted, fontSize: 10 }}>→</span>
                       </span>
                     ))}
-                    <span style={{ fontSize: 10, fontFamily: FONT, color: C.accent, background: C.bg, border: `1px dashed ${C.accent}`, borderRadius: 4, padding: "2px 6px" }}>
+                    <span style={{
+                      fontSize: 10, fontFamily: FONT, borderRadius: 4, padding: "2px 6px",
+                      ...(sink === "active…"
+                        ? { color: C.amber, background: C.bg, border: `1px dashed ${C.amber}` }
+                        : { color: C.accent, background: C.bg, border: `1px dashed ${C.accent}` }),
+                    }}>
                       {sink}
                     </span>
                   </div>
