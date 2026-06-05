@@ -1283,7 +1283,10 @@ const cycleLog = [];
           }
         }
         if (visitedSections.length > 0) {
-          const sink = entity.outcome?.routeLabel || (entity.status === "reneged" ? "Reneged" : "Completed");
+          const isDone = entity.status === "done" || entity.status === "reneged";
+          const sink = isDone
+            ? (entity.outcome?.routeLabel || (entity.status === "reneged" ? "Reneged" : "Completed"))
+            : "Incomplete";
           const key = [...visitedSections, sink].join("→");
           journeys[key] = (journeys[key] || 0) + 1;
         }
@@ -1300,7 +1303,10 @@ const cycleLog = [];
       if (!entity.stages?.length) continue;
       const queueParts = entity.stages.map(s => s.queueName).filter(Boolean);
       if (!queueParts.length) continue;
-      const sink = entity.outcome?.routeLabel || (entity.status === "reneged" ? "Reneged" : "Completed");
+      const isDone = entity.status === "done" || entity.status === "reneged";
+      const sink = isDone
+        ? (entity.outcome?.routeLabel || (entity.status === "reneged" ? "Reneged" : "Completed"))
+        : "Incomplete";
       const path = [...queueParts, sink].join("→");
       queueJourneys[path] = (queueJourneys[path] || 0) + 1;
     }
