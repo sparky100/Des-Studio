@@ -1077,7 +1077,7 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
   );
 }
 
-function JourneysPanel({ queueJourneys, C, FONT }) {
+function JourneysPanel({ queueJourneys, queueNames, C, FONT }) {
   const rows = Object.entries(queueJourneys || {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15);
@@ -1087,15 +1087,17 @@ function JourneysPanel({ queueJourneys, C, FONT }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {rows.map(([path, count]) => {
-        const queues = path.split("→");
+        const segs = path.split("→");
         const pct = total > 0 ? Math.round(count / total * 100) : 0;
+        // Last segment is a real sink only when it isn't itself a queue name
+        const lastSeg = segs[segs.length - 1];
+        const hasSink = !queueNames?.has(lastSeg);
+        const sinkColor = lastSeg === "Incomplete" ? C.amber : C.accent;
         return (
           <div key={path} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-              {queues.map((q, i) => {
-                const isSink = i === queues.length - 1;
-                const isIncomplete = isSink && q === "Incomplete";
-                const sinkColor = isIncomplete ? C.amber : C.accent;
+              {segs.map((q, i) => {
+                const isSink = hasSink && i === segs.length - 1;
                 return (
                   <Fragment key={i}>
                     {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
@@ -1233,15 +1235,18 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
             <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>ENTITY PATHWAYS ACROSS SECTIONS</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {visibleRows.map(({ key, count }) => {
-                const names = key.split("→").map(id => sectionById[id]?.name || id);
+                const rawParts = key.split("→");
+                const names = rawParts.map(id => sectionById[id]?.name || id);
                 const pct = total > 0 ? Math.round(count / total * 100) : 0;
+                // Last segment is a sink only when it isn't itself a known section ID
+                const lastRaw = rawParts[rawParts.length - 1];
+                const hasSink = !sectionById[lastRaw];
+                const sinkColor = lastRaw === "Incomplete" ? C.amber : C.accent;
                 return (
                   <div key={key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                       {names.map((name, i) => {
-                        const isSink = i === names.length - 1;
-                        const isIncomplete = isSink && name === "Incomplete";
-                        const sinkColor = isIncomplete ? C.amber : C.accent;
+                        const isSink = hasSink && i === names.length - 1;
                         return (
                           <Fragment key={i}>
                             {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
@@ -1402,10 +1407,10 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
             <div id="results-section-journeys" style={{ display: sectionsOpen.journeys ? "block" : "none", paddingTop: 14 }}>
               <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6, marginBottom: 10 }}>
                 Top queue paths taken by entities through the model, ranked by frequency.
-                The final label is the name of the C-event that completed each entity.
-                A label of <strong>Completed</strong> is a generic fallback — the entity was still fully served; it just means the completion event has no specific name in the model.
+                Named sinks show the completion event; <strong style={{ color: C.reneged }}>Reneged</strong> entities left before finishing;
+                <strong style={{ color: C.amber }}> Incomplete</strong> entities were still in the system when the simulation ended.
               </div>
-              <JourneysPanel queueJourneys={queueJourneys} C={C} FONT={FONT} />
+              <JourneysPanel queueJourneys={queueJourneys} queueNames={new Set((model.queues || []).map(q => q.name))} C={C} FONT={FONT} />
             </div>
           </div>
         )}
@@ -1578,10 +1583,10 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
           <div id="results-section-journeys" style={{ display: sectionsOpen.journeys ? "block" : "none", paddingTop: 14 }}>
             <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6, marginBottom: 10 }}>
               Top queue paths taken by entities through the model, ranked by frequency.
-              The final label is the name of the C-event that completed each entity.
-              A label of <strong>Completed</strong> is a generic fallback — the entity was still fully served; it just means the completion event has no specific name in the model.
+              Named sinks show the completion event; <strong style={{ color: C.reneged }}>Reneged</strong> entities left before finishing;
+              <strong style={{ color: C.amber }}> Incomplete</strong> entities were still in the system when the simulation ended.
             </div>
-            <JourneysPanel queueJourneys={queueJourneys} C={C} FONT={FONT} />
+            <JourneysPanel queueJourneys={queueJourneys} queueNames={new Set((model.queues || []).map(q => q.name))} C={C} FONT={FONT} />
           </div>
         </div>
       )}
