@@ -457,6 +457,7 @@ Predicate object fields:
 
 - `routing` and `probabilisticRouting` are mutually exclusive.
 - `routing` cannot be combined with a queue argument in `RELEASE(Server, Queue)`.
+- `probabilisticRouting` cannot be combined with a queue argument in `RELEASE(Server, Queue)`. Use `RELEASE(Server)` (no queue arg) — the routing table controls where the entity goes. `RELEASE(Server, Queue)` hard-routes to a single queue and conflicts with the routing table (V18).
 - `defaultQueueName` must reference a valid queue name.
 - **Do not use a string condition** (e.g. `"entity.priority < 2"`) — the engine only evaluates predicate objects in routing; a string will cause an error.
 
@@ -484,7 +485,9 @@ Predicate object fields:
 | Pattern | When to Use | Example |
 |---|---|---|
 | **✓ Preferred: Explicit COMPLETE** | Simple terminal completion — all entities exit after this event | `"effect": ["COMPLETE()"], "schedules": []` |
+| **✓ Valid: RELEASE + probabilistic routing** | Mid-network service where the entity can branch to different queues; server freed, routing table decides next queue | `"effect": ["RELEASE(Nurse)"], "probabilisticRouting": [{"queueName": "Treatment Queue", "probability": 0.7}, {"queueName": "Diagnostics Queue", "probability": 0.3}]` |
 | **✓ Valid: RELEASE + probabilistic exit** | Mid-network service where some entities exit and some continue; server must be freed | `"effect": ["RELEASE(Nurse)"], "probabilisticRouting": [{"queueName": "Treatment Queue", "probability": 0.7}, {"queueName": null, "probability": 0.3}]` |
+| **✗ Anti-Pattern: RELEASE with queue arg + probabilisticRouting** | **(Broken — V18)** `RELEASE(Server, Queue)` hard-routes to one queue; combining with `probabilisticRouting` is mutually exclusive — engine rejects it | `"effect": ["RELEASE(Nurse, Treatment Queue)"], "probabilisticRouting": [...]` — **drop the queue arg: use `RELEASE(Nurse)` instead** |
 | **✗ Anti-Pattern: RELEASE then COMPLETE** | **(Broken — never use)** `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped | `"effect": ["RELEASE(Server)", "COMPLETE()"]` |
 | **✗ Anti-Pattern: Null routing with prob 1.0** | (Avoid) Redundant — adds unnecessary complexity | `"effect": ["COMPLETE()"], "probabilisticRouting": [{ "queueName": null, "probability": 1 }]` |
 

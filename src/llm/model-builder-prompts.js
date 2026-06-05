@@ -121,7 +121,15 @@ companionCsv rules:
    patient's journey must not be deferred behind admitting new patients.
 
    ✓ CORRECT: c_start_discharge priority=0, c_start_consultation priority=1 (discharge wins)
-   ✗ WRONG:   c_start_discharge priority=2, c_start_consultation priority=1 — discharge starved`,
+   ✗ WRONG:   c_start_discharge priority=2, c_start_consultation priority=1 — discharge starved
+
+10. RELEASE(Server, Queue) and probabilisticRouting are mutually exclusive (V18).
+    When probabilisticRouting is present, RELEASE must NOT include a target queue argument —
+    the routing table controls where the entity goes. RELEASE(Server, Queue) hard-routes to
+    one queue and conflicts with the routing table; the engine rejects the combination.
+
+    ✓ CORRECT: "effect": ["RELEASE(Nurse)"], "probabilisticRouting": [{"queueName": "Treatment Queue", "probability": 0.7}, {"queueName": "Diagnostics Queue", "probability": 0.3}]
+    ✗ WRONG:   "effect": ["RELEASE(Nurse, Treatment Queue)"], "probabilisticRouting": [...]  — V18 error`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:
