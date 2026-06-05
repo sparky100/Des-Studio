@@ -1282,6 +1282,12 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
           .filter(Boolean);
         const hasEntry = (sec.entryQueues || []).length > 0;
         const hasExit  = (sec.exitQueues  || []).length > 0;
+        const sinkCount = Object.entries(journeys || {}).reduce((sum, [key, n]) => {
+          const parts = key.split("→");
+          const lastPart = parts[parts.length - 1];
+          const isSink = !sectionById[lastPart];
+          return (isSink && parts[parts.length - 2] === sec.id) ? sum + n : sum;
+        }, 0);
         const isQueueOpen = !!queueOpen[sec.id];
         return (
           <div key={sec.id} style={{
@@ -1314,6 +1320,12 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
                 <div style={{ background: "#E74C3C18", border: "1px solid #E74C3C44", borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
                   <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>OUT</span>
                   <span style={{ fontFamily: FONT, fontSize: 12, color: "#E74C3C", fontWeight: 700 }}>{fmtCount(stats.entitiesOut)}</span>
+                </div>
+              )}
+              {sinkCount > 0 && !hasExit && (
+                <div style={{ background: `${C.accent}18`, border: `1px solid ${C.accent}44`, borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>DONE</span>
+                  <span style={{ fontFamily: FONT, fontSize: 12, color: C.accent, fontWeight: 700 }}>{fmtCount(sinkCount)}</span>
                 </div>
               )}
             </div>
