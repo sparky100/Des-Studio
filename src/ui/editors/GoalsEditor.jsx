@@ -5,13 +5,17 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 
 // Values must match aggregateStats keys used by buildGoalGaps in prompts.js
 const METRICS = [
-  { value: "summary.avgWait",    label: "Average wait time",      unit: "time units" },
-  { value: "summary.avgSvc",     label: "Average service time",   unit: "time units" },
-  { value: "summary.avgSojourn", label: "Average sojourn time",   unit: "time units" },
-  { value: "summary.served",     label: "Customers served",       unit: "entities"   },
-  { value: "summary.reneged",    label: "Customers reneged",      unit: "entities"   },
-  { value: "summary.totalCost",  label: "Total cost",             unit: "cost units" },
+  { value: "summary.avgWait",    label: "Average wait time",           unit: "time units" },
+  { value: "summary.avgSvc",     label: "Average service time",        unit: "time units" },
+  { value: "summary.avgSojourn", label: "Average sojourn time",        unit: "time units" },
+  { value: "summary.avgWIP",     label: "Average WIP (queue depth)",   unit: "entities"   },
+  { value: "summary.served",     label: "Customers served",            unit: "entities"   },
+  { value: "summary.reneged",    label: "Customers reneged",           unit: "entities"   },
+  { value: "summary.totalCost",  label: "Total cost",                  unit: "cost units" },
 ];
+
+// Metrics where the goal evaluates against the per-run average in batch mode
+const COUNT_METRICS = new Set(["summary.served", "summary.reneged"]);
 
 // Backward-compat: old short keys → new full keys
 const METRIC_LEGACY = {
@@ -105,6 +109,11 @@ export function GoalsEditor({ goals = [], onChange }) {
               <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
                 → <span style={{ color: C.purple }}>{g.label}</span>{' '}
                 ({metricDef?.label || normMetric} {g.operator} {g.target} {metricDef?.unit || ""})
+              </div>
+            )}
+            {COUNT_METRICS.has(normMetric) && (
+              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+                ⓘ In batch mode this goal is evaluated against the average per replication, not the total.
               </div>
             )}
           </div>

@@ -2,7 +2,7 @@ import { Fragment, useCallback, useMemo, useState } from "react";
 import { alpha } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { csvEscape, downloadTextFile, slugifyResultName, timestampForFilename } from "../shared/utils.js";
-import { batchMeansCI, computePercentiles, computeSummaryStats, detectOutliers } from "../../engine/statistics.js";
+import { batchMeansCI, buildHistogramFD, computePercentiles, computeSummaryStats, detectOutliers } from "../../engine/statistics.js";
 import { buildResultsViewModel } from "./resultsViewModel.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
@@ -739,24 +739,30 @@ function WaitHistogram({ dist, color }) {
   const { C, FONT } = useTheme();
   const [tip, setTip] = useState(null);
   if (!dist || dist.n < 2) return null;
-  const vals = dist.values;
-  const minV = vals[0];
-  const maxV = vals[vals.length - 1];
+
+  // Prefer pre-computed histogram bins (present in "minimal" saves) over raw values.
+  // Fall back to computing FD bins from raw values for live/compact/full runs.
+  const histBins = useMemo(() => {
+    if (dist.histogram?.bins?.length > 1) return dist.histogram.bins;
+    if (Array.isArray(dist.values) && dist.values.length > 1) {
+      return buildHistogramFD(dist.values, { maxBins: HIST_BINS }).bins;
+    }
+    return null;
+  }, [dist]);
+
+  if (!histBins || histBins.length < 2) return null;
+  const minV = histBins[0].low;
+  const maxV = histBins[histBins.length - 1].high;
   if (maxV === minV) return null;
 
-  const binWidth = (maxV - minV) / HIST_BINS;
-  const counts = Array(HIST_BINS).fill(0);
-  for (const v of vals) {
-    const i = Math.min(Math.floor((v - minV) / binWidth), HIST_BINS - 1);
-    counts[i]++;
-  }
+  const counts = histBins.map(b => b.count);
   const maxCount = Math.max(...counts, 1);
-  const barW = HIST_W / HIST_BINS;
+  const barW = HIST_W / histBins.length;
   const PAD = { top: 14, right: 6, bottom: 20, left: 40 };
   const w = HIST_W - PAD.left - PAD.right;
   const h = HIST_H - PAD.top - PAD.bottom;
   const toX = v => PAD.left + ((v - minV) / (maxV - minV)) * w;
-  const barToX = i => PAD.left + (i / HIST_BINS) * w;
+  const barToX = i => PAD.left + (i / histBins.length) * w;
   const yTicks = [0, Math.round(maxCount / 2) || 1, maxCount];
   const markers = [
     { label: "p50", value: dist.p50, color: C.green },
@@ -785,15 +791,14 @@ function WaitHistogram({ dist, color }) {
           const bx = barToX(i) + 1;
           const bw = Math.max(barW - 2, 1);
           const by = PAD.top + h - barH;
-          const binLo = minV + i * binWidth;
-          const binHi = minV + (i + 1) * binWidth;
+          const bin = histBins[i];
           return (
             <rect key={i}
               x={bx} y={by}
               width={bw} height={barH}
               fill={alpha(color, 0.85)} rx={4} ry={4}
               style={{ cursor: "crosshair" }}
-              onMouseEnter={() => setTip({ x: bx + bw / 2, y: by, label: `${binLo.toFixed(1)} – ${binHi.toFixed(1)}`, value: `count: ${cnt}` })}
+              onMouseEnter={() => setTip({ x: bx + bw / 2, y: by, label: `${bin.low.toFixed(1)} – ${bin.high.toFixed(1)}`, value: `count: ${cnt}` })}
             />
           );
         })}
@@ -1208,7 +1213,8 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
   );
 }
 
-function JourneysPanel({ queueJourneys, queueNames, C, FONT }) {
+function JourneysPanel({ queueJourneys, queueNames, repCount = 1, C, FONT }) {
+  const isMultiRep = repCount > 1;
   const rows = Object.entries(queueJourneys || {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15);
@@ -1243,7 +1249,9 @@ function JourneysPanel({ queueJourneys, queueNames, C, FONT }) {
                 );
               })}
               <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
-                {count} ({pct}%)
+                {isMultiRep
+                  ? `${+(count / repCount).toFixed(1)} avg/run (${pct}%)`
+                  : `${count} (${pct}%)`}
               </span>
             </div>
             <div style={{ height: 3, background: C.border, borderRadius: 2 }}>
@@ -1256,7 +1264,7 @@ function JourneysPanel({ queueJourneys, queueNames, C, FONT }) {
   );
 }
 
-function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, queues, C, FONT }) {
+function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, queues, repCount = 1, C, FONT }) {
   const queueNameById = {};
   for (const q of queues || []) { if (q.id && q.name) queueNameById[q.id] = q.name; }
   const sectionById = {};
@@ -1267,6 +1275,11 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
   for (const [k, v] of Object.entries(waitDist || {})) waitDistNorm[k.trim().toLowerCase()] = v;
 
   const fmtT = v => v == null ? "—" : formatNumber(v, 1);
+
+  const isMultiRep = repCount > 1;
+  const fmtCount = (n) => isMultiRep
+    ? `${+(n / repCount).toFixed(1)} avg/run`
+    : String(n);
 
   const journeyRows = Object.entries(journeys || {})
     .sort((a, b) => b[1] - a[1])
@@ -1306,7 +1319,9 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
                 {sec.name || sec.id}
               </span>
               <span style={{ fontFamily: FONT, fontSize: 11, color: C.muted }}>
-                {stats.count} {stats.count === 1 ? "entity" : "entities"}
+                {isMultiRep
+                  ? `${+(stats.count / repCount).toFixed(1)} avg/run`
+                  : `${stats.count} ${stats.count === 1 ? "entity" : "entities"}`}
               </span>
             </div>
 
@@ -1318,13 +1333,13 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
               {hasEntry && (
                 <div style={{ background: "#27AE6018", border: "1px solid #27AE6044", borderRadius: 4, padding: "3px 8px" }}>
                   <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>IN  </span>
-                  <span style={{ fontFamily: FONT, fontSize: 11, color: "#27AE60", fontWeight: 700 }}>{stats.entitiesIn}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 11, color: "#27AE60", fontWeight: 700 }}>{fmtCount(stats.entitiesIn)}</span>
                 </div>
               )}
               {hasExit && (
                 <div style={{ background: "#E74C3C18", border: "1px solid #E74C3C44", borderRadius: 4, padding: "3px 8px" }}>
                   <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>OUT  </span>
-                  <span style={{ fontFamily: FONT, fontSize: 11, color: "#E74C3C", fontWeight: 700 }}>{stats.entitiesOut}</span>
+                  <span style={{ fontFamily: FONT, fontSize: 11, color: "#E74C3C", fontWeight: 700 }}>{fmtCount(stats.entitiesOut)}</span>
                 </div>
               )}
             </div>
@@ -1466,6 +1481,14 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   const queueJourneys = results?.summary?.queueJourneys;
   const hasQueueJourneys = !!queueJourneys && Object.keys(queueJourneys).length > 0;
 
+  // Replication count for avg-per-run display in sections and journey panels
+  const storedRepCountRW = Array.isArray(results?.replications)
+    ? results.replications.length
+    : (typeof results?.replications === 'number' && results.replications > 1 ? results.replications : null);
+  const repCountRW = replicationResults.length > 0
+    ? replicationResults.length
+    : (results?.summary?.numReplications ?? results?.runtimeMetrics?.replications ?? storedRepCountRW ?? 1);
+
   // ── Shared responsive grid style used by all three chart sections ───────────
   const CHART_GRID = {
     display: "grid",
@@ -1526,6 +1549,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                 journeys={sectionJourneys}
                 waitDist={results.waitDist}
                 queues={model.queues}
+                repCount={repCountRW}
                 C={C}
                 FONT={FONT}
               />
@@ -1541,7 +1565,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                 Named sinks show the completion event; <strong style={{ color: C.reneged }}>Reneged</strong> entities left before finishing;
                 <strong style={{ color: C.amber }}> Incomplete</strong> entities were still in the system when the simulation ended.
               </div>
-              <JourneysPanel queueJourneys={queueJourneys} queueNames={new Set((model.queues || []).map(q => q.name))} C={C} FONT={FONT} />
+              <JourneysPanel queueJourneys={queueJourneys} queueNames={new Set((model.queues || []).map(q => q.name))} repCount={repCountRW} C={C} FONT={FONT} />
             </div>
           </div>
         )}
@@ -1700,6 +1724,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               journeys={sectionJourneys}
               waitDist={results.waitDist}
               queues={model.queues}
+              repCount={repCountRW}
               C={C}
               FONT={FONT}
             />
@@ -1717,7 +1742,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               Named sinks show the completion event; <strong style={{ color: C.reneged }}>Reneged</strong> entities left before finishing;
               <strong style={{ color: C.amber }}> Incomplete</strong> entities were still in the system when the simulation ended.
             </div>
-            <JourneysPanel queueJourneys={queueJourneys} queueNames={new Set((model.queues || []).map(q => q.name))} C={C} FONT={FONT} />
+            <JourneysPanel queueJourneys={queueJourneys} queueNames={new Set((model.queues || []).map(q => q.name))} repCount={repCountRW} C={C} FONT={FONT} />
           </div>
         </div>
       )}

@@ -222,6 +222,31 @@ function extractCEvents(model = {}) {
   });
 }
 
+/**
+ * Build a compact sections digest for LLM prompts.
+ * Resolves queue IDs to names so the LLM can reason about which queues bound
+ * a section, and which are the official entry/exit measurement points.
+ * Includes a note on the entry/exit semantics so the LLM knows that
+ * entitiesIn/Out counts are only non-zero when these are configured.
+ */
+function buildSectionsDigest(model = {}) {
+  const sections = model.sections || [];
+  if (!sections.length) return [];
+  const queueNameById = {};
+  for (const q of model.queues || []) {
+    if (q.id && q.name) queueNameById[q.id] = q.name;
+  }
+  return sections.map(s => ({
+    name: s.name || s.id,
+    memberQueues: (s.memberIds || []).map(id => queueNameById[id] || id).filter(Boolean),
+    entryQueues:  (s.entryQueues || []).map(id => queueNameById[id] || id).filter(Boolean),
+    exitQueues:   (s.exitQueues  || []).map(id => queueNameById[id] || id).filter(Boolean),
+    note: (s.entryQueues || []).length === 0
+      ? "No entry queue set — entitiesIn count will be 0"
+      : null,
+  }));
+}
+
 function extractEntityAnomalies(results = {}) {
   const entitySummary = results.entitySummary;
   if (!Array.isArray(entitySummary) || entitySummary.length === 0) return undefined;
@@ -344,12 +369,16 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
       windows: et.shiftSchedule.map(w => ({ time: w.time, capacity: w.capacity })),
     }));
 
+  // Build a sections digest so the LLM understands section entry/exit semantics
+  const sectionsDigest = buildSectionsDigest(model);
+
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
       goals: goalsToPrompt(model),
       ...(stateVariables.length ? { stateVariables } : {}),
+      ...(sectionsDigest.length ? { sections: sectionsDigest } : {}),
     },
     experiment,
     kpis: buildKpis(model, results),
@@ -502,6 +531,7 @@ const GOAL_STAT_KEY = {
   avgWait:    "summary.avgWait",
   avgSvc:     "summary.avgSvc",
   avgSojourn: "summary.avgSojourn",
+  avgWIP:     "summary.avgWIP",
   served:     "summary.served",
   reneged:    "summary.reneged",
   totalCost:  "summary.totalCost",
@@ -514,6 +544,7 @@ const GOAL_SUMMARY_KEY = {
   'summary.avgWait':    'avgWait',
   'summary.avgSvc':     'avgSvc',
   'summary.avgSojourn': 'avgSojourn',
+  'summary.avgWIP':     'avgWIP',
   'summary.served':     'served',
   'summary.reneged':    'reneged',
   'summary.totalCost':  'totalCost',
@@ -521,6 +552,7 @@ const GOAL_SUMMARY_KEY = {
   avgWait:    'avgWait',
   avgSvc:     'avgSvc',
   avgSojourn: 'avgSojourn',
+  avgWIP:     'avgWIP',
   served:     'served',
   reneged:    'reneged',
   totalCost:  'totalCost',
@@ -653,6 +685,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
       ...(cEvents ? { cEvents } : {}),
       ...(stateVariables.length ? { stateVariables } : {}),
       ...(goalGaps?.length ? { goalGaps } : {}),
+      ...(() => { const sd = buildSectionsDigest(model); return sd.length ? { sections: sd } : {}; })(),
     },
     experiment: extractExperiment(experimentConfig),
     kpis,
