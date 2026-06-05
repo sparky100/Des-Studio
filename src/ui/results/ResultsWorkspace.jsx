@@ -1281,6 +1281,9 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
     ? `${+(n / repCount).toFixed(1)} avg/run`
     : String(n);
 
+  const [queueOpen, setQueueOpen] = React.useState({});
+  const toggleQueue = id => setQueueOpen(prev => ({ ...prev, [id]: !prev[id] }));
+
   const journeyRows = Object.entries(journeys || {})
     .sort((a, b) => b[1] - a[1])
     .map(([key, count]) => {
@@ -1291,7 +1294,8 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
     });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
       {(sectionsDef || []).map(sec => {
         const stats = sectionStats?.[sec.id];
         if (!stats) return null;
@@ -1304,6 +1308,7 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
           .filter(Boolean);
         const hasEntry = (sec.entryQueues || []).length > 0;
         const hasExit  = (sec.exitQueues  || []).length > 0;
+        const isQueueOpen = !!queueOpen[sec.id];
         return (
           <div key={sec.id} style={{
             background: C.surface,
@@ -1326,51 +1331,61 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
             </div>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ background: `${sec.color}18`, border: `1px solid ${sec.color}44`, borderRadius: 4, padding: "3px 8px" }}>
-                <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>AVG TIME IN SECTION  </span>
-                <span style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 700 }}>{fmtT(stats.avgSojourn)}</span>
+              <div style={{ background: `${sec.color}18`, border: `1px solid ${sec.color}44`, borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+                <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>AVG TIME IN SECTION</span>
+                <span style={{ fontFamily: FONT, fontSize: 12, color: C.text, fontWeight: 700 }}>{fmtT(stats.avgSojourn)}</span>
               </div>
               {hasEntry && (
-                <div style={{ background: "#27AE6018", border: "1px solid #27AE6044", borderRadius: 4, padding: "3px 8px" }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>IN  </span>
-                  <span style={{ fontFamily: FONT, fontSize: 11, color: "#27AE60", fontWeight: 700 }}>{fmtCount(stats.entitiesIn)}</span>
+                <div style={{ background: "#27AE6018", border: "1px solid #27AE6044", borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>IN</span>
+                  <span style={{ fontFamily: FONT, fontSize: 12, color: "#27AE60", fontWeight: 700 }}>{fmtCount(stats.entitiesIn)}</span>
                 </div>
               )}
               {hasExit && (
-                <div style={{ background: "#E74C3C18", border: "1px solid #E74C3C44", borderRadius: 4, padding: "3px 8px" }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>OUT  </span>
-                  <span style={{ fontFamily: FONT, fontSize: 11, color: "#E74C3C", fontWeight: 700 }}>{fmtCount(stats.entitiesOut)}</span>
+                <div style={{ background: "#E74C3C18", border: "1px solid #E74C3C44", borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+                  <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>OUT</span>
+                  <span style={{ fontFamily: FONT, fontSize: 12, color: "#E74C3C", fontWeight: 700 }}>{fmtCount(stats.entitiesOut)}</span>
                 </div>
               )}
             </div>
 
             {memberQueueRows.length > 0 && (
               <div>
-                <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: 4 }}>QUEUE WAIT TIMES</div>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
-                  <thead>
-                    <tr>
-                      {["Queue", "Mean", "P50", "P95"].map(h => (
-                        <th key={h} style={{ textAlign: h === "Queue" ? "left" : "right", color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, borderBottom: `1px solid ${C.border}` }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {memberQueueRows.map(({ name, dist }) => (
-                      <tr key={name}>
-                        <td style={{ color: C.text, paddingTop: 3, paddingRight: 8, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</td>
-                        <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingRight: 8 }}>{fmtT(dist.mean)}</td>
-                        <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingRight: 8 }}>{fmtT(dist.p50)}</td>
-                        <td style={{ color: C.text, textAlign: "right", paddingTop: 3 }}>{fmtT(dist.p95)}</td>
+                <div
+                  onClick={() => toggleQueue(sec.id)}
+                  style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: isQueueOpen ? 4 : 0, userSelect: "none" }}
+                >
+                  <span style={{ fontSize: 8 }}>{isQueueOpen ? "▾" : "▸"}</span>
+                  QUEUE WAIT TIMES
+                </div>
+                {isQueueOpen && (
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: FONT, fontSize: 11 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: "left", color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, borderBottom: `1px solid ${C.border}` }}>Queue</th>
+                        {["Mean", "P50", "P95"].map(h => (
+                          <th key={h} style={{ textAlign: "right", width: 48, minWidth: 48, color: C.muted, fontWeight: 600, fontSize: 9, letterSpacing: 0.6, paddingBottom: 3, paddingLeft: 12, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {memberQueueRows.map(({ name, dist }) => (
+                        <tr key={name}>
+                          <td style={{ color: C.text, paddingTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</td>
+                          <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 48 }}>{fmtT(dist.mean)}</td>
+                          <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 48 }}>{fmtT(dist.p50)}</td>
+                          <td style={{ color: C.text, textAlign: "right", paddingTop: 3, paddingLeft: 12, width: 48 }}>{fmtT(dist.p95)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             )}
           </div>
         );
       })}
+      </div>
 
       {journeyRows.length > 0 && (() => {
         const visibleRows = journeyRows.slice(0, 15);
