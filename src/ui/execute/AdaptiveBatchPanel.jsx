@@ -122,9 +122,11 @@ export function AdaptiveBatchPanel({
   const [proposedModel, setProposedModel] = useState(null);
   const [proposalExplanation, setProposalExplanation] = useState(null);
   const [applyError, setApplyError] = useState(null);
+  const [checkpointData, setCheckpointData] = useState(null); // null | { totalReps, relativeHalfWidth }
   const applyAbortRef = useRef(null);
   const abortRef = useRef(null);
   const baseSeedRef = useRef(Date.now() % 1_000_000);
+  const checkpointResolveRef = useRef(null);
 
   const tierPolicy = RUN_ADMISSION_TIERS[tier] || RUN_ADMISSION_TIERS.free;
   const tierMax = tierPolicy.maxReplications;
@@ -165,6 +167,16 @@ export function AdaptiveBatchPanel({
     runPipeline(controller.signal);
   }
 
+  function handleCheckpointContinue() {
+    setCheckpointData(null);
+    checkpointResolveRef.current?.(true);
+  }
+
+  function handleCheckpointStop() {
+    setCheckpointData(null);
+    checkpointResolveRef.current?.(false);
+  }
+
   async function runPipeline(signal) {
     try {
       const adaptiveResult = await runAdaptiveBatch({
@@ -180,6 +192,11 @@ export function AdaptiveBatchPanel({
           setCurrentCiPct(relativeHalfWidth != null ? +relativeHalfWidth.toFixed(1) : null);
           setRoundHistory(prev => [...prev, { reps, relativeHalfWidth }]);
         },
+        onCheckpoint: ({ totalReps: reps, relativeHalfWidth }) =>
+          new Promise(resolve => {
+            setCheckpointData({ totalReps: reps, relativeHalfWidth });
+            checkpointResolveRef.current = resolve;
+          }),
       });
       setBatchResult(adaptiveResult);
       setTotalReps(adaptiveResult.finalReps);
@@ -469,25 +486,71 @@ export function AdaptiveBatchPanel({
           {/* ── Running phase ── */}
           {phase === "running" && (
             <div style={{ display: "flex", flexDirection: "column", gap: SPACE.md }}>
-              <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
-                Running adaptive batch — stepping up replications to achieve statistical confidence...
-              </div>
-              <div style={{
-                height: 6, borderRadius: RADIUS.sm,
-                background: C.panel, overflow: "hidden",
-              }}>
-                <div style={{
-                  height: "100%",
-                  width: `${pct}%`,
-                  background: C.accent,
-                  borderRadius: RADIUS.sm,
-                  transition: "width 300ms ease",
-                }} />
-              </div>
-              <div style={{ fontFamily: FONT, fontSize: 11, color: C.muted }}>
-                {totalReps} / {tierMax} replications
-                {currentCiPct != null && ` — CI ±${currentCiPct}%`}
-              </div>
+              {!checkpointData && (
+                <>
+                  <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
+                    Running adaptive batch — stepping up replications to achieve statistical confidence...
+                  </div>
+                  <div style={{
+                    height: 6, borderRadius: RADIUS.sm,
+                    background: C.panel, overflow: "hidden",
+                  }}>
+                    <div style={{
+                      height: "100%",
+                      width: `${pct}%`,
+                      background: C.accent,
+                      borderRadius: RADIUS.sm,
+                      transition: "width 300ms ease",
+                    }} />
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 11, color: C.muted }}>
+                    {totalReps} / {tierMax} replications
+                    {currentCiPct != null && ` — CI ±${currentCiPct}%`}
+                  </div>
+                </>
+              )}
+
+              {/* ── Checkpoint dialog ── */}
+              {checkpointData && (() => {
+                const rhw = checkpointData.relativeHalfWidth;
+                const interpretation = rhw == null
+                  ? "Statistical precision cannot yet be measured — the model may need more variation across runs."
+                  : rhw < 5
+                  ? "Results have already converged — the model is statistically stable at this sample size."
+                  : rhw < 10
+                  ? "Good precision achieved. Running more replications will tighten the confidence interval further."
+                  : "Results are still variable. Continuing would significantly improve reliability.";
+                return (
+                  <div style={{
+                    background: C.panel,
+                    border: `1px solid ${C.accent}`,
+                    borderRadius: RADIUS.md,
+                    padding: SPACE.md,
+                    display: "flex", flexDirection: "column", gap: SPACE.sm,
+                  }}>
+                    <div style={{ fontFamily: FONT, fontWeight: 700, fontSize: 13, color: C.text }}>
+                      {checkpointData.totalReps} replications complete
+                    </div>
+                    <div style={{ fontFamily: FONT, fontSize: 12, color: C.accent }}>
+                      95% CI precision:{" "}
+                      {rhw != null
+                        ? `±${rhw.toFixed(1)}% of mean`
+                        : "not yet measurable"}
+                    </div>
+                    <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+                      {interpretation}
+                    </div>
+                    <div style={{ display: "flex", gap: SPACE.sm, marginTop: SPACE.xs }}>
+                      <Btn small variant="primary" onClick={handleCheckpointContinue}>
+                        Continue
+                      </Btn>
+                      <Btn small variant="ghost" onClick={handleCheckpointStop}>
+                        Stop here — use these results
+                      </Btn>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -501,9 +564,11 @@ export function AdaptiveBatchPanel({
                   borderRadius: RADIUS.md,
                   border: `1px solid ${batchResult.converged ? C.green : C.amber}`,
                 }}>
-                  <span style={{ fontFamily: FONT, fontSize: 11, color: batchResult.converged ? C.green : C.amber }}>
+                  <span style={{ fontFamily: FONT, fontSize: 11, color: batchResult.converged ? C.green : batchResult.stoppedAtCheckpoint ? C.text : C.amber }}>
                     {batchResult.converged
                       ? `✓ Confidence achieved: ±${batchResult.relativeHalfWidth?.toFixed(1)}% with ${batchResult.finalReps} replication${batchResult.finalReps !== 1 ? "s" : ""}`
+                      : batchResult.stoppedAtCheckpoint
+                      ? `✓ Stopped at ${batchResult.finalReps} replications${batchResult.relativeHalfWidth != null ? ` — CI ±${batchResult.relativeHalfWidth.toFixed(1)}%` : ""}`
                       : `⚠ Tier limit reached (${batchResult.finalReps} reps)${batchResult.relativeHalfWidth != null ? ` — CI ±${batchResult.relativeHalfWidth.toFixed(1)}%` : ""} — results are indicative`}
                   </span>
                 </div>
