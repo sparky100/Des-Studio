@@ -45,6 +45,67 @@ describe('runAdaptiveBatch', () => {
     }
   }, 60000);
 
+  test('checkpoint fires at checkpointAt and stops when callback returns false', async () => {
+    let checkpointFired = false;
+    const result = await runAdaptiveBatch({
+      model: mm1Model,
+      tier: 'standard',  // max 30 reps
+      baseSeed: 1,
+      warmupPeriod: 0,
+      maxSimTime: 500,
+      targetRelativeCI: 0.001,  // impossible — will not converge
+      checkpointAt: 20,
+      onCheckpoint: async ({ totalReps }) => {
+        checkpointFired = true;
+        expect(totalReps).toBeGreaterThanOrEqual(20);
+        return false;  // stop here
+      },
+    });
+    expect(checkpointFired).toBe(true);
+    expect(result.stoppedAtCheckpoint).toBe(true);
+    expect(result.converged).toBe(false);
+    expect(result.finalReps).toBeGreaterThanOrEqual(20);
+  }, 60000);
+
+  test('checkpoint continues running when callback returns true', async () => {
+    let checkpointFired = false;
+    const result = await runAdaptiveBatch({
+      model: mm1Model,
+      tier: 'standard',  // max 30 reps
+      baseSeed: 2,
+      warmupPeriod: 0,
+      maxSimTime: 500,
+      targetRelativeCI: 0.001,  // impossible — will not converge, hits tier max
+      checkpointAt: 20,
+      onCheckpoint: async () => {
+        checkpointFired = true;
+        return true;  // continue
+      },
+    });
+    expect(checkpointFired).toBe(true);
+    expect(result.stoppedAtCheckpoint).toBeUndefined();
+    expect(result.finalReps).toBe(30);  // ran to tier max
+  }, 60000);
+
+  test('checkpoint not fired when CI converges before checkpointAt', async () => {
+    let checkpointFired = false;
+    const result = await runAdaptiveBatch({
+      model: mm1Model,
+      tier: 'standard',  // max 30 reps
+      baseSeed: 3,
+      warmupPeriod: 200,
+      maxSimTime: 1000,
+      targetRelativeCI: 50,  // very loose — will converge quickly
+      checkpointAt: 25,
+      onCheckpoint: async () => { checkpointFired = true; return true; },
+    });
+    // If converged before 25, checkpoint should not fire
+    if (result.converged && result.finalReps < 25) {
+      expect(checkpointFired).toBe(false);
+    }
+    expect(result.converged).toBe(true);
+  }, 60000);
+
   test('uses non-overlapping seeds across rounds', async () => {
     const seenSeeds = [];
     let callCount = 0;

@@ -30,7 +30,7 @@ describe("AdaptiveBatchPanel", () => {
       />
     );
 
-    expect(container.textContent).toContain("Explore will run up to 100 replications of the model");
+    expect(container.textContent).toContain("Explore will run up to 500 replications of the model");
     expect(container.textContent).toContain("then provide an analysis of the results.");
     expect(container.textContent).not.toContain("(pro plan)");
   });
