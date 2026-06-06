@@ -1035,13 +1035,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         isCompactLayout={isCompactLayout}
         showMoreTabs={showMoreTabs} setShowMoreTabs={setShowMoreTabs}
         aiSidebarOpen={aiSidebarOpen}
-        onToggleAiSidebar={isMobileLayout ? null : ()=>{
+        onToggleAiSidebar={()=>{
           if (aiSidebarOpen) {
             setAiSidebarOpen(false);
             setAiAction(null);
           } else {
             setAiSidebarOpen(true);
             if (tab === "results" || tab === "execute") { setAiAction("explain"); setAiSeq(s => s + 1); }
+            else { setAiAction("explain"); }
           }
         }}
         onExplore={()=>setShowExplorePanel(true)}
