@@ -456,6 +456,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [aiSeq,setAiSeq]=useState(0);
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
   const [resultsReportGenerating,setResultsReportGenerating]=useState(false);
+  const [exportMenuOpen,setExportMenuOpen]=useState(false);
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const runWithPatchRef = useRef(null);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
@@ -1349,13 +1350,21 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </Btn>
               ))}
               {latestResults && (
-                <>
-                  <Btn small variant="ghost" onClick={handleResultsExportJson} title="Download results as JSON">Export Results</Btn>
-                  <Btn small variant="ghost" onClick={handleResultsExportLLMBundle} title="Export model + results as Markdown for analysis in any AI tool">Export for AI tools (.md)</Btn>
-                  <Btn small variant="ghost" onClick={() => handleResultsReport('seniorMgmt')} disabled={resultsReportGenerating}>
-                    {resultsReportGenerating ? "Generating…" : "Create Report"}
-                  </Btn>
-                </>
+                <div style={{ position: "relative" }}>
+                  <Btn small variant="ghost" onClick={() => setExportMenuOpen(v => !v)}>Export ▾</Btn>
+                  {exportMenuOpen && (
+                    <div
+                      style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 200, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 1000 }}
+                      onMouseLeave={() => setExportMenuOpen(false)}
+                    >
+                      <button onClick={() => { handleResultsExportJson(); setExportMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export Results (JSON)</button>
+                      <button onClick={() => { handleResultsExportLLMBundle(); setExportMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export for AI tools (.md)</button>
+                      <button onClick={() => { handleResultsReport('seniorMgmt'); setExportMenuOpen(false); }} disabled={resultsReportGenerating} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: resultsReportGenerating ? C.muted : C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: resultsReportGenerating ? "default" : "pointer", borderRadius: 4 }}>
+                        {resultsReportGenerating ? "Generating…" : "Create Report"}
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 

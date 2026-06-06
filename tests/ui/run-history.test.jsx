@@ -91,8 +91,7 @@ describe('run history', () => {
     expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('LEFT BEFORE SERVICE');
     expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('0.0%');
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Export run list' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Export run list as CSV' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Export list/i })).toBeEnabled();
   });
 
   it('exports normalized history payloads', () => {
@@ -114,7 +113,8 @@ describe('run history', () => {
     fireEvent.click(screen.getByRole('button', { name: /^results$/i }));
     fireEvent.click(screen.getByRole('button', { name: /^history$/i }));
     await screen.findAllByText('Two servers');
-    fireEvent.click(screen.getByRole('button', { name: 'Export run list' }));
+    fireEvent.click(screen.getByRole('button', { name: /Export list/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Export as JSON/i }));
 
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:run-history');

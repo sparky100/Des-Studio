@@ -24,7 +24,7 @@ describe('runAdaptiveBatch', () => {
     expect(result.results.length).toBe(result.finalReps);
     expect(result.roundHistory.length).toBeGreaterThanOrEqual(1);
     expect(result.ci?.n).toBe(result.finalReps);
-    expect(result.kpiPath).toBe('summary.served');
+    expect(result.kpiPath).toBe('summary.avgWait');
   }, 120000);
 
   test('respects tier max replications', async () => {

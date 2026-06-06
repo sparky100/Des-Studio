@@ -59,6 +59,7 @@ export function ModelHistoryTab({
   const [snapshotDiffLoading, setSnapshotDiffLoading] = useState(false);
   const [moreMenuId, setMoreMenuId] = useState(null);
   const [moreMenuPos, setMoreMenuPos] = useState({ top: 0, right: 0 });
+  const [exportListMenuOpen, setExportListMenuOpen] = useState(false);
   const [selectedComparison, setSelectedComparison] = useState(null);
   const runHistoryFetcher = (filters = {}) => (
     userId ? fetchRunHistory(modelId, filters) : Promise.resolve(fetchLocalRunHistory(modelId))
@@ -288,8 +289,18 @@ export function ModelHistoryTab({
             .catch(e => setHistoryError(e.message))
             .finally(() => setHistoryLoading(false));
         }}>{historyShowArchived ? "Hide archived" : "Show archived"}</Btn>
-        <Btn small variant="ghost" onClick={exportRunHistoryJson} disabled={!historyRows.length}>Export run list</Btn>
-        <Btn small variant="ghost" onClick={exportRunHistoryCsv} disabled={!historyRows.length}>Export run list as CSV</Btn>
+        <div style={{ position: "relative" }}>
+          <Btn small variant="ghost" disabled={!historyRows.length} onClick={() => setExportListMenuOpen(v => !v)}>Export list ▾</Btn>
+          {exportListMenuOpen && (
+            <div
+              style={{ position: "absolute", top: "100%", right: 0, marginTop: 4, background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 4, minWidth: 180, boxShadow: "0 4px 16px rgba(0,0,0,0.4)", zIndex: 1000 }}
+              onMouseLeave={() => setExportListMenuOpen(false)}
+            >
+              <button onClick={() => { exportRunHistoryJson(); setExportListMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export as JSON</button>
+              <button onClick={() => { exportRunHistoryCsv(); setExportListMenuOpen(false); }} style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", color: C.text, fontFamily: FONT, fontSize: 12, padding: "6px 10px", cursor: "pointer", borderRadius: 4 }}>Export as CSV</button>
+            </div>
+          )}
+        </div>
       </div>
 
       {historyLoading && <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>Loading...</div>}
@@ -434,7 +445,7 @@ export function ModelHistoryTab({
                           const total = row.total_served || 0;
                           const reps = row.replications || 1;
                           const avg = reps > 1 ? (total / reps) : total;
-                          const label = reps > 1 ? `${avg.toFixed(1)} avg` : total;
+                          const label = reps > 1 ? avg.toFixed(1) : total;
                           return (
                             <span title={reps > 1 ? `${total} total across ${reps} replications` : undefined}>
                               {label}
@@ -444,7 +455,7 @@ export function ModelHistoryTab({
                       </td>
                       <td style={{ padding: "6px 12px", color: row.total_reneged > 0 ? C.reneged : C.muted }}>{row.total_reneged || 0}</td>
                       <td style={{ padding: "6px 12px", color: C.amber }}>
-                        {row.avg_wait_time != null ? row.avg_wait_time.toFixed(2) : "—"}t
+                        {row.avg_wait_time != null ? row.avg_wait_time.toFixed(2) : "—"}
                       </td>
                       <td style={{ padding: "6px 12px" }}>
                         {(() => {
