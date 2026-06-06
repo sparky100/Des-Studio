@@ -203,22 +203,14 @@ describe('ModelHistoryTab — Run History UI', () => {
 
   // ── Export buttons ─────────────────────────────────────────────────────
 
-  it('disables export buttons when no rows', () => {
+  it('disables export button when no rows', () => {
     renderTab({ historyRows: [] });
-    const buttons = screen.getAllByRole('button');
-    const exportJson = buttons.find(b => b.textContent.includes('Export run list') && !b.textContent.includes('CSV'));
-    const exportCsv = buttons.find(b => b.textContent.includes('Export run list as CSV'));
-    expect(exportJson).toBeDisabled();
-    expect(exportCsv).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Export list/i })).toBeDisabled();
   });
 
-  it('enables export buttons when rows exist', () => {
+  it('enables export button when rows exist', () => {
     renderTab({ historyRows: [baseRow] });
-    const buttons = screen.getAllByRole('button');
-    const exportJson = buttons.find(b => b.textContent.includes('Export run list') && !b.textContent.includes('CSV'));
-    const exportCsv = buttons.find(b => b.textContent.includes('Export run list as CSV'));
-    expect(exportJson).not.toBeDisabled();
-    expect(exportCsv).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: /Export list/i })).not.toBeDisabled();
   });
 
   // ── Bulk selection ─────────────────────────────────────────────────────

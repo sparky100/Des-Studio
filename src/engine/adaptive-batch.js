@@ -19,7 +19,7 @@ function selectKpiPath(model) {
   if (firstGoal?.metric && GOAL_METRIC_TO_PATH[firstGoal.metric]) {
     return GOAL_METRIC_TO_PATH[firstGoal.metric];
   }
-  return 'summary.served';
+  return 'summary.avgWait';
 }
 
 function getPathValue(obj, path) {
