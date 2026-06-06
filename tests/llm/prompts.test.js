@@ -164,7 +164,7 @@ describe("LLM prompt builders", () => {
     const payload = JSON.parse(prompt.messages[1].content);
     expect(payload.kpis.resources[0]).toEqual(expect.objectContaining({
       name: "Nurse",
-      utilisation: 1.0,
+      utilisation: 100,
       busyCount: 2,
       idleCount: 0,
       totalServers: 2,

@@ -700,8 +700,8 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     ...(entityAnomalies ? { entityAnomalies } : {}),
   };
 
-  const highLoadWarning = kpis.resources.some(r => r.utilisation != null && r.utilisation > 0.85)
-    ? " NOTE: At least one resource has utilisation > 0.85 — this is the HIGH LOAD REGIME where wait times are non-linearly sensitive to capacity; small capacity increases have outsized impact."
+  const highLoadWarning = kpis.resources.some(r => r.utilisation != null && r.utilisation > 85)
+    ? " NOTE: At least one resource has utilisation above 85% — this is the HIGH LOAD REGIME where wait times are non-linearly sensitive to capacity; small capacity increases have outsized impact."
     : "";
 
   const goalInstruction = goalGaps?.length
@@ -788,7 +788,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     ? " In the 'How Reliable' section, identify which KPIs have wide confidence intervals and what this means for decision-making."
     : " Note that replication count is low, so confidence intervals may be wide and conclusions less certain.";
 
-  const highLoadWarning = payload.kpis.resources.some(r => r.utilisation != null && r.utilisation > 0.85)
+  const highLoadWarning = payload.kpis.resources.some(r => r.utilisation != null && r.utilisation > 85)
     ? " NOTE: One or more resources has utilisation above 85% — this is a common cause of queue instability. Factor this into your recommendations."
     : "";
 
