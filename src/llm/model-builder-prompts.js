@@ -129,7 +129,17 @@ companionCsv rules:
     one queue and conflicts with the routing table; the engine rejects the combination.
 
     ✓ CORRECT: "effect": ["RELEASE(Nurse)"], "probabilisticRouting": [{"queueName": "Treatment Queue", "probability": 0.7}, {"queueName": "Diagnostics Queue", "probability": 0.3}]
-    ✗ WRONG:   "effect": ["RELEASE(Nurse, Treatment Queue)"], "probabilisticRouting": [...]  — V18 error`,
+    ✗ WRONG:   "effect": ["RELEASE(Nurse, Treatment Queue)"], "probabilisticRouting": [...]  — V18 error
+
+11. C-event name MUST NOT start with the word "Start".
+    The effect picker prepends "Start" automatically — a C-event named "Start Triage"
+    displays as "Start Start Triage with…" in the UI.
+
+    Use a verb or verb-noun for the C-event name:
+    ✓ CORRECT: "name": "Triage"            → displays "Start Triage with Nurse…"
+    ✓ CORRECT: "name": "Assess Minor"      → displays "Start Assess Minor with…"
+    ✗ WRONG:   "name": "Start Triage"      → displays "Start Start Triage with…"
+    ✗ WRONG:   "name": "Start Assessment Minor"`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:

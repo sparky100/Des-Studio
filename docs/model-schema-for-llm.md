@@ -581,8 +581,8 @@ C-events fire whenever their condition becomes true. They represent service star
 
 ```json
 {
-  "id": "c_start_triage",
-  "name": "Start Triage",
+  "id": "c_triage",
+  "name": "Triage",
   "priority": 1,
   "condition": "queue(Triage Queue).length > 0 AND idle(Nurse).count > 0",
   "effect": ["ASSIGN(Triage Queue, Nurse)"],
@@ -863,7 +863,15 @@ All generated model JSON MUST pass every blocking rule below.
   - Entity types: `et_` prefix (e.g. `et_patient`, `et_nurse`)
   - Queues: `q_` prefix (e.g. `q_triage`, `q_treatment`)
   - B-events: `b_` prefix (e.g. `b_arrive`, `b_complete`)
-  - C-events: `c_` prefix (e.g. `c_start_service`)
+  - C-events: `c_` prefix (e.g. `c_triage`, `c_assess_minor`).
+    ⚠ C-event `name` must be a **verb or verb-noun — never prefixed with "Start"**.
+    The effect picker automatically prepends "Start" when showing ASSIGN labels.
+    Naming a C-event "Start Triage" causes the UI to display "Start Start Triage".
+    Good examples: "Triage", "Assess Minor", "Treat Resus", "Check In", "Consult".
+  - Entity type `name` (servers/resources) should be a role noun — "Nurse", "Doctor", "Triage Nurse".
+    Queues should be noun phrases — "Triage Queue", "Waiting Room".
+    Together with a correctly named C-event, the effect label reads naturally:
+    "Start Triage with Nurse and Patient from Triage Queue."
   - State variables: `sv_` prefix (e.g. `sv_shift_active`)
   - Containers: `ct_` prefix (e.g. `ct_tank`)
 - `name` fields are the human-readable labels shown in the UI. They are also used as references in macro arguments — **they must match exactly including case**.
