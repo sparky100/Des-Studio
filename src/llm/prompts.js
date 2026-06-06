@@ -1421,13 +1421,16 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     : "";
 
   const instruction =
-    "Produce a structured analysis with exactly these four sections:\n" +
+    "Produce a structured analysis with exactly these five sections:\n" +
     "### Bottlenecks\nRank the top 3 bottlenecks by impact on throughput or wait time. " +
     "For each state the queue/resource name, utilisation or wait metric, and why it is a bottleneck.\n" +
-    "### Quick Wins\nList 3 changes achievable without adding resources " +
-    "(e.g. scheduling, routing, priority, warmup). For each give the expected benefit.\n" +
-    "### Investment Opportunities\nList 2 structural improvements requiring additional resources or redesign. " +
-    "Quantify the potential gain where the CI data supports it.\n" +
+    "### Quick Wins\nIn 2–3 sentences of prose (NO numbered list), describe the most impactful policy or scheduling change achievable without adding resources (e.g. priority rules, routing, warmup period). Do NOT use numbered list items in this section.\n" +
+    "### Investment Opportunities\nIn 1–2 sentences of prose (NO numbered list), describe structural improvements requiring additional resources or redesign. Do NOT use numbered list items in this section.\n" +
+    "### Automatable Changes\nList up to 3 changes that can be expressed as a single numeric parameter update to the existing model. " +
+    "ONLY include items of these types: (a) increasing or decreasing a server/entity-type count, (b) changing a queue capacity limit, (c) changing a state variable's initial value. " +
+    "For each item cite the exact current value from the model data and propose a specific new number — no ranges, no vague directions. " +
+    "Format each as a numbered item, e.g. '1. Increase Nurse count from 2 to 3 — expected to reduce avgWait by ~30%'. " +
+    "If no such changes are warranted by the data, omit this section entirely.\n" +
     "### Confidence Summary\nOne paragraph: state whether results are statistically robust, " +
     "cite the CI and replication count, and flag any caveats from non-convergence or warnings.\n\n" +
     "NUMBER FORMAT: Express all numeric values to at most 1 decimal place. Express all utilisation values as integer percentages (e.g. '57%' not '57.3%' or '0.57'). Express all time values to at most 1 decimal place." +
