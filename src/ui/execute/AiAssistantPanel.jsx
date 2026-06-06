@@ -106,15 +106,23 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
   const isManual = suggestion.change?.type === "manual";
   const canApply = !isManual && typeof onRunWithPatch === "function";
   const canSave = !isManual && typeof onApplyPatchedModel === "function" && verifyResult;
+  const canApplyDirect = !isManual && typeof onApplyPatchedModel === "function" && verifyStatus !== "saved";
   const running = verifyStatus === "running";
   const [runName, setRunName] = useState("");
 
   const changeLabel = isManual
     ? "Manual change required"
-    : `${suggestion.change?.target} count/capacity/value: ${suggestion.change?.from} -> ${suggestion.change?.to}`;
+    : `${suggestion.change?.target}: ${suggestion.change?.from} → ${suggestion.change?.to}`;
 
   const handleSave = () => {
     if (!canSave) return;
+    const patched = applySuggestionPatch(model, suggestion.change);
+    onApplyPatchedModel(patched, suggestion);
+    onSaved?.();
+  };
+
+  const handleApplyDirect = () => {
+    if (!canApplyDirect) return;
     const patched = applySuggestionPatch(model, suggestion.change);
     onApplyPatchedModel(patched, suggestion);
     onSaved?.();
@@ -150,8 +158,19 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
         onClick={() => onRunWithPatch(suggestion)}
         style={{ width: "100%", justifyContent: "center" }}
       >
-        {running ? "Running simulation…" : "Run with this change"}
+        {running ? "Running simulation…" : "Run Comparison"}
       </Btn>
+      {canApplyDirect && !verifyResult && (
+        <Btn
+          small
+          variant="ghost"
+          disabled={running}
+          onClick={handleApplyDirect}
+          style={{ width: "100%", justifyContent: "center", marginTop: 4 }}
+        >
+          Apply to model
+        </Btn>
+      )}
       {running && (
         <div style={{ marginTop: 8, padding: "10px 12px", background: C.surface, borderRadius: 6, border: `1px solid ${C.border}` }}>
           <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic", animation: "pulse 1.5s ease-in-out infinite" }}>
