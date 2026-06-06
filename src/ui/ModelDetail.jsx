@@ -454,6 +454,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [showExplorePanel,setShowExplorePanel]=useState(false);
   const [aiAction,setAiAction]=useState(null);
   const [aiSeq,setAiSeq]=useState(0);
+  const [describePrompt,setDescribePrompt]=useState("");
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
   const [resultsReportGenerating,setResultsReportGenerating]=useState(false);
   const [exportMenuOpen,setExportMenuOpen]=useState(false);
@@ -1076,7 +1077,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="ai"&&(
           <div style={{height:"calc(100vh - 220px)", minHeight: 0, display:"flex", flexDirection:"column", overflow:"hidden"}}>
           {renderAuthoringShell(
-            <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel} onSaveModel={saveGeneratedModel}/>
+            <AiGeneratedModelPanel model={model} canEdit={canEdit} onApplyModel={applyGeneratedModel} onSaveModel={saveGeneratedModel} initialDraft={describePrompt}/>
           )}
           </div>
         )}
@@ -1606,6 +1607,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           onApplyPatchedModel={canEdit ? (patchedModel, suggestion) => {
             setWholeModel(patchedModel);
             toast.success(`Applied: ${suggestion.change?.target} → ${suggestion.change?.to}`);
+          } : null}
+          onRefineInDescribe={canEdit ? (promptText) => {
+            setDescribePrompt(promptText);
+            setTab("ai");
+            setAiSidebarOpen(false);
+            setAiAction(null);
           } : null}
           onClose={()=>{setAiSidebarOpen(false);setAiAction(null);}}
         />

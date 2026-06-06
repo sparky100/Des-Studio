@@ -101,7 +101,7 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
   );
 }
 
-function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult, onSaved }) {
+function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult, onSaved, onRefineInDescribe }) {
   const { C, FONT } = useTheme();
   const change = suggestion.change;
   const AUTOMATABLE = new Set(["entityTypeCount", "queueCapacity", "stateVariable"]);
@@ -123,6 +123,12 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
   const changeLabel = isManual
     ? "Manual change required — implement in model editor"
     : `${change?.target}: ${change?.from} → ${change?.to}`;
+
+  const handleRefineInDescribe = () => {
+    if (!onRefineInDescribe) return;
+    const parts = [suggestion.cause, suggestion.predicted].filter(Boolean);
+    onRefineInDescribe(parts.join(". "));
+  };
 
   const handleSave = () => {
     if (!canSave) return;
@@ -179,6 +185,16 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
           style={{ width: "100%", justifyContent: "center", marginTop: 4 }}
         >
           Apply to model
+        </Btn>
+      )}
+      {isManual && onRefineInDescribe && (
+        <Btn
+          small
+          variant="ghost"
+          onClick={handleRefineInDescribe}
+          style={{ width: "100%", justifyContent: "center", marginTop: 4 }}
+        >
+          Refine in Describe →
         </Btn>
       )}
       {running && (
@@ -324,6 +340,7 @@ export const AiAssistantPanel = ({
   inline = false,
   triggerAction = null, // { action: "explain"|"compare"|"refine", seq: number }
   onDiagnosticsNodeSelect = null,
+  onRefineInDescribe = null,
 }) => {
   const { C, FONT } = useTheme();
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -785,6 +802,7 @@ export const AiAssistantPanel = ({
               verifyStatus={verifyStatus[s.rank]}
               verifyResult={verifyResults[s.rank]}
               onSaved={() => setVerifyStatus(prev => ({ ...prev, [s.rank]: "saved" }))}
+              onRefineInDescribe={onRefineInDescribe}
             />
           ))}
         </div>
