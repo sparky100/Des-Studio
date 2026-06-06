@@ -1,5 +1,5 @@
 // ui/shared/DistSparkline.jsx — Small SVG preview of distribution shape
-;
+import { useTheme } from "./ThemeContext.jsx";
 
 const W = 120;
 const H = 40;
@@ -23,6 +23,7 @@ function linspace(a, b, n) {
 // Approximate PDF shapes
 
 function ExponentialShape({ mean }) {
+  const { C } = useTheme();
   const m = Math.max(0.01, parseFloat(mean) || 1);
   const xs = linspace(0, m * 4, 40);
   const ys = xs.map(x => Math.exp(-x / m) / m);
@@ -31,6 +32,7 @@ function ExponentialShape({ mean }) {
 }
 
 function UniformShape({ min, max }) {
+  const { C } = useTheme();
   const lo = parseFloat(min) || 0;
   const hi = parseFloat(max) || 1;
   if (lo >= hi) return <rect x={PAD} y={PAD} width={IW} height={IH} fill={C.cEvent + "44"} stroke={C.cEvent} strokeWidth={1} />;
@@ -46,6 +48,7 @@ function UniformShape({ min, max }) {
 }
 
 function FixedShape({ value }) {
+  const { C } = useTheme();
   const v = parseFloat(value) || 1;
   const cx = PAD + IW / 2;
   return (
@@ -57,6 +60,7 @@ function FixedShape({ value }) {
 }
 
 function NormalShape({ mean, stddev }) {
+  const { C } = useTheme();
   const m = parseFloat(mean) || 1;
   const s = Math.max(0.01, parseFloat(stddev) || 0.3);
   const range = s * 4;
@@ -67,6 +71,7 @@ function NormalShape({ mean, stddev }) {
 }
 
 function TriangularShape({ min, mode, max }) {
+  const { C } = useTheme();
   const a = parseFloat(min) || 0;
   const c = parseFloat(mode) || 0.5;
   const b = parseFloat(max) || 1;
@@ -79,6 +84,7 @@ function TriangularShape({ min, mode, max }) {
 }
 
 function ErlangShape({ k, mean }) {
+  const { C } = useTheme();
   const kv = Math.max(1, Math.round(parseFloat(k) || 2));
   const m = Math.max(0.01, parseFloat(mean) || 1);
   const rate = kv / m;
@@ -92,6 +98,7 @@ function ErlangShape({ k, mean }) {
 }
 
 function IconShape({ label }) {
+  const { C } = useTheme();
   return (
     <text x={W / 2} y={H / 2 + 4} textAnchor="middle" fill={C.muted} fontSize={13} fontFamily="sans-serif">
       {label}
@@ -114,6 +121,7 @@ const SHAPE_MAP = {
 };
 
 export function DistSparkline({ dist, distParams = {} }) {
+  const { C } = useTheme();
   const ShapeComp = SHAPE_MAP[dist] || (() => <IconShape label="?" />);
   return (
     <svg
