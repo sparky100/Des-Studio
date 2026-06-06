@@ -196,16 +196,6 @@ export function ModelTabBar({
               {renderIssueBadge(tabIssueCounts["validate"], "validate")}
             </button>
           )}
-          {onToggleAiSidebar && (
-            <button type="button" aria-pressed={aiSidebarOpen}
-              onClick={onToggleAiSidebar}
-              style={btnTabStyle(aiSidebarOpen)}
-              title="Ask for help explaining or improving this model"
-            >
-              <span aria-hidden="true" style={{ fontWeight: 800 }}>?</span>
-              Model Assistant
-            </button>
-          )}
         </div>
 
         {/* Define sub-bar — shown when any define tab is active */}
@@ -300,6 +290,28 @@ export function ModelTabBar({
             </button>
           );
         })}
+        {onToggleAiSidebar && (
+          <>
+            <div style={{ width: 1, background: C.border, margin: "6px 4px", alignSelf: "stretch" }} />
+            <button
+              type="button"
+              aria-pressed={aiSidebarOpen}
+              onClick={onToggleAiSidebar}
+              title="Ask for help explaining or improving this model"
+              style={{
+                background: aiSidebarOpen ? C.panel : C.surface,
+                border: `1px solid ${aiSidebarOpen ? C.accent : C.border}`,
+                borderRadius: 6, color: aiSidebarOpen ? C.accent : C.text,
+                cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+                flexShrink: 0, fontFamily: FONT, fontSize: 11, fontWeight: 700,
+                padding: "7px 10px", whiteSpace: "nowrap",
+              }}
+            >
+              <span aria-hidden="true" style={{ fontWeight: 800 }}>?</span>
+              Model Assistant
+            </button>
+          </>
+        )}
         {exploreVisible && onExplore && (
           <>
             <div style={{ width: 1, background: C.border, margin: "6px 4px", alignSelf: "stretch" }} />
