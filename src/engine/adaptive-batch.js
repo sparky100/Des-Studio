@@ -60,9 +60,11 @@ function runReplicationsPromise(opts, signal) {
  * @param {Object} [options.schedulesMap={}]
  * @param {number} [options.targetRelativeCI=5] - convergence threshold as % of mean
  * @param {function}[options.onRoundComplete]   - ({round, totalReps, ci, relativeHalfWidth}) => void
+ * @param {number|null} [options.checkpointAt=100] - pause for user confirmation after this many reps (null disables)
+ * @param {function}[options.onCheckpoint]      - async ({totalReps, relativeHalfWidth, ci}) => Promise<boolean> — resolve true to continue, false to stop
  * @param {AbortSignal} [options.signal]
  * @param {function}[options._createWorker]     - injectable worker factory for tests
- * @returns {Promise<{finalReps, converged, relativeHalfWidth, ci, kpiPath, results, roundHistory}>}
+ * @returns {Promise<{finalReps, converged, relativeHalfWidth, ci, kpiPath, results, roundHistory, stoppedAtCheckpoint?}>}
  */
 export async function runAdaptiveBatch(options = {}) {
   const {
@@ -74,6 +76,8 @@ export async function runAdaptiveBatch(options = {}) {
     schedulesMap = {},
     targetRelativeCI = 5,
     onRoundComplete,
+    checkpointAt = 100,
+    onCheckpoint,
     signal,
     _createWorker,
   } = options;
@@ -88,12 +92,19 @@ export async function runAdaptiveBatch(options = {}) {
   let totalReps = 0;
   let round = 0;
   const roundHistory = [];
+  let checkpointFired = false;
 
   while (totalReps < tierMax) {
     round++;
-    const batchSize = totalReps === 0
-      ? initialBatch
-      : Math.min(stepSize, tierMax - totalReps);
+    // Size batch to land exactly on checkpointAt before normal stepping resumes
+    let batchSize;
+    if (totalReps === 0) {
+      batchSize = initialBatch;
+    } else if (checkpointAt != null && !checkpointFired && totalReps < checkpointAt) {
+      batchSize = Math.min(checkpointAt - totalReps, tierMax - totalReps);
+    } else {
+      batchSize = Math.min(stepSize, tierMax - totalReps);
+    }
 
     const runOpts = {
       model,
@@ -125,6 +136,16 @@ export async function runAdaptiveBatch(options = {}) {
 
     if (relativeHalfWidth != null && relativeHalfWidth < targetRelativeCI) {
       return { finalReps: totalReps, converged: true, relativeHalfWidth, ci, kpiPath, results: allResults, roundHistory };
+    }
+
+    // Checkpoint fires after convergence check — converged models skip it
+    if (checkpointAt != null && !checkpointFired && totalReps >= checkpointAt && onCheckpoint) {
+      checkpointFired = true;
+      const shouldContinue = await onCheckpoint({ totalReps, relativeHalfWidth, ci });
+      if (!shouldContinue) {
+        return { finalReps: totalReps, converged: false, relativeHalfWidth, ci,
+                 kpiPath, results: allResults, roundHistory, stoppedAtCheckpoint: true };
+      }
     }
   }
 
