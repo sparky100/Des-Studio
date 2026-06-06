@@ -3,17 +3,19 @@
 // streams an LLM opportunity analysis, and saves results to the DB.
 import { useState, useEffect, useRef, useMemo } from "react";
 import { runAdaptiveBatch } from "../../engine/adaptive-batch.js";
+import { runReplications } from "../../engine/replication-runner.js";
 import { buildBatchAnalysisPrompt, buildApplyOpportunityPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
 import { streamNarrative, streamModelBuilder, callLLMOnce } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
 import { makeBatchResult, CI_METRICS } from "./executeHelpers.js";
-import { summarizeReplicationResults } from "../../engine/statistics.js";
+import { summarizeReplicationResults, compareScenarios } from "../../engine/statistics.js";
 import { RUN_ADMISSION_TIERS, getRunAdmission } from "../../engine/run-admission.js";
 import { RADIUS, Z, SPACE, SHADOW } from "../shared/tokens.js";
 import { Btn } from "../shared/components.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { ModelDiffPreview } from "../editors/ModelDiffPreview.jsx";
 import { SummaryCardGrid } from "../results/ResultsWorkspace.jsx";
+import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
 
 const RISK_LABELS = { small: "Low", medium: "Medium", large: "High", too_large: "Very high" };
 
@@ -96,6 +98,23 @@ function renderMarkdown(text, C, FONT, onApplyItem) {
 }
 const RISK_COLORS = { small: C => C.green, medium: C => C.amber, large: C => C.amber, too_large: C => C.red };
 
+function parseOptions(text) {
+  if (!text) return [];
+  const lines = text.split("\n");
+  const options = [];
+  let inBottleneck = false;
+  for (const line of lines) {
+    if (/^###? /.test(line)) inBottleneck = /bottleneck/i.test(line);
+    const m = line.match(/^(\d+)\. (.+)/);
+    if (m && !inBottleneck) options.push(m[2].trim());
+  }
+  return options;
+}
+
+function getResultPathValue(obj, path) {
+  return path.split('.').reduce((cur, key) => cur?.[key], obj);
+}
+
 export function AdaptiveBatchPanel({
   model,
   tier,
@@ -123,6 +142,8 @@ export function AdaptiveBatchPanel({
   const [proposalExplanation, setProposalExplanation] = useState(null);
   const [applyError, setApplyError] = useState(null);
   const [checkpointData, setCheckpointData] = useState(null); // null | { totalReps, relativeHalfWidth }
+  const [exploreTab, setExploreTab] = useState("analysis"); // "analysis" | "options"
+  const [comparisonStates, setComparisonStates] = useState({}); // { [idx]: { status, patchedModel, comparison, explanation, error } }
   const applyAbortRef = useRef(null);
   const abortRef = useRef(null);
   const baseSeedRef = useRef(Date.now() % 1_000_000);
@@ -354,6 +375,58 @@ export function AdaptiveBatchPanel({
     }
   }
 
+  async function runComparison(idx, optionText) {
+    if (!onApplyModel) return;
+    setComparisonStates(prev => ({ ...prev, [idx]: { status: 'generating' } }));
+    try {
+      const applyPrompt = buildApplyOpportunityPrompt(optionText, model, batchResult || null);
+      const rawText = await callLLMOnce(applyPrompt);
+      const { analysis, suggestions } = parseSuggestionResponse(rawText);
+      const suggestion = suggestions?.[0];
+      if (!suggestion?.change || suggestion.change.type === 'manual') {
+        setComparisonStates(prev => ({ ...prev, [idx]: { status: 'error', error: 'This change requires manual model edits — use Apply ↗ in the Analysis tab.' } }));
+        return;
+      }
+      const patched = applySuggestionPatch(model, suggestion.change);
+      setComparisonStates(prev => ({ ...prev, [idx]: { status: 'running', patchedModel: patched } }));
+      const finalReps = batchResult?.finalReps || 10;
+      const patchedResults = await new Promise((resolve, reject) => {
+        runReplications({
+          model: patched,
+          replications: finalReps,
+          baseSeed: baseSeedRef.current,
+          warmupPeriod,
+          maxSimTime,
+          schedulesMap,
+          collectTimeSeries: false,
+          onComplete: resolve,
+          onError: reject,
+        });
+      });
+      const baselineReps = batchResult?.results || [];
+      const comparison = compareScenarios(baselineReps, patchedResults, CI_METRICS, {
+        labelA: 'Baseline',
+        labelB: 'With change',
+      });
+      const meansA = {};
+      const meansB = {};
+      for (const m of CI_METRICS) {
+        const valsA = baselineReps.map(r => getResultPathValue(r?.result, m)).filter(v => Number.isFinite(v));
+        const valsB = (Array.isArray(patchedResults) ? patchedResults : []).map(r => getResultPathValue(r?.result, m)).filter(v => Number.isFinite(v));
+        meansA[m] = valsA.length > 0 ? valsA.reduce((s, v) => s + v, 0) / valsA.length : null;
+        meansB[m] = valsB.length > 0 ? valsB.reduce((s, v) => s + v, 0) / valsB.length : null;
+      }
+      setComparisonStates(prev => ({ ...prev, [idx]: {
+        status: 'done',
+        patchedModel: patched,
+        comparison: { ...comparison, meansA, meansB },
+        explanation: analysis || suggestion.predicted || '',
+      }}));
+    } catch (err) {
+      setComparisonStates(prev => ({ ...prev, [idx]: { status: 'error', error: err?.message || 'Comparison failed.' } }));
+    }
+  }
+
   const pct = tierMax > 0 ? Math.round((totalReps / tierMax) * 100) : 0;
 
   return (
@@ -408,6 +481,9 @@ export function AdaptiveBatchPanel({
                 Explore will run up to <strong style={{ color: C.accent }}>{tierMax} replications</strong> of the model,
                 stepping up in batches until the 95% confidence interval is within ±5% of the mean,
                 then provide an analysis of the results.
+                {tier === 'pro' && (
+                  <span style={{ color: C.muted }}> You will be prompted at 100 reps to continue further if needed.</span>
+                )}
               </div>
 
               {/* Model complexity row */}
@@ -484,7 +560,7 @@ export function AdaptiveBatchPanel({
           )}
 
           {/* ── Running phase ── */}
-          {phase === "running" && (
+          {(phase === "running" || phase === "checkpoint") && (
             <div style={{ display: "flex", flexDirection: "column", gap: SPACE.md }}>
               {!checkpointData && (
                 <>
@@ -542,7 +618,7 @@ export function AdaptiveBatchPanel({
                     </div>
                     <div style={{ display: "flex", gap: SPACE.sm, marginTop: SPACE.xs }}>
                       <Btn small variant="primary" onClick={handleCheckpointContinue}>
-                        Continue
+                        Continue to 500 reps
                       </Btn>
                       <Btn small variant="ghost" onClick={handleCheckpointStop}>
                         Stop here — use these results
@@ -576,81 +652,141 @@ export function AdaptiveBatchPanel({
               {combinedBatchResult && (
                 <SummaryCardGrid results={combinedBatchResult} replicationResults={replicationResults} />
               )}
-              {phase === "analysing" && !streamedText && (
-                <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
-                  Analysing results...
-                </div>
-              )}
-              {streamedText && (
-                <div aria-live={phase === "analysing" ? "polite" : "off"}>
-                  {renderMarkdown(
-                    streamedText,
-                    C,
-                    FONT,
-                    phase === "done" && onApplyModel ? startApply : undefined
-                  )}
-                  {phase === "analysing" && (
-                    <span style={{ color: C.accent, fontFamily: FONT }}>▌</span>
-                  )}
-                </div>
-              )}
 
-              {/* ── Apply-generating overlay ── */}
-              {applyPhase === "generating" && (
-                <div style={{
-                  marginTop: SPACE.md,
-                  padding: `${SPACE.sm}px ${SPACE.md}px`,
-                  background: C.panel,
-                  borderRadius: RADIUS.md,
-                  border: `1px solid ${C.border}`,
-                  display: "flex", alignItems: "center", gap: SPACE.sm,
-                }}>
-                  <span style={{ color: C.accent, fontFamily: FONT }}>▌</span>
-                  <span style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
-                    Generating model change…
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => { applyAbortRef.current?.abort(); setApplyPhase("idle"); }}
-                    style={{ marginLeft: "auto", background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11 }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
+              {/* ── Tab headers ── */}
+              {(() => {
+                const options = parseOptions(streamedText);
+                return (
+                  <>
+                    <div style={{ display: "flex", gap: 6, borderBottom: `1px solid ${C.border}`, paddingBottom: 6 }}>
+                      {["analysis", "options"].map(tab => (
+                        <button
+                          key={tab}
+                          type="button"
+                          onClick={() => setExploreTab(tab)}
+                          style={{
+                            background: exploreTab === tab ? C.accent : "transparent",
+                            border: `1px solid ${exploreTab === tab ? C.accent : C.border}`,
+                            borderRadius: RADIUS.sm,
+                            color: exploreTab === tab ? C.surface : C.text,
+                            fontFamily: FONT, fontSize: 11, fontWeight: 700,
+                            padding: "3px 10px", cursor: "pointer",
+                          }}
+                        >
+                          {tab === "analysis" ? "Analysis" : `Options${options.length > 0 ? ` (${options.length})` : ""}`}
+                        </button>
+                      ))}
+                    </div>
 
-              {/* ── Apply-error ── */}
-              {applyPhase === "apply-error" && applyError && (
-                <div style={{
-                  marginTop: SPACE.md,
-                  padding: `${SPACE.sm}px ${SPACE.md}px`,
-                  background: C.errorBg,
-                  borderRadius: RADIUS.md,
-                  display: "flex", alignItems: "center", gap: SPACE.sm,
-                }}>
-                  <span style={{ fontFamily: FONT, fontSize: 11, color: C.error, flex: 1 }}>{applyError}</span>
-                  <button
-                    type="button"
-                    onClick={() => setApplyPhase("idle")}
-                    style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11 }}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              )}
+                    {/* ── Analysis tab ── */}
+                    {exploreTab === "analysis" && (
+                      <div>
+                        {phase === "analysing" && !streamedText && (
+                          <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
+                            Analysing results...
+                          </div>
+                        )}
+                        {streamedText && (
+                          <div aria-live={phase === "analysing" ? "polite" : "off"}>
+                            {renderMarkdown(streamedText, C, FONT, null)}
+                            {phase === "analysing" && (
+                              <span style={{ color: C.accent, fontFamily: FONT }}>▌</span>
+                            )}
+                          </div>
+                        )}
+                        {/* Legacy apply overlays (used when starting apply from Analysis tab) */}
+                        {applyPhase === "generating" && (
+                          <div style={{ marginTop: SPACE.md, padding: `${SPACE.sm}px ${SPACE.md}px`, background: C.panel, borderRadius: RADIUS.md, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: SPACE.sm }}>
+                            <span style={{ color: C.accent, fontFamily: FONT }}>▌</span>
+                            <span style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>Generating model change…</span>
+                            <button type="button" onClick={() => { applyAbortRef.current?.abort(); setApplyPhase("idle"); }} style={{ marginLeft: "auto", background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11 }}>Cancel</button>
+                          </div>
+                        )}
+                        {applyPhase === "apply-error" && applyError && (
+                          <div style={{ marginTop: SPACE.md, padding: `${SPACE.sm}px ${SPACE.md}px`, background: C.errorBg, borderRadius: RADIUS.md, display: "flex", alignItems: "center", gap: SPACE.sm }}>
+                            <span style={{ fontFamily: FONT, fontSize: 11, color: C.error, flex: 1 }}>{applyError}</span>
+                            <button type="button" onClick={() => setApplyPhase("idle")} style={{ background: "none", border: "none", color: C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 11 }}>Dismiss</button>
+                          </div>
+                        )}
+                        {applyPhase === "preview" && proposedModel && (
+                          <div style={{ marginTop: SPACE.md }}>
+                            <ModelDiffPreview
+                              currentModel={model}
+                              proposedModel={proposedModel}
+                              llmExplanation={proposalExplanation}
+                              onApply={(merged) => { onApplyModel(merged); onClose?.(); }}
+                              onDiscard={() => setApplyPhase("idle")}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-              {/* ── ModelDiffPreview ── */}
-              {applyPhase === "preview" && proposedModel && (
-                <div style={{ marginTop: SPACE.md }}>
-                  <ModelDiffPreview
-                    currentModel={model}
-                    proposedModel={proposedModel}
-                    llmExplanation={proposalExplanation}
-                    onApply={(merged) => { onApplyModel(merged); onClose?.(); }}
-                    onDiscard={() => setApplyPhase("idle")}
-                  />
-                </div>
-              )}
+                    {/* ── Options tab ── */}
+                    {exploreTab === "options" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: SPACE.sm }}>
+                        {phase === "analysing" && options.length === 0 && (
+                          <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
+                            Identifying improvement options…
+                          </div>
+                        )}
+                        {options.length === 0 && phase === "done" && (
+                          <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
+                            No numbered options found in analysis. Check the Analysis tab.
+                          </div>
+                        )}
+                        {options.map((optText, idx) => {
+                          const cs = comparisonStates[idx];
+                          return (
+                            <div key={idx} style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: RADIUS.md, padding: SPACE.md, display: "flex", flexDirection: "column", gap: SPACE.sm }}>
+                              <div style={{ display: "flex", alignItems: "flex-start", gap: SPACE.sm }}>
+                                <span style={{ color: C.accent, fontFamily: FONT, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}.</span>
+                                <span style={{ fontFamily: FONT, fontSize: 12, color: C.text, flex: 1, lineHeight: 1.55 }}>{optText}</span>
+                                {onApplyModel && (!cs || cs.status === 'idle') && phase === "done" && (
+                                  <Btn small variant="ghost" onClick={() => runComparison(idx, optText)} style={{ flexShrink: 0 }}>
+                                    Run Comparison
+                                  </Btn>
+                                )}
+                              </div>
+                              {cs?.status === 'generating' && (
+                                <div style={{ fontFamily: FONT, fontSize: 11, color: C.muted }}>
+                                  ▌ Generating model patch…
+                                </div>
+                              )}
+                              {cs?.status === 'running' && (
+                                <div style={{ fontFamily: FONT, fontSize: 11, color: C.muted }}>
+                                  ▌ Running {batchResult?.finalReps || 10} replications of patched model…
+                                </div>
+                              )}
+                              {cs?.status === 'error' && (
+                                <div style={{ fontFamily: FONT, fontSize: 11, color: C.error }}>
+                                  {cs.error}
+                                </div>
+                              )}
+                              {cs?.status === 'done' && cs.comparison && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: SPACE.sm }}>
+                                  {cs.explanation && (
+                                    <div style={{ fontFamily: FONT, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+                                      {cs.explanation}
+                                    </div>
+                                  )}
+                                  <ScenarioComparisonTable comparison={cs.comparison} />
+                                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                                    <Btn small variant="primary" onClick={() => { onApplyModel(cs.patchedModel); onClose?.(); }}>
+                                      Apply to Model
+                                    </Btn>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
               {error && (
                 <div style={{
                   padding: `${SPACE.sm}px ${SPACE.md}px`,
@@ -705,7 +841,7 @@ export function AdaptiveBatchPanel({
               )}
             </>
           )}
-          {phase === "running" && (
+          {(phase === "running" || phase === "checkpoint") && (
             <Btn small variant="ghost" onClick={() => abortRef.current?.abort()}>
               Cancel
             </Btn>
