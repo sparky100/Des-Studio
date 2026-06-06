@@ -24,7 +24,7 @@ export const RUN_ADMISSION_TIERS = Object.freeze({
   pro: Object.freeze({
     id: "pro",
     label: "Pro",
-    maxReplications: 100,
+    maxReplications: 500,
     maxScans: 1000000,
     maxPlannedRows: 50000,
     maxSimTime: 200000,
