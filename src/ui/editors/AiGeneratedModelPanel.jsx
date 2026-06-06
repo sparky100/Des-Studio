@@ -523,10 +523,11 @@ function RefinementChips({ suggestions, onChipClick }) {
   );
 }
 
-export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveModel }) {
+export function AiGeneratedModelPanel({ model, canEdit, onApplyModel, onSaveModel, initialDraft = "" }) {
   const { C, FONT } = useTheme();
   const { isMobile, isCompact } = useViewport();
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(initialDraft);
+  useEffect(() => { if (initialDraft) setDraft(initialDraft); }, [initialDraft]);
   const [history, setHistory] = useState([]);
   const [proposal, setProposal] = useState(null);
   const [proposalExplanation, setProposalExplanation] = useState(null);
