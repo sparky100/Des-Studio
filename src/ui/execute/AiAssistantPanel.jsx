@@ -161,15 +161,17 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
       <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, marginBottom: 6 }}>
         <span style={{ color: C.muted, fontSize: 10 }}>Goal impact: </span>{suggestion.goalImpact}
       </div>
-      <Btn
-        small
-        variant="primary"
-        disabled={!canApply || running}
-        onClick={() => onRunWithPatch(suggestion)}
-        style={{ width: "100%", justifyContent: "center" }}
-      >
-        {running ? "Running simulation…" : "Run Comparison"}
-      </Btn>
+      {!isManual && (
+        <Btn
+          small
+          variant="primary"
+          disabled={running}
+          onClick={() => onRunWithPatch(suggestion)}
+          style={{ width: "100%", justifyContent: "center" }}
+        >
+          {running ? "Running simulation…" : "Run Comparison"}
+        </Btn>
+      )}
       {canApplyDirect && !verifyResult && (
         <Btn
           small
