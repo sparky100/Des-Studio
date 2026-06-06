@@ -103,7 +103,17 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
 
 function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult, onSaved }) {
   const { C, FONT } = useTheme();
-  const isManual = suggestion.change?.type === "manual";
+  const change = suggestion.change;
+  const AUTOMATABLE = new Set(["entityTypeCount", "queueCapacity", "stateVariable"]);
+  const targetExists = change?.target && (
+    (model?.entityTypes  || []).some(e => e.name === change.target) ||
+    (model?.queues       || []).some(q => q.name === change.target) ||
+    (model?.stateVariables || []).some(v => v.name === change.target)
+  );
+  const isManual = change?.type === "manual"
+    || !AUTOMATABLE.has(change?.type)
+    || !Number.isFinite(Number(change?.to))
+    || !targetExists;
   const canApply = !isManual && typeof onRunWithPatch === "function";
   const canSave = !isManual && typeof onApplyPatchedModel === "function" && verifyResult;
   const canApplyDirect = !isManual && typeof onApplyPatchedModel === "function" && verifyStatus !== "saved";
@@ -111,8 +121,8 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
   const [runName, setRunName] = useState("");
 
   const changeLabel = isManual
-    ? "Manual change required"
-    : `${suggestion.change?.target}: ${suggestion.change?.from} → ${suggestion.change?.to}`;
+    ? "Manual change required — implement in model editor"
+    : `${change?.target}: ${change?.from} → ${change?.to}`;
 
   const handleSave = () => {
     if (!canSave) return;
