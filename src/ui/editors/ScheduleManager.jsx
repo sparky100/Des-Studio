@@ -64,60 +64,52 @@ function ScheduleRow({ sched, bEvents, isSelected, onSelect, onSetDefault, onDel
     <div
       onClick={() => onSelect(sched.id)}
       style={{
-        display: "grid",
-        gridTemplateColumns: "1.5rem 1fr 80px 1fr auto",
-        alignItems: "center",
+        background: C.bg,
+        border: `1px solid ${C.accent}33`,
+        borderLeft: `3px solid ${C.accent}`,
+        borderRadius: 6,
+        padding: 12,
+        display: "flex",
+        flexDirection: "column",
         gap: 8,
-        padding: "10px 12px",
-        background: isSelected ? `${C.accent}18` : "transparent",
-        borderLeft: isSelected ? `3px solid ${C.accent}` : "3px solid transparent",
         cursor: "pointer",
-        borderBottom: `1px solid ${C.border}`,
-        transition: "background 0.1s",
+        transition: "border-color 0.1s",
       }}
     >
-      {/* Default star */}
-      <span
-        title={sched.isDefault ? "Default schedule" : "Set as default"}
-        onClick={e => { e.stopPropagation(); canEdit && onSetDefault(sched.id); }}
-        style={{ color: sched.isDefault ? C.amber : C.muted, fontSize: 16, cursor: canEdit ? "pointer" : "default" }}
-      >
-        {sched.isDefault ? "★" : "☆"}
-      </span>
+      {/* Header row: star · name · row count · delete */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span
+          title={sched.isDefault ? "Default schedule" : "Set as default"}
+          onClick={e => { e.stopPropagation(); canEdit && onSetDefault(sched.id); }}
+          style={{ color: sched.isDefault ? C.amber : C.muted, fontSize: 16, cursor: canEdit ? "pointer" : "default", lineHeight: 1 }}
+        >
+          {sched.isDefault ? "★" : "☆"}
+        </span>
+        <span style={{ fontWeight: 600, fontSize: 13, color: C.text, flex: 1 }}>{sched.name}</span>
+        <span style={{ fontSize: 11, color: C.muted }}>{rowCount.toLocaleString()} rows</span>
+        <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
+          {canEdit && (
+            confirming
+              ? <>
+                  <Btn size="xs" variant="danger" onClick={handleDelete}>Confirm delete</Btn>
+                  <Btn size="xs" onClick={() => setConfirming(false)}>Cancel</Btn>
+                </>
+              : <Btn size="xs" variant="ghost" onClick={handleDelete}>✕</Btn>
+          )}
+        </div>
+      </div>
 
-      {/* Name + description */}
-      <div>
-        <div style={{ fontWeight: 600, fontSize: 13, color: C.text }}>{sched.name}</div>
+      {/* Meta row: description + used-by */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {sched.description && (
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {sched.description}
-          </div>
+          <div style={{ fontSize: 11, color: C.muted }}>{sched.description}</div>
         )}
-      </div>
-
-      {/* Row count */}
-      <div style={{ fontSize: 13, color: C.muted, textAlign: "right" }}>
-        {rowCount.toLocaleString()} rows
-      </div>
-
-      {/* Used by */}
-      <div style={{ fontSize: 11, color: C.muted }}>
-        {usedByEvents.length === 0
-          ? <span style={{ color: C.amber }}>Not linked</span>
-          : `${usedByEvents.length} arrival event${usedByEvents.length === 1 ? "" : "s"}`
-        }
-      </div>
-
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
-        {canEdit && (
-          confirming
-            ? <>
-                <Btn size="xs" variant="danger" onClick={handleDelete}>Confirm delete</Btn>
-                <Btn size="xs" onClick={() => setConfirming(false)}>Cancel</Btn>
-              </>
-            : <Btn size="xs" variant="ghost" onClick={handleDelete}>✕</Btn>
-        )}
+        <div style={{ fontSize: 11 }}>
+          {usedByEvents.length === 0
+            ? <span style={{ color: C.amber }}>⚠ Not linked to any B-events</span>
+            : <span style={{ color: C.muted }}>Used by: {usedByEvents.map(e => e.name || e.id).join(", ")}</span>
+          }
+        </div>
       </div>
     </div>
   );
@@ -927,11 +919,12 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], dataSo
       )}
 
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: `1px solid ${C.border}` }}>
-        <SH>Schedules</SH>
-        {canEdit && !showNewForm && (
-          <Btn size="sm" onClick={() => setShowNewForm(true)}>+ New Schedule</Btn>
-        )}
+      <div style={{ padding: "12px 16px 0" }}>
+        <SH label="Schedules" color={C.accent}>
+          {canEdit && !showNewForm && (
+            <Btn small variant="ghost" onClick={() => setShowNewForm(true)}>+ New Schedule</Btn>
+          )}
+        </SH>
       </div>
 
       {/* New schedule form */}
@@ -946,54 +939,23 @@ export function ScheduleManager({ modelId, userId, canEdit, bEvents = [], dataSo
         </div>
       )}
 
-      {/* Table header */}
-      {schedules.length > 0 && (
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "1.5rem 1fr 80px 1fr auto",
-          gap: 8,
-          padding: "6px 12px",
-          background: C.panel,
-          borderBottom: `1px solid ${C.border}`,
-          fontSize: 11,
-          color: C.muted,
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: "0.05em",
-        }}>
-          <span />
-          <span>Name</span>
-          <span style={{ textAlign: "right" }}>Rows</span>
-          <span>Used by</span>
-          <span />
-        </div>
-      )}
-
-      {/* Schedule rows */}
+      {/* Schedule cards */}
       {schedules.length === 0 ? (
-        <Empty style={{ margin: 24 }}>
-          No schedules yet.
-          {canEdit && " Create one to store timetable data separately from the DES logic."}
-        </Empty>
+        <Empty icon="📅" msg={`No schedules yet.${canEdit ? " Create one to store timetable data separately from the DES logic." : ""}`} />
       ) : (
-        schedules.map(sched => (
-          <ScheduleRow
-            key={sched.id}
-            sched={sched}
-            bEvents={bEvents}
-            isSelected={sched.id === selectedId}
-            onSelect={setSelectedId}
-            onSetDefault={handleSetDefault}
-            onDelete={handleDelete}
-            canEdit={canEdit}
-          />
-        ))
-      )}
-
-      {/* Footer info */}
-      {schedules.length > 0 && (
-        <div style={{ padding: "8px 16px", fontSize: 11, color: C.muted, borderTop: `1px solid ${C.border}` }}>
-          ★ = default schedule (used when none is selected at run time). Click a row to view details.
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 16px 16px" }}>
+          {schedules.map(sched => (
+            <ScheduleRow
+              key={sched.id}
+              sched={sched}
+              bEvents={bEvents}
+              isSelected={sched.id === selectedId}
+              onSelect={setSelectedId}
+              onSetDefault={handleSetDefault}
+              onDelete={handleDelete}
+              canEdit={canEdit}
+            />
+          ))}
         </div>
       )}
     </div>
