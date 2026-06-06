@@ -297,7 +297,7 @@ export function ModelTabBar({
               type="button"
               aria-pressed={aiSidebarOpen}
               onClick={onToggleAiSidebar}
-              title="Ask for help explaining or improving this model"
+              title="Model Assistant — ask for help building or improving this model"
               style={{
                 background: aiSidebarOpen ? C.panel : C.surface,
                 border: `1px solid ${aiSidebarOpen ? C.accent : C.border}`,
@@ -307,7 +307,7 @@ export function ModelTabBar({
                 padding: "7px 10px", whiteSpace: "nowrap",
               }}
             >
-              <span aria-hidden="true" style={{ fontWeight: 800 }}>?</span>
+              <span aria-hidden="true">✨</span>
               Model Assistant
             </button>
           </>
