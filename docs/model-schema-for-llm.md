@@ -435,6 +435,12 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | `FAIL` | `FAIL(ServerType)` | Marks matching servers as failed; interrupts any in-progress service. Pair with a scheduled `REPAIR` B-event. `ServerType` must match a defined server entity type. Note: for random failures, prefer the `mtbfDist`/`mttrDist` failure model on the entity type (§2) — the engine auto-generates FAIL/REPAIR events. |
 | `REPAIR` | `REPAIR(ServerType)` | Restores failed servers to idle. `ServerType` must match a defined server entity type. Triggers a C-scan for waiting entities. |
 
+> ⚠ **SET_ATTR ordering — V44:** `SET_ATTR` requires a context entity established by a preceding `ARRIVE`, `ASSIGN`, `COSEIZE`, `SEIZE`, `BATCH`, or `SPLIT` macro in the same effect array. A `SET_ATTR` appearing before any such macro is silently skipped at runtime.
+> 
+> ✓ `["ARRIVE(Patient, Queue)", "SET_ATTR(severity, 3)"]` — ARRIVE first establishes context, SET_ATTR follows  
+> ✗ `["SET_ATTR(severity, 3)", "ARRIVE(Patient, Queue)"]` — SET_ATTR fires before context exists, silently skipped  
+> ✗ `["SET_ATTR(priority, 1)"]` alone on a scheduled B-event with no context macro — silently skipped
+
 ### Optional: Conditional Routing Table
 
 After service, route entities to different queues based on entity attribute conditions. Each `condition` is a **predicate object** — never a string.
@@ -781,7 +787,9 @@ Performance targets for the AI analysis and optimisation features.
 | `summary.reneged` | Total customers who abandoned |
 | `summary.totalCost` | Total cost (requires cost model) |
 
-`operator`: one of `<`, `<=`, `>`, `>=`, `==`
+`operator`: one of `<`, `<=`, `>`, `>=`
+
+⚠ The seven `metric` values listed above are the **only** valid values. Do not invent other paths (`queue.avgLength`, `section.Triage.avgWait`, etc.) — the engine evaluates no other metric path and the UI will not display it. Always use the full `summary.*` prefix form shown in the table.
 
 > **Batch-mode note:** For multi-replication runs, count goals (`summary.served`, `summary.reneged`) and `summary.avgWIP` are evaluated against the **per-replication average** (the CI mean), not the cumulative total across all replications.
 
@@ -931,6 +939,8 @@ Notice the handoff: `q_nhs24_clinical` is in `exitQueues` for the NHS 24 section
 - A terminal section (last stage, entities complete here) has no `exitQueues`.
 - For sections that model a service stage, `entryQueues` should contain the queue where entities wait *before* being served (the "in-queue" for this stage). For non-terminal sections, `exitQueues` should contain the queue that acts as the "out-queue" or handoff point — the queue entities join after service, which becomes the next section's `entryQueues`. Example: if "Triage" processes patients and places them into `q_ed_wait` before the "ED" section, then `q_ed_wait` is in Triage's `exitQueues` AND in ED's `entryQueues`.
 - Sections with neither `entryQueues` nor `exitQueues` (both empty) are purely cosmetic groupings — they provide no boundary information for journey analysis. Prefer at least one `entryQueues` entry for any section that has a distinct waiting-to-be-served queue.
+
+⚠ **Coverage requirement:** For any model that uses sections, every queue `id`, entity type `id`, B-event `id`, and C-event `id` in the model **must** appear in exactly one section's `memberIds`. Items absent from all `memberIds` arrays are invisible to the swimlane UI and filter tabs. When in doubt, assign supporting events and entity types to the section they are primarily associated with.
 
 **Anti-pattern — `elementIds`:** An earlier draft used `elementIds` instead of `memberIds`. This field name is silently ignored. Always use `memberIds`.
 

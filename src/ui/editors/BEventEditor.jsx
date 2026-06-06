@@ -3,7 +3,7 @@ import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPa
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker, SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],sections=[],containerTypes=[],dataSources=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule})=>{
+const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],sections=[],containerTypes=[],dataSources=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule,errorFilter=null,onClearErrorFilter})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -51,8 +51,12 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
 
   const lcFilter=filterText.toLowerCase();
   const sectionFiltered=filterBySection(events, sections, activeSectionId);
-  const filtered=lcFilter?sectionFiltered.filter(ev=>(ev.name||"").toLowerCase().includes(lcFilter)):sectionFiltered;
-  const effectiveExpanded=lcFilter?new Set(filtered.map(e=>e.id)):expandedIds;
+  const filtered=sectionFiltered.filter(ev=>{
+    const matchesText=!lcFilter||(ev.name||"").toLowerCase().includes(lcFilter);
+    const matchesError=!errorFilter||(ev.name||"").toLowerCase()===errorFilter.toLowerCase();
+    return matchesText&&matchesError;
+  });
+  const effectiveExpanded=(lcFilter||errorFilter)?new Set(filtered.map(e=>e.id)):expandedIds;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -62,6 +66,12 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"
             style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
+          {errorFilter&&(
+            <div style={{display:"flex",alignItems:"center",gap:4,background:`${C.amber}26`,border:`1px solid ${C.amber}80`,borderRadius:4,padding:"3px 8px",color:C.amber,fontSize:11,fontFamily:FONT,whiteSpace:"nowrap"}}>
+              Filtered by error
+              <Btn small variant="ghost" onClick={onClearErrorFilter} style={{padding:"0 4px",minWidth:0}}>✕</Btn>
+            </div>
+          )}
           <Btn small variant="ghost" onClick={expandAll}>Expand all</Btn>
           <Btn small variant="ghost" onClick={collapseAll}>Collapse all</Btn>
         </div>

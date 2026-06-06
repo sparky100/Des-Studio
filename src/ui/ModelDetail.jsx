@@ -52,23 +52,37 @@ const AuthoringWorkflowShell = ({ mode, children }) => (
   </section>
 );
 
-const TabErrors = ({ tabId, validation }) => {
+function extractErrorItemName(msg) {
+  return (msg || "").match(/'([^']+)'/)?.[1] || null;
+}
+
+const TabErrors = ({ tabId, validation, onErrorClick = null }) => {
   const { C, FONT } = useTheme();
   const errs = (validation.errors || []).filter(e => e.tab === tabId);
   const warns = (validation.warnings || []).filter(w => w.tab === tabId);
   if (!errs.length && !warns.length) return null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
-      {errs.map((e, i) => (
-        <div key={i} role="alert" style={{ background: alpha(C.red, 0.1), border: `1px solid ${alpha(C.red, 0.4)}`, borderRadius: 6, padding: "8px 12px", color: C.red, fontFamily: FONT, fontSize: 12 }}>
-          [{e.code}] {e.message}
-        </div>
-      ))}
-      {warns.map((w, i) => (
-        <div key={i} style={{ background: alpha(C.amber, 0.1), border: `1px solid ${alpha(C.amber, 0.4)}`, borderRadius: 6, padding: "8px 12px", color: C.amber, fontFamily: FONT, fontSize: 12 }}>
-          [{w.code}] {w.message}
-        </div>
-      ))}
+      {errs.map((e, i) => {
+        const name = extractErrorItemName(e.message);
+        const clickable = onErrorClick && name;
+        return (
+          <div key={i} role="alert" onClick={clickable ? () => onErrorClick({ tab: tabId, name }) : undefined}
+            style={{ background: alpha(C.red, 0.1), border: `1px solid ${alpha(C.red, 0.4)}`, borderRadius: 6, padding: "8px 12px", color: C.red, fontFamily: FONT, fontSize: 12, cursor: clickable ? "pointer" : undefined }}>
+            [{e.code}] {e.message}
+          </div>
+        );
+      })}
+      {warns.map((w, i) => {
+        const name = extractErrorItemName(w.message);
+        const clickable = onErrorClick && name;
+        return (
+          <div key={i} onClick={clickable ? () => onErrorClick({ tab: tabId, name }) : undefined}
+            style={{ background: alpha(C.amber, 0.1), border: `1px solid ${alpha(C.amber, 0.4)}`, borderRadius: 6, padding: "8px 12px", color: C.amber, fontFamily: FONT, fontSize: 12, cursor: clickable ? "pointer" : undefined }}>
+            [{w.code}] {w.message}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -432,6 +446,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [latestWarmupDetection,setLatestWarmupDetection]=useState(null);
   const [latestLog,setLatestLog]=useState([]);
   const [namedSchedules,setNamedSchedules]=useState([]);
+  const [errorFilter,setErrorFilter]=useState(null); // null | { tab, name }
   const [focusBEventId,setFocusBEventId]=useState(null);
   const [focusScheduleId,setFocusScheduleId]=useState(null);
   const [schedulesVersion,setSchedulesVersion]=useState(0);
@@ -1198,8 +1213,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             </div>
           </div>
         )}
-        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}}/></div>)}
-        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}}/></div>)}
+        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation} onErrorClick={({tab,name})=>setErrorFilter({tab,name})}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}} errorFilter={errorFilter?.tab==="bevents"?errorFilter.name:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
+        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation} onErrorClick={({tab,name})=>setErrorFilter({tab,name})}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}} errorFilter={errorFilter?.tab==="cevents"?errorFilter.name:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
         {tab==="sections"&&renderAuthoringShell(<div style={{maxWidth:900}}><SectionEditor sections={model.sections||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} bEvents={model.bEvents||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("sections",v):()=>{}}/></div>)}
         {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} dataSources={model.dataSources||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
