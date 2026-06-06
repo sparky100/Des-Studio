@@ -27,7 +27,9 @@ When you have enough specific information, summarise your understanding of the s
 
 Do not invent macros, distribution types, or field names outside the schema defined below. All distParams values must be strings.
 
-IMPORTANT — SECTIONS FOR LARGE MODELS: When building a model with 8 or more queues, OR with 3 or more distinct stages/departments, you MUST include a populated sections[] in the proposedModel. Do not generate a flat model without sections when the system clearly has named stages. See the SCHEMA REFERENCE §11.1 for the correct section fields (memberIds, entryQueues, exitQueues, color) — never use elementIds. For each section that represents a service stage, populate entryQueues with the queue where entities wait BEFORE service (the in-queue) and exitQueues with the queue entities join AFTER service (the handoff out-queue) — unless this is the terminal stage, in which case exitQueues should be []. The exit queue of one section must match the entry queue of the next section. Sections with both fields empty give no boundary information and should be avoided.`,
+IMPORTANT — SECTIONS FOR LARGE MODELS: When building a model with 8 or more queues, OR with 3 or more distinct stages/departments, you MUST include a populated sections[] in the proposedModel. Do not generate a flat model without sections when the system clearly has named stages. See the SCHEMA REFERENCE §11.1 for the correct section fields (memberIds, entryQueues, exitQueues, color) — never use elementIds. For each section that represents a service stage, populate entryQueues with the queue where entities wait BEFORE service (the in-queue) and exitQueues with the queue entities join AFTER service (the handoff out-queue) — unless this is the terminal stage, in which case exitQueues should be []. The exit queue of one section must match the entry queue of the next section. Sections with both fields empty give no boundary information and should be avoided.
+
+SECTIONS COVERAGE: When sections[] is present, every queue id, entity type id, B-event id, and C-event id in the model MUST appear in exactly one section's memberIds. Items absent from all memberIds arrays are invisible in the swimlane UI.`,
 
     // PART 3 — Response format
     `RESPONSE FORMAT:
@@ -139,7 +141,20 @@ companionCsv rules:
     ✓ CORRECT: "name": "Triage"            → displays "Start Triage with Nurse…"
     ✓ CORRECT: "name": "Assess Minor"      → displays "Start Assess Minor with…"
     ✗ WRONG:   "name": "Start Triage"      → displays "Start Start Triage with…"
-    ✗ WRONG:   "name": "Start Assessment Minor"`,
+    ✗ WRONG:   "name": "Start Assessment Minor"
+
+12. SET_ATTR must follow a context macro in the same effect array.
+    SET_ATTR(attr) with no preceding ARRIVE/ASSIGN/COSEIZE/SEIZE/BATCH/SPLIT is silently
+    skipped at runtime (V44 warning).
+
+    ✓ CORRECT: "effect": ["ARRIVE(Patient, Queue)", "SET_ATTR(severity, 3)"]
+    ✗ WRONG:   "effect": ["SET_ATTR(severity, 3)", "ARRIVE(Patient, Queue)"]
+    ✗ WRONG:   "effect": ["SET_ATTR(priority, 1)"]  — B-event with no context macro, silently skipped
+
+13. goals[].metric MUST be one of these exact seven values:
+    "summary.avgWait" | "summary.avgSvc" | "summary.avgSojourn" | "summary.avgWIP"
+    "summary.served"  | "summary.reneged" | "summary.totalCost"
+    Do not use short-form keys ("avgWait") or invent other paths — the engine evaluates no other path.`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:
