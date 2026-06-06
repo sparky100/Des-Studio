@@ -933,7 +933,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   }, [activeMode?.id]);
   const hasModelIssues = validation.errors.length > 0 || validation.warnings.length > 0;
   const exploreVisible = useMemo(()=>
-    ["overview","design","execute"].includes(activeMode?.id) && validation.errors.length===0,
+    ["overview","design","execute","results"].includes(activeMode?.id) && validation.errors.length===0,
   [activeMode?.id, validation.errors.length]);
   const resolvedTier = useMemo(()=>
     resolveRunAdmissionTier(overrides.plan,{isAdmin:overrides.isAdmin}),
@@ -1034,7 +1034,15 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         isCompactLayout={isCompactLayout}
         showMoreTabs={showMoreTabs} setShowMoreTabs={setShowMoreTabs}
         aiSidebarOpen={aiSidebarOpen}
-        onToggleAiSidebar={isMobileLayout ? null : ()=>setAiSidebarOpen(v=>!v)}
+        onToggleAiSidebar={isMobileLayout ? null : ()=>{
+          if (aiSidebarOpen) {
+            setAiSidebarOpen(false);
+            setAiAction(null);
+          } else {
+            setAiSidebarOpen(true);
+            if (tab === "results" || tab === "execute") { setAiAction("explain"); setAiSeq(s => s + 1); }
+          }
+        }}
         onExplore={()=>setShowExplorePanel(true)}
         exploreVisible={exploreVisible}
       />
@@ -1325,11 +1333,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                   {sub.label}
                 </Btn>
               ))}
-              <Btn
-                small
-                variant={aiSidebarOpen?"primary":"ghost"}
-                onClick={()=>{if(aiSidebarOpen){setAiSidebarOpen(false);setAiAction(null);}else{setAiSidebarOpen(true);setAiAction("explain");setAiSeq(s=>s+1);}}}
-              >Model Assistant</Btn>
               {latestResults && (
                 <>
                   <Btn small variant="ghost" onClick={handleResultsExportJson} title="Download results as JSON">Export Results</Btn>
