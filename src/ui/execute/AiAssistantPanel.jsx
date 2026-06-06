@@ -323,6 +323,7 @@ export const AiAssistantPanel = ({
   }, [sidebarWidth]);
   const isRunContext = activeTab === "execute";
   const isResultsContext = activeTab === "results";
+  const isOverviewContext = activeTab === "overview";
   const toast = useToast();
   const [activeMode, setActiveMode] = useState(triggerAction?.action || "explain");
 
@@ -856,7 +857,9 @@ export const AiAssistantPanel = ({
     ? "Debug and diagnose simulation runs."
     : isResultsContext
     ? "Analyse and refine simulation results."
-    : "Ask questions about this model.";
+    : isOverviewContext
+    ? "Review your model definition and set goals."
+    : "Ask questions about your model design.";
   const innerStyle = sidebar
     ? { flex: 1, minHeight: 0, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }
     : mobileFullscreen
@@ -931,6 +934,62 @@ export const AiAssistantPanel = ({
           ))}
         </div>
       )}
+
+      {/* Starter prompt chips — context-aware, shown when not in run/results */}
+      {sidebar && !isResultsContext && !isRunContext && conversationHistory.length === 0 && !isStreaming && (() => {
+        const chips = isOverviewContext ? [
+          { label: "Review name & description", prompt: "Please review my model's name and description — is it clear, specific, and complete? Suggest any improvements." },
+          { label: "What can this model simulate?", prompt: "Based on the model structure, what simulation questions can this model answer? What are its key capabilities?" },
+          { label: "Help me define KPI goals", prompt: "Help me set up meaningful KPI goals for this model. What performance measures should I track?" },
+          { label: "Check model completeness", prompt: "Review this model's definition. What might be missing or incomplete — entities, queues, events, goals, or logic?" },
+        ] : activeTab === "visual" ? [
+          { label: "Explain the process flow", prompt: "Describe the process flow in this model — how do entities move through it?" },
+          { label: "Are there structural gaps?", prompt: "Looking at this model's structure, are there any obvious gaps or missing connections?" },
+        ] : activeTab === "entities" ? [
+          { label: "Review my entity types", prompt: "Review the entity types defined in this model. Are they well-structured and complete?" },
+          { label: "Explain entity roles", prompt: "Explain the different entity types and their roles in this simulation." },
+        ] : activeTab === "queues" ? [
+          { label: "Check my queuing setup", prompt: "Review the queues in this model. Are the configurations sensible for the process being modelled?" },
+          { label: "Explain the queue structure", prompt: "Describe how the queues in this model relate to each other and to the entities." },
+        ] : activeTab === "bevents" ? [
+          { label: "Review arrival events", prompt: "Review the B-events (arrivals and completions) in this model. Are they correctly configured?" },
+          { label: "Check arrival timing", prompt: "Are the scheduled times and distributions for my arrival events appropriate for this kind of system?" },
+        ] : activeTab === "cevents" ? [
+          { label: "Review conditional events", prompt: "Review the C-events in this model. Are the conditions and effects correctly specified?" },
+          { label: "Explain the event logic", prompt: "Explain the conditional event logic in this model — what triggers each event and what happens?" },
+        ] : activeTab === "schedules" ? [
+          { label: "Explain the schedule structure", prompt: "Explain how the named schedules in this model are used and how they connect to arrival events." },
+        ] : activeTab === "state" ? [
+          { label: "Review state variables", prompt: "Review the state variables in this model. Are they used appropriately?" },
+        ] : activeTab === "sections" ? [
+          { label: "Explain the sections", prompt: "Explain the sections defined in this model and how they structure the workflow." },
+        ] : [
+          { label: "Explain this model's structure", prompt: "Give me an overview of this model's structure — entities, queues, events, and flow." },
+          { label: "Check for design issues", prompt: "Review this model for potential design issues or improvements I should consider." },
+        ];
+        if (!chips.length) return null;
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>QUICK START</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {chips.map(chip => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={() => { setModelQueryText(chip.prompt); runModelQuery(chip.prompt); }}
+                  style={{
+                    background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4,
+                    color: C.muted, fontFamily: FONT, fontSize: 11, padding: "4px 8px",
+                    cursor: "pointer", textAlign: "left", transition: "border-color 0.1s",
+                  }}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Model Q&A — shown in sidebar when not on results/execute tab */}
       {sidebar && !isResultsContext && (
