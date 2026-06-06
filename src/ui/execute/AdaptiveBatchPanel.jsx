@@ -164,7 +164,18 @@ export function AdaptiveBatchPanel({
     collectTimeSeries: false,
   }), [model, tier, tierMax, maxSimTime, warmupPeriod]);
 
-  const riskLevel = admission.complexityEstimate?.riskLevel || "small";
+  // Complexity label uses single-rep estimate — the multi-rep multiplier (500) inflates
+  // the scan count and makes all non-trivial models appear "Very high"
+  const singleRepAdmission = useMemo(() => getRunAdmission(model, {
+    tier,
+    replications: 1,
+    maxSimTime,
+    warmupPeriod,
+    terminationMode: "time",
+    collectTimeSeries: false,
+  }), [model, tier, maxSimTime, warmupPeriod]);
+
+  const riskLevel = singleRepAdmission.complexityEstimate?.riskLevel || "small";
   const riskColor = (RISK_COLORS[riskLevel] || (C => C.muted))(C);
   const hasHardErrors = admission.hardErrors.length > 0;
   const hasWarnings = admission.warnings.length > 0;
