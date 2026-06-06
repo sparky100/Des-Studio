@@ -238,7 +238,7 @@ export function ModelTabBar({
   return (
     <>
       {/* Mode selector bar */}
-      <div aria-label={isCompactLayout ? "Mobile model workflow" : "Model workflow modes"} style={{ display: "flex", alignItems: "stretch", gap: 8, padding: "8px 20px", borderBottom: `1px solid ${C.border}`, background: C.bg, overflowX: "auto", flexShrink: 0 }}>
+      <div aria-label={isCompactLayout ? "Mobile model workflow" : "Model workflow modes"} style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, padding: "8px 16px", borderBottom: `1px solid ${C.border}`, background: C.bg, flexShrink: 0 }}>
         {DISPLAY_MODES.map(mode => {
           const selected = activeMode.id === mode.id;
           const modeCounts = mode.tabs.filter(t => t !== "validate").reduce((acc, tabId) => {
@@ -291,46 +291,42 @@ export function ModelTabBar({
           );
         })}
         {onToggleAiSidebar && (
-          <>
-            <div style={{ width: 1, background: C.border, margin: "6px 4px", alignSelf: "stretch" }} />
-            <button
-              type="button"
-              aria-pressed={aiSidebarOpen}
-              onClick={onToggleAiSidebar}
-              title="Ask for help explaining or improving this model"
-              style={{
-                background: aiSidebarOpen ? C.panel : C.surface,
-                border: `1px solid ${aiSidebarOpen ? C.accent : C.border}`,
-                borderRadius: 6, color: aiSidebarOpen ? C.accent : C.text,
-                cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
-                flexShrink: 0, fontFamily: FONT, fontSize: 11, fontWeight: 700,
-                padding: "7px 10px", whiteSpace: "nowrap",
-              }}
-            >
-              <span aria-hidden="true" style={{ fontWeight: 800 }}>?</span>
-              Model Assistant
-            </button>
-          </>
+          <button
+            type="button"
+            aria-pressed={aiSidebarOpen}
+            onClick={onToggleAiSidebar}
+            title="Ask for help explaining or improving this model"
+            style={{
+              marginLeft: 6,
+              background: aiSidebarOpen ? C.panel : C.surface,
+              border: `1px solid ${aiSidebarOpen ? C.accent : C.border}`,
+              borderRadius: 6, color: aiSidebarOpen ? C.accent : C.text,
+              cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+              flexShrink: 0, fontFamily: FONT, fontSize: 11, fontWeight: 700,
+              padding: "7px 10px", whiteSpace: "nowrap",
+            }}
+          >
+            <span aria-hidden="true" style={{ fontWeight: 800 }}>?</span>
+            Model Assistant
+          </button>
         )}
         {exploreVisible && onExplore && (
-          <>
-            <div style={{ width: 1, background: C.border, margin: "6px 4px", alignSelf: "stretch" }} />
-            <button
-              type="button"
-              onClick={onExplore}
-              title="Run adaptive batch and get AI-powered improvement opportunities"
-              style={{
-                background: C.surface,
-                border: `1px solid ${C.accent}`,
-                borderRadius: 6, color: C.accent,
-                cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
-                flexShrink: 0, fontFamily: FONT, fontSize: 11, fontWeight: 700,
-                padding: "7px 10px", whiteSpace: "nowrap",
-              }}
-            >
-              ✦ Explore
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={onExplore}
+            title="Run adaptive batch and get AI-powered improvement opportunities"
+            style={{
+              marginLeft: onToggleAiSidebar ? 0 : 6,
+              background: C.surface,
+              border: `1px solid ${C.accent}`,
+              borderRadius: 6, color: C.accent,
+              cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+              flexShrink: 0, fontFamily: FONT, fontSize: 11, fontWeight: 700,
+              padding: "7px 10px", whiteSpace: "nowrap",
+            }}
+          >
+            ✦ Explore
+          </button>
         )}
       </div>
 
