@@ -102,11 +102,12 @@ function parseOptions(text) {
   if (!text) return [];
   const lines = text.split("\n");
   const options = [];
-  let inBottleneck = false;
+  let inAutomatable = false;
   for (const line of lines) {
-    if (/^###? /.test(line)) inBottleneck = /bottleneck/i.test(line);
+    if (/^###? /.test(line)) inAutomatable = /automatable/i.test(line);
+    if (!inAutomatable) continue;
     const m = line.match(/^(\d+)\. (.+)/);
-    if (m && !inBottleneck) options.push(m[2].trim());
+    if (m) options.push(m[2].trim());
   }
   return options;
 }
