@@ -1205,31 +1205,32 @@ function JourneysPanel({ queueJourneys, queueNames, repCount = 1, C, FONT }) {
         const hasSink = !queueNames?.has(lastSeg);
         const sinkColor = lastSeg === "Incomplete" ? C.amber : C.accent;
         return (
-          <div key={path} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-              {segs.map((q, i) => {
-                const isSink = hasSink && i === segs.length - 1;
-                return (
-                  <Fragment key={i}>
-                    {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
-                    <span style={{
-                      fontFamily: FONT, fontSize: 10,
-                      color: isSink ? sinkColor : C.text,
-                      background: isSink ? `${sinkColor}18` : C.bg,
-                      border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
-                      borderRadius: 3, padding: "1px 5px",
-                    }}>{q}</span>
-                  </Fragment>
-                );
-              })}
-              <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
-                {isMultiRep
-                  ? `${+(count / repCount).toFixed(1)} (${pct}%)`
-                  : `${count} (${pct}%)`}
-              </span>
+          <div key={path} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                {segs.map((q, i) => {
+                  const isSink = hasSink && i === segs.length - 1;
+                  return (
+                    <Fragment key={i}>
+                      {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
+                      <span style={{
+                        fontFamily: FONT, fontSize: 10,
+                        color: isSink ? sinkColor : C.text,
+                        background: isSink ? `${sinkColor}18` : C.bg,
+                        border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
+                        borderRadius: 3, padding: "1px 5px",
+                      }}>{q}</span>
+                    </Fragment>
+                  );
+                })}
+              </div>
+              <div style={{ height: 3, background: C.border, borderRadius: 2 }}>
+                <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
+              </div>
             </div>
-            <div style={{ height: 3, background: C.border, borderRadius: 2 }}>
-              <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
+            <div style={{ width: 72, flexShrink: 0, textAlign: "right" }}>
+              <div style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 600, lineHeight: 1.3 }}>{isMultiRep ? +(count / repCount).toFixed(1) : count}</div>
+              <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, lineHeight: 1.3 }}>{pct}%</div>
             </div>
           </div>
         );
@@ -1385,29 +1386,32 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
                 const hasSink = !sectionById[lastRaw];
                 const sinkColor = lastRaw === "Incomplete" ? C.amber : C.accent;
                 return (
-                  <div key={key} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                      {names.map((name, i) => {
-                        const isSink = hasSink && i === names.length - 1;
-                        return (
-                          <Fragment key={i}>
-                            {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
-                            <span style={{
-                              fontFamily: FONT, fontSize: 10,
-                              color: isSink ? sinkColor : C.text,
-                              background: isSink ? `${sinkColor}18` : C.bg,
-                              border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
-                              borderRadius: 3, padding: "1px 5px",
-                            }}>{name}</span>
-                          </Fragment>
-                        );
-                      })}
-                      <span style={{ marginLeft: "auto", fontFamily: FONT, fontSize: 10, color: C.muted, flexShrink: 0 }}>
-                        {isMultiRep ? +(count / repCount).toFixed(1) : count} ({pct}%)
-                      </span>
+                  <div key={key} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                        {names.map((name, i) => {
+                          const isSink = hasSink && i === names.length - 1;
+                          return (
+                            <Fragment key={i}>
+                              {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
+                              <span style={{
+                                fontFamily: FONT, fontSize: 10,
+                                color: isSink ? sinkColor : C.text,
+                                background: isSink ? `${sinkColor}18` : C.bg,
+                                border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
+                                borderRadius: 3, padding: "1px 5px",
+                              }}>{name}</span>
+                            </Fragment>
+                          );
+                        })}
+                      </div>
+                      <div style={{ height: 3, background: C.border, borderRadius: 2 }}>
+                        <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
+                      </div>
                     </div>
-                    <div style={{ height: 3, background: C.border, borderRadius: 2 }}>
-                      <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
+                    <div style={{ width: 72, flexShrink: 0, textAlign: "right" }}>
+                      <div style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 600, lineHeight: 1.3 }}>{isMultiRep ? +(count / repCount).toFixed(1) : count}</div>
+                      <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, lineHeight: 1.3 }}>{pct}%</div>
                     </div>
                   </div>
                 );
