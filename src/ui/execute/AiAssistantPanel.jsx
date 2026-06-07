@@ -1087,15 +1087,15 @@ export const AiAssistantPanel = ({
         />
       )}
 
-      {/* Explain — shown in non-run modes: results context with analyse mode, or non-sidebar non-results */}
-      {!isRunContext && (isResultsContext ? activeMode === "explain" : !sidebar) && (
+      {/* Explain — shown in results context or when non-sidebar with results */}
+      {!isRunContext && (isResultsContext ? activeMode === "explain" : (!sidebar && results)) && (
         <Btn variant="primary" onClick={explainResults} disabled={!results || isStreaming} style={panelButtonStyle}>
           {isResultsContext ? 'Analyse results' : 'Explain results'}
         </Btn>
       )}
 
-      {/* Compare — shown in non-run modes: results context with compare mode, or non-sidebar */}
-      {!isRunContext && (isResultsContext ? activeMode === "compare" : !sidebar) && (
+      {/* Compare — shown in non-run modes: results context or non-sidebar with comparison data */}
+      {!isRunContext && (isResultsContext ? activeMode === "compare" : (!sidebar && comparisonRuns.length > 0)) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE WITH</label>
           <select
