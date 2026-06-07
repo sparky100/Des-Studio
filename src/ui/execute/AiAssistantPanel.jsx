@@ -376,6 +376,7 @@ export const AiAssistantPanel = ({
   const isOverviewContext = activeTab === "overview";
   const toast = useToast();
   const [activeMode, setActiveMode] = useState(triggerAction?.action || "explain");
+  const [runModeToggle, setRunModeToggle] = useState("design");
 
   const handleModeChange = (mode) => {
     if (mode !== activeMode) {
@@ -953,8 +954,8 @@ export const AiAssistantPanel = ({
         )}
       </div>
 
-      {/* Starter prompt chips — context-aware, shown in all non-results modes */}
-      {!isResultsContext && conversationHistory.length === 0 && !isStreaming && (() => {
+      {/* Starter prompt chips — context-aware, shown in all non-results modes (hidden in run when not design toggle) */}
+      {!isResultsContext && (!isRunContext || runModeToggle === "design") && conversationHistory.length === 0 && !isStreaming && (() => {
         const chips = isOverviewContext ? [
           { label: "Review name & description", prompt: "Please review my model's name and description — is it clear, specific, and complete? Suggest any improvements." },
           { label: "What can this model simulate?", prompt: "Based on the model structure, what simulation questions can this model answer? What are its key capabilities?" },
@@ -1009,8 +1010,8 @@ export const AiAssistantPanel = ({
         );
       })()}
 
-      {/* Model Q&A — shown in all non-results modes including run */}
-      {!isResultsContext && (
+      {/* Model Q&A — shown in all non-results modes (hidden in run when not design toggle) */}
+      {!isResultsContext && (!isRunContext || runModeToggle === "design") && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
             ASK ABOUT THIS MODEL
@@ -1080,24 +1081,38 @@ export const AiAssistantPanel = ({
         </div>
       )}
 
-      {/* Diagnostics — run mode only, shown after model Q&A */}
+      {/* Run mode — toggle bar + conditional content */}
       {isRunContext && (
-        <DiagnosticsTab
-          model={model}
-          results={results}
-          onGoToNode={onDiagnosticsNodeSelect || (() => {})}
-        />
+        <>
+          <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${C.border}`, paddingBottom: 8, marginBottom: 4 }}>
+            {["design", "diagnose", "debug"].map(mode => (
+              <button key={mode} type="button" onClick={() => setRunModeToggle(mode)}
+                style={{
+                  background: runModeToggle === mode ? C.accent + "22" : "transparent",
+                  border: `1px solid ${runModeToggle === mode ? C.accent : C.border}`,
+                  borderRadius: 5, color: runModeToggle === mode ? C.accent : C.muted,
+                  fontFamily: FONT, fontSize: 11, fontWeight: 700, padding: "5px 12px",
+                  cursor: "pointer", letterSpacing: 0.5,
+                }}>
+                {mode.charAt(0).toUpperCase() + mode.slice(1)}
+              </button>
+            ))}
+          </div>
+          {runModeToggle !== "design" && (
+            <DiagnosticsTab mode={runModeToggle} model={model} results={results} onGoToNode={onDiagnosticsNodeSelect || (() => {})} />
+          )}
+        </>
       )}
 
-      {/* Explain — shown in results context or when non-sidebar with results */}
-      {!isRunContext && (isResultsContext ? activeMode === "explain" : (!sidebar && results)) && (
+      {/* Explain/Analyse — results context only */}
+      {isResultsContext && activeMode === "explain" && (
         <Btn variant="primary" onClick={explainResults} disabled={!results || isStreaming} style={panelButtonStyle}>
           {isResultsContext ? 'Analyse results' : 'Explain results'}
         </Btn>
       )}
 
-      {/* Compare — shown in non-run modes: results context or non-sidebar with comparison data */}
-      {!isRunContext && (isResultsContext ? activeMode === "compare" : (!sidebar && comparisonRuns.length > 0)) && (
+      {/* Compare — results context only */}
+      {isResultsContext && activeMode === "compare" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE WITH</label>
           <select
@@ -1144,7 +1159,7 @@ export const AiAssistantPanel = ({
         {renderContent()}
       </div>}
 
-      {!isResultsContext && results && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      {!isResultsContext && !isRunContext && results && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         <label htmlFor="query-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
           ASK A QUESTION
         </label>

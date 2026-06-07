@@ -212,7 +212,7 @@ function ChatMessage({ msg }) {
   );
 }
 
-export function DiagnosticsTab({ model, results, onGoToNode }) {
+export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
   const { C, FONT } = useTheme();
   const hasRun = Boolean(results?.summary);
 
@@ -359,7 +359,7 @@ export function DiagnosticsTab({ model, results, onGoToNode }) {
       <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={labelStyle}>Diagnosis</div>
 
-        {diagnosisState === "idle" && (
+        {diagnosisState === "idle" && mode !== "debug" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div style={{ fontSize: 12, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
               Describe what you expected the model to do, then request an AI diagnosis of why it behaved differently.
@@ -440,7 +440,8 @@ export function DiagnosticsTab({ model, results, onGoToNode }) {
         )}
       </div>
 
-      {/* ── F69.4: Chat panel ── */}
+      {mode !== "diagnose" && mode !== "debug" && (
+      <>{/* ── F69.4: Chat panel ── */}
       <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <div style={labelStyle}>Debugging Chat</div>
@@ -563,6 +564,7 @@ export function DiagnosticsTab({ model, results, onGoToNode }) {
           Press Enter to send · Shift+Enter for new line
         </div>
       </div>
+      </>)}
     </div>
   );
 }
