@@ -951,29 +951,8 @@ export const AiAssistantPanel = ({
         )}
       </div>
 
-      {isRunContext ? (
-        <DiagnosticsTab
-          model={model}
-          results={results}
-          onGoToNode={onDiagnosticsNodeSelect || (() => {})}
-        />
-      ) : (
-      <>
-      {/* Mode tabs — shown when in results context */}
-      {isResultsContext && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {[
-            { id: "explain", label: "Analyse" },
-            { id: "compare", label: "Compare" },
-            ...(hasSchedule ? [{ id: "refine", label: "Refine Plan" }] : []),
-          ].map(m => (
-            <Btn key={m.id} small variant={activeMode === m.id ? "primary" : "ghost"} onClick={() => handleModeChange(m.id)}>{m.label}</Btn>
-          ))}
-        </div>
-      )}
-
-      {/* Starter prompt chips — context-aware, shown when not in run/results */}
-      {sidebar && !isResultsContext && !isRunContext && conversationHistory.length === 0 && !isStreaming && (() => {
+      {/* Starter prompt chips — context-aware, shown in all non-results modes */}
+      {!isResultsContext && conversationHistory.length === 0 && !isStreaming && (() => {
         const chips = isOverviewContext ? [
           { label: "Review name & description", prompt: "Please review my model's name and description — is it clear, specific, and complete? Suggest any improvements." },
           { label: "What can this model simulate?", prompt: "Based on the model structure, what simulation questions can this model answer? What are its key capabilities?" },
@@ -1028,8 +1007,8 @@ export const AiAssistantPanel = ({
         );
       })()}
 
-      {/* Model Q&A — shown in sidebar when not on results/execute tab */}
-      {sidebar && !isResultsContext && (
+      {/* Model Q&A — shown in all non-results modes including run */}
+      {!isResultsContext && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>
             ASK ABOUT THIS MODEL
@@ -1086,15 +1065,37 @@ export const AiAssistantPanel = ({
         </div>
       )}
 
-      {/* Explain — shown when in results context with analyse mode, or in non-sidebar non-results context */}
-      {(isResultsContext ? activeMode === "explain" : !sidebar) && (
+      {/* Mode tabs — shown when in results context, not in run */}
+      {!isRunContext && isResultsContext && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {[
+            { id: "explain", label: "Analyse" },
+            { id: "compare", label: "Compare" },
+            ...(hasSchedule ? [{ id: "refine", label: "Refine Plan" }] : []),
+          ].map(m => (
+            <Btn key={m.id} small variant={activeMode === m.id ? "primary" : "ghost"} onClick={() => handleModeChange(m.id)}>{m.label}</Btn>
+          ))}
+        </div>
+      )}
+
+      {/* Diagnostics — run mode only, shown after model Q&A */}
+      {isRunContext && (
+        <DiagnosticsTab
+          model={model}
+          results={results}
+          onGoToNode={onDiagnosticsNodeSelect || (() => {})}
+        />
+      )}
+
+      {/* Explain — shown in non-run modes: results context with analyse mode, or non-sidebar non-results */}
+      {!isRunContext && (isResultsContext ? activeMode === "explain" : !sidebar) && (
         <Btn variant="primary" onClick={explainResults} disabled={!results || isStreaming} style={panelButtonStyle}>
           {isResultsContext ? 'Analyse results' : 'Explain results'}
         </Btn>
       )}
 
-      {/* Compare — shown when in results context with compare mode */}
-      {(isResultsContext ? activeMode === "compare" : !sidebar) && (
+      {/* Compare — shown in non-run modes: results context with compare mode, or non-sidebar */}
+      {!isRunContext && (isResultsContext ? activeMode === "compare" : !sidebar) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <label htmlFor="compare-run" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>COMPARE WITH</label>
           <select
@@ -1202,7 +1203,7 @@ export const AiAssistantPanel = ({
         </div>
       </div>}
 
-      {(isResultsContext ? activeMode === "refine" : (!sidebar && hasSchedule)) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      {!isRunContext && (isResultsContext ? activeMode === "refine" : (!sidebar && hasSchedule)) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         {refineStatus === "loading" && (
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, marginBottom: 8 }}>Analysing schedule constraints…</div>
         )}
@@ -1252,9 +1253,6 @@ export const AiAssistantPanel = ({
             )}
           </div>
       </div>}
-
-      </>
-      )}
       </div>
       {!isRunContext && (isStreaming || status === "complete") && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "8px 14px", borderTop: `1px solid ${C.border}` }}>
