@@ -1319,39 +1319,96 @@ export function parseReportRecommendations(text) {
 
 // ── AI Sidebar: design-context model Q&A ──────────────────────────────────────
 
-export function buildModelQueryPrompt(question, model = {}, history = []) {
+export function buildModelQueryPrompt(question, model = {}, history = [], context = {}) {
   const isFirstTurn = history.length === 0;
 
-  // Build model digest only on the first turn; rely on history for follow-ups.
-  let systemContent;
+  let userContent;
   if (isFirstTurn) {
-    const entityTypes = (model.entityTypes || []);
-    const customers = entityTypes.filter(e => e.role === 'customer').map(e => e.name).join(', ') || 'none';
-    const servers   = entityTypes.filter(e => e.role === 'server').map(e => `${e.name} (×${e.count ?? 1})`).join(', ') || 'none';
-    const queues    = (model.queues || []).map(q => q.name).join(', ') || 'none';
-    const bEvents   = (model.bEvents || []).slice(0, 8).map(ev => ev.name).join(', ') || 'none';
-    const goals     = (model.goals || []).map(g => `${g.label}: target ${g.targetValue} ${g.metric}`).join('; ') || 'none';
-    systemContent = `You are assisting a simulation modeller in simmodlr.
+    const entityTypes = (model.entityTypes || []).map(et => {
+      const entry = { name: et.name || et.id, role: et.role || 'customer' };
+      if (et.role === 'server') entry.count = et.count ?? 1;
+      const attrs = (et.attrDefs || []).filter(a => a.name).map(a => ({
+        name: a.name,
+        valueType: a.valueType || 'number',
+        ...(a.defaultValue != null && a.defaultValue !== '' ? { defaultValue: a.defaultValue } : {}),
+      }));
+      if (attrs.length) entry.attributes = attrs;
+      if (et.mtbfDist) entry.failureModel = { mtbfDist: et.mtbfDist, mttrDist: et.mttrDist };
+      return entry;
+    });
 
-Model: ${model.name || 'Unnamed'}
-${model.description ? `Description: ${model.description}\n` : ''}Entity types (customer): ${customers}
-Resources (server): ${servers}
-Queues: ${queues}
-B-Events (arrivals/inputs): ${bEvents}
-Performance goals: ${goals}
+    const queues = (model.queues || []).map(q => ({
+      name: q.name || q.id,
+      discipline: q.discipline || 'FIFO',
+      capacity: q.capacity ?? null,
+      customerType: q.customerType || null,
+    }));
 
-Answer questions about this model concisely and precisely. If a question requires running the simulation to answer definitively, say so. Do not invent data not present in the model definition above.`;
+    const bEvents = (model.bEvents || []).slice(0, 12).map(ev => {
+      const effects = Array.isArray(ev.effect) ? ev.effect : (ev.effect ? [ev.effect] : []);
+      const effectTypes = [...new Set(
+        effects.map(e => String(e).match(/^\w+/)?.[0]?.toUpperCase()).filter(Boolean)
+      )];
+      return { name: ev.name || ev.id, effectTypes: effectTypes.length ? effectTypes : ['none'] };
+    });
+
+    const cEvents = (model.cEvents || []).slice(0, 12).map(ev => {
+      const effects = Array.isArray(ev.effect) ? ev.effect : (ev.effect ? [ev.effect] : []);
+      const effectTypes = [...new Set(
+        effects.map(e => String(e).match(/^\w+/)?.[0]?.toUpperCase()).filter(Boolean)
+      )];
+      return { name: ev.name || ev.id, priority: ev.priority ?? null, effectTypes: effectTypes.length ? effectTypes : ['none'] };
+    });
+
+    const goals = (model.goals || []).filter(g => g.metric && g.target).map(g => ({
+      label: g.label || g.metric,
+      metric: g.metric,
+      operator: g.operator || '<',
+      target: parseFloat(g.target),
+    }));
+
+    const sectionsDigest = buildSectionsDigest(model);
+    const stateVariables = (model.stateVariables || []).filter(v => v.name).map(v => ({
+      name: v.name, initialValue: v.initialValue ?? null,
+    }));
+
+    const modelDigest = {
+      name: model.name || 'Unnamed',
+      description: model.description || '',
+      entityTypes,
+      queues,
+      bEvents: bEvents.length ? bEvents : undefined,
+      cEvents: cEvents.length ? cEvents : undefined,
+      goals: goals.length ? goals : undefined,
+      sections: sectionsDigest.length ? sectionsDigest : undefined,
+      stateVariables: stateVariables.length ? stateVariables : undefined,
+    };
+
+    if (context.currentTab) modelDigest._currentTab = context.currentTab;
+    if (context.workflowMode) modelDigest._workflowMode = context.workflowMode;
+
+    const systemContent = [
+      "You are assisting a simulation modeller in simmodlr. You have full knowledge of the model structure below.",
+      "Give concrete, specific answers that reference the model's actual entities, queues, events, and attributes by name.",
+      "When asked to review a specific editor tab (entity types, queues, B-events, C-events, sections, state variables), focus your analysis on that area.",
+      "If the model has C-events, you can reason about conditional event logic and whether the conditions and effects are correctly wired.",
+      "If the model has performance goals, you can assess whether the model structure is sufficient to measure them.",
+      "If a question requires running the simulation to answer definitively (e.g. 'what is the average wait?'), say so — you can only reason about the model definition, not predict results.",
+      "Do not invent data not present in the model context above.",
+    ].join('\n\n');
+
+    userContent = truncateWords(JSON.stringify({ model: modelDigest, question }, null, 2));
   } else {
-    systemContent = `You are assisting a simulation modeller in simmodlr. Answer questions about the model described earlier in this conversation concisely and precisely. Do not invent data.`;
+    userContent = question;
   }
 
   const messages = [
-    { role: 'system', content: systemContent },
+    ...(isFirstTurn ? [{ role: 'system', content: 'You are assisting a simulation modeller in simmodlr. You have detailed knowledge of the model. Answer concisely and precisely. Do not invent data.' }] : [{ role: 'system', content: 'Continue assisting the modeller about the model described earlier. Be concise and precise. Do not invent data.' }]),
     ...history.slice(-8),
-    { role: 'user', content: question },
+    { role: 'user', content: userContent },
   ];
 
-  return { kind: 'model_query', messages, max_tokens: 400 };
+  return { kind: 'model_query', messages, max_tokens: 600 };
 }
 
 // ── Explore: adaptive batch analysis with opportunity identification ──────────

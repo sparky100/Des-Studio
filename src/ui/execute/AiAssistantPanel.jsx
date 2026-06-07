@@ -584,7 +584,8 @@ export const AiAssistantPanel = ({
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    const messages = buildModelQueryPrompt(question, model, conversationHistory);
+    const workflowMode = isRunContext ? 'Running' : isResultsContext ? 'Analyzing' : 'Designing';
+    const messages = buildModelQueryPrompt(question, model, conversationHistory, { currentTab: activeTab, workflowMode });
     setConversationHistory(prev => [...prev, { role: "user", content: question }]);
     setModelQueryText("");
     setResponse("");
@@ -742,8 +743,8 @@ export const AiAssistantPanel = ({
     refine: handleRefinePlan,
   };
 
-  // Fire the requested action when triggerAction.seq changes.
-  // Compare does NOT auto-fire — user must select a run then click the button.
+  // Reset state when triggerAction changes, but do NOT auto-fire.
+  // The user must explicitly click the button to trigger analysis.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!triggerAction?.action || !results) return;
@@ -753,20 +754,7 @@ export const AiAssistantPanel = ({
     setResponse("");
     setStatus("idle");
     setParsedSuggestion(null);
-    if (triggerAction.action !== "compare") {
-      actionFnsRef.current[triggerAction.action]?.();
-    }
   }, [triggerAction?.seq]);
-
-  // Auto-trigger refinement when the Refine Plan tab is selected
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (activeMode !== "refine" || !isResultsContext || !hasSchedule || refineStatus === "loading") return;
-    setResponse("");
-    setStatus("idle");
-    setParsedSuggestion(null);
-    actionFnsRef.current.refine?.();
-  }, [activeMode]);
 
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
 
@@ -1163,28 +1151,33 @@ export const AiAssistantPanel = ({
             rows={2}
             value={queryText}
             onChange={event => setQueryText(event.target.value)}
-            onKeyDown={handleQueryKeyDown}
-            disabled={!results || isStreaming}
-            placeholder={results ? "e.g. Which queue had the longest wait?" : "Run the model first…"}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                results ? runQuery(queryText) : runModelQuery(queryText);
+              }
+            }}
+            disabled={isStreaming}
+            placeholder={results ? "e.g. Which queue had the longest wait?" : "Ask about this model…"}
             style={{
               flex: 1, background: C.bg, border: `1px solid ${C.border}`,
               borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12,
               padding: "7px 8px", resize: "none", outline: "none",
-              opacity: (!results || isStreaming) ? 0.6 : 1,
+              opacity: isStreaming ? 0.6 : 1,
             }}
           />
           <button
             type="button"
             aria-label={listening && micTarget === "query" ? "Stop voice input" : "Start voice input"}
             onClick={() => toggleListening("query")}
-            disabled={!results || isStreaming}
+            disabled={isStreaming}
             style={{
               width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
               background: (listening && micTarget === "query") ? C.red + "22" : "transparent",
               border: `1px solid ${(listening && micTarget === "query") ? C.red : C.border}`,
               display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: (!results || isStreaming) ? "not-allowed" : "pointer",
-              opacity: (!results || isStreaming) ? 0.45 : 1, transition: "all .15s",
+              cursor: isStreaming ? "not-allowed" : "pointer",
+              opacity: isStreaming ? 0.45 : 1, transition: "all .15s",
             }}
           >
             <MicIcon size={15} color={(listening && micTarget === "query") ? C.red : C.muted} />
@@ -1192,15 +1185,15 @@ export const AiAssistantPanel = ({
           <button
             type="button"
             aria-label="Send"
-            onClick={() => runQuery(queryText)}
-            disabled={!results || !queryText.trim() || isStreaming}
+            onClick={() => results ? runQuery(queryText) : runModelQuery(queryText)}
+            disabled={!queryText.trim() || isStreaming}
             style={{
               width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-              background: (!results || !queryText.trim() || isStreaming) ? C.muted : C.accent,
+              background: !queryText.trim() || isStreaming ? C.muted : C.accent,
               border: "none",
               display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: (!results || !queryText.trim() || isStreaming) ? "not-allowed" : "pointer",
-              opacity: (!results || !queryText.trim() || isStreaming) ? 0.35 : 1,
+              cursor: !queryText.trim() || isStreaming ? "not-allowed" : "pointer",
+              opacity: !queryText.trim() || isStreaming ? 0.35 : 1,
               transition: "opacity .12s, background .12s",
             }}
           >
