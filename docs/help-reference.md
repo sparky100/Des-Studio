@@ -624,29 +624,37 @@ If the model is complex or high-variance, the Free tier may not achieve the ±5%
 
 ## Model Assistant
 
-The Model Assistant is an AI panel available from any model editing or results view. It provides results analysis, run comparison, plan refinement, and model Q&A.
+The Model Assistant is the AI panel available from any model editing, run, or results view. Click the **✦ AI** button in the mode bar to open it. It adapts to your current context:
+
+| Context | What it shows |
+|---------|--------------|
+| **Design tabs** (entities, queues, B-events, C-events, etc.) | Suggested questions about the current tab's content. A free-text **ASK ABOUT THIS MODEL** input for any question about the model's structure. The assistant receives the full model definition (entity attributes, queue configurations, C-event logic, sections, goals) and can reason about whether conditions and effects are correctly wired. |
+| **Run tab** (Execute) | A **Diagnostics** panel showing entity inspection and event log overlays on the Execute canvas. The same **ASK ABOUT THIS MODEL** input is available so you can ask questions about the model while watching it run. After a run completes, a second **ASK A QUESTION** input appears for results-specific queries. |
+| **Results tab** | Three focused tabs: **Analyse** (plain-language narrative of results), **Compare** (side-by-side comparison with a saved run), and **Refine Plan** (schedule adjustment suggestions — only when the model has a timetable). A **FOLLOW-UP QUESTION** input lets you ask specific questions about the results. No action fires automatically — click the button to trigger analysis. |
 
 ### Opening the Model Assistant
 
-Click the **✦ AI** button in the top-right of the mode bar to toggle the Model Assistant sidebar. On compact layouts (720–1024px wide) the panel floats as an overlay. On mobile (<720px), use the action buttons directly — they open a full-screen view.
+Click the **✦ AI** button in the mode bar to toggle the Model Assistant. On desktop it opens as a resizable sidebar. On compact layouts (720–1024px) the panel floats as an overlay. On mobile (<720px), it opens full-screen.
 
-### Focused actions (Results and Execute tabs)
+### Design and Run tabs — Model Q&A
+
+The **ASK ABOUT THIS MODEL** textarea is always available in design and run tabs. Type any question about the model — the assistant has full knowledge of your entity types, attributes, queue configurations, C-event conditions, sections, and goals. Examples: "Review my entity types", "Are my C-event conditions correctly wired?", "What can this model simulate?"
+
+Quick-start chips suggest context-specific questions based on the tab you're viewing.
+
+### Run tab — Diagnostics
+
+When you open the Model Assistant on the Run tab, it shows the **Diagnostics** panel: entity inspector overlays on the Execute canvas, event log filtering by phase, and node status indicators. This replaces the full analysis interface — results-focused actions (Analyse, Compare, Refine Plan) only appear in the Results tab.
+
+### Results tab — Focused actions
 
 | Button | What it does |
 |--------|-------------|
-| **Explain Results** | Streams a plain-language narrative of the latest run KPIs, queue waits, and resource utilisation |
-| **Compare Runs** | Selects a saved run from the dropdown and streams a structural comparison with the current run |
-| **Refine Plan** | Analyses the current schedule against results and suggests timetable adjustments (only shown when the model has a schedule) |
+| **Analyse** | Streams a plain-language narrative of the latest run KPIs with structured improvement suggestions |
+| **Compare** | Select a saved run from the dropdown and click to stream a structural side-by-side comparison |
+| **Refine Plan** | Analyses the current schedule against results and suggests timetable adjustments (only when the model has a timetable) |
 
-Each button opens a focused view showing only that action — the other actions are hidden. Click the ✕ close button to dismiss.
-
-### Model Q&A (Design tabs)
-
-When the Model Assistant is open on a non-results tab (entities, queues, B-events, etc.), a free-text input appears. Ask questions about the current model structure, e.g. "How many queues does this model have?" or "What does the Triage C-event do?"
-
-### Diagnostics
-
-The **Diagnosis** section (in the Execute panel) uses the same LLM backend. Click **Diagnose** to stream an analysis of validation errors and warnings for the current model configuration.
+All actions require an explicit click — nothing fires automatically when you switch tabs.
 
 ---
 

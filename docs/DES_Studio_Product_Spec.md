@@ -1,6 +1,6 @@
 # simmodlr — Product Specification
 
-**Version:** 7.1.0  
+**Version:** 7.2.0  
 **Date:** 2026-06-04  
 **Sprint baseline:** Sprint 82  
 **Status:** Living document — reviewed and updated at end of each sprint  
@@ -97,7 +97,7 @@ High-value features that are complete but whose absence would degrade the platfo
 | S6 | **Report generation** | Senior Management and Technical reports in HTML and Markdown. AI-written narrative sections grounded in run results. |
 | S7 | **Share / public dashboard** | Public link, QR code, embeddable widget. Read-only. No login required for viewers. |
 | S8 | **Model versioning** | Explicit milestones with notes. Version history panel. Structural change detection. Run records reference version snapshot. |
-| S9 | **Model Assistant (AI)** | Persistent sidebar. Focused views: Explain Results, Compare Runs, Refine Plan. Context-aware Q&A. |
+| S9 | **Model Assistant (AI)** | Persistent sidebar. Design mode: tab-aware suggested questions and model Q&A with full structure context (entity attributes, queue configs, C-event logic). Run mode: canvas diagnostics (entity inspector, event log overlays) with model Q&A above. Results mode: Analyse, Compare, and Refine Plan tabs — all manual, no auto-fire. |
 | S10 | **Template library** | 22 pre-built templates covering healthcare, logistics, transport, manufacturing, and service industries. Browsable by domain chip filter and text search. |
 | S11 | **Schedule Manager** | Named timetables (e.g. Weekday, Weekend) stored separately from `model_json` (ADR-016). CSV and Excel/XLSX import, multi-event import, and inline-row migration to named schedules. Schedule selector in Execute panel. |
 | S12 | **Resource failures** | FAIL/REPAIR macros with MTBF/MTTR distributions. V37 validation enforces paired configuration. |

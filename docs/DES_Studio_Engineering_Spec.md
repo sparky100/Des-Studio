@@ -1,6 +1,6 @@
 # simmodlr — Engineering Specification
 
-**Version:** 7.2.0  
+**Version:** 7.3.0  
 **Date:** 2026-06-04  
 **Note:** package.json version is 0.9.0-Beta; this document uses an internal engineering version number.  
 **Sprint baseline:** Sprint 82  
@@ -521,12 +521,12 @@ All LLM calls go through `src/llm/prompts.js`. Prompts are built as structured o
 | `buildExplainResultsPrompt(model, experimentConfig, results, ciResults)` | Generates narrative for Results → Explain tab |
 | `buildComparisonPrompt(modelName, runA, runB, modelA, modelB)` | Structured comparison of two run results (actual name; not `buildCompareRunsPrompt`) |
 | `buildPlanRefinementPrompt(model, experimentConfig, results)` | Patches `model_json` based on user feedback |
-| `buildResultsQueryPrompt(question, model, results, conversationHistory)` | Context-aware Q&A for Model Assistant sidebar (actual name; not `buildModelQueryPrompt`) |
+| `buildResultsQueryPrompt(question, model, results, conversationHistory)` | Context-aware results Q&A for Model Assistant sidebar |
 | `buildModelDescriptionPrompt(model, results)` | Plain-English description for Senior Management report |
 | `buildCiResults(aggregateStats)` | Formats CI data for report narrative |
 | `buildSuggestionPrompt(model, experimentConfig, results)` | Generates improvement suggestions |
 | `buildSensitivityPrompt(modelName, experimentConfig, ciResults)` | Sensitivity analysis narrative |
-| `buildModelQueryPrompt(question, model, history)` | Model structure Q&A (separate from results query) |
+| `buildModelQueryPrompt(question, model, history, context)` | Design- and run-mode model Q&A. Receives structured model digest (entity attributes, queue configs, C-event summaries, sections, goals) plus current tab context. |
 | `buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, ciSummary, tier)` | Explore/Adaptive Batch analysis narrative |
 | `buildReportRecommendationsPrompt(model, results)` | Report recommendations section |
 

@@ -1,6 +1,6 @@
 # simmodlr — User Guide
 
-**Version:** 7.1.0  
+**Version:** 7.2.0  
 **Date:** 2026-06-04  
 **Sprint baseline:** Sprint 82  
 **Audience:** Simulation practitioners, operations analysts, engineering students
@@ -234,7 +234,10 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    | **Analysis** | Confidence intervals, Welch warm-up diagnostic, replication-level variance. |
    | **Run Effort** | Replications completed, total sim time, wall-clock duration. |
 
-5. Use the **Explain** button to ask the Model Assistant (AI) to narrate the results, identify improvement opportunities, or answer specific questions.
+5. Open the **✦ AI** sidebar (Model Assistant) to explore the results:
+   - Click **Analyse** for a plain-English narrative of the results with structured improvement suggestions.
+   - Click **Compare** to compare against a saved historical run.
+   - Use the text input to ask specific questions about the results (e.g. "Which queue had the longest wait?").
 
 ### 4.4 Compare scenarios with a parametric sweep
 
