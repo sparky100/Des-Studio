@@ -1142,7 +1142,7 @@ export const AiAssistantPanel = ({
         {renderContent()}
       </div>}
 
-      {!isResultsContext && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      {!isResultsContext && results && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         <label htmlFor="query-input" style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, display: "block", marginBottom: 6 }}>
           ASK A QUESTION
         </label>
