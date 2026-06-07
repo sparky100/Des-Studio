@@ -443,10 +443,6 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                       )}
                     </div>
                   )}
-                  <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
-                    {outcome.status === "reneged" ? "Left before completion." : "Completed on this route."}
-                    {outcome.endedBy ? ` Source: ${outcome.endedBy}.` : ""}
-                  </div>
                 </div>
               );
             })}
