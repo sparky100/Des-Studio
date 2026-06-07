@@ -21,13 +21,13 @@ function ConfidenceBadge({ confidence }) {
 }
 
 const KPI_ROWS = [
-  { key: "summary.avgWait", label: "Avg wait" },
-  { key: "summary.avgSvc", label: "Avg service" },
-  { key: "summary.avgSojourn", label: "Avg sojourn" },
-  { key: "summary.served", label: "Served" },
-  { key: "summary.reneged", label: "Reneged" },
-  { key: "summary.totalCost", label: "Total cost" },
-  { key: "summary.costPerServed", label: "Cost per served" },
+  { key: "summary.avgWait", label: "Avg wait", higherIsBetter: false },
+  { key: "summary.avgSvc", label: "Avg service", higherIsBetter: false },
+  { key: "summary.avgSojourn", label: "Avg sojourn", higherIsBetter: false },
+  { key: "summary.served", label: "Served", higherIsBetter: true },
+  { key: "summary.reneged", label: "Reneged", higherIsBetter: false },
+  { key: "summary.totalCost", label: "Total cost", higherIsBetter: false },
+  { key: "summary.costPerServed", label: "Cost per served", higherIsBetter: false },
 ];
 
 function BeforeAfterTable({ goals, baselineStats, afterStats }) {
@@ -49,7 +49,9 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
     const afterVal = afterStat?.mean ?? null;
     if (beforeVal === null && afterVal === null) continue;
     const d = delta(beforeVal, afterVal);
-    const dColor = d === null ? C.muted : d.startsWith("+") ? C.red : C.green;
+    const betterHigher = kpi.higherIsBetter ?? false;
+    const dColor = d === null ? C.muted
+      : (afterVal > beforeVal) === betterHigher ? C.green : C.red;
     rows.push(
       <tr key={kpi.key}>
         <td style={{ color: C.text, padding: "2px 4px" }}>{kpi.label}</td>
