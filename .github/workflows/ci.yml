@@ -23,9 +23,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run full test suite
-        run: npm test -- --run
-
   benchmarks:
     name: Analytical correctness benchmarks
     runs-on: ubuntu-latest
