@@ -1221,6 +1221,11 @@ export const AiAssistantPanel = ({
       </div>}
 
       {!isRunContext && (isResultsContext ? activeMode === "refine" : (!sidebar && hasSchedule)) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+        {refineStatus === "idle" && (
+          <Btn variant="primary" onClick={handleRefinePlan} style={panelButtonStyle}>
+            Analyse schedule
+          </Btn>
+        )}
         {refineStatus === "loading" && (
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, marginBottom: 8 }}>Analysing schedule constraints…</div>
         )}
