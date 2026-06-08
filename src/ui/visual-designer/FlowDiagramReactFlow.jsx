@@ -299,13 +299,14 @@ export function FlowDiagramReactFlow({
       return {
         ...base,
         selected: selectedSet.has(node.id),
+        selectable: true,
         data: {
           ...base.data,
           hasError,
           sectionColor: showSections ? base.data.sectionColor : undefined,
           sectionId: showSections ? base.data.sectionId : undefined,
         },
-        style: { opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms" },
+        style: { opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms", cursor: "pointer" },
       };
     });
 
@@ -413,7 +414,7 @@ export function FlowDiagramReactFlow({
         onNodeClick={(event, node) => {
           if (node.type === "sectionPanel") return;
           nodeClickHandledRef.current = true;
-          const toggle = selectionMode === "select" || event?.shiftKey || event?.ctrlKey || event?.metaKey;
+          const toggle = event?.shiftKey || event?.ctrlKey || event?.metaKey;
           onNodeSelect?.(node.id, { toggle });
         }}
         onPaneClick={() => {
