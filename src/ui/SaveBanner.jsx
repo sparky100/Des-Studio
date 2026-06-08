@@ -9,10 +9,12 @@ export function SaveBanner({ canEdit, dirty, visualPending, saving, discardConfi
   if (visualPending && !dirty) {
     return (
       <div role="status" style={{
+        display: "flex", alignItems: "center", gap: 10,
         color: C.amber, fontFamily: FONT, fontSize: 11,
-        padding: "6px 0", marginBottom: 8, opacity: 0.8,
+        padding: "6px 0", marginBottom: 8,
       }}>
-        ● Unsaved layout changes — Save before leaving this workspace.
+        <span style={{ opacity: 0.8 }}>● Unsaved layout changes</span>
+        <Btn small variant="primary" onClick={onSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Btn>
       </div>
     );
   }
