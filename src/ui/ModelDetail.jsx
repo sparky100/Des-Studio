@@ -1060,7 +1060,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       />
       <div style={{flex:1,display:"flex",flexDirection:"row",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>
-        <SaveBanner canEdit={canEdit} dirty={dirty || visualPending} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
+        <SaveBanner canEdit={canEdit} dirty={dirty} visualPending={visualPending} saving={saving} discardConfirm={discardConfirm} setDiscardConfirm={setDiscardConfirm} onSave={save} onDiscard={discard}/>
         {saveError&&<div role="alert" style={{background:C.errorBg,border:`1px solid ${C.danger}`,borderRadius:6,padding:'8px 12px',color:C.error,fontFamily:FONT,fontSize:12,marginBottom:8}}>{saveError}</div>}
         {tab==="overview" && <ModelHealthPanel model={model} validation={healthValidation} isStarterBlank={isStarterBlank} tab={tab} setTab={setTab} latestResults={latestResults} onGoToHistory={() => { setTab("results"); setResultsView("history"); }}/>}
         <ErrorBoundary

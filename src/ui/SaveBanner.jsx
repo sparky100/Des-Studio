@@ -3,9 +3,20 @@
 import { Btn } from "./shared/components.jsx";
 import { useTheme } from "./shared/ThemeContext.jsx";
 
-export function SaveBanner({ canEdit, dirty, saving, discardConfirm, setDiscardConfirm, onSave, onDiscard }) {
+export function SaveBanner({ canEdit, dirty, visualPending, saving, discardConfirm, setDiscardConfirm, onSave, onDiscard }) {
   const { C, FONT } = useTheme();
-  if (!canEdit || !dirty) return null;
+  if (!canEdit || (!dirty && !visualPending)) return null;
+  if (visualPending && !dirty) {
+    return (
+      <div role="status" style={{
+        color: C.amber, fontFamily: FONT, fontSize: 11,
+        padding: "6px 0", marginBottom: 8, opacity: 0.8,
+      }}>
+        ● Unsaved layout changes — Save before leaving this workspace.
+      </div>
+    );
+  }
+  if (!dirty) return null;
   return (
     <div role="status" style={{
       background: C.amber + "18", border: `1px solid ${C.amber}66`, borderRadius: 6,
