@@ -383,6 +383,7 @@ export const AiAssistantPanel = ({
       setResponse("");
       setStatus("idle");
       setParsedSuggestion(null);
+      setQueryText("");
     }
     setActiveMode(mode);
   };
