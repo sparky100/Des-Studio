@@ -70,25 +70,51 @@ function DeleteNodeDialog({ node, nodes = [], dependents, onConfirm, onCancel })
   );
 }
 
-// Maps a validateModel error/warning to the canvas node that owns it,
-// by extracting the element name from the message and matching against graph nodes.
-function findNodeForError(item, graph) {
-  const match = (item.message || "").match(/'([^']+)'/);
-  const name = match?.[1];
-  if (!name) return null;
+// Maps a validateModel error/warning to the canvas nodes that own it,
+// using structured affectedIds (eventIds, queueIds, entityTypeIds) matched against node refId.
+// Returns an array of matching graph node IDs (may be empty).
+function findNodesForError(item, graph) {
   const nodes = graph?.nodes || [];
-  if (item.tab === "cevents") {
-    return nodes.find(n => n.type === VISUAL_NODE_TYPES.ACTIVITY && n.label === name)?.id ?? null;
+  const ids = new Set();
+
+  if (item.affectedIds?.eventIds?.length) {
+    const eventIdSet = new Set(item.affectedIds.eventIds);
+    if (item.tab === "cevents") {
+      nodes
+        .filter(n => n.type === VISUAL_NODE_TYPES.ACTIVITY && eventIdSet.has(n.refId))
+        .forEach(n => ids.add(n.id));
+    } else if (item.tab === "bevents") {
+      nodes
+        .filter(n => (n.type === VISUAL_NODE_TYPES.SOURCE || n.type === VISUAL_NODE_TYPES.SINK) && eventIdSet.has(n.refId))
+        .forEach(n => ids.add(n.id));
+    }
   }
-  if (item.tab === "bevents") {
-    return nodes.find(
-      n => (n.type === VISUAL_NODE_TYPES.SOURCE || n.type === VISUAL_NODE_TYPES.SINK) && n.label === name
-    )?.id ?? null;
+
+  if (item.affectedIds?.queueIds?.length) {
+    const queueIdSet = new Set(item.affectedIds.queueIds);
+    if (item.tab === "queues") {
+      nodes
+        .filter(n => n.type === VISUAL_NODE_TYPES.QUEUE && queueIdSet.has(n.refId))
+        .forEach(n => ids.add(n.id));
+    }
   }
-  if (item.tab === "queues") {
-    return nodes.find(n => n.type === VISUAL_NODE_TYPES.QUEUE && n.label === name)?.id ?? null;
+
+  if (!ids.size) {
+    const match = (item.message || "").match(/'([^']+)'/);
+    const name = match?.[1];
+    if (!name) return [];
+    let found = null;
+    if (item.tab === "cevents") {
+      found = nodes.find(n => n.type === VISUAL_NODE_TYPES.ACTIVITY && n.label === name);
+    } else if (item.tab === "bevents") {
+      found = nodes.find(n => (n.type === VISUAL_NODE_TYPES.SOURCE || n.type === VISUAL_NODE_TYPES.SINK) && n.label === name);
+    } else if (item.tab === "queues") {
+      found = nodes.find(n => n.type === VISUAL_NODE_TYPES.QUEUE && n.label === name);
+    }
+    if (found) ids.add(found.id);
   }
-  return null;
+
+  return [...ids];
 }
 
 // Clickable checklist combining visual-graph warnings with canonical model errors/warnings.
@@ -105,13 +131,13 @@ function ValidationChecklist({ visualIssues, modelErrors, modelWarnings, graph, 
     ...modelErrors.map((err, i) => ({
       key: `err-${err.code}-${i}`,
       message: `[${err.code}] ${err.message}`,
-      nodeId: findNodeForError(err, graph),
+      nodeId: findNodesForError(err, graph)[0] || null,
       severity: "error",
     })),
     ...modelWarnings.map((warn, i) => ({
       key: `warn-${warn.code}-${i}`,
       message: `[${warn.code}] ${warn.message}`,
-      nodeId: findNodeForError(warn, graph),
+      nodeId: findNodesForError(warn, graph)[0] || null,
       severity: "warning",
     })),
   ];
@@ -245,8 +271,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     const ids = new Set();
     visualIssues.forEach(issue => { if (issue.nodeId) ids.add(issue.nodeId); });
     [...modelValidation.errors, ...modelValidation.warnings].forEach(item => {
-      const id = findNodeForError(item, graph);
-      if (id) ids.add(id);
+      findNodesForError(item, graph).forEach(id => ids.add(id));
     });
     return ids;
   }, [visualIssues, modelValidation, graph]);
