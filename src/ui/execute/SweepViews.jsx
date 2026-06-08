@@ -10,14 +10,16 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 // goals: array of {metric, operator, target} from model.goals
 // Returns true if all goals met, false if any missed, null if no goals or no data.
 function pointIsFeasible(goals, aggregateStats) {
-
   if (!goals?.length) return null;
   const STAT_KEY = {
     avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn",
-    served: "summary.served", reneged: "summary.reneged", totalCost: "summary.totalCost",
+    avgWIP: "summary.avgWIP", maxWIP: "summary.maxWIP",
+    served: "summary.served", reneged: "summary.reneged",
+    totalCost: "summary.totalCost", costPerServed: "summary.costPerServed",
   };
   for (const g of goals) {
-    const key = STAT_KEY[g.metric];
+    if (g.scope || (typeof g.operator === "string" && g.operator.startsWith("p"))) continue;
+    const key = STAT_KEY[g.metric] || (g.metric?.startsWith("summary.") ? g.metric : null);
     if (!key) continue;
     const val = aggregateStats[key]?.mean;
     if (val == null || !Number.isFinite(val)) return null;

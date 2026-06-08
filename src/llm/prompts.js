@@ -313,6 +313,10 @@ export function buildKpis(model = {}, results = {}) {
   if (journeys) kpis.journeys = journeys;
   if (summary.totalCost) kpis.totalCost = finiteOrNull(summary.totalCost);
   if (summary.costPerServed) kpis.costPerServed = finiteOrNull(summary.costPerServed);
+  if (summary.maxWIP) kpis.maxWIP = finiteOrNull(summary.maxWIP);
+  if (summary.perResource) kpis.resourceUtilisation = Object.fromEntries(
+    Object.entries(summary.perResource).map(([name, r]) => [name, finiteOrNull(r.utilisation)])
+  );
   if (summary.containerLevels) kpis.containerLevels = summary.containerLevels;
   if (summary.phaseCTruncated) kpis.warning_phaseCTruncated = true;
   if (summary.warnings?.length) kpis.warnings = summary.warnings;
@@ -322,12 +326,16 @@ export function buildKpis(model = {}, results = {}) {
 export function goalsToPrompt(model = {}) {
   const goals = model.goals || [];
   if (!goals.length) return null;
-  return goals.filter(g => g.metric && g.target).map(g => ({
-    metric: g.metric,
-    target: parseFloat(g.target),
-    operator: g.operator || "<",
-    label: g.label || `${g.metric} ${g.operator} ${g.target}`,
-  }));
+  return goals.filter(g => g.metric && g.target).map(g => {
+    const scopeLabel = g.scope?.name ? `${g.scope.name} ` : "";
+    return {
+      metric: g.metric,
+      target: parseFloat(g.target),
+      operator: g.operator || "<",
+      scope: g.scope || null,
+      label: g.label || `${scopeLabel}${g.metric} ${g.operator} ${g.target}`,
+    };
+  });
 }
 
 function makeMessages(system, payload, instruction) {
@@ -531,51 +539,121 @@ export function buildSensitivityPrompt(modelName = DEFAULT_MODEL_NAME, experimen
 }
 
 // ── Goal gap analysis ────────────────────────────────────────────────────────
-// Maps goal metric names to aggregateStats keys
+
+function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}) {
+  if (scope?.type === "queue") {
+    const qId = scope.id;
+    if (aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`]?.mean != null) {
+      return aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`].mean;
+    }
+    const wd = Array.isArray(summary.waitDist) ? summary.waitDist : [];
+    const q = wd.find(w => w.queueId === qId || w.queue === qId);
+    if (q) {
+      if (metric === "summary.avgWait") return q.mean;
+      if (metric === "summary.served") return q.n;
+      if (metric === "summary.reneged") return q.reneged;
+      if (metric === "summary.avgWIP" || metric === "summary.maxWIP") return q.avgDepth;
+    }
+    if (summary.byQueue?.[qId]) {
+      const bq = summary.byQueue[qId];
+      if (metric === "summary.avgWait") return bq.avgWait;
+      if (metric === "summary.avgWIP" || metric === "summary.maxWIP") return bq.avgWIP;
+    }
+  }
+  if (scope?.type === "resource") {
+    const rName = scope.name || scope.id;
+    if (aggregateStats[`resource.utilisation.${rName}`]?.mean != null) {
+      return aggregateStats[`resource.utilisation.${rName}`].mean;
+    }
+    return summary.perResource?.[rName]?.utilisation ?? null;
+  }
+  if (scope?.type === "container") {
+    const cName = scope.name || scope.id;
+    const key = metric.replace("container.", "");
+    if (aggregateStats[`container.${key}.${cName}`]?.mean != null) {
+      return aggregateStats[`container.${key}.${cName}`].mean;
+    }
+    return summary.containerLevels?.[cName]?.[key] ?? null;
+  }
+  return null;
+}
+
+// Maps goal metric names (without summary. prefix for legacy) to aggregateStats keys
 const GOAL_STAT_KEY = {
   avgWait:    "summary.avgWait",
   avgSvc:     "summary.avgSvc",
   avgSojourn: "summary.avgSojourn",
   avgWIP:     "summary.avgWIP",
+  maxWIP:     "summary.maxWIP",
   served:     "summary.served",
   reneged:    "summary.reneged",
   totalCost:  "summary.totalCost",
+  costPerServed: "summary.costPerServed",
 };
 
-// Goal metric paths (as stored in model.goals[].metric) → key in the single-run
-// summary object.  Goals use the full "summary.*" path that matches aggregateStats;
-// the mapping strips the prefix so we can read from results.summary directly.
+// Goal metric paths (as stored in model.goals[].metric) → key in the single-run summary
 const GOAL_SUMMARY_KEY = {
   'summary.avgWait':    'avgWait',
   'summary.avgSvc':     'avgSvc',
   'summary.avgSojourn': 'avgSojourn',
   'summary.avgWIP':     'avgWIP',
+  'summary.maxWIP':     'maxWIP',
   'summary.served':     'served',
   'summary.reneged':    'reneged',
   'summary.totalCost':  'totalCost',
-  // Legacy short-form keys (stored in older models)
+  'summary.costPerServed': 'costPerServed',
   avgWait:    'avgWait',
   avgSvc:     'avgSvc',
   avgSojourn: 'avgSojourn',
   avgWIP:     'avgWIP',
+  maxWIP:     'maxWIP',
   served:     'served',
   reneged:    'reneged',
   totalCost:  'totalCost',
+  costPerServed: 'costPerServed',
 };
+
+function resolvePercentileValue(operator, summary = {}, scope) {
+  const p = parseInt(operator.replace("p", ""), 10);
+  if (!p) return null;
+  if (scope?.type === "queue") {
+    const qId = scope.id;
+    const wd = Array.isArray(summary.waitDist) ? summary.waitDist : [];
+    const q = wd.find(w => w.queueId === qId || w.queue === qId);
+    if (q) {
+      const key = `p${p}`;
+      return q[key] ?? null;
+    }
+  }
+  const wd = Array.isArray(summary.waitDist) ? summary.waitDist : [];
+  const allValues = wd.flatMap(w => w.values || []);
+  if (!allValues.length) return null;
+  allValues.sort((a, b) => a - b);
+  const idx = Math.ceil((p / 100) * allValues.length) - 1;
+  return allValues[Math.max(0, idx)] ?? null;
+}
 
 export function buildGoalGaps(model = {}, aggregateStats = {}, summary = {}) {
   const goals = model.goals || [];
   if (!goals.length) return null;
   return goals.filter(g => g.metric && g.target).map(g => {
-    // For multi-replication runs use the CI mean; fall back to the single-run
-    // summary value so goals are never reported as "unknown" on a 1-rep run.
-    const current = finiteOrNull(aggregateStats[g.metric]?.mean)
-                 ?? finiteOrNull(summary[GOAL_SUMMARY_KEY[g.metric] ?? g.metric]);
+    const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
+    let current = null;
+    if (isPercentile) {
+      current = finiteOrNull(resolvePercentileValue(g.operator, summary, g.scope));
+    } else if (g.scope) {
+      current = finiteOrNull(resolveScopedGoalValue(g.metric, g.scope, aggregateStats, summary));
+    } else {
+      current = finiteOrNull(aggregateStats[g.metric]?.mean)
+             ?? finiteOrNull(summary[GOAL_SUMMARY_KEY[g.metric] ?? g.metric]);
+    }
     const target = parseFloat(g.target);
     const op = g.operator || "<";
     let met = false;
     if (current != null) {
-      if (op === "<")  met = current < target;
+      if (isPercentile) {
+        met = current < target;
+      } else if (op === "<")  met = current < target;
       else if (op === "<=") met = current <= target;
       else if (op === ">")  met = current > target;
       else if (op === ">=") met = current >= target;
@@ -595,17 +673,18 @@ export function buildGoalGaps(model = {}, aggregateStats = {}, summary = {}) {
 }
 
 // Evaluate whether a single sweep point's aggregateStats satisfies all goals.
-// Returns { feasible: bool, gaps: [{metric, met, current, target}] }
 export function evaluateSweepPointGoals(goals = [], aggregateStats = {}) {
   if (!goals.length) return { feasible: null, gaps: [] };
   const gaps = goals.filter(g => g.metric && g.target).map(g => {
-    const statKey = GOAL_STAT_KEY[g.metric];
+    const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
+    const statKey = !isPercentile && !g.scope ? (GOAL_STAT_KEY[g.metric] || null) : null;
     const current = statKey ? finiteOrNull(aggregateStats[statKey]?.mean) : null;
     const target = parseFloat(g.target);
     const op = g.operator || "<";
     let met = null;
     if (current != null) {
-      if (op === "<")  met = current < target;
+      if (isPercentile) met = current < target;
+      else if (op === "<")  met = current < target;
       else if (op === "<=") met = current <= target;
       else if (op === ">")  met = current > target;
       else if (op === ">=") met = current >= target;

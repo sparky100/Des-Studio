@@ -1129,7 +1129,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               </div>
             )}
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
-              <GoalsEditor goals={model.goals||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
+              <GoalsEditor goals={model.goals||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
             </div>
           </div>)
         )}

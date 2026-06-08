@@ -2034,10 +2034,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         <tbody>
                           {sweepResults.map((pt, i) => {
                             const goals = model.goals || [];
-                            const STAT_KEY = { avgWait:"summary.avgWait", avgSvc:"summary.avgSvc", avgSojourn:"summary.avgSojourn", served:"summary.served", reneged:"summary.reneged", totalCost:"summary.totalCost" };
+                            const STAT_KEY = { avgWait:"summary.avgWait", avgSvc:"summary.avgSvc", avgSojourn:"summary.avgSojourn", avgWIP:"summary.avgWIP", maxWIP:"summary.maxWIP", served:"summary.served", reneged:"summary.reneged", totalCost:"summary.totalCost", costPerServed:"summary.costPerServed" };
                             const feasible = goals.length
-                              ? goals.filter(g=>g.metric&&g.target).every(g=>{
-                                  const k=STAT_KEY[g.metric]; if(!k) return true;
+                              ? goals.filter(g=>g.metric&&g.target&&!g.scope&&!(typeof g.operator==="string"&&g.operator.startsWith("p"))).every(g=>{
+                                  const k=STAT_KEY[g.metric]||(g.metric?.startsWith("summary.")?g.metric:null); if(!k) return true;
                                   const v=pt.aggregateStats[k]?.mean; if(v==null||!Number.isFinite(v)) return true;
                                   const t=parseFloat(g.target); const op=g.operator||"<";
                                   return op==="<"?v<t:op==="<="?v<=t:op===">"?v>t:op===">="?v>=t:Math.abs(v-t)<0.001;
@@ -2749,11 +2749,27 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               }}>
                 {(() => {
                   const goals = model.goals || [];
-                  const GOAL_KEY = { avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn", served: "summary.served", reneged: "summary.reneged", totalCost: "summary.totalCost" };
+                  const GOAL_KEY = {
+                    avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn",
+                    avgWIP: "summary.avgWIP", maxWIP: "summary.maxWIP",
+                    served: "summary.served", reneged: "summary.reneged",
+                    totalCost: "summary.totalCost", costPerServed: "summary.costPerServed",
+                  };
+                  const MATCH_KEYS = {
+                    "summary.avgWait": "summary.avgWait", "summary.avgSvc": "summary.avgSvc",
+                    "summary.avgSojourn": "summary.avgSojourn", "summary.avgWIP": "summary.avgWIP",
+                    "summary.maxWIP": "summary.maxWIP", "summary.served": "summary.served",
+                    "summary.reneged": "summary.reneged", "summary.totalCost": "summary.totalCost",
+                    "summary.costPerServed": "summary.costPerServed",
+                  };
                   return CI_METRICS.map(metric => {
                     const stat = aggregateStats[metric];
                     if (!stat || stat.n < 2) return null;
-                    const matchingGoals = goals.filter(g => g.metric && g.target && GOAL_KEY[g.metric] === metric);
+                    const matchingGoals = goals.filter(g => {
+                      if (!g.metric || !g.target || g.scope) return false;
+                      const mapped = GOAL_KEY[g.metric] || MATCH_KEYS[g.metric];
+                      return mapped === metric && !(typeof g.operator === "string" && g.operator.startsWith("p"));
+                    });
                     let goalMet = null;
                     if (matchingGoals.length > 0) {
                       goalMet = matchingGoals.every(g => {

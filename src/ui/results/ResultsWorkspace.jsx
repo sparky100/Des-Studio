@@ -489,19 +489,23 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
         if (!goals.length) return null;
         const storedAgg = results?.aggregateStats && Object.keys(results.aggregateStats).length > 0
           ? results.aggregateStats : null;
+        const summary = results?.summary || {};
         const aggForGoals = storedAgg || (() => {
-          const s = results?.summary || {};
+          const s = summary;
           const pt = v => (v != null && Number.isFinite(Number(v)) ? { mean: Number(v), n: 1 } : null);
           const out = {};
           if (pt(s.avgWait))    out['summary.avgWait']    = pt(s.avgWait);
           if (pt(s.avgSvc))     out['summary.avgSvc']     = pt(s.avgSvc);
           if (pt(s.avgSojourn)) out['summary.avgSojourn'] = pt(s.avgSojourn);
+          if (pt(s.avgWIP))     out['summary.avgWIP']     = pt(s.avgWIP);
+          if (pt(s.maxWIP))     out['summary.maxWIP']     = pt(s.maxWIP);
           if (pt(s.served))     out['summary.served']     = pt(s.served);
           if (pt(s.reneged))    out['summary.reneged']    = pt(s.reneged);
           if (pt(s.totalCost))  out['summary.totalCost']  = pt(s.totalCost);
+          if (pt(s.costPerServed)) out['summary.costPerServed'] = pt(s.costPerServed);
           return out;
         })();
-        const gaps = buildGoalGaps(model, aggForGoals);
+        const gaps = buildGoalGaps(model, aggForGoals, summary);
         if (!gaps?.length) return null;
         return (
           <>
@@ -513,14 +517,16 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                 const pass = g.current != null && g.met;
                 const chipColor = g.current == null ? C.muted : pass ? C.green : C.red;
                 const chipLabel = g.current == null ? 'UNKNOWN' : pass ? '✓ PASS' : '✗ FAIL';
+                const isPercentile = typeof g.operator === "string" && g.operator.startsWith("p");
+                const opLabel = isPercentile
+                  ? `${g.operator.replace("p", "")}th %ile <`
+                  : g.operator;
                 return (
-                  <div key={g.metric} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
+                  <div key={g.metric + (g.scope?.id || "")} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
                     <div style={{ flex: 1, fontFamily: FONT, fontSize: 12, color: C.text }}>{g.label}</div>
-                    {g.current != null && (
-                      <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
-                        {Number(g.current).toFixed(2)} {g.operator} {g.target}
-                      </div>
-                    )}
+                    <div style={{ fontFamily: FONT, fontSize: 12, color: C.muted }}>
+                      {g.current != null ? `${Number(g.current).toFixed(1)} ${opLabel} ${g.target}` : "n/a"}
+                    </div>
                     <div style={{ padding: "2px 8px", borderRadius: 4, background: chipColor + "22", border: `1px solid ${chipColor}55`, fontFamily: FONT, fontSize: 10, fontWeight: 700, color: chipColor, letterSpacing: 0.5 }}>
                       {chipLabel}
                     </div>
