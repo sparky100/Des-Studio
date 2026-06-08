@@ -777,21 +777,90 @@ Performance targets for the AI analysis and optimisation features.
 }
 ```
 
-| `metric` key | Meaning |
-|---|---|
-| `summary.avgWait` | Mean customer wait time |
-| `summary.avgSvc` | Mean service time |
-| `summary.avgSojourn` | Mean total time in system |
-| `summary.avgWIP` | Average work-in-progress (mean entities in system, Little's Law) |
-| `summary.served` | Total customers served |
-| `summary.reneged` | Total customers who abandoned |
-| `summary.totalCost` | Total cost (requires cost model) |
+### Scoped goals
+
+Queue-scoped goals constrain a metric to a specific queue. When `scope` is present, the engine evaluates the metric only for that queue, not the system-wide average.
+
+```json
+{
+  "metric": "summary.avgWait",
+  "operator": "<",
+  "target": 10,
+  "label": "Triage wait under 10 min",
+  "scope": { "type": "queue", "id": "q_triage", "name": "Triage Queue" }
+}
+```
+
+Resource-scoped goals target a specific server/resource type. `scope` is **required** for `resource.utilisation` — there is no system-wide utilisation metric.
+
+```json
+{
+  "metric": "resource.utilisation",
+  "operator": "<",
+  "target": 0.85,
+  "label": "Nurse utilisation under 85%",
+  "scope": { "type": "resource", "id": "et_nurse", "name": "Nurse" }
+}
+```
+
+Container-scoped goals target a specific container. `scope` is **required** for container metrics.
+
+```json
+{
+  "metric": "container.avgLevel",
+  "operator": ">",
+  "target": 50,
+  "label": "Average tank level above 50 units",
+  "scope": { "type": "container", "id": "ct_tank", "name": "tank" }
+}
+```
+
+### Supported metric paths
+
+| `metric` key | Meaning | Scopable |
+|---|---|---|
+| `summary.avgWait` | Mean customer wait time | Queue |
+| `summary.avgSvc` | Mean service time | — |
+| `summary.avgSojourn` | Mean total time in system | — |
+| `summary.avgWIP` | Average work-in-progress (mean entities in system, Little's Law) | Queue |
+| `summary.maxWIP` | Maximum work-in-progress (peak queue depth) | Queue |
+| `summary.served` | Total customers served | Queue |
+| `summary.reneged` | Total customers who abandoned | Queue |
+| `summary.totalCost` | Total cost (requires cost model) | — |
+| `summary.costPerServed` | Cost per served entity (requires cost model) | — |
+| `resource.utilisation` | Resource utilisation as a fraction (0–1) | **Resource** (required) |
+| `container.minLevel` | Minimum container level during run | **Container** (required) |
+| `container.avgLevel` | Average container level during run | **Container** (required) |
+| `container.maxLevel` | Maximum container level during run | **Container** (required) |
 
 `operator`: one of `<`, `<=`, `>`, `>=`
 
-⚠ The seven `metric` values listed above are the **only** valid values. Do not invent other paths (`queue.avgLength`, `section.Triage.avgWait`, etc.) — the engine evaluates no other metric path and the UI will not display it. Always use the full `summary.*` prefix form shown in the table.
+### Percentile operators (time metrics only)
 
-> **Batch-mode note:** For multi-replication runs, count goals (`summary.served`, `summary.reneged`) and `summary.avgWIP` are evaluated against the **per-replication average** (the CI mean), not the cumulative total across all replications.
+For time-scoped goals (`summary.avgWait`, `summary.avgSvc`, `summary.avgSojourn`), use `p50`, `p75`, `p90`, `p95`, or `p99` as the `operator` to set a target on a wait-distribution percentile rather than the mean. All percentile comparisons use `<` semantics (the percentile must be below the target).
+
+```json
+{
+  "metric": "summary.avgWait",
+  "operator": "p90",
+  "target": 15,
+  "label": "90th percentile wait under 15"
+}
+```
+
+⚠ The thirteen `metric` values listed above are the **only** valid values. Do not invent other paths (`queue.avgLength`, `section.Triage.avgWait`, etc.) — the engine evaluates no other metric path and the UI will not display it. Always use the full prefix form shown in the table.
+
+> **Batch-mode note:** For multi-replication runs, count goals (`summary.served`, `summary.reneged`) and `summary.avgWIP`/`summary.maxWIP` are evaluated against the **per-replication average** (the CI mean), not the cumulative total across all replications.
+
+### Scope field reference
+
+| `scope.type` | `scope.id` | `scope.name` | Used by |
+|---|---|---|---|
+| `"queue"` | Queue `id` | Queue `name` | `summary.avgWait`, `summary.avgWIP`, `summary.maxWIP`, `summary.served`, `summary.reneged` |
+| `"resource"` | Server entity type `id` | Server entity type `name` | `resource.utilisation` (required — must select a resource) |
+| `"container"` | Container `id` | Container `id` | `container.minLevel`, `container.avgLevel`, `container.maxLevel` (required — must select a container) |
+
+When `scope` is omitted, the metric applies system-wide.
 
 ---
 
