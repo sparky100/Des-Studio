@@ -52,10 +52,6 @@ const AuthoringWorkflowShell = ({ mode, children }) => (
   </section>
 );
 
-function extractErrorItemName(msg) {
-  return (msg || "").match(/'([^']+)'/)?.[1] || null;
-}
-
 const TabErrors = ({ tabId, validation, onErrorClick = null }) => {
   const { C, FONT } = useTheme();
   const errs = (validation.errors || []).filter(e => e.tab === tabId);
@@ -64,20 +60,18 @@ const TabErrors = ({ tabId, validation, onErrorClick = null }) => {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
       {errs.map((e, i) => {
-        const name = extractErrorItemName(e.message);
-        const clickable = onErrorClick && name;
+        const clickable = onErrorClick && e.affectedIds;
         return (
-          <div key={i} role="alert" onClick={clickable ? () => onErrorClick({ tab: tabId, name }) : undefined}
+          <div key={i} role="alert" onClick={clickable ? () => onErrorClick({ tab: tabId, affectedIds: e.affectedIds }) : undefined}
             style={{ background: alpha(C.red, 0.1), border: `1px solid ${alpha(C.red, 0.4)}`, borderRadius: 6, padding: "8px 12px", color: C.red, fontFamily: FONT, fontSize: 12, cursor: clickable ? "pointer" : undefined }}>
             [{e.code}] {e.message}
           </div>
         );
       })}
       {warns.map((w, i) => {
-        const name = extractErrorItemName(w.message);
-        const clickable = onErrorClick && name;
+        const clickable = onErrorClick && w.affectedIds;
         return (
-          <div key={i} onClick={clickable ? () => onErrorClick({ tab: tabId, name }) : undefined}
+          <div key={i} onClick={clickable ? () => onErrorClick({ tab: tabId, affectedIds: w.affectedIds }) : undefined}
             style={{ background: alpha(C.amber, 0.1), border: `1px solid ${alpha(C.amber, 0.4)}`, borderRadius: 6, padding: "8px 12px", color: C.amber, fontFamily: FONT, fontSize: 12, cursor: clickable ? "pointer" : undefined }}>
             [{w.code}] {w.message}
           </div>
@@ -446,7 +440,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [latestWarmupDetection,setLatestWarmupDetection]=useState(null);
   const [latestLog,setLatestLog]=useState([]);
   const [namedSchedules,setNamedSchedules]=useState([]);
-  const [errorFilter,setErrorFilter]=useState(null); // null | { tab, name }
+  const [errorFilter,setErrorFilter]=useState(null); // null | { tab, affectedEventIds, affectedQueueIds, affectedEntityTypeIds }
   const [focusBEventId,setFocusBEventId]=useState(null);
   const [focusScheduleId,setFocusScheduleId]=useState(null);
   const [schedulesVersion,setSchedulesVersion]=useState(0);
@@ -1141,13 +1135,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         )}
         {tab==="entities"&&(
           renderAuthoringShell(<div style={{maxWidth:1100,display:"flex",flexDirection:"column",gap:14}}>
-            <TabErrors tabId="entities" validation={validation}/>
+            <TabErrors tabId="entities" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/>
             {canEdit&&(
               <div style={{display:"flex",justifyContent:"flex-end"}}>
                 <Btn small variant="ghost" onClick={()=>setShowCsvImport(true)}>Import from CSV</Btn>
               </div>
             )}
-            <EntityTypeEditor types={model.entityTypes||[]} sections={model.sections||[]} onChange={canEdit?newTypes=>{
+            <EntityTypeEditor types={model.entityTypes||[]} sections={model.sections||[]} errorFilter={errorFilter?.tab==="entities"?{filteredEntityTypeIds:errorFilter.affectedEntityTypeIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} onChange={canEdit?newTypes=>{
               const oldTypes = model.entityTypes || [];
               let updated = { ...model, entityTypes: newTypes };
               for (let i = 0; i < newTypes.length; i++) {
@@ -1215,8 +1209,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             </div>
           </div>
         )}
-        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation} onErrorClick={({tab,name})=>setErrorFilter({tab,name})}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}} errorFilter={errorFilter?.tab==="bevents"?errorFilter.name:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
-        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation} onErrorClick={({tab,name})=>setErrorFilter({tab,name})}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}} errorFilter={errorFilter?.tab==="cevents"?errorFilter.name:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
+        {tab==="bevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="bevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><BEventEditor events={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} cEvents={model.cEvents||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} dataSources={model.dataSources||[]} onChange={canEdit?v=>setField("bEvents",v):()=>{}} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} namedSchedules={namedSchedules} focusBEventId={focusBEventId} onFocusHandled={()=>setFocusBEventId(null)} onGoToSchedule={(schedId)=>{setFocusScheduleId(schedId);setTab("schedules");}} errorFilter={errorFilter?.tab==="bevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
+        {tab==="cevents"&&renderAuthoringShell(<div style={{maxWidth:1100}}><TabErrors tabId="cevents" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><CEventEditor events={model.cEvents||[]} bEvents={model.bEvents||[]} entityTypes={model.entityTypes||[]} stateVariables={model.stateVariables||[]} queues={model.queues||[]} sections={model.sections||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("cEvents",v):()=>{}} errorFilter={errorFilter?.tab==="cevents"?{filteredEventIds:errorFilter.affectedEventIds}:null} onClearErrorFilter={()=>setErrorFilter(null)}/></div>)}
         {tab==="sections"&&renderAuthoringShell(<div style={{maxWidth:900}}><SectionEditor sections={model.sections||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} bEvents={model.bEvents||[]} cEvents={model.cEvents||[]} onChange={canEdit?v=>setField("sections",v):()=>{}}/></div>)}
         {tab==="schedules"&&renderAuthoringShell(<div style={{maxWidth:1100}}><ScheduleManager modelId={model.id} userId={overrides.userId} canEdit={canEdit} bEvents={model.bEvents||[]} dataSources={model.dataSources||[]} epoch={model.epoch||null} timeUnit={model.timeUnit||'minutes'} focusScheduleId={focusScheduleId} onFocusHandled={()=>setFocusScheduleId(null)} onGoToBEvent={(bEventId)=>{setFocusBEventId(bEventId);setTab("bevents");}} onBEventsExtracted={async (updatedBEvents) => {
           const next = { ...model, bEvents: updatedBEvents };
@@ -1227,7 +1221,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           setModel(next);
           try { await overrides.onSave?.(next); setDirty(false); setSchedulesVersion(v => v + 1); toast.success("Event link updated and model saved"); } catch { toast.error("Link updated but model save failed — please save manually"); }
         } : undefined}/></div>)}
-        {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues" validation={validation}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} sections={model.sections||[]} onChange={canEdit?newQueues=>{
+        {tab==="queues"&&renderAuthoringShell(<div style={{maxWidth:900}}><TabErrors tabId="queues" validation={validation} onErrorClick={({tab,affectedIds})=>setErrorFilter({tab,affectedEventIds:affectedIds?.eventIds,affectedQueueIds:affectedIds?.queueIds,affectedEntityTypeIds:affectedIds?.entityTypeIds})}/><QueueEditor queues={model.queues||[]} entityTypes={model.entityTypes||[]} sections={model.sections||[]} errorFilter={errorFilter?.tab==="queues"?{filteredQueueIds:errorFilter.affectedQueueIds}:null} onClearErrorFilter={()=>setErrorFilter(null)} onChange={canEdit?newQueues=>{
           const oldQueues = model.queues || [];
           let updated = { ...model, queues: newQueues };
           for (let i = 0; i < newQueues.length; i++) {
@@ -1264,13 +1258,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             {(validation.errors.length || validation.warnings.length) ? (
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {validation.errors.map((issue,index)=>(
-                  <button key={`err-${issue.code}-${index}`} type="button" onClick={()=>setTab(issue.tab||"overview")}
+                  <button key={`err-${issue.code}-${index}`} type="button" onClick={()=>{setTab(issue.tab||"overview");if(issue.affectedIds){setErrorFilter({tab:issue.tab,affectedEventIds:issue.affectedIds.eventIds,affectedQueueIds:issue.affectedIds.queueIds,affectedEntityTypeIds:issue.affectedIds.entityTypeIds});}}}
                     style={{background:alpha(C.red,0.1),border:`1px solid ${alpha(C.red,0.4)}`,borderRadius:6,color:C.red,cursor:"pointer",fontFamily:FONT,fontSize:11,padding:"9px 11px",textAlign:"left"}}>
                     {MODEL_HEALTH_TAB_LABELS[issue.tab||"overview"]||"Overview"}: {issue.message}{issue.code?` · Code ${issue.code}`:""}
                   </button>
                 ))}
                 {validation.warnings.map((issue,index)=>(
-                  <button key={`warn-${issue.code}-${index}`} type="button" onClick={()=>setTab(issue.tab||"overview")}
+                  <button key={`warn-${issue.code}-${index}`} type="button" onClick={()=>{setTab(issue.tab||"overview");if(issue.affectedIds){setErrorFilter({tab:issue.tab,affectedEventIds:issue.affectedIds.eventIds,affectedQueueIds:issue.affectedIds.queueIds,affectedEntityTypeIds:issue.affectedIds.entityTypeIds});}}}
                     style={{background:alpha(C.amber,0.1),border:`1px solid ${alpha(C.amber,0.4)}`,borderRadius:6,color:C.amber,cursor:"pointer",fontFamily:FONT,fontSize:11,padding:"9px 11px",textAlign:"left"}}>
                     {MODEL_HEALTH_TAB_LABELS[issue.tab||"overview"]||"Overview"}: {issue.message}{issue.code?` · Code ${issue.code}`:""}
                   </button>
@@ -1284,7 +1278,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           </div>
         )}
 
-        {tab==="execute"&&(
+        <div style={{display: tab === "execute" ? undefined : "none"}}>
           <ErrorBoundary
             title="Execute panel crashed"
             message="The simulation controls could not render."
@@ -1330,9 +1324,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                   setAiSeq(s => s + 1);
                 }
               }}
+              visible={tab === "execute"}
             />
           </ErrorBoundary>
-        )}
+        </div>
         {tab==="results"&&(
           <div style={{display:"flex",flexDirection:"column",gap:0,minWidth:0}}>
             <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>

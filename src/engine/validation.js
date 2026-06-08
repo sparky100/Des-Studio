@@ -4,7 +4,8 @@
 // errors   — blocking: run must be prevented
 // warnings — non-blocking: run proceeds with a visible banner
 //
-// Each item: { code, message, tab }
+// Each item: { code, message, tab, affectedIds? }
+// affectedIds: { eventIds?: string[], queueIds?: string[], entityTypeIds?: string[], containerIds?: string[] }
 // tab maps to ModelDetail tab IDs: 'entities' | 'state' | 'bevents' | 'cevents' | 'queues' | 'execute'
 
 import { normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
@@ -14,8 +15,8 @@ export const DEFAULT_MAX_SIM_TIME = 500;
 export function validateModel(model) {
   const errors   = [];
   const warnings = [];
-  const err  = (code, message, tab) => errors.push({ code, message, tab });
-  const warn = (code, message, tab) => warnings.push({ code, message, tab });
+  const err  = (code, message, tab, affectedIds) => errors.push({ code, message, tab, affectedIds });
+  const warn = (code, message, tab, affectedIds) => warnings.push({ code, message, tab, affectedIds });
 
   const entityTypes = model.entityTypes    || [];
   const bEvents     = model.bEvents        || [];
@@ -63,9 +64,11 @@ export function validateModel(model) {
   entityTypes.forEach((et, i) => {
     const name = (et.name || '').trim();
     if (!name) {
-      err('V1', `Entity class at position ${i + 1} has an empty name.`, 'entities');
+      err('V1', `Entity class at position ${i + 1} has an empty name.`, 'entities',
+        { entityTypeIds: [et.id] });
     } else if (seen1.has(name)) {
-      err('V1', `Duplicate entity class name: '${name}'.`, 'entities');
+      err('V1', `Duplicate entity class name: '${name}'.`, 'entities',
+        { entityTypeIds: [et.id] });
     } else {
       seen1.add(name);
     }
@@ -78,7 +81,8 @@ export function validateModel(model) {
       const name = (a.name || '').trim();
       if (!name) return;
       if (seen2.has(name)) {
-        err('V2', `Duplicate attribute '${name}' in entity class '${et.name || '?'}'.`, 'entities');
+        err('V2', `Duplicate attribute '${name}' in entity class '${et.name || '?'}'.`, 'entities',
+          { entityTypeIds: [et.id] });
       }
       seen2.add(name);
     });
@@ -93,11 +97,13 @@ export function validateModel(model) {
 
       if (type === 'number') {
         if (isNaN(parseFloat(val)) || !isFinite(val)) {
-          err('V3', `Attribute '${a.name || '?'}' in '${et.name || '?'}': default value '${val}' is not a valid number.`, 'entities');
+          err('V3', `Attribute '${a.name || '?'}' in '${et.name || '?'}': default value '${val}' is not a valid number.`, 'entities',
+            { entityTypeIds: [et.id] });
         }
       } else if (type === 'boolean') {
         if (val !== 'true' && val !== 'false') {
-          err('V3', `Attribute '${a.name || '?'}' in '${et.name || '?'}': default value '${val}' is not 'true' or 'false'.`, 'entities');
+          err('V3', `Attribute '${a.name || '?'}' in '${et.name || '?'}': default value '${val}' is not 'true' or 'false'.`, 'entities',
+            { entityTypeIds: [et.id] });
         }
       }
       // String type always matches, no specific validation needed for its content
@@ -113,17 +119,20 @@ export function validateModel(model) {
     if (!ct) {
       err('V4',
         `Queue '${q.name}' uses PRIORITY discipline but entity class '${q.customerType || '?'}' was not found.`,
-        'queues');
+        'queues',
+        { queueIds: [q.id] });
     } else {
       const priorityAttr = (ct.attrDefs || []).find(a => (a.name || '').trim().toLowerCase() === 'priority');
       if (!priorityAttr) {
         err('V4',
           `Queue '${q.name}' uses PRIORITY discipline but entity class '${ct.name}' has no 'priority' attribute.`,
-          'queues');
+          'queues',
+          { queueIds: [q.id] });
       } else if (priorityAttr.valueType !== 'number') {
         err('V4',
           `Queue '${q.name}' uses PRIORITY discipline but entity class '${ct.name}' must define 'priority' as a number.`,
-          'queues');
+          'queues',
+          { queueIds: [q.id] });
       }
     }
   });
@@ -231,7 +240,8 @@ export function validateModel(model) {
     if (!Number.isFinite(scheduledTime)) {
       err('V26',
         `B-Event '${b.name || b.id}' scheduledTime '${b.scheduledTime}' is not numeric.`,
-        'bevents');
+        'bevents',
+        { eventIds: [b.id] });
     }
     (b.schedules || []).forEach((s, j) => {
       if (s.rows || s.times) return; // rows/times entries have no distribution
@@ -279,21 +289,26 @@ export function validateModel(model) {
       const time = parseFloat(period.time ?? period.startTime);
       const capacity = Number(period.capacity);
       if (!Number.isFinite(time)) {
-        err('V14', `Server '${et.name || '?'}' shift period ${idx + 1} requires a numeric time.`, 'entities');
+        err('V14', `Server '${et.name || '?'}' shift period ${idx + 1} requires a numeric time.`, 'entities',
+          { entityTypeIds: [et.id] });
       } else {
         if (idx === 0 && time !== 0) {
-          err('V14', `Server '${et.name || '?'}' shift schedule must start at time 0.`, 'entities');
+          err('V14', `Server '${et.name || '?'}' shift schedule must start at time 0.`, 'entities',
+            { entityTypeIds: [et.id] });
         }
         if (time < previous) {
-          err('V14', `Server '${et.name || '?'}' shift times must be sorted ascending.`, 'entities');
+          err('V14', `Server '${et.name || '?'}' shift times must be sorted ascending.`, 'entities',
+            { entityTypeIds: [et.id] });
         }
         if (Number.isFinite(maxSimTime) && maxSimTime > 0 && time > maxSimTime) {
-          warn('V15', `Server '${et.name || '?'}' shift at t=${time} is after the run duration.`, 'entities');
+          warn('V15', `Server '${et.name || '?'}' shift at t=${time} is after the run duration.`, 'entities',
+            { entityTypeIds: [et.id] });
         }
         previous = time;
       }
       if (!Number.isInteger(capacity) || capacity < 1) {
-        err('V14', `Server '${et.name || '?'}' shift capacity must be a positive integer.`, 'entities');
+        err('V14', `Server '${et.name || '?'}' shift capacity must be a positive integer.`, 'entities',
+          { entityTypeIds: [et.id] });
       }
     });
   });
@@ -319,14 +334,16 @@ export function validateModel(model) {
     if (et.role !== 'server') {
       err('V36',
         `Entity class '${et.name || '?'}' defines server failure settings, but only server entity types can use MTBF/MTTR.`,
-        'entities');
+        'entities',
+        { entityTypeIds: [et.id] });
       return;
     }
 
     if (!hasField(mtbfDist) || !hasField(mtbfParams)) {
       err('V37',
         `Server '${et.name || '?'}' must include both MTBF distribution and MTBF parameters.`,
-        'entities');
+        'entities',
+        { entityTypeIds: [et.id] });
     } else {
       checkDist(mtbfDist, mtbfParams, `Server '${et.name || '?'}' MTBF`, 'entities');
     }
@@ -334,7 +351,8 @@ export function validateModel(model) {
     if (!hasField(mttrDist) || !hasField(mttrParams)) {
       err('V37',
         `Server '${et.name || '?'}' must include both MTTR distribution and MTTR parameters.`,
-        'entities');
+        'entities',
+        { entityTypeIds: [et.id] });
     } else {
       checkDist(mttrDist, mttrParams, `Server '${et.name || '?'}' MTTR`, 'entities');
     }
@@ -348,7 +366,8 @@ export function validateModel(model) {
       if (s.eventId && !bEventIds.has(s.eventId)) {
         err('V6',
           `C-Event '${c.name || c.id}' schedules unknown B-Event ID '${s.eventId}'.`,
-          'cevents');
+          'cevents',
+          { eventIds: [c.id] });
       }
     });
   });
@@ -358,7 +377,8 @@ export function validateModel(model) {
       if (s.eventId && !bEventIds.has(s.eventId)) {
         err('V6',
           `B-Event '${b.name || b.id}' schedule references unknown event ID '${s.eventId}'.`,
-          'bevents');
+          'bevents',
+          { eventIds: [b.id] });
       }
     });
   });
@@ -403,7 +423,8 @@ export function validateModel(model) {
       if (/^RELEASE\s*\(/i.test(parts[i]) && /^COMPLETE\s*\(\s*\)/i.test(parts[i + 1])) {
         warn('V38',
           `B-Event '${b.name || b.id}': RELEASE() followed immediately by COMPLETE() — COMPLETE will always be skipped because RELEASE sets the entity to "waiting" state. Remove the RELEASE(); COMPLETE() releases the server automatically.`,
-          'bevents');
+          'bevents',
+          { eventIds: [b.id] });
         break;
       }
     }
@@ -434,7 +455,8 @@ export function validateModel(model) {
       if (!queueNamesLower.has(ref)) {
         err('V9',
           `C-Event '${c.name || c.id}' condition references unknown queue '${ref}'.`,
-          'cevents');
+          'cevents',
+          { eventIds: [c.id] });
       }
     });
   });
@@ -447,7 +469,8 @@ export function validateModel(model) {
       if (/^(Resource|Queue)\b/i.test(name)) {
         err('V10',
           `Attribute '${name}' in entity class '${et.name || '?'}' conflicts with the built-in 'Resource' or 'Queue' namespace.`,
-          'entities');
+          'entities',
+          { entityTypeIds: [et.id] });
       }
     });
   });
@@ -465,7 +488,8 @@ export function validateModel(model) {
     if (releaseHasQueue) {
       err('V17',
         `${bLabel} specifies both a RELEASE target queue (in effect) and a routing table — they are mutually exclusive.`,
-        'bevents');
+        'bevents',
+        { eventIds: [b.id] });
     }
 
     // Each routing entry must reference a valid queue, or null/"" meaning "exit system"
@@ -475,7 +499,8 @@ export function validateModel(model) {
       if (!queueNamesLower.has(qName.toLowerCase())) {
         err('V17',
           `${bLabel} routing entry ${idx + 1} references unknown queue '${qName}'.`,
-          'bevents');
+          'bevents',
+          { eventIds: [b.id] });
       }
     });
 
@@ -485,7 +510,8 @@ export function validateModel(model) {
       if (!queueNamesLower.has(defQ.toLowerCase())) {
         err('V17',
           `${bLabel} defaultQueueName '${defQ}' does not match any defined queue.`,
-          'bevents');
+          'bevents',
+          { eventIds: [b.id] });
       }
     }
 
@@ -496,12 +522,14 @@ export function validateModel(model) {
     if (hasNullRoutingBranch && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr) || hasReleaseEffect(effectStr))) {
       err('V31',
         `${bLabel} routes entities to exit (null queue) but does not explicitly end the lifecycle with COMPLETE(), RENEGE(ctx), or RELEASE().`,
-        'bevents');
+        'bevents',
+        { eventIds: [b.id] });
     }
     if (countTerminalSinkEffects(effectStr) > 1) {
       err('V32',
         `${bLabel} has multiple terminal lifecycle sinks. Choose one clear terminal action: COMPLETE() or RENEGE(ctx).`,
-        'bevents');
+        'bevents',
+        { eventIds: [b.id] });
     }
   });
 
@@ -514,7 +542,8 @@ export function validateModel(model) {
     if (!Number.isInteger(n) || n < 1) {
       err('V19',
         `Server type '${et.name || et.id}' count '${raw}' must be an integer >= 1.`,
-        'entities');
+        'entities',
+        { entityTypeIds: [et.id] });
     }
   });
 
@@ -527,17 +556,20 @@ export function validateModel(model) {
     // Mutually exclusive with routing and literal RELEASE queue arg
     const hasConditionalRouting = Array.isArray(b.routing) && b.routing.some(isMeaningfulRoutingBranch);
     if (hasConditionalRouting) {
-      err('V18', `${bLabel} has both routing and probabilisticRouting — they are mutually exclusive.`, 'bevents');
+      err('V18', `${bLabel} has both routing and probabilisticRouting — they are mutually exclusive.`, 'bevents',
+        { eventIds: [b.id] });
     }
     const effectStr = effectText(b.effect);
     if (hasReleaseTargetQueue(effectStr)) {
-      err('V18', `${bLabel} specifies a RELEASE target queue and probabilisticRouting — mutually exclusive.`, 'bevents');
+      err('V18', `${bLabel} specifies a RELEASE target queue and probabilisticRouting — mutually exclusive.`, 'bevents',
+        { eventIds: [b.id] });
     }
 
     // Probabilities must sum to 1.0 (± 0.001)
     const sum = b.probabilisticRouting.reduce((s, branch) => s + (parseFloat(branch.probability) || 0), 0);
     if (Math.abs(sum - 1.0) > 0.001) {
-      err('V18', `${bLabel} probabilisticRouting probabilities sum to ${sum.toFixed(4)}, must be 1.0 (±0.001).`, 'bevents');
+      err('V18', `${bLabel} probabilisticRouting probabilities sum to ${sum.toFixed(4)}, must be 1.0 (±0.001).`, 'bevents',
+        { eventIds: [b.id] });
     }
 
     // Each branch must reference a valid queue, or null/"" meaning "exit system"
@@ -547,7 +579,8 @@ export function validateModel(model) {
       if (qName === null || qName === '') {
         hasNullRouting = true; // null = exit system
       } else if (!queueNamesLower.has(qName.toLowerCase())) {
-        err('V18', `${bLabel} probabilisticRouting entry ${idx + 1} references unknown queue '${qName}'.`, 'bevents');
+        err('V18', `${bLabel} probabilisticRouting entry ${idx + 1} references unknown queue '${qName}'.`, 'bevents',
+          { eventIds: [b.id] });
       }
     });
 
@@ -555,7 +588,8 @@ export function validateModel(model) {
     if (hasNullRouting && !(hasCompleteEffect(effectStr) || hasExactRenegeCtxEffect(effectStr) || hasReleaseEffect(effectStr))) {
       err('V30',
         `${bLabel} routes entities to exit (null queue) but has no COMPLETE(), RENEGE(ctx), or RELEASE() effect — entities will not be counted as served.`,
-        'bevents');
+        'bevents',
+        { eventIds: [b.id] });
     }
     const isSingleNullExit = b.probabilisticRouting.length === 1 && Math.abs((parseFloat(b.probabilisticRouting[0]?.probability) || 0) - 1) <= 0.001;
     const onlyRoute = b.probabilisticRouting[0];
@@ -563,19 +597,22 @@ export function validateModel(model) {
     if (isSingleNullExit && (onlyRouteQueue === null || onlyRouteQueue === '') && hasCompleteEffect(effectStr) && !hasExactRenegeCtxEffect(effectStr)) {
       warn('V33',
         `${bLabel} uses probabilisticRouting with a single 100% null exit. Prefer explicit COMPLETE() without routing for a simple terminal completion.`,
-        'bevents');
+        'bevents',
+        { eventIds: [b.id] });
     }
     if (countTerminalSinkEffects(effectStr) > 1) {
       err('V32',
         `${bLabel} has multiple terminal lifecycle sinks. Choose one clear terminal action: COMPLETE() or RENEGE(ctx).`,
-        'bevents');
+        'bevents',
+        { eventIds: [b.id] });
     }
 
     // V39: ARRIVE + probabilisticRouting is invalid — ARRIVE routes via its effect argument
     if (/ARRIVE\s*\(/i.test(effectStr)) {
       err('V39',
         `${bLabel} has an ARRIVE effect and probabilisticRouting — ARRIVE events route entities via their effect argument "ARRIVE(Type, QueueName)". Remove probabilisticRouting. Use separate ARRIVE events with proportional rates to split arrivals.`,
-        'bevents');
+        'bevents',
+        { eventIds: [b.id] });
     }
   });
 
@@ -584,12 +621,14 @@ export function validateModel(model) {
     if (q.capacity === undefined || q.capacity === null || q.capacity === '') return;
     const n = parseInt(q.capacity, 10);
     if (!Number.isInteger(n) || n < 1) {
-      err('V20', `Queue '${q.name || q.id}' capacity '${q.capacity}' must be an integer >= 1.`, 'queues');
+      err('V20', `Queue '${q.name || q.id}' capacity '${q.capacity}' must be an integer >= 1.`, 'queues',
+        { queueIds: [q.id] });
     }
     if (q.overflowDestination && q.overflowDestination !== null) {
       const dest = String(q.overflowDestination).trim();
       if (!queueNamesLower.has(dest.toLowerCase())) {
-        err('V20', `Queue '${q.name || q.id}' overflowDestination '${dest}' does not match any defined queue.`, 'queues');
+        err('V20', `Queue '${q.name || q.id}' overflowDestination '${dest}' does not match any defined queue.`, 'queues',
+          { queueIds: [q.id] });
       }
     }
   });
@@ -599,7 +638,8 @@ export function validateModel(model) {
     if (b.balkProbability != null) {
       const p = parseFloat(b.balkProbability);
       if (!Number.isFinite(p) || p < 0 || p > 1) {
-        err('V21', `B-Event '${b.name || b.id}' balkProbability '${b.balkProbability}' must be between 0 and 1.`, 'bevents');
+        err('V21', `B-Event '${b.name || b.id}' balkProbability '${b.balkProbability}' must be between 0 and 1.`, 'bevents',
+          { eventIds: [b.id] });
       }
     }
   });
@@ -614,10 +654,12 @@ export function validateModel(model) {
       const qName = bMatch[1].trim();
       const size = parseInt(bMatch[2], 10);
       if (size < 2) {
-        err('V22', `B-Event '${b.name || b.id}' uses BATCH with batchSize=${size}, must be >= 2.`, 'bevents');
+        err('V22', `B-Event '${b.name || b.id}' uses BATCH with batchSize=${size}, must be >= 2.`, 'bevents',
+          { eventIds: [b.id] });
       }
       if (!queueNamesLower.has(qName.toLowerCase())) {
-        err('V22', `B-Event '${b.name || b.id}' BATCH references unknown queue '${qName}'.`, 'bevents');
+        err('V22', `B-Event '${b.name || b.id}' BATCH references unknown queue '${qName}'.`, 'bevents',
+          { eventIds: [b.id] });
       }
       batchRefs.push({ b, qName, size });
     }
@@ -625,7 +667,8 @@ export function validateModel(model) {
     if (uMatch) {
       const qName = uMatch[1].trim();
       if (!queueNamesLower.has(qName.toLowerCase())) {
-        err('V23', `B-Event '${b.name || b.id}' UNBATCH references unknown queue '${qName}'.`, 'bevents');
+        err('V23', `B-Event '${b.name || b.id}' UNBATCH references unknown queue '${qName}'.`, 'bevents',
+          { eventIds: [b.id] });
       }
       unbatchRefs.push({ b, qName });
     }
@@ -638,10 +681,12 @@ export function validateModel(model) {
       const qName = bMatch[1].trim();
       const size = parseInt(bMatch[2], 10);
       if (size < 2) {
-        err('V22', `C-Event '${c.name || c.id}' uses BATCH with batchSize=${size}, must be >= 2.`, 'cevents');
+        err('V22', `C-Event '${c.name || c.id}' uses BATCH with batchSize=${size}, must be >= 2.`, 'cevents',
+          { eventIds: [c.id] });
       }
       if (!queueNamesLower.has(qName.toLowerCase())) {
-        err('V22', `C-Event '${c.name || c.id}' BATCH references unknown queue '${qName}'.`, 'cevents');
+        err('V22', `C-Event '${c.name || c.id}' BATCH references unknown queue '${qName}'.`, 'cevents',
+          { eventIds: [c.id] });
       }
       batchRefs.push({ c, qName, size });
     }
@@ -652,12 +697,14 @@ export function validateModel(model) {
     if (!b.loopConfig) return;
     const maxCount = parseInt(b.loopConfig.maxLoopCount, 10);
     if (!Number.isInteger(maxCount) || maxCount < 1) {
-      err('V24', `B-Event '${b.name || b.id}' loopConfig.maxLoopCount must be an integer >= 1.`, 'bevents');
+      err('V24', `B-Event '${b.name || b.id}' loopConfig.maxLoopCount must be an integer >= 1.`, 'bevents',
+        { eventIds: [b.id] });
     }
     if (b.loopConfig.exitQueueName) {
       const exitQ = String(b.loopConfig.exitQueueName).trim();
       if (!queueNamesLower.has(exitQ.toLowerCase())) {
-        err('V24', `B-Event '${b.name || b.id}' loopConfig.exitQueueName '${exitQ}' does not match any defined queue.`, 'bevents');
+        err('V24', `B-Event '${b.name || b.id}' loopConfig.exitQueueName '${exitQ}' does not match any defined queue.`, 'bevents',
+          { eventIds: [b.id] });
       }
     }
   });
@@ -685,7 +732,8 @@ export function validateModel(model) {
         err('V25',
           `B-Event '${b.name || b.id}' uses RENEGE('${arg}') which is invalid. ` +
           `Use exactly RENEGE(ctx) to reference the current entity.`,
-          'bevents');
+          'bevents',
+          { eventIds: [b.id] });
       }
     }
   });
@@ -698,7 +746,8 @@ export function validateModel(model) {
         err('V25',
           `C-Event '${c.name || c.id}' uses RENEGE('${arg}') which is invalid. ` +
           `Use exactly RENEGE(ctx) to reference the current entity.`,
-          'cevents');
+          'cevents',
+          { eventIds: [c.id] });
       }
     }
   });
@@ -742,7 +791,8 @@ export function validateModel(model) {
         const macro = inner[1].toUpperCase();
         const name  = inner[2].trim();
         if (!containerIdsLower.has(name.toLowerCase())) {
-          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ${macro} references undeclared container '${name}'.`, tab);
+          err('V27', `${tab === 'bevents' ? 'B' : 'C'}-Event '${ev.name || ev.id}' ${macro} references undeclared container '${name}'.`, tab,
+            { eventIds: [ev.id] });
         }
       });
     });
@@ -762,7 +812,8 @@ export function validateModel(model) {
   for (const ce of (model.cEvents || [])) {
     const css = ce.cSchedules || [];
     if (css.length > 0 && css.every(cs => cs.when)) {
-      warn('V29', `C-event '${ce.name || ce.id}' has attribute-conditional cSchedules but no fallback entry (one without a 'when' condition). Entities that don't match any condition will receive no service.`, 'cevents');
+      warn('V29', `C-event '${ce.name || ce.id}' has attribute-conditional cSchedules but no fallback entry (one without a 'when' condition). Entities that don't match any condition will receive no service.`, 'cevents',
+        { eventIds: [ce.id] });
     }
   }
 
@@ -780,14 +831,15 @@ export function validateModel(model) {
       if (!serverTypesSeizedByCEvent.has(key)) {
         serverTypesSeizedByCEvent.set(key, []);
       }
-      serverTypesSeizedByCEvent.get(key).push(c.name || c.id);
+      serverTypesSeizedByCEvent.get(key).push(c.id);
     });
   });
-  for (const [serverType, cEventNames] of serverTypesSeizedByCEvent) {
-    if (cEventNames.length >= 2) {
+  for (const [serverType, cEventIds] of serverTypesSeizedByCEvent) {
+    if (cEventIds.length >= 2) {
       warn('W-CAP-01',
-        `Complex multi-class resource contention detected: ${cEventNames.length} C-events (${cEventNames.join(', ')}) compete for server type '${serverType}'. Results may be sensitive to C-event priority ordering.`,
-        'cevents');
+        `Complex multi-class resource contention detected: ${cEventIds.length} C-events compete for server type '${serverType}'. Results may be sensitive to C-event priority ordering.`,
+        'cevents',
+        { eventIds: cEventIds });
     }
   }
 
@@ -803,7 +855,8 @@ export function validateModel(model) {
         if (Number.isFinite(mean) && mean < 0.001) {
           warn('W-CAP-02',
             `B-Event '${b.name || b.id}' schedule ${j + 1}: Exponential mean interval = ${mean} (< 0.001). simmodlr models discrete individual entities. For continuous flow or aggregate quantities, consider SD Studio.`,
-            'bevents');
+            'bevents',
+            { eventIds: [b.id] });
         }
       }
     });
@@ -832,12 +885,15 @@ export function validateModel(model) {
           if (!m) return;
           const attrName = m[1];
           if (immutableNames.has(attrName)) {
-            err('V41', `SET_ATTR(${attrName}) in '${ev.name || ev.id}': attribute is immutable.`, tab);
+            err('V41', `SET_ATTR(${attrName}) in '${ev.name || ev.id}': attribute is immutable.`, tab,
+              { eventIds: [ev.id] });
           } else if (!declaredNames.has(attrName)) {
-            warn('V40', `SET_ATTR(${attrName}) in '${ev.name || ev.id}': attribute '${attrName}' is not declared on any entity class.`, tab);
+            warn('V40', `SET_ATTR(${attrName}) in '${ev.name || ev.id}': attribute '${attrName}' is not declared on any entity class.`, tab,
+              { eventIds: [ev.id] });
           }
           if (!hasCtx) {
-            warn('V44', `SET_ATTR(${attrName}) in '${ev.name || ev.id}' has no preceding ARRIVE/ASSIGN/COSEIZE — write will be skipped at runtime.`, tab);
+            warn('V44', `SET_ATTR(${attrName}) in '${ev.name || ev.id}' has no preceding ARRIVE/ASSIGN/COSEIZE — write will be skipped at runtime.`, tab,
+              { eventIds: [ev.id] });
           }
         });
       });
@@ -860,14 +916,16 @@ export function validateModel(model) {
           return n === 'servicetime' || n === 'processingtime';
         });
         if (!hasAttr) {
-          warn('V42', `Queue '${q.name}' uses SPT discipline but entity class '${ct.name}' has no 'serviceTime' or 'processingTime' attribute.`, 'queues');
+          warn('V42', `Queue '${q.name}' uses SPT discipline but entity class '${ct.name}' has no 'serviceTime' or 'processingTime' attribute.`, 'queues',
+            { queueIds: [q.id] });
         }
       }
     } else if (d === 'EDD') {
       if (ct) {
         const hasDueDate = (ct.attrDefs || []).some(a => (a.name || '').trim().toLowerCase() === 'duedate');
         if (!hasDueDate) {
-          warn('V43', `Queue '${q.name}' uses EDD discipline but entity class '${ct.name}' has no 'dueDate' attribute.`, 'queues');
+          warn('V43', `Queue '${q.name}' uses EDD discipline but entity class '${ct.name}' has no 'dueDate' attribute.`, 'queues',
+            { queueIds: [q.id] });
         }
       }
     }

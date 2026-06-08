@@ -5,7 +5,7 @@ import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { AttrEditor } from "./AttrEditor.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
-const EntityTypeEditor=({types,sections=[],onChange})=>{
+const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,onChange})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -59,8 +59,13 @@ const EntityTypeEditor=({types,sections=[],onChange})=>{
 
   const lcFilter=filterText.toLowerCase();
   const sectionFiltered=filterBySection(types, sections, activeSectionId);
-  const filtered=lcFilter?sectionFiltered.filter(et=>(et.name||"").toLowerCase().includes(lcFilter)):sectionFiltered;
-  const effectiveExpanded=lcFilter?new Set(filtered.map(e=>e.id)):expandedIds;
+  const filteredEntityTypeIds=errorFilter?.filteredEntityTypeIds;
+  const filtered=sectionFiltered.filter(et=>{
+    const matchesText=!lcFilter||(et.name||"").toLowerCase().includes(lcFilter);
+    const matchesError=!filteredEntityTypeIds||filteredEntityTypeIds.includes(et.id);
+    return matchesText&&matchesError;
+  });
+  const effectiveExpanded=(lcFilter||filteredEntityTypeIds)?new Set(filtered.map(e=>e.id)):expandedIds;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -70,6 +75,12 @@ const EntityTypeEditor=({types,sections=[],onChange})=>{
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"
             style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
+          {filteredEntityTypeIds&&(
+            <div style={{display:"flex",alignItems:"center",gap:4,background:`${C.amber}26`,border:`1px solid ${C.amber}80`,borderRadius:4,padding:"3px 8px",color:C.amber,fontSize:11,fontFamily:FONT,whiteSpace:"nowrap"}}>
+              Filtered by error
+              <Btn small variant="ghost" onClick={onClearErrorFilter} style={{padding:"0 4px",minWidth:0}}>✕</Btn>
+            </div>
+          )}
           <Btn small variant="ghost" onClick={expandAll}>Expand all</Btn>
           <Btn small variant="ghost" onClick={collapseAll}>Collapse all</Btn>
         </div>
@@ -83,7 +94,7 @@ const EntityTypeEditor=({types,sections=[],onChange})=>{
       </InfoBox>
       {types.length===0&&<Empty icon="👥" msg="No entity types."/>}
       {filtered.length===0&&types.length>0&&(
-        <div style={{fontFamily:FONT,fontSize:11,color:C.muted,padding:"8px 0",fontStyle:"italic"}}>No types match "{filterText}"</div>
+        <div style={{fontFamily:FONT,fontSize:11,color:C.muted,padding:"8px 0",fontStyle:"italic"}}>No types match{filteredEntityTypeIds?" error filter":filterText&&` "${filterText}"`}</div>
       )}
       {filtered.map((et)=>{
         const i=types.findIndex(e=>e.id===et.id);

@@ -70,12 +70,13 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
 
   const lcFilter=filterText.toLowerCase();
   const sectionFiltered=filterBySection(events, sections, activeSectionId);
+  const filteredEventIds=errorFilter?.filteredEventIds;
   const filtered=sectionFiltered.filter(ev=>{
     const matchesText=!lcFilter||(ev.name||"").toLowerCase().includes(lcFilter);
-    const matchesError=!errorFilter||(ev.name||"").toLowerCase()===errorFilter.toLowerCase();
+    const matchesError=!filteredEventIds||filteredEventIds.includes(ev.id);
     return matchesText&&matchesError;
   });
-  const effectiveExpanded=(lcFilter||errorFilter)?new Set(filtered.map(e=>e.id)):expandedIds;
+  const effectiveExpanded=(lcFilter||filteredEventIds)?new Set(filtered.map(e=>e.id)):expandedIds;
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -87,7 +88,7 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"
             style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
-          {errorFilter&&(
+          {filteredEventIds&&(
             <div style={{display:"flex",alignItems:"center",gap:4,background:`${C.amber}26`,border:`1px solid ${C.amber}80`,borderRadius:4,padding:"3px 8px",color:C.amber,fontSize:11,fontFamily:FONT,whiteSpace:"nowrap"}}>
               Filtered by error
               <Btn small variant="ghost" onClick={onClearErrorFilter} style={{padding:"0 4px",minWidth:0}}>✕</Btn>

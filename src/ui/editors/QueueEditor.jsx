@@ -15,7 +15,7 @@ const disciplineAttr = d => {
   return m ? m[1] : 'priority';
 };
 
-const QueueEditor = ({queues=[], entityTypes=[], sections=[], onChange}) => {
+const QueueEditor = ({queues=[], entityTypes=[], sections=[], errorFilter=null, onClearErrorFilter, onChange}) => {
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
   const [expandedIds,setExpandedIds]=useState(new Set());
@@ -59,8 +59,13 @@ const QueueEditor = ({queues=[], entityTypes=[], sections=[], onChange}) => {
 
   const lcFilter=filterText.toLowerCase();
   const sectionFiltered=filterBySection(queues, sections, activeSectionId);
-  const filtered=lcFilter?sectionFiltered.filter(q=>(q.name||"").toLowerCase().includes(lcFilter)):sectionFiltered;
-  const effectiveExpanded=lcFilter?new Set(filtered.map(q=>q.id)):expandedIds;
+  const filteredQueueIds=errorFilter?.filteredQueueIds;
+  const filtered=sectionFiltered.filter(q=>{
+    const matchesText=!lcFilter||(q.name||"").toLowerCase().includes(lcFilter);
+    const matchesError=!filteredQueueIds||filteredQueueIds.includes(q.id);
+    return matchesText&&matchesError;
+  });
+  const effectiveExpanded=(lcFilter||filteredQueueIds)?new Set(filtered.map(q=>q.id)):expandedIds;
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
@@ -70,6 +75,12 @@ const QueueEditor = ({queues=[], entityTypes=[], sections=[], onChange}) => {
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
           <input value={filterText} onChange={e=>setFilterText(e.target.value)} placeholder="Filter by name…"
             style={{flex:1,background:"transparent",border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"5px 8px",outline:"none"}}/>
+          {filteredQueueIds&&(
+            <div style={{display:"flex",alignItems:"center",gap:4,background:`${C.amber}26`,border:`1px solid ${C.amber}80`,borderRadius:4,padding:"3px 8px",color:C.amber,fontSize:11,fontFamily:FONT,whiteSpace:"nowrap"}}>
+              Filtered by error
+              <Btn small variant="ghost" onClick={onClearErrorFilter} style={{padding:"0 4px",minWidth:0}}>✕</Btn>
+            </div>
+          )}
           <Btn small variant="ghost" onClick={expandAll}>Expand all</Btn>
           <Btn small variant="ghost" onClick={collapseAll}>Collapse all</Btn>
         </div>
@@ -81,7 +92,7 @@ const QueueEditor = ({queues=[], entityTypes=[], sections=[], onChange}) => {
       </InfoBox>
       {queues.length===0&&<Empty icon="Queues" msg="No named queues yet. Add a queue before defining new arrivals."/>}
       {filtered.length===0&&queues.length>0&&(
-        <div style={{fontFamily:FONT,fontSize:11,color:C.muted,padding:"8px 0",fontStyle:"italic"}}>No queues match "{filterText}"</div>
+        <div style={{fontFamily:FONT,fontSize:11,color:C.muted,padding:"8px 0",fontStyle:"italic"}}>No queues match{filteredQueueIds?" error filter":filterText&&` "${filterText}"`}</div>
       )}
       {filtered.map((q)=>{
         const i=queues.findIndex(x=>x.id===q.id);

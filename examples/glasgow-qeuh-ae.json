@@ -1,0 +1,204 @@
+{
+  "name": "Queen Elizabeth University Hospital A&E — Glasgow",
+  "description": "Realistic 3-stage accident & emergency model for Scotland's largest emergency department (~110,000 annual attendances). Pathway: Triage → Assessment → Treatment/Discharge. Patients arrive every ~4.8 min on average. 3 triage nurses, 6 majors doctors, 4 minors clinicians. 70% routed to majors (PRIORITY by severity), 30% to minors. Tracks 4-hour target compliance.",
+  "visibility": "private",
+  "timeUnit": "minutes",
+  "entityTypes": [
+    {
+      "id": "et_patient",
+      "name": "Patient",
+      "role": "customer",
+      "count": 0,
+      "attrDefs": [
+        {
+          "name": "severity",
+          "valueType": "number",
+          "defaultValue": "3",
+          "mutable": false,
+          "dist": "Triangular",
+          "distParams": { "min": "1", "mode": "3", "max": "5" }
+        }
+      ]
+    },
+    {
+      "id": "et_triage_nurse",
+      "name": "TriageNurse",
+      "role": "server",
+      "count": "3",
+      "attrDefs": []
+    },
+    {
+      "id": "et_majors_doctor",
+      "name": "MajorsDoctor",
+      "role": "server",
+      "count": "6",
+      "attrDefs": []
+    },
+    {
+      "id": "et_minors_clinician",
+      "name": "MinorsClinician",
+      "role": "server",
+      "count": "4",
+      "attrDefs": []
+    }
+  ],
+  "stateVariables": [],
+  "queues": [
+    {
+      "id": "q_triage",
+      "name": "Triage Queue",
+      "customerType": "Patient",
+      "capacity": "",
+      "discipline": "FIFO"
+    },
+    {
+      "id": "q_majors",
+      "name": "Majors Queue",
+      "customerType": "Patient",
+      "capacity": "",
+      "discipline": "PRIORITY(severity)"
+    },
+    {
+      "id": "q_minors",
+      "name": "Minors Queue",
+      "customerType": "Patient",
+      "capacity": "",
+      "discipline": "FIFO"
+    }
+  ],
+  "bEvents": [
+    {
+      "id": "b_arrive",
+      "name": "Patient Arrival",
+      "scheduledTime": "0",
+      "effect": ["ARRIVE(Patient, Triage Queue)"],
+      "schedules": [
+        {
+          "dist": "Exponential",
+          "distParams": { "mean": "4.8" }
+        }
+      ],
+      "description": "~300 patients/day, Poisson arrivals (mean interval 4.8 min)"
+    },
+    {
+      "id": "b_triage_done",
+      "name": "Triage Complete",
+      "scheduledTime": "9999",
+      "effect": ["RELEASE(TriageNurse)"],
+      "schedules": [],
+      "probabilisticRouting": [
+        { "queueName": "Majors Queue", "probability": 0.7 },
+        { "queueName": "Minors Queue", "probability": 0.3 }
+      ],
+      "description": "70% to majors (higher acuity), 30% to minors"
+    },
+    {
+      "id": "b_majors_complete",
+      "name": "Majors Complete — Discharged",
+      "scheduledTime": "9999",
+      "effect": ["COMPLETE()"],
+      "schedules": [],
+      "description": "Assessment and treatment complete; patient discharged"
+    },
+    {
+      "id": "b_minors_complete",
+      "name": "Minors Complete — Discharged",
+      "scheduledTime": "9999",
+      "effect": ["COMPLETE()"],
+      "schedules": [],
+      "description": "Treatment complete; patient discharged"
+    }
+  ],
+  "cEvents": [
+    {
+      "id": "c_start_triage",
+      "name": "Begin Triage Assessment",
+      "priority": 1,
+      "condition": "queue(Triage Queue).length > 0 AND idle(TriageNurse).count > 0",
+      "effect": ["ASSIGN(Triage Queue, TriageNurse)"],
+      "cSchedules": [
+        {
+          "eventId": "b_triage_done",
+          "dist": "Triangular",
+          "distParams": { "min": "2", "mode": "4", "max": "8" },
+          "useEntityCtx": true
+        }
+      ],
+      "description": "Triage nurse assesses: observations, Manchester score, stream to majors/minors. ~4 min average"
+    },
+    {
+      "id": "c_start_majors",
+      "name": "Begin Majors Assessment & Treatment",
+      "priority": 2,
+      "condition": "Queue.Majors Queue.length > 0 AND idle(MajorsDoctor).count > 0",
+      "effect": ["ASSIGN(Majors Queue, MajorsDoctor)"],
+      "cSchedules": [
+        {
+          "eventId": "b_majors_complete",
+          "dist": "Triangular",
+          "distParams": { "min": "15", "mode": "25", "max": "50" },
+          "useEntityCtx": true
+        }
+      ],
+      "description": "Doctor/ANP assesses higher-acuity patients. PRIORITY queue by severity (1=most urgent). ~25 min average"
+    },
+    {
+      "id": "c_start_minors",
+      "name": "Begin Minors Treatment",
+      "priority": 3,
+      "condition": "Queue.Minors Queue.length > 0 AND idle(MinorsClinician).count > 0",
+      "effect": ["ASSIGN(Minors Queue, MinorsClinician)"],
+      "cSchedules": [
+        {
+          "eventId": "b_minors_complete",
+          "dist": "Triangular",
+          "distParams": { "min": "5", "mode": "12", "max": "25" },
+          "useEntityCtx": true
+        }
+      ],
+      "description": "ANP/clinician treats lower-acuity patients (fractures, lacerations, minor illness). ~12 min average"
+    }
+  ],
+  "goals": [
+    {
+      "metric": "summary.avgSojourn",
+      "operator": "<",
+      "target": 240,
+      "label": "Average total time in A&E under 4 hours (NHS Scotland target)"
+    },
+    {
+      "metric": "summary.served",
+      "operator": ">",
+      "target": 250,
+      "label": "At least 250 patients completed per 24-hour period"
+    }
+  ],
+  "experimentDefaults": {
+    "maxSimTime": 1440,
+    "warmupPeriod": 240,
+    "replications": 5,
+    "terminationMode": "time"
+  },
+  "containerTypes": [],
+  "dataSources": [],
+  "sections": [
+    {
+      "id": "sec_triage",
+      "name": "Triage",
+      "color": "#E67E22",
+      "memberIds": ["q_triage", "et_triage_nurse", "c_start_triage", "b_triage_done"]
+    },
+    {
+      "id": "sec_majors",
+      "name": "Majors",
+      "color": "#E74C3C",
+      "memberIds": ["q_majors", "et_majors_doctor", "c_start_majors", "b_majors_complete"]
+    },
+    {
+      "id": "sec_minors",
+      "name": "Minors",
+      "color": "#2ECC71",
+      "memberIds": ["q_minors", "et_minors_clinician", "c_start_minors", "b_minors_complete"]
+    }
+  ]
+}

@@ -624,6 +624,161 @@ describe("validateModel", () => {
   });
 });
 
+describe("affectedIds — structured event/queue/entity references", () => {
+  it("V6 populates affectedIds with the C-event ID", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" }],
+      bEvents: [{ id: "b1", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [{ dist: "Exponential", distParams: { mean: "5" } }] }],
+      cEvents: [{ id: "c_bad", name: "Bad C", condition: "queue(Queue1).length > 0", effect: "ASSIGN(Queue1, Server)", cSchedules: [{ eventId: "b_missing", dist: "Fixed", distParams: { value: "1" } }] }],
+    };
+    const { errors } = validateModel(model);
+    const v6 = errors.find(e => e.code === "V6");
+    expect(v6).toBeDefined();
+    expect(v6.affectedIds).toEqual({ eventIds: ["c_bad"] });
+  });
+
+  it("V6 populates affectedIds with the B-event ID", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [],
+      bEvents: [{ id: "b_bad", name: "Bad B", effect: "ARRIVE(Customer)", schedules: [{ eventId: "b_missing", dist: "Fixed", distParams: { value: "1" } }] }],
+      cEvents: [],
+    };
+    const { errors } = validateModel(model);
+    const v6 = errors.find(e => e.code === "V6");
+    expect(v6).toBeDefined();
+    expect(v6.affectedIds).toEqual({ eventIds: ["b_bad"] });
+  });
+
+  it("V9 populates affectedIds with the C-event ID", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [],
+      bEvents: [],
+      cEvents: [{ id: "c_bad", name: "Bad C", condition: "queue(UnknownQ).length > 0", effect: "ASSIGN(UnknownQ, Server)", cSchedules: [] }],
+    };
+    const { errors } = validateModel(model);
+    const v9 = errors.find(e => e.code === "V9");
+    expect(v9).toBeDefined();
+    expect(v9.affectedIds).toEqual({ eventIds: ["c_bad"] });
+  });
+
+  it("W-CAP-01 populates affectedIds with ALL competing C-event IDs", () => {
+    const model = {
+      entityTypes: [
+        { id: "et1", name: "Customer", role: "customer", attrDefs: [] },
+        { id: "ets", name: "Server", role: "server", count: "1", attrDefs: [] },
+      ],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "QueueA", discipline: "FIFO", customerType: "Customer" }, { id: "q2", name: "QueueB", discipline: "FIFO", customerType: "Customer" }],
+      bEvents: [
+        { id: "b1", name: "Arrive A", effect: "ARRIVE(Customer, QueueA)", schedules: [{ dist: "Exponential", distParams: { mean: "5" } }] },
+        { id: "b2", name: "Arrive B", effect: "ARRIVE(Customer, QueueB)", schedules: [{ dist: "Exponential", distParams: { mean: "5" } }] },
+        { id: "b3", name: "Done", effect: "COMPLETE()", schedules: [] },
+      ],
+      cEvents: [
+        { id: "c1", name: "Serve A", condition: "Queue.QueueA.length > 0", effect: "ASSIGN(QueueA, Server)", cSchedules: [{ eventId: "b3", dist: "Fixed", distParams: { value: "10" } }], priority: 1 },
+        { id: "c2", name: "Serve B", condition: "Queue.QueueB.length > 0", effect: "ASSIGN(QueueB, Server)", cSchedules: [{ eventId: "b3", dist: "Fixed", distParams: { value: "5" } }], priority: 2 },
+      ],
+    };
+    const { warnings } = validateModel(model);
+    const cap = warnings.find(w => w.code === "W-CAP-01");
+    expect(cap).toBeDefined();
+    expect(cap.affectedIds.eventIds).toEqual(expect.arrayContaining(["c1", "c2"]));
+    expect(cap.affectedIds.eventIds).toHaveLength(2);
+  });
+
+  it("V20 populates affectedIds with queue ID", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      bEvents: [],
+      cEvents: [],
+      queues: [{ id: "q_bad", name: "BadQ", capacity: "abc", discipline: "FIFO" }],
+    };
+    const { errors } = validateModel(model);
+    const v20 = errors.find(e => e.code === "V20");
+    expect(v20).toBeDefined();
+    expect(v20.affectedIds).toEqual({ queueIds: ["q_bad"] });
+  });
+
+  it("V4 populates affectedIds with queue ID", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      bEvents: [],
+      cEvents: [],
+      queues: [{ id: "q_prio", name: "PrioQ", discipline: "PRIORITY", customerType: "Customer" }],
+    };
+    const { errors } = validateModel(model);
+    const v4 = errors.find(e => e.code === "V4");
+    expect(v4).toBeDefined();
+    expect(v4.affectedIds).toEqual({ queueIds: ["q_prio"] });
+  });
+
+  it("V25 populates affectedIds with event ID for RENEGE in B-event", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      queues: [{ id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" }],
+      bEvents: [{ id: "b_bad", name: "Bad B", effect: "RENEGE(Customer)", schedules: [] }],
+      cEvents: [],
+    };
+    const { errors } = validateModel(model);
+    const v25 = errors.find(e => e.code === "V25");
+    expect(v25).toBeDefined();
+    expect(v25.affectedIds).toEqual({ eventIds: ["b_bad"] });
+  });
+
+  it("V27 populates affectedIds with event ID for FILL/DRAIN", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      queues: [],
+      bEvents: [{ id: "b1", name: "Bad Fill", effect: "FILL(MissingTank, 10)", schedules: [] }],
+      cEvents: [],
+      containerTypes: [],
+    };
+    const { errors } = validateModel(model);
+    const v27 = errors.find(e => e.code === "V27");
+    expect(v27).toBeDefined();
+    expect(v27.affectedIds).toEqual({ eventIds: ["b1"] });
+  });
+
+  it("V8 (no source or sink) does NOT have affectedIds", () => {
+    const model = {
+      entityTypes: [],
+      stateVariables: [],
+      bEvents: [],
+      cEvents: [],
+      queues: [],
+    };
+    const { errors } = validateModel(model);
+    const v8 = errors.find(e => e.code === "V8");
+    expect(v8).toBeDefined();
+    expect(v8.affectedIds).toBeUndefined();
+  });
+
+  it("V34 (invalid replication count) does NOT have affectedIds", () => {
+    const model = {
+      entityTypes: [{ id: "et1", name: "Customer", attrDefs: [] }],
+      stateVariables: [],
+      bEvents: [{ id: "b1", name: "Arrival", effect: "ARRIVE(Customer)", schedules: [{ dist: "Exponential", distParams: { mean: "5" } }] }],
+      cEvents: [],
+      queues: [{ id: "q1", name: "Queue1", discipline: "FIFO", customerType: "Customer" }],
+      experimentDefaults: { replications: 0 },
+    };
+    const { errors } = validateModel(model);
+    const v34 = errors.find(e => e.code === "V34");
+    expect(v34).toBeDefined();
+    expect(v34.affectedIds).toBeUndefined();
+  });
+});
+
 // ── V26 / V27: Container validation (Sprint 39) ───────────────────────────────
 
 const baseModel = {
@@ -802,7 +957,7 @@ describe("V5 — EntityAttr skips dist validation", () => {
         {
           id: "b_exit",
           name: "Exit",
-          effect: ["RELEASE(Server)"],
+          effect: ["SET(var, 1)"],
           schedules: [],
           probabilisticRouting: [{ queueName: null, probability: 1 }],
         },
@@ -951,7 +1106,7 @@ describe("V5 — EntityAttr skips dist validation", () => {
         {
           id: "b_exit",
           name: "Exit",
-          effect: ["RELEASE(Server)"],
+          effect: ["SET(var, 1)"],
           schedules: [],
           routing: [{ condition: { variable: "Entity.severity", operator: ">", value: 1 }, queueName: null }],
         },

@@ -157,7 +157,7 @@ async function doCloudSave(saveFn, {
 const formatEstimate = value => Number.isFinite(value) ? Math.round(value).toLocaleString() : "—";
 const yieldToBrowser = () => new Promise(resolve => setTimeout(resolve, 0));
 
-const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null }) => {
+const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, tierPolicies = null, currentVersion, currentVersionId, onRunSaved, onResultsReady, onRunComplete, onGoToResults, autoRun = false, onExperimentDefaultsChange = null, onApplyPatchedModel = null, onExposeRunApi = null, schedulesVersion = 0, modelAssistantOpen = false, onOpenModelAssistant = null, visible = true }) => {
   const { C, FONT } = useTheme();
   const experimentDefaults = model?.experimentDefaults || {};
   const [mode, setMode] = useState("idle");
@@ -1024,11 +1024,10 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
 
   const autoRunRef = useRef(false);
   useEffect(() => {
-    if (autoRun && !autoRunRef.current && !hasAdmissionErrors && modelId) {
-      autoRunRef.current = true;
-      doRunAll();
-    }
-  }, [autoRun, hasAdmissionErrors, modelId, doRunAll]);
+    if (!visible || !autoRun || autoRunRef.current || hasAdmissionErrors || !modelId) return;
+    autoRunRef.current = true;
+    doRunAll();
+  }, [visible, autoRun, hasAdmissionErrors, modelId, doRunAll]);
 
   useEffect(() => {
     if (!userId) return;
