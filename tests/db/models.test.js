@@ -517,7 +517,7 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
           results_json: expect.objectContaining({
             _results_payload_size_bytes: expect.any(Number),
             _result_detail_level: 'minimal',
-            _trimmed_fields: expect.arrayContaining(['log', 'entitySummary', 'timeSeries', 'waitDist.values']),
+            _trimmed_fields: expect.arrayContaining(['log', 'entitySummary', 'waitDist.values→histogram']),
             runtimeMetrics: expect.objectContaining({
               wall_clock_ms: 42,
               events_processed: 9,
@@ -535,7 +535,8 @@ describe('DB Layer: models.js (ADR-001 Enforcement)', () => {
       const insertedPayload = supabase.from('simulation_runs').insert.mock.calls.at(-1)[0];
       expect(insertedPayload.results_json.log).toBeUndefined();
       expect(insertedPayload.results_json.entitySummary).toBeUndefined();
-      expect(insertedPayload.results_json.timeSeries).toBeUndefined();
+      expect(insertedPayload.results_json.timeSeries).toBeDefined();
+      expect(insertedPayload.results_json.timeSeries).toHaveLength(2);
       expect(insertedPayload.results_json.waitDist.Main.values).toBeUndefined();
       const { _results_payload_size_bytes: storedSize, ...resultsJsonWithoutSize } = insertedPayload.results_json;
       expect(storedSize).toBe(JSON.stringify(resultsJsonWithoutSize).length);

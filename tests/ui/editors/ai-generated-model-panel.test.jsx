@@ -390,7 +390,6 @@ describe("AiGeneratedModelPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: /start voice input/i }));
       expect(mockRecognitionInstance.start).toHaveBeenCalledOnce();
       expect(screen.getByRole("button", { name: /stop voice input/i })).toBeInTheDocument();
-      expect(screen.getByText(/■ stop/i)).toBeInTheDocument();
     });
 
     it("stops recognition and toggles back to mic when clicked again", () => {

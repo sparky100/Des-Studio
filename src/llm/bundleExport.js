@@ -270,7 +270,8 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   // CI table — present only when aggregateStats exists (multi-replication).
   // For single-run or explore runs where aggregateStats wasn't stored, synthesise
   // point estimates from the summary so goals can show PASS/FAIL instead of UNKNOWN.
-  const storedStats = results.aggregateStats && Object.keys(results.aggregateStats).length
+  const hasRealAggregateStats = results.aggregateStats && Object.keys(results.aggregateStats).length > 0;
+  const aggregateStats = hasRealAggregateStats
     ? results.aggregateStats
     : (() => {
         const s = results.summary || {};
@@ -285,9 +286,8 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
         if (point(s.costPerServed)) synth['summary.costPerServed'] = point(s.costPerServed);
         return synth;
       })();
-  const aggregateStats = storedStats;
   const ciKeys = Object.keys(aggregateStats).filter(k => aggregateStats[k]?.mean != null);
-  if (ciKeys.length) {
+  if (ciKeys.length && hasRealAggregateStats) {
     lines.push('### Confidence Intervals (95%)');
     lines.push('');
     lines.push('| Metric | n | Mean | Lower | Upper | Half-width |');

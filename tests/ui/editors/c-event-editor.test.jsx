@@ -261,6 +261,7 @@ describe('CEventEditor — follow-on B-event labels', () => {
 
     // Card is collapsed by default — expand it first
     fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Add Effect/i }));
 
     expect(screen.getByRole('option', {
       name: 'Start Service with Server and Customer from Waiting Queue',
