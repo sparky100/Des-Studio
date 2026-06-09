@@ -43,8 +43,8 @@ function renderInline(text, keyPrefix = "") {
       case "code":
         return (
           <code key={key} style={{
-            background: C.surface, fontFamily: FONT, fontSize: 11,
-            padding: "1px 5px", borderRadius: RADIUS.sm, color: C.accent,
+            background: `${C.accent}22`, fontFamily: FONT, fontSize: 11,
+            padding: "1px 5px", borderRadius: RADIUS.sm, color: "#e6edf3",
           }}>
             {part.content}
           </code>
@@ -156,12 +156,11 @@ export function MarkdownContent({ text, style }) {
         switch (block.type) {
           case "heading": {
             const sizes = { 1: 16, 2: 14, 3: 13, 4: 12 };
-            const colors = { 1: C.text, 2: C.text, 3: C.text, 4: C.muted };
             return (
               <div key={key} style={{
                 fontSize: sizes[block.level] ?? 12,
                 fontWeight: 700,
-                color: colors[block.level] ?? C.text,
+                color: "#e6edf3",
                 fontFamily: FONT,
                 marginBottom: SPACE.sm,
                 marginTop: i > 0 ? SPACE.md : 0,
@@ -173,7 +172,7 @@ export function MarkdownContent({ text, style }) {
           case "paragraph":
             return (
               <div key={key} style={{
-                fontSize: 12, lineHeight: 1.7, color: C.text,
+                fontSize: 12, lineHeight: 1.7, color: "#e6edf3",
                 fontFamily: FONT, marginBottom: SPACE.sm,
               }}>
                 {renderInline(block.content, key)}
@@ -184,7 +183,7 @@ export function MarkdownContent({ text, style }) {
               <div key={key} style={{ marginBottom: SPACE.sm }}>
                 {block.items.map((item, j) => (
                   <div key={`${key}-${j}`} style={{
-                    fontSize: 12, lineHeight: 1.6, color: C.text,
+                    fontSize: 12, lineHeight: 1.6, color: "#e6edf3",
                     fontFamily: FONT, marginBottom: 2, paddingLeft: 16,
                     position: "relative",
                   }}>
@@ -199,7 +198,7 @@ export function MarkdownContent({ text, style }) {
               <div key={key} style={{ marginBottom: SPACE.sm }}>
                 {block.items.map((item, j) => (
                   <div key={`${key}-${j}`} style={{
-                    fontSize: 12, lineHeight: 1.6, color: C.text,
+                    fontSize: 12, lineHeight: 1.6, color: "#e6edf3",
                     fontFamily: FONT, marginBottom: 2, paddingLeft: 20,
                   }}>
                     <span style={{ position: "absolute", left: 4, color: C.muted, minWidth: 14 }}>{j + 1}.</span>
@@ -214,7 +213,7 @@ export function MarkdownContent({ text, style }) {
                 background: C.bg, border: `1px solid ${C.border}`,
                 borderRadius: RADIUS.md, padding: SPACE.md,
                 fontFamily: FONT, fontSize: 11, lineHeight: 1.5,
-                color: C.text, overflow: "auto", marginBottom: SPACE.sm,
+                color: "#e6edf3", overflow: "auto", marginBottom: SPACE.sm,
                 whiteSpace: "pre-wrap", wordBreak: "break-word",
               }}>
                 {block.content}
