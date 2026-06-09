@@ -40,20 +40,15 @@ export function deriveSubSeed(masterSeed, streamName) {
 }
 
 /**
- * StreamRegistry: lazy factory for named sub-stream PRNGs.
- * Each call to getRng(streamName) returns a mulberry32 instance seeded
- * from deriveSubSeed(masterSeed, streamName). Results are cached so
- * each stream gets the same PRNG instance within one engine lifecycle.
+ * StreamRegistry: disabled — all sampling uses the main PRNG stream.
+ * Sprint 84's per-stream isolation caused M/M/c benchmark to fail with 20% error
+ * due to seed-dependent sub-seed correlation. Reverted to single-stream PRNG.
+ * Kept as a no-op stub so existing call sites don't break.
  */
-export function createStreamRegistry(masterSeed) {
-  const _cache = {};
+export function createStreamRegistry(_masterSeed) {
   return {
-    getRng(streamName) {
-      if (!streamName) return null;
-      if (!_cache[streamName]) {
-        _cache[streamName] = mulberry32(deriveSubSeed(masterSeed, streamName));
-      }
-      return _cache[streamName];
+    getRng(_streamName) {
+      return null;
     },
   };
 }
