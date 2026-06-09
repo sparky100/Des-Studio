@@ -310,17 +310,22 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     return rawTotal;
   };
 
+  const waitBreakdown = summary.waitSamplesBreakdown;
+  const waitBreakdownNote = waitBreakdown
+    ? `(${waitBreakdown.served} served, ${waitBreakdown.reneged} reneged${waitBreakdown.inProgress > 0 ? `, ${waitBreakdown.inProgress} in-progress` : ""})`
+    : "";
+
   const cards = [
     {
       label: "Average wait",
       value: formatMetricValue(summary.avgWait),
-      note: Number(summary.avgWait) > 0 ? "Time an entity waited before service." : "No waiting recorded.",
+      note: Number(summary.avgWait) > 0 ? `Weighted average across served, reneged, and in-progress entities. ${waitBreakdownNote}` : "No waiting recorded.",
       color: C.amber,
     },
     {
       label: "Average time in system",
       value: formatMetricValue(summary.avgSojourn),
-      note: "Total time from arrival to exit.",
+      note: "Total time from arrival to exit (served + reneged entities).",
       color: C.accent,
     },
     {

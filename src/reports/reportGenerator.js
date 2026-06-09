@@ -426,21 +426,22 @@ function journeyBreakdownChart({ avgWait, avgSvc, unit = 'minutes', stages = nul
   const svc  = Number.isFinite(Number(avgSvc))  ? Math.max(0, Number(avgSvc))  : 0;
   if (wait + svc === 0) return '';
   const height = m.top + m.bottom + 2 * rowH;
-  const total = wait + svc;
+  const max = Math.max(wait, svc, 1);
   const rows = [
-    { label: `Avg wait (${unit})`,    val: wait, color: '#2563eb' },
-    { label: `Avg service (${unit})`, val: svc,  color: '#16a34a' },
+    { label: `Avg wait (${unit})`,    val: wait, color: '#2563eb', note: 'includes reneged & in-progress' },
+    { label: `Avg service (${unit})`, val: svc,  color: '#16a34a', note: 'served entities only' },
   ];
   let bars = '';
   rows.forEach((r, i) => {
     const y = m.top + i * rowH;
     bars += `<rect x="${m.left}" y="${y + 3}" width="${cW}" height="20" fill="#f3f4f6" rx="3"/>`;
-    if (r.val > 0) bars += `<rect x="${m.left}" y="${y + 3}" width="${((r.val / total) * cW).toFixed(1)}" height="20" fill="${r.color}" rx="3" opacity="0.85"/>`;
+    if (r.val > 0) bars += `<rect x="${m.left}" y="${y + 3}" width="${((r.val / max) * cW).toFixed(1)}" height="20" fill="${r.color}" rx="3" opacity="0.85"/>`;
     bars += `<text x="${m.left - 6}" y="${y + 17}" text-anchor="end" font-size="11" fill="#374151" font-family="sans-serif">${esc(r.label)}</text>`;
     bars += `<text x="${m.left + cW + 8}" y="${y + 17}" font-size="11" font-weight="600" fill="${r.color}" font-family="sans-serif">${r.val.toFixed(1)}</text>`;
+    if (r.note) bars += `<text x="${m.left + cW + 76}" y="${y + 17}" font-size="9" fill="#9ca3af" font-family="sans-serif">${r.note}</text>`;
   });
   return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-    <text x="${width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#111827" font-family="sans-serif">Journey Time Breakdown</text>
+    <text x="${width / 2}" y="18" text-anchor="middle" font-size="13" font-weight="600" fill="#111827" font-family="sans-serif">Wait &amp; Service Time Metrics</text>
     ${bars}
   </svg>`;
 }
@@ -721,7 +722,7 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     [`${entityName}s reneged (abandoned)`,                           formatInt(resolveValue('reneged',     summary, aggStats))],
     [`Average waiting time (${unit})`,                               formatN(resolveValue('avgWait',      summary, aggStats))],
     [`Average service time (${unit})`,                               formatN(resolveValue('avgSvc',       summary, aggStats))],
-    [`Average total time in system — wait + service (${unit})`,      formatN(resolveValue('avgSojourn',   summary, aggStats))],
+    [`Average total time in system (${unit})`,                            formatN(resolveValue('avgSojourn',   summary, aggStats))],
     [`Longest time in system (${unit})`,                             formatN(resolveValue('maxSojourn',   summary, aggStats))],
     [`Average number in system (WIP)`,                               formatN(resolveValue('avgWIP',       summary, aggStats))],
     [`Total cost`,                                                   formatCurrency(resolveValue('totalCost',     summary, aggStats))],

@@ -1139,8 +1139,9 @@ const cycleLog = [];
   }
 
   function entitySojournAfterWarmup(entity) {
-    if (entity?.completionTime == null) return null;
-    return truncateInterval(entity.arrivalTime, entity.completionTime);
+    const endTime = entity?.completionTime ?? entity?.renegeTime ?? null;
+    if (endTime == null) return null;
+    return truncateInterval(entity.arrivalTime, endTime);
   }
 
   // ── waitDist: per-queue wait-time distribution (F10.4b) ───────────────────
@@ -1205,7 +1206,7 @@ const cycleLog = [];
     const avgSvc = serviceSamples.length
       ? serviceSamples.reduce((s, value) => s + value, 0) / serviceSamples.length
       : null;
-    const sojournSamples = served
+    const sojournSamples = [...served, ...reneged]
       .map(entitySojournAfterWarmup)
       .filter(value => value != null);
     const avgSojourn = sojournSamples.length
