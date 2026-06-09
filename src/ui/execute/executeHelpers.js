@@ -316,7 +316,7 @@ export function buildResultsExportPayload({
 }
 
 export function buildResultsCsv({ results, replicationResults = [], aggregateStats = {}, config = {} } = {}) {
-  const rows = [["runLabel", "replicationIndex", "seed", "served", "reneged", "avgWait", "avgSvc", "avgSojourn", "finalTime"]];
+  const rows = [["runLabel", "replicationIndex", "seed", "arrived", "served", "reneged", "completionRate", "avgWait", "avgSvc", "avgSojourn", "avgTimeInSystem", "totalCost", "costPerServed", "finalTime"]];
 
   const resultRows = replicationResults.length
     ? replicationResults.map(payload => ({
@@ -341,11 +341,16 @@ export function buildResultsCsv({ results, replicationResults = [], aggregateSta
       row.runLabel,
       row.replicationIndex,
       row.seed,
+      row.summary.total,
       row.summary.served,
       row.summary.reneged,
+      row.summary.servedRatio != null ? Math.round(row.summary.servedRatio * 100) + "%" : "",
       row.summary.avgWait,
       row.summary.avgSvc,
       row.summary.avgSojourn,
+      row.summary.avgTimeInSystem,
+      row.summary.totalCost,
+      row.summary.costPerServed,
       row.finalTime,
     ]);
   }

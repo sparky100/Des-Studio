@@ -62,9 +62,37 @@
               "icon": "lucide-file",
               "title": "Untitled"
             }
+          },
+          {
+            "id": "c803efbd8c7f3463",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Untitled 1.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Untitled 1"
+            }
+          },
+          {
+            "id": "47c807c8b6760017",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Item1.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Item1"
+            }
           }
         ],
-        "currentTab": 3
+        "currentTab": 5
       }
     ],
     "direction": "vertical"
@@ -122,7 +150,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 508.5
+    "width": 508.5,
+    "collapsed": true
   },
   "right": {
     "id": "0b9104ce2d2a50d0",
@@ -227,8 +256,14 @@
       "bases:Create new base": false
     }
   },
-  "active": "14e20ad8a73e5503",
+  "active": "47c807c8b6760017",
   "lastOpenFiles": [
+    "Item1.md",
+    "Some Notes on Warnings.md",
+    "Untitled 1.md",
+    "model-schema-for-llm.md.tmp.21192.a4e9055a92b1",
+    "model-schema-for-llm.md.tmp.21192.46c07bcfc388",
+    "Untitled.md",
     "model-schema-for-llm.md.tmp.34768.bb7dad1245be",
     "model-schema-for-llm.md.tmp.34768.f22f4abfc73e",
     "user/simpy-export.md",
@@ -246,7 +281,6 @@
     "simmodlr_Engineering_Spec.md.tmp.20908.ba794746a870",
     "simmodlr_Engineering_Spec.md.tmp.20908.d45c70ecf458",
     "model-schema-for-llm.md.tmp.20908.bcc83229f332",
-    "model-schema-for-llm.md.tmp.20908.31b9118a725a",
     "analysis/simmodlr-competitive-comparison-and-gap-update.md",
     "analysis/des-capability-comparison-open-source-and-professional-2026-05.md",
     "reviews/sprint-77-plan.md",
@@ -259,12 +293,7 @@
     "roadmap/# Codex Prompt Pack — DES Compute, Supab.md",
     "roadmap/des-executable-implementation-backlog.md",
     "roadmap/des-compute-and-runtime-roadmap.md",
-    "roadmap",
     "analysis/des-benchmark-inventory-and-gaps.md",
-    "operations/des-cost-control-checklist.md",
-    "operations",
-    "analysis/des-lifecycle-validation-update.md",
-    "analysis/des-validation-gap-review.md",
     "Pasted image 20260518105526.png",
     "Pasted image 20260505144753.png"
   ]

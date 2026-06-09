@@ -102,8 +102,8 @@ describe('results export helpers', () => {
   it('builds CSV with the expected replication headers', () => {
     const csv = buildResultsCsv({ results: singleResult, config: { seed: 123 } });
 
-    expect(csv.split('\n')[0]).toBe('runLabel,replicationIndex,seed,served,reneged,avgWait,avgSvc,avgSojourn,finalTime');
-    expect(csv).toContain(',0,123,4,1,2.5,1.25,3.75,10');
+    expect(csv.split('\n')[0]).toBe('runLabel,replicationIndex,seed,arrived,served,reneged,completionRate,avgWait,avgSvc,avgSojourn,avgTimeInSystem,totalCost,costPerServed,finalTime');
+    expect(csv).toContain(',0,123,5,4,1,,2.5,1.25,3.75,,,,10');
   });
 
   it('includes one CSV row per completed replication plus aggregates', () => {
@@ -117,8 +117,8 @@ describe('results export helpers', () => {
       },
     });
 
-    expect(csv).toContain(',0,10,2,0,4,2,6,20');
-    expect(csv).toContain(',1,11,3,1,5,3,8,22');
+    expect(csv).toContain(',0,10,,2,0,,4,2,6,,,,20');
+    expect(csv).toContain(',1,11,,3,1,,5,3,8,,,,22');
     expect(csv).toContain('metric,n,mean,lower95,upper95,halfWidth');
     expect(csv).toContain('summary.avgWait,2,4.5,1,8,3.5');
   });
