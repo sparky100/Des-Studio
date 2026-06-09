@@ -25,6 +25,7 @@ import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { computeExecuteLayout, EXEC_NODE_WIDTH, EXEC_NODE_HEIGHT } from "./executeLayout.js";
 import { SectionPanelNode } from "../visual-designer/SectionPanelNode.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { NodeDetailSidebar } from "./NodeDetailSidebar.jsx";
 export { DEFAULT_KPI_SLOTS };
 
 // ── Configurable KPI bar (F9C.7) ─────────────────────────────────────────────
@@ -412,6 +413,9 @@ export function ExecuteCanvas({
   kpiSlots = DEFAULT_KPI_SLOTS,
   onKpiSlotChange,
   onNodeSelect,
+  selectedNodeDetail,
+  onNodeDetailSelect,
+  onEntitySelect,
   batchActive = false,
 }) {
   const { C, FONT } = useTheme();
@@ -597,6 +601,24 @@ export function ExecuteCanvas({
           const idleCount = relevant.filter(e => e.status === "idle").length;
           const failedCount = relevant.filter(e => e.status === "failed").length;
           const actualCapacity = relevant.length;
+          const customers = entities.filter(e => e.role !== "server");
+          const serverDetails = relevant.map(srv => {
+            const cust = srv.currentCustId != null
+              ? customers.find(c => c.id === srv.currentCustId)
+              : null;
+            return {
+              id: srv.id,
+              status: srv.status,
+              busyTime: srv._busyTime ?? 0,
+              starvationTime: srv._starvationTime ?? 0,
+              downtime: srv._downtime ?? 0,
+              scheduledDuration: srv._scheduledDuration ?? null,
+              serviceStart: srv._busyStart ?? null,
+              customerId: srv.currentCustId ?? null,
+              customerType: cust?.type ?? null,
+              customerArrivalTime: cust?.arrivalTime ?? null,
+            };
+          });
           liveData = {
             serverTypeName:    serverType ?? null,
             capacity:          actualCapacity,
@@ -605,6 +627,8 @@ export function ExecuteCanvas({
             failedCount,
             utilisation:       actualCapacity > 0 ? (busyCount / actualCapacity) * 100 : 0,
             completionSignal:  snap.served,
+            servers:           serverDetails,
+            clock:             snap.clock,
           };
         } else if (node.type === "sink") {
           const customers = entities.filter(e => e.role !== "server");
@@ -782,8 +806,15 @@ export function ExecuteCanvas({
           onNodeClick={(_, node) => {
             if (node.type === "sectionPanel") return;
             onNodeSelect?.(node.data?.label ?? null);
+            if (node.type === "queueNode" || node.type === "activityNode" || node.type === "queue" || node.type === "activity") {
+              onNodeDetailSelect?.({
+                nodeType: node.type === "queue" ? "queueNode" : node.type === "activity" ? "activityNode" : node.type,
+                label: node.data?.label ?? node.label ?? null,
+                liveData: node.data?.liveData ?? null,
+              });
+            }
           }}
-          onPaneClick={() => { setFocusedSectionId(null); onNodeSelect?.(null); }}
+          onPaneClick={() => { setFocusedSectionId(null); onNodeSelect?.(null); onNodeDetailSelect?.(null); }}
         >
           <Background color={C.border} gap={24} size={1} />
           <Controls showInteractive={false} />
@@ -831,6 +862,11 @@ export function ExecuteCanvas({
             </Panel>
           )}
         </ReactFlow>
+        <NodeDetailSidebar
+          selectedNode={selectedNodeDetail}
+          onClose={() => onNodeDetailSelect?.(null)}
+          onEntitySelect={onEntitySelect}
+        />
       </div>
       <div
         role="separator"

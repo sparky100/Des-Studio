@@ -250,6 +250,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [kpiSlots, setKpiSlots] = useState(DEFAULT_KPI_SLOTS);
   const [speedMultiplier, setSpeedMultiplier] = useState(1);
   const [selectedNodeLabel, setSelectedNodeLabel] = useState(null);
+  const [selectedNodeDetail, setSelectedNodeDetail] = useState(null);
   const [selectedEntityId, setSelectedEntityId] = useState(null);
   const [shareLinks, setShareLinks] = useState([]);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -3067,6 +3068,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   kpiSlots={kpiSlots}
                   onKpiSlotChange={handleKpiSlotChange}
                   onNodeSelect={setSelectedNodeLabel}
+                  selectedNodeDetail={selectedNodeDetail}
+                  onNodeDetailSelect={setSelectedNodeDetail}
+                  onEntitySelect={setSelectedEntityId}
                   batchActive={batchActive}
                 />
               </Suspense>
