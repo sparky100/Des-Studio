@@ -317,7 +317,16 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     ? `(${waitBreakdown.served} served, ${waitBreakdown.reneged} reneged${waitBreakdown.inProgress > 0 ? `, ${waitBreakdown.inProgress} in-progress` : ""})`
     : "";
 
-  const servedRatio = summary.servedRatio != null ? Math.round(summary.servedRatio * 100) : null;
+  // Fallback: compute servedRatio if not stored (older runs)
+  const servedRatio = summary.servedRatio != null
+    ? summary.servedRatio
+    : (totalArrived > 0 ? +(served / totalArrived).toFixed(4) : null);
+  const servedRatioDisplay = servedRatio != null ? Math.round(servedRatio * 100) : null;
+
+  // Fallback: compute avgTimeInSystem if not stored (older runs)
+  const avgTimeInSystem = summary.avgTimeInSystem != null
+    ? summary.avgTimeInSystem
+    : (summary.avgSojourn != null ? summary.avgSojourn : null);
 
   const cards = [
     {
@@ -337,7 +346,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     },
     {
       label: "Time in system",
-      value: formatMetricValue(summary.avgTimeInSystem),
+      value: formatMetricValue(avgTimeInSystem),
       color: C.accent,
     },
     {
@@ -1009,6 +1018,27 @@ export function MiniLineChart({ title, ariaTitle, points, color, yLabel, formatY
   );
 }
 
+function CollapsibleRunDetails({ label, children, C, FONT }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        style={{
+          background: "none", border: "none", cursor: "pointer", padding: 0,
+          display: "flex", alignItems: "center", gap: 6, marginBottom: 8,
+          fontFamily: FONT, fontSize: 10, color: C.cEvent, letterSpacing: 1.2, fontWeight: 700,
+        }}
+      >
+        <span style={{ display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 160ms ease", fontSize: 9 }}>▶</span>
+        {label}
+      </button>
+      {open && children}
+    </div>
+  );
+}
+
 export function ResultsAnalysisPanel({ results, replicationResults = [], warmupDetection = null }) {
   const { C, FONT } = useTheme();
   const [batchMetric, setBatchMetric] = useState("summary.avgWait");
@@ -1189,10 +1219,7 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
           const hdStyle   = { ...cellStyle, color: C.muted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, textAlign: "left" };
           let waitFiniteIdx = 0, svcFiniteIdx = 0, servedFiniteIdx = 0;
           return (
-            <div>
-              <div style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
-                PER-RUN BREAKDOWN
-              </div>
+            <CollapsibleRunDetails label="PER-RUN BREAKDOWN" C={C} FONT={FONT}>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
@@ -1250,7 +1277,7 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
                   </tfoot>
                 </table>
               </div>
-            </div>
+            </CollapsibleRunDetails>
           );
         })()}
       </div>
@@ -1267,41 +1294,38 @@ function JourneysPanel({ queueJourneys, queueNames, repCount = 1, C, FONT }) {
   const total = rows.reduce((s, [, c]) => s + c, 0);
   const maxCount = rows[0][1];
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
       {rows.map(([path, count]) => {
         const segs = path.split("→");
         const pct = total > 0 ? Math.round(count / total * 100) : 0;
-        // Last segment is a real sink only when it isn't itself a queue name
         const lastSeg = segs[segs.length - 1];
         const hasSink = !queueNames?.has(lastSeg);
         const sinkColor = lastSeg === "Incomplete" ? C.amber : C.accent;
         return (
-          <div key={path} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                {segs.map((q, i) => {
-                  const isSink = hasSink && i === segs.length - 1;
-                  return (
-                    <Fragment key={i}>
-                      {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
-                      <span style={{
-                        fontFamily: FONT, fontSize: 10,
-                        color: isSink ? sinkColor : C.text,
-                        background: isSink ? `${sinkColor}18` : C.bg,
-                        border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
-                        borderRadius: 3, padding: "1px 5px",
-                      }}>{q}</span>
-                    </Fragment>
-                  );
-                })}
-              </div>
-              <div style={{ height: 3, background: C.border, borderRadius: 2 }}>
-                <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
-              </div>
+          <div key={path} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+              {segs.map((q, i) => {
+                const isSink = hasSink && i === segs.length - 1;
+                return (
+                  <Fragment key={i}>
+                    {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
+                    <span style={{
+                      fontFamily: FONT, fontSize: 10,
+                      color: isSink ? sinkColor : C.text,
+                      background: isSink ? `${sinkColor}18` : C.bg,
+                      border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
+                      borderRadius: 3, padding: "1px 5px",
+                    }}>{q}</span>
+                  </Fragment>
+                );
+              })}
             </div>
-            <div style={{ width: 72, flexShrink: 0, textAlign: "right" }}>
-              <div style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 600, lineHeight: 1.3 }}>{isMultiRep ? +(count / repCount).toFixed(1) : count}</div>
-              <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, lineHeight: 1.3 }}>{pct}%</div>
+            <div style={{ height: 3, background: C.border, borderRadius: 2, marginBottom: 4 }}>
+              <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 600 }}>{isMultiRep ? +(count / repCount).toFixed(1) : count}</span>
+              <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted }}>{pct}%</span>
             </div>
           </div>
         );
@@ -1447,42 +1471,39 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
         return (
           <div style={{ marginTop: 4 }}>
             <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, letterSpacing: 1, fontWeight: 700, marginBottom: 6 }}>ENTITY PATHWAYS ACROSS SECTIONS</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 10 }}>
               {visibleRows.map(({ key, count }) => {
                 const rawParts = key.split("→");
                 const names = rawParts.map(id => sectionById[id]?.name || id);
                 const pct = total > 0 ? Math.round(count / total * 100) : 0;
-                // Last segment is a sink only when it isn't itself a known section ID
                 const lastRaw = rawParts[rawParts.length - 1];
                 const hasSink = !sectionById[lastRaw];
                 const sinkColor = lastRaw === "Incomplete" ? C.amber : C.accent;
                 return (
-                  <div key={key} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                        {names.map((name, i) => {
-                          const isSink = hasSink && i === names.length - 1;
-                          return (
-                            <Fragment key={i}>
-                              {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
-                              <span style={{
-                                fontFamily: FONT, fontSize: 10,
-                                color: isSink ? sinkColor : C.text,
-                                background: isSink ? `${sinkColor}18` : C.bg,
-                                border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
-                                borderRadius: 3, padding: "1px 5px",
-                              }}>{name}</span>
-                            </Fragment>
-                          );
-                        })}
-                      </div>
-                      <div style={{ height: 3, background: C.border, borderRadius: 2 }}>
-                        <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
-                      </div>
+                  <div key={key} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", marginBottom: 6 }}>
+                      {names.map((name, i) => {
+                        const isSink = hasSink && i === names.length - 1;
+                        return (
+                          <Fragment key={i}>
+                            {i > 0 && <span style={{ color: C.muted, fontSize: 9 }}>→</span>}
+                            <span style={{
+                              fontFamily: FONT, fontSize: 10,
+                              color: isSink ? sinkColor : C.text,
+                              background: isSink ? `${sinkColor}18` : C.bg,
+                              border: `1px ${isSink ? "dashed" : "solid"} ${isSink ? sinkColor : C.border}`,
+                              borderRadius: 3, padding: "1px 5px",
+                            }}>{name}</span>
+                          </Fragment>
+                        );
+                      })}
                     </div>
-                    <div style={{ width: 72, flexShrink: 0, textAlign: "right" }}>
-                      <div style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 600, lineHeight: 1.3 }}>{isMultiRep ? +(count / repCount).toFixed(1) : count}</div>
-                      <div style={{ fontFamily: FONT, fontSize: 9, color: C.muted, lineHeight: 1.3 }}>{pct}%</div>
+                    <div style={{ height: 3, background: C.border, borderRadius: 2, marginBottom: 4 }}>
+                      <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 600 }}>{isMultiRep ? +(count / repCount).toFixed(1) : count}</span>
+                      <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted }}>{pct}%</span>
                     </div>
                   </div>
                 );
