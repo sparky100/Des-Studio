@@ -1,12 +1,12 @@
 # simmodlr — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-06-09 | Reflects: Sprint 83 complete — Wait Time Accuracy & Transparency.*
+*Last updated: 2026-06-09 | Reflects: Sprint 84 complete — PRNG Streams, Shift Behavior, Purge Period & Starvation Tracking.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Current sprint plan: `docs/reviews/sprint-83-plan.md` — Wait Time Accuracy & Transparency
-- Previous sprint plan: `docs/reviews/sprint-82-plan.md` — Results API & LLM Export Bundle
+- Current sprint plan: `docs/reviews/sprint-84-plan.md` — PRNG Streams, Shift Behavior, Purge Period & Starvation
+- Previous sprint plan: `docs/reviews/sprint-83-plan.md` — Wait Time Accuracy & Transparency
 - API design spec: `docs/architecture/results-api-design.md` — Results API endpoint schemas and consumer guidance
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
@@ -1520,6 +1520,7 @@ See `docs/simmodlr_Build_Plan.md` for the full sprint-by-sprint roadmap. Latest 
 | Sprint 81 | 🔄 In progress | — | Codebase Deduplication — 460 clone groups, 9,453 duplicated lines |
 | Sprint 82 | ⬜ Planned | — | Results API (read-only Edge Function, JWT + share-token auth, 3 routes) and LLM Export Bundle (`buildLLMBundle`, "LLM Bundle (.md)" in Export… popover) |
 | Sprint 83 | ✅ Complete | 2026-06-09 | Wait Time Accuracy & Transparency — RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, `waitSamplesBreakdown`, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), BottomPanel live metrics align with engine formula |
+| Sprint 84 | ✅ Complete | 2026-06-09 | Engine Fidelity — PRNG stream isolation per process (arrival/service/renege/mtbf/mttr), shift-change behavior toggle (delay/preempt/suspend), purge period option, starvation duration tracking per resource |
 
 ---
 

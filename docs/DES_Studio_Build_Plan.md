@@ -132,6 +132,7 @@ flowchart LR
 | Performance optimisation | 🔄 Planned | Sprint 72 will remove legacy runtime condition evaluation, migrate old models to predicate JSON, and optimise the Phase C hot path with benchmarks and correctness gates. |
 | Results API & LLM export bundle | ⬜ Planned | Sprint 82: read-only `results-api` Edge Function (JWT + share-token auth, 3 routes); `buildLLMBundle()` Markdown serialiser; "LLM Bundle (.md)" in Export… popover. No schema changes. |
 | Wait time accuracy & transparency | ✅ Complete | Sprint 83: RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, per-queue `waitSamplesBreakdown`, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), live metrics align with engine formula. |
+| Engine fidelity — PRNG streams, shifts, purge, starvation | ✅ Complete | Sprint 84: PRNG stream isolation per process (`deriveSubSeed` + `StreamRegistry`), shift-change behavior toggle (delay/preempt/suspend), opt-in purge/run-down period, per-resource starvation duration tracking. 15 new tests. |
 
 ### Key Issues and Watchpoints
 
