@@ -446,6 +446,12 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           serving: Math.round((serving / totalWip) * 100),
           waiting: Math.round((waiting / totalWip) * 100),
         } : null;
+        const wipLabel = isMultiRep
+          ? `~${Math.round(totalWip / repCount)}/run (${wipPct}% of arrivals) are WIP`
+          : `${totalWip} entit${totalWip === 1 ? "y" : "ies"} still in progress (${wipPct}% of arrivals) are WIP`;
+        const splitLabel = serving > 0
+          ? ` — ${isMultiRep ? `~${Math.round(serving / repCount)}/run` : serving} serving (${wipSplitPct?.serving ?? 0}%), ${isMultiRep ? `~${Math.round(waiting / repCount)}/run` : waiting} waiting (${wipSplitPct?.waiting ?? 0}%)`
+          : ` — all ${isMultiRep ? `~${Math.round(waiting / repCount)}/run` : waiting} waiting`;
         return (
         <div style={{
           background: isCritical ? C.errorBg : C.warmup,
@@ -453,12 +459,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           borderRadius: 6, padding: "12px 14px", marginTop: 8, marginBottom: 8,
         }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: isCritical ? C.error : C.amber, fontFamily: FONT }}>
-            {isMultiRep
-              ? `~${Math.round(totalWip / repCount)}/run (${wipPct}% of arrivals)`
-              : `${totalWip} entit${totalWip === 1 ? "y" : "ies"} still in progress (${wipPct}% of arrivals)`}
-            {serving > 0
-              ? ` — ${isMultiRep ? `~${Math.round(serving / repCount)}/run` : serving} serving (${wipSplitPct?.serving ?? 0}%), ${isMultiRep ? `~${Math.round(waiting / repCount)}/run` : waiting} waiting (${wipSplitPct?.waiting ?? 0}%)`
-              : ` — all ${isMultiRep ? `~${Math.round(waiting / repCount)}/run` : waiting} waiting`}
+            {wipLabel}{splitLabel}
           </div>
           <div style={{ fontSize: 12, color: isCritical ? C.error : C.amber, fontFamily: FONT, lineHeight: 1.5, marginTop: 4 }}>
             {isCritical

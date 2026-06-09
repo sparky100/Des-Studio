@@ -145,6 +145,7 @@ export function AdaptiveBatchPanel({
   const [checkpointData, setCheckpointData] = useState(null); // null | { totalReps, relativeHalfWidth }
   const [exploreTab, setExploreTab] = useState("analysis"); // "analysis" | "options"
   const [comparisonStates, setComparisonStates] = useState({}); // { [idx]: { status, patchedModel, comparison, explanation, error } }
+  const [collectCharts, setCollectCharts] = useState(true);
   const applyAbortRef = useRef(null);
   const abortRef = useRef(null);
   const baseSeedRef = useRef(Date.now() % 1_000_000);
@@ -219,6 +220,7 @@ export function AdaptiveBatchPanel({
         warmupPeriod,
         maxSimTime,
         schedulesMap,
+        collectTimeSeries: collectCharts,
         signal,
         onRoundComplete: ({ totalReps: reps, relativeHalfWidth }) => {
           setTotalReps(reps);
@@ -529,6 +531,31 @@ export function AdaptiveBatchPanel({
                     ±5% of mean
                   </div>
                 </div>
+              </div>
+
+              {/* Collect charts toggle */}
+              <div style={{
+                display: "flex", alignItems: "center", gap: SPACE.sm,
+                padding: `${SPACE.sm}px ${SPACE.md}px`,
+                background: C.panel, borderRadius: RADIUS.md,
+                border: `1px solid ${C.border}`,
+              }}>
+                <label style={{ display: "flex", alignItems: "center", gap: SPACE.sm, cursor: "pointer", flex: 1 }}>
+                  <input
+                    type="checkbox"
+                    checked={collectCharts}
+                    onChange={e => setCollectCharts(e.target.checked)}
+                    style={{ accentColor: C.accent, width: 14, height: 14 }}
+                  />
+                  <div>
+                    <div style={{ fontFamily: FONT, fontSize: 12, color: C.text, fontWeight: 600 }}>
+                      Collect charts
+                    </div>
+                    <div style={{ fontFamily: FONT, fontSize: 10, color: C.muted, lineHeight: 1.4 }}>
+                      Record queue depth and server utilisation over time for charts in Results. Slightly slower.
+                    </div>
+                  </div>
+                </label>
               </div>
 
               {/* Hard errors — block proceed */}

@@ -77,6 +77,7 @@ export async function runAdaptiveBatch(options = {}) {
     maxSimTime = 500,
     schedulesMap = {},
     targetRelativeCI = 5,
+    collectTimeSeries = true,
     onRoundComplete,
     checkpointAt = 100,
     onCheckpoint,
@@ -115,6 +116,7 @@ export async function runAdaptiveBatch(options = {}) {
       warmupPeriod,
       maxSimTime,
       schedulesMap,
+      collectTimeSeries,
       ...(typeof _createWorker === 'function' ? { createWorker: _createWorker } : {}),
     };
 
