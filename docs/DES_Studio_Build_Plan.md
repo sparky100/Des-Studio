@@ -131,6 +131,7 @@ flowchart LR
 | Consistent panel visibility UX | ✅ Complete | Sprint 79: BottomPanel state persisted (collapsed/height/tab via localStorage); S/M/L preset height pills; Results Workspace gains 5 collapsible sections (summary, bottlenecks, cost, analysis, runtime) with chevron animation and localStorage persistence. |
 | Performance optimisation | 🔄 Planned | Sprint 72 will remove legacy runtime condition evaluation, migrate old models to predicate JSON, and optimise the Phase C hot path with benchmarks and correctness gates. |
 | Results API & LLM export bundle | ⬜ Planned | Sprint 82: read-only `results-api` Edge Function (JWT + share-token auth, 3 routes); `buildLLMBundle()` Markdown serialiser; "LLM Bundle (.md)" in Export… popover. No schema changes. |
+| Wait time accuracy & transparency | ✅ Complete | Sprint 83: RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, per-queue `waitSamplesBreakdown`, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), live metrics align with engine formula. |
 
 ### Key Issues and Watchpoints
 
@@ -209,6 +210,7 @@ flowchart LR
 | 1.79 | 2026-05-22 | Sprint 8C complete — AI Generator conversational quality redesign. Three-phase elicitation (Discovery/Confirmation/Build), no fixed question cap, 7-question ordered sequence, Phase B "Here is my understanding" format enforced. Confirmation bubble with one-click sign-off. Simulation summary card (WHO ARRIVES / HOW THEY FLOW / RESOURCES / GOALS) replacing schema diff as primary view. Proactive refinement chips. 11 new tests added (6 prompt, 3 ModelDiffPreview, 2 AiGeneratedModelPanel). User Guide §2.X and Engineering Spec §6.10 updated. |
 | 1.80 | 2026-05-25 | Sprint 72 planned. Added Performance Optimisation sprint plan and closure scaffold, updated AGENTS sprint tracking, and added roadmap/build-plan entries for predicate-only condition execution and Phase C optimisation. |
 | 1.84 | 2026-06-04 | Sprint 82 planned. Pre-sprint assessment completed for Results API (Option 2) and LLM Export Bundle (Option 3). Sprint plan, API design spec, and AGENTS.md tracking updated. |
+| 1.85 | 2026-06-09 | Sprint 83 completed. Wait time accuracy: RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, `waitSamplesBreakdown` with served/reneged/inProgress counts, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), BottomPanel live metrics align with engine formula. 10 new tests. User Guide, Engineering Spec, and Product Spec updated. |
 
 ---
 

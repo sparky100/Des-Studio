@@ -115,6 +115,10 @@ export function buildServerUtilizationSeries(results = {}, model = {}) {
 
 export function buildWaitDistributions(results = {}) {
   const waitDist = results?.waitDist && typeof results.waitDist === "object" ? results.waitDist : {};
+  const breakdown = results?.summary?.waitSamplesBreakdown;
+  const sourceSuffix = breakdown
+    ? ` (${breakdown.served} served, ${breakdown.reneged} reneged${breakdown.inProgress > 0 ? `, ${breakdown.inProgress} in-progress` : ""})`
+    : " from completed customers";
   return Object.entries(waitDist)
     .filter(([, dist]) => dist && Array.isArray(dist.values) && dist.values.length >= 2)
     .map(([label, dist]) => ({
@@ -126,7 +130,7 @@ export function buildWaitDistributions(results = {}) {
       p95: finiteNumber(dist.p95),
       p99: finiteNumber(dist.p99),
       values: [...dist.values].map(v => finiteNumber(v)).sort((a, b) => a - b),
-      sourceLabel: `${finiteNumber(dist.n, dist.values.length)} waiting times from completed customers`,
+      sourceLabel: `${finiteNumber(dist.n, dist.values.length)} wait samples${sourceSuffix}`,
     }));
 }
 

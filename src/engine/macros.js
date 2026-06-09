@@ -200,17 +200,21 @@ function retireIdleExcessServers(ctx, serverTypeName) {
 
 function buildStageRecord(cust, srv, clock) {
   const waitStartedAt = cust.lastStageStart ?? cust.arrivalTime;
-  const serviceStartedAt = cust.serviceStart ?? clock;
+  const serviceStartedAt = cust.serviceStart ?? null;
+  const wait = serviceStartedAt != null
+    ? Math.max(0, serviceStartedAt - waitStartedAt)
+    : Math.max(0, clock - waitStartedAt);
+  const svc = serviceStartedAt != null
+    ? Math.max(0, clock - serviceStartedAt)
+    : 0;
   return {
     serverType: srv?.type || "unknown",
     queueName: cust.lastQueue || cust.queue || null,
     waitStartedAt,
-    serviceStartedAt,
+    serviceStartedAt: serviceStartedAt ?? clock,
     serviceEndedAt: clock,
-    stageWait: +(cust.serviceStart != null
-      ? (cust.serviceStart - waitStartedAt)
-      : 0).toFixed(4),
-    stageService: +(clock - serviceStartedAt).toFixed(4),
+    stageWait:  +wait.toFixed(4),
+    stageService: +svc.toFixed(4),
   };
 }
 
@@ -529,6 +533,8 @@ export const MACROS = [
         : parseInt(match[1]);
       const ent = entities.find(e => e.id === id);
       if (ent && ent.status === "waiting") {
+        if (!ent.stages) ent.stages = [];
+        ent.stages.push(buildStageRecord(ent, null, clock));
         clearWaitingState(ent);
         ent.status     = "reneged";
         ent.renegeTime = clock;

@@ -273,7 +273,7 @@ function StageKpisTable({ snap, model }) {
               const inQueue  = entities.filter(e => e.role !== "server" && (e.queue === q.name || e.lastQueue === q.name));
               const waiting  = entities.filter(e => e.role !== "server" && e.queue === q.name && e.status === "waiting");
               const now = snap.clock || 0;
-              const currentWaits = waiting.map(e => now - (e.arrivalTime || 0)).filter(Number.isFinite);
+              const currentWaits = waiting.map(e => now - (e.waitingSince ?? e.lastStageStart ?? (e.arrivalTime || 0))).filter(Number.isFinite);
               const meanWait = currentWaits.length ? currentWaits.reduce((a, b) => a + b, 0) / currentWaits.length : null;
               const maxWait  = currentWaits.length ? Math.max(...currentWaits) : null;
               return (

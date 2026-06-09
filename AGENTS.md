@@ -1,12 +1,12 @@
 # simmodlr — AGENTS.md
 *Architectural contract for all Codex sessions. Read this file in full before writing any code.*
-*Last updated: 2026-06-04 | Reflects: Sprint 82 planned — Results API & LLM Export Bundle.*
+*Last updated: 2026-06-09 | Reflects: Sprint 83 complete — Wait Time Accuracy & Transparency.*
 
 **Agent routing:** See `opencode.json` for agent profiles (build, plan, explore, code-reviewer, test-runner, ui-polish, db-migrate, security-audit, docs) and `.opencode/skills/` for reusable workflows. Use `@<agent-name>` to invoke a subagent.
 
 **Current sprint tracking:**
-- Current sprint plan: `docs/reviews/sprint-82-plan.md` — Results API & LLM Export Bundle
-- Previous sprint plan: `docs/reviews/sprint-81-deduplication-plan.md` — Codebase Deduplication
+- Current sprint plan: `docs/reviews/sprint-83-plan.md` — Wait Time Accuracy & Transparency
+- Previous sprint plan: `docs/reviews/sprint-82-plan.md` — Results API & LLM Export Bundle
 - API design spec: `docs/architecture/results-api-design.md` — Results API endpoint schemas and consumer guidance
 - Build plan: `docs/DES_Studio_Build_Plan.md`
 - Roadmap: `docs/DES_Studio_Build_Plan.md`
@@ -1519,6 +1519,7 @@ See `docs/simmodlr_Build_Plan.md` for the full sprint-by-sprint roadmap. Latest 
 | Sprint 80 | ⬜ Planned | — | Visual Designer Multi-Select, Bulk Move, and Bulk Delete |
 | Sprint 81 | 🔄 In progress | — | Codebase Deduplication — 460 clone groups, 9,453 duplicated lines |
 | Sprint 82 | ⬜ Planned | — | Results API (read-only Edge Function, JWT + share-token auth, 3 routes) and LLM Export Bundle (`buildLLMBundle`, "LLM Bundle (.md)" in Export… popover) |
+| Sprint 83 | ✅ Complete | 2026-06-09 | Wait Time Accuracy & Transparency — RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, `waitSamplesBreakdown`, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), BottomPanel live metrics align with engine formula |
 
 ---
 
@@ -1874,6 +1875,33 @@ New nullable/defaulted columns added by migration `20260524060000_sprint71_saas_
 - `plan` on `profiles` is the individual fallback. Phase 2 adds org-level plan that takes precedence.
 - `admin_user_stats` is a view — Phase 2 redefines it to include org aggregation without data migration.
 - No org RLS policies exist — Phase 2 adds them without untangling existing policies.
+
+## Sprint 83 — Wait Time Accuracy & Transparency (2026-06-09)
+
+### RENEGE wait tracking
+The `RENEGE` macro (`src/engine/macros.js`) now calls `buildStageRecord(entity, null, clock)` before `clearWaitingState(entity)`, capturing the entity's queue wait time as a stage record. `buildStageRecord()` was updated to handle the case where `serviceStart` is null (renege — no service received): `stageWait = clock - waitStartedAt`, `stageService = 0`.
+
+### In-progress partial waits
+In `getSummary()` (`src/engine/index.js`), entities with `status === "waiting"` at termination contribute partial wait samples: `completed stage waits + truncateInterval(lastStageStart ?? arrivalTime, clock)`. Partial waits are half-weighted (0.5) per standard DES practice.
+
+### Weighted average wait
+`summary.avgWait` is now computed across three pools:
+- `served` (full weight) — entities that completed
+- `reneged` (full weight) — entities that reneged (now with stages)
+- `inProgress` (0.5 weight) — entities still waiting at termination
+
+### Little's Law validation gate
+`summary` now includes:
+- `avgWaitByLittle`: Little's Law estimate = `avgWIP / arrivalRate`
+- `waitDiscrepancy`: percentage difference between `avgWait` and `avgWaitByLittle`; >5% warns the run may be too short
+- `waitSamplesBreakdown`: `{ served: N, reneged: N, inProgress: N }` for UI transparency
+
+### Live metrics alignment
+BottomPanel live wait time now uses `waitingSince ?? lastStageStart ?? arrivalTime` rather than plain `arrivalTime`, matching the engine's multi-stage wait tracking.
+
+### Tests
+- `tests/engine/wait-time-accuracy.test.js` — 10 tests covering RENEGE wait sampling, in-progress partial waits, waitDist inclusion, Little's Law gate, and warmup truncation
+- All existing engine tests and benchmarks pass
 
 ## Schema Contract
 

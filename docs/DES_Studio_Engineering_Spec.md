@@ -3,7 +3,7 @@
 **Version:** 7.3.0  
 **Date:** 2026-06-04  
 **Note:** package.json version is 0.9.0-Beta; this document uses an internal engineering version number.  
-**Sprint baseline:** Sprint 82  
+**Sprint baseline:** Sprint 83  
 **Status:** Living document — updated at end of each sprint  
 **Audience:** Engineering team, technical contributors, platform integrators
 
@@ -444,6 +444,25 @@ The returned `Engine` object exposes:
 | `getFelSize()` | `number` | Current Future Event List size. |
 
 **`buildEngine()` is the only engine import allowed in UI code.** No UI component may import from `src/engine/macros.js`, `src/engine/phases.js`, or any other engine sub-module directly.
+
+#### 3.1.1 Wait time computation (Sprint 83)
+
+The engine's `getSummary()` computes `avgWait` as a weighted average across three entity pools:
+
+| Pool | Entities | Weight | Description |
+|------|----------|--------|-------------|
+| `served` | `status === "done"` | 1.0 | Full wait from all completed stages |
+| `reneged` | `status === "reneged"` | 1.0 | Wait until renege (Sprint 83: now captured via `buildStageRecord()` in RENEGE macro) |
+| `inProgress` | `status === "waiting"` at termination | 0.5 | Partial wait from `lastStageStart ?? arrivalTime` to termination clock. Half-weighted per standard DES practice. |
+
+`avgWait = (sumServed + sumRenege + 0.5 * sumInProgress) / (nServed + nRenege + 0.5 * nInProgress)`
+
+The summary also includes:
+- `avgWaitByLittle`: Little's Law estimate (`avgWIP / arrivalRate`) for validation
+- `waitDiscrepancy`: percentage difference between `avgWait` and `avgWaitByLittle`; >5% suggests the run may be too short
+- `waitSamplesBreakdown`: `{ served, reneged, inProgress }` counts for UI transparency
+
+The `RENEGE` macro now calls `buildStageRecord(entity, null, clock)` before clearing the entity's waiting state, so reneged entities contribute wait samples to both `avgWait` and `waitDist`.
 
 ### 3.2 Visual Designer interaction contract
 

@@ -1138,19 +1138,40 @@ const cycleLog = [];
     const customers    = entities.filter(e => e.role !== "server");
     const served       = customers.filter(e => e.status === "done");
     const reneged      = customers.filter(e => e.status === "reneged");
+    const waitingAtEnd = customers.filter(e => e.status === "waiting");
     const servers      = entities.filter(e => e.role === "server");
 
-    const waitSamples = served.map(entityWaitAfterWarmup);
-    const avgWait = waitSamples.length
-      ? waitSamples.reduce((s, value) => s + value, 0) / waitSamples.length
-      : null;
+    const servedWaits  = served
+      .map(entityWaitAfterWarmup)
+      .filter(w => w > 0);
+    const renegedWaits = reneged
+      .filter(e => e.stages?.length)
+      .map(e => entityWaitAfterWarmup(e))
+      .filter(w => w > 0);
+    const inProgressWaits = waitingAtEnd.map(e => {
+      const completed = e.stages?.length
+        ? e.stages.reduce((sum, st) => sum + truncateInterval(st.waitStartedAt, st.serviceStartedAt), 0)
+        : 0;
+      const partial = truncateInterval(e.lastStageStart ?? e.arrivalTime, clock);
+      return Math.max(0, completed + partial);
+    }).filter(w => w > 0);
+
+    const totalWeightedWait =
+      servedWaits.reduce((a, b) => a + b, 0) +
+      renegedWaits.reduce((a, b) => a + b, 0) +
+      inProgressWaits.reduce((a, b) => a + b, 0) * 0.5;
+    const totalWeightedN =
+      servedWaits.length +
+      renegedWaits.length +
+      inProgressWaits.length * 0.5;
+    const avgWait = totalWeightedN > 0 ? + (totalWeightedWait / totalWeightedN).toFixed(4) : null;
     const serviceSamples = served
       .map(entityServiceAfterWarmup)
       .filter(value => value != null);
     const avgSvc = serviceSamples.length
       ? serviceSamples.reduce((s, value) => s + value, 0) / serviceSamples.length
       : null;
-    const sojournSamples = customers
+    const sojournSamples = served
       .map(entitySojournAfterWarmup)
       .filter(value => value != null);
     const avgSojourn = sojournSamples.length
@@ -1196,8 +1217,15 @@ const cycleLog = [];
       if (Number.isFinite(sojourn)) { outcomes[routeId]._sojournSum += sojourn; outcomes[routeId]._sojournN++; }
     }
     for (const o of Object.values(outcomes)) finalizeWeightedStats(o);
-
     const elapsed = clock - _statsResetTime;
+    const avgWip = elapsed > 0 ? +(_wipIntegral / elapsed).toFixed(4) : 0;
+    // Little's Law check: L = λW → W = L/λ
+    const arrivalRate = elapsed > 0 ? served.length / elapsed : 0;
+    const avgWaitByLittle = arrivalRate > 0 ? +(avgWip / arrivalRate).toFixed(4) : null;
+    const waitDiscrepancy = avgWait != null && avgWaitByLittle != null && avgWaitByLittle > 0
+      ? Math.round((Math.abs(avgWait - avgWaitByLittle) / avgWaitByLittle) * 100)
+      : null;
+
     const perResource = {};
     for (const srv of servers) {
       if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyTimeSum: 0 };
@@ -1322,10 +1350,17 @@ const cycleLog = [];
       served:            served.length,
       reneged:           reneged.length,
       avgWait:           avgWait   != null ? +avgWait.toFixed(4)   : null,
+      avgWaitByLittle,
+      waitDiscrepancy,
+      waitSamplesBreakdown: {
+        served:      servedWaits.length,
+        reneged:     renegedWaits.length,
+        inProgress:  inProgressWaits.length,
+      },
       avgSvc:            avgSvc    != null ? +avgSvc.toFixed(4)    : null,
       avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
       maxSojourn:        maxSojourn!= null ? +maxSojourn.toFixed(4): null,
-      avgWIP:            (clock - _statsResetTime) > 0 ? +(_wipIntegral / (clock - _statsResetTime)).toFixed(4) : 0,
+      avgWIP:            avgWip,
       totalCost:         +totalCost.toFixed(4),
       costPerServed,
       avgPlanDeviation,

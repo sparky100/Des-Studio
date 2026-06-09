@@ -2,7 +2,7 @@
 
 **Version:** 7.2.0  
 **Date:** 2026-06-04  
-**Sprint baseline:** Sprint 82  
+**Sprint baseline:** Sprint 83  
 **Audience:** Simulation practitioners, operations analysts, engineering students
 
 ---
@@ -235,6 +235,10 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    | **Run Effort** | Replications completed, total sim time, wall-clock duration. |
 
 5. Open the **✦ AI** sidebar (Model Assistant) to explore the results:
+
+**How wait time is calculated.** The average wait time includes all entities that spent time in a queue: served entities, reneged entities (those that left the queue before service), and in-progress entities still waiting when the simulation ends. In-progress partial waits are half-weighted (standard DES practice). A separate Little's Law estimate (`L_q / arrival rate`) is computed from the time-averaged queue length and checked against the per-entity average; when the two estimates disagree by more than 5%, the run may be too short for reliable wait-time estimates.
+
+6. Open the **✦ AI** sidebar (Model Assistant) to explore the results:
    - Click **Analyse** for a plain-English narrative of the results with structured improvement suggestions.
    - Click **Compare** to compare against a saved historical run.
    - Use the text input to ask specific questions about the results (e.g. "Which queue had the longest wait?").

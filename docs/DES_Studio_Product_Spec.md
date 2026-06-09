@@ -2,7 +2,7 @@
 
 **Version:** 7.2.0  
 **Date:** 2026-06-04  
-**Sprint baseline:** Sprint 82  
+**Sprint baseline:** Sprint 83  
 **Status:** Living document — reviewed and updated at end of each sprint  
 **Note:** package.json version is 0.9.0-Beta; version alignment with spec version number pending.
 
