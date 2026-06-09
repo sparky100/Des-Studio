@@ -412,16 +412,33 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           </div>
         ))}
       </div>
-      {summary.terminatingState?.servingAtEnd > 0 && (
-        <div style={{ background: C.warmup, border: `1px solid ${C.amber}44`, borderRadius: 6, padding: "10px 14px", marginTop: 6 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, color: C.amber, fontFamily: FONT, marginBottom: 3 }}>
-            {summary.terminatingState.servingAtEnd} entit{summary.terminatingState.servingAtEnd === 1 ? "y" : "ies"} still being served when run ended
+      {summary.terminatingState && (() => {
+        const serving = summary.terminatingState.servingAtEnd;
+        const waiting = summary.terminatingState.waitingAtEnd;
+        const totalWip = serving + waiting;
+        const wipPct = summary.terminatingState.wipPct ?? 0;
+        if (totalWip === 0) return null;
+        const isCritical = wipPct > 25;
+        const isConcern = wipPct > 10 && serving > 0;
+        if (!isCritical && !isConcern) return null;
+        return (
+        <div style={{
+          background: isCritical ? C.errorBg : C.warmup,
+          border: `1px solid ${isCritical ? C.danger + "88" : C.amber + "88"}`,
+          borderRadius: 6, padding: "12px 14px", marginTop: 8, marginBottom: 8,
+        }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: isCritical ? C.error : C.amber, fontFamily: FONT }}>
+            {totalWip} entit{totalWip === 1 ? "y" : "ies"} still in progress ({wipPct}% of arrivals)
+            {serving > 0 ? ` — ${serving} serving, ${waiting} waiting` : ` — all ${waiting} waiting`}
           </div>
-          <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, lineHeight: 1.5, opacity: 0.85 }}>
-            Average service time may skew low — shorter tasks finish first. Consider enabling &ldquo;Let in-flight entities complete&rdquo; in Run Setup, or increasing the max simulation time.
+          <div style={{ fontSize: 12, color: isCritical ? C.error : C.amber, fontFamily: FONT, lineHeight: 1.5, marginTop: 4 }}>
+            {isCritical
+              ? "Large unfinished backlog — results may be unreliable. Increase max sim time or enable the purge period in Run Setup."
+              : "Service time may be understated — shorter tasks finish first. Consider enabling &ldquo;Let in-flight entities complete&rdquo; in Run Setup."}
           </div>
         </div>
-      )}
+        );
+      })()}
       {outcomeEntries.length > 0 && (
         <>
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>

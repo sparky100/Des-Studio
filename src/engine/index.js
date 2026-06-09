@@ -1407,6 +1407,7 @@ const cycleLog = [];
       terminatingState: {
         waitingAtEnd: waitingAtEnd.length,
         servingAtEnd,
+        wipPct: customers.length > 0 ? Math.round(((waitingAtEnd.length + servingAtEnd) / customers.length) * 100) : 0,
       },
       avgSvc:            avgSvc    != null ? +avgSvc.toFixed(4)    : null,
       avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
