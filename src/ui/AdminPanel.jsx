@@ -251,6 +251,8 @@ function AdminPanel({ userId, isAdmin, onClose }) {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null);
   const [showKey, setShowKey] = useState(false);
+  const [proxyConfig, setProxyConfig] = useState(null);
+  const [proxyLoading, setProxyLoading] = useState(false);
 
   // User list UI state
   const [sortCol, setSortCol] = useState("signupAt");
@@ -320,6 +322,22 @@ function AdminPanel({ userId, isAdmin, onClose }) {
       setSaveStatus({ state: "error", message: err.message });
     }
     setSaving(false);
+  };
+
+  const handleCheckProxyConfig = async () => {
+    setProxyLoading(true); setProxyConfig(null);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const proxyUrl = supabaseUrl
+        ? `${supabaseUrl.replace(/\/$/, "")}/functions/v1/llm-proxy`
+        : "/functions/v1/llm-proxy";
+      const res = await fetch(proxyUrl, { method: "GET" });
+      const data = await res.json();
+      setProxyConfig(data);
+    } catch (err) {
+      setProxyConfig({ error: err.message });
+    }
+    setProxyLoading(false);
   };
 
   const handleSaveTierPolicies = async () => {
@@ -516,11 +534,30 @@ function AdminPanel({ userId, isAdmin, onClose }) {
                   style={{ ...inp({ color: C.amber, width: 100 })}}
                 />
               </div>
-              <div style={{ display: "flex", gap: 10 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                 <Btn variant="primary" onClick={handleSaveLlm} disabled={saving}>
                   {saving ? "Saving..." : "Save Configuration"}
                 </Btn>
+                <Btn variant="ghost" onClick={handleCheckProxyConfig} disabled={proxyLoading}>
+                  {proxyLoading ? "Checking..." : "Check Proxy Config"}
+                </Btn>
               </div>
+              {proxyConfig && (
+                <div style={{
+                  padding: `${SPACE.sm}px ${SPACE.md}px`,
+                  background: proxyConfig.error ? C.errorBg : C.panel,
+                  borderRadius: RADIUS.md,
+                  border: `1px solid ${proxyConfig.error ? C.danger : C.border}`,
+                  fontFamily: FONT, fontSize: 11,
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4, color: proxyConfig.error ? C.error : C.muted }}>
+                    {proxyConfig.error ? "Proxy Error" : "Edge Function Active Config"}
+                  </div>
+                  <pre style={{ margin: 0, whiteSpace: "pre-wrap", color: proxyConfig.error ? C.error : C.text, fontSize: 10 }}>
+                    {JSON.stringify(proxyConfig, null, 2)}
+                  </pre>
+                </div>
+              )}
             </div>
           )}
 
