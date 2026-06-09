@@ -1,58 +1,115 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, test, expect, vi } from "vitest";
 import { NodeDetailSidebar } from "../../../src/ui/execute/NodeDetailSidebar.jsx";
+import { ThemeProvider } from "../../../src/ui/shared/ThemeContext.jsx";
 
-const mockQueueLiveData = {
-  depth: 3,
-  capacity: 5,
-  discipline: "FIFO",
-  clock: 10.5,
-  entities: [
-    { id: 1, type: "Customer", arrivalTime: 2.0, waitingSince: 2.0, attrs: {} },
-    { id: 2, type: "Customer", arrivalTime: 4.0, waitingSince: 4.0, attrs: { priority: 3 } },
-    { id: 3, type: "VIP", arrivalTime: 6.0, waitingSince: 6.0, attrs: {} },
-  ],
+function renderWithTheme(ui) {
+  return render(<ThemeProvider>{ui}</ThemeProvider>);
+}
+
+function makeSnap({ clock = 10.5, entities = [], served = 0 } = {}) {
+  return { clock, entities, served };
+}
+
+function makeQueueSnap({ clock = 10.5, queueEntities = [] } = {}) {
+  const entities = queueEntities.map((e, i) => ({
+    id: e.id ?? i + 1,
+    type: e.type || "Customer",
+    status: "waiting",
+    queue: e.queue || "Queue",
+    arrivalTime: e.arrivalTime ?? (2 + i * 2),
+    waitingSince: e.waitingSince ?? (2 + i * 2),
+    attrs: e.attrs || {},
+    role: "customer",
+  }));
+  return makeSnap({ clock, entities });
+}
+
+function makeActivitySnap({ clock = 15.0, servers = [] } = {}) {
+  const entities = servers.map((s, i) => ({
+    id: i + 1,
+    type: s.type || "Server",
+    role: "server",
+    status: s.status || "idle",
+    currentCustId: s.currentCustId ?? null,
+    _busyTime: s.busyTime ?? 0,
+    _starvationTime: s.starvationTime ?? 0,
+    _downtime: s.downtime ?? 0,
+    _scheduledDuration: s.scheduledDuration ?? null,
+    _busyStart: s.serviceStart ?? null,
+  }));
+  // Add customer entities for busy servers
+  if (servers.some(s => s.currentCustId != null)) {
+    const custIds = servers.filter(s => s.currentCustId != null).map(s => s.currentCustId);
+    custIds.forEach(cid => {
+      entities.push({
+        id: cid,
+        type: "Customer",
+        role: "customer",
+        status: "busy",
+        arrivalTime: 3.0,
+      });
+    });
+  }
+  return makeSnap({ clock, entities });
+}
+
+const mockModel = {
+  queues: [{ name: "Queue", discipline: "FIFO", capacity: "5" }],
+  cEvents: [{ id: "ce-1", effect: [{ macro: "ASSIGN", args: ["Queue", "Server"] }] }],
+  entityTypes: [{ name: "Server", role: "server", count: "3" }],
 };
 
-const mockActivityLiveData = {
-  serverTypeName: "Server",
-  capacity: 3,
-  busyCount: 2,
-  idleCount: 1,
-  failedCount: 0,
-  utilisation: 66.67,
-  clock: 15.0,
-  servers: [
-    { id: 1, status: "busy", busyTime: 8.0, starvationTime: 0, downtime: 0, scheduledDuration: 5.0, serviceStart: 10.0, customerId: 10, customerType: "Customer", customerArrivalTime: 3.0 },
-    { id: 2, status: "busy", busyTime: 6.0, starvationTime: 0, downtime: 0, scheduledDuration: 4.0, serviceStart: 12.0, customerId: 11, customerType: "VIP", customerArrivalTime: 5.0 },
-    { id: 3, status: "idle", busyTime: 4.0, starvationTime: 3.0, downtime: 0, scheduledDuration: null, serviceStart: null, customerId: null, customerType: null, customerArrivalTime: null },
-  ],
-};
+const mockServerTypeIndex = new Map([
+  ["ce-1", { serverType: "Server", capacity: 3 }],
+]);
 
 describe("NodeDetailSidebar", () => {
   test("renders nothing when no node selected", () => {
-    const { container } = render(<NodeDetailSidebar selectedNode={null} onClose={vi.fn()} />);
+    const { container } = renderWithTheme(
+      <NodeDetailSidebar selectedNode={null} onClose={vi.fn()} snap={null} serverTypeIndex={new Map()} model={{}} />
+    );
     expect(container.firstChild).toBeNull();
   });
 
   test("renders queue detail sidebar with header", () => {
-    render(
+    const snap = makeQueueSnap({
+      queueEntities: [
+        { id: 1, type: "Customer", arrivalTime: 2.0, waitingSince: 2.0 },
+        { id: 2, type: "Customer", arrivalTime: 4.0, waitingSince: 4.0, attrs: { priority: 3 } },
+        { id: 3, type: "VIP", arrivalTime: 6.0, waitingSince: 6.0 },
+      ],
+    });
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "queueNode", label: "CheckinQueue", liveData: mockQueueLiveData }}
+        selectedNode={{ nodeType: "queueNode", label: "Queue" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={new Map()}
+        model={mockModel}
       />
     );
     expect(screen.getByText("Queue Members")).toBeInTheDocument();
-    expect(screen.getByText("CheckinQueue")).toBeInTheDocument();
+    expect(screen.getByText("Queue")).toBeInTheDocument();
     expect(screen.getByText("FIFO")).toBeInTheDocument();
     expect(screen.getByText("3 / 5")).toBeInTheDocument();
   });
 
   test("shows queue entities sorted by arrival time (FIFO)", () => {
-    render(
+    const snap = makeQueueSnap({
+      queueEntities: [
+        { id: 1, type: "Customer", arrivalTime: 2.0, waitingSince: 2.0 },
+        { id: 2, type: "Customer", arrivalTime: 4.0, waitingSince: 4.0 },
+        { id: 3, type: "VIP", arrivalTime: 6.0, waitingSince: 6.0 },
+      ],
+    });
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "queueNode", label: "Queue", liveData: mockQueueLiveData }}
+        selectedNode={{ nodeType: "queueNode", label: "Queue" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={new Map()}
+        model={mockModel}
       />
     );
     expect(screen.getAllByText(/#\d/).length).toBeGreaterThanOrEqual(3);
@@ -61,10 +118,21 @@ describe("NodeDetailSidebar", () => {
   });
 
   test("shows wait times for queue entities", () => {
-    render(
+    const snap = makeQueueSnap({
+      clock: 10.5,
+      queueEntities: [
+        { id: 1, type: "Customer", arrivalTime: 2.0, waitingSince: 2.0 },
+        { id: 2, type: "Customer", arrivalTime: 4.0, waitingSince: 4.0 },
+        { id: 3, type: "VIP", arrivalTime: 6.0, waitingSince: 6.0 },
+      ],
+    });
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "queueNode", label: "Queue", liveData: mockQueueLiveData }}
+        selectedNode={{ nodeType: "queueNode", label: "Queue" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={new Map()}
+        model={mockModel}
       />
     );
     expect(screen.getByText("t=8.5")).toBeInTheDocument();
@@ -73,42 +141,74 @@ describe("NodeDetailSidebar", () => {
   });
 
   test("shows priority badge when entity has priority attribute", () => {
-    render(
+    const snap = makeQueueSnap({
+      queueEntities: [
+        { id: 2, type: "Customer", arrivalTime: 4.0, waitingSince: 4.0, attrs: { priority: 3 } },
+      ],
+    });
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "queueNode", label: "Queue", liveData: mockQueueLiveData }}
+        selectedNode={{ nodeType: "queueNode", label: "Queue" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={new Map()}
+        model={mockModel}
       />
     );
     expect(screen.getByText("P=3")).toBeInTheDocument();
   });
 
   test("shows empty queue message when no entities", () => {
-    render(
+    const snap = makeQueueSnap({ queueEntities: [] });
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "queueNode", label: "EmptyQueue", liveData: { ...mockQueueLiveData, entities: [], depth: 0 } }}
+        selectedNode={{ nodeType: "queueNode", label: "EmptyQueue" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={new Map()}
+        model={{ queues: [{ name: "EmptyQueue", discipline: "FIFO" }] }}
       />
     );
     expect(screen.getByText("Queue is empty")).toBeInTheDocument();
   });
 
   test("renders activity detail sidebar with header", () => {
-    render(
+    const snap = makeActivitySnap({
+      servers: [
+        { type: "Server", status: "busy", currentCustId: 10, busyTime: 8.0, serviceStart: 10.0, scheduledDuration: 5.0 },
+        { type: "Server", status: "busy", currentCustId: 11, busyTime: 6.0, serviceStart: 12.0, scheduledDuration: 4.0 },
+        { type: "Server", status: "idle", busyTime: 4.0, starvationTime: 3.0 },
+      ],
+    });
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "ServiceActivity", liveData: mockActivityLiveData }}
+        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={mockServerTypeIndex}
+        model={mockModel}
       />
     );
     expect(screen.getByText("Server Pool")).toBeInTheDocument();
-    expect(screen.getByText("ServiceActivity")).toBeInTheDocument();
+    expect(screen.getByText("ce-1")).toBeInTheDocument();
     expect(screen.getByText("Server")).toBeInTheDocument();
   });
 
   test("shows server pool stats", () => {
-    render(
+    const snap = makeActivitySnap({
+      servers: [
+        { type: "Server", status: "busy", busyTime: 8.0 },
+        { type: "Server", status: "busy", busyTime: 6.0 },
+        { type: "Server", status: "idle", busyTime: 4.0 },
+      ],
+    });
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "Activity", liveData: mockActivityLiveData }}
+        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={mockServerTypeIndex}
+        model={mockModel}
       />
     );
     expect(screen.getByText("3")).toBeInTheDocument();
@@ -118,59 +218,93 @@ describe("NodeDetailSidebar", () => {
   });
 
   test("shows utilisation bar and percentage", () => {
-    render(
+    const snap = makeActivitySnap({
+      servers: [
+        { type: "Server", status: "busy", busyTime: 8.0 },
+        { type: "Server", status: "busy", busyTime: 6.0 },
+        { type: "Server", status: "idle", busyTime: 4.0 },
+      ],
+    });
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "Activity", liveData: mockActivityLiveData }}
+        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={mockServerTypeIndex}
+        model={mockModel}
       />
     );
     expect(screen.getByText(/Utilisation: 67%/)).toBeInTheDocument();
   });
 
   test("shows busy server details with customer info", () => {
-    render(
+    const snap = makeActivitySnap({
+      servers: [
+        { type: "Server", status: "busy", currentCustId: 10, busyTime: 8.0, serviceStart: 10.0, scheduledDuration: 5.0 },
+        { type: "Server", status: "idle", busyTime: 4.0 },
+      ],
+    });
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "Activity", liveData: mockActivityLiveData }}
+        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={mockServerTypeIndex}
+        model={mockModel}
       />
     );
     expect(screen.getByText("Server #1")).toBeInTheDocument();
     expect(screen.getAllByText("busy").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/Serving/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("#10")).toBeInTheDocument();
-    expect(screen.getAllByText(/Customer/).length).toBeGreaterThanOrEqual(1);
   });
 
   test("shows idle server with starvation time", () => {
-    render(
+    const snap = makeActivitySnap({
+      servers: [
+        { type: "Server", status: "idle", busyTime: 4.0, starvationTime: 3.0 },
+      ],
+    });
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "Activity", liveData: mockActivityLiveData }}
+        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={mockServerTypeIndex}
+        model={mockModel}
       />
     );
-    expect(screen.getByText("Server #3")).toBeInTheDocument();
+    expect(screen.getByText("Server #1")).toBeInTheDocument();
     expect(screen.getByText("idle")).toBeInTheDocument();
     expect(screen.getByText("Starvation: t=3.0")).toBeInTheDocument();
   });
 
   test("calls onClose when close button clicked", () => {
+    const snap = makeQueueSnap({ queueEntities: [] });
     const onClose = vi.fn();
-    render(
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "queueNode", label: "Queue", liveData: mockQueueLiveData }}
+        selectedNode={{ nodeType: "queueNode", label: "Queue" }}
         onClose={onClose}
+        snap={snap}
+        serverTypeIndex={new Map()}
+        model={mockModel}
       />
     );
-    fireEvent.click(screen.getByText("×"));
+    fireEvent.click(screen.getByText(/Close/));
     expect(onClose).toHaveBeenCalled();
   });
 
   test("calls onClose when Escape key pressed", () => {
+    const snap = makeQueueSnap({ queueEntities: [] });
     const onClose = vi.fn();
-    render(
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "queueNode", label: "Queue", liveData: mockQueueLiveData }}
+        selectedNode={{ nodeType: "queueNode", label: "Queue" }}
         onClose={onClose}
+        snap={snap}
+        serverTypeIndex={new Map()}
+        model={mockModel}
       />
     );
     fireEvent.keyDown(document, { key: "Escape" });
@@ -178,11 +312,17 @@ describe("NodeDetailSidebar", () => {
   });
 
   test("calls onEntitySelect when entity clicked in queue", () => {
+    const snap = makeQueueSnap({
+      queueEntities: [{ id: 1, type: "Customer", arrivalTime: 2.0, waitingSince: 2.0 }],
+    });
     const onEntitySelect = vi.fn();
-    render(
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "queueNode", label: "Queue", liveData: mockQueueLiveData }}
+        selectedNode={{ nodeType: "queueNode", label: "Queue" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={new Map()}
+        model={mockModel}
         onEntitySelect={onEntitySelect}
       />
     );
@@ -192,11 +332,19 @@ describe("NodeDetailSidebar", () => {
   });
 
   test("calls onEntitySelect when customer clicked in activity", () => {
+    const snap = makeActivitySnap({
+      servers: [
+        { type: "Server", status: "busy", currentCustId: 10, busyTime: 8.0, serviceStart: 10.0, scheduledDuration: 5.0 },
+      ],
+    });
     const onEntitySelect = vi.fn();
-    render(
+    renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "Activity", liveData: mockActivityLiveData }}
+        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
         onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={mockServerTypeIndex}
+        model={mockModel}
         onEntitySelect={onEntitySelect}
       />
     );

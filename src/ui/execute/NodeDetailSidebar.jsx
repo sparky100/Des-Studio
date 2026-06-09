@@ -1,10 +1,77 @@
 // ui/execute/NodeDetailSidebar.jsx — Detail sidebar for queue and activity nodes
-import { useEffect, useCallback } from "react";
-import { C, FONT, SPACE, RADIUS, Z } from "../shared/tokens.js";
+import { useEffect, useCallback, useMemo } from "react";
+import { useTheme } from "../shared/ThemeContext.jsx";
+
+// Spacing, radius, and z-index tokens (mirrors tokens.js for test compatibility)
+const SPACE = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 };
+const RADIUS = { sm: 4, md: 6, lg: 10 };
+const Z = { dropdown: 100, tooltip: 150, overlay: 180, modal: 200 };
 
 const SIDEBAR_WIDTH = 380;
 
+function deriveQueueLiveData(snap, label, model) {
+  if (!snap) return null;
+  const entities = snap.entities || [];
+  const waiting = entities.filter(e => e.status === "waiting");
+  const queueEntities = waiting.filter(e => e.queue === label);
+  const qDef = (model.queues || []).find(q => q.name === label);
+  const cap = qDef?.capacity ? parseInt(qDef.capacity, 10) : null;
+  return {
+    depth: queueEntities.length,
+    capacity: Number.isFinite(cap) && cap > 0 ? cap : null,
+    entities: queueEntities,
+    discipline: qDef?.discipline ?? null,
+    clock: snap.clock,
+  };
+}
+
+function deriveActivityLiveData(snap, label, serverTypeIndex, model) {
+  if (!snap) return null;
+  const entities = snap.entities || [];
+  const servers = entities.filter(e => e.role === "server");
+  const meta = serverTypeIndex.get(label);
+  const serverType = meta?.serverType;
+  const capacity = meta?.capacity ?? 1;
+  const relevant = serverType
+    ? servers.filter(e => e.type.trim().toLowerCase() === serverType.trim().toLowerCase())
+    : servers;
+  const busyCount = relevant.filter(e => e.status === "busy").length;
+  const idleCount = relevant.filter(e => e.status === "idle").length;
+  const failedCount = relevant.filter(e => e.status === "failed").length;
+  const actualCapacity = relevant.length;
+  const customers = entities.filter(e => e.role !== "server");
+  const serverDetails = relevant.map(srv => {
+    const cust = srv.currentCustId != null
+      ? customers.find(c => c.id === srv.currentCustId)
+      : null;
+    return {
+      id: srv.id,
+      status: srv.status,
+      busyTime: srv._busyTime ?? 0,
+      starvationTime: srv._starvationTime ?? 0,
+      downtime: srv._downtime ?? 0,
+      scheduledDuration: srv._scheduledDuration ?? null,
+      serviceStart: srv._busyStart ?? null,
+      customerId: srv.currentCustId ?? null,
+      customerType: cust?.type ?? null,
+      customerArrivalTime: cust?.arrivalTime ?? null,
+    };
+  });
+  return {
+    serverTypeName: serverType ?? null,
+    capacity: actualCapacity,
+    busyCount,
+    idleCount,
+    failedCount,
+    utilisation: actualCapacity > 0 ? (busyCount / actualCapacity) * 100 : 0,
+    completionSignal: snap.served,
+    servers: serverDetails,
+    clock: snap.clock,
+  };
+}
+
 function QueueDetail({ label, liveData, onEntitySelect }) {
+  const { C, FONT } = useTheme();
   const { depth, capacity, entities = [], discipline, clock } = liveData || {};
   const sorted = [...entities].sort((a, b) => {
     if (discipline === "LIFO") return b.arrivalTime - a.arrivalTime;
@@ -82,6 +149,7 @@ function QueueDetail({ label, liveData, onEntitySelect }) {
 }
 
 function ActivityDetail({ label, liveData, onEntitySelect }) {
+  const { C, FONT } = useTheme();
   const {
     serverTypeName, capacity, busyCount, idleCount, failedCount,
     utilisation, servers = [], clock,
@@ -204,7 +272,17 @@ function ActivityDetail({ label, liveData, onEntitySelect }) {
   );
 }
 
-export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect }) {
+export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect, snap, serverTypeIndex, model }) {
+  const { C, FONT } = useTheme();
+
+  const liveData = useMemo(() => {
+    if (!selectedNode || !snap) return null;
+    const { nodeType, label } = selectedNode;
+    if (nodeType === "queueNode") return deriveQueueLiveData(snap, label, model);
+    if (nodeType === "activityNode") return deriveActivityLiveData(snap, label, serverTypeIndex, model);
+    return null;
+  }, [selectedNode, snap, serverTypeIndex, model]);
+
   const handleEsc = useCallback(e => {
     if (e.key === "Escape") onClose?.();
   }, [onClose]);
@@ -218,7 +296,7 @@ export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect }) {
 
   if (!selectedNode) return null;
 
-  const { nodeType, label, liveData } = selectedNode;
+  const { nodeType, label } = selectedNode;
 
   return (
     <div style={{
@@ -248,13 +326,27 @@ export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect }) {
           type="button"
           onClick={onClose}
           style={{
-            background: "transparent", border: "none", color: C.muted,
-            cursor: "pointer", fontSize: 16, fontFamily: FONT, padding: "2px 6px",
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            color: C.text,
+            cursor: "pointer",
+            fontSize: 14,
+            fontWeight: 700,
+            fontFamily: FONT,
+            padding: "4px 10px",
             borderRadius: RADIUS.sm,
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = C.border;
+            e.currentTarget.style.borderColor = C.muted;
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = C.surface;
+            e.currentTarget.style.borderColor = C.border;
           }}
           title="Close (Esc)"
         >
-          ×
+          ✕ Close
         </button>
       </div>
       <div style={{

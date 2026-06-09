@@ -810,7 +810,6 @@ export function ExecuteCanvas({
               onNodeDetailSelect?.({
                 nodeType: node.type === "queue" ? "queueNode" : node.type === "activity" ? "activityNode" : node.type,
                 label: node.data?.label ?? node.label ?? null,
-                liveData: node.data?.liveData ?? null,
               });
             }
           }}
@@ -866,6 +865,9 @@ export function ExecuteCanvas({
           selectedNode={selectedNodeDetail}
           onClose={() => onNodeDetailSelect?.(null)}
           onEntitySelect={onEntitySelect}
+          snap={snap}
+          serverTypeIndex={serverTypeIndex}
+          model={model}
         />
       </div>
       <div
