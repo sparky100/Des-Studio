@@ -819,9 +819,9 @@ Container-scoped goals target a specific container. `scope` is **required** for 
 
 | `metric` key | Meaning | Scopable |
 |---|---|---|
-| `summary.avgWait` | Mean customer wait time | Queue |
-| `summary.avgSvc` | Mean service time | — |
-| `summary.avgSojourn` | Mean total time in system | — |
+| `summary.avgWait` | Weighted mean wait across served + reneged + in-progress entities. In-progress waits are half-weighted. | Queue |
+| `summary.avgSvc` | Mean service time (served entities only — excludes reneged) | — |
+| `summary.avgSojourn` | Mean total time in system (served + reneged entities) | — |
 | `summary.avgWIP` | Average work-in-progress (mean entities in system, Little's Law) | Queue |
 | `summary.maxWIP` | Maximum work-in-progress (peak queue depth) | Queue |
 | `summary.served` | Total customers served | Queue |
