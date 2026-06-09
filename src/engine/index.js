@@ -1217,6 +1217,33 @@ const cycleLog = [];
       ? Math.max(...sojournSamples)
       : null;
 
+    const inProgressAtEnd = customers.filter(e => e.status === "waiting" || e.status === "serving");
+    const servedSojourns = served
+      .map(entitySojournAfterWarmup)
+      .filter(v => v != null);
+    const renegedSojourns = reneged
+      .map(entitySojournAfterWarmup)
+      .filter(v => v != null);
+    const inProgressSojourns = inProgressAtEnd.map(e => {
+      const partial = truncateInterval(e.arrivalTime, clock);
+      return Math.max(0, partial);
+    }).filter(v => v > 0);
+    const totalWeightedSojourn =
+      servedSojourns.reduce((a, b) => a + b, 0) +
+      renegedSojourns.reduce((a, b) => a + b, 0) +
+      inProgressSojourns.reduce((a, b) => a + b, 0) * 0.5;
+    const totalWeightedSojournN =
+      servedSojourns.length +
+      renegedSojourns.length +
+      inProgressSojourns.length * 0.5;
+    const avgTimeInSystem = totalWeightedSojournN > 0
+      ? +(totalWeightedSojourn / totalWeightedSojournN).toFixed(4)
+      : null;
+
+    const servedRatio = customers.length > 0
+      ? +(served.length / customers.length).toFixed(4)
+      : null;
+
     const outcomes = {};
     const ensureOutcome = (entity) => {
       const fallbackStatus = entity.status === "reneged" ? "reneged" : "completed";
@@ -1412,6 +1439,8 @@ const cycleLog = [];
       avgSvc:            avgSvc    != null ? +avgSvc.toFixed(4)    : null,
       avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
       maxSojourn:        maxSojourn!= null ? +maxSojourn.toFixed(4): null,
+      avgTimeInSystem:   avgTimeInSystem != null ? +avgTimeInSystem.toFixed(4) : null,
+      servedRatio,
       avgWIP:            avgWip,
       totalCost:         +totalCost.toFixed(4),
       costPerServed,

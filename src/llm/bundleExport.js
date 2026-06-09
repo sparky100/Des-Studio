@@ -188,6 +188,8 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
   if (kpis.avgWait != null) lines.push(`| Average wait time | ${kpis.avgWait.toFixed(2)} |`);
   if (kpis.avgService != null) lines.push(`| Average service time | ${kpis.avgService.toFixed(2)} |`);
   if (kpis.avgSojourn != null) lines.push(`| Average sojourn time | ${kpis.avgSojourn.toFixed(2)} |`);
+  if (kpis.avgTimeInSystem != null) lines.push(`| Average time in system (incl. in-progress) | ${kpis.avgTimeInSystem.toFixed(2)} |`);
+  if (kpis.servedRatio != null) lines.push(`| Service completion rate | ${(kpis.servedRatio * 100).toFixed(1)}% |`);
   if (kpis.avgWIP != null) lines.push(`| Average WIP | ${kpis.avgWIP.toFixed(2)} |`);
   if (kpis.maxSojourn != null) lines.push(`| Max sojourn time | ${kpis.maxSojourn.toFixed(2)} |`);
   if (kpis.totalCost != null) lines.push(`| Total cost | ${kpis.totalCost.toFixed(2)} |`);

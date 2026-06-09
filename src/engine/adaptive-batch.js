@@ -9,7 +9,9 @@ const GOAL_METRIC_TO_PATH = {
   avgWait:    'summary.avgWait',
   avgSvc:     'summary.avgSvc',
   avgSojourn: 'summary.avgSojourn',
+  avgTimeInSystem: 'summary.avgTimeInSystem',
   served:     'summary.served',
+  servedRatio: 'summary.servedRatio',
   reneged:    'summary.reneged',
   totalCost:  'summary.totalCost',
 };

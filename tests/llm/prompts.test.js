@@ -659,6 +659,38 @@ describe("Sprint 46 — AI apply & verify", () => {
       expect(gaps[0].gap).toBeCloseTo(2.0); // 5.0 - 3 = 2.0
       expect(gaps[1].met).toBe(false);
     });
+
+    it("resolves avgTimeInSystem goal from aggregateStats", () => {
+      const model = { goals: [{ metric: "summary.avgTimeInSystem", operator: "<", target: 10 }] };
+      const stats = { "summary.avgTimeInSystem": { mean: 8.5, n: 5 } };
+      const gaps = buildGoalGaps(model, stats);
+      expect(gaps[0].met).toBe(true);
+      expect(gaps[0].current).toBeCloseTo(8.5);
+    });
+
+    it("resolves avgTimeInSystem goal from single-run summary", () => {
+      const model = { goals: [{ metric: "summary.avgTimeInSystem", operator: "<", target: 10 }] };
+      const summary = { avgTimeInSystem: 12.3 };
+      const gaps = buildGoalGaps(model, {}, summary);
+      expect(gaps[0].met).toBe(false);
+      expect(gaps[0].current).toBeCloseTo(12.3);
+    });
+
+    it("resolves servedRatio goal from aggregateStats", () => {
+      const model = { goals: [{ metric: "summary.servedRatio", operator: ">=", target: 0.95 }] };
+      const stats = { "summary.servedRatio": { mean: 0.97, n: 5 } };
+      const gaps = buildGoalGaps(model, stats);
+      expect(gaps[0].met).toBe(true);
+      expect(gaps[0].current).toBeCloseTo(0.97);
+    });
+
+    it("resolves servedRatio goal from single-run summary", () => {
+      const model = { goals: [{ metric: "summary.servedRatio", operator: ">=", target: 0.95 }] };
+      const summary = { servedRatio: 0.88 };
+      const gaps = buildGoalGaps(model, {}, summary);
+      expect(gaps[0].met).toBe(false);
+      expect(gaps[0].current).toBeCloseTo(0.88);
+    });
   });
 
   describe("parseSuggestionResponse", () => {

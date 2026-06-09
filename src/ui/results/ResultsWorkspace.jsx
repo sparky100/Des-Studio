@@ -97,7 +97,9 @@ const ANALYSIS_METRICS = [
   { path: "summary.avgWait", label: "Average wait" },
   { path: "summary.avgSvc", label: "Average service time" },
   { path: "summary.avgSojourn", label: "Average time in system" },
+  { path: "summary.avgTimeInSystem", label: "Average time in system (all entities)" },
   { path: "summary.served", label: "Customers served" },
+  { path: "summary.servedRatio", label: "Service completion rate" },
   { path: "summary.totalCost", label: "Total cost" },
   { path: "summary.costPerServed", label: "Cost per served customer" },
 ];
@@ -422,6 +424,10 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
         const isCritical = wipPct > 25;
         const isConcern = wipPct > 10 && serving > 0;
         if (!isCritical && !isConcern) return null;
+        const wipSplitPct = totalWip > 0 ? {
+          serving: Math.round((serving / totalWip) * 100),
+          waiting: Math.round((waiting / totalWip) * 100),
+        } : null;
         return (
         <div style={{
           background: isCritical ? C.errorBg : C.warmup,
@@ -429,13 +435,17 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           borderRadius: 6, padding: "12px 14px", marginTop: 8, marginBottom: 8,
         }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: isCritical ? C.error : C.amber, fontFamily: FONT }}>
-            {totalWip} entit{totalWip === 1 ? "y" : "ies"} still in progress ({wipPct}% of arrivals)
-            {serving > 0 ? ` — ${serving} serving, ${waiting} waiting` : ` — all ${waiting} waiting`}
+            {isMultiRep
+              ? `~${Math.round(totalWip / repCount)}/run (${wipPct}% of arrivals)`
+              : `${totalWip} entit${totalWip === 1 ? "y" : "ies"} still in progress (${wipPct}% of arrivals)`}
+            {serving > 0
+              ? ` — ${isMultiRep ? `~${Math.round(serving / repCount)}/run` : serving} serving (${wipSplitPct?.serving ?? 0}%), ${isMultiRep ? `~${Math.round(waiting / repCount)}/run` : waiting} waiting (${wipSplitPct?.waiting ?? 0}%)`
+              : ` — all ${isMultiRep ? `~${Math.round(waiting / repCount)}/run` : waiting} waiting`}
           </div>
           <div style={{ fontSize: 12, color: isCritical ? C.error : C.amber, fontFamily: FONT, lineHeight: 1.5, marginTop: 4 }}>
             {isCritical
-              ? "Large unfinished backlog — results may be unreliable. Increase max sim time or enable the purge period in Run Setup."
-              : "Service time may be understated — shorter tasks finish first. Consider enabling &ldquo;Let in-flight entities complete&rdquo; in Run Setup."}
+              ? "Large unfinished backlog — results may be unreliable. Carefully review the model to identify where bottlenecks are forming. Consider increasing max simulation time or enabling the purge period in Run Setup."
+              : "Service time may be understated — shorter tasks finish first. Review the model for bottleneck resources."}
           </div>
         </div>
         );

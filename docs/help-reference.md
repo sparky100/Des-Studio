@@ -240,7 +240,9 @@ All 6 queue disciplines.
 |--------|---------|----------------|---------------|
 | avgWait | Mean waiting time across all queues (post-warmup) | Congestion, insufficient capacity | Adequate capacity or low utilisation |
 | avgSvc | Mean service time | Complex service or slow servers | Fast service or simple tasks |
-| avgSojourn | Mean end-to-end time (wait + service) | System-wide delays | Efficient flow |
+| avgSojourn | Mean end-to-end time (wait + service, served + reneged only) | System-wide delays | Efficient flow |
+| avgTimeInSystem | Weighted mean time in system (all entities, incl. in-progress at 0.5 weight) | System-wide delays including unfinished work | Efficient flow |
+| servedRatio | Service completion rate (served / total, 0–1) | Most entities complete service | Many entities still in system or reneging |
 | served | Count of entities completing service | High throughput | Low throughput or insufficient run time |
 | reneged | Count of entities abandoning before service | Impatience or excessive waits | Patient customers or fast service |
 | totalCost | Cumulative cost from COST macro | High operational cost | Low cost (may indicate under-investment) |

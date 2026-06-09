@@ -100,8 +100,10 @@ Builds and returns a simulation engine instance.
   reneged:       number,           // Entities that abandoned
   avgWait:       number | null,    // Mean post-warmup wait time
   avgSvc:        number | null,    // Mean post-warmup service time
-  avgSojourn:    number | null,    // Mean post-warmup sojourn (wait + service)
+  avgSojourn:    number | null,    // Mean post-warmup sojourn (served + reneged only)
+  avgTimeInSystem: number | null,  // Weighted mean time in system (all entities, incl. in-progress at 0.5 weight)
   maxSojourn:    number | null,    // Maximum sojourn time
+  servedRatio:   number | null,    // Service completion rate (served / total, 0–1)
   avgWIP:        number,           // Time-average WIP = ∫ WIP dt / post-warmup elapsed
   totalCost:     number,           // Accumulated COST() macro total (0 if unused)
   costPerServed: number | null,    // totalCost / served (null if served = 0)

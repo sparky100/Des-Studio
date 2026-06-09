@@ -152,14 +152,15 @@ companionCsv rules:
     ✗ WRONG:   "effect": ["SET_ATTR(priority, 1)"]  — B-event with no context macro, silently skipped
 
 13. goals[].metric MUST be one of these exact values:
-    "summary.avgWait" | "summary.avgSvc" | "summary.avgSojourn" | "summary.avgWIP"
-    "summary.maxWIP"  | "summary.served"  | "summary.reneged" | "summary.totalCost"
-    "summary.costPerServed" | "resource.utilisation"
+    "summary.avgWait" | "summary.avgSvc" | "summary.avgSojourn" | "summary.avgTimeInSystem"
+    "summary.avgWIP" | "summary.maxWIP" | "summary.served" | "summary.servedRatio"
+    "summary.reneged" | "summary.totalCost" | "summary.costPerServed"
+    "resource.utilisation"
     "container.minLevel" | "container.avgLevel" | "container.maxLevel"
     Do not use short-form keys ("avgWait") or invent other paths — the engine evaluates no other path.
     For queue-scoped goals, add: "scope": { "type": "queue", "id": "q_...", "name": "..." }.
     For resource.utilisation and container.* metrics, "scope" is required (set type/id/name).
-    Time metrics (avgWait, avgSvc, avgSojourn) support percentile operators: "p50" | "p75" | "p90" | "p95" | "p99".`,
+    Time metrics (avgWait, avgSvc, avgSojourn, avgTimeInSystem) support percentile operators: "p50" | "p75" | "p90" | "p95" | "p99".`,
 
     // PART 5 — Schema
     `SCHEMA REFERENCE — authoritative specification for all model JSON:

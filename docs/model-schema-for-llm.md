@@ -1,8 +1,8 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 1.5.0
-**Date:** 2026-06-05
-**Sprint baseline:** Sprint 71
+**Version:** 1.6.0
+**Date:** 2026-06-09
+**Sprint baseline:** Sprint 85
 
 | Version | Date | Sprint | Changes |
 |---------|------|--------|---------|
@@ -14,6 +14,7 @@
 | v1.3.2 | 2026-06-01 | Results contract | Added `entity.outcome` and `summary.outcomes` journey-conclusion result metadata for terminal route reporting and AI analysis |
 | v1.4.0 | 2026-06-03 | Schema review | DES best-practice and consistency review: added V39 to §10 blocking errors; corrected V30/V31 to include RELEASE(); fixed balkCondition variable format in §16.13; added `terminationCondition` to §1; corrected §16.3 queue naming rule; added SPT/EDD/PRIORITY(attrName) attribute requirements to §3; added Empirical non-empty constraint to §4; added SPLIT/FILL/SPLIT to §5/§6 macro tables; added Normal distribution caveat to §4; added LIFO caveat to §3; expanded §16.6 with steady-state vs terminating guidance; added replication and stability best-practice notes; added §6.1 state variable and container predicates; added UI-parity notes for JSON-only settings |
 | v1.5.0 | 2026-06-05 | Results accuracy | **§9 Goals:** added `summary.avgWIP` metric; added batch-mode note on per-replication evaluation of count goals. **§11.1 Sections:** corrected factual error — the engine actively uses `entryQueues`/`exitQueues` to compute `entitiesIn`/`entitiesOut`/`avgSojourn` (was incorrectly stated as "engine ignores sections entirely"); clarified dual purpose (UI organisation + statistical boundary tracking); aligned "large model" threshold with TOP LLM MISTAKES #13 (≥8 queues or ≥3 stages, consistent throughout); added note that sections with empty entry/exit arrays are cosmetic only and produce zero in/out counts. |
+| v1.6.0 | 2026-06-09 | Sprint 85 | **§9 Goals:** added `summary.avgTimeInSystem` (weighted mean time across all entities including in-progress) and `summary.servedRatio` (service completion rate as decimal 0–1). Updated metric count from 13 to 15. Added `avgTimeInSystem` to percentile-capable time metrics. |
 
 ---
 
@@ -821,10 +822,12 @@ Container-scoped goals target a specific container. `scope` is **required** for 
 |---|---|---|
 | `summary.avgWait` | Weighted mean wait across served + reneged + in-progress entities. In-progress waits are half-weighted. | Queue |
 | `summary.avgSvc` | Mean service time (served entities only — excludes reneged) | — |
-| `summary.avgSojourn` | Mean total time in system (served + reneged entities) | — |
+| `summary.avgSojourn` | Mean total time in system (served + reneged entities only) | — |
+| `summary.avgTimeInSystem` | Weighted mean time in system across ALL entities (served + reneged + in-progress). In-progress partial sojourns are half-weighted. | — |
 | `summary.avgWIP` | Average work-in-progress (mean entities in system, Little's Law) | Queue |
 | `summary.maxWIP` | Maximum work-in-progress (peak queue depth) | Queue |
 | `summary.served` | Total customers served | Queue |
+| `summary.servedRatio` | Service completion rate as a decimal (served / total, 0–1) | — |
 | `summary.reneged` | Total customers who abandoned | Queue |
 | `summary.totalCost` | Total cost (requires cost model) | — |
 | `summary.costPerServed` | Cost per served entity (requires cost model) | — |
@@ -837,7 +840,7 @@ Container-scoped goals target a specific container. `scope` is **required** for 
 
 ### Percentile operators (time metrics only)
 
-For time-scoped goals (`summary.avgWait`, `summary.avgSvc`, `summary.avgSojourn`), use `p50`, `p75`, `p90`, `p95`, or `p99` as the `operator` to set a target on a wait-distribution percentile rather than the mean. All percentile comparisons use `<` semantics (the percentile must be below the target).
+For time-scoped goals (`summary.avgWait`, `summary.avgSvc`, `summary.avgSojourn`, `summary.avgTimeInSystem`), use `p50`, `p75`, `p90`, `p95`, or `p99` as the `operator` to set a target on a wait-distribution percentile rather than the mean. All percentile comparisons use `<` semantics (the percentile must be below the target).
 
 ```json
 {
@@ -848,7 +851,7 @@ For time-scoped goals (`summary.avgWait`, `summary.avgSvc`, `summary.avgSojourn`
 }
 ```
 
-⚠ The thirteen `metric` values listed above are the **only** valid values. Do not invent other paths (`queue.avgLength`, `section.Triage.avgWait`, etc.) — the engine evaluates no other metric path and the UI will not display it. Always use the full prefix form shown in the table.
+⚠ The fifteen `metric` values listed above are the **only** valid values. Do not invent other paths (`queue.avgLength`, `section.Triage.avgWait`, etc.) — the engine evaluates no other metric path and the UI will not display it. Always use the full prefix form shown in the table.
 
 > **Batch-mode note:** For multi-replication runs, count goals (`summary.served`, `summary.reneged`) and `summary.avgWIP`/`summary.maxWIP` are evaluated against the **per-replication average** (the CI mean), not the cumulative total across all replications.
 

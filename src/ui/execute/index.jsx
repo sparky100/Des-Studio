@@ -2036,7 +2036,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                         <tbody>
                           {sweepResults.map((pt, i) => {
                             const goals = model.goals || [];
-                            const STAT_KEY = { avgWait:"summary.avgWait", avgSvc:"summary.avgSvc", avgSojourn:"summary.avgSojourn", avgWIP:"summary.avgWIP", maxWIP:"summary.maxWIP", served:"summary.served", reneged:"summary.reneged", totalCost:"summary.totalCost", costPerServed:"summary.costPerServed" };
+                            const STAT_KEY = { avgWait:"summary.avgWait", avgSvc:"summary.avgSvc", avgSojourn:"summary.avgSojourn", avgTimeInSystem:"summary.avgTimeInSystem", avgWIP:"summary.avgWIP", maxWIP:"summary.maxWIP", served:"summary.served", servedRatio:"summary.servedRatio", reneged:"summary.reneged", totalCost:"summary.totalCost", costPerServed:"summary.costPerServed" };
                             const feasible = goals.length
                               ? goals.filter(g=>g.metric&&g.target&&!g.scope&&!(typeof g.operator==="string"&&g.operator.startsWith("p"))).every(g=>{
                                   const k=STAT_KEY[g.metric]||(g.metric?.startsWith("summary.")?g.metric:null); if(!k) return true;
@@ -2753,15 +2753,18 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   const goals = model.goals || [];
                   const GOAL_KEY = {
                     avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn",
+                    avgTimeInSystem: "summary.avgTimeInSystem",
                     avgWIP: "summary.avgWIP", maxWIP: "summary.maxWIP",
-                    served: "summary.served", reneged: "summary.reneged",
+                    served: "summary.served", servedRatio: "summary.servedRatio", reneged: "summary.reneged",
                     totalCost: "summary.totalCost", costPerServed: "summary.costPerServed",
                   };
                   const MATCH_KEYS = {
                     "summary.avgWait": "summary.avgWait", "summary.avgSvc": "summary.avgSvc",
-                    "summary.avgSojourn": "summary.avgSojourn", "summary.avgWIP": "summary.avgWIP",
+                    "summary.avgSojourn": "summary.avgSojourn", "summary.avgTimeInSystem": "summary.avgTimeInSystem",
+                    "summary.avgWIP": "summary.avgWIP",
                     "summary.maxWIP": "summary.maxWIP", "summary.served": "summary.served",
-                    "summary.reneged": "summary.reneged", "summary.totalCost": "summary.totalCost",
+                    "summary.servedRatio": "summary.servedRatio", "summary.reneged": "summary.reneged",
+                    "summary.totalCost": "summary.totalCost",
                     "summary.costPerServed": "summary.costPerServed",
                   };
                   return CI_METRICS.map(metric => {

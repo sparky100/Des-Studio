@@ -52,6 +52,12 @@ function formatInt(value) {
   return Number.isFinite(n) ? String(Math.round(n)) : null;
 }
 
+// Formats a decimal ratio (0–1) as a percentage string
+function formatPct(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : null;
+}
+
 // Formats financial values in English: £1.24 million, £45.34 thousand, £123
 function formatCurrency(value, symbol = '£') {
   const n = Number(value);
@@ -558,6 +564,8 @@ function buildExecutiveSummary(model, results, recommendations, aggStats = {}, m
     { lbl: `Avg wait time (${unit})`,       val: formatN(resolveValue('avgWait',      summary, aggStats)) },
     { lbl: `Avg service time (${unit})`,    val: formatN(resolveValue('avgSvc',       summary, aggStats)) },
     { lbl: `Avg total time (${unit})`,      val: formatN(resolveValue('avgSojourn',   summary, aggStats)) },
+    { lbl: `Avg time in system (${unit})`,  val: formatN(resolveValue('avgTimeInSystem', summary, aggStats)) },
+    { lbl: 'Service completion rate',       val: formatPct(resolveValue('servedRatio', summary, aggStats)) },
     { lbl: 'Avg WIP',                       val: formatN(resolveValue('avgWIP',       summary, aggStats)) },
   ].filter(k => k.val !== null);
 
@@ -723,6 +731,8 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     [`Average waiting time (${unit})`,                               formatN(resolveValue('avgWait',      summary, aggStats))],
     [`Average service time (${unit})`,                               formatN(resolveValue('avgSvc',       summary, aggStats))],
     [`Average total time in system (${unit})`,                            formatN(resolveValue('avgSojourn',   summary, aggStats))],
+    [`Average time in system incl. in-progress (${unit})`,            formatN(resolveValue('avgTimeInSystem', summary, aggStats))],
+    [`Service completion rate`,                                      formatPct(resolveValue('servedRatio', summary, aggStats))],
     [`Longest time in system (${unit})`,                             formatN(resolveValue('maxSojourn',   summary, aggStats))],
     [`Average number in system (WIP)`,                               formatN(resolveValue('avgWIP',       summary, aggStats))],
     [`Total cost`,                                                   formatCurrency(resolveValue('totalCost',     summary, aggStats))],
@@ -1105,6 +1115,8 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     ['Avg wait time',                             `${formatN(resolveValue('avgWait',    summary, aggregateStats)) ?? '—'} ${unit}`],
     ['Avg service time',                           `${formatN(resolveValue('avgSvc',     summary, aggregateStats)) ?? '—'} ${unit}`],
     ['Avg total time in system',                   `${formatN(resolveValue('avgSojourn', summary, aggregateStats)) ?? '—'} ${unit}`],
+    ['Avg time in system (incl. in-progress)',     `${formatN(resolveValue('avgTimeInSystem', summary, aggregateStats)) ?? '—'} ${unit}`],
+    ['Service completion rate',                    formatPct(resolveValue('servedRatio', summary, aggregateStats)) ?? '—'],
     [`Avg ${entityName.toLowerCase()}s in system (WIP)`, `${formatN(resolveValue('avgWIP', summary, aggregateStats)) ?? '—'}`],
     [`${entityName}s served${multiRep ? ' (avg per run)' : ''}`,  `${formatInt(resolveValue('served',  summary, aggregateStats)) ?? '—'}`],
     [`${entityName}s reneged${multiRep ? ' (avg per run)' : ''}`, `${formatInt(resolveValue('reneged', summary, aggregateStats)) ?? '—'}`],

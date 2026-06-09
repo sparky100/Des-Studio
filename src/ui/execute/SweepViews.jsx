@@ -13,8 +13,9 @@ function pointIsFeasible(goals, aggregateStats) {
   if (!goals?.length) return null;
   const STAT_KEY = {
     avgWait: "summary.avgWait", avgSvc: "summary.avgSvc", avgSojourn: "summary.avgSojourn",
+    avgTimeInSystem: "summary.avgTimeInSystem",
     avgWIP: "summary.avgWIP", maxWIP: "summary.maxWIP",
-    served: "summary.served", reneged: "summary.reneged",
+    served: "summary.served", servedRatio: "summary.servedRatio", reneged: "summary.reneged",
     totalCost: "summary.totalCost", costPerServed: "summary.costPerServed",
   };
   for (const g of goals) {
