@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Btn, MicIcon, ArrowUpIcon } from "../shared/components.jsx";
 import { supabase } from "../../db/supabase.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { MarkdownContent } from "../shared/MarkdownContent.jsx";
+import { tryExtractJson } from "../../llm/apiClient.js";
 
 function getProxyUrl() {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -203,10 +205,9 @@ function ChatMessage({ msg }) {
         fontSize: 12,
         lineHeight: 1.6,
         padding: "10px 14px",
-        whiteSpace: "pre-wrap",
         wordBreak: "break-word",
       }}>
-        {msg.content}
+        {isError ? msg.content : <MarkdownContent text={msg.content} />}
       </div>
     </div>
   );
@@ -258,10 +259,10 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
 
       let parsed;
       try {
-        const clean = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-        parsed = JSON.parse(clean);
+        parsed = tryExtractJson(raw.trim());
       } catch {
-        throw new Error("AI returned an unexpected format. Please try again.");
+        const snippet = raw.slice(0, 200);
+        throw new Error(`AI response couldn't be parsed. Try again. (Received: "${snippet}...")`);
       }
       setDiagnosisResult(parsed);
       setDiagnosisState("done");

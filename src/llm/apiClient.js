@@ -104,7 +104,7 @@ function extractJsonText(payload) {
   return payload.text || payload.completion || "";
 }
 
-function tryExtractJson(raw) {
+export function tryExtractJson(raw) {
   // Strategy 1: code fences (```json ... ```) anywhere in text
   const fenced = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
   if (fenced) return JSON.parse(fenced[1]);

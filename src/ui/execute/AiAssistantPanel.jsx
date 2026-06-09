@@ -9,6 +9,7 @@ import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, build
 import { makeRunPromptPayload, makeRunLabel, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { DiagnosticsTab } from "./DiagnosticsTab.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { MarkdownContent } from "../shared/MarkdownContent.jsx";
 
 function ConfidenceBadge({ confidence }) {
   const { C, FONT } = useTheme();
@@ -451,11 +452,13 @@ export const AiAssistantPanel = ({
     setError("");
     setStatus("loading");
     setActiveKind(kind);
-    if (kind !== "suggestion" && kind !== "explainResults") {
-      setParsedSuggestion(null);
-      setVerifyStatus({});
-      setVerifyResults({});
-    }
+    setParsedSuggestion(null);
+    setVerifyStatus({});
+    setVerifyResults({});
+    setConversationHistory([]);
+    setRefineParsed(null);
+    setRefineStatus("idle");
+    setRefineError("");
 
     let accumulated = "";
     streamNarrative(prompt, {
@@ -489,8 +492,11 @@ export const AiAssistantPanel = ({
     const controller = new AbortController();
     abortRef.current = controller;
     setError("");
+    setResponse("");
     setStatus("streaming");
     setActiveKind("query");
+    setParsedSuggestion(null);
+    setRefineParsed(null);
 
     const userEntry = { role: "user", content: question };
     setConversationHistory(prev => [...prev, userEntry]);
@@ -596,6 +602,8 @@ export const AiAssistantPanel = ({
     setError("");
     setStatus("streaming");
     setActiveKind("modelQuery");
+    setParsedSuggestion(null);
+    setRefineParsed(null);
     let accumulated = "";
     streamNarrative(messages, {
       signal: controller.signal,
@@ -778,9 +786,7 @@ export const AiAssistantPanel = ({
       return (
         <div>
           {analysisText && (
-            <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, lineHeight: 1.7, marginBottom: 10, whiteSpace: "pre-wrap" }}>
-              {analysisText}
-            </div>
+            <MarkdownContent text={analysisText} style={{ marginBottom: 10 }} />
           )}
           {parsedSuggestion.suggestions.length === 0 && (
             <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>No structured suggestions found.</div>
@@ -815,9 +821,7 @@ export const AiAssistantPanel = ({
           }}>
             {entry.role === "user" ? "YOU" : "AI"}
           </div>
-          <div style={{ color: C.text, fontFamily: FONT, fontSize: 12, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
-            {entry.content}
-          </div>
+          <MarkdownContent text={entry.content} style={{ color: C.text, fontSize: 12, lineHeight: 1.7 }} />
         </div>
       ));
     }
@@ -826,7 +830,7 @@ export const AiAssistantPanel = ({
       return "";
     }
     if (status === "loading") return "Waiting for analysis...";
-    if (response) return response;
+    if (response) return <MarkdownContent text={response} />;
     if (activeKind === "comparison") return "Select a saved run above and click Compare.";
     return "";
   };
@@ -1131,6 +1135,11 @@ export const AiAssistantPanel = ({
               Saved runs unavailable: {comparisonError}
             </div>
           )}
+          {!comparisonRuns.length && !comparisonLoading && (
+            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, fontStyle: "italic", textAlign: "center", padding: "8px 0" }}>
+              Save at least two runs to compare results.
+            </div>
+          )}
           <Btn variant="ghost" onClick={compareRuns} disabled={!results || !selectedRun || isStreaming} style={panelButtonStyle}>
             Compare
           </Btn>
@@ -1155,7 +1164,7 @@ export const AiAssistantPanel = ({
         fontFamily: FONT,
         fontSize: 12,
         lineHeight: 1.7,
-        whiteSpace: parsedSuggestion ? "normal" : "pre-wrap",
+        whiteSpace: parsedSuggestion ? "normal" : "normal",
       }}>
         {renderContent()}
       </div>}
@@ -1221,8 +1230,13 @@ export const AiAssistantPanel = ({
         </div>
       </div>}
 
-      {!isRunContext && (isResultsContext ? activeMode === "refine" : (!sidebar && hasSchedule)) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
-        {refineStatus === "idle" && (
+      {!isRunContext && (isResultsContext ? activeMode === "refine" : !sidebar) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+        {!hasSchedule && (
+          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, fontStyle: "italic", textAlign: "center", padding: "16px 0" }}>
+            Add a timetable schedule to enable schedule refinement.
+          </div>
+        )}
+        {hasSchedule && refineStatus === "idle" && (
           <Btn variant="primary" onClick={handleRefinePlan} style={panelButtonStyle}>
             Analyse schedule
           </Btn>
@@ -1239,9 +1253,7 @@ export const AiAssistantPanel = ({
           {refineParsed && (
               <div style={{ marginTop: 10 }}>
                 {refineParsed.analysis && (
-                  <div style={{ color: C.text, fontFamily: FONT, fontSize: 11, lineHeight: 1.7, marginBottom: 10, whiteSpace: "pre-wrap" }}>
-                    {refineParsed.analysis}
-                  </div>
+                  <MarkdownContent text={refineParsed.analysis} style={{ fontSize: 11, marginBottom: 10 }} />
                 )}
                 {refineParsed.recommendations.length === 0 && (
                   <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>No schedule recommendations returned.</div>
