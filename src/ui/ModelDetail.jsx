@@ -188,7 +188,6 @@ function hydrateResultsFromHistoryRow(row) {
     ...json,
     summary: nextSummary,
     runLabel: json.runLabel || row.run_label || null,
-    replications: json.replications || row.replications || 1,
   };
 }
 

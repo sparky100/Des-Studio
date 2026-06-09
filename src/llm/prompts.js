@@ -324,6 +324,18 @@ export function buildKpis(model = {}, results = {}) {
   if (summary.containerLevels) kpis.containerLevels = summary.containerLevels;
   if (summary.phaseCTruncated) kpis.warning_phaseCTruncated = true;
   if (summary.warnings?.length) kpis.warnings = summary.warnings;
+  if (summary.terminatingState) {
+    const ts = summary.terminatingState;
+    const wipPct = ts.wipPct ?? (summary.total > 0 ? Math.round(((ts.waitingAtEnd + ts.servingAtEnd) / summary.total) * 100) : 0);
+    kpis.terminatingState = {
+      servingAtEnd: ts.servingAtEnd,
+      waitingAtEnd: ts.waitingAtEnd,
+      wipPct,
+      note: wipPct > 10
+        ? `WARNING: ${wipPct}% of entities were still in progress (${ts.servingAtEnd} serving, ${ts.waitingAtEnd} waiting) when the run ended. Service time and wait metrics may be understated — shorter tasks finish first. Consider increasing max simulation time or enabling the purge period.`
+        : undefined,
+    };
+  }
   return kpis;
 }
 
@@ -416,6 +428,10 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     ? " NOTE: Phase C was truncated during this run — some conditional events may not have fired. Mention this caveat."
     : "";
 
+  const wipInstr = payload.kpis.terminatingState?.note
+    ? ` WARNING: ${payload.kpis.terminatingState.note}`
+    : "";
+
   const repInstr = experiment.replications > 1
     ? ` This was a ${experiment.replications}-replication study — reference the 95% CI ranges from confidenceIntervals rather than single-run point estimates when available.`
     : " This was a single-replication run — results are point estimates with no confidence intervals.";
@@ -429,7 +445,7 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     messages: makeMessages(
       system,
       payload,
-      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish typical from extreme waits. If cost or WIP data is present, comment on it briefly." + repInstr + planInstr + goalsInstr + warningsInstr
+      "Highlight the most significant findings. Flag any queues where mean wait exceeds 2 x service time as possible overload. Use per-queue percentiles to distinguish typical from extreme waits. If cost or WIP data is present, comment on it briefly." + repInstr + planInstr + goalsInstr + wipInstr + warningsInstr
     ),
     max_tokens: 450,
   };
@@ -896,6 +912,10 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     ? " NOTE: One or more resources has utilisation above 85% — this is a common cause of queue instability. Factor this into your recommendations."
     : "";
 
+  const wipInstr = payload.kpis.terminatingState?.note
+    ? ` WARNING: ${payload.kpis.terminatingState.note}`
+    : "";
+
   const goalInstruction = goalGaps?.length
     ? ` The model has performance goals. For each suggestion, state which goals would be met, which remain missed, and which are unaffected.`
     : "";
@@ -908,7 +928,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "## What Happened",
     "Highlight the most significant findings. Flag queues where mean wait exceeds 2x service time as possible overload.",
     "Use per-queue percentiles to distinguish typical from extreme waits.",
-    "If cost or WIP data is present, comment briefly." + goalsInstr + warningsInstr,
+    "If cost or WIP data is present, comment briefly." + goalsInstr + warningsInstr + wipInstr,
     "",
     "## How Reliable" + sensitivityInstr,
     "Discuss statistical uncertainty, confidence interval width, and which conclusions are robust enough to act on.",

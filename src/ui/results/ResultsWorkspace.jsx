@@ -416,7 +416,8 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
         const serving = summary.terminatingState.servingAtEnd;
         const waiting = summary.terminatingState.waitingAtEnd;
         const totalWip = serving + waiting;
-        const wipPct = summary.terminatingState.wipPct ?? 0;
+        const totalArrived = summary.total ?? (summary.served + summary.reneged + totalWip);
+        const wipPct = summary.terminatingState.wipPct ?? (totalArrived > 0 ? Math.round((totalWip / totalArrived) * 100) : 0);
         if (totalWip === 0) return null;
         const isCritical = wipPct > 25;
         const isConcern = wipPct > 10 && serving > 0;
