@@ -1291,12 +1291,6 @@ const cycleLog = [];
       delete r.busyTimeSum;
       delete r.starvationTimeSum;
     }
-    for (const type of Object.keys(perResource)) {
-      const r = perResource[type];
-      const denominator = elapsed * r.total;
-      r.utilisation = denominator > 0 ? +(r.busyTimeSum / denominator).toFixed(4) : 0;
-      delete r.busyTimeSum;
-    }
 
     const totalCost   = state.__totalCost || 0;
     const costPerServed = served.length > 0 ? +(totalCost / served.length).toFixed(4) : null;
