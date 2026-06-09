@@ -236,6 +236,11 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
       avgWait: aggregateStats["summary.avgWait"]?.mean ?? null,
       avgSvc: aggregateStats["summary.avgSvc"]?.mean ?? null,
       avgSojourn: aggregateStats["summary.avgSojourn"]?.mean ?? null,
+      avgWIP: aggregateStats["summary.avgWIP"]?.mean ?? null,
+      maxSojourn: aggregateStats["summary.maxSojourn"]?.mean ?? null,
+      totalCost: aggregateStats["summary.totalCost"]?.mean ?? null,
+      costPerServed: aggregateStats["summary.costPerServed"]?.mean ?? null,
+      avgWaitByLittle: aggregateStats["summary.avgWaitByLittle"]?.mean ?? null,
       warmupPeriod,
       maxSimTime: maxTime,
       outcomes: Object.keys(outcomeAcc).length ? outcomeAcc : undefined,
@@ -243,6 +248,16 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
       sections,
       journeys,
       queueJourneys,
+      waitSamplesBreakdown: {
+        served: summaries.reduce((s, sm) => s + (sm.waitSamplesBreakdown?.served || 0), 0),
+        reneged: summaries.reduce((s, sm) => s + (sm.waitSamplesBreakdown?.reneged || 0), 0),
+        inProgress: summaries.reduce((s, sm) => s + (sm.waitSamplesBreakdown?.inProgress || 0), 0),
+      },
+      terminatingState: {
+        waitingAtEnd: summaries.reduce((s, sm) => s + (sm.terminatingState?.waitingAtEnd || 0), 0),
+        servingAtEnd: summaries.reduce((s, sm) => s + (sm.terminatingState?.servingAtEnd || 0), 0),
+        wipPct: total > 0 ? Math.round(((summaries.reduce((s, sm) => s + ((sm.terminatingState?.waitingAtEnd || 0) + (sm.terminatingState?.servingAtEnd || 0)), 0)) / total) * 100) : 0,
+      },
     },
   };
 }
