@@ -164,6 +164,15 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
                     Use shift schedule (overrides static pool size)
                   </label>
                   {Array.isArray(et.shiftSchedule)&&(<>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>When capacity drops mid-shift:</span>
+                      <select value={et.shiftBehavior||"delay"} onChange={e=>upd(i,"shiftBehavior",e.target.value)}
+                        style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:10,padding:"3px 6px",outline:"none"}}>
+                        <option value="delay">Delay — finish current entity, then go offline</option>
+                        <option value="preempt">Preempt — interrupt entity, store remaining time</option>
+                        <option value="suspend">Suspend — freeze work in place</option>
+                      </select>
+                    </div>
                     {(et.shiftSchedule||[]).map((step,j)=>{
                       const time=parseFloat(step.time);
                       const prev=j>0?parseFloat(et.shiftSchedule[j-1].time):null;

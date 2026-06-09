@@ -196,6 +196,12 @@ export function claimServerForEntity(customer, server, clock) {
   server.currentCustId = customer.id;
   server.resourceClaim = claim;
 
+  // Flush starvation timer — server was idle and is now busy
+  if (server._starvationStart != null) {
+    server._starvationTime = (server._starvationTime || 0) + Math.max(0, clock - server._starvationStart);
+    delete server._starvationStart;
+  }
+
   return true;
 }
 
@@ -215,6 +221,8 @@ export function releaseServerClaim(customer, server, clock) {
       }
       delete server._busyStart;
       server.status = "idle";
+      // Start starvation timer — server just became idle; if no work arrives, this is starvation
+      server._starvationStart = clock;
     }
   }
 
@@ -283,6 +291,7 @@ export function createServerEntities(entityTypes, sampleAttrsFn) {
         attrs:       sampleAttrsFn(et.attrDefs || et.attrs),
         arrivalTime: 0,
         stages:      [],
+        _starvationStart: 0,
       });
     }
   }
@@ -327,13 +336,13 @@ export function makeHelpers(entities, model = null) {
       filterWaiting(makeQueueFilter(queueName, includeBatches), discipline, filterFn)[0],
 
     idleOf: (type) =>
-      sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "idle")),
+      sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "idle" && !e._suspended)),
 
     busyOf: (type) =>
-      sortResourceEntities(entities.filter(e => match(e.type, type) && (e.status === "busy" || e.status === "serving"))),
+      sortResourceEntities(entities.filter(e => match(e.type, type) && (e.status === "busy" || e.status === "serving") && !e._suspended)),
 
     selectIdleOf: (type) =>
-      sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "idle"))[0],
+      sortResourceEntities(entities.filter(e => match(e.type, type) && e.status === "idle" && !e._suspended))[0],
 
     findById: (id) =>
       entities.find(e => e.id === id),

@@ -183,6 +183,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [maxSimTime, setMaxSimTime] = useState(() => numberDefault(experimentDefaults.maxSimTime, 500));
   const [terminationMode, setTerminationMode] = useState(() => experimentDefaults.terminationMode === "condition" ? "condition" : "time");
   const [terminationCondition, setTerminationCondition] = useState(() => experimentDefaults.terminationCondition || null);
+  const [purgePeriodEnabled, setPurgePeriodEnabled] = useState(() => !!experimentDefaults.purgePeriod?.enabled);
   const [replications, setReplications] = useState(() => intDefault(experimentDefaults.replications, 1));
   const [runLabel, setRunLabel] = useState("");
   const [executeSection, setExecuteSection] = useState("run");
@@ -446,7 +447,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       5000, 500,
       collectTimeSeries,
       undefined,
-      { schedulesMap: activeSchedulesMap }
+      { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) } }
     );
     setCurrentSnap(engineRef.current.getSnap());
     const initLog = [{ phase: "INIT", time: 0, message: `Simulation initialized  (seed: ${seed}, warmup: ${warmupPeriod})` }];
@@ -880,7 +881,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       5000, 500,
       effectiveCollectTimeSeries,
       undefined,
-      { schedulesMap: activeSchedulesMap }
+      { schedulesMap: activeSchedulesMap, purgePeriod: { enabled: purgePeriodEnabled, maxPurgeTime: Math.min(2 * (maxSimTime || 500), 5000) } }
     );
     setSingleRunProgress(engine.getProgress());
 
@@ -1543,6 +1544,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           persistExperimentDefaults={persistExperimentDefaults}
           animationEnabled={animationEnabled} setAnimationEnabled={setAnimationEnabled}
           collectTimeSeries={collectTimeSeries} setCollectTimeSeries={setCollectTimeSeries}
+          purgePeriodEnabled={purgePeriodEnabled} setPurgePeriodEnabled={setPurgePeriodEnabled}
           saveDetailLevel={saveDetailLevel} setSaveDetailLevel={setSaveDetailLevel}
           speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}
           onClose={() => setExecuteSection("run")}

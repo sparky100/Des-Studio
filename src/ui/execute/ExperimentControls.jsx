@@ -24,6 +24,7 @@ export function ExperimentControls({
   persistExperimentDefaults,
   animationEnabled, setAnimationEnabled,
   collectTimeSeries, setCollectTimeSeries,
+  purgePeriodEnabled, setPurgePeriodEnabled,
   saveDetailLevel, setSaveDetailLevel,
   speedMultiplier, setSpeedMultiplier,
   onClose,
@@ -282,6 +283,16 @@ export function ExperimentControls({
                   style={{ accentColor: C.accent }}
                 />
                 Keep chart data during the run
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 12, color: purgePeriodEnabled ? C.server : C.label, fontFamily: FONT }}
+                title="Block new arrivals after max sim time and let in-flight entities complete before ending the run">
+                <input
+                  type="checkbox"
+                  checked={!!purgePeriodEnabled}
+                  onChange={e => setPurgePeriodEnabled?.(e.target.checked)}
+                  style={{ accentColor: C.server }}
+                />
+                Let in-flight entities complete
               </label>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>ARCHIVE DETAIL</span>

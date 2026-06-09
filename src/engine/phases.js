@@ -11,7 +11,7 @@
 import { MACROS, applyScalar }              from "./macros.js";
 import { evalCondition, evaluatePredicate } from "./conditions.js";
 import { sample }                           from "./distributions.js";
-import { clearWaitingState, markEntityWaiting } from "./entities.js";
+import { clearWaitingState, markEntityWaiting, preemptCustomer, releaseServerClaim } from "./entities.js";
 
 function completeEntity(cust, ev, clock, state) {
   const previousQueue = cust.queue ?? cust.lastQueue ?? null;
@@ -55,6 +55,8 @@ function applyShiftChange(ev, ctx) {
   ctx.state.__desiredServerCapacity[String(serverTypeName).trim().toLowerCase()] = target;
   const servers = ctx.entities.filter(e => e.role === "server" && match(e.type, serverTypeName));
   const current = servers.length;
+  const entityType = (ctx.model?.entityTypes || []).find(et => et.role === "server" && match(et.name, serverTypeName));
+  const behavior = entityType?.shiftBehavior || "delay";
 
   if (target > current) {
     const addCount = target - current;
@@ -62,23 +64,72 @@ function applyShiftChange(ev, ctx) {
       const created = ctx.createServerEntity?.(serverTypeName, ctx.clock);
       if (created) ctx.entities.push(created);
     }
+    // Reactivate suspended servers when capacity increases
+    for (const srv of servers) {
+      if (srv._suspended) {
+        delete srv._suspended;
+        srv.status = "idle";
+      }
+    }
     return [`SHIFT_CHANGE: ${serverTypeName} capacity -> ${target} (${addCount} added)`];
   }
 
   if (target < current) {
     let excess = current - target;
+    const preempted = [];
+
+    if (behavior === "preempt") {
+      // Preempt busy servers — store remaining service, re-queue entity, remove server
+      const busyServers = servers.filter(e => (e.status === "busy" || e.status === "serving") && !e._suspended);
+      for (const srv of busyServers) {
+        if (excess <= 0) break;
+        const cust = ctx.entities.find(e => e.id === srv.currentCustId);
+        let rem = 0;
+        if (cust) {
+          rem = srv._scheduledDuration != null
+            ? Math.max(0, srv._scheduledDuration - (ctx.clock - (cust.serviceStart ?? ctx.clock)))
+            : 0;
+          cust._remainingService = rem;
+          preemptCustomer(cust, srv, ctx.clock, ctx.noteQueueDepth);
+        }
+        const idx = ctx.entities.indexOf(srv);
+        if (idx >= 0) ctx.entities.splice(idx, 1);
+        excess--;
+        preempted.push(`#${cust?.id ?? "?"} preempted (${rem.toFixed(1)} remaining)`);
+      }
+    } else if (behavior === "suspend") {
+      // Suspend busy servers — freeze work, mark unavailable
+      const busyServers = servers.filter(e => (e.status === "busy" || e.status === "serving") && !e._suspended);
+      for (const srv of busyServers) {
+        if (excess <= 0) break;
+        srv._suspended = true;
+        delete srv._busyStart;
+        releaseServerClaim(null, srv, ctx.clock);
+        excess--;
+        preempted.push(`${srv.type} server suspended`);
+      }
+    }
+
+    // Remove idle servers (all behaviors)
     for (let i = ctx.entities.length - 1; i >= 0 && excess > 0; i--) {
       const entity = ctx.entities[i];
-      if (entity.role === "server" && match(entity.type, serverTypeName) && entity.status === "idle") {
+      if (entity.role === "server" && match(entity.type, serverTypeName) && entity.status === "idle" && !entity._suspended) {
         ctx.entities.splice(i, 1);
         excess--;
       }
     }
+
     const retainedBusy = excess;
     if (retainedBusy > 0) {
-      const warning = `SHIFT_CHANGE: ${serverTypeName} target ${target} retained ${retainedBusy} busy server(s) until completion`;
+      const warning = `SHIFT_CHANGE: ${serverTypeName} target ${target} retained ${retainedBusy} busy server(s) until completion (behavior: ${behavior})`;
       ctx.warnings?.push(warning);
+      if (preempted.length > 0) {
+        return [`SHIFT_CHANGE: ${serverTypeName} capacity -> ${target} (${behavior})`, ...preempted, warning];
+      }
       return [`SHIFT_CHANGE: ${serverTypeName} capacity -> ${target}`, warning];
+    }
+    if (preempted.length > 0) {
+      return [`SHIFT_CHANGE: ${serverTypeName} capacity -> ${target} (${behavior})`, ...preempted];
     }
     return [`SHIFT_CHANGE: ${serverTypeName} capacity -> ${target}`];
   }
@@ -286,7 +337,12 @@ export function fireBEvent(ev, ctx) {
     const selfId = sched.eventId ?? ev.id;
     const tmpl = (model.bEvents || []).find(b => b.id === selfId);
     if (!tmpl) continue;
-    const schedCtx = { clock, state: ctx.state, schedKey: selfId };
+    // Purge phase: suppress new arrivals (non-renege schedules create entities — skip them)
+    if (ctx._purgePhase && !sched.isRenege) {
+      // During run-down, don't schedule new arrival events
+      continue;
+    }
+    const schedCtx = { clock, state: ctx.state, schedKey: selfId, streamName: sched.isRenege ? `renege:${selfId}` : `arrival:${selfId}`, streamRegistry: ctx.streamRegistry }; 
     // rows[]/times[] may be top-level on the entry (schema doc format) or inside distParams
     const topLevelData = sched.rows ? { rows: sched.rows } : sched.times ? { times: sched.times } : null;
     const baseParams = topLevelData ? { ...topLevelData, ...(sched.distParams || {}) } : (sched.distParams || {});
@@ -401,7 +457,7 @@ export function fireCEvent(ev, ctx) {
         const resolvedCParams = ctx.registry
           ? ctx.registry.resolve(cs.distParams || {}, cs.paramSource)
           : (cs.distParams || {});
-        delay = Math.max(0, sample(cs.dist || "Fixed", resolvedCParams, ctx.rng, null, { clock }));
+        delay = Math.max(0, sample(cs.dist || "Fixed", resolvedCParams, ctx.rng, null, { clock, streamName: `service:${ev.id}`, streamRegistry: ctx.streamRegistry }));
         msgs.push(`Scheduled "${tmpl.name}" @ t=${(clock + delay).toFixed(3)} [${cs.dist}(${delay.toFixed(3)})]`);
       }
     }

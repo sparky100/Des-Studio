@@ -785,6 +785,21 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                             </label>
                           )}
                         </div>
+                        {canEdit && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>On downshift:</span>
+                            <select value={et.shiftBehavior || "delay"} onChange={e => {
+                              const next = [...(model.entityTypes || [])];
+                              next[i] = { ...next[i], shiftBehavior: e.target.value };
+                              applyModel({ ...model, entityTypes: next });
+                            }}
+                              style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 3, color: C.text, fontFamily: FONT, fontSize: 9, padding: "2px 4px", outline: "none" }}>
+                              <option value="delay">Delay</option>
+                              <option value="preempt">Preempt</option>
+                              <option value="suspend">Suspend</option>
+                            </select>
+                          </div>
+                        )}
                         {(et.shiftSchedule || []).map((step, j) => {
                           const time = parseFloat(step.time);
                           const prev = j > 0 ? parseFloat(et.shiftSchedule[j - 1].time) : null;

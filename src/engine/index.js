@@ -8,7 +8,7 @@
 //   const snap   = engine.getSnap()       // current state snapshot
 //   const felSz  = engine.getFelSize()    // events in FEL
 
-import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods } from "./distributions.js";
+import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods, createStreamRegistry } from "./distributions.js";
 import { buildWaitDistEntry, finalizeWeightedStats } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
 import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers } from "./entities.js";
@@ -300,7 +300,7 @@ function makeRateChangeEvents(model) {
   return events;
 }
 
-function makeFailureEvents(model, rng) {
+function makeFailureEvents(model, rng, streamRegistry) {
   const events = [];
   for (const entityType of model.entityTypes || []) {
     if (entityType.role !== "server") continue;
@@ -311,7 +311,8 @@ function makeFailureEvents(model, rng) {
     if (!mtbfDist || !mtbfParams) continue;
 
     const serverName = entityType.name;
-    let t = sample(mtbfDist, mtbfParams, rng);
+    const ctx = { streamName: `mtbf:${serverName}`, streamRegistry };
+    let t = sample(mtbfDist, mtbfParams, rng, null, ctx);
     const maxTime = 100000;
     let count = 0;
     while (t < maxTime && count < 1000) {
@@ -324,7 +325,7 @@ function makeFailureEvents(model, rng) {
         mttrDist,
         mttrParams,
       });
-      const repairTime = t + sample(mttrDist, mttrParams, rng);
+      const repairTime = t + sample(mttrDist, mttrParams, rng, null, { streamName: `mttr:${serverName}`, streamRegistry });
       events.push({
         id: `repair:${serverName}:${repairTime.toFixed(4)}`,
         type: "REPAIR",
@@ -332,7 +333,7 @@ function makeFailureEvents(model, rng) {
         serverTypeName: serverName,
         scheduledTime: repairTime,
       });
-      t += sample(mtbfDist, mtbfParams, rng);
+      t += sample(mtbfDist, mtbfParams, rng, null, { streamName: `mtbf:${serverName}`, streamRegistry });
       count++;
     }
   }
@@ -380,11 +381,18 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const runtimeModel = modelWithShiftInitialCapacity(resolvedModel);
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
   const rng = mulberry32(seed);
+  const streamRegistry = createStreamRegistry(seed);
   let _warmupComplete = false;
   let _terminationConditionMet = false;
   let _phaseCTruncated = false;
   let _excludedCount = 0;
   let _statsResetTime = 0;
+  let _purgePhase = false;
+  let _purgeStartedAt = null;
+  let _servedInPurge = 0;
+  const purgeConfig = engineOptions.purgePeriod || {};
+  const purgeEnabled = !!purgeConfig.enabled;
+  const maxPurgeTime = purgeConfig.maxPurgeTime || Math.min(2 * (maxSimTime || 500), 5000);
   const warnings = [];
 
   // ── Per-queue metrics (F11.4): blockingCount, balkCount per queue name ───────
@@ -486,6 +494,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       attrs: sampleAttrs(entityType.attrDefs || entityType.attrs, rng),
       arrivalTime,
       stages: [],
+      _starvationStart: clock,
     };
     noteEntityCreated(created);
     return created;
@@ -668,7 +677,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
       };
     });
 
-  fel.push(...makeRateChangeEvents(runtimeModel), ...makeShiftChangeEvents(runtimeModel), ...makeFailureEvents(runtimeModel, rng));
+  fel.push(...makeRateChangeEvents(runtimeModel), ...makeShiftChangeEvents(runtimeModel), ...makeFailureEvents(runtimeModel, rng, streamRegistry));
 
   if (warmupPeriod > 0) {
     fel.push({ type: "WARMUP", name: "Warm-up complete", scheduledTime: warmupPeriod });
@@ -692,6 +701,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     helpers: makeHelpers(entities, runtimeModel),
     nextId,
     rng,
+    streamRegistry,
     warnings,
     createServerEntity,
     incQueueMetric,
@@ -699,6 +709,7 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
     noteEntityCreated,
     noteQueueDepth,
     _arbitration,
+    _purgePhase,
     registry,
   });
 
@@ -1066,12 +1077,35 @@ const cycleLog = [];
     }
 
     while (fel.length > 0 && _cycleCount < maxCycles && !_terminationConditionMet) {
+      // Check if maxSimTime reached and purge is enabled
+      if (maxSimTime != null && clock >= maxSimTime && purgeEnabled && !_purgePhase) {
+        _purgePhase = true;
+        _purgeStartedAt = clock;
+        log.push(makeTraceEntry("PURGE", { message: `Purge period started — blocking new arrivals until all entities exit (max ${maxPurgeTime} time units)` }));
+      }
       const r = step({ captureSnap: false });
       onProgress?.(getProgressSnapshot());
       if (r.done) break;
       if (shouldCancel?.(getProgressSnapshot())) {
         onProgress?.(getProgressSnapshot({ cancelled: true, done: true }));
         return buildRunResult({ cancelled: true, message: "Run cancelled at a safe checkpoint. Partial results shown." });
+      }
+    }
+    // Purge period: continue until all customer entities exit or maxPurgeTime elapsed
+    if (_purgePhase) {
+      const customerEntities = () => entities.filter(e => e.role !== "server" && (e.status === "waiting" || e.status === "serving"));
+      while (fel.length > 0 && _cycleCount < maxCycles && !_terminationConditionMet && customerEntities().length > 0) {
+        if (_purgeStartedAt != null && (clock - _purgeStartedAt) >= maxPurgeTime) {
+          log.push(makeTraceEntry("END", { message: `Purge period max time reached (${maxPurgeTime})` }));
+          break;
+        }
+        if (maxSimTime != null && (clock - maxSimTime) > maxPurgeTime) {
+          log.push(makeTraceEntry("END", { message: `Purge period max time reached (${maxPurgeTime})` }));
+          break;
+        }
+        const r = step({ captureSnap: false });
+        onProgress?.(getProgressSnapshot());
+        if (r.done) break;
       }
     }
     if (!_terminationConditionMet && _cycleCount >= maxCycles) {
@@ -1228,15 +1262,32 @@ const cycleLog = [];
 
     const perResource = {};
     for (const srv of servers) {
-      if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyTimeSum: 0 };
+      if (!perResource[srv.type]) perResource[srv.type] = { total: 0, busyTimeSum: 0, starvationTimeSum: 0 };
       perResource[srv.type].total++;
-      // Flush any ongoing busy period up to now
       const busyTime = (srv._busyTime || 0) + (
         srv.status === "busy" && srv._busyStart != null
           ? Math.max(0, clock - srv._busyStart)
           : 0
       );
       perResource[srv.type].busyTimeSum += busyTime;
+      // Flush active starvation timer if running
+      if (srv._starvationStart != null && srv.status === "idle") {
+        const starvTime = (srv._starvationTime || 0) + Math.max(0, clock - srv._starvationStart);
+        perResource[srv.type].starvationTimeSum += starvTime;
+        srv._starvationTime = starvTime;
+        delete srv._starvationStart;
+      } else if (srv._starvationTime) {
+        perResource[srv.type].starvationTimeSum += srv._starvationTime;
+      }
+    }
+    for (const type of Object.keys(perResource)) {
+      const r = perResource[type];
+      const denominator = elapsed * r.total;
+      r.utilisation = denominator > 0 ? +(r.busyTimeSum / denominator).toFixed(4) : 0;
+      r.starvationTime = denominator > 0 ? +(r.starvationTimeSum / r.total).toFixed(4) : 0;
+      r.starvationPct = denominator > 0 ? +(r.starvationTimeSum / denominator).toFixed(4) : 0;
+      delete r.busyTimeSum;
+      delete r.starvationTimeSum;
     }
     for (const type of Object.keys(perResource)) {
       const r = perResource[type];
@@ -1374,6 +1425,8 @@ const cycleLog = [];
       excludedCount:     _excludedCount,
       phaseCTruncated:   _phaseCTruncated,
       maxCPasses,
+      purgePeriodUsed:   _purgePhase ? !!(purgeConfig.enabled) : false,
+      purgeStartTime:    _purgeStartedAt,
       warnings,
     };
   }

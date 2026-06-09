@@ -19,6 +19,45 @@ export function mulberry32(seed) {
   };
 }
 
+/**
+ * Derive a deterministic sub-seed from a master seed and a named stream.
+ * Uses a simple djb2-style hash to spread stream names across the integer space.
+ * Same (masterSeed, streamName) always produces the same sub-seed.
+ */
+export function deriveSubSeed(masterSeed, streamName) {
+  let hash = 5381;
+  const str = String(streamName || "");
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
+  }
+  // Mix the master seed with the hash to produce the sub-seed.
+  // Uses splitmix32 mixing step to avoid linear correlations between
+  // consecutive stream names (e.g. "service:c1", "service:c2", ...).
+  let sub = (masterSeed | 0) ^ hash;
+  sub = ((sub ^ (sub >>> 16)) * 0x85ebca6b) | 0;
+  sub = ((sub ^ (sub >>> 13)) * 0xc2b2ae35) | 0;
+  return (sub ^ (sub >>> 16)) | 0;
+}
+
+/**
+ * StreamRegistry: lazy factory for named sub-stream PRNGs.
+ * Each call to getRng(streamName) returns a mulberry32 instance seeded
+ * from deriveSubSeed(masterSeed, streamName). Results are cached so
+ * each stream gets the same PRNG instance within one engine lifecycle.
+ */
+export function createStreamRegistry(masterSeed) {
+  const _cache = {};
+  return {
+    getRng(streamName) {
+      if (!streamName) return null;
+      if (!_cache[streamName]) {
+        _cache[streamName] = mulberry32(deriveSubSeed(masterSeed, streamName));
+      }
+      return _cache[streamName];
+    },
+  };
+}
+
 const DIST_ALIASES = {
   fixed: "Fixed",
   uniform: "Uniform",
@@ -234,7 +273,10 @@ export function sample(dist, params = {}, rng, serverAttrs = null, context = {})
   const name = normalizeDistributionName(dist);
   const def = DISTRIBUTIONS[name];
   if (!def) return parseFloat(params.value) || 0;
-  return def.sample(params, rng, serverAttrs, context);
+  // When a streamRegistry + streamName are available, use the isolated sub-rng
+  const streamRng = context.streamRegistry?.getRng?.(context.streamName) ?? null;
+  const effectiveRng = streamRng || rng;
+  return def.sample(params, effectiveRng, serverAttrs, context);
 }
 
 /**
