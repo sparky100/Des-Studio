@@ -16,12 +16,14 @@ const LLM_PROVIDERS = [
   { value: "anthropic",    label: "Anthropic" },
   { value: "openai",       label: "OpenAI" },
   { value: "opencode-go",  label: "OpenCode Go" },
+  { value: "zen",          label: "Zen" },
 ];
 
 const LLM_MODELS = {
   anthropic:   ["claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4-20250514", "claude-haiku-4-5", "claude-opus-4-5"],
   openai:      ["gpt-5.1-codex", "gpt-5.1-codex-mini", "gpt-5.1-codex-max"],
   "opencode-go": ["opencode-go/deepseek-v4-pro", "opencode-go/deepseek-v4-flash"],
+  zen: ["deepseek-v4-flash", "claude-sonnet-4-6", "gpt-5.4-mini", "qwen3.6-plus", "minimax-m2.7"],
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

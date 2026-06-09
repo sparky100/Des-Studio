@@ -2,6 +2,7 @@ const DEFAULT_PROVIDER = "anthropic";
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
+const ZEN_BASE_URL = "https://opencode.ai/zen/v1";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -107,11 +108,102 @@ async function callOpenAI(request: LlmProxyRequest, config: LlmProviderConfig) {
   });
 }
 
+function getZenEndpoint(model: string): { url: string; format: "openai" | "anthropic" | "google" } {
+  const openaiCompatible = [
+    "deepseek-v4-flash", "deepseek-v4-flash-free", "minimax-m2.7", "minimax-m2.5",
+    "glm-5.1", "glm-5", "kimi-k2.5", "kimi-k2.6", "grok-build-0.1",
+    "big-pickle", "mimo-v2.5-free", "north-mini-code-free", "nemotron-3-ultra-free",
+  ];
+  const anthropicModels = [
+    "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-opus-4-5", "claude-opus-4-1",
+    "claude-sonnet-4-6", "claude-sonnet-4-5", "claude-sonnet-4",
+    "claude-haiku-4-5", "claude-3-5-haiku",
+    "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus",
+  ];
+  const googleModels = ["gemini-3.5-flash", "gemini-3.1-pro", "gemini-3-flash"];
+  const openaiModels = [
+    "gpt-5.5", "gpt-5.5-pro", "gpt-5.4", "gpt-5.4-pro", "gpt-5.4-mini", "gpt-5.4-nano",
+    "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2", "gpt-5.2-codex",
+    "gpt-5.1", "gpt-5.1-codex", "gpt-5.1-codex-max", "gpt-5.1-codex-mini",
+    "gpt-5", "gpt-5-codex", "gpt-5-nano",
+  ];
+
+  if (openaiCompatible.includes(model)) return { url: `${ZEN_BASE_URL}/chat/completions`, format: "openai" };
+  if (anthropicModels.includes(model)) return { url: `${ZEN_BASE_URL}/messages`, format: "anthropic" };
+  if (googleModels.includes(model)) return { url: `${ZEN_BASE_URL}/models/${model}`, format: "google" };
+  if (openaiModels.includes(model)) return { url: `${ZEN_BASE_URL}/responses`, format: "openai" };
+  return { url: `${ZEN_BASE_URL}/chat/completions`, format: "openai" };
+}
+
+async function callZen(request: LlmProxyRequest, config: LlmProviderConfig) {
+  const { url, format } = getZenEndpoint(config.model);
+  const systemText = request.messages.find(m => m.role === "system")?.content || "";
+
+  if (format === "anthropic") {
+    const userMessages = request.messages.filter(m => m.role !== "system").map(m => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: String(m.content || ""),
+    }));
+    return fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": config.apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: config.model,
+        system: systemText || undefined,
+        messages: userMessages,
+        max_tokens: request.maxTokens,
+        stream: request.stream,
+        temperature: config.temperature ?? 0.3,
+      }),
+    });
+  }
+
+  if (format === "google") {
+    const messages = request.messages.map(m => ({
+      role: m.role === "system" ? "system" : m.role === "assistant" ? "assistant" : "user",
+      content: String(m.content || ""),
+    }));
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
+      body: JSON.stringify({
+        model: config.model,
+        messages,
+        max_tokens: request.maxTokens,
+        stream: request.stream,
+        temperature: config.temperature ?? 0.3,
+      }),
+    });
+  }
+
+  const messages = request.messages.map(m => ({
+    role: m.role === "system" ? "system" : m.role === "assistant" ? "assistant" : "user",
+    content: String(m.content || ""),
+  }));
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
+    body: JSON.stringify({
+      model: config.model,
+      messages,
+      max_tokens: request.maxTokens,
+      stream: request.stream,
+      temperature: config.temperature ?? 0.3,
+    }),
+  });
+}
+
 async function callProvider(request: LlmProxyRequest, config: LlmProviderConfig) {
   switch (config.provider) {
     case "openai":
     case "opencode-go":
       return callOpenAI(request, config);
+    case "zen":
+      return callZen(request, config);
     default:
       return callAnthropic(request, config);
   }
@@ -135,7 +227,9 @@ async function loadConfig(): Promise<LlmProviderConfig> {
           const apiKey = cfg.apiKey ||
             (provider === "anthropic"
               ? Deno.env.get("ANTHROPIC_API_KEY")
-              : Deno.env.get("OPENAI_API_KEY")) || "";
+              : provider === "zen"
+                ? Deno.env.get("ZEN_API_KEY")
+                : Deno.env.get("OPENAI_API_KEY")) || "";
           const temperature = typeof cfg.temperature === "number" ? cfg.temperature : 0.3;
           const rateLimitPerHour = typeof cfg.rateLimitPerHour === "number" ? cfg.rateLimitPerHour : 25;
           console.log("[llm-proxy] config:platform_config", { provider, model, hasApiKey: !!apiKey, apiKeyLen: apiKey.length });
@@ -153,7 +247,7 @@ async function loadConfig(): Promise<LlmProviderConfig> {
   }
   const provider = Deno.env.get("LLM_PROVIDER") || DEFAULT_PROVIDER;
   const model = Deno.env.get("LLM_MODEL") || DEFAULT_MODEL;
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("OPENAI_API_KEY") || "";
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY") || Deno.env.get("ZEN_API_KEY") || Deno.env.get("OPENAI_API_KEY") || "";
   const rateLimitPerHour = parseInt(Deno.env.get("LLM_RATE_LIMIT") || "25", 10);
   const temperature = parseFloat(Deno.env.get("LLM_TEMPERATURE") || "0.3");
   console.log("[llm-proxy] config:env_vars", { provider, model, hasApiKey: !!apiKey, apiKeyLen: apiKey.length });
