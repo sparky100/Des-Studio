@@ -412,6 +412,16 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           </div>
         ))}
       </div>
+      {summary.terminatingState?.servingAtEnd > 0 && (
+        <div style={{ background: C.warmup, border: `1px solid ${C.amber}44`, borderRadius: 6, padding: "10px 14px", marginTop: 6 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: C.amber, fontFamily: FONT, marginBottom: 3 }}>
+            {summary.terminatingState.servingAtEnd} entit{summary.terminatingState.servingAtEnd === 1 ? "y" : "ies"} still being served when run ended
+          </div>
+          <div style={{ fontSize: 11, color: C.amber, fontFamily: FONT, lineHeight: 1.5, opacity: 0.85 }}>
+            Average service time may skew low — shorter tasks finish first. Consider enabling &ldquo;Let in-flight entities complete&rdquo; in Run Setup, or increasing the max simulation time.
+          </div>
+        </div>
+      )}
       {outcomeEntries.length > 0 && (
         <>
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>

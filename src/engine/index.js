@@ -1174,6 +1174,7 @@ const cycleLog = [];
     const served       = customers.filter(e => e.status === "done");
     const reneged      = customers.filter(e => e.status === "reneged");
     const waitingAtEnd = customers.filter(e => e.status === "waiting");
+    const servingAtEnd = customers.filter(e => e.status === "serving").length;
     const servers      = entities.filter(e => e.role === "server");
 
     const servedWaits  = served
@@ -1408,6 +1409,10 @@ const cycleLog = [];
         served:      servedWaits.length,
         reneged:     renegedWaits.length,
         inProgress:  inProgressWaits.length,
+      },
+      terminatingState: {
+        waitingAtEnd: waitingAtEnd.length,
+        servingAtEnd,
       },
       avgSvc:            avgSvc    != null ? +avgSvc.toFixed(4)    : null,
       avgSojourn:        avgSojourn!= null ? +avgSojourn.toFixed(4): null,
