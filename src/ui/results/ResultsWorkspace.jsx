@@ -323,10 +323,8 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     : (totalArrived > 0 ? +(served / totalArrived).toFixed(4) : null);
   const servedRatioDisplay = servedRatio != null ? Math.round(servedRatio * 100) : null;
 
-  // Fallback: compute avgTimeInSystem if not stored (older runs)
-  const avgTimeInSystem = summary.avgTimeInSystem != null
-    ? summary.avgTimeInSystem
-    : (summary.avgSojourn != null ? summary.avgSojourn : null);
+  // avgTimeInSystem includes WIP entities; do not fall back to avgSojourn (served-only)
+  const avgTimeInSystem = summary.avgTimeInSystem != null ? summary.avgTimeInSystem : null;
 
   const cards = [
     {
@@ -370,7 +368,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     },
     {
       label: "Completion rate",
-      value: servedRatio != null ? `${servedRatio}%` : "—",
+      value: servedRatioDisplay != null ? `${servedRatioDisplay}%` : "—",
       color: C.green,
     },
   ];
