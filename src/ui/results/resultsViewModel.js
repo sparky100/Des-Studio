@@ -99,11 +99,16 @@ export function buildServerUtilizationSeries(results = {}, model = {}) {
       capacity,
       hasShiftSchedule,
       isPercent: true,
-      points: timeSeries.map(entry => ({
-        t: finiteNumber(entry?.t),
-        value: (finiteNumber(entry?.byType?.[server.name]?.busy) / capacity) * 100,
-      })),
-      sourceLabel: `Busy ${server.name} resources measured during the run, divided by capacity ${capacity}`,
+      points: timeSeries.map(entry => {
+        const busy = finiteNumber(entry?.byType?.[server.name]?.busy);
+        const total = finiteNumber(entry?.byType?.[server.name]?.total);
+        const effectiveCapacity = total > 0 ? total : capacity;
+        return {
+          t: finiteNumber(entry?.t),
+          value: (busy / effectiveCapacity) * 100,
+        };
+      }),
+      sourceLabel: `Busy ${server.name} resources measured during the run, divided by actual capacity at each time point`,
     };
   });
 }

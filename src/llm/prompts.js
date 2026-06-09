@@ -81,6 +81,10 @@ function extractResources(model = {}, summary = {}) {
     }
     if (Array.isArray(server.shiftSchedule) && server.shiftSchedule.length > 0) {
       result.shiftSchedule = `${server.shiftSchedule.length} period(s)`;
+      result.shiftWindows = server.shiftSchedule.map(p => ({
+        time: parseInt(p.time, 10) || 0,
+        capacity: parseInt(p.capacity, 10) || 1,
+      }));
     }
     return result;
   });
@@ -417,7 +421,7 @@ export function buildNarrativePrompt(model = {}, experimentConfig = {}, results 
     : " This was a single-replication run — results are point estimates with no confidence intervals.";
 
   const planInstr = shiftCapacity.length
-    ? " The model uses a shift-based capacity plan (shiftCapacity). Mention whether the plan appears to be adequately staffed relative to the observed demand."
+    ? " The model uses a shift-based capacity plan (shiftCapacity). Mention whether the plan appears to be adequately staffed relative to the observed demand. When suggesting capacity changes, recommend adjusting specific shift period(s) — mention the time and target capacity. Do not suggest changing the static count — shifts already control capacity."
     : "";
 
   return {

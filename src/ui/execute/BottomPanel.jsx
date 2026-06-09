@@ -303,10 +303,11 @@ function StageKpisTable({ snap, model }) {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {serverTypes.map(et => {
-              const capacity = parseInt(et.count || "1", 10) || 1;
+              const declaredCapacity = parseInt(et.count || "1", 10) || 1;
               const servers  = entities.filter(e => e.role === "server" && e.type === et.name);
+              const actualCapacity = servers.length;
               const busy     = servers.filter(e => e.status === "busy").length;
-              const util     = ((busy / capacity) * 100).toFixed(0);
+              const util     = ((busy / actualCapacity) * 100).toFixed(0);
               const done     = entities.filter(e => e.role !== "server" &&
                 e.completionTime != null && e.serviceStart != null);
               const svcTimes = done.map(e => e.completionTime - e.serviceStart).filter(Number.isFinite);
@@ -318,7 +319,7 @@ function StageKpisTable({ snap, model }) {
                     {et.name}
                   </div>
                   <div style={metricGridStyle}>
-                    {metricCard("Capacity", capacity)}
+                    {metricCard("Capacity", actualCapacity)}
                     {metricCard("Busy", busy, busy > 0 ? C.amber : C.text)}
                     {metricCard("Use", `${util}%`)}
                     {metricCard("Mean svc", fmt(meanSvc, 1))}

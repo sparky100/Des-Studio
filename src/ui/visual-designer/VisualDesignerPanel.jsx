@@ -255,6 +255,37 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     try { return localStorage.getItem("des.sections.show") !== "0"; } catch { return true; }
   });
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [expandedShiftIds, setExpandedShiftIds] = useState(new Set());
+  const toggleShiftExpand = (id) => setExpandedShiftIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const addShiftPeriod = (entityIdx) => {
+    const next = [...(model.entityTypes || [])];
+    const schedule = [...(next[entityIdx].shiftSchedule || [])];
+    const last = schedule[schedule.length - 1];
+    schedule.push({ time: last ? String((parseFloat(last.time) || 0) + 60) : "0", capacity: last?.capacity || next[entityIdx].count || "1" });
+    next[entityIdx] = { ...next[entityIdx], shiftSchedule: schedule };
+    applyModel({ ...model, entityTypes: next });
+  };
+  const updShiftPeriod = (entityIdx, periodIdx, patch) => {
+    const next = [...(model.entityTypes || [])];
+    const schedule = [...(next[entityIdx].shiftSchedule || [])];
+    schedule[periodIdx] = { ...schedule[periodIdx], ...patch };
+    next[entityIdx] = { ...next[entityIdx], shiftSchedule: schedule };
+    applyModel({ ...model, entityTypes: next });
+  };
+  const remShiftPeriod = (entityIdx, periodIdx) => {
+    const next = [...(model.entityTypes || [])];
+    next[entityIdx] = { ...next[entityIdx], shiftSchedule: (next[entityIdx].shiftSchedule || []).filter((_, idx) => idx !== periodIdx) };
+    applyModel({ ...model, entityTypes: next });
+  };
+  const enableShiftSchedule = (entityIdx, enable) => {
+    const next = [...(model.entityTypes || [])];
+    next[entityIdx] = { ...next[entityIdx], shiftSchedule: enable
+      ? (Array.isArray(next[entityIdx].shiftSchedule) && next[entityIdx].shiftSchedule.length
+          ? next[entityIdx].shiftSchedule
+          : [{ time: "0", capacity: next[entityIdx].count || "1" }])
+      : undefined };
+    applyModel({ ...model, entityTypes: next });
+  };
   // Ref set by CanvasControls (inside ReactFlow) to expose fitView for specific nodes
   const fitNodeRef = useRef(null);
   const graph = useMemo(() => deriveGraphFromModel(model || {}), [model]);
@@ -655,59 +686,139 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                     No entity types defined.
                   </div>
                 )}
-                {(model.entityTypes || []).map((et, i) => (
-                  <div key={et.id || i} style={{
-                    display: "grid",
-                    gridTemplateColumns: et.role === "server" ? "minmax(0, 1fr) 66px 44px 14px" : "minmax(0, 1fr) 66px 14px",
-                    alignItems: "center", gap: 4, padding: "3px 4px",
-                    background: C.bg, borderRadius: 4, marginBottom: 3,
-                    border: `1px solid ${et.role === "server" ? C.server + "44" : C.cEvent + "33"}`,
-                    borderLeft: `2px solid ${et.role === "server" ? C.server : C.cEvent}`,
-                  }}>
-                    <CommitInput
-                      value={et.name}
-                      onCommit={value => {
-                        const oldName = et.name || "";
-                        const next = [...(model.entityTypes || [])];
-                        next[i] = { ...next[i], name: value };
-                        const renamed = value && oldName && value !== oldName
-                          ? renameEntityType({ ...model, entityTypes: next }, oldName, value, et.role || "customer")
-                          : { ...model, entityTypes: next };
-                        applyModel(renamed);
-                      }}
-                      placeholder="Name"
-                      maxLength={20}
-                      disabled={!canEdit}
-                      ariaLabel={`Entity type ${i + 1} name`}
-                      style={{ width: "100%", minWidth: 0, background: "transparent", border: "none", color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
-                    />
-                    <select value={et.role || "customer"} onChange={e => {
-                      const next = [...(model.entityTypes || [])];
-                      next[i] = { ...next[i], role: e.target.value, count: e.target.value === "server" ? (next[i].count || "1") : "" };
-                      applyModel({ ...model, entityTypes: next });
-                    }}
-                      style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: et.role === "server" ? C.server : C.cEvent, fontFamily: FONT, fontSize: 9, padding: "1px 3px", outline: "none" }}>
-                      <option value="customer">Entity</option>
-                      <option value="server">Server</option>
-                    </select>
-                    {et.role === "server" && (
-                      <input type="number" min="1" value={et.count || "1"} onChange={e => {
-                        const next = [...(model.entityTypes || [])];
-                        next[i] = { ...next[i], count: e.target.value };
-                        applyModel({ ...model, entityTypes: next });
-                      }}
-                        style={{ width: "100%", boxSizing: "border-box", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 3px", outline: "none", textAlign: "center" }}
+                {(model.entityTypes || []).map((et, i) => {
+                  const hasShifts = et.role === "server" && Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0;
+                  const shiftFirstCap = hasShifts ? parseInt(et.shiftSchedule[0]?.capacity, 10) || 1 : null;
+                  const shiftLastCap = hasShifts ? parseInt(et.shiftSchedule[et.shiftSchedule.length - 1]?.capacity, 10) || 1 : null;
+                  const shiftSummary = hasShifts ? (shiftFirstCap === shiftLastCap ? shiftFirstCap : `${shiftFirstCap}-${shiftLastCap}`) : null;
+                  const isShiftExpanded = expandedShiftIds.has(et.id);
+                  const gridCols = et.role === "server" && hasShifts
+                    ? "minmax(0, 1fr) 66px minmax(0, 1fr) 20px 14px"
+                    : et.role === "server"
+                      ? "minmax(0, 1fr) 66px 44px 14px"
+                      : "minmax(0, 1fr) 66px 14px";
+                  return (
+                  <div key={et.id || i}>
+                    <div style={{
+                      display: "grid",
+                      gridTemplateColumns: gridCols,
+                      alignItems: "center", gap: 4, padding: "3px 4px",
+                      background: C.bg, borderRadius: 4, marginBottom: 1,
+                      border: `1px solid ${et.role === "server" ? C.server + "44" : C.cEvent + "33"}`,
+                      borderLeft: `2px solid ${et.role === "server" ? C.server : C.cEvent}`,
+                    }}>
+                      <CommitInput
+                        value={et.name}
+                        onCommit={value => {
+                          const oldName = et.name || "";
+                          const next = [...(model.entityTypes || [])];
+                          next[i] = { ...next[i], name: value };
+                          const renamed = value && oldName && value !== oldName
+                            ? renameEntityType({ ...model, entityTypes: next }, oldName, value, et.role || "customer")
+                            : { ...model, entityTypes: next };
+                          applyModel(renamed);
+                        }}
+                        placeholder="Name"
+                        maxLength={20}
+                        disabled={!canEdit}
+                        ariaLabel={`Entity type ${i + 1} name`}
+                        style={{ width: "100%", minWidth: 0, background: "transparent", border: "none", color: C.text, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
                       />
-                    )}
-                    {canEdit && (
-                      <button type="button" onClick={() => {
-                        const next = (model.entityTypes || []).filter((_, idx) => idx !== i);
+                      <select value={et.role || "customer"} onChange={e => {
+                        const next = [...(model.entityTypes || [])];
+                        next[i] = { ...next[i], role: e.target.value, count: e.target.value === "server" ? (next[i].count || "1") : "" };
                         applyModel({ ...model, entityTypes: next });
                       }}
-                        style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 11, padding: "0 2px", lineHeight: 1 }}>✕</button>
+                        style={{ width: "100%", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: et.role === "server" ? C.server : C.cEvent, fontFamily: FONT, fontSize: 9, padding: "1px 3px", outline: "none" }}>
+                        <option value="customer">Entity</option>
+                        <option value="server">Server</option>
+                      </select>
+                      {et.role === "server" && !hasShifts && (
+                        <input type="number" min="1" value={et.count || "1"} onChange={e => {
+                          const next = [...(model.entityTypes || [])];
+                          next[i] = { ...next[i], count: e.target.value };
+                          applyModel({ ...model, entityTypes: next });
+                        }}
+                          style={{ width: "100%", boxSizing: "border-box", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 3px", outline: "none", textAlign: "center" }}
+                        />
+                      )}
+                      {et.role === "server" && hasShifts && (
+                        <span title={`${et.shiftSchedule.length} shift period${et.shiftSchedule.length !== 1 ? "s" : ""} — pool varies from ${shiftFirstCap} to ${shiftLastCap}`}
+                          style={{ fontSize: 10, color: C.server, fontFamily: FONT, fontWeight: 700, textAlign: "center", background: `${C.server}15`, borderRadius: 3, padding: "2px 4px", cursor: "pointer", whiteSpace: "nowrap" }}
+                          onClick={() => toggleShiftExpand(et.id)}>
+                          {shiftSummary} shifts
+                        </span>
+                      )}
+                      {et.role === "server" && hasShifts && (
+                        <button type="button" onClick={() => toggleShiftExpand(et.id)}
+                          title={isShiftExpanded ? "Hide shift periods" : "Show shift periods"}
+                          style={{ background: "none", border: "none", color: isShiftExpanded ? C.server : C.muted, cursor: "pointer", fontSize: 11, padding: "0 2px", lineHeight: 1 }}>
+                          {isShiftExpanded ? "▾" : "▸"}
+                        </button>
+                      )}
+                      {canEdit && (
+                        <button type="button" onClick={() => {
+                          const next = (model.entityTypes || []).filter((_, idx) => idx !== i);
+                          applyModel({ ...model, entityTypes: next });
+                        }}
+                          style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 11, padding: "0 2px", lineHeight: 1 }}>✕</button>
+                      )}
+                    </div>
+                    {et.role === "server" && hasShifts && isShiftExpanded && (
+                      <div style={{
+                        background: `${C.server}08`,
+                        border: `1px solid ${C.server}22`,
+                        borderTop: "none",
+                        borderRadius: "0 0 4px 4px",
+                        padding: "8px 10px",
+                        marginBottom: 4,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>SHIFT SCHEDULE</span>
+                          {canEdit && (
+                            <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontFamily: FONT, fontSize: 9, color: C.muted }}>
+                              <input type="checkbox" checked={hasShifts} onChange={e => enableShiftSchedule(i, e.target.checked)} style={{ accentColor: C.server }} />
+                              Enabled
+                            </label>
+                          )}
+                        </div>
+                        {(et.shiftSchedule || []).map((step, j) => {
+                          const time = parseFloat(step.time);
+                          const prev = j > 0 ? parseFloat(et.shiftSchedule[j - 1].time) : null;
+                          const capacity = Number(step.capacity);
+                          const invalidTime = !Number.isFinite(time) || (j === 0 && time !== 0) || (j > 0 && Number.isFinite(prev) && time < prev);
+                          const invalidCapacity = !Number.isInteger(capacity) || capacity < 1;
+                          return (
+                            <div key={j} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                              <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>t={j === 0 ? "0" : time || ""}</span>
+                              <input type="number" value={step.time ?? ""} disabled={j === 0} onChange={e => updShiftPeriod(i, j, { time: e.target.value })}
+                                style={{ width: 52, background: "transparent", border: `1px solid ${invalidTime ? C.red : C.border}`, borderRadius: 3, color: C.amber, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none", opacity: j === 0 ? 0.7 : 1 }}
+                              />
+                              <span style={{ fontSize: 9, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>cap:</span>
+                              <input type="number" value={step.capacity ?? ""} onChange={e => updShiftPeriod(i, j, { capacity: e.target.value })}
+                                style={{ width: 44, background: "transparent", border: `1px solid ${invalidCapacity ? C.red : C.border}`, borderRadius: 3, color: C.server, fontFamily: FONT, fontSize: 10, padding: "2px 4px", outline: "none" }}
+                              />
+                              {canEdit && <button type="button" onClick={() => remShiftPeriod(i, j)}
+                                style={{ background: "none", border: "none", color: C.red, cursor: "pointer", fontSize: 10, padding: 0, lineHeight: 1 }}>✕</button>}
+                            </div>
+                          );
+                        })}
+                        {canEdit && (
+                          <button type="button" onClick={() => addShiftPeriod(i)}
+                            style={{ background: "none", border: `1px dashed ${C.border}`, borderRadius: 3, color: C.muted, cursor: "pointer", fontFamily: FONT, fontSize: 9, padding: "3px 8px", alignSelf: "flex-start" }}>
+                            + Add Period
+                          </button>
+                        )}
+                        <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic", lineHeight: 1.4 }}>
+                          The first period sets the starting pool size. Shift changes add or remove idle servers at the scheduled times.
+                        </div>
+                      </div>
                     )}
                   </div>
-                ))}
+                );})}
               </div>
 
               {(visualIssues.length > 0 || modelValidation.errors.length > 0 || modelValidation.warnings.length > 0) && (

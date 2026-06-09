@@ -188,6 +188,28 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
               : servers.map(type => <option key={type.id || type.name} value={type.name}>{type.name}</option>)
             }
           </SelectField>
+          {(() => {
+            const selServer = servers.find(s => s.name === activityServer);
+            const ss = selServer && Array.isArray(selServer.shiftSchedule) && selServer.shiftSchedule.length > 0 ? selServer.shiftSchedule : null;
+            if (!ss) return null;
+            const firstCap = parseInt(ss[0]?.capacity, 10) || 1;
+            const lastCap = parseInt(ss[ss.length - 1]?.capacity, 10) || 1;
+            const range = firstCap === lastCap ? `${firstCap}` : `${firstCap}-${lastCap}`;
+            return (
+              <div style={{ background: `${C.server}10`, border: `1px solid ${C.server}33`, borderRadius: 6, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: C.server, fontFamily: FONT }}>Shift Schedule</span>
+                  <span style={{ fontSize: 9, color: C.server, fontFamily: FONT, background: `${C.server}22`, borderRadius: 3, padding: "1px 5px" }}>{ss.length} period{ss.length !== 1 ? "s" : ""}</span>
+                </div>
+                <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
+                  Pool size varies: {range} across {ss.length} shift{ss.length !== 1 ? "s" : ""}.
+                </div>
+                <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+                  Manage shift periods in the Forms/Tabs Entity Types editor.
+                </div>
+              </div>
+            );
+          })()}
           <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: C.muted, textTransform: "uppercase", fontFamily: FONT }}>
               Service time

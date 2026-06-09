@@ -101,7 +101,9 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
         if(i===-1)return null;
         const isExpanded=effectiveExpanded.has(et.id);
         const attrCount=(Array.isArray(et.attrDefs)?et.attrDefs:[]).length;
-        const roleSummary=et.role==="server"?`resource · pool ${et.count||1}`:"arriving entity";
+        const hasShifts=et.role==="server"&&Array.isArray(et.shiftSchedule)&&et.shiftSchedule.length>0;
+        const shiftFirstCap=hasShifts?parseInt(et.shiftSchedule[0]?.capacity,10)||1:null;
+        const roleSummary=et.role==="server"?(hasShifts?`resource · pool ${shiftFirstCap} · ${et.shiftSchedule.length} shift${et.shiftSchedule.length!==1?"s":""}`:`resource · pool ${et.count||1}`):"arriving entity";
 
         return (
           <div key={et.id} style={{background:C.bg,border:`1px solid ${et.role==="server"?C.server+"44":C.cEvent+"33"}`,
@@ -124,17 +126,23 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
                   <option value="server">Pre-created Resource</option>
                 </select>
                 {et.role==="server"&&<>
-                  <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>pool size:</span>
-                  <input
-                    aria-label={`Server pool size for ${et.name||"server"}`}
-                    type="number" min="1" step="1"
-                    value={et.count||""} onChange={e=>upd(i,"count",e.target.value)} placeholder="1"
-                    style={{width:60,background:"transparent",border:`1px solid ${C.server}55`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
-                  {parseInt(et.count||"1",10)>1&&(
-                    <span style={{fontSize:10,color:C.server,fontFamily:FONT}}>
-                      ({parseInt(et.count,10)} servers in pool)
-                    </span>
-                  )}
+                  {hasShifts?(<>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>pool size:</span>
+                    <span style={{fontSize:12,color:C.server,fontFamily:FONT,fontWeight:700,background:`${C.server}15`,border:`1px solid ${C.server}44`,borderRadius:4,padding:"5px 10px",minWidth:40,textAlign:"center"}}>{shiftFirstCap}</span>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>set by shift schedule</span>
+                  </>):(<>
+                    <span style={{fontSize:10,color:C.muted,fontFamily:FONT}}>pool size:</span>
+                    <input
+                      aria-label={`Server pool size for ${et.name||"server"}`}
+                      type="number" min="1" step="1"
+                      value={et.count||""} onChange={e=>upd(i,"count",e.target.value)} placeholder="1"
+                      style={{width:60,background:"transparent",border:`1px solid ${C.server}55`,borderRadius:4,color:C.server,fontFamily:FONT,fontSize:12,padding:"5px 8px",outline:"none"}}/>
+                    {parseInt(et.count||"1",10)>1&&(
+                      <span style={{fontSize:10,color:C.server,fontFamily:FONT}}>
+                        ({parseInt(et.count,10)} servers in pool)
+                      </span>
+                    )}
+                  </>)}
                 </>}
               </>}
               <Btn small variant="danger" ariaLabel={`Remove entity type ${et.name || i + 1}`} onClick={()=>rem(i)}>✕</Btn>
@@ -174,9 +182,9 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
                         </div>
                       );
                     })}
-                    <Btn small variant="ghost" onClick={()=>addShift(i)} style={{alignSelf:"flex-start"}}>+ Add Shift</Btn>
+                    <Btn small variant="ghost" onClick={()=>addShift(i)} style={{alignSelf:"flex-start"}}>+ Add Shift Period</Btn>
                     <span style={{fontSize:10,color:C.muted,fontFamily:FONT,fontStyle:"italic"}}>
-                      The first shift sets initial capacity; static count is ignored while this is enabled.
+                      The first shift period sets the initial pool size; the static count is ignored while shifts are in use. Shift changes add or remove idle servers at the scheduled times.
                     </span>
                   </>)}
                 </SectionPanel>
