@@ -317,49 +317,65 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     ? `(${waitBreakdown.served} served, ${waitBreakdown.reneged} reneged${waitBreakdown.inProgress > 0 ? `, ${waitBreakdown.inProgress} in-progress` : ""})`
     : "";
 
+  const servedRatio = summary.servedRatio != null ? Math.round(summary.servedRatio * 100) : null;
+
   const cards = [
     {
-      label: "Average wait",
+      label: "Avg wait",
       value: formatMetricValue(summary.avgWait),
-      note: Number(summary.avgWait) > 0 ? `Weighted average across served, reneged, and in-progress entities. ${waitBreakdownNote}` : "No waiting recorded.",
       color: C.amber,
     },
     {
-      label: "Average time in system",
-      value: formatMetricValue(summary.avgSojourn),
-      note: "Total time from arrival to exit (served + reneged entities).",
+      label: "Avg service",
+      value: formatMetricValue(summary.avgSvc),
       color: C.accent,
     },
     {
-      label: "Customers arriving",
+      label: "Sojourn",
+      value: formatMetricValue(summary.avgSojourn),
+      color: C.accent,
+    },
+    {
+      label: "Time in system",
+      value: formatMetricValue(summary.avgTimeInSystem),
+      color: C.accent,
+    },
+    {
+      label: "Arrived",
       value: totalArrived > 0 ? formatMetricValue(isMultiRep ? Math.round(totalArrived / repCount) : totalArrived, 0) : "—",
-      note: totalArrived > 0 ? (isMultiRep ? null : "Total arrivals.") : "No arrivals recorded.",
       color: C.text,
     },
     {
-      label: "Customers served",
+      label: "Served",
       value: formatMetricValue(resolveCount(served, "summary.served"), 0),
       ciPath: "summary.served",
-      note: served > 0 ? (isMultiRep ? null : "Completed successfully.") : "No completed entities yet.",
       color: C.served,
     },
     {
-      label: "Customers who left before service",
+      label: "Reneged",
       value: isMultiRep && reneged > 0
         ? formatMetricValue(resolveCount(reneged, "summary.reneged"), 0)
         : (leftRate == null ? "—" : `${formatNumber(leftRate, 1)}%`),
       ciPath: reneged > 0 ? "summary.reneged" : null,
-      note: reneged > 0
-        ? (isMultiRep ? null : `${reneged.toLocaleString()} left before being served.`)
-        : "No customers left early.",
       color: reneged > 0 ? C.reneged : C.green,
+    },
+    {
+      label: "Completion rate",
+      value: servedRatio != null ? `${servedRatio}%` : "—",
+      color: C.green,
     },
   ];
   if (Number.isFinite(summary.totalCost) && summary.totalCost > 0) {
     cards.push({
       label: "Total cost",
       value: formatMetricValue(summary.totalCost),
-      note: summary.costPerServed != null ? `About ${formatMetricValue(summary.costPerServed)} per served customer.` : "Cost captured for this run.",
+      color: C.purple,
+    });
+  }
+  if (summary.costPerServed != null && Number.isFinite(summary.costPerServed)) {
+    cards.push({
+      label: "Cost / served",
+      value: formatMetricValue(summary.costPerServed),
       color: C.purple,
     });
   }
@@ -402,15 +418,10 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
             <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
               {card.label.toUpperCase()}
             </div>
-            <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 4, marginBottom: 5 }}>
+            <div style={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 4 }}>
               <span style={{ fontSize: 18, color: card.color, fontFamily: FONT, fontWeight: 700, lineHeight: 1.2 }}>{card.value}</span>
               {card.ciPath && <CiBadge ci={results?.aggregateStats?.[card.ciPath]} C={C} FONT={FONT} />}
             </div>
-            {card.note && (
-              <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
-                {card.note}
-              </div>
-            )}
           </div>
         ))}
       </div>
@@ -492,13 +503,24 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           </div>
         </>
       )}
-      {perResourceEntries.length > 0 && (
+      {perResourceEntries.length > 0 && (() => {
+        const serverTypes = (model?.entityTypes || []).filter(et => et.role === "server");
+        const serverTypeMap = {};
+        serverTypes.forEach(et => {
+          serverTypeMap[et.name] = {
+            count: Math.max(1, parseInt(et.count || "1", 10) || 1),
+            hasShiftSchedule: Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0,
+          };
+        });
+        return (
         <>
           <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
             RESOURCE UTILISATION
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
-            {perResourceEntries.map(([name, r]) => (
+            {perResourceEntries.map(([name, r]) => {
+              const st = serverTypeMap[name] || { count: r.total ?? 1, hasShiftSchedule: false };
+              return (
               <div key={name} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
                 <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
                   {name.toUpperCase()}
@@ -507,10 +529,13 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
                   {utilPct(r.utilisation ?? 0)}
                 </div>
                 <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
-                  {r.total ?? 1} resource{(r.total ?? 1) !== 1 ? "s" : ""}. Average % of capacity in use.
+                  {st.hasShiftSchedule
+                    ? "Shift pattern enabled"
+                    : `${st.count} resource${st.count !== 1 ? "s" : ""}. Average % of capacity in use.`}
                 </div>
               </div>
-            ))}
+              );
+            })}
             {perResourceEntries.length > 1 && avgUtil != null && (
               <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, padding: 12 }}>
                 <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.1, fontWeight: 700, marginBottom: 5 }}>
@@ -526,7 +551,8 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
             )}
           </div>
         </>
-      )}
+        );
+      })()}
       {(() => {
         const goals = model.goals || [];
         if (!goals.length) return null;

@@ -6,8 +6,9 @@ import { buildWaitDistEntry, finalizeWeightedStats } from "../../engine/statisti
 export { downloadTextFile };
 
 export const tokenColor = (id) => TOKEN_COLORS[(id - 1) % TOKEN_COLORS.length];
-export const CI_METRICS = ["summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.avgTimeInSystem", "summary.served", "summary.reneged", "summary.servedRatio", "summary.totalCost", "summary.costPerServed"];
+export const CI_METRICS = ["summary.total", "summary.avgWait", "summary.avgSvc", "summary.avgSojourn", "summary.avgTimeInSystem", "summary.served", "summary.reneged", "summary.servedRatio", "summary.totalCost", "summary.costPerServed"];
 export const METRIC_LABELS = {
+  "summary.total": "Arrived",
   "summary.avgWait": "Avg wait",
   "summary.avgSvc": "Avg service",
   "summary.avgSojourn": "Avg sojourn",

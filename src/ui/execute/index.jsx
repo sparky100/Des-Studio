@@ -175,6 +175,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [batchProgress, setBatchProgress] = useState(null);
   const [replicationResults, setReplicationResults] = useState([]);
   const [aggregateStats, setAggregateStats] = useState({});
+  const [replicationDetailOpen, setReplicationDetailOpen] = useState(false);
   const [seed, setSeed] = useState(() => Math.floor(mulberry32(Date.now())() * 1e9));
   const [resolvedSeed, setResolvedSeed] = useState(null);
   const [loadedRunSnapshot, setLoadedRunSnapshot] = useState(null);
@@ -2756,7 +2757,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                     avgTimeInSystem: "summary.avgTimeInSystem",
                     avgWIP: "summary.avgWIP", maxWIP: "summary.maxWIP",
                     served: "summary.served", servedRatio: "summary.servedRatio", reneged: "summary.reneged",
-                    totalCost: "summary.totalCost", costPerServed: "summary.costPerServed",
+                    total: "summary.total", totalCost: "summary.totalCost", costPerServed: "summary.costPerServed",
                   };
                   const MATCH_KEYS = {
                     "summary.avgWait": "summary.avgWait", "summary.avgSvc": "summary.avgSvc",
@@ -2764,6 +2765,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                     "summary.avgWIP": "summary.avgWIP",
                     "summary.maxWIP": "summary.maxWIP", "summary.served": "summary.served",
                     "summary.servedRatio": "summary.servedRatio", "summary.reneged": "summary.reneged",
+                    "summary.total": "summary.total",
                     "summary.totalCost": "summary.totalCost",
                     "summary.costPerServed": "summary.costPerServed",
                   };
@@ -2796,7 +2798,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                           {goalMet === false && <span style={{ marginLeft: 5, color: C.red }}>✗</span>}
                         </div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: C.accent, fontFamily: FONT }}>
-                          {fmt(stat.mean, 1)}
+                          {metric === "summary.servedRatio"
+                            ? `${Math.round(stat.mean * 100)}%`
+                            : fmt(stat.mean, 1)}
                         </div>
                         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>
                           ±{fmt(stat.halfWidth, 1)} (95% CI)
@@ -2809,95 +2813,114 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             </div>
           )}
 
-          {(() => {
-            const repCount = replicationResults.length;
-            const waitVals = replicationResults.map(p => p.result?.summary?.avgWait).filter(Number.isFinite);
-            const svcVals = replicationResults.map(p => p.result?.summary?.avgSvc).filter(Number.isFinite);
-            const servedVals = replicationResults.map(p => p.result?.summary?.served).filter(Number.isFinite);
-            const outlierWait = detectOutliers(waitVals);
-            const outlierSvc = detectOutliers(svcVals);
-            const outlierServed = detectOutliers(servedVals);
-            const minMaxRow = repCount >= 2 ? {
-              minWait: waitVals.length ? Math.min(...waitVals) : null,
-              maxWait: waitVals.length ? Math.max(...waitVals) : null,
-              minSvc: svcVals.length ? Math.min(...svcVals) : null,
-              maxSvc: svcVals.length ? Math.max(...svcVals) : null,
-              minServed: servedVals.length ? Math.min(...servedVals) : null,
-              maxServed: servedVals.length ? Math.max(...servedVals) : null,
-            } : null;
-            let waitFiniteIdx = 0, svcFiniteIdx = 0, servedFiniteIdx = 0;
-            return (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
-                  <thead>
-                    <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
-                      <th scope="col" style={{ padding: 8 }}>Rep #</th>
-                      <th scope="col" style={{ padding: 8 }}>Seed</th>
-                      <th scope="col" style={{ padding: 8 }}>Served</th>
-                      <th scope="col" style={{ padding: 8 }}>Reneged</th>
-                      <th scope="col" style={{ padding: 8 }}>Avg wait</th>
-                      <th scope="col" style={{ padding: 8 }}>Avg service</th>
-                      <th scope="col" style={{ padding: 8 }}>Avg sojourn</th>
-                      <th scope="col" style={{ padding: 8 }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {replicationResults.map(payload => {
-                      const summary = payload.result?.summary;
-                      const rowWait = summary?.avgWait;
-                      const rowSvc = summary?.avgSvc;
-                      const rowServed = summary?.served;
-                      const wi = Number.isFinite(rowWait) ? waitFiniteIdx++ : -1;
-                      const si = Number.isFinite(rowSvc) ? svcFiniteIdx++ : -1;
-                      const sei = Number.isFinite(rowServed) ? servedFiniteIdx++ : -1;
-                      const isWaitOutlier = wi >= 0 && outlierWait.outlierIndices.includes(wi);
-                      const isSvcOutlier = si >= 0 && outlierSvc.outlierIndices.includes(si);
-                      const isServedOutlier = sei >= 0 && outlierServed.outlierIndices.includes(sei);
-                      const isOutlier = isWaitOutlier || isSvcOutlier || isServedOutlier;
-                      const outlierMsg = [
-                        isWaitOutlier && `Avg wait outside fence [${fmt(outlierWait.lowerFence, 1)}, ${fmt(outlierWait.upperFence, 1)}]`,
-                        isSvcOutlier && `Avg service outside fence [${fmt(outlierSvc.lowerFence, 1)}, ${fmt(outlierSvc.upperFence, 1)}]`,
-                        isServedOutlier && `Served outside fence [${fmt(outlierServed.lowerFence)}, ${fmt(outlierServed.upperFence)}]`,
-                      ].filter(Boolean).join("; ");
-                      return (
-                        <tr key={payload.replicationIndex} style={{ borderBottom: `1px solid ${C.border}` }}>
-                          <td style={{ padding: 8 }}>{payload.replicationIndex + 1}</td>
-                          <td style={{ padding: 8, color: C.amber }}>{payload.seed}</td>
-                          <td style={{ padding: 8 }}>{summary?.served ?? "—"}</td>
-                          <td style={{ padding: 8 }}>{summary?.reneged ?? "—"}</td>
-                          <td style={{ padding: 8 }}>{fmt(rowWait, 1)}</td>
-                          <td style={{ padding: 8 }}>{fmt(rowSvc, 1)}</td>
-                          <td style={{ padding: 8 }}>{fmt(summary?.avgSojourn, 1)}</td>
-                          <td style={{ padding: 8 }}>
-                            <Tag label="complete" color={C.green} />
-                            {isOutlier && (
-                              <span title={outlierMsg} style={{ marginLeft: 6, color: C.amber, cursor: "help" }}>⚠</span>
-                            )}
-                          </td>
+          {replicationResults.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button
+                onClick={() => setReplicationDetailOpen(v => !v)}
+                style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  color: C.muted, fontFamily: FONT, fontSize: 12,
+                  display: "flex", alignItems: "center", gap: 6, padding: 0,
+                }}
+              >
+                <span style={{
+                  display: "inline-block", transition: "transform 160ms ease",
+                  transform: replicationDetailOpen ? "rotate(90deg)" : "rotate(0deg)",
+                  fontSize: 10,
+                }}>▶</span>
+                Replication detail ({replicationResults.length})
+              </button>
+              {replicationDetailOpen && (() => {
+                const repCount = replicationResults.length;
+                const waitVals = replicationResults.map(p => p.result?.summary?.avgWait).filter(Number.isFinite);
+                const svcVals = replicationResults.map(p => p.result?.summary?.avgSvc).filter(Number.isFinite);
+                const servedVals = replicationResults.map(p => p.result?.summary?.served).filter(Number.isFinite);
+                const outlierWait = detectOutliers(waitVals);
+                const outlierSvc = detectOutliers(svcVals);
+                const outlierServed = detectOutliers(servedVals);
+                const minMaxRow = repCount >= 2 ? {
+                  minWait: waitVals.length ? Math.min(...waitVals) : null,
+                  maxWait: waitVals.length ? Math.max(...waitVals) : null,
+                  minSvc: svcVals.length ? Math.min(...svcVals) : null,
+                  maxSvc: svcVals.length ? Math.max(...svcVals) : null,
+                  minServed: servedVals.length ? Math.min(...servedVals) : null,
+                  maxServed: servedVals.length ? Math.max(...servedVals) : null,
+                } : null;
+                let waitFiniteIdx = 0, svcFiniteIdx = 0, servedFiniteIdx = 0;
+                return (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", color: C.text, fontSize: 12, textAlign: "left", tableLayout: "fixed" }}>
+                      <thead>
+                        <tr style={{ color: C.muted, borderBottom: `1px solid ${C.border}` }}>
+                          <th scope="col" style={{ padding: 8 }}>Rep #</th>
+                          <th scope="col" style={{ padding: 8 }}>Seed</th>
+                          <th scope="col" style={{ padding: 8 }}>Served</th>
+                          <th scope="col" style={{ padding: 8 }}>Reneged</th>
+                          <th scope="col" style={{ padding: 8 }}>Avg wait</th>
+                          <th scope="col" style={{ padding: 8 }}>Avg service</th>
+                          <th scope="col" style={{ padding: 8 }}>Avg sojourn</th>
+                          <th scope="col" style={{ padding: 8 }}>Status</th>
                         </tr>
-                      );
-                    })}
-                    {!replicationResults.length && (
-                      <tr>
-                        <td colSpan={8} style={{ padding: 8, color: C.muted }}>Waiting for first replication result...</td>
-                      </tr>
-                    )}
-                    {minMaxRow && (
-                      <tr style={{ borderTop: `2px solid ${C.border}`, color: C.muted, fontStyle: "italic" }}>
-                        <td style={{ padding: 8 }} colSpan={2}>Min / Max</td>
-                        <td style={{ padding: 8 }}>{minMaxRow.minServed ?? "—"} / {minMaxRow.maxServed ?? "—"}</td>
-                        <td style={{ padding: 8 }}>—</td>
-                        <td style={{ padding: 8 }}>{minMaxRow.minWait != null ? fmt(minMaxRow.minWait, 1) : "—"} / {minMaxRow.maxWait != null ? fmt(minMaxRow.maxWait, 1) : "—"}</td>
-                        <td style={{ padding: 8 }}>{minMaxRow.minSvc != null ? fmt(minMaxRow.minSvc, 1) : "—"} / {minMaxRow.maxSvc != null ? fmt(minMaxRow.maxSvc, 1) : "—"}</td>
-                        <td style={{ padding: 8 }}>—</td>
-                        <td style={{ padding: 8 }}>—</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })()}
+                      </thead>
+                      <tbody>
+                        {replicationResults.map(payload => {
+                          const summary = payload.result?.summary;
+                          const rowWait = summary?.avgWait;
+                          const rowSvc = summary?.avgSvc;
+                          const rowServed = summary?.served;
+                          const wi = Number.isFinite(rowWait) ? waitFiniteIdx++ : -1;
+                          const si = Number.isFinite(rowSvc) ? svcFiniteIdx++ : -1;
+                          const sei = Number.isFinite(rowServed) ? servedFiniteIdx++ : -1;
+                          const isWaitOutlier = wi >= 0 && outlierWait.outlierIndices.includes(wi);
+                          const isSvcOutlier = si >= 0 && outlierSvc.outlierIndices.includes(si);
+                          const isServedOutlier = sei >= 0 && outlierServed.outlierIndices.includes(sei);
+                          const isOutlier = isWaitOutlier || isSvcOutlier || isServedOutlier;
+                          const outlierMsg = [
+                            isWaitOutlier && `Avg wait outside fence [${fmt(outlierWait.lowerFence, 1)}, ${fmt(outlierWait.upperFence, 1)}]`,
+                            isSvcOutlier && `Avg service outside fence [${fmt(outlierSvc.lowerFence, 1)}, ${fmt(outlierSvc.upperFence, 1)}]`,
+                            isServedOutlier && `Served outside fence [${fmt(outlierServed.lowerFence)}, ${fmt(outlierServed.upperFence)}]`,
+                          ].filter(Boolean).join("; ");
+                          return (
+                            <tr key={payload.replicationIndex} style={{ borderBottom: `1px solid ${C.border}` }}>
+                              <td style={{ padding: 8 }}>{payload.replicationIndex + 1}</td>
+                              <td style={{ padding: 8, color: C.amber }}>{payload.seed}</td>
+                              <td style={{ padding: 8 }}>{summary?.served ?? "—"}</td>
+                              <td style={{ padding: 8 }}>{summary?.reneged ?? "—"}</td>
+                              <td style={{ padding: 8 }}>{fmt(rowWait, 1)}</td>
+                              <td style={{ padding: 8 }}>{fmt(rowSvc, 1)}</td>
+                              <td style={{ padding: 8 }}>{fmt(summary?.avgSojourn, 1)}</td>
+                              <td style={{ padding: 8 }}>
+                                <Tag label="complete" color={C.green} />
+                                {isOutlier && (
+                                  <span title={outlierMsg} style={{ marginLeft: 6, color: C.amber, cursor: "help" }}>⚠</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {!replicationResults.length && (
+                          <tr>
+                            <td colSpan={8} style={{ padding: 8, color: C.muted }}>Waiting for first replication result...</td>
+                          </tr>
+                        )}
+                        {minMaxRow && (
+                          <tr style={{ borderTop: `2px solid ${C.border}`, color: C.muted, fontStyle: "italic" }}>
+                            <td style={{ padding: 8 }} colSpan={2}>Min / Max</td>
+                            <td style={{ padding: 8 }}>{minMaxRow.minServed ?? "—"} / {minMaxRow.maxServed ?? "—"}</td>
+                            <td style={{ padding: 8 }}>—</td>
+                            <td style={{ padding: 8 }}>{minMaxRow.minWait != null ? fmt(minMaxRow.minWait, 1) : "—"} / {minMaxRow.maxWait != null ? fmt(minMaxRow.maxWait, 1) : "—"}</td>
+                            <td style={{ padding: 8 }}>{minMaxRow.minSvc != null ? fmt(minMaxRow.minSvc, 1) : "—"} / {minMaxRow.maxSvc != null ? fmt(minMaxRow.maxSvc, 1) : "—"}</td>
+                            <td style={{ padding: 8 }}>—</td>
+                            <td style={{ padding: 8 }}>—</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {Object.values(aggregateStats).some(stat => stat.n >= 2) && (() => {
             const ciRows = CI_METRICS.map(metric => {
