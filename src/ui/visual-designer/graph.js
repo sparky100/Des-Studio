@@ -397,10 +397,19 @@ export function graphLayoutFromDerivedGraph(derivedGraph = {}) {
 
 export async function exportCanvasToPng() {
   try {
-    const el = document.querySelector('.react-flow__renderer');
+    const el = document.querySelector('.react-flow__renderer') || document.querySelector('.react-flow');
     if (!el) return null;
     const html2canvas = (await import('html2canvas')).default;
-    const canvas = await html2canvas(el, { backgroundColor: '#ffffff', scale: 2 });
+    const canvas = await html2canvas(el, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+      useCORS: true,
+      allowTaint: false,
+      logging: false,
+      ignoreElements: node =>
+        node.classList?.contains('react-flow__controls') ||
+        node.classList?.contains('react-flow__minimap'),
+    });
     return canvas.toDataURL('image/png');
   } catch (err) {
     console.warn('[simmodlr] Canvas export failed:', err);

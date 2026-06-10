@@ -1379,8 +1379,28 @@ function fmtDist(dist, params = {}) {
   if (d === 'erlang') {
     return p.k != null && p.mean != null ? `Erlang-${p.k}, mean ${p.mean}` : 'Erlang';
   }
-  const parts = Object.entries(p).map(([k, v]) => `${k}=${v}`).join(', ');
-  return parts ? `${dist}(${parts})` : dist;
+  if (d === 'piecewise') {
+    const periods = Array.isArray(p.periods) ? p.periods : [];
+    if (!periods.length) return 'Time-varying';
+    const descs = periods.map(period => {
+      const t = period.startTime ?? period.time ?? 0;
+      const pd = period.dist || period.distribution?.dist;
+      const pp = period.distParams || period.params || period.distribution?.distParams || {};
+      return `t=${t}: ${pd ? fmtDist(pd, pp) : 'Fixed'}`;
+    });
+    return `Time-varying (${periods.length} period${periods.length !== 1 ? 's' : ''}): ${descs.join('; ')}`;
+  }
+  if (d === 'schedule' || d === 'plan') {
+    const rows = p.rows || p.periods || [];
+    return rows.length ? `Scheduled (${rows.length} period${rows.length !== 1 ? 's' : ''})` : 'Scheduled';
+  }
+  if (d === 'empirical') {
+    const vals = Array.isArray(p.values) ? p.values : [];
+    return vals.length ? `Empirical (${vals.length} values)` : 'Empirical';
+  }
+  if (d === 'serverattr' || d === 'server-attr' || d === 'server_attr') return p.attr ? `Server attr: ${p.attr}` : 'Server attribute';
+  if (d === 'entityattr' || d === 'entity-attr' || d === 'entity_attr') return p.attr ? `Entity attr: ${p.attr}` : 'Entity attribute';
+  return dist;
 }
 
 function fmtSchedule(sched = []) {
@@ -1417,55 +1437,112 @@ export function buildModelDefinitionHtml(model = {}) {
   const bEvents = model.bEvents || [];
   const cEvents = model.cEvents || [];
   const goals = model.goals || [];
+  const stateVars = model.stateVariables || [];
 
+  // ── Overview key-value pairs ─────────────────────────────────────────────
+  const overviewPairs = [
+    ['Time unit', esc(model.timeUnit || 'mins')],
+    model.runPeriod != null ? ['Run period', `${esc(String(model.runPeriod))} ${timeUnit}`] : null,
+    model.warmUp != null ? ['Warm-up', `${esc(String(model.warmUp))} ${timeUnit}`] : null,
+    model.replications != null ? ['Replications', esc(String(model.replications))] : null,
+    model.epoch ? ['Calendar start', esc(String(model.epoch))] : null,
+  ].filter(Boolean);
+
+  const overviewHtml = overviewPairs.length ? `<section>
+  <h2>Overview</h2>
+  <table>
+    <tbody>
+      ${overviewPairs.map(([k, v]) => `<tr><th style="width:180px">${k}</th><td>${v}</td></tr>`).join('\n      ')}
+    </tbody>
+  </table>
+</section>` : '';
+
+  // ── State variables ────────────────────────────────────────────────────────
+  const stateVarRows = stateVars.length ? [
+    ['Name', 'Initial value', 'Description'],
+    ...stateVars.map(sv => [esc(sv.name), esc(String(sv.initialValue ?? '')), esc(sv.description || '')])
+  ] : [];
+
+  // ── Entity types ───────────────────────────────────────────────────────────
   const customerRows = customers.length ? [
     ['Name', 'Description'],
     ...customers.map(e => [esc(e.name), esc(e.description || '')])
   ] : [];
 
   const serverRows = servers.length ? [
-    ['Name', 'Description', 'Capacity', 'Shift pattern'],
+    ['Name', 'Capacity', 'Shift pattern', 'Description'],
     ...servers.map(e => {
-      const shifts = (e.shiftSchedule || []);
-      const shiftDesc = shifts.length > 1
+      const shifts = e.shiftSchedule || [];
+      const capacityStr = shifts.length ? '' : esc(String(e.count ?? 1));
+      const shiftStr = shifts.length > 0
         ? shifts.map(s => `${s.capacity} from t=${s.time}`).join('; ')
-        : (e.count != null ? String(e.count) : '1');
-      return [esc(e.name), esc(e.description || ''), shifts.length ? '' : esc(String(e.count ?? 1)), esc(shifts.length ? shiftDesc : 'Fixed')];
+        : 'Fixed';
+      return [esc(e.name), capacityStr, esc(shiftStr), esc(e.description || '')];
     })
   ] : [];
 
+  // ── Queues ─────────────────────────────────────────────────────────────────
   const queueRows = queues.length ? [
-    ['Name', 'Description', 'Discipline', 'Capacity'],
-    ...queues.map(q => [esc(q.name), esc(q.description || ''), esc(q.discipline || 'FIFO'), q.capacity != null ? esc(String(q.capacity)) : 'Unlimited'])
+    ['Name', 'Discipline', 'Capacity', 'Description'],
+    ...queues.map(q => [
+      esc(q.name),
+      esc(q.discipline || 'FIFO'),
+      q.capacity != null ? esc(String(q.capacity)) : 'Unlimited',
+      esc(q.description || ''),
+    ])
   ] : [];
 
-  const arrivalRows = bEvents.length ? [
-    ['Name', 'Description', 'Inter-arrival time'],
+  // ── B Events ───────────────────────────────────────────────────────────────
+  function bEventType(effect) {
+    const e = Array.isArray(effect) ? effect.join(' ') : String(effect || '');
+    if (/ARRIVE\s*\(/i.test(e)) return 'Arrival';
+    if (/COMPLETE\s*\(/i.test(e)) return 'Completion';
+    if (/RENEGE\s*\(/i.test(e)) return 'Renege';
+    if (/BATCH\s*\(/i.test(e)) return 'Batch';
+    return 'Event';
+  }
+  function fmtEffect(effect) {
+    if (Array.isArray(effect)) return effect.map(e => esc(String(e))).join(' → ');
+    return esc(String(effect || ''));
+  }
+
+  const bEventRows = bEvents.length ? [
+    ['Name', 'Type', 'Timing', 'Effect'],
     ...bEvents.map(ev => {
       const sched = fmtSchedule(ev.schedules);
-      return [esc(ev.name), esc(ev.description || ''), sched ? `${sched} ${timeUnit}` : '—'];
+      return [esc(ev.name), bEventType(ev.effect), sched ? `${sched} ${timeUnit}` : '—', fmtEffect(ev.effect)];
     })
   ] : [];
 
-  const serviceRows = cEvents.length ? [
-    ['Name', 'Description', 'Service time', 'Server'],
+  // ── C Events ───────────────────────────────────────────────────────────────
+  const cEventRows = cEvents.length ? [
+    ['Name', 'Server', 'Service time', 'Condition', 'Priority'],
     ...cEvents.map(ev => {
-      const sched = fmtSchedule(ev.schedules);
-      return [esc(ev.name), esc(ev.description || ''), sched ? `${sched} ${timeUnit}` : '—', esc(ev.serverType || ev.resourceType || '')];
+      const sched = fmtSchedule(ev.cSchedules);
+      return [
+        esc(ev.name),
+        esc(ev.serverType || ev.resourceType || '—'),
+        sched ? `${sched} ${timeUnit}` : '—',
+        esc(ev.condition || '—'),
+        esc(String(ev.priority ?? 1)),
+      ];
     })
   ] : [];
 
+  // ── Goals ──────────────────────────────────────────────────────────────────
   const goalRows = goals.length ? [
     ['Goal', 'Target'],
     ...goals.map(g => [esc(g.label || g.metric || ''), esc(g.target != null ? `${g.operator || '≤'} ${g.target}` : '')])
   ] : [];
 
   const sections = [
+    overviewHtml,
     customers.length ? printSection('Customer types', customerRows) : '',
     servers.length ? printSection('Server types (resources)', serverRows) : '',
+    stateVars.length ? printSection('State variables', stateVarRows) : '',
     queues.length ? printSection('Queues', queueRows) : '',
-    bEvents.length ? printSection('Arrivals', arrivalRows) : '',
-    cEvents.length ? printSection('Service events', serviceRows) : '',
+    bEvents.length ? printSection('B Events (Arrivals & routing)', bEventRows) : '',
+    cEvents.length ? printSection('C Events (Activities)', cEventRows) : '',
     goals.length ? printSection('Performance goals', goalRows) : '',
   ].filter(Boolean).join('\n');
 
@@ -1476,15 +1553,15 @@ export function buildModelDefinitionHtml(model = {}) {
 <title>${name} — Model Definition</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 13px; color: #1a1a1a; background: #fff; padding: 32px 40px; max-width: 900px; margin: 0 auto; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 13px; color: #1a1a1a; background: #fff; padding: 32px 40px; max-width: 960px; margin: 0 auto; }
   h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
   .subtitle { color: #555; font-size: 12px; margin-bottom: 6px; }
-  .description { color: #333; font-size: 13px; margin-bottom: 20px; line-height: 1.6; }
+  .description { color: #333; font-size: 13px; margin-bottom: 24px; line-height: 1.6; }
   h2 { font-size: 14px; font-weight: 700; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1.5px solid #ddd; color: #111; }
   section { margin-bottom: 28px; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th { text-align: left; font-weight: 600; background: #f5f5f5; padding: 6px 10px; border: 1px solid #ddd; }
-  td { padding: 5px 10px; border: 1px solid #ddd; vertical-align: top; line-height: 1.5; }
+  td { padding: 5px 10px; border: 1px solid #ddd; vertical-align: top; line-height: 1.5; word-break: break-word; }
   tr:nth-child(even) td { background: #fafafa; }
   .footer { margin-top: 32px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
   @media print {
@@ -1499,7 +1576,7 @@ export function buildModelDefinitionHtml(model = {}) {
 </head>
 <body>
   <h1>${name}</h1>
-  <div class="subtitle">Printed ${esc(printDate)}</div>
+  <div class="subtitle">Model definition · Printed ${esc(printDate)}</div>
   ${desc ? `<div class="description">${desc}</div>` : ''}
   ${sections}
   <div class="footer">Generated by simmodlr</div>
