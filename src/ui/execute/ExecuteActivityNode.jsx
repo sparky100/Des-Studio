@@ -20,9 +20,8 @@ function Dot({ busyHere, busyElsewhere, failed }) {
       width: 10,
       height: 10,
       borderRadius: 2,
-      background:  failed ? C.red : busyHere ? C.cEvent : "transparent",
-      border:      `1.5px solid ${failed ? C.red : (busyHere || busyElsewhere) ? C.cEvent : `${C.muted}66`}`,
-      opacity:     busyElsewhere ? 0.4 : 1,
+      background: failed ? C.red : busyHere ? C.cEvent : busyElsewhere ? `${C.amber}33` : "transparent",
+      border:     `1.5px solid ${failed ? C.red : busyHere ? C.cEvent : busyElsewhere ? C.amber : `${C.muted}66`}`,
       flexShrink: 0,
       transition: "background 0.12s, border-color 0.12s",
     }} />
@@ -91,7 +90,7 @@ export function ExecuteActivityNode({ data }) {
 
   const capacity           = live?.capacity           ?? 1;
   const busyCount          = live?.busyCount          ?? 0;
-  const activityBusyCount  = live?.activityBusyCount  ?? live?.activeCount ?? 0;
+  const activityBusyCount  = live?.activityBusyCount  ?? 0;
   const failedCount        = live?.failedCount        ?? 0;
   const utilisation        = live?.utilisation        ?? 0;
   const serverName         = live?.serverTypeName     ?? null;
@@ -168,7 +167,7 @@ export function ExecuteActivityNode({ data }) {
             : <DotGrid  capacity={capacity} activityBusyCount={activityBusyCount} totalBusyCount={busyCount} failedCount={failedCount} />
           }
 
-          {/* active · pool · utilisation% */}
+          {/* Utilisation row */}
           <div style={{
             display: "flex",
             justifyContent: "space-between",
@@ -177,16 +176,10 @@ export function ExecuteActivityNode({ data }) {
           }}>
             <span style={{
               fontSize: 9,
-              color: C.muted,
               fontFamily: FONT,
+              color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted,
             }}>
-              <span style={{ color: activityBusyCount > 0 ? C.cEvent : C.muted }}>{activityBusyCount} active</span>
-              {" · "}
-              {busyCount}/{capacity} pool
-              {" · "}
-              <span style={{ color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted }}>
-                {utilisation.toFixed(0)}%
-              </span>
+              {utilisation.toFixed(0)}%
             </span>
             {hasFailures && (
               <span style={{ fontSize: 9, color: C.red, fontFamily: FONT, fontWeight: 600 }}>

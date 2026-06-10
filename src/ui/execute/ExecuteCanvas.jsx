@@ -601,12 +601,6 @@ export function ExecuteCanvas({
           const failedCount = relevant.filter(e => e.status === "failed").length;
           const actualCapacity = relevant.length;
           const customers = entities.filter(e => e.role !== "server");
-          const cEventName = node.label ?? null;
-          const activityBusyCount = relevant.filter(e => {
-            if (e.status !== "busy") return false;
-            const cust = e.currentCustId != null ? customers.find(c => c.id === e.currentCustId) : null;
-            return cust?.ceventName === cEventName;
-          }).length;
           const serverDetails = relevant.map(srv => {
             const cust = srv.currentCustId != null
               ? customers.find(c => c.id === srv.currentCustId)
@@ -625,9 +619,8 @@ export function ExecuteCanvas({
               ceventName: cust?.ceventName ?? null,
             };
           });
-          const ceventName = meta?.ceventName ?? null;
-          const activeCount = ceventName
-            ? serverDetails.filter(s => s.ceventName === ceventName).length
+          const activityBusyCount = meta?.ceventName
+            ? serverDetails.filter(s => s.ceventName === meta.ceventName).length
             : 0;
           liveData = {
             serverTypeName:    serverType ?? null,
@@ -640,7 +633,6 @@ export function ExecuteCanvas({
             completionSignal:  snap.served,
             servers:           serverDetails,
             clock:             snap.clock,
-            activeCount,
           };
         } else if (node.type === "sink") {
           const customers = entities.filter(e => e.role !== "server");
