@@ -182,7 +182,7 @@ describe("NodeDetailSidebar", () => {
     });
     renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
+        selectedNode={{ nodeType: "activityNode", label: "ServiceActivity", refId: "ce-1" }}
         onClose={vi.fn()}
         snap={snap}
         serverTypeIndex={mockServerTypeIndex}
@@ -190,7 +190,7 @@ describe("NodeDetailSidebar", () => {
       />
     );
     expect(screen.getByText("Server Pool")).toBeInTheDocument();
-    expect(screen.getByText("ce-1")).toBeInTheDocument();
+    expect(screen.getByText("ServiceActivity")).toBeInTheDocument();
     expect(screen.getByText("Server")).toBeInTheDocument();
   });
 
@@ -204,7 +204,7 @@ describe("NodeDetailSidebar", () => {
     });
     renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
+        selectedNode={{ nodeType: "activityNode", label: "ServiceActivity", refId: "ce-1" }}
         onClose={vi.fn()}
         snap={snap}
         serverTypeIndex={mockServerTypeIndex}
@@ -227,7 +227,7 @@ describe("NodeDetailSidebar", () => {
     });
     renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
+        selectedNode={{ nodeType: "activityNode", label: "ServiceActivity", refId: "ce-1" }}
         onClose={vi.fn()}
         snap={snap}
         serverTypeIndex={mockServerTypeIndex}
@@ -246,7 +246,7 @@ describe("NodeDetailSidebar", () => {
     });
     renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
+        selectedNode={{ nodeType: "activityNode", label: "ServiceActivity", refId: "ce-1" }}
         onClose={vi.fn()}
         snap={snap}
         serverTypeIndex={mockServerTypeIndex}
@@ -267,7 +267,7 @@ describe("NodeDetailSidebar", () => {
     });
     renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
+        selectedNode={{ nodeType: "activityNode", label: "ServiceActivity", refId: "ce-1" }}
         onClose={vi.fn()}
         snap={snap}
         serverTypeIndex={mockServerTypeIndex}
@@ -340,7 +340,7 @@ describe("NodeDetailSidebar", () => {
     const onEntitySelect = vi.fn();
     renderWithTheme(
       <NodeDetailSidebar
-        selectedNode={{ nodeType: "activityNode", label: "ce-1" }}
+        selectedNode={{ nodeType: "activityNode", label: "ServiceActivity", refId: "ce-1" }}
         onClose={vi.fn()}
         snap={snap}
         serverTypeIndex={mockServerTypeIndex}

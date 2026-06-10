@@ -810,6 +810,7 @@ export function ExecuteCanvas({
               onNodeDetailSelect?.({
                 nodeType: node.type === "queue" ? "queueNode" : node.type === "activity" ? "activityNode" : node.type,
                 label: node.data?.label ?? node.label ?? null,
+                refId: node.refId ?? node.data?.refId ?? null,
               });
             }
           }}

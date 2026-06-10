@@ -25,11 +25,11 @@ function deriveQueueLiveData(snap, label, model) {
   };
 }
 
-function deriveActivityLiveData(snap, label, serverTypeIndex, model) {
+function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
   if (!snap) return null;
   const entities = snap.entities || [];
   const servers = entities.filter(e => e.role === "server");
-  const meta = serverTypeIndex.get(label);
+  const meta = serverTypeIndex.get(refId);
   const serverType = meta?.serverType;
   const capacity = meta?.capacity ?? 1;
   const relevant = serverType
@@ -277,9 +277,9 @@ export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect, snap,
 
   const liveData = useMemo(() => {
     if (!selectedNode || !snap) return null;
-    const { nodeType, label } = selectedNode;
+    const { nodeType, label, refId } = selectedNode;
     if (nodeType === "queueNode") return deriveQueueLiveData(snap, label, model);
-    if (nodeType === "activityNode") return deriveActivityLiveData(snap, label, serverTypeIndex, model);
+    if (nodeType === "activityNode") return deriveActivityLiveData(snap, refId, serverTypeIndex, model);
     return null;
   }, [selectedNode, snap, serverTypeIndex, model]);
 
