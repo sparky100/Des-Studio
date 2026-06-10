@@ -44,7 +44,7 @@ function renderInline(text, keyPrefix = "") {
         return (
           <code key={key} style={{
             background: `${C.accent}22`, fontFamily: FONT, fontSize: 11,
-            padding: "1px 5px", borderRadius: RADIUS.sm, color: "#e6edf3",
+            padding: "1px 5px", borderRadius: RADIUS.sm, color: C.text,
           }}>
             {part.content}
           </code>
@@ -160,7 +160,7 @@ export function MarkdownContent({ text, style }) {
               <div key={key} style={{
                 fontSize: sizes[block.level] ?? 12,
                 fontWeight: 700,
-                color: "#e6edf3",
+                color: C.text,
                 fontFamily: FONT,
                 marginBottom: SPACE.sm,
                 marginTop: i > 0 ? SPACE.md : 0,
@@ -172,7 +172,7 @@ export function MarkdownContent({ text, style }) {
           case "paragraph":
             return (
               <div key={key} style={{
-                fontSize: 12, lineHeight: 1.7, color: "#e6edf3",
+                fontSize: 12, lineHeight: 1.7, color: C.text,
                 fontFamily: FONT, marginBottom: SPACE.sm,
               }}>
                 {renderInline(block.content, key)}
@@ -183,7 +183,7 @@ export function MarkdownContent({ text, style }) {
               <div key={key} style={{ marginBottom: SPACE.sm }}>
                 {block.items.map((item, j) => (
                   <div key={`${key}-${j}`} style={{
-                    fontSize: 12, lineHeight: 1.6, color: "#e6edf3",
+                    fontSize: 12, lineHeight: 1.6, color: C.text,
                     fontFamily: FONT, marginBottom: 2, paddingLeft: 16,
                     position: "relative",
                   }}>
@@ -198,7 +198,7 @@ export function MarkdownContent({ text, style }) {
               <div key={key} style={{ marginBottom: SPACE.sm }}>
                 {block.items.map((item, j) => (
                   <div key={`${key}-${j}`} style={{
-                    fontSize: 12, lineHeight: 1.6, color: "#e6edf3",
+                    fontSize: 12, lineHeight: 1.6, color: C.text,
                     fontFamily: FONT, marginBottom: 2, paddingLeft: 20,
                   }}>
                     <span style={{ position: "absolute", left: 4, color: C.muted, minWidth: 14 }}>{j + 1}.</span>
@@ -213,7 +213,7 @@ export function MarkdownContent({ text, style }) {
                 background: C.bg, border: `1px solid ${C.border}`,
                 borderRadius: RADIUS.md, padding: SPACE.md,
                 fontFamily: FONT, fontSize: 11, lineHeight: 1.5,
-                color: "#e6edf3", overflow: "auto", marginBottom: SPACE.sm,
+                color: C.text, overflow: "auto", marginBottom: SPACE.sm,
                 whiteSpace: "pre-wrap", wordBreak: "break-word",
               }}>
                 {block.content}
