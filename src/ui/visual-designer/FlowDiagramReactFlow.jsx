@@ -92,7 +92,7 @@ function DesNode({ data, selected }) {
         <Handle
           type="target"
           position={Position.Left}
-          style={{ width: 9, height: 9, background: color, borderColor: C.bg }}
+          style={{ width: 14, height: 14, background: color, borderColor: C.bg }}
         />
       )}
       <div style={{
@@ -133,7 +133,7 @@ function DesNode({ data, selected }) {
         <Handle
           type="source"
           position={Position.Right}
-          style={{ width: 9, height: 9, background: color, borderColor: C.bg }}
+          style={{ width: 14, height: 14, background: color, borderColor: C.bg }}
         />
       )}
     </div>
@@ -259,7 +259,7 @@ export function FlowDiagramReactFlow({
   canEdit = false,
   selectedNodeId = null,
   selectedNodeIds = [],
-  selectionMode = "pan",
+  spacePan = false,
   errorNodeIds,
   fitNodeRef,
   showSections = true,
@@ -405,10 +405,11 @@ export function FlowDiagramReactFlow({
         nodesConnectable={canEdit}
         deleteKeyCode={null}
         elementsSelectable
-        selectionOnDrag={canEdit && selectionMode === "select"}
+        selectionOnDrag={canEdit && !spacePan}
         selectionMode={ReactFlowSelectionMode.Full}
-        panOnDrag={selectionMode !== "select"}
+        panOnDrag={spacePan}
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
+        snapGrid={[24, 24]}
         panOnScroll
         isValidConnection={isValidConnection}
         onNodeClick={(event, node) => {

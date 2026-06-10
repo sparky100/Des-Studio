@@ -245,7 +245,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   };
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState([]);
-  const [selectionMode, setSelectionMode] = useState("pan");
+  const [spacePan, setSpacePan] = useState(false);
   const [message, setMessage] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [selectedPatternId, setSelectedPatternId] = useState(VISUAL_PATTERNS[0]?.id || "");
@@ -402,22 +402,49 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     }
   }
 
-  // Ref holds the latest delete-triggering closure so the keydown listener never goes stale.
-  const deleteKeyHandlerRef = useRef(null);
-  deleteKeyHandlerRef.current = () => {
-    deleteSelectedNodes();
-  };
+  // Ref holds latest closures so keydown/keyup listeners never go stale.
+  const kbRef = useRef(null);
+  kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit };
 
   useEffect(() => {
-    const handler = e => {
-      if (e.key !== "Delete") return;
+    const ARROW_DELTA = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+    const onKeyDown = e => {
       const tag = e.target?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
-      e.preventDefault();
-      deleteKeyHandlerRef.current();
+      const inInput = tag === "input" || tag === "textarea" || tag === "select";
+      if (e.key === " " && !inInput) {
+        e.preventDefault();
+        setSpacePan(true);
+        return;
+      }
+      if (inInput) return;
+      if (e.key === "Delete") {
+        e.preventDefault();
+        kbRef.current.deleteSelectedNodes();
+        return;
+      }
+      const delta = ARROW_DELTA[e.key];
+      if (delta) {
+        e.preventDefault();
+        const { canEdit: ce, graph: g, selectedNodeIds: ids, moveNodes: mv } = kbRef.current;
+        if (!ce || !ids.length) return;
+        const step = e.shiftKey ? 24 : 1;
+        const moved = ids
+          .map(id => g.nodes.find(n => n.id === id))
+          .filter(Boolean)
+          .map(n => ({ id: n.id, x: n.x + delta[0] * step, y: n.y + delta[1] * step }));
+        mv(moved);
+      }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    const onKeyUp = e => { if (e.key === " ") setSpacePan(false); };
+    const onBlur = () => setSpacePan(false);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
   }, []);
 
   const addNode = (type, position = null) => {
@@ -862,44 +889,12 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
             justifyContent: "space-between",
             minHeight: 34,
           }}>
-            <div
-              aria-label="Canvas interaction mode"
-              role="group"
-              style={{
-                background: C.panel,
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-                display: "flex",
-                gap: 2,
-                padding: 3,
-              }}
+            <span
+              title="Hold Space to pan · Arrow keys to nudge selection"
+              style={{ fontFamily: FONT, fontSize: 10, color: C.muted, userSelect: "none", paddingLeft: 2 }}
             >
-              {[
-                { id: "pan", label: "Pan" },
-                { id: "select", label: "Select" },
-              ].map(mode => (
-                <button
-                  key={mode.id}
-                  type="button"
-                  aria-pressed={selectionMode === mode.id}
-                  disabled={!canEdit && mode.id === "select"}
-                  onClick={() => setSelectionMode(mode.id)}
-                  style={{
-                    background: selectionMode === mode.id ? `${C.accent}22` : "transparent",
-                    border: `1px solid ${selectionMode === mode.id ? C.accent : "transparent"}`,
-                    borderRadius: 4,
-                    color: selectionMode === mode.id ? C.accent : C.muted,
-                    cursor: canEdit || mode.id === "pan" ? "pointer" : "not-allowed",
-                    fontFamily: FONT,
-                    fontSize: 10,
-                    fontWeight: 700,
-                    padding: "5px 10px",
-                  }}
-                >
-                  {mode.label}
-                </button>
-              ))}
-            </div>
+              {spacePan ? "Panning…" : "Space to pan"}
+            </span>
 
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               {(model?.sections || []).length > 0 && (
@@ -978,7 +973,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               canEdit={canEdit}
               selectedNodeId={inspectorNodeId}
               selectedNodeIds={selectedNodeIds}
-              selectionMode={selectionMode}
+              spacePan={spacePan}
               errorNodeIds={errorNodeIds}
               fitNodeRef={fitNodeRef}
               showSections={showSections}
