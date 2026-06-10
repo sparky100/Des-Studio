@@ -31,7 +31,6 @@ function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
   const servers = entities.filter(e => e.role === "server");
   const meta = serverTypeIndex.get(refId);
   const serverType = meta?.serverType;
-  const capacity = meta?.capacity ?? 1;
   const relevant = serverType
     ? servers.filter(e => e.type.trim().toLowerCase() === serverType.trim().toLowerCase())
     : servers;
@@ -41,6 +40,13 @@ function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
   const suspendedCount = relevant.filter(e => e._suspended).length;
   const actualCapacity = relevant.length;
   const customers = entities.filter(e => e.role !== "server");
+  const cEvent = (model?.cEvents || []).find(ce => ce.id === refId);
+  const cEventName = cEvent?.name ?? null;
+  const activityBusyCount = relevant.filter(e => {
+    if (e.status !== "busy") return false;
+    const cust = e.currentCustId != null ? customers.find(c => c.id === e.currentCustId) : null;
+    return cust?.ceventName === cEventName;
+  }).length;
   const serverDetails = relevant.map(srv => {
     const cust = srv.currentCustId != null
       ? customers.find(c => c.id === srv.currentCustId)
@@ -57,12 +63,14 @@ function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
       customerId: srv.currentCustId ?? null,
       customerType: cust?.type ?? null,
       customerArrivalTime: cust?.arrivalTime ?? null,
+      ceventName: cust?.ceventName ?? null,
     };
   });
   return {
     serverTypeName: serverType ?? null,
     capacity: actualCapacity,
     busyCount,
+    activityBusyCount,
     idleCount,
     failedCount,
     suspendedCount,

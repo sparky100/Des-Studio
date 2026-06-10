@@ -989,6 +989,7 @@ function ResourcesTab({ snap, model }) {
               suspended: srv._suspended,
               customerId: cust?.id,
               customerType: cust?.type,
+              ceventName: cust?.ceventName ?? null,
               serviceStart: srv.serviceStart,
               scheduledDuration: srv.scheduledDuration,
               starvationTime: srv._starvationTime || 0,

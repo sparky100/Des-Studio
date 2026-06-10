@@ -1,7 +1,9 @@
 // ui/execute/ExecuteActivityNode.jsx — live Activity node for the Execute canvas
 // Registered as nodeType "activityNode" in ExecuteCanvas.
-// data.liveData shape: { serverTypeName, capacity, busyCount, idleCount,
-//                        utilisation, completionSignal }
+// data.liveData shape: { serverTypeName, capacity, busyCount, activityBusyCount,
+//                        idleCount, utilisation, completionSignal }
+// activityBusyCount = servers currently serving THIS activity only.
+// busyCount = ALL servers of this type currently busy (pool-level).
 // completionSignal is snap.served — strictly increases on each COMPLETE event,
 // used to trigger the flash without needing direct FEL access.
 import { useEffect, useRef, useState } from "react";
@@ -11,58 +13,52 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 const MAX_DOTS = 12;
 const FLASH_MS = 400;
 
-function Dot({ busy, failed }) {
+function Dot({ busyHere, busyElsewhere, failed }) {
   const { C } = useTheme();
-  const busyColor   = C.cEvent;
-  const failedColor = C.red;
   return (
     <div style={{
       width: 10,
       height: 10,
       borderRadius: 2,
-      background:  failed ? failedColor : busy ? busyColor : "transparent",
-      border:      `1.5px solid ${failed ? failedColor : busy ? busyColor : `${C.muted}66`}`,
+      background:  failed ? C.red : busyHere ? C.cEvent : "transparent",
+      border:      `1.5px solid ${failed ? C.red : (busyHere || busyElsewhere) ? C.cEvent : `${C.muted}66`}`,
+      opacity:     busyElsewhere ? 0.4 : 1,
       flexShrink: 0,
       transition: "background 0.12s, border-color 0.12s",
     }} />
   );
 }
 
-function DotGrid({ capacity, busyCount, failedCount }) {
-  const effectiveFailed = Math.min(failedCount, capacity);
-  const effectiveBusy = Math.max(0, Math.min(busyCount, capacity - effectiveFailed));
+function DotGrid({ capacity, activityBusyCount, totalBusyCount, failedCount }) {
+  const effectiveFailed        = Math.min(failedCount, capacity);
+  const effectiveActivityBusy  = Math.max(0, Math.min(activityBusyCount, capacity - effectiveFailed));
+  const effectiveTotalBusy     = Math.max(0, Math.min(totalBusyCount, capacity - effectiveFailed));
   const dots = Array.from({ length: capacity }, (_, i) => {
-    if (i < effectiveFailed) return { busy: false, failed: true };
-    if (i < effectiveFailed + effectiveBusy) return { busy: true, failed: false };
-    return { busy: false, failed: false };
+    if (i < effectiveFailed) return { busyHere: false, busyElsewhere: false, failed: true };
+    const j = i - effectiveFailed;
+    if (j < effectiveActivityBusy) return { busyHere: true,  busyElsewhere: false, failed: false };
+    if (j < effectiveTotalBusy)    return { busyHere: false, busyElsewhere: true,  failed: false };
+    return { busyHere: false, busyElsewhere: false, failed: false };
   });
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-      {dots.map((state, i) => <Dot key={i} busy={state.busy} failed={state.failed} />)}
+      {dots.map((state, i) => <Dot key={i} {...state} />)}
     </div>
   );
 }
 
-function PoolText({ busyCount, failedCount, capacity }) {
+function PoolText({ activityBusyCount, busyCount, failedCount, capacity }) {
   const { C, FONT } = useTheme();
-  const failedColor = C.red;
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <span style={{
-        fontFamily: FONT,
-        fontSize: 12,
-        fontWeight: 700,
-        color: busyCount > 0 ? C.amber : C.muted,
-      }}>
-        {busyCount}/{capacity} busy
+      <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: activityBusyCount > 0 ? C.cEvent : C.muted }}>
+        {activityBusyCount} active
+      </span>
+      <span style={{ fontFamily: FONT, fontSize: 11, color: busyCount > 0 ? C.amber : C.muted }}>
+        {busyCount}/{capacity} pool
       </span>
       {failedCount > 0 && (
-        <span style={{
-          fontFamily: FONT,
-          fontSize: 11,
-          fontWeight: 600,
-          color: failedColor,
-        }}>
+        <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 600, color: C.red }}>
           {failedCount} failed
         </span>
       )}
@@ -93,14 +89,14 @@ export function ExecuteActivityNode({ data }) {
     if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
-  const capacity    = live?.capacity    ?? 1;
-  const busyCount   = live?.busyCount   ?? 0;
-  const failedCount = live?.failedCount ?? 0;
-  const utilisation = live?.utilisation ?? 0;
-  const serverName  = live?.serverTypeName ?? null;
-  const activeCount = live?.activeCount ?? 0;
-  const useText     = capacity > MAX_DOTS;
-  const hasFailures = failedCount > 0;
+  const capacity           = live?.capacity           ?? 1;
+  const busyCount          = live?.busyCount          ?? 0;
+  const activityBusyCount  = live?.activityBusyCount  ?? live?.activeCount ?? 0;
+  const failedCount        = live?.failedCount        ?? 0;
+  const utilisation        = live?.utilisation        ?? 0;
+  const serverName         = live?.serverTypeName     ?? null;
+  const useText            = capacity > MAX_DOTS;
+  const hasFailures        = failedCount > 0;
 
   return (
     <div style={{
@@ -166,35 +162,34 @@ export function ExecuteActivityNode({ data }) {
 
       {live ? (
         <>
-          {/* Per-activity serving count */}
-          <div style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: activeCount > 0 ? C.amber : C.muted,
-            fontFamily: FONT,
-          }}>
-            {activeCount > 0 ? `${activeCount} serving here` : "no entities serving"}
-          </div>
+          {/* Dot grid or text pool */}
+          {useText
+            ? <PoolText activityBusyCount={activityBusyCount} busyCount={busyCount} failedCount={failedCount} capacity={capacity} />
+            : <DotGrid  capacity={capacity} activityBusyCount={activityBusyCount} totalBusyCount={busyCount} failedCount={failedCount} />
+          }
 
-          {/* Pool status — dot grid or text + utilisation */}
+          {/* active · pool · utilisation% */}
           <div style={{
             display: "flex",
-            gap: 6,
+            justifyContent: "space-between",
             alignItems: "center",
-            fontSize: 9,
-            color: C.muted,
-            fontFamily: FONT,
-            flexWrap: "wrap",
+            marginTop: 1,
           }}>
-            {useText
-              ? <span>{busyCount}/{capacity} busy</span>
-              : <DotGrid capacity={capacity} busyCount={busyCount} failedCount={failedCount} />
-            }
-            <span style={{ color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted }}>
-              {utilisation.toFixed(0)}%
+            <span style={{
+              fontSize: 9,
+              color: C.muted,
+              fontFamily: FONT,
+            }}>
+              <span style={{ color: activityBusyCount > 0 ? C.cEvent : C.muted }}>{activityBusyCount} active</span>
+              {" · "}
+              {busyCount}/{capacity} pool
+              {" · "}
+              <span style={{ color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted }}>
+                {utilisation.toFixed(0)}%
+              </span>
             </span>
             {hasFailures && (
-              <span style={{ color: C.red, fontWeight: 600 }}>
+              <span style={{ fontSize: 9, color: C.red, fontFamily: FONT, fontWeight: 600 }}>
                 ⚠ {failedCount} failed
               </span>
             )}
