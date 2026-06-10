@@ -1,7 +1,7 @@
 // ui/execute/DiagnosticsTab.jsx — F69.3 + F69.4: AI diagnosis panel and chat
 import { useCallback, useEffect, useRef, useState } from "react";
 ;
-import { Btn, MicIcon, ArrowUpIcon } from "../shared/components.jsx";
+import { Btn, MicIcon, ArrowUpIcon, TypingIndicator } from "../shared/components.jsx";
 import { supabase } from "../../db/supabase.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { MarkdownContent } from "../shared/MarkdownContent.jsx";
@@ -13,7 +13,7 @@ function getProxyUrl() {
   return "/functions/v1/llm-proxy";
 }
 
-async function callDiagnosticsApi(messages, maxTokens = 1000) {
+async function callDiagnosticsApi(messages, maxTokens = 2000) {
   const sessionResponse = await supabase.auth.getSession();
   const accessToken = sessionResponse?.data?.session?.access_token;
 
@@ -162,26 +162,6 @@ function FindingCard({ finding, onGoToNode }) {
   );
 }
 
-function TypingIndicator() {
-  const { C, FONT } = useTheme();
-  return (
-    <div style={{ display: "flex", gap: 4, alignItems: "center", padding: "8px 12px" }}>
-      {[0, 1, 2].map(i => (
-        <div
-          key={i}
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: C.muted,
-            animation: `pulse 1.2s ${i * 0.2}s infinite`,
-          }}
-        />
-      ))}
-      <style>{`@keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }`}</style>
-    </div>
-  );
-}
 
 function ChatMessage({ msg }) {
   const { C, FONT } = useTheme();
@@ -356,8 +336,8 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
-      {/* ── F69.3: Diagnosis panel ── */}
-      <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* ── F69.3: Diagnosis panel — hidden in debug mode ── */}
+      {mode !== "debug" && <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={labelStyle}>Diagnosis</div>
 
         {diagnosisState === "idle" && mode !== "debug" && (
@@ -439,9 +419,9 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
             </div>
           </div>
         )}
-      </div>
+      </div>}
 
-      {mode !== "diagnose" && mode !== "debug" && (
+      {mode !== "diagnose" && (
       <>{/* ── F69.4: Chat panel ── */}
       <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
