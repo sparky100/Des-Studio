@@ -593,7 +593,6 @@ export function ExecuteCanvas({
         } else if (node.type === "activity") {
           const meta = serverTypeIndex.get(node.refId);
           const serverType = meta?.serverType;
-          const capacity   = meta?.capacity ?? 1;
           const relevant   = serverType
             ? servers.filter(e => e.type.trim().toLowerCase() === serverType.trim().toLowerCase())
             : servers;
