@@ -35,9 +35,10 @@ function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
   const relevant = serverType
     ? servers.filter(e => e.type.trim().toLowerCase() === serverType.trim().toLowerCase())
     : servers;
-  const busyCount = relevant.filter(e => e.status === "busy").length;
-  const idleCount = relevant.filter(e => e.status === "idle").length;
+  const busyCount = relevant.filter(e => e.status === "busy" && !e._suspended).length;
+  const idleCount = relevant.filter(e => e.status === "idle" && !e._suspended).length;
   const failedCount = relevant.filter(e => e.status === "failed").length;
+  const suspendedCount = relevant.filter(e => e._suspended).length;
   const actualCapacity = relevant.length;
   const customers = entities.filter(e => e.role !== "server");
   const serverDetails = relevant.map(srv => {
@@ -47,6 +48,7 @@ function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
     return {
       id: srv.id,
       status: srv.status,
+      suspended: !!srv._suspended,
       busyTime: srv._busyTime ?? 0,
       starvationTime: srv._starvationTime ?? 0,
       downtime: srv._downtime ?? 0,
@@ -63,6 +65,7 @@ function deriveActivityLiveData(snap, refId, serverTypeIndex, model) {
     busyCount,
     idleCount,
     failedCount,
+    suspendedCount,
     utilisation: actualCapacity > 0 ? (busyCount / actualCapacity) * 100 : 0,
     completionSignal: snap.served,
     servers: serverDetails,
@@ -151,12 +154,15 @@ function QueueDetail({ label, liveData, onEntitySelect }) {
 function ActivityDetail({ label, liveData, onEntitySelect }) {
   const { C, FONT } = useTheme();
   const {
-    serverTypeName, capacity, busyCount, idleCount, failedCount,
+    serverTypeName, capacity, busyCount, idleCount, failedCount, suspendedCount = 0,
     utilisation, servers = [], clock,
   } = liveData || {};
 
-  const statusColor = { busy: C.busy, idle: C.idle, failed: C.red };
-  const statusBg = { busy: `${C.busy}18`, idle: `${C.idle}18`, failed: `${C.red}18` };
+  const statusColor = { busy: C.busy, idle: C.idle, failed: C.red, suspended: C.muted };
+  const statusBg = { busy: `${C.busy}18`, idle: `${C.idle}18`, failed: `${C.red}18`, suspended: `${C.muted}18` };
+
+  const activeServers = servers.filter(s => !s.suspended);
+  const suspendedServers = servers.filter(s => s.suspended);
 
   return (
     <div>
@@ -168,7 +174,7 @@ function ActivityDetail({ label, liveData, onEntitySelect }) {
       </div>
       <div style={{
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: SPACE.sm,
-        marginBottom: SPACE.md,
+        marginBottom: SPACE.sm,
       }}>
         {[
           { label: "Capacity", value: capacity, color: C.text },
@@ -185,8 +191,22 @@ function ActivityDetail({ label, liveData, onEntitySelect }) {
           </div>
         ))}
       </div>
+      {suspendedCount > 0 && (
+        <div style={{
+          display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: SPACE.sm,
+          marginBottom: SPACE.sm,
+        }}>
+          <div style={{
+            background: `${C.muted}12`, borderRadius: RADIUS.sm, padding: `${SPACE.sm}px`,
+            textAlign: "center", gridColumn: "span 4",
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.muted, fontFamily: FONT }}>{suspendedCount}</div>
+            <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, textTransform: "uppercase", letterSpacing: 1 }}>Suspended (shift change)</div>
+          </div>
+        </div>
+      )}
       <div style={{
-        height: 4, background: C.surface, borderRadius: RADIUS.sm, marginBottom: SPACE.md, overflow: "hidden",
+        height: 4, background: C.surface, borderRadius: RADIUS.sm, marginBottom: SPACE.sm, overflow: "hidden",
       }}>
         <div style={{
           height: "100%", width: `${Math.min(utilisation, 100)}%`,
@@ -197,13 +217,13 @@ function ActivityDetail({ label, liveData, onEntitySelect }) {
       <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: SPACE.sm }}>
         Utilisation: {utilisation.toFixed(0)}%
       </div>
-      {servers.length === 0 ? (
+      {activeServers.length === 0 && suspendedServers.length === 0 ? (
         <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic", padding: SPACE.lg, textAlign: "center" }}>
           No servers configured
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: SPACE.sm }}>
-          {servers.map(srv => {
+          {activeServers.map(srv => {
             const elapsed = srv.serviceStart != null ? clock - srv.serviceStart : null;
             const remaining = srv.scheduledDuration != null && elapsed != null
               ? Math.max(0, srv.scheduledDuration - elapsed)
@@ -266,6 +286,50 @@ function ActivityDetail({ label, liveData, onEntitySelect }) {
               </div>
             );
           })}
+          {suspendedServers.length > 0 && (
+            <div style={{ marginTop: SPACE.sm }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, fontFamily: FONT, textTransform: "uppercase", letterSpacing: 1, marginBottom: SPACE.sm }}>
+                Suspended by shift change
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: SPACE.sm }}>
+                {suspendedServers.map(srv => (
+                  <div
+                    key={srv.id}
+                    style={{
+                      background: `${C.muted}08`, borderRadius: RADIUS.md,
+                      padding: `${SPACE.sm}px ${SPACE.md}px`,
+                      border: `1px dashed ${C.muted}40`,
+                      opacity: 0.6,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: SPACE.sm, marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, fontFamily: FONT }}>
+                        Server #{srv.id}
+                      </span>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, color: C.muted,
+                        background: `${C.muted}18`,
+                        padding: "1px 5px", borderRadius: RADIUS.sm, fontFamily: FONT,
+                        textTransform: "uppercase",
+                      }}>
+                        suspended
+                      </span>
+                      {srv.status === "busy" && srv.customerId != null && (
+                        <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>
+                          was serving #{srv.customerId}
+                        </span>
+                      )}
+                    </div>
+                    {srv.busyTime > 0 && (
+                      <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT }}>
+                        Total busy before suspension: t={srv.busyTime.toFixed(1)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

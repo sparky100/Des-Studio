@@ -37,6 +37,7 @@ function makeActivitySnap({ clock = 15.0, servers = [] } = {}) {
     _downtime: s.downtime ?? 0,
     _scheduledDuration: s.scheduledDuration ?? null,
     _busyStart: s.serviceStart ?? null,
+    _suspended: s._suspended ?? false,
   }));
   // Add customer entities for busy servers
   if (servers.some(s => s.currentCustId != null)) {
@@ -277,6 +278,32 @@ describe("NodeDetailSidebar", () => {
     expect(screen.getByText("Server #1")).toBeInTheDocument();
     expect(screen.getByText("idle")).toBeInTheDocument();
     expect(screen.getByText("Starvation: t=3.0")).toBeInTheDocument();
+  });
+
+  test("shows suspended servers in separate section with shift change label", () => {
+    const snap = makeActivitySnap({
+      servers: [
+        { type: "Server", status: "busy", busyTime: 5.0, currentCustId: 10, serviceStart: 8.0, scheduledDuration: 4.0 },
+        { type: "Server", status: "idle", busyTime: 2.0, starvationTime: 0 },
+        { type: "Server", status: "busy", busyTime: 3.0, _suspended: true, currentCustId: 11, serviceStart: 5.0, scheduledDuration: 6.0 },
+        { type: "Server", status: "idle", busyTime: 1.0, _suspended: true, starvationTime: 0 },
+      ],
+    });
+    renderWithTheme(
+      <NodeDetailSidebar
+        selectedNode={{ nodeType: "activityNode", label: "ServiceActivity", refId: "ce-1" }}
+        onClose={vi.fn()}
+        snap={snap}
+        serverTypeIndex={mockServerTypeIndex}
+        model={mockModel}
+      />
+    );
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("Suspended (shift change)")).toBeInTheDocument();
+    expect(screen.getAllByText("suspended").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Suspended by shift change")).toBeInTheDocument();
+    expect(screen.getAllByText("busy").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("idle").length).toBeGreaterThanOrEqual(1);
   });
 
   test("calls onClose when close button clicked", () => {
