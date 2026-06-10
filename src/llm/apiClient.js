@@ -105,9 +105,12 @@ function extractJsonText(payload) {
 }
 
 export function tryExtractJson(raw) {
-  // Strategy 1: code fences (```json ... ```) anywhere in text
-  const fenced = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
-  if (fenced) return JSON.parse(fenced[1]);
+  // Strategy 1: code fences (```json ... ```) — try every match until one parses
+  const fenceRe = /```(?:json)?\s*\n?([\s\S]*?)\n?```/gi;
+  let m;
+  while ((m = fenceRe.exec(raw)) !== null) {
+    try { return JSON.parse(m[1]); } catch { /* try next fence segment */ }
+  }
 
   // Strategy 2: <json> tags anywhere
   const tagged = raw.match(/<json>\s*([\s\S]*?)<\/json>/i);

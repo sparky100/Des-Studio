@@ -235,7 +235,7 @@ export function DiagnosticsTab({ model, results, onGoToNode, mode = "full" }) {
         { role: "system", content: DIAGNOSIS_SYSTEM_PROMPT },
         { role: "user", content: JSON.stringify(ctx, null, 0) },
       ];
-      const raw = await callDiagnosticsApi(messages, 1000);
+      const raw = await callDiagnosticsApi(messages, 3000);
 
       let parsed;
       try {
