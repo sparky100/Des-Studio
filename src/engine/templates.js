@@ -1109,7 +1109,7 @@ const AE_FULL_DEPARTMENT = {
     { id: "b_resus_obs_done", name: "Resus Observation Done", scheduledTime: "9999",
       effect: ["RELEASE(Assessment Nurse, Discharge Decision Queue)"], schedules: [] },
     { id: "b_discharge_done", name: "Discharge Decision Made", scheduledTime: "9999",
-      effect: ["COMPLETE()", "RELEASE(A&E Doctor)"], schedules: [] },
+      effect: ["COMPLETE()"], schedules: [] },
   ],
   cEvents: [
     { id: "c_start_discharge", name: "Start Discharge Decision", priority: 1,

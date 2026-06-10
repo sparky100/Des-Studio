@@ -32,6 +32,7 @@ Read this before writing any model JSON.
 |---|---------|------|
 | 1 | `probabilisticRouting` on ARRIVE B-events | ARRIVE events route entities via their effect macro — never via routing tables. For arrival splits, create one ARRIVE B-event per stream and set each Exponential mean to `baseMean / probability`. Blocked by V39. |
 | 2 | `"effect": ["RELEASE(Server)", "COMPLETE()"]` | `RELEASE` sets entity to `"waiting"` so `COMPLETE` is silently skipped. Use `"effect": ["COMPLETE()"]` alone — COMPLETE releases the server automatically. Warning V38. |
+| 2b | `"effect": ["COMPLETE()", "RELEASE(Server)"]` | `COMPLETE` marks entity `"done"` and releases the server. The `RELEASE` that follows re-queues the completed entity, causing an **infinite loop**. Use `"effect": ["COMPLETE()"]` alone. Warning V38b. |
 | 3 | Missing `useEntityCtx: true` on cSchedules | Without this, the target B-event can't identify the entity. Always add `"useEntityCtx": true` to every `cSchedules[]` entry. |
 | 4 | `balkCondition` as a string | Must be a predicate object: `{ "variable": "Queue.Name.length", "operator": ">", "value": 5 }`. Never a string expression. Blocked by CHK-011. |
 | 5 | `routing[].condition` as a string | Same as #4 — must be a predicate object, never a string. Blocked by CHK-012. |

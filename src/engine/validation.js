@@ -430,6 +430,25 @@ export function validateModel(model) {
     }
   });
 
+  // ── V38b: COMPLETE immediately followed by RELEASE in same effect ────────────
+  // COMPLETE marks the entity "done" and releases the server. If RELEASE follows,
+  // claimMatchesPair returns true (all claim fields are now null) and the entity
+  // is re-queued — causing an infinite loop. Use only COMPLETE(); it releases the
+  // server automatically.
+  bEvents.forEach(b => {
+    const text = effectText(b.effect);
+    const parts = text.split(';').map(s => s.trim()).filter(Boolean);
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (/^COMPLETE\s*\(\s*\)/i.test(parts[i]) && /^RELEASE\s*\(/i.test(parts[i + 1])) {
+        warn('V38b',
+          `B-Event '${b.name || b.id}': COMPLETE() followed immediately by RELEASE() — the RELEASE will re-queue the completed entity, causing an infinite loop. Remove the RELEASE(); COMPLETE() releases the server automatically.`,
+          'bevents',
+          { eventIds: [b.id] });
+        break;
+      }
+    }
+  });
+
   const queueRefsFromCondition = (condition) => {
     if (!condition) return [];
     if (typeof condition === 'string') {

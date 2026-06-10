@@ -162,6 +162,7 @@ function waitingSnapshot(entity, clock, queueName) {
 
 export function markEntityWaiting(entity, clock, queueName = entity.queue ?? entity.lastQueue ?? null) {
   if (!entity) return false;
+  if (entity.status === "done" || entity.status === "reneged") return false;
   entity.status = "waiting";
   entity.queue = queueName;
   entity.waitingSince = clock;
