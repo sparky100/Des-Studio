@@ -355,12 +355,15 @@ export const MACROS = [
 
       const matchedQ = helpers.findQueueConfig?.(cType);
       const discipline = matchedQ?.discipline || 'FIFO';
+      // When cType matched via customerType (not queue name), use the actual queue name as the token
+      // so listWaiting searches entity.queue === queueName rather than entity.queue === customerType
+      const queueToken = matchedQ ? matchedQ.name : cType;
 
       const filterFn = ctx.entityFilter
         ? (entity) => evaluatePredicate(ctx.entityFilter, { currentEntity: entity })
         : null;
 
-      const candidates = listWaiting(cType, discipline, entities, filterFn, !!matchedQ);
+      const candidates = listWaiting(queueToken, discipline, entities, filterFn, !!matchedQ);
       const allIdleServers = helpers.idleOf(sType) || [];
 
       const arbitration = {
