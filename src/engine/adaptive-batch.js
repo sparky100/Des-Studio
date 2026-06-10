@@ -36,7 +36,6 @@ function runReplicationsPromise(opts, signal) {
     }
     const handle = runReplications({
       ...opts,
-      collectTimeSeries: false,
       onComplete: resolve,
       onError: reject,
       onCancelled: () => reject(new DOMException('Aborted', 'AbortError')),
