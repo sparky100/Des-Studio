@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Tag, Btn, SH, InfoBox, Empty, CommitInput } from "../shared/components.jsx";
-import { deriveGraphFromModel, VISUAL_NODE_TYPES } from "./graph.js";
+import { deriveGraphFromModel, VISUAL_NODE_TYPES, exportCanvasToPng } from "./graph.js";
+import { buildModelDefinitionHtml } from "../../reports/reportGenerator.js";
 import { validateVisualGraph, addVisualNode, addVisualPattern, deleteVisualNode, deleteVisualNodes, connectVisualNodes, updateVisualNode, deleteVisualEdge, findNodeDependents, updateGraphLayout, validateVisualConnection, VISUAL_PATTERNS } from "./graph-operations.js";
 import { FlowDiagramReactFlow } from "./FlowDiagramReactFlow.jsx";
 import { VisualNodeInspector } from "./VisualNodeInspector.jsx";
@@ -900,60 +901,98 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               ))}
             </div>
 
-            {(model?.sections || []).length > 0 && (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              {(model?.sections || []).length > 0 && (
+                <button
+                  type="button"
+                  aria-pressed={showSections}
+                  onClick={() => setShowSections(prev => {
+                    const next = !prev;
+                    try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch {}
+                    return next;
+                  })}
+                  title={showSections ? "Hide section overlays" : "Show section overlays"}
+                  style={{
+                    background: showSections ? `${C.accent}22` : "transparent",
+                    border: `1px solid ${showSections ? C.accent : C.border}`,
+                    borderRadius: 4,
+                    color: showSections ? C.accent : C.muted,
+                    cursor: "pointer",
+                    fontFamily: FONT,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "5px 10px",
+                  }}
+                >
+                  Sections
+                </button>
+              )}
+
               <button
                 type="button"
-                aria-pressed={showSections}
-                onClick={() => setShowSections(prev => {
-                  const next = !prev;
-                  try { localStorage.setItem("des.sections.show", next ? "1" : "0"); } catch {}
-                  return next;
-                })}
-                title={showSections ? "Hide section overlays" : "Show section overlays"}
-                style={{
-                  background: showSections ? `${C.accent}22` : "transparent",
-                  border: `1px solid ${showSections ? C.accent : C.border}`,
-                  borderRadius: 4,
-                  color: showSections ? C.accent : C.muted,
-                  cursor: "pointer",
-                  fontFamily: FONT,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: "5px 10px",
+                title="Print diagram"
+                onClick={async () => {
+                  const dataUrl = await exportCanvasToPng();
+                  if (!dataUrl) { alert("Could not capture diagram — try again after the canvas has fully loaded."); return; }
+                  const win = window.open("", "_blank");
+                  if (!win) return;
+                  const escHtml = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+                  win.document.write(`<!DOCTYPE html><html><head><title>${escHtml(model.name||"Model")} — Diagram</title><style>body{margin:0;padding:20px 24px;font-family:Segoe UI,Arial,sans-serif;background:#fff}h1{font-size:18px;font-weight:700;margin-bottom:4px;color:#111}p{font-size:11px;color:#666;margin-bottom:14px}img{max-width:100%;height:auto;border:1px solid #e5e5e5;border-radius:4px}@media print{@page{margin:1.5cm}}</style></head><body><h1>${escHtml(model.name||"Model")}</h1><p>${escHtml(model.description||"")}</p><img src="${dataUrl}" /></body></html>`);
+                  win.document.close();
+                  win.focus();
+                  win.print();
                 }}
+                style={{ ...ICON_BTN_BASE, fontSize: 10, padding: "5px 10px", border: `1px solid ${C.border}`, borderRadius: 4 }}
               >
-                Sections
+                Print diagram
               </button>
-            )}
 
-            {selectedNodeIds.length > 0 && (
-              <div
-                aria-label="Selection actions"
-                style={{
-                  alignItems: "center",
-                  background: C.panel,
-                  border: `1px solid ${C.border}`,
-                  borderRadius: 6,
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 6,
-                  justifyContent: "flex-end",
-                  padding: "4px 6px",
+              <button
+                type="button"
+                title="Print model definition"
+                onClick={() => {
+                  const html = buildModelDefinitionHtml(model);
+                  const win = window.open("", "_blank");
+                  if (!win) return;
+                  win.document.write(html);
+                  win.document.close();
+                  win.focus();
+                  win.print();
                 }}
+                style={{ ...ICON_BTN_BASE, fontSize: 10, padding: "5px 10px", border: `1px solid ${C.border}`, borderRadius: 4 }}
               >
-                <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
-                  {selectedNodeIds.length} selected
-                </span>
-                {canEdit && (
-                  <Btn small variant="danger" onClick={deleteSelectedNodes}>
-                    Delete
+                Print definition
+              </button>
+
+              {selectedNodeIds.length > 0 && (
+                <div
+                  aria-label="Selection actions"
+                  style={{
+                    alignItems: "center",
+                    background: C.panel,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: 6,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 6,
+                    justifyContent: "flex-end",
+                    padding: "4px 6px",
+                  }}
+                >
+                  <span style={{ color: C.muted, fontFamily: FONT, fontSize: 10, fontWeight: 700 }}>
+                    {selectedNodeIds.length} selected
+                  </span>
+                  {canEdit && (
+                    <Btn small variant="danger" onClick={deleteSelectedNodes}>
+                      Delete
+                    </Btn>
+                  )}
+                  <Btn small variant="ghost" onClick={clearSelection}>
+                    Clear selection
                   </Btn>
-                )}
-                <Btn small variant="ghost" onClick={clearSelection}>
-                  Clear selection
-                </Btn>
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
           {message && (
             <div role={message.state === "error" ? "alert" : "status"} style={{
