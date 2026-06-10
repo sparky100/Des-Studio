@@ -1056,6 +1056,22 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         }}
         onExplore={()=>setShowExplorePanel(true)}
         exploreVisible={exploreVisible}
+        onPrintDiagram={async () => {
+          const { exportCanvasToPng } = await import("./visual-designer/graph.js");
+          const dataUrl = await exportCanvasToPng();
+          if (!dataUrl) { alert("Could not capture diagram — try again after the canvas has fully loaded."); return; }
+          const win = window.open("", "_blank");
+          if (!win) return;
+          const esc = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+          win.document.write(`<!DOCTYPE html><html><head><title>${esc(model.name||"Diagram")}</title><style>body{margin:0;display:flex;justify-content:center;align-items:flex-start;padding:20px;background:#fff;}img{max-width:100%;}</style></head><body><img src="${dataUrl}" /></body></html>`);
+          win.document.close(); win.focus(); win.print();
+        }}
+        onPrintDefinition={() => {
+          const html = buildModelDefinitionHtml(model);
+          const win = window.open("", "_blank");
+          if (!win) return;
+          win.document.write(html); win.document.close(); win.focus(); win.print();
+        }}
       />
       <div style={{flex:1,display:"flex",flexDirection:"row",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"clamp(12px,2vw,20px)"}}>

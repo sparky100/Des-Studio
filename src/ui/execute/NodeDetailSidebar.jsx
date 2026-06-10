@@ -151,7 +151,7 @@ function QueueDetail({ label, liveData, onEntitySelect }) {
   );
 }
 
-function ActivityDetail({ label, liveData, onEntitySelect }) {
+export function ActivityDetail({ label, liveData, onEntitySelect }) {
   const { C, FONT } = useTheme();
   const {
     serverTypeName, capacity, busyCount, idleCount, failedCount, suspendedCount = 0,

@@ -50,10 +50,14 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
 
   if (!node) {
     return (
-      <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14 }}>
-        <SH label="Inspector" color={C.muted} />
-        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6 }}>
-          Select a node to review or edit its canonical model fields.
+      <div style={{ background: C.panel, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+          <SH label="Inspector" color={C.muted} />
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
+          <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6 }}>
+            Select a node to review or edit its canonical model fields.
+          </div>
         </div>
       </div>
     );
@@ -71,8 +75,8 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
   const activityServer = effectValue(cEvent?.effect, /ASSIGN\([^,)]+,\s*([^)]+)\)/i);
 
   return (
-    <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 6, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+    <div style={{ background: C.panel, display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 14px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <SH label="Inspector" color={C.accent}>
           <Tag label={node.type} color={node.type === VISUAL_NODE_TYPES.SINK ? C.red : node.type === VISUAL_NODE_TYPES.ACTIVITY ? C.purple : node.type === VISUAL_NODE_TYPES.QUEUE ? C.cEvent : C.green} />
         </SH>
@@ -83,19 +87,21 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
             title="Close inspector"
             aria-label="Close inspector"
             style={{
-              background: "transparent",
-              border: "none",
-              borderRadius: 3,
-              color: C.muted,
+              background: C.surface,
+              border: `1px solid ${C.border}`,
+              borderRadius: 4,
+              color: C.text,
               cursor: "pointer",
               fontFamily: FONT,
-              fontSize: 14,
+              fontSize: 12,
+              fontWeight: 700,
               lineHeight: 1,
-              padding: "2px 4px",
+              padding: "4px 10px",
             }}
-          >›</button>
+          >✕</button>
         )}
       </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
 
       {node.type === VISUAL_NODE_TYPES.SOURCE && bEvent && (
         <>
@@ -242,6 +248,8 @@ export function VisualNodeInspector({ model, graph, selectedNodeId, canEdit, onP
           <Btn small variant="danger" full onClick={() => onDeleteNode?.(node)}>Delete node</Btn>
         </div>
       )}
+
+      </div>
     </div>
   );
 }
