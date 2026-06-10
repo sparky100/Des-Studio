@@ -479,7 +479,7 @@ export function ExecuteCanvas({
         e => e.role === "server" && e.name?.trim().toLowerCase() === serverType.trim().toLowerCase()
       );
       const capacity = parseInt(et?.count ?? "1", 10) || 1;
-      index.set(ce.id, { serverType, capacity });
+      index.set(ce.id, { serverType, capacity, ceventName: ce.name });
     }
     return index;
   }, [model.cEvents, model.entityTypes]);
@@ -616,8 +616,13 @@ export function ExecuteCanvas({
               customerId: srv.currentCustId ?? null,
               customerType: cust?.type ?? null,
               customerArrivalTime: cust?.arrivalTime ?? null,
+              ceventName: cust?.ceventName ?? null,
             };
           });
+          const ceventName = meta?.ceventName ?? null;
+          const activeCount = ceventName
+            ? serverDetails.filter(s => s.ceventName === ceventName).length
+            : 0;
           liveData = {
             serverTypeName:    serverType ?? null,
             capacity:          actualCapacity,
@@ -628,6 +633,7 @@ export function ExecuteCanvas({
             completionSignal:  snap.served,
             servers:           serverDetails,
             clock:             snap.clock,
+            activeCount,
           };
         } else if (node.type === "sink") {
           const customers = entities.filter(e => e.role !== "server");

@@ -98,6 +98,7 @@ export function ExecuteActivityNode({ data }) {
   const failedCount = live?.failedCount ?? 0;
   const utilisation = live?.utilisation ?? 0;
   const serverName  = live?.serverTypeName ?? null;
+  const activeCount = live?.activeCount ?? 0;
   const useText     = capacity > MAX_DOTS;
   const hasFailures = failedCount > 0;
 
@@ -165,33 +166,35 @@ export function ExecuteActivityNode({ data }) {
 
       {live ? (
         <>
-          {/* Dot grid or text pool */}
-          {useText
-            ? <PoolText busyCount={busyCount} failedCount={failedCount} capacity={capacity} />
-            : <DotGrid  capacity={capacity}   busyCount={busyCount} failedCount={failedCount} />
-          }
+          {/* Per-activity serving count */}
+          <div style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: activeCount > 0 ? C.amber : C.muted,
+            fontFamily: FONT,
+          }}>
+            {activeCount > 0 ? `${activeCount} serving here` : "no entities serving"}
+          </div>
 
-          {/* Utilisation % and failure indicator */}
+          {/* Pool status — dot grid or text + utilisation */}
           <div style={{
             display: "flex",
-            justifyContent: "space-between",
+            gap: 6,
             alignItems: "center",
-            marginTop: 1,
+            fontSize: 9,
+            color: C.muted,
+            fontFamily: FONT,
+            flexWrap: "wrap",
           }}>
-            <span style={{
-              fontSize: 9,
-              color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted,
-              fontFamily: FONT,
-            }}>
-              {utilisation.toFixed(0)}% utilisation
+            {useText
+              ? <span>{busyCount}/{capacity} busy</span>
+              : <DotGrid capacity={capacity} busyCount={busyCount} failedCount={failedCount} />
+            }
+            <span style={{ color: utilisation >= 90 ? C.red : utilisation >= 60 ? C.amber : C.muted }}>
+              {utilisation.toFixed(0)}%
             </span>
             {hasFailures && (
-              <span style={{
-                fontSize: 9,
-                color: C.red,
-                fontFamily: FONT,
-                fontWeight: 600,
-              }}>
+              <span style={{ color: C.red, fontWeight: 600 }}>
                 ⚠ {failedCount} failed
               </span>
             )}
