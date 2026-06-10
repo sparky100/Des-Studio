@@ -1,1 +1,1 @@
-export { generateReport, sanitizeFilename } from './reportGenerator.js';
+export { generateReport, sanitizeFilename, buildModelDefinitionHtml } from './reportGenerator.js';

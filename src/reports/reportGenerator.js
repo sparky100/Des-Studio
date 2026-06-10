@@ -1349,4 +1349,162 @@ export async function generateReport(model = {}, results = {}, experimentConfig 
     : buildHtmlReport(ctx);
 }
 
+function fmtDist(dist, params = {}) {
+  if (!dist) return null;
+  const p = params || {};
+  const d = String(dist).toLowerCase();
+  if (d === 'exponential' || d === 'exp') {
+    const mean = p.mean ?? (p.rate != null ? (1 / p.rate) : null);
+    return mean != null ? `Exponential, mean ${mean}` : 'Exponential';
+  }
+  if (d === 'uniform') {
+    if (p.min != null && p.max != null) return `Uniform ${p.min}–${p.max}`;
+    return 'Uniform';
+  }
+  if (d === 'normal' || d === 'gaussian') {
+    if (p.mean != null && p.std != null) return `Normal, mean ${p.mean} SD ${p.std}`;
+    return 'Normal';
+  }
+  if (d === 'triangular' || d === 'triangle') {
+    if (p.min != null && p.mode != null && p.max != null) return `Triangular (${p.min}, ${p.mode}, ${p.max})`;
+    return 'Triangular';
+  }
+  if (d === 'lognormal' || d === 'log-normal') {
+    if (p.mean != null && p.std != null) return `Log-normal, mean ${p.mean} SD ${p.std}`;
+    return 'Log-normal';
+  }
+  if (d === 'fixed' || d === 'constant' || d === 'deterministic') {
+    return p.value != null ? `Fixed ${p.value}` : 'Fixed';
+  }
+  if (d === 'erlang') {
+    return p.k != null && p.mean != null ? `Erlang-${p.k}, mean ${p.mean}` : 'Erlang';
+  }
+  const parts = Object.entries(p).map(([k, v]) => `${k}=${v}`).join(', ');
+  return parts ? `${dist}(${parts})` : dist;
+}
+
+function fmtSchedule(sched = []) {
+  const entry = (sched || []).find(s => s.dist);
+  if (!entry) return null;
+  const unit = entry.unit || '';
+  const desc = fmtDist(entry.dist, entry.distParams);
+  return desc ? (unit ? `${desc} ${unit}` : desc) : null;
+}
+
+function printSection(title, rows) {
+  if (!rows.length) return '';
+  return `<section>
+  <h2>${esc(title)}</h2>
+  <table>
+    <thead><tr>${rows[0].map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+    <tbody>
+      ${rows.slice(1).map(r => `<tr>${r.map(c => `<td>${c ?? '—'}</td>`).join('')}</tr>`).join('\n      ')}
+    </tbody>
+  </table>
+</section>`;
+}
+
+export function buildModelDefinitionHtml(model = {}) {
+  const name = esc(model.name || 'Untitled model');
+  const desc = esc(model.description || '');
+  const timeUnit = esc(model.timeUnit || 'mins');
+  const printDate = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  const entityTypes = model.entityTypes || [];
+  const customers = entityTypes.filter(e => e.role !== 'server');
+  const servers = entityTypes.filter(e => e.role === 'server');
+  const queues = model.queues || [];
+  const bEvents = model.bEvents || [];
+  const cEvents = model.cEvents || [];
+  const goals = model.goals || [];
+
+  const customerRows = customers.length ? [
+    ['Name', 'Description'],
+    ...customers.map(e => [esc(e.name), esc(e.description || '')])
+  ] : [];
+
+  const serverRows = servers.length ? [
+    ['Name', 'Description', 'Capacity', 'Shift pattern'],
+    ...servers.map(e => {
+      const shifts = (e.shiftSchedule || []);
+      const shiftDesc = shifts.length > 1
+        ? shifts.map(s => `${s.capacity} from t=${s.time}`).join('; ')
+        : (e.count != null ? String(e.count) : '1');
+      return [esc(e.name), esc(e.description || ''), shifts.length ? '' : esc(String(e.count ?? 1)), esc(shifts.length ? shiftDesc : 'Fixed')];
+    })
+  ] : [];
+
+  const queueRows = queues.length ? [
+    ['Name', 'Description', 'Discipline', 'Capacity'],
+    ...queues.map(q => [esc(q.name), esc(q.description || ''), esc(q.discipline || 'FIFO'), q.capacity != null ? esc(String(q.capacity)) : 'Unlimited'])
+  ] : [];
+
+  const arrivalRows = bEvents.length ? [
+    ['Name', 'Description', 'Inter-arrival time'],
+    ...bEvents.map(ev => {
+      const sched = fmtSchedule(ev.schedules);
+      return [esc(ev.name), esc(ev.description || ''), sched ? `${sched} ${timeUnit}` : '—'];
+    })
+  ] : [];
+
+  const serviceRows = cEvents.length ? [
+    ['Name', 'Description', 'Service time', 'Server'],
+    ...cEvents.map(ev => {
+      const sched = fmtSchedule(ev.schedules);
+      return [esc(ev.name), esc(ev.description || ''), sched ? `${sched} ${timeUnit}` : '—', esc(ev.serverType || ev.resourceType || '')];
+    })
+  ] : [];
+
+  const goalRows = goals.length ? [
+    ['Goal', 'Target'],
+    ...goals.map(g => [esc(g.label || g.metric || ''), esc(g.target != null ? `${g.operator || '≤'} ${g.target}` : '')])
+  ] : [];
+
+  const sections = [
+    customers.length ? printSection('Customer types', customerRows) : '',
+    servers.length ? printSection('Server types (resources)', serverRows) : '',
+    queues.length ? printSection('Queues', queueRows) : '',
+    bEvents.length ? printSection('Arrivals', arrivalRows) : '',
+    cEvents.length ? printSection('Service events', serviceRows) : '',
+    goals.length ? printSection('Performance goals', goalRows) : '',
+  ].filter(Boolean).join('\n');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${name} — Model Definition</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 13px; color: #1a1a1a; background: #fff; padding: 32px 40px; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #555; font-size: 12px; margin-bottom: 6px; }
+  .description { color: #333; font-size: 13px; margin-bottom: 20px; line-height: 1.6; }
+  h2 { font-size: 14px; font-weight: 700; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 1.5px solid #ddd; color: #111; }
+  section { margin-bottom: 28px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; font-weight: 600; background: #f5f5f5; padding: 6px 10px; border: 1px solid #ddd; }
+  td { padding: 5px 10px; border: 1px solid #ddd; vertical-align: top; line-height: 1.5; }
+  tr:nth-child(even) td { background: #fafafa; }
+  .footer { margin-top: 32px; font-size: 11px; color: #888; border-top: 1px solid #eee; padding-top: 10px; }
+  @media print {
+    body { padding: 0; }
+    @page { margin: 1.5cm 1.8cm; }
+    h2 { break-before: avoid; }
+    section { break-inside: avoid; }
+    table { break-inside: auto; }
+    tr { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+  <h1>${name}</h1>
+  <div class="subtitle">Printed ${esc(printDate)}</div>
+  ${desc ? `<div class="description">${desc}</div>` : ''}
+  ${sections}
+  <div class="footer">Generated by simmodlr</div>
+</body>
+</html>`;
+}
+
 export { sanitizeFilename, formatDate };
