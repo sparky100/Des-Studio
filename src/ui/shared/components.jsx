@@ -847,6 +847,21 @@ const SectionPanel = ({label, status, color, children, defaultOpen=false}) => {
   );
 };
 
+export function TypingIndicator() {
+  const { C } = useTheme();
+  return (
+    <div style={{ display: "flex", gap: 4, alignItems: "center", padding: "8px 12px" }}>
+      {[0, 1, 2].map(i => (
+        <div key={i} style={{
+          width: 6, height: 6, borderRadius: "50%", background: C.muted,
+          animation: `pulse 1.2s ${i * 0.2}s infinite`,
+        }} />
+      ))}
+      <style>{`@keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:1} }`}</style>
+    </div>
+  );
+}
+
 export function MicIcon({ size = 16, color = "currentColor" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

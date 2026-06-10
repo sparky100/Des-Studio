@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 ;
-import { Btn, MicIcon, ArrowUpIcon } from "../shared/components.jsx";
+import { Btn, MicIcon, ArrowUpIcon, TypingIndicator } from "../shared/components.jsx";
 import { useToast } from "../shared/ToastContext.jsx";
 import { streamNarrative } from "../../llm/apiClient.js";
 import { buildCiResults, buildComparisonPrompt, buildExplainResultsPrompt, buildResultsQueryPrompt, buildSuggestionPrompt, parseSuggestionResponse, applySuggestionPatch, buildPlanRefinementPrompt, parsePlanRefinementResponse, applySchedulePatch, buildModelQueryPrompt } from "../../llm/prompts.js";
@@ -771,13 +771,11 @@ export const AiAssistantPanel = ({
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
 
   const renderContent = () => {
+    if (status === "loading") return <TypingIndicator />;
     if (isStreaming && (activeKind === "suggestion" || activeKind === "explainResults")) {
-      return (
-        <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>
-          Building suggestions…
-        </div>
-      );
+      return <TypingIndicator />;
     }
+
     if (parsedSuggestion) {
       const analysisText = parsedSuggestion.analysis
         .replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "")
@@ -809,27 +807,32 @@ export const AiAssistantPanel = ({
       );
     }
     if (conversationHistory.length > 0) {
-      return conversationHistory.map((entry, i) => (
-        <div key={i} style={{ marginBottom: 10 }}>
-          <div style={{
-            color: entry.role === "user" ? C.accent : C.text,
-            fontFamily: FONT,
-            fontWeight: 700,
-            fontSize: 10,
-            letterSpacing: 1,
-            marginBottom: 4,
-          }}>
-            {entry.role === "user" ? "YOU" : "AI"}
-          </div>
-          <MarkdownContent text={entry.content} style={{ color: C.text, fontSize: 12, lineHeight: 1.7 }} />
-        </div>
-      ));
+      return (
+        <>
+          {conversationHistory.map((entry, i) => (
+            <div key={i} style={{ marginBottom: 10 }}>
+              <div style={{
+                color: entry.role === "user" ? C.accent : C.text,
+                fontFamily: FONT,
+                fontWeight: 700,
+                fontSize: 10,
+                letterSpacing: 1,
+                marginBottom: 4,
+              }}>
+                {entry.role === "user" ? "YOU" : "AI"}
+              </div>
+              <MarkdownContent text={entry.content} style={{ color: C.text, fontSize: 12, lineHeight: 1.7 }} />
+            </div>
+          ))}
+          {isStreaming && !response && <TypingIndicator />}
+          {isStreaming && response && <MarkdownContent text={response} />}
+        </>
+      );
     }
     if (isResultsContext && activeMode === "refine") {
-      if (refineStatus === "loading") return "Building plan suggestions…";
+      if (refineStatus === "loading") return <TypingIndicator />;
       return "";
     }
-    if (status === "loading") return "Waiting for analysis...";
     if (response) return <MarkdownContent text={response} />;
     if (activeKind === "comparison") return "Select a saved run above and click Compare.";
     return "";
