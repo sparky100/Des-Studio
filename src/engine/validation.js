@@ -538,12 +538,21 @@ export function validateModel(model) {
     if (et.role !== "server") return;
     const raw = et.count;
     if (raw === undefined || raw === null || raw === "") return; // defaults to 1 in engine
-    const n = parseInt(raw, 10);
-    if (!Number.isInteger(n) || n < 1) {
+    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 1) {
       err('V19',
-        `Server type '${et.name || et.id}' count '${raw}' must be an integer >= 1.`,
+        `Server type '${et.name || et.id}' count must be an integer >= 1 (got ${JSON.stringify(raw)}).`,
         'entities',
         { entityTypeIds: [et.id] });
+    }
+    if (Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) {
+      const firstCap = et.shiftSchedule[0]?.capacity;
+      if (Number.isInteger(firstCap) && firstCap !== raw) {
+        warn('V19-shift',
+          `Server type '${et.name || et.id}' count (${raw}) does not match first shift capacity (${firstCap}). ` +
+          `The engine will use the shift capacity — set count = ${firstCap} for consistency.`,
+          'entities',
+          { entityTypeIds: [et.id] });
+      }
     }
   });
 

@@ -1019,7 +1019,7 @@ export function applySuggestionPatch(model, change) {
     const entities = clone.entityTypes || [];
     const found = entities.find(e => e.name === change.target || e.id === change.target);
     if (!found) return clone;
-    found.count = change.to;
+    found.count = Number.isInteger(change.to) ? change.to : parseInt(change.to, 10);
     return clone;
   }
 

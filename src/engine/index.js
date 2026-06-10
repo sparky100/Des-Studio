@@ -254,7 +254,7 @@ function modelWithShiftInitialCapacity(model) {
       if (entityType.role !== "server") return entityType;
       const schedule = getValidShiftSchedule(entityType);
       if (!schedule.length) return entityType;
-      return { ...entityType, count: String(schedule[0].capacity) };
+      return { ...entityType, count: schedule[0].capacity };
     }),
   };
 }
