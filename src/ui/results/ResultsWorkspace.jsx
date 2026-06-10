@@ -1765,6 +1765,9 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                         dataPreview={<SeriesDataPreview series={series} />}
                       >
                         <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="% busy" formatY={fmtPct} />
+                        {series.hasShiftSchedule && Array.isArray(series.capacitySeries) && series.capacitySeries.length >= 2 && (
+                          <MiniLineChart title="Resources available over time" ariaTitle={`${series.label} capacity`} points={series.capacitySeries} color={C.muted} yLabel="servers" />
+                        )}
                       </ChartCard>
                     );
                   })}

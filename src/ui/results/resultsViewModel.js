@@ -90,24 +90,24 @@ export function buildServerUtilizationSeries(results = {}, model = {}) {
   const serverTypes = (model?.entityTypes || []).filter(et => et.role === "server");
 
   return serverTypes.map(server => {
-    const capacity = Math.max(1, parseInt(server.count || "1", 10) || 1);
     const hasShiftSchedule = Array.isArray(server.shiftSchedule) && server.shiftSchedule.length > 0;
-    const capacityNote = `${capacity} resource${capacity !== 1 ? "s" : ""}${hasShiftSchedule ? " (shift schedule applies — capacity varies over time)" : ""}`;
     return {
       id: server.id || server.name,
       label: server.name,
-      capacity,
       hasShiftSchedule,
       isPercent: true,
       points: timeSeries.map(entry => {
         const busy = finiteNumber(entry?.byType?.[server.name]?.busy);
         const total = finiteNumber(entry?.byType?.[server.name]?.total);
-        const effectiveCapacity = total > 0 ? total : capacity;
         return {
           t: finiteNumber(entry?.t),
-          value: (busy / effectiveCapacity) * 100,
+          value: total > 0 ? (busy / total) * 100 : 0,
         };
       }),
+      capacitySeries: timeSeries.map(entry => ({
+        t: finiteNumber(entry?.t),
+        value: finiteNumber(entry?.byType?.[server.name]?.total),
+      })),
       sourceLabel: `Busy ${server.name} resources measured during the run, divided by actual capacity at each time point`,
     };
   });
