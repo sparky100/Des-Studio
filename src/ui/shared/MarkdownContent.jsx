@@ -1,6 +1,5 @@
 // ui/shared/MarkdownContent.jsx — Lightweight markdown-to-React renderer
-// Uses existing theme tokens. No external dependencies.
-import { C, FONT, RADIUS, SPACE } from "./tokens.js";
+import { C, RADIUS, SPACE } from "./tokens.js";
 
 function parseInline(text) {
   const parts = [];
@@ -43,8 +42,8 @@ function renderInline(text, keyPrefix = "") {
       case "code":
         return (
           <code key={key} style={{
-            background: `${C.accent}22`, fontFamily: FONT, fontSize: 11,
-            padding: "1px 5px", borderRadius: RADIUS.sm, color: C.text,
+            background: `${C.accent}22`,
+            padding: "1px 5px", borderRadius: RADIUS.sm,
           }}>
             {part.content}
           </code>
@@ -154,27 +153,19 @@ export function MarkdownContent({ text, style }) {
       {blocks.map((block, i) => {
         const key = `md-${i}`;
         switch (block.type) {
-          case "heading": {
-            const sizes = { 1: 16, 2: 14, 3: 13, 4: 12 };
+          case "heading":
             return (
               <div key={key} style={{
-                fontSize: sizes[block.level] ?? 12,
                 fontWeight: 700,
-                color: C.text,
-                fontFamily: FONT,
                 marginBottom: SPACE.sm,
                 marginTop: i > 0 ? SPACE.md : 0,
               }}>
                 {renderInline(block.content, key)}
               </div>
             );
-          }
           case "paragraph":
             return (
-              <div key={key} style={{
-                fontSize: 12, lineHeight: 1.7, color: C.text,
-                fontFamily: FONT, marginBottom: SPACE.sm,
-              }}>
+              <div key={key} style={{ lineHeight: 1.7, marginBottom: SPACE.sm }}>
                 {renderInline(block.content, key)}
               </div>
             );
@@ -183,11 +174,10 @@ export function MarkdownContent({ text, style }) {
               <div key={key} style={{ marginBottom: SPACE.sm }}>
                 {block.items.map((item, j) => (
                   <div key={`${key}-${j}`} style={{
-                    fontSize: 12, lineHeight: 1.6, color: C.text,
-                    fontFamily: FONT, marginBottom: 2, paddingLeft: 16,
+                    lineHeight: 1.6, marginBottom: 2, paddingLeft: 16,
                     position: "relative",
                   }}>
-                    <span style={{ position: "absolute", left: 4, color: C.muted }}>•</span>
+                    <span style={{ position: "absolute", left: 4 }}>•</span>
                     {renderInline(item, `${key}-${j}`)}
                   </div>
                 ))}
@@ -198,10 +188,10 @@ export function MarkdownContent({ text, style }) {
               <div key={key} style={{ marginBottom: SPACE.sm }}>
                 {block.items.map((item, j) => (
                   <div key={`${key}-${j}`} style={{
-                    fontSize: 12, lineHeight: 1.6, color: C.text,
-                    fontFamily: FONT, marginBottom: 2, paddingLeft: 20,
+                    lineHeight: 1.6, marginBottom: 2, paddingLeft: 20,
+                    position: "relative",
                   }}>
-                    <span style={{ position: "absolute", left: 4, color: C.muted, minWidth: 14 }}>{j + 1}.</span>
+                    <span style={{ position: "absolute", left: 4, minWidth: 14 }}>{j + 1}.</span>
                     {renderInline(item, `${key}-${j}`)}
                   </div>
                 ))}
@@ -212,8 +202,8 @@ export function MarkdownContent({ text, style }) {
               <pre key={key} style={{
                 background: C.bg, border: `1px solid ${C.border}`,
                 borderRadius: RADIUS.md, padding: SPACE.md,
-                fontFamily: FONT, fontSize: 11, lineHeight: 1.5,
-                color: C.text, overflow: "auto", marginBottom: SPACE.sm,
+                fontSize: 11, lineHeight: 1.5,
+                overflow: "auto", marginBottom: SPACE.sm,
                 whiteSpace: "pre-wrap", wordBreak: "break-word",
               }}>
                 {block.content}
