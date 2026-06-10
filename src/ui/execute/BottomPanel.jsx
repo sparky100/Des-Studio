@@ -7,6 +7,7 @@ import { Tag, PhaseTag } from "../shared/components.jsx";
 import { QueueDepthTimePlot, QueueHistogram } from "./SweepViews.jsx";
 import { formatSimWallTime } from "../../engine/clockUtils.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
+import { ActivityDetail } from "./NodeDetailSidebar.jsx";
 
 const fmt = (v, d = 0) => Number.isFinite(v) ? v.toFixed(d) : "—";
 
@@ -19,6 +20,7 @@ function formatStatus(status) {
 const TABS = [
   { id: "log",       label: "Step Log" },
   { id: "entities",  label: "Entity Details" },
+  { id: "resources", label: "Resources" },
   { id: "charts",    label: "Charts" },
   { id: "stagekpis", label: "Live Metrics" },
   { id: "fel",       label: "Future Events" },
@@ -859,9 +861,9 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
   });
 
   return (
-    <div style={{ display: "flex", gap: 16, height: "100%" }}>
+    <div style={{ display: "flex", gap: 16, height: "100%", flexWrap: "wrap", alignContent: "flex-start" }}>
       {/* Left: Entity List */}
-      <div style={{ flex: "0 0 45%", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={{ flex: "1 1 200px", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
           <input
             placeholder="Filter by ID, type or location…"
@@ -938,13 +940,66 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
       </div>
 
       {/* Right: Inspector */}
-      <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
+      <div style={{ flex: "2 1 200px", minWidth: 0, overflowY: "auto" }}>
         <EntityInspector
           entity={selectedEntityId != null ? entities.find(e => e.id === selectedEntityId) : null}
           snap={snap}
           onClose={onEntitySelect ? () => onEntitySelect(null) : undefined}
         />
       </div>
+    </div>
+  );
+}
+
+// ── Resources tab ────────────────────────────────────────────────────────────
+
+function ResourcesTab({ snap, model }) {
+  const { C, FONT } = useTheme();
+  const serverTypes = (model?.entityTypes || []).filter(et => et.role === "server");
+
+  if (!snap) {
+    return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>No snapshot yet.</div>;
+  }
+  if (serverTypes.length === 0) {
+    return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, fontStyle: "italic" }}>No server resource types defined.</div>;
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {serverTypes.map(et => {
+        const allEntities = snap.entities || [];
+        const servers = allEntities.filter(s => s.role === "server" &&
+          s.type?.trim().toLowerCase() === et.name?.trim().toLowerCase());
+        const busyCount = servers.filter(s => s.status === "busy" && !s._suspended).length;
+        const idleCount = servers.filter(s => s.status === "idle" && !s._suspended).length;
+        const failedCount = servers.filter(s => s.status === "failed").length;
+        const suspendedCount = servers.filter(s => s._suspended).length;
+        const utilisation = servers.length > 0 ? (busyCount / servers.length) * 100 : 0;
+
+        const liveData = {
+          serverTypeName: et.name,
+          capacity: servers.length || (et.count ?? 1),
+          busyCount, idleCount, failedCount, suspendedCount, utilisation,
+          clock: snap.clock,
+          servers: servers.map(srv => {
+            const cust = allEntities.find(e => e.id === srv.currentCustId);
+            return {
+              id: srv.id,
+              status: srv.status,
+              suspended: srv._suspended,
+              customerId: cust?.id,
+              customerType: cust?.type,
+              serviceStart: srv.serviceStart,
+              scheduledDuration: srv.scheduledDuration,
+              starvationTime: srv._starvationTime || 0,
+              downtime: srv._downtime || 0,
+              busyTime: srv._busyTime || 0,
+            };
+          }),
+        };
+
+        return <ActivityDetail key={et.id} label={et.name} liveData={liveData} />;
+      })}
     </div>
   );
 }
@@ -1196,6 +1251,7 @@ export function BottomPanel({ log, snap, model, hasResults = false, onOpenResult
         >
           {activeTab === "log"       && <LogTab log={log} selectedNodeLabel={selectedNodeLabel} onClearFilter={onClearFilter} onEntitySelect={onEntitySelect} onNodeSelect={onNodeSelect} model={model} />}
           {activeTab === "entities"  && <EntitiesTab snap={snap} selectedEntityId={selectedEntityId} onEntitySelect={onEntitySelect} />}
+          {activeTab === "resources" && <ResourcesTab snap={snap} model={model} />}
           {activeTab === "fel"       && <FelTab snap={snap} model={model} />}
           {activeTab === "charts"    && (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

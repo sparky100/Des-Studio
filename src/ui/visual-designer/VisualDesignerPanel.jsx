@@ -928,42 +928,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
                 </button>
               )}
 
-              <button
-                type="button"
-                title="Print diagram"
-                onClick={async () => {
-                  const dataUrl = await exportCanvasToPng();
-                  if (!dataUrl) { alert("Could not capture diagram — try again after the canvas has fully loaded."); return; }
-                  const win = window.open("", "_blank");
-                  if (!win) return;
-                  const escHtml = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-                  win.document.write(`<!DOCTYPE html><html><head><title>${escHtml(model.name||"Model")} — Diagram</title><style>body{margin:0;padding:20px 24px;font-family:Segoe UI,Arial,sans-serif;background:#fff}h1{font-size:18px;font-weight:700;margin-bottom:4px;color:#111}p{font-size:11px;color:#666;margin-bottom:14px}img{max-width:100%;height:auto;border:1px solid #e5e5e5;border-radius:4px}@media print{@page{margin:1.5cm}}</style></head><body><h1>${escHtml(model.name||"Model")}</h1><p>${escHtml(model.description||"")}</p><img src="${dataUrl}" /></body></html>`);
-                  win.document.close();
-                  win.focus();
-                  win.print();
-                }}
-                style={{ ...ICON_BTN_BASE, fontSize: 10, padding: "5px 10px", border: `1px solid ${C.border}`, borderRadius: 4 }}
-              >
-                Print diagram
-              </button>
-
-              <button
-                type="button"
-                title="Print model definition"
-                onClick={() => {
-                  const html = buildModelDefinitionHtml(model);
-                  const win = window.open("", "_blank");
-                  if (!win) return;
-                  win.document.write(html);
-                  win.document.close();
-                  win.focus();
-                  win.print();
-                }}
-                style={{ ...ICON_BTN_BASE, fontSize: 10, padding: "5px 10px", border: `1px solid ${C.border}`, borderRadius: 4 }}
-              >
-                Print definition
-              </button>
-
               {selectedNodeIds.length > 0 && (
                 <div
                   aria-label="Selection actions"
@@ -1075,7 +1039,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
           overflow: "hidden",
         }}>
           {/* Fixed inner width prevents content reflow during the slide animation */}
-          <div style={{ width: 280 }}>
+          <div style={{ width: 280, borderLeft: `1px solid ${C.border}`, height: "100%", display: "flex", flexDirection: "column" }}>
             <VisualNodeInspector
               model={model}
               graph={graph}
