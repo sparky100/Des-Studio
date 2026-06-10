@@ -291,37 +291,6 @@ export function getPredicateDependencies(predicate) {
   return deps;
 }
 
-/**
- * Return a short string showing what each condition variable resolved to.
- * Used in step-log "condition false" entries so the user can see why.
- * Example: "queue(Majors Investigations).length=20, idle(Assessment Nurse).count=8"
- */
-export function getConditionDiagnostics(predicate, state) {
-  if (!predicate) return null;
-  const normalized = migrateLegacyCondition(predicate);
-  if (!normalized) return null;
-
-  const parts = [];
-  function collect(node) {
-    if (!node || typeof node !== 'object') return;
-    if (node.operator === 'AND' || node.operator === 'OR') {
-      for (const clause of node.clauses || []) collect(clause);
-      return;
-    }
-    const variable = String(node.variable || node.token || '').trim();
-    if (!variable) return;
-    let val;
-    try { val = resolveVariable(variable, state); } catch { val = '?'; }
-    parts.push(`${variable}=${val !== undefined ? val : '?'}`);
-  }
-  try {
-    collect(normalized);
-    return parts.length ? parts.join(', ') : null;
-  } catch {
-    return null;
-  }
-}
-
 export function compilePredicate(predicate) {
   if (predicate && typeof predicate === "object" && predicate[COMPILED_PREDICATE]) {
     return predicate[COMPILED_PREDICATE];

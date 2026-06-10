@@ -407,7 +407,7 @@ export const MACROS = [
         arbitration.candidateCount = candidates.length;
         arbitration.idleServerCount = allIdleServers.length;
         if (arbitrationTarget) Object.assign(arbitrationTarget, arbitration);
-        msgs.push(`ASSIGN(${cType},${sType}): no match — searched queue "${queueToken}" (${candidates.length} waiting), idle "${sType}" (${allIdleServers.length})`);
+        msgs.push(`ASSIGN(${cType},${sType}): no match — queue=${candidates.length} idle=${allIdleServers.length}`);
       }
     },
   },

@@ -12,7 +12,7 @@ import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionNa
 import { buildWaitDistEntry, finalizeWeightedStats } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
 import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers } from "./entities.js";
-import { compilePredicate, getPredicateDependencies, getConditionDiagnostics } from "./conditions.js";
+import { compilePredicate, getPredicateDependencies } from "./conditions.js";
 import { fireBEvent, fireCEvent }              from "./phases.js";
 import { makeSingleRunProgress } from "./progress-contract.js";
 import { nullRegistry }                        from "./adapters/index.js";
@@ -898,27 +898,13 @@ const cycleLog = [];
       for (let idx = 0; idx < sortedCEvents.length; idx++) {
         const ev = sortedCEvents[idx];
         if (enableFilteredPhaseC && !shouldEvaluateCEvent(ev, phaseCDirty, h, runtimeModel, queueWaitingCache)) {
-          const skipEntry = makeTraceEntry("C", {
-            message: `C: "${ev.name || ev.id}" — skipped (no relevant state change)`,
-            cEval: {
-              eventId: ev.id || ev.name || "?",
-              eventName: ev.name || ev.id || "?",
-              priority: ev.priority ?? 9999,
-              pass: cPass,
-              conditionTrue: false,
-              skippedBecause: "dirty-skip",
-            },
-          });
-          cycleLog.push(skipEntry);
-          log.push(skipEntry);
           continue;
         }
         _runtimeMetrics.cEventScans++;
         const condTrue = ev._compiledCondition(predicateCtx);
         if (!condTrue) {
-          const diag = getConditionDiagnostics(ev.condition, predicateCtx);
           const falseEntry = makeTraceEntry("C", {
-            message: `C: "${ev.name || ev.id}" — condition false${diag ? ` [${diag}]` : ''}`,
+            message: `C: "${ev.name || ev.id}" — condition false`,
             cEval: {
               eventId: ev.id || ev.name || "?",
               eventName: ev.name || ev.id || "?",
@@ -926,7 +912,6 @@ const cycleLog = [];
               pass: cPass,
               conditionTrue: false,
               failureReason: "condition false",
-              diagnostics: diag || undefined,
             },
           });
           cycleLog.push(falseEntry);
