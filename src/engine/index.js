@@ -924,11 +924,7 @@ const cycleLog = [];
         ctx.clock = clock;
         const { msgs, felEntries } = fireCEvent(ev, ctx);
         if (enableFilteredPhaseC) {
-          phaseCDirty = deriveDirtyFromTemplate(
-            ev._effectImpactTemplate,
-            { ...ev, _contextCustId: ctx._lastCustId, _contextSrvId: ctx._lastSrvId },
-            ctx
-          );
+          phaseCDirty.all = true;
         }
         for (const entry of felEntries) fel.push(entry);
         if (felEntries.length) fel.sort((a, b) => a.scheduledTime - b.scheduledTime);

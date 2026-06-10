@@ -430,19 +430,12 @@ export function evalCondition(condition, helpers, state, clock) {
  * Build the list of valid condition tokens for the ConditionBuilder UI.
  * Derived from the model's entity types and state variables.
  */
-export function buildConditionTokens(entityTypes = [], stateVariables = []) {
+export function buildConditionTokens(entityTypes = [], stateVariables = [], queues = []) {
   const tokens = [];
 
   for (const et of entityTypes) {
     const name = et.name?.trim() || "";
     if (!name) continue;
-    if (et.role === "customer") {
-      tokens.push({
-        label: `queue(${name}).length  — customers waiting`,
-        value: `queue(${name}).length`,
-        valueType: "number",
-      });
-    }
     if (et.role === "server") {
       tokens.push({
         label: `idle(${name}).count  — idle servers`,
@@ -455,6 +448,16 @@ export function buildConditionTokens(entityTypes = [], stateVariables = []) {
         valueType: "number",
       });
     }
+  }
+
+  for (const q of queues) {
+    const qName = q.name?.trim() || "";
+    if (!qName) continue;
+    tokens.push({
+      label: `queue(${qName}).length  — customers waiting`,
+      value: `queue(${qName}).length`,
+      valueType: "number",
+    });
   }
 
   tokens.push({ label: "clock  — current simulation time", value: "clock", valueType: "number" });

@@ -115,10 +115,10 @@ describe('evalCondition', () => {
 });
 
 describe('buildConditionTokens', () => {
-  test('returns queue token for each customer type', () => {
-    const types = [{ name: 'Customer', role: 'customer' }];
-    const tokens = buildConditionTokens(types, []);
-    const queueToken = tokens.find(t => t.value === 'queue(Customer).length');
+  test('returns queue token for each declared queue', () => {
+    const queues = [{ name: 'CustomerQueue', customerType: 'Customer' }];
+    const tokens = buildConditionTokens([], [], queues);
+    const queueToken = tokens.find(t => t.value === 'queue(CustomerQueue).length');
     expect(queueToken).toBeDefined();
     expect(queueToken.valueType).toBe('number');
   });
