@@ -285,3 +285,45 @@ describe('Phase C — resource wake-up ordering', () => {
     expect(firstServeB).toBeGreaterThan(secondServeA);
   });
 });
+
+// ── ASSIGN customerType-vs-queueName regression ──────────────────────────────
+
+describe('ASSIGN macro — customerType queue matching', () => {
+  test('ASSIGN(customerType, serverType) fires when queue name differs from customerType', () => {
+    // Regression: findQueueConfig matched by customerType but listWaiting was called
+    // with isQueueName=true and the customerType string, so entity.queue === customerType
+    // was checked (not entity.queue === queueName) — finding zero candidates.
+    const model = {
+      entityTypes: [
+        { id: 'et_patient', name: 'Patient', role: 'customer', count: 1, attrDefs: [] },
+        { id: 'et_nurse',   name: 'Nurse',   role: 'server',   count: 1, attrDefs: [] },
+      ],
+      queues: [
+        // Queue name DIFFERS from customerType — this is the triggering condition
+        { id: 'q_waiting', name: 'Triage Waiting Room', customerType: 'Patient', discipline: 'FIFO' },
+      ],
+      bEvents: [
+        {
+          id: 'b_arrive', name: 'Patient arrives', scheduledTime: '0',
+          effect: 'ARRIVE(Patient, Triage Waiting Room)',
+          schedules: [],
+        },
+        { id: 'b_done', name: 'Done', scheduledTime: '999', effect: 'COMPLETE()', schedules: [] },
+      ],
+      cEvents: [
+        {
+          id: 'c_assign', name: 'Start Triage', priority: 1,
+          // First arg is the customerType "Patient", NOT the queue name "Triage Waiting Room"
+          condition: 'queue(Triage Waiting Room).length > 0 AND idle(Nurse).count > 0',
+          effect: 'ASSIGN(Patient, Nurse)',
+          cSchedules: [{ eventId: 'b_done', dist: 'Fixed', distParams: { value: 1 }, useEntityCtx: true }],
+        },
+      ],
+    };
+
+    const result = buildEngine(model, 42).runAll();
+    const completed = result.entities?.filter(e => e.status === 'done') ?? [];
+    expect(completed).toHaveLength(1);
+    expect(result.runtimeMetrics.c_events_fired).toBeGreaterThanOrEqual(1);
+  });
+});

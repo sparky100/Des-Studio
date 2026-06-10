@@ -370,7 +370,7 @@ export const MACROS = [
         type: "server",
         serverType: sType,
         discipline,
-        queueName: matchedQ ? cType : null,
+        queueName: matchedQ ? queueToken : null,
         candidates: candidates.map(e => ({
           entityId: e.id,
           type: e.type,
@@ -705,7 +705,8 @@ export const MACROS = [
       const cType = match[1].trim();
       const matchedQ = helpers.findQueueConfig?.(cType);
       const discipline = matchedQ?.discipline || 'FIFO';
-      const ent = selectWaiting(cType, discipline, entities, null, !!matchedQ);
+      const queueToken = matchedQ ? matchedQ.name : cType;
+      const ent = selectWaiting(queueToken, discipline, entities, null, !!matchedQ);
       if (ent) {
         clearWaitingState(ent);
         ent.status     = "reneged";
