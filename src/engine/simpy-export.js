@@ -536,6 +536,9 @@ class Stats:
     const t = effectText(c.effect);
     return /ASSIGN\s*\(/i.test(t) || /COSEIZE\s*\(/i.test(t);
   });
+  // Maps c.name → list of routing-target _store variable names, so run_replication()
+  // can pass them as explicit parameters to monitor/serve functions.
+  const cEventRoutingStores = new Map();
   if (assignCEvents.length > 0) {
     const svcParts = ['# ── Service processes ───────────────────────────────────────────────────────'];
     for (const c of assignCEvents) {
@@ -600,13 +603,19 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
 
       const completionCode = routingCode(completionBEvent, queues);
 
-      let monBody = `def ${monFn}(env, ${storeId}, ${resArgs}, stats):\n`;
+      // Routing code may reference stores local to run_replication() — pass them explicitly.
+      const routingStoreVarNames = [...new Set((completionCode.match(/\b\w+_store\b/g) || []))]
+        .filter(v => v !== storeId);
+      cEventRoutingStores.set(c.name, routingStoreVarNames);
+      const rStoreComma = routingStoreVarNames.length > 0 ? ', ' + routingStoreVarNames.join(', ') : '';
+
+      let monBody = `def ${monFn}(env, ${storeId}, ${resArgs}${rStoreComma}, stats):\n`;
       monBody += `    """C-event "${c.name}": ${assignCall.name}(${queueName}, ${serverTypes.join(', ')})"""\n`;
       monBody += `    while True:\n`;
       monBody += `        entity = yield ${storeId}.get()\n`;
-      monBody += `        env.process(${svcFn}(env, entity, ${resArgs}, stats))\n`;
+      monBody += `        env.process(${svcFn}(env, entity, ${resArgs}${rStoreComma}, stats))\n`;
 
-      let svcBody = `def ${svcFn}(env, entity, ${resArgs}, stats):\n`;
+      let svcBody = `def ${svcFn}(env, entity, ${resArgs}${rStoreComma}, stats):\n`;
       if (todoNote) svcBody += todoNote + '\n';
       svcBody += `${seizeBlock}\n`;
       svcBody += `    entity.sojourn_time = env.now - entity.arrival_time\n`;
@@ -780,7 +789,9 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
       const storeId = safeId(queueName) + '_store';
       const resArgs = serverTypes.map(st => safeId(st) + '_resource').join(', ');
       const monFn = safeId(c.name || 'service') + '_monitor';
-      runLines.push(`    env.process(${monFn}(env, ${storeId}, ${resArgs}, stats))`);
+      const routingStoreVarNames = cEventRoutingStores.get(c.name) || [];
+      const rStoreComma = routingStoreVarNames.length > 0 ? ', ' + routingStoreVarNames.join(', ') : '';
+      runLines.push(`    env.process(${monFn}(env, ${storeId}, ${resArgs}${rStoreComma}, stats))`);
     }
     runLines.push(``);
   }
