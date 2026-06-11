@@ -1174,8 +1174,7 @@ const cycleLog = [];
     const servers      = entities.filter(e => e.role === "server");
 
     const servedWaits  = served
-      .map(entityWaitAfterWarmup)
-      .filter(w => w > 0);
+      .map(entityWaitAfterWarmup);
     const renegedWaits = reneged
       .filter(e => e.stages?.length)
       .map(e => entityWaitAfterWarmup(e))
