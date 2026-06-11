@@ -404,7 +404,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
 
   // Ref holds latest closures so keydown/keyup listeners never go stale.
   const kbRef = useRef(null);
-  kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit };
 
   useEffect(() => {
     const ARROW_DELTA = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
@@ -494,6 +493,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     if (!canEdit || !nodes?.length) return;
     applyModel(updateGraphLayout(model, graph, { nodes }));
   };
+  kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit };
   const changeViewport = viewport => {
     if (!canEdit || !viewport) return;
     try { localStorage.setItem(`des.vp.${model?.id}`, JSON.stringify(viewport)); } catch {}
