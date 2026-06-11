@@ -94,8 +94,57 @@ function distToExpr(dist, distParams) {
     case 'Fixed':       return `_fixed(${+(p.value ?? 1)})`;
     case 'Erlang':      return `_erlang(${+(p.k ?? 1)}, ${+(p.mean ?? 1)})`;
     case 'Lognormal':   return `_lognormal(${+(p.logMean ?? 0)}, ${+(p.logStdDev ?? 1)})`;
-    default:            return `1.0  # TODO: unsupported distribution "${dist || 'unknown'}"`;
+    default: break;
   }
+  const raw = String(dist || '').toLowerCase().replace(/[_\s-]/g, '');
+  if (raw === 'empirical') {
+    const vals = Array.isArray(p.values) ? p.values.map(Number) : [1];
+    return `random.choice([${vals.join(', ')}])`;
+  }
+  // Piecewise and Schedule are handled specially in the caller — return safe fallback
+  return `1.0`;
+}
+
+// Returns a comment string for distributions that fall back to 1.0, null otherwise
+function distUnsupportedNote(dist) {
+  if (!dist) return null;
+  if (normalizeDistName(dist)) return null;
+  const raw = String(dist).toLowerCase().replace(/[_\s-]/g, '');
+  if (raw === 'empirical' || raw === 'piecewise' || raw === 'schedule') return null;
+  return `# NOTE: distribution "${dist}" not auto-translated — using fallback value 1.0`;
+}
+
+// Returns true if this schedule entry uses a Piecewise distribution
+function isPiecewiseDist(sched) {
+  const raw = String(sched?.dist || '').toLowerCase().replace(/[_\s-]/g, '');
+  return raw === 'piecewise';
+}
+
+// Returns true if this schedule entry uses a Schedule (planned absolute times) distribution
+function isScheduleDist(sched) {
+  const raw = String(sched?.dist || '').toLowerCase().replace(/[_\s-]/g, '');
+  return raw === 'schedule';
+}
+
+// Generate a _piecewise_NAME(t) helper function for a piecewise distribution
+function buildPiecewiseFn(fnName, periods) {
+  const validPeriods = (periods || []).filter(p => p.dist);
+  if (validPeriods.length === 0) return `def ${fnName}(t):\n    return 1.0\n`;
+  const entries = validPeriods.map(p => {
+    const expr = distToExpr(p.dist, p.distParams || {});
+    return `        (${+(p.startTime ?? 0)}, lambda: ${expr})`;
+  });
+  return `def ${fnName}(t):
+    _periods = [
+${entries.join(',\n')},
+    ]
+    _fn = _periods[0][1]
+    for _start, _f in reversed(_periods):
+        if t >= _start:
+            _fn = _f
+            break
+    return _fn()
+`;
 }
 
 function distLabel(dist, distParams) {
@@ -419,7 +468,6 @@ class Stats:
       const sched = (b.schedules || []).find(s => s.dist || s.distribution);
       const iaDist = sched?.dist || 'Exponential';
       const iaParams = sched?.distParams || { mean: 1 };
-      const iaExpr = distToExpr(iaDist, iaParams);
       const iaLabel = distLabel(iaDist, iaParams);
 
       // Check for balking
@@ -428,15 +476,55 @@ class Stats:
       let fnBody = `def ${fnName}(env, ${storeId}, stats):\n`;
       fnBody += `    """B-event "${b.name}": ARRIVE(${customerTypeName}, ${queueName})"""\n`;
       fnBody += `    _counter = 0\n`;
-      fnBody += `    while True:\n`;
-      fnBody += `        yield env.timeout(${iaExpr})  # inter-arrival: ${iaLabel}\n`;
-      fnBody += `        _counter += 1\n`;
-      if (balkProb != null && balkProb > 0) {
-        fnBody += `        if random.random() < ${balkProb}:  # balking probability\n`;
-        fnBody += `            continue\n`;
+
+      if (isScheduleDist(sched)) {
+        // Planned absolute-time arrivals — fire once at each scheduled time
+        const rows = (iaParams?.rows || iaParams?.times?.map?.((t, i) => ({ time: t })) || []);
+        const entries = rows.map(r => {
+          const t = +(r.time ?? 0);
+          const attrs = Object.entries(r.attrs || {})
+            .filter(([k]) => k !== 'time')
+            .map(([k, v]) => `"${safeId(k)}": ${JSON.stringify(v)}`)
+            .join(', ');
+          return attrs ? `        (${t}, {${attrs}})` : `        (${t}, {})`;
+        });
+        fnBody += `    _schedule = [\n${entries.join(',\n')}\n    ]\n`;
+        fnBody += `    for _t, _attrs in _schedule:\n`;
+        fnBody += `        yield env.timeout(max(0.0, _t - env.now))\n`;
+        fnBody += `        _counter += 1\n`;
+        fnBody += `        entity = ${entityClass}(id=_counter, arrival_time=env.now)\n`;
+        fnBody += `        for _k, _v in _attrs.items():\n`;
+        fnBody += `            try: setattr(entity, _k, _v)\n`;
+        fnBody += `            except AttributeError: pass\n`;
+        fnBody += `        yield ${storeId}.put(entity)\n`;
+      } else if (isPiecewiseDist(sched)) {
+        // Time-varying arrivals — generate a helper function and reference it
+        const helperFn = `_piecewise_${fnName}`;
+        const periods = iaParams?.periods || [];
+        arrParts.unshift(buildPiecewiseFn(helperFn, periods));
+        fnBody += `    while True:\n`;
+        fnBody += `        yield env.timeout(${helperFn}(env.now))  # inter-arrival: ${iaLabel}\n`;
+        fnBody += `        _counter += 1\n`;
+        if (balkProb != null && balkProb > 0) {
+          fnBody += `        if random.random() < ${balkProb}:  # balking probability\n`;
+          fnBody += `            continue\n`;
+        }
+        fnBody += `        entity = ${entityClass}(id=_counter, arrival_time=env.now)\n`;
+        fnBody += `        yield ${storeId}.put(entity)\n`;
+      } else {
+        const iaExpr = distToExpr(iaDist, iaParams);
+        const iaNote = distUnsupportedNote(iaDist);
+        fnBody += `    while True:\n`;
+        if (iaNote) fnBody += `        ${iaNote}\n`;
+        fnBody += `        yield env.timeout(${iaExpr})  # inter-arrival: ${iaLabel}\n`;
+        fnBody += `        _counter += 1\n`;
+        if (balkProb != null && balkProb > 0) {
+          fnBody += `        if random.random() < ${balkProb}:  # balking probability\n`;
+          fnBody += `            continue\n`;
+        }
+        fnBody += `        entity = ${entityClass}(id=_counter, arrival_time=env.now)\n`;
+        fnBody += `        yield ${storeId}.put(entity)\n`;
       }
-      fnBody += `        entity = ${entityClass}(id=_counter, arrival_time=env.now)\n`;
-      fnBody += `        yield ${storeId}.put(entity)\n`;
 
       arrParts.push(fnBody);
     }
@@ -464,6 +552,7 @@ class Stats:
       const { dist: svcDist, distParams: svcParams, placeholder } = getServiceDist(c);
       const svcExpr = distToExpr(svcDist, svcParams);
       const svcLabel = distLabel(svcDist, svcParams);
+      const svcNote = distUnsupportedNote(svcDist);
 
       const completionBEvent = findCompletionBEvent(c, bEvents);
 
@@ -482,12 +571,13 @@ class Stats:
         const svcBusyLines = serverTypes.map(st =>
           `        stats.resource_busy["${st}"] = stats.resource_busy.get("${st}", 0.0) + _svc_t`
         ).join('\n');
+        const svcNoteLineCoseize = svcNote ? `        ${svcNote}\n` : '';
         seizeBlock =
 `${reqDecls}
     yield simpy.AllOf(env, [${reqVars.join(', ')}])
     entity.service_start_time = env.now
     try:
-        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
+${svcNoteLineCoseize}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
         _svc_t = env.now - entity.service_start_time
 ${svcBusyLines}
     finally:
@@ -495,11 +585,12 @@ ${svcBusyLines}
             try: _req.resource.release(_req)
             except: pass`;
       } else {
+        const svcNoteLine = svcNote ? `        ${svcNote}\n` : '';
         seizeBlock =
 `    with ${resVars[0]}.request() as _req:
         yield _req
         entity.service_start_time = env.now
-        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
+${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
         _svc_t = env.now - entity.service_start_time
         stats.resource_busy["${serverTypes[0]}"] = stats.resource_busy.get("${serverTypes[0]}", 0.0) + _svc_t`;
       }
