@@ -957,12 +957,12 @@ function ResourcesTab({ snap, model }) {
   const { C, FONT } = useTheme();
   const [filterText,   setFilterText]   = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [collapsed, setCollapsed] = useState(new Set());
+  const [expanded, setExpanded] = useState(new Set());
 
   const serverTypes = (model?.entityTypes || []).filter(et => et.role === "server");
 
-  const toggleCollapse = (id) =>
-    setCollapsed(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleExpand = (id) =>
+    setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
   const computed = useMemo(() => serverTypes.map(et => {
     const allEntities = snap?.entities || [];
@@ -1051,16 +1051,16 @@ function ResourcesTab({ snap, model }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {visible.map(({ et, liveData }) => {
-            const isCollapsed = collapsed.has(et.id);
+            const isExpanded = expanded.has(et.id);
             const utilColor = liveData.utilisation > 90 ? C.red : liveData.utilisation > 70 ? C.amber : C.green;
             return (
               <div key={et.id} style={{ border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
                 <div
-                  onClick={() => toggleCollapse(et.id)}
+                  onClick={() => toggleExpand(et.id)}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px",
                     background: C.panel, cursor: "pointer", userSelect: "none" }}
                 >
-                  <span style={{ color: C.muted, fontSize: 10 }}>{isCollapsed ? "▶" : "▼"}</span>
+                  <span style={{ color: C.muted, fontSize: 10 }}>{isExpanded ? "▼" : "▶"}</span>
                   <span style={{ flex: 1, fontFamily: FONT, fontSize: 12, fontWeight: 600, color: C.text }}>
                     {et.name}
                   </span>
@@ -1075,7 +1075,7 @@ function ResourcesTab({ snap, model }) {
                     {liveData.utilisation.toFixed(0)}%
                   </span>
                 </div>
-                {!isCollapsed && (
+                {isExpanded && (
                   <div style={{ padding: "10px 10px" }}>
                     <ActivityDetail label={et.name} liveData={liveData} />
                   </div>
