@@ -7,7 +7,7 @@ import { runReplications } from "../../engine/replication-runner.js";
 import { buildBatchAnalysisPrompt, buildApplyOpportunityPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
 import { streamNarrative, streamModelBuilder, callLLMOnce } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
-import { makeBatchResult, CI_METRICS } from "./executeHelpers.js";
+import { makeBatchResult, CI_METRICS, formatRunTimestamp } from "./executeHelpers.js";
 import { summarizeReplicationResults, compareScenarios } from "../../engine/statistics.js";
 import { RUN_ADMISSION_TIERS, getRunAdmission } from "../../engine/run-admission.js";
 import { RADIUS, Z, SPACE, SHADOW } from "../shared/tokens.js";
@@ -252,7 +252,7 @@ export function AdaptiveBatchPanel({
             maxTime: maxSimTime,
             warmupPeriod,
             seed: baseSeedRef.current,
-            runLabel: `✦ Explore (${adaptiveResult.finalReps} reps)`,
+            runLabel: `Explore ${formatRunTimestamp()}`,
             aggregateStats,
             // Embed the experiment config so _experiment_config is written into
             // results_json and the replication count is never reconstructed from

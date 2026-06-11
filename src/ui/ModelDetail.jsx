@@ -13,6 +13,7 @@ import { ScheduleManager } from "./editors/ScheduleManager.jsx";
 import { AiGeneratedModelPanel } from "./editors/AiGeneratedModelPanel.jsx";
 import { GoalsEditor } from "./editors/GoalsEditor.jsx";
 import { ExecutePanel } from "./execute/index.jsx";
+import { formatRunTimestamp } from "./execute/executeHelpers.js";
 import { AiAssistantPanel } from "./execute/AiAssistantPanel.jsx";
 import { LogViewer } from "./execute/LogViewer.jsx";
 import { EntitySummaryTable } from "./execute/SweepViews.jsx";
@@ -1195,7 +1196,22 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           <SimPyExportModal
             model={model}
             onClose={()=>setShowSimPyExport(false)}
-            onResultsReady={r=>{setLatestResults(r);setShowSimPyExport(false);setTab("results");setResultsView("summary");}}
+            onResultsReady={r=>{
+              setLatestResults(r);
+              setShowSimPyExport(false);
+              setTab("results");
+              setResultsView("summary");
+              if (r && overrides.userId && modelId) {
+                const cfg = model.experimentDefaults || {};
+                saveSimulationRun(modelId, overrides.userId, r, {
+                  runLabel: `SimPy ${formatRunTimestamp()}`,
+                  replications: r.replications?.length ?? 1,
+                  maxTime: cfg.maxSimTime ?? 500,
+                  warmupPeriod: cfg.warmupPeriod ?? 0,
+                  seed: cfg.seed ?? 42,
+                }).then(runId => handleRunSaved(runId)).catch(console.error);
+              }
+            }}
           />
         )}
         {tab==="state"&&renderAuthoringShell(
