@@ -442,6 +442,7 @@ class Stats:
     def __init__(self):
         self.served:     List = []
         self.reneged:    List = []
+        self.total:      int  = 0
         self.total_cost: float = 0.0
         self.resource_busy: Dict[str, float] = {}
 `);
@@ -492,6 +493,7 @@ class Stats:
         fnBody += `    for _t, _attrs in _schedule:\n`;
         fnBody += `        yield env.timeout(max(0.0, _t - env.now))\n`;
         fnBody += `        _counter += 1\n`;
+        fnBody += `        if env.now >= WARMUP_PERIOD: stats.total += 1\n`;
         fnBody += `        entity = ${entityClass}(id=_counter, arrival_time=env.now)\n`;
         fnBody += `        for _k, _v in _attrs.items():\n`;
         fnBody += `            try: setattr(entity, _k, _v)\n`;
@@ -505,6 +507,7 @@ class Stats:
         fnBody += `    while True:\n`;
         fnBody += `        yield env.timeout(${helperFn}(env.now))  # inter-arrival: ${iaLabel}\n`;
         fnBody += `        _counter += 1\n`;
+        fnBody += `        if env.now >= WARMUP_PERIOD: stats.total += 1\n`;
         if (balkProb != null && balkProb > 0) {
           fnBody += `        if random.random() < ${balkProb}:  # balking probability\n`;
           fnBody += `            continue\n`;
@@ -518,6 +521,7 @@ class Stats:
         if (iaNote) fnBody += `        ${iaNote}\n`;
         fnBody += `        yield env.timeout(${iaExpr})  # inter-arrival: ${iaLabel}\n`;
         fnBody += `        _counter += 1\n`;
+        fnBody += `        if env.now >= WARMUP_PERIOD: stats.total += 1\n`;
         if (balkProb != null && balkProb > 0) {
           fnBody += `        if random.random() < ${balkProb}:  # balking probability\n`;
           fnBody += `            continue\n`;
@@ -817,9 +821,16 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
   runLines.push(``);
 
   const resCapsEntries = servers.map(s => {
-    const cap = s.count != null && s.count !== '' ? parseInt(String(s.count), 10) : 1;
-    const safeCap = Number.isFinite(cap) && cap >= 1 ? cap : 1;
-    return `"${s.name}": ${safeCap}`;
+    const shiftSched = s.shiftSchedule || [];
+    const cap = (() => {
+      if (shiftSched.length > 0) {
+        const first = +(shiftSched[0].capacity ?? 1);
+        if (Number.isFinite(first) && first >= 1) return first;
+      }
+      const c = s.count != null && s.count !== '' ? parseInt(String(s.count), 10) : 1;
+      return Number.isFinite(c) && c >= 1 ? c : 1;
+    })();
+    return `"${s.name}": ${cap}`;
   }).join(', ');
 
   runLines.push(`    _warmup_served = [e for e in stats.served if e.sojourn_time > 0]`);
@@ -836,6 +847,7 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
   runLines.push(`    def _pct(vals, p):`);
   runLines.push(`        return round(float(statistics.quantiles(vals, n=100)[p - 1]), 4) if len(vals) >= 2 else 0.0`);
   runLines.push(`    return {`);
+  runLines.push(`        "total":       stats.total,`);
   runLines.push(`        "served":      len(stats.served),`);
   runLines.push(`        "reneged":     len(stats.reneged),`);
   runLines.push(`        "avg_sojourn": round(statistics.mean(_soj_vals), 4) if _soj_vals else 0.0,`);
