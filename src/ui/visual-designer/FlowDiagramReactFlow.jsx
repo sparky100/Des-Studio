@@ -22,27 +22,34 @@ function colorForNodeType(type, C) {
 
 function DesNode({ data, selected }) {
   const { C, FONT } = useTheme();
+  const [hovered, setHovered] = useState(false);
   const color = colorForNodeType(data.type, C);
   const hasTarget = data.type !== "source";
   const hasSource = data.type !== "sink";
   const hasError = !!data.hasError;
   return (
-    <div style={{
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
       position: "relative",
       width: 142,
       minHeight: 68,
       background: data.sectionColor && !hasError
         ? `linear-gradient(${data.sectionColor}18, ${data.sectionColor}18), ${C.surface}`
         : C.surface,
-      border: `1.5px solid ${hasError && !selected ? C.red : selected ? color : `${color}44`}`,
+      border: `1.5px solid ${hasError && !selected ? C.red : selected ? color : hovered ? `${color}99` : `${color}44`}`,
       borderLeft: `4px solid ${hasError && !selected ? C.red : color}`,
       borderRadius: 6,
       boxShadow: selected
         ? `0 0 0 3px ${color}88, 0 0 10px ${color}44`
-        : hasError
-          ? `0 0 0 2px ${C.red}44`
-          : "none",
+        : hovered
+          ? `0 0 0 2px ${color}33`
+          : hasError
+            ? `0 0 0 2px ${C.red}44`
+            : "none",
       color: C.text,
+      cursor: "pointer",
       display: "flex",
       flexDirection: "column",
       gap: 5,
@@ -259,7 +266,7 @@ export function FlowDiagramReactFlow({
   canEdit = false,
   selectedNodeId = null,
   selectedNodeIds = [],
-  spacePan = false,
+  selectionMode = "pan",
   errorNodeIds,
   fitNodeRef,
   showSections = true,
@@ -405,9 +412,9 @@ export function FlowDiagramReactFlow({
         nodesConnectable={canEdit}
         deleteKeyCode={null}
         elementsSelectable
-        selectionOnDrag={canEdit && !spacePan}
+        selectionOnDrag={canEdit && selectionMode === "select"}
         selectionMode={ReactFlowSelectionMode.Full}
-        panOnDrag={spacePan}
+        panOnDrag={selectionMode !== "select"}
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
         snapGrid={[24, 24]}
         panOnScroll
