@@ -1059,8 +1059,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         onExplore={()=>setShowExplorePanel(true)}
         exploreVisible={exploreVisible}
         onPrintDiagram={async () => {
+          const prevTab = tab;
+          if (tab !== "visual") setTab("visual");
+          await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
           const { exportCanvasToPng } = await import("./visual-designer/graph.js");
           const dataUrl = await exportCanvasToPng();
+          if (tab !== "visual") setTab(prevTab);
           const win = window.open("", "_blank");
           if (!win) return;
           const e = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -1134,8 +1138,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 </span>
               </div>
             )}
-            <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
-            <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4} inputStyle={{fontFamily:"Inter, Segoe UI, Arial, sans-serif",fontSize:13}}/>
+            <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null}/>
+            <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4}/>
             <div style={{display:"flex",justifyContent:"flex-end"}}>
               <Btn small variant="ghost" onClick={()=>{
                 const html = buildModelDefinitionHtml(model);

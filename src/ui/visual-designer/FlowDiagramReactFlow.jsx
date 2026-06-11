@@ -182,7 +182,7 @@ function toFlowEdge(edge, C, FONT) {
       strokeDasharray: isLoop ? "8,4" : isFallback ? "5,3" : undefined,
     },
     labelStyle: {
-      fill: isLoop ? C.amber : isFallback ? C.amber : isProbabilistic ? C.accent : C.muted,
+      fill: isLoop ? C.amber : isFallback ? C.amber : C.accent,
       fontFamily: FONT,
       fontSize: 11,
       fontWeight: (isLoop || isProbabilistic) ? 700 : undefined,
@@ -422,6 +422,7 @@ export function FlowDiagramReactFlow({
         selectionMode={ReactFlowSelectionMode.Full}
         panOnDrag={selectionMode !== "select"}
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
+        snapToGrid={canEdit}
         snapGrid={[24, 24]}
         panOnScroll
         isValidConnection={isValidConnection}

@@ -1233,7 +1233,7 @@ export const AiAssistantPanel = ({
         </div>
       </div>}
 
-      {!isRunContext && (isResultsContext ? activeMode === "refine" : !sidebar) && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
+      {!isRunContext && isResultsContext && activeMode === "refine" && <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
         {!hasSchedule && (
           <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11, fontStyle: "italic", textAlign: "center", padding: "16px 0" }}>
             Add a timetable schedule to enable schedule refinement.

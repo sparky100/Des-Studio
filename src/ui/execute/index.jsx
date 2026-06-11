@@ -412,7 +412,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       : complexityEstimate.riskLevel === "medium"
         ? C.warnBg
         : C.green;
-  const complexityLabel = complexityEstimate.riskLevel.replace("_", " ").toUpperCase();
+  const COMPLEXITY_LABELS = { small: "Small", medium: "Medium", large: "Large", too_large: "Very Large" };
+  const complexityLabel = COMPLEXITY_LABELS[complexityEstimate.riskLevel] || complexityEstimate.riskLevel;
 
   // Estimated save payload size (KB) based on complexity and selected detail level.
   // "full" keeps log + trace + entitySummary + timeSeries + waitDist.values; "minimal" strips them all.

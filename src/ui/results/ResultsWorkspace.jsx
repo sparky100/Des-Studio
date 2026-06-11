@@ -330,6 +330,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     {
       label: "Avg wait",
       value: formatMetricValue(summary.avgWait),
+      ciPath: "summary.avgWait",
       color: C.amber,
     },
     {
@@ -355,7 +356,6 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
     {
       label: "Served",
       value: formatMetricValue(resolveCount(served, "summary.served"), 0),
-      ciPath: "summary.served",
       color: C.served,
     },
     {

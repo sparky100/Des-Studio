@@ -563,16 +563,6 @@ export function validateModel(model) {
         'entities',
         { entityTypeIds: [et.id] });
     }
-    if (Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) {
-      const firstCap = et.shiftSchedule[0]?.capacity;
-      if (Number.isInteger(firstCap) && firstCap !== raw) {
-        warn('V19-shift',
-          `Server type '${et.name || et.id}' count (${raw}) does not match first shift capacity (${firstCap}). ` +
-          `The engine will use the shift capacity — set count = ${firstCap} for consistency.`,
-          'entities',
-          { entityTypeIds: [et.id] });
-      }
-    }
   });
 
   // ── V18: Probabilistic routing validation (F10.2) ─────────────────────────
