@@ -379,7 +379,7 @@ export function buildResultsCsv({ results, replicationResults = [], aggregateSta
 
 
 export function formatRunTimestamp(date = new Date()) {
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat(undefined, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -389,8 +389,8 @@ export function formatRunTimestamp(date = new Date()) {
   }).format(date).replace(",", "");
 }
 
-export function makeDefaultRunLabel(modelName, date = new Date()) {
-  return `${modelName || "Model"} ${formatRunTimestamp(date)}`;
+export function makeDefaultRunLabel(type = "Batch", date = new Date()) {
+  return `${type} ${formatRunTimestamp(date)}`;
 }
 
 export function makeRunLabel(payload) {

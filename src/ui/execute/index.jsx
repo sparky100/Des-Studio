@@ -285,8 +285,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     ];
   }, [warmupPeriod, replications, seed, terminationMode, maxSimTime]);
   const effectiveRunLabel = useMemo(
-    () => runLabel.trim() || makeDefaultRunLabel(model?.name),
-    [runLabel, model?.name]
+    () => runLabel.trim() || makeDefaultRunLabel(autoRunning ? "AutoRun" : "Batch"),
+    [runLabel, autoRunning]
   );
 
   useEffect(() => {
