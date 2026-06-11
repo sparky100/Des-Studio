@@ -1,8 +1,8 @@
 # simmodlr — Product Specification
 
-**Version:** 7.2.0  
-**Date:** 2026-06-04  
-**Sprint baseline:** Sprint 83  
+**Version:** 7.4.0  
+**Date:** 2026-06-11  
+**Sprint baseline:** Sprint 85  
 **Status:** Living document — reviewed and updated at end of each sprint  
 **Note:** package.json version is 0.9.0-Beta; version alignment with spec version number pending.
 
@@ -100,12 +100,14 @@ High-value features that are complete but whose absence would degrade the platfo
 | S9 | **Model Assistant (AI)** | Persistent sidebar. Design mode: tab-aware suggested questions and model Q&A with full structure context (entity attributes, queue configs, C-event logic). Run mode: canvas diagnostics (entity inspector, event log overlays) with model Q&A above. Results mode: Analyse, Compare, and Refine Plan tabs — all manual, no auto-fire. |
 | S10 | **Template library** | 22 pre-built templates covering healthcare, logistics, transport, manufacturing, and service industries. Browsable by domain chip filter and text search. |
 | S11 | **Schedule Manager** | Named timetables (e.g. Weekday, Weekend) stored separately from `model_json` (ADR-016). CSV and Excel/XLSX import, multi-event import, and inline-row migration to named schedules. Schedule selector in Execute panel. |
-| S12 | **Resource failures** | FAIL/REPAIR macros with MTBF/MTTR distributions. V37 validation enforces paired configuration. |
+| S12 | **Resource failures and shift-change behavior** | FAIL/REPAIR macros with MTBF/MTTR distributions. V37 validation enforces paired configuration. Shift-change behavior configurable per server: **Delay** (finish current service before applying shift change), **Preempt** (interrupt immediately; entity re-queues with remaining service time), or **Suspend** (pause service at shift boundary; resume on next shift start). |
 | S13 | **Voice input** | Microphone button in AI chat dialogs. Uses the Web Speech API to transcribe spoken input into the prompt field. |
 | S14 | **Explore / AdaptiveBatchPanel** | AI-driven bottleneck analysis panel. Runs adaptive replication stepping (increasing batch size until 95% CI is within ±5% of the mean), surfaces bottleneck resources and queues, and provides an Apply-to-model action. |
 | S15 | **Run admission tier system** | Per-user run tier controls replication depth: Free (10 reps), Standard (30 reps), Pro (100 reps). Enforced before each run. |
 | S16 | **Per-outcome metrics** | avgWait and avgSojourn reported per journey outcome in run results, enabling comparison across routing branches. |
-| S17 | **SimPy Python export** | One-click export of any model as a runnable SimPy `.py` script. Category 1 (fully runnable) for models using standard macros; Category 2 (annotated TODO stubs) for models containing RENEGE, BATCH, MATCH, FAIL, REPAIR, PREEMPT, or RENEGE_OLDEST. Available from the header bar (⬇ SimPy button) and from the Access tab → Export section. No round-trip import; no new npm dependencies. |
+| S17 | **SimPy Python export and browser execution** | One-click export of any model as a runnable SimPy `.py` script. Category 1 (fully runnable) for models using standard macros; Category 2 (annotated TODO stubs) for models containing RENEGE, BATCH, MATCH, FAIL, REPAIR, PREEMPT, or RENEGE_OLDEST. Available from the header bar (⬇ SimPy button) and from the Access tab → Export section. Category 1 models can **Run in Browser** via Pyodide WebAssembly (~25 MB, cached after first use) — no Python installation needed; results load directly into the Results workspace with a `[SimPy]` source label. The generated script supports `RUN_MODE = "text"` (human-readable terminal output) or `"json"` (JSONL per-replication records for pipeline use); the browser runner sets `"json"` automatically. No round-trip import. |
+| S18 | **Starvation tracking** | Per-resource starvation metric: cumulative time a server was idle despite entities waiting upstream (`starvationTime`) and the fraction of post-warmup time starved (`starvationPct`). Distinguishes upstream supply bottlenecks from capacity shortfalls — a high-utilisation server with non-zero starvation indicates a feed problem, not an under-capacity problem. |
+| S19 | **Purge period** | Scheduled queue sweep that removes entities exceeding a maximum dwell time. Configured as a B-event with a fixed or periodic interval. Complements entity-driven reneging with a global timer-based clearance — useful for batch/job queues operating under SLA deadlines. |
 
 ### Could-have
 
@@ -203,6 +205,7 @@ Valuable additions already partially implemented or planned for near-term sprint
 - Category 2 scripts identify which macros need manual completion and provide a commented pattern for each.
 - The export is available from both the header bar and the Access tab.
 - Filename is derived from the model name (kebab-case slug + `_simpy.py`).
+- Category 1 models can be executed directly in the browser; results appear in the Results workspace with a `[SimPy]` source label, carrying served/reneged counts, wait percentiles (P50/P90/P99), avg sojourn, and per-resource utilisation.
 
 ---
 

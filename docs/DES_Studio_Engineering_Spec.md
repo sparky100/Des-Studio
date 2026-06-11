@@ -1,9 +1,9 @@
 # simmodlr — Engineering Specification
 
-**Version:** 7.3.0  
-**Date:** 2026-06-04  
+**Version:** 7.4.0  
+**Date:** 2026-06-11  
 **Note:** package.json version is 0.9.0-Beta; this document uses an internal engineering version number.  
-**Sprint baseline:** Sprint 83  
+**Sprint baseline:** Sprint 85  
 **Status:** Living document — updated at end of each sprint  
 **Audience:** Engineering team, technical contributors, platform integrators
 
@@ -118,7 +118,8 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 | `adapters/` | Real-time data sources: RestAdapter, ScheduleFeedAdapter, ActualsStreamAdapter |
 | `adapters/OpenSkyAdapter.js` | OpenSky real-time flight data adapter |
 | `adapters/mockAdapter.js` | Mock adapter for testing |
-| `simpy-export.js` | Pure-function SimPy Python export (Sprint 80). No React, no DOM, no Supabase. See §3.5 for API and design. |
+| `simpy-export.js` | Pure-function SimPy Python export (Sprint 80). No React, no DOM, no Supabase. Generates `RUN_MODE`-aware scripts with enriched `Stats` class (Sprint 85). See §3.7 for API and design. |
+| `simpy-runner-worker.js` | Pyodide Web Worker entry point (Sprint 85). Loads CPython-in-WASM from CDN, installs SimPy via `micropip`, captures JSONL stdout, streams `{type:"rep"}` / `{type:"summary"}` messages back via `postMessage`. Module worker (`type:"module"`). |
 
 ### 1.4 Three-Phase execution loop
 
@@ -407,6 +408,7 @@ During a simulation run, the engine maintains an in-memory state object (not per
 | `state.resources[id].status` | "IDLE" \| "BUSY" \| "FAILED" | Resource status |
 | `state.resources[id].busyCount` | number | Count of entities being served |
 | `state.resources[id]._busyTime` | number | Cumulative busy time (for utilisation) |
+| `state.resources[id].starvationTime` | number | Cumulative post-warmup time the server was idle with entities waiting upstream |
 | `state.variables[name]` | number | User-defined state variable counters |
 | `state.containers[id]` | number | Container resource level |
 | `state.timeSeries` | object | Sampled time-series data per queue/resource |
@@ -529,6 +531,7 @@ submitFeedback(category, message, context): Promise<void>
 |----------|---------|-------------|
 | `llm-proxy` | HTTP POST from `src/llm/` | Provider-neutral LLM routing. Accepts a prompt payload, routes to the configured provider (OpenAI, Anthropic, or other), returns a structured response. Credentials never exposed to the browser. |
 | `notify-new-signup` | `auth.users` INSERT trigger | Sends email and Slack notification to the platform admin on new user registration. |
+| `results-api` | HTTP GET from external clients | Read-only programmatic access to saved run and sweep results. JWT Bearer auth or `?shareToken=` for publicly shared runs. Three routes: `GET /runs/:runId`, `GET /runs?modelId=`, `GET /sweeps/:sweepId`. See §4.6 for full spec. |
 
 ### 3.5 LLM prompt builders (src/llm/)
 
@@ -574,7 +577,7 @@ The report pipeline:
 
 ### 3.7 SimPy Python export (src/engine/simpy-export.js)
 
-Added in Sprint 80. Pure JavaScript function — no React, no DOM, no Supabase dependency. May be called from the engine layer, a Web Worker, or a UI component.
+Added in Sprint 80. Enriched in Sprint 85 (RUN_MODE, Stats.resource_busy, wait percentiles, per-resource utilisation). Pure JavaScript function — no React, no DOM, no Supabase dependency. May be called from the engine layer, a Web Worker, or a UI component.
 
 #### Public API
 
@@ -595,24 +598,51 @@ function exportToSimPy(model: ModelJson): {
 
 `TODO_MACRO_SET = { RENEGE, BATCH, RENEGE_OLDEST, MATCH, FAIL, REPAIR, PREEMPT }`
 
+Note: all macros in `TODO_MACRO_SET` are fully implemented in the JS Three-Phase engine. They appear as stubs only because their Python translation is non-trivial to auto-generate.
+
 Every model produces a script — there is no "cannot export" path.
 
 #### Generated script structure
 
 ```
 docstring           (model name, date, category, TODO list)
-imports             (simpy, random, math, statistics, dataclasses)
-configuration       (MAX_SIM_TIME, WARMUP_PERIOD, REPLICATIONS, BASE_SEED)
+imports             (simpy, random, math, statistics, json, dataclasses, Dict)
+configuration       (MAX_SIM_TIME, WARMUP_PERIOD, REPLICATIONS, BASE_SEED, RUN_MODE)
 distribution fns    (_exp, _uniform, _normal, _triangular, _fixed, _erlang, _lognormal)
 state variables     (module-level Python vars from model.stateVariables)
-entity @dataclasses (one per customer entity type; fallback Entity if none)
-Stats class         (served[], reneged[], total_cost)
+entity @dataclasses (one per customer entity type; fields: arrival_time, sojourn_time,
+                     service_start_time, wait_time)
+Stats class         (served[], reneged[], total_cost, resource_busy: Dict[str,float])
 arrival generators  (one per B-event containing ARRIVE)
-service pairs       (monitor fn + serve fn per C-event with ASSIGN or COSEIZE)
+service pairs       (monitor fn + serve fn per C-event with ASSIGN or COSEIZE;
+                     both track entity.service_start_time and stats.resource_busy)
 shift managers      (one per server entity type with shiftSchedule)
 TODO stubs          (category 2 only — pattern comments for each unsupported macro)
-run_replication()   (wires env, stores, resources, containers, processes)
-__main__ block      (replication loop, per-rep print, summary table)
+run_replication()   (wires env, stores, resources, containers, processes;
+                     returns 10-field dict — see below)
+__main__ block      (branches on RUN_MODE: "text" → human-readable table,
+                     "json" → one JSON object per line / JSONL)
+```
+
+#### RUN_MODE output control
+
+The generated script contains `RUN_MODE = "text"` in the configuration block. Setting it to `"json"` switches the `__main__` block to JSONL output (one JSON object per line): one `{"type":"rep",...}` record per replication followed by a `{"type":"summary",...}` record. `simpy-runner-worker.js` switches to `"json"` by string-replacing this constant before execution.
+
+#### run_replication() return dict
+
+```python
+{
+  "served": int,
+  "reneged": int,
+  "avg_sojourn": float,
+  "total_cost": float,
+  "wait_mean": float,
+  "wait_p50": float,
+  "wait_p90": float,
+  "wait_p99": float,
+  "svc_mean": float,
+  "util": dict[str, float]   # {server_name: utilisation_fraction}
+}
 ```
 
 #### C-event → B-event routing resolution
@@ -629,7 +659,8 @@ DES Studio `DRAIN` fails immediately if container level < amount (guard). SimPy 
 
 #### UI integration
 
-- `src/ui/editors/SimPyExportModal.jsx` — calls `exportToSimPy(model)` on mount; shows category badge, TODO macro list, filename, and Download button.
+- `src/ui/editors/SimPyExportModal.jsx` — calls `exportToSimPy(model)` on mount; shows category badge, TODO macro list, filename, Download button, and **Run in Browser** button (Category 1 only). Progress bar streams per-replication updates; on completion calls `onResultsReady(results)` to push into ResultsWorkspace.
+- `src/ui/hooks/useSimPyRunner.js` — React hook managing `simpy-runner-worker.js` lifecycle. Exposes `{ run, cancel, reset, status, progress, total, results, error }`. Normalises JSONL results to ResultsWorkspace shape (`{ replications, summary, _source: "simpy" }`).
 - `src/ui/ModelDetailHeader.jsx` — `onExportSimPy` prop; renders ⬇ SimPy button (no `canEdit` guard — export is read-only).
 - `src/ui/ModelDetail.jsx` — `showSimPyExport` state; Export SimPy row in Access tab → Export section.
 
