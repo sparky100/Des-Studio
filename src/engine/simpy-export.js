@@ -745,9 +745,16 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
     runLines.push(`    # Resources (servers)`);
     for (const s of servers) {
       const resId = safeId(s.name) + '_resource';
-      const cap = s.count != null && s.count !== '' ? parseInt(String(s.count), 10) : 1;
-      const safeCap = Number.isFinite(cap) && cap >= 1 ? cap : 1;
-      runLines.push(`    ${resId} = simpy.Resource(env, capacity=${safeCap})`);
+      const shiftSchedule = s.shiftSchedule || [];
+      const cap = (() => {
+        if (shiftSchedule.length > 0) {
+          const first = +(shiftSchedule[0].capacity ?? 1);
+          if (Number.isFinite(first) && first >= 1) return first;
+        }
+        const c = s.count != null && s.count !== '' ? parseInt(String(s.count), 10) : 1;
+        return Number.isFinite(c) && c >= 1 ? c : 1;
+      })();
+      runLines.push(`    ${resId} = simpy.Resource(env, capacity=${cap})`);
     }
     runLines.push(``);
   }

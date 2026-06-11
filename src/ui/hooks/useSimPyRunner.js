@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { exportToSimPy } from "../../engine/simpy-export.js";
+import { summarizeReplicationResults } from "../../engine/statistics.js";
+import { CI_METRICS } from "../execute/executeHelpers.js";
 
 function mean(arr) {
   return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
@@ -16,6 +18,20 @@ function buildResultsShape(repResults, model) {
       idle: 0,
     };
   }
+  const replications = repResults.map((r, i) => ({
+    replicationIndex: i,
+    seed: (+(model.experimentDefaults?.seed ?? model.seed ?? 42)) + i,
+    result: {
+      summary: {
+        served:     r.served,
+        reneged:    r.reneged,
+        avgSojourn: r.avg_sojourn,
+        avgWait:    r.wait_mean ?? 0,
+        totalCost:  r.total_cost ?? 0,
+      },
+    },
+  }));
+  const aggregateStats = summarizeReplicationResults(replications, CI_METRICS);
   return {
     _source: "simpy",
     summary: {
@@ -35,17 +51,8 @@ function buildResultsShape(repResults, model) {
         p99:  mean(repResults.map(r => r.wait_p99 ?? 0)),
       },
     } : {},
-    replications: repResults.map((r, i) => ({
-      replicationIndex: i,
-      seed: (+(model.experimentDefaults?.seed ?? model.seed ?? 42)) + i,
-      summary: {
-        served:     r.served,
-        reneged:    r.reneged,
-        avgSojourn: r.avg_sojourn,
-        avgWait:    r.wait_mean ?? 0,
-        totalCost:  r.total_cost ?? 0,
-      },
-    })),
+    replications,
+    aggregateStats,
     _simpy_reps: repResults,
   };
 }
