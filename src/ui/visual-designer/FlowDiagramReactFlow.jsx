@@ -159,28 +159,33 @@ function toFlowNode(node) {
 }
 
 function toFlowEdge(edge, C, FONT) {
-  const label = edge.label || edge.source || undefined;
-  const isLoop = edge.loop === true;
-  const isFallback = edge.label === "fallback";
+  const isLoop         = edge.loop === true;
+  const isFallback     = edge.label === "fallback";
+  const isProbabilistic = typeof edge.label === "string" && edge.label.endsWith("%");
+
+  // Omit the edge.source fallback — "arrival" and "condition" are noise, not information
+  const label = isLoop
+    ? `↻ rework (max ${edge.maxLoopCount || 3}x)`
+    : edge.label || undefined;
+
+  const strokeColor = isLoop ? C.amber : C.muted;
+
   return {
     id: edge.id,
     source: edge.from,
     target: edge.to,
-    label: isLoop ? `↻ rework (max ${edge.maxLoopCount || 3}x)` : label,
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      color: isLoop ? C.amber : isFallback ? C.muted : C.muted,
-    },
+    label,
+    markerEnd: { type: MarkerType.ArrowClosed, color: strokeColor },
     style: {
-      stroke: isLoop ? C.amber : isFallback ? C.muted : C.muted,
+      stroke: strokeColor,
       strokeWidth: isLoop ? 2 : 1.5,
       strokeDasharray: isLoop ? "8,4" : isFallback ? "5,3" : undefined,
     },
     labelStyle: {
-      fill: isLoop ? C.amber : isFallback ? C.amber : C.muted,
+      fill: isLoop ? C.amber : isFallback ? C.amber : isProbabilistic ? C.accent : C.muted,
       fontFamily: FONT,
       fontSize: 10,
-      fontWeight: isLoop ? 700 : undefined,
+      fontWeight: (isLoop || isProbabilistic) ? 700 : undefined,
     },
     labelBgStyle: { fill: C.bg, fillOpacity: 0.9 },
   };
