@@ -1,8 +1,8 @@
 # simmodlr — User Guide
 
-**Version:** 7.2.0  
-**Date:** 2026-06-04  
-**Sprint baseline:** Sprint 83  
+**Version:** 7.4.0  
+**Date:** 2026-06-11  
+**Sprint baseline:** Sprint 85  
 **Audience:** Simulation practitioners, operations analysts, engineering students
 
 ---
@@ -223,6 +223,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    | **Termination condition** | Leave blank for time-based termination, or enter a condition (e.g. `total_served >= 1000`). |
    | **Seed** | Leave blank for a random seed, or enter a number for reproducible results. |
    | **Schedule** | If the model has multiple timetables (e.g. Weekday, Weekend), select which one to use. |
+   | **Purge period** | Optional run-down time after the simulation clock reaches Max sim time. New arrivals stop but the system continues until all queues drain. Useful for end-of-day or shift-end scenarios — set to the longest expected remaining service time. |
 
 3. Click **Run**. The Execute canvas animates entity flow in real time. The event log in the Bottom Panel records every event.
 4. When the run completes, the Results tab shows:
@@ -232,6 +233,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    | **Summary** | Entities arriving, served, and reneged. Average wait, service time, and utilisation. Goal pass/fail. |
    | **Bottlenecks** | Which queues have the longest average waits. Peak queue depth. |
    | **Analysis** | Confidence intervals, Welch warm-up diagnostic, replication-level variance. |
+   | **Starvation** | Per-resource time and percentage spent starved — server idle because its queue was empty, not because it was recently freed. High starvation means the server is capacity-constrained on the supply side; consider whether upstream stages need balancing. |
    | **Run Effort** | Replications completed, total sim time, wall-clock duration. |
 
 5. Open the **✦ AI** sidebar (Model Assistant) to explore the results:
@@ -284,11 +286,26 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
 **Per-outcome results.** The Results tab shows a Journey Outcomes section that breaks down completed entities by route (COMPLETE, RENEGE, and other terminal outcomes), with average wait time and average time in system reported separately per route.
 
-**Export as SimPy Python.** Click **⬇ SimPy** in the model header bar (or go to the **Access** tab and click **Export SimPy**) to download a runnable SimPy `.py` script for the current model.
+**Export and run SimPy Python.** Click **⬇ SimPy** in the model header bar (or go to the **Access** tab and click **Export SimPy**) to open the SimPy dialog.
 
-A dialog shows whether the script is **Category 1** (complete — runs immediately after `pip install simpy`) or **Category 2** (partial — macros that require complex SimPy patterns are replaced with annotated `# TODO` stubs showing the correct pattern). Click **Download .py** to save the file. The filename is derived from the model name.
+A dialog shows whether the script is **Category 1** (complete) or **Category 2** (partial). For Category 1 models you have two options:
 
-Use Category 1 exports as standalone Python experiments; use Category 2 exports as scaffolding to complete in your IDE. See the full help guide at `docs/user/simpy-export.md`.
+- **Run in Browser** — executes the SimPy script directly in your browser tab via Pyodide (Python compiled to WebAssembly). No Python installation required. A progress bar tracks each replication; when all replications finish the results are loaded into the app and available in the Results workspace alongside any JS-engine runs. The first run downloads Pyodide (~25 MB, cached afterwards); subsequent runs start immediately.
+- **Download .py** — saves the script as `<model-name>_simpy.py` to run locally with `python your_model_simpy.py` after `pip install simpy`.
+
+Category 2 scripts contain macros that need manual completion. The **Run in Browser** button is disabled for Category 2 models — download the script and complete the `# TODO` sections first.
+
+The browser-run results include enriched metrics not shown in the downloaded script's text output: wait-time percentiles (P50/P90/P99), mean service time, and per-resource utilisation — the same fields shown by the JS engine results workspace.
+
+See the full help guide at `docs/user/simpy-export.md`.
+
+**Shift-change behavior.** When a server's shift schedule reduces capacity mid-simulation, you can choose how in-progress service is handled. In the Entity Types editor, each server with a shift schedule has a **Shift change** setting:
+
+| Mode | Behaviour |
+|------|-----------|
+| **Delay** (default) | Capacity reduction takes effect once current service finishes naturally. |
+| **Preempt** | In-progress service is interrupted immediately; the entity re-queues with its remaining service time. |
+| **Suspend** | In-progress service is paused and resumes when capacity is next available. |
 
 **Sections (large-model organisation).** When a model grows beyond roughly ten queues or twenty events, you can group elements into named *sections* to keep the editors manageable. Open the **Sections** tab (under the Design area) and click **+ Add Section** to create a named, coloured group. Assign queues, entity types, B-events, and C-events to the section using the member checkboxes. For queues that act as handoff points between sections, mark them **IN** (entities arrive from another section) or **OUT** (entities leave to another section).
 
@@ -450,5 +467,9 @@ Click any error in the Model Health panel to jump directly to the relevant edito
 | **Warm-up period** | The initial phase of a run during which the system is reaching steady state. Statistics collected during warm-up are discarded. |
 | **LLM Bundle** | A structured Markdown document downloaded from the Export… menu that combines model definition, experiment configuration, and full results into a single file. Designed to be pasted into an LLM (Claude, ChatGPT, Gemini) for custom analysis — contains a preamble explaining the Three-Phase DES method so no additional context is needed. |
 | **Results API** | A Supabase Edge Function (`/functions/v1/results-api/`) providing authenticated read-only access to saved run and sweep results via HTTP, for use from Python, R, or BI tools. |
-| **SimPy export — Category 1** | A generated `.py` script that requires no manual editing and runs as-is after `pip install simpy`. Produced when all macros in the model have a direct SimPy equivalent. |
-| **SimPy export — Category 2** | A generated `.py` script where one or more macros (RENEGE, BATCH, MATCH, FAIL, REPAIR, PREEMPT, or RENEGE_OLDEST) have been replaced with annotated `# TODO` stubs. The script runs without errors but the stub sections must be completed manually before results are meaningful. |
+| **SimPy export — Category 1** | A generated `.py` script that requires no manual editing and runs as-is after `pip install simpy`, or directly in the browser via the **Run in Browser** button. Produced when all macros in the model have a direct SimPy equivalent. |
+| **SimPy export — Category 2** | A generated `.py` script where one or more macros (RENEGE, BATCH, MATCH, FAIL, REPAIR, PREEMPT, or RENEGE_OLDEST) have been replaced with annotated `# TODO` stubs. The script runs without errors but the stub sections must be completed manually before results are meaningful. The Run in Browser button is disabled for Category 2 scripts. |
+| **Starvation** | The condition where a server is idle because its input queue is empty — demand is too low to keep the server busy, not because the server is busy with another entity. Reported per-resource in the Results workspace as starvation duration and percentage. High starvation indicates upstream bottlenecks or low arrival rates relative to capacity. |
+| **Purge period** | An optional run-down phase after the simulation's Max sim time. New arrivals are stopped but the simulation continues until all queued entities are served (or until a configurable extra time limit). Used to model end-of-day or shift-end drain-down. |
+| **Shift-change behavior** | How a server handles in-progress service when its shift schedule reduces capacity: Delay (finish naturally), Preempt (interrupt and re-queue with remaining time), or Suspend (pause and resume). Set per server entity type in the Entity Types editor. |
+| **PRNG stream isolation** | Each stochastic process in the simulation (arrivals, service, reneging, MTBF, MTTR) has its own independent pseudo-random stream derived from the base seed. This means changing the distribution of one process does not alter the random sequence of any other process, making scenario comparisons more controlled. |
