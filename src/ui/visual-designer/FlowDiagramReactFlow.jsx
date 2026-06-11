@@ -38,13 +38,13 @@ function DesNode({ data, selected }) {
       background: data.sectionColor && !hasError
         ? `linear-gradient(${data.sectionColor}18, ${data.sectionColor}18), ${C.surface}`
         : C.surface,
-      border: `1.5px solid ${hasError && !selected ? C.red : selected ? color : hovered ? `${color}99` : `${color}44`}`,
+      border: `1.5px solid ${hasError && !selected ? C.red : selected ? color : hovered ? `${color}cc` : `${color}44`}`,
       borderLeft: `4px solid ${hasError && !selected ? C.red : color}`,
       borderRadius: 6,
       boxShadow: selected
         ? `0 0 0 3px ${color}88, 0 0 10px ${color}44`
         : hovered
-          ? `0 0 0 2px ${color}33`
+          ? `0 0 0 3px ${color}66`
           : hasError
             ? `0 0 0 2px ${C.red}44`
             : "none",
@@ -184,10 +184,11 @@ function toFlowEdge(edge, C, FONT) {
     labelStyle: {
       fill: isLoop ? C.amber : isFallback ? C.amber : isProbabilistic ? C.accent : C.muted,
       fontFamily: FONT,
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: (isLoop || isProbabilistic) ? 700 : undefined,
     },
     labelBgStyle: { fill: C.bg, fillOpacity: 0.9 },
+    labelBgPadding: [3, 6],
   };
 }
 
@@ -318,7 +319,7 @@ export function FlowDiagramReactFlow({
           sectionColor: showSections ? base.data.sectionColor : undefined,
           sectionId: showSections ? base.data.sectionId : undefined,
         },
-        style: { opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms", cursor: "pointer" },
+        style: { opacity: dimmed ? 0.15 : 1, transition: "opacity 200ms" },
       };
     });
 
