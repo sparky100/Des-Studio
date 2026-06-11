@@ -320,8 +320,9 @@ SimPy docs  : https://simpy.readthedocs.io/
 import random
 import math
 import statistics
+import json
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Dict, Optional
 `);
 
   // ── Configuration ──────────────────────────────────────────────────────────
@@ -331,6 +332,7 @@ MAX_SIM_TIME   = ${maxSimTime}   # ${timeUnit}
 WARMUP_PERIOD  = ${warmupPeriod} # ${timeUnit}
 REPLICATIONS   = ${replications}
 BASE_SEED      = 42
+RUN_MODE       = "text"  # set to "json" for machine-readable JSONL output
 `);
 
   // ── Distribution samplers ──────────────────────────────────────────────────
@@ -363,7 +365,12 @@ def _lognormal(log_mean, log_sd): return random.lognormvariate(log_mean, log_sd)
   const entityClassParts = ['# ── Entity dataclasses ──────────────────────────────────────────────────────'];
   for (const et of customers) {
     const cls = toPascal(et.name);
-    const attrLines = ['    id: int', '    arrival_time: float = 0.0', '    sojourn_time: float = 0.0'];
+    const attrLines = [
+      '    id: int',
+      '    arrival_time: float = 0.0',
+      '    sojourn_time: float = 0.0',
+      '    service_start_time: float = 0.0',
+    ];
     for (const a of (et.attrDefs || [])) {
       const pyType = a.valueType === 'string' ? 'str' : a.valueType === 'boolean' ? 'bool' : 'float';
       const defVal = a.defaultValue !== undefined && a.defaultValue !== null && a.defaultValue !== ''
@@ -375,7 +382,7 @@ def _lognormal(log_mean, log_sd): return random.lognormvariate(log_mean, log_sd)
   }
   // Always provide a fallback generic Entity for models with no customer types
   if (customers.length === 0) {
-    entityClassParts.push(`@dataclass\nclass Entity:\n    id: int\n    arrival_time: float = 0.0\n    sojourn_time: float = 0.0\n`);
+    entityClassParts.push(`@dataclass\nclass Entity:\n    id: int\n    arrival_time: float = 0.0\n    sojourn_time: float = 0.0\n    service_start_time: float = 0.0\n`);
   }
   parts.push(entityClassParts.join('\n') + '\n');
 
@@ -384,9 +391,10 @@ def _lognormal(log_mean, log_sd): return random.lognormvariate(log_mean, log_sd)
 `# ── Statistics collector ─────────────────────────────────────────────────────
 class Stats:
     def __init__(self):
-        self.served:  List = []
-        self.reneged: List = []
+        self.served:     List = []
+        self.reneged:    List = []
         self.total_cost: float = 0.0
+        self.resource_busy: Dict[str, float] = {}
 `);
 
   // ── Arrival processes ──────────────────────────────────────────────────────
@@ -471,11 +479,17 @@ class Stats:
       if (isCoseize) {
         const reqVars = resVars.map((r, i) => `_req${i}`);
         const reqDecls = resVars.map((r, i) => `    ${reqVars[i]} = ${r}.request()`).join('\n');
+        const svcBusyLines = serverTypes.map(st =>
+          `        stats.resource_busy["${st}"] = stats.resource_busy.get("${st}", 0.0) + _svc_t`
+        ).join('\n');
         seizeBlock =
 `${reqDecls}
     yield simpy.AllOf(env, [${reqVars.join(', ')}])
+    entity.service_start_time = env.now
     try:
         yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
+        _svc_t = env.now - entity.service_start_time
+${svcBusyLines}
     finally:
         for _req in [${reqVars.join(', ')}]:
             try: _req.resource.release(_req)
@@ -484,7 +498,10 @@ class Stats:
         seizeBlock =
 `    with ${resVars[0]}.request() as _req:
         yield _req
-        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}`;
+        entity.service_start_time = env.now
+        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
+        _svc_t = env.now - entity.service_start_time
+        stats.resource_busy["${serverTypes[0]}"] = stats.resource_busy.get("${serverTypes[0]}", 0.0) + _svc_t`;
       }
 
       const todoNote = todoSet.has('COSEIZE') ? '' :
@@ -689,12 +706,37 @@ class Stats:
 
   runLines.push(`    env.run(until=MAX_SIM_TIME)`);
   runLines.push(``);
-  runLines.push(`    _warmup_served = [e for e in stats.served if getattr(e, "sojourn_time", None) is not None]`);
+
+  const resCapsEntries = servers.map(s => {
+    const cap = s.count != null && s.count !== '' ? parseInt(String(s.count), 10) : 1;
+    const safeCap = Number.isFinite(cap) && cap >= 1 ? cap : 1;
+    return `"${s.name}": ${safeCap}`;
+  }).join(', ');
+
+  runLines.push(`    _warmup_served = [e for e in stats.served if e.sojourn_time > 0]`);
+  runLines.push(`    _soj_vals  = [e.sojourn_time for e in _warmup_served]`);
+  runLines.push(`    _wait_vals = [e.service_start_time - e.arrival_time for e in _warmup_served if e.service_start_time > 0]`);
+  runLines.push(`    _svc_vals  = [e.sojourn_time - (e.service_start_time - e.arrival_time) for e in _warmup_served if e.service_start_time > 0]`);
+  if (servers.length > 0) {
+    runLines.push(`    _RES_CAPS  = {${resCapsEntries}}`);
+    runLines.push(`    _warmup_t  = max(env.now - WARMUP_PERIOD, 1.0)`);
+    runLines.push(`    _util = {k: round(min(1.0, v / (_warmup_t * _RES_CAPS.get(k, 1))), 4) for k, v in stats.resource_busy.items()}`);
+  } else {
+    runLines.push(`    _util = {}`);
+  }
+  runLines.push(`    def _pct(vals, p):`);
+  runLines.push(`        return round(float(statistics.quantiles(vals, n=100)[p - 1]), 4) if len(vals) >= 2 else 0.0`);
   runLines.push(`    return {`);
-  runLines.push(`        "served":       len(stats.served),`);
-  runLines.push(`        "reneged":      len(stats.reneged),`);
-  runLines.push(`        "avg_sojourn":  statistics.mean([e.sojourn_time for e in _warmup_served]) if _warmup_served else 0.0,`);
-  runLines.push(`        "total_cost":   stats.total_cost,`);
+  runLines.push(`        "served":      len(stats.served),`);
+  runLines.push(`        "reneged":     len(stats.reneged),`);
+  runLines.push(`        "avg_sojourn": round(statistics.mean(_soj_vals), 4) if _soj_vals else 0.0,`);
+  runLines.push(`        "total_cost":  round(stats.total_cost, 4),`);
+  runLines.push(`        "wait_mean":   round(statistics.mean(_wait_vals), 4) if _wait_vals else 0.0,`);
+  runLines.push(`        "wait_p50":    _pct(_wait_vals, 50),`);
+  runLines.push(`        "wait_p90":    _pct(_wait_vals, 90),`);
+  runLines.push(`        "wait_p99":    _pct(_wait_vals, 99),`);
+  runLines.push(`        "svc_mean":    round(statistics.mean(_svc_vals), 4) if _svc_vals else 0.0,`);
+  runLines.push(`        "util":        _util,`);
   runLines.push(`    }`);
   parts.push(runLines.join('\n') + '\n');
 
@@ -706,21 +748,37 @@ if __name__ == "__main__":
     for _rep in range(REPLICATIONS):
         _r = run_replication(BASE_SEED + _rep)
         _all.append(_r)
-        print(f"Rep {_rep + 1:3d}: served={_r['served']:5d}  "
-              f"avg_sojourn={_r['avg_sojourn']:8.3f}  "
-              f"reneged={_r['reneged']:4d}")
+        if RUN_MODE == "json":
+            print(json.dumps({"type": "rep", "rep": _rep + 1, **_r}), flush=True)
+        else:
+            print(f"Rep {_rep + 1:3d}: served={_r['served']:5d}  "
+                  f"avg_sojourn={_r['avg_sojourn']:8.3f}  "
+                  f"reneged={_r['reneged']:4d}  "
+                  f"wait_p90={_r['wait_p90']:7.3f}")
 
-    if REPLICATIONS > 1:
-        _sv  = [r["served"]      for r in _all]
-        _sq  = [r["avg_sojourn"] for r in _all]
-        _rv  = [r["reneged"]     for r in _all]
+    _sv = [r["served"]      for r in _all]
+    _sq = [r["avg_sojourn"] for r in _all]
+    _rv = [r["reneged"]     for r in _all]
+    _wm = [r["wait_mean"]   for r in _all]
+    _n  = len(_all)
+    _summary = {
+        "type":         "summary",
+        "replications": _n,
+        "served_mean":  round(statistics.mean(_sv), 2),
+        "served_sd":    round(statistics.stdev(_sv) if _n > 1 else 0.0, 2),
+        "sojourn_mean": round(statistics.mean(_sq), 4),
+        "sojourn_sd":   round(statistics.stdev(_sq) if _n > 1 else 0.0, 4),
+        "reneged_mean": round(statistics.mean(_rv), 2),
+        "wait_mean":    round(statistics.mean(_wm), 4),
+    }
+    if RUN_MODE == "json":
+        print(json.dumps(_summary), flush=True)
+    elif _n > 1:
         print("\\n── Replication summary ──────────────────────────────────────────────────")
-        print(f"  served      mean={statistics.mean(_sv):.1f}  "
-              f"sd={statistics.stdev(_sv) if REPLICATIONS > 1 else 0:.2f}")
-        print(f"  avg_sojourn mean={statistics.mean(_sq):.3f}  "
-              f"sd={statistics.stdev(_sq) if REPLICATIONS > 1 else 0:.4f}")
-        print(f"  reneged     mean={statistics.mean(_rv):.1f}  "
-              f"sd={statistics.stdev(_rv) if REPLICATIONS > 1 else 0:.2f}")
+        print(f"  served      mean={_summary['served_mean']:.1f}  sd={_summary['served_sd']:.2f}")
+        print(f"  avg_sojourn mean={_summary['sojourn_mean']:.3f}  sd={_summary['sojourn_sd']:.4f}")
+        print(f"  wait_mean   mean={_summary['wait_mean']:.3f}")
+        print(f"  reneged     mean={_summary['reneged_mean']:.1f}")
 `);
 
   return parts.join('\n');
