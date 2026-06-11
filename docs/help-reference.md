@@ -2,7 +2,8 @@
 
 **Purpose:** System context for Help Assistant LLM responses  
 **Audience:** LLM consuming as prompt context (machine-readable)  
-**Maintenance:** Updated at end of each sprint alongside core documents
+**Maintenance:** Updated at end of each sprint alongside core documents  
+**Last updated:** 2026-06-11 (Sprint 85)
 
 ---
 
@@ -224,6 +225,28 @@ All 6 queue disciplines.
 
 **Behaviour:** Integer seed set in the Execute panel before running. Stored with the run record so any past run can be exactly reproduced.
 
+### PRNG Stream Isolation (Sprint 84)
+
+**Purpose:** Ensure adding or removing a process does not disturb the random streams of other processes.
+
+**Behaviour:** Each generator process (arrival B-event, service C-event, shift schedule) gets an independent PRNG stream derived from `baseSeed + replicationIndex` via `deriveSubSeed(seed, processIndex)`. Modifying one process (e.g., adding a new arrival source) leaves all other streams unchanged — results remain reproducible and statistically comparable across model edits.
+
+### Purge Period
+
+**Purpose:** Remove entities that have exceeded a maximum dwell age in a queue.
+
+**Behaviour:** Configured as a B-event with a fixed or periodic interval. At each purge event, entities older than the configured threshold are removed from the target queue. Unlike reneging (entity-driven, patience-timer per entity), purge is a global sweep fired on a timer — useful for batch/job queues with SLA deadlines where wholesale queue clearing is required.
+
+### Shift-change Behavior (Sprint 84)
+
+**Purpose:** Controls what happens when a shift boundary fires while a server is mid-service.
+
+| Mode | Behaviour |
+|------|-----------|
+| Delay | Server finishes current service before applying the shift change |
+| Preempt | Service interrupted immediately; entity re-queues with remaining service time preserved |
+| Suspend | Service paused at shift boundary; resumes automatically when the next shift starts |
+
 ### Parametric Sweep
 
 **1D sweep:** One parameter varied across range. Full replication batch at each point.
@@ -278,6 +301,8 @@ All 6 queue disciplines.
 | utilisation | Fraction of time servers busy | >85% indicates congestion risk; <50% indicates over-capacity |
 | busyCount | Number of service start events | Throughput indicator |
 | idleCount | Number of idle periods | Under-utilisation indicator |
+| starvationTime | Cumulative time server was starved (idle despite entities waiting in a downstream-fed queue) | Zero = fully fed; non-zero = scheduling gap or upstream bottleneck |
+| starvationPct | Fraction of post-warmup time server was starved | High value indicates upstream supply problem, not a capacity problem |
 
 ---
 
@@ -694,6 +719,47 @@ The LLM Bundle is a structured Markdown file that combines model definition and 
 ### When confidence intervals are absent
 
 The CI section is omitted for single-replication runs — there is no between-replication variance to report. Run with ≥ 2 replications to include CIs.
+
+---
+
+## SimPy Export
+
+### What it is
+
+Exports any model as a runnable Python SimPy script, or runs it directly in the browser via Pyodide WebAssembly. Provides an independent reference implementation useful for cross-validating JS engine results.
+
+### Category 1 vs Category 2
+
+| Category | Meaning | "Run in Browser" available? |
+|----------|---------|----------------------------|
+| Category 1 — Complete | All macros auto-translated; script runs without edits | Yes |
+| Category 2 — Partial | Contains macros with complex Python patterns; replaced with annotated `# TODO` stubs | No — complete TODO sections in an IDE first, then run locally |
+
+**Category 1 supported macros:** `ARRIVE`, `ASSIGN`, `COSEIZE`, `COMPLETE`, `RELEASE`, `FILL`, `DRAIN`, `SPLIT`, `SET`, `SET_ATTR`, `COST`, `UNBATCH`.
+
+**Category 2 macros (stubs generated):** `RENEGE`, `BATCH`, `RENEGE_OLDEST`, `MATCH`, `FAIL`, `REPAIR`, `PREEMPT`. Note: all of these are fully implemented in the JS Three-Phase engine — they appear as stubs only because their Python translation is non-trivial to auto-generate.
+
+### Run in Browser
+
+Category 1 models can run without leaving the browser. Click **Run in Browser** in the SimPy export dialog:
+
+- First run downloads Pyodide (~25 MB WASM bundle) and caches it. Subsequent runs start immediately.
+- A progress bar shows each replication as it completes.
+- Results load into the Results workspace with a `[SimPy]` source label — same place as JS engine results.
+- Metrics available: served/reneged counts, avg sojourn, avg wait, wait P50/P90/P99, mean service time, per-resource utilisation.
+
+The **Run in Browser** button is disabled for Category 2 models. A tooltip explains that manual edits are required first.
+
+### Output modes (RUN_MODE)
+
+The generated script contains a `RUN_MODE` constant near the top of the configuration block:
+
+- `"text"` (default) — human-readable per-replication summary lines; for `python model_simpy.py` terminal use
+- `"json"` — one JSON object per line (JSONL); one `{"type":"rep",...}` per replication followed by a `{"type":"summary",...}` record; designed for pipeline/script consumption. The browser runner sets this mode automatically before execution.
+
+### Accessing the export
+
+Click **⬇ SimPy** in the model header bar, or go to the **Access** tab and click **Export SimPy**.
 
 ---
 
