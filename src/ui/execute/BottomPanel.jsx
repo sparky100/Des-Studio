@@ -955,7 +955,57 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
 
 function ResourcesTab({ snap, model }) {
   const { C, FONT } = useTheme();
+  const [filterText,   setFilterText]   = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [collapsed, setCollapsed] = useState(new Set());
+
   const serverTypes = (model?.entityTypes || []).filter(et => et.role === "server");
+
+  const toggleCollapse = (id) =>
+    setCollapsed(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  const computed = useMemo(() => serverTypes.map(et => {
+    const allEntities = snap?.entities || [];
+    const servers = allEntities.filter(s => s.role === "server" &&
+      s.type?.trim().toLowerCase() === et.name?.trim().toLowerCase());
+    const busyCount = servers.filter(s => s.status === "busy" && !s._suspended).length;
+    const idleCount = servers.filter(s => s.status === "idle" && !s._suspended).length;
+    const failedCount = servers.filter(s => s.status === "failed").length;
+    const suspendedCount = servers.filter(s => s._suspended).length;
+    const utilisation = servers.length > 0 ? (busyCount / servers.length) * 100 : 0;
+    const liveData = {
+      serverTypeName: et.name,
+      capacity: servers.length || (et.count ?? 1),
+      busyCount, idleCount, failedCount, suspendedCount, utilisation,
+      clock: snap?.clock,
+      servers: servers.map(srv => {
+        const cust = allEntities.find(e => e.id === srv.currentCustId);
+        return {
+          id: srv.id,
+          status: srv.status,
+          suspended: srv._suspended,
+          customerId: cust?.id,
+          customerType: cust?.type,
+          ceventName: cust?.ceventName ?? null,
+          serviceStart: srv.serviceStart,
+          scheduledDuration: srv.scheduledDuration,
+          starvationTime: srv._starvationTime || 0,
+          downtime: srv._downtime || 0,
+          busyTime: srv._busyTime || 0,
+        };
+      }),
+    };
+    return { et, liveData };
+  }), [serverTypes, snap]);
+
+  const visible = useMemo(() => computed.filter(({ et, liveData }) => {
+    if (filterText.trim() && !et.name.toLowerCase().includes(filterText.toLowerCase())) return false;
+    if (filterStatus === "busy")      return liveData.busyCount > 0;
+    if (filterStatus === "failed")    return liveData.failedCount > 0;
+    if (filterStatus === "suspended") return liveData.suspendedCount > 0;
+    if (filterStatus === "idle")      return liveData.busyCount === 0 && liveData.failedCount === 0;
+    return true;
+  }), [computed, filterText, filterStatus]);
 
   if (!snap) {
     return <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12 }}>No snapshot yet.</div>;
@@ -965,42 +1015,76 @@ function ResourcesTab({ snap, model }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {serverTypes.map(et => {
-        const allEntities = snap.entities || [];
-        const servers = allEntities.filter(s => s.role === "server" &&
-          s.type?.trim().toLowerCase() === et.name?.trim().toLowerCase());
-        const busyCount = servers.filter(s => s.status === "busy" && !s._suspended).length;
-        const idleCount = servers.filter(s => s.status === "idle" && !s._suspended).length;
-        const failedCount = servers.filter(s => s.status === "failed").length;
-        const suspendedCount = servers.filter(s => s._suspended).length;
-        const utilisation = servers.length > 0 ? (busyCount / servers.length) * 100 : 0;
+    <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+      {/* Filter bar */}
+      <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6 }}>
+        <input
+          placeholder="Filter resource types…"
+          value={filterText}
+          onChange={ev => setFilterText(ev.target.value)}
+          style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`,
+            borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11,
+            padding: "5px 8px", outline: "none" }}
+        />
+        <select
+          value={filterStatus}
+          onChange={ev => setFilterStatus(ev.target.value)}
+          style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 4,
+            color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
+        >
+          <option value="all">All</option>
+          <option value="busy">Has Busy</option>
+          <option value="failed">Has Failed</option>
+          <option value="suspended">Has Suspended</option>
+          <option value="idle">All Idle</option>
+        </select>
+      </div>
+      <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginBottom: 8 }}>
+        {visible.length}{visible.length !== serverTypes.length ? ` of ${serverTypes.length}` : ""} resource {serverTypes.length === 1 ? "type" : "types"}
+      </div>
 
-        const liveData = {
-          serverTypeName: et.name,
-          capacity: servers.length || (et.count ?? 1),
-          busyCount, idleCount, failedCount, suspendedCount, utilisation,
-          clock: snap.clock,
-          servers: servers.map(srv => {
-            const cust = allEntities.find(e => e.id === srv.currentCustId);
-            return {
-              id: srv.id,
-              status: srv.status,
-              suspended: srv._suspended,
-              customerId: cust?.id,
-              customerType: cust?.type,
-              ceventName: cust?.ceventName ?? null,
-              serviceStart: srv.serviceStart,
-              scheduledDuration: srv.scheduledDuration,
-              starvationTime: srv._starvationTime || 0,
-              downtime: srv._downtime || 0,
-              busyTime: srv._busyTime || 0,
-            };
-          }),
-        };
-
-        return <ActivityDetail key={et.id} label={et.name} liveData={liveData} />;
-      })}
+      {/* Collapsible sections */}
+      {visible.length === 0 ? (
+        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, fontStyle: "italic" }}>
+          No resource types match the filter.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {visible.map(({ et, liveData }) => {
+            const isCollapsed = collapsed.has(et.id);
+            const utilColor = liveData.utilisation > 90 ? C.red : liveData.utilisation > 70 ? C.amber : C.green;
+            return (
+              <div key={et.id} style={{ border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
+                <div
+                  onClick={() => toggleCollapse(et.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px",
+                    background: C.panel, cursor: "pointer", userSelect: "none" }}
+                >
+                  <span style={{ color: C.muted, fontSize: 10 }}>{isCollapsed ? "▶" : "▼"}</span>
+                  <span style={{ flex: 1, fontFamily: FONT, fontSize: 12, fontWeight: 600, color: C.text }}>
+                    {et.name}
+                  </span>
+                  <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{liveData.capacity} cap</span>
+                  <Tag label={`${liveData.busyCount} busy`}   color={C.busy} />
+                  <Tag label={`${liveData.idleCount} idle`}   color={C.idle} />
+                  {liveData.failedCount > 0 &&
+                    <Tag label={`${liveData.failedCount} failed`} color={C.red} />}
+                  {liveData.suspendedCount > 0 &&
+                    <Tag label={`${liveData.suspendedCount} susp`} color={C.muted} />}
+                  <span style={{ fontSize: 10, fontFamily: FONT, color: utilColor, fontWeight: 700 }}>
+                    {liveData.utilisation.toFixed(0)}%
+                  </span>
+                </div>
+                {!isCollapsed && (
+                  <div style={{ padding: "10px 10px" }}>
+                    <ActivityDetail label={et.name} liveData={liveData} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
