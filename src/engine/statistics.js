@@ -782,8 +782,8 @@ export function buildHistogram(values = [], options = {}) {
     return { bins: [], numBins: 0, min: null, max: null, total: 0 };
   }
 
-  const lo = userMin != null ? userMin : Math.min(...finite);
-  const hi = userMax != null ? userMax : Math.max(...finite);
+  const lo = userMin != null ? userMin : finite.reduce((m, v) => v < m ? v : m, Infinity);
+  const hi = userMax != null ? userMax : finite.reduce((m, v) => v > m ? v : m, -Infinity);
 
   if (lo === hi) {
     // All values identical — single bin
@@ -845,10 +845,10 @@ export function buildHistogramFD(values = [], options = {}) {
 
   const pcts = computePercentiles(finite, [25, 75]);
   const iqr = (pcts.p75 ?? 0) - (pcts.p25 ?? 0);
-  const binWidth = iqr > 0 ? 2 * iqr / Math.cbrt(n) : (Math.max(...finite) - Math.min(...finite)) / 10;
 
-  const lo = userMin != null ? userMin : Math.min(...finite);
-  const hi = userMax != null ? userMax : Math.max(...finite);
+  const lo = userMin != null ? userMin : finite.reduce((m, v) => v < m ? v : m, Infinity);
+  const hi = userMax != null ? userMax : finite.reduce((m, v) => v > m ? v : m, -Infinity);
+  const binWidth = iqr > 0 ? 2 * iqr / Math.cbrt(n) : (hi - lo) / 10;
   const numBins = Math.min(maxBins, Math.max(2, Math.ceil((hi - lo) / binWidth)));
 
   const result = buildHistogram(finite, { numBins, min: lo, max: hi });
