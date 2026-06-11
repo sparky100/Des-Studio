@@ -13,6 +13,7 @@ async function boot() {
   pyodide = await loadPyodide({
     indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/",
   });
+  await pyodide.loadPackage("micropip");
   await pyodide.runPythonAsync("import micropip; await micropip.install('simpy')");
   bootResolve();
   self.postMessage({ type: "ready" });
