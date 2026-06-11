@@ -360,6 +360,31 @@ describe("exportToSimPy", () => {
       const result = exportToSimPy(model);
       expect(result.script).toContain("Clerk_resource = simpy.Resource(env, capacity=1)");
     });
+
+    it("uses shiftSchedule[0].capacity as initial capacity when shift schedule is present", () => {
+      const model = {
+        ...minimalModel,
+        entityTypes: [
+          { id: "e1", name: "Customer", role: "customer" },
+          { id: "e2", name: "Clerk", role: "server", count: 0, shiftSchedule: [{ time: 0, capacity: 5 }, { time: 480, capacity: 2 }] },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.script).toContain("Clerk_resource = simpy.Resource(env, capacity=5)");
+    });
+
+    it("shiftSchedule[0].capacity overrides count=0", () => {
+      const model = {
+        ...minimalModel,
+        entityTypes: [
+          { id: "e1", name: "Customer", role: "customer" },
+          { id: "e2", name: "Clerk", role: "server", count: 0, shiftSchedule: [{ time: 0, capacity: 10 }] },
+        ],
+      };
+      const result = exportToSimPy(model);
+      expect(result.script).toContain("Clerk_resource = simpy.Resource(env, capacity=10)");
+      expect(result.script).not.toContain("capacity=0");
+    });
   });
 
   describe("queues (stores)", () => {

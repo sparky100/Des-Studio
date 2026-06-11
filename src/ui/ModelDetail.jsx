@@ -34,6 +34,7 @@ import { ModelTabBar }       from "./ModelTabBar.jsx";
 import { SaveBanner }        from "./SaveBanner.jsx";
 import { VersionHistoryPanel } from "./VersionHistoryPanel.jsx";
 import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, buildSchedulesMap, saveSimulationRun, saveAiInsights } from "../db/models.js";
+import { formatRunTimestamp } from "./execute/executeHelpers.js";
 import { generateReport, sanitizeFilename, buildModelDefinitionHtml } from "../reports/index.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
@@ -1198,6 +1199,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             onClose={()=>setShowSimPyExport(false)}
             onResultsReady={r=>{
               setLatestResults(r);
+              setLatestReplicationResults(r?.replications || []);
               setShowSimPyExport(false);
               setTab("results");
               setResultsView("summary");
