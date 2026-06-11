@@ -1192,7 +1192,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           </div>)
         )}
         {showSimPyExport&&(
-          <SimPyExportModal model={model} onClose={()=>setShowSimPyExport(false)}/>
+          <SimPyExportModal
+            model={model}
+            onClose={()=>setShowSimPyExport(false)}
+            onResultsReady={r=>{setLatestResults(r);setShowSimPyExport(false);setTab("results");setResultsView("summary");}}
+          />
         )}
         {tab==="state"&&renderAuthoringShell(
           <div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
