@@ -29,34 +29,38 @@ self.addEventListener("message", async ({ data }) => {
   try {
     await bootDone;
 
-    let lineBuf = "";
-    pyodide.setStdout({
-      batched(text) {
-        lineBuf += text;
-        const lines = lineBuf.split("\n");
-        lineBuf = lines.pop();
-        for (const raw of lines) {
-          const line = raw.trim();
-          if (!line) continue;
-          try {
-            const msg = JSON.parse(line);
-            if (msg.type === "rep" || msg.type === "summary") {
-              self.postMessage(msg);
-            }
-          } catch {
-            // non-JSON lines ignored in json mode
-          }
-        }
-      },
-    });
-
-    pyodide.setStderr({ batched(text) { console.warn("[SimPy]", text); } });
-
-    // Switch script to json output mode
     const jsonScript = data.script.replace('RUN_MODE       = "text"', 'RUN_MODE       = "json"');
-    await pyodide.runPythonAsync(jsonScript);
+
+    // Pass the script as a Python variable to avoid any quoting issues, then
+    // run it via exec() with StringIO stdout capture. This is more reliable
+    // than setStdout({ batched }) whose timing varies across Pyodide versions.
+    pyodide.globals.set("_simpy_script", jsonScript);
+
+    const output = await pyodide.runPythonAsync(`
+import sys as _sys, io as _io
+_prev = _sys.stdout
+_buf  = _io.StringIO()
+_sys.stdout = _buf
+try:
+    exec(compile(_simpy_script, "<simpy>", "exec"), {"__name__": "__main__"})
+finally:
+    _sys.stdout = _prev
+_buf.getvalue()
+`);
+
+    // output is the full JSONL output — parse and forward each rep/summary line
+    for (const raw of output.split("\n")) {
+      const line = raw.trim();
+      if (!line) continue;
+      try {
+        const msg = JSON.parse(line);
+        if (msg.type === "rep" || msg.type === "summary") {
+          self.postMessage(msg);
+        }
+      } catch { /* non-JSON lines ignored */ }
+    }
     self.postMessage({ type: "done" });
   } catch (err) {
-    self.postMessage({ type: "error", message: err.message });
+    self.postMessage({ type: "error", message: err.message ?? String(err) });
   }
 });
