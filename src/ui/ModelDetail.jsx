@@ -33,6 +33,7 @@ import { ModelTabBar }       from "./ModelTabBar.jsx";
 import { SaveBanner }        from "./SaveBanner.jsx";
 import { VersionHistoryPanel } from "./VersionHistoryPanel.jsx";
 import { fetchRunHistory, listShareLinks, fetchModelSchedules, getRun, buildSchedulesMap, saveSimulationRun, saveAiInsights } from "../db/models.js";
+import { formatRunTimestamp } from "./execute/executeHelpers.js";
 import { generateReport, sanitizeFilename, buildModelDefinitionHtml } from "../reports/index.js";
 import { fetchLocalRunHistory } from "../db/local.js";
 import { validateModel }                    from "../engine/validation.js";
@@ -1192,7 +1193,27 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           </div>)
         )}
         {showSimPyExport&&(
-          <SimPyExportModal model={model} onClose={()=>setShowSimPyExport(false)}/>
+          <SimPyExportModal
+            model={model}
+            onClose={()=>setShowSimPyExport(false)}
+            onResultsReady={r=>{
+              setLatestResults(r);
+              setLatestReplicationResults(r?.replications || []);
+              setShowSimPyExport(false);
+              setTab("results");
+              setResultsView("summary");
+              if (r && overrides.userId && modelId) {
+                const cfg = model.experimentDefaults || {};
+                saveSimulationRun(modelId, overrides.userId, r, {
+                  runLabel: `SimPy ${formatRunTimestamp()}`,
+                  replications: r.replications?.length ?? 1,
+                  maxTime: cfg.maxSimTime ?? 500,
+                  warmupPeriod: cfg.warmupPeriod ?? 0,
+                  seed: cfg.seed ?? 42,
+                }).then(runId => handleRunSaved(runId)).catch(console.error);
+              }
+            }}
+          />
         )}
         {tab==="state"&&renderAuthoringShell(
           <div style={{maxWidth:900,display:"flex",flexDirection:"column",gap:14}}>
