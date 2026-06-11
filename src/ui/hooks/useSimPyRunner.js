@@ -35,8 +35,8 @@ function buildResultsShape(repResults, model) {
   return {
     _source: "simpy",
     summary: {
-      served:      Math.round(mean(repResults.map(r => r.served))),
-      reneged:     Math.round(mean(repResults.map(r => r.reneged))),
+      served:      repResults.reduce((s, r) => s + (r.served  || 0), 0),
+      reneged:     repResults.reduce((s, r) => s + (r.reneged || 0), 0),
       avgSojourn:  mean(repResults.map(r => r.avg_sojourn)),
       avgWait:     mean(repResults.map(r => r.wait_mean ?? 0)),
       totalCost:   mean(repResults.map(r => r.total_cost ?? 0)),
