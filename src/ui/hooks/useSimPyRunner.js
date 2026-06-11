@@ -23,22 +23,31 @@ function buildResultsShape(repResults, model) {
     seed: (+(model.experimentDefaults?.seed ?? model.seed ?? 42)) + i,
     result: {
       summary: {
-        served:     r.served,
-        reneged:    r.reneged,
-        avgSojourn: r.avg_sojourn,
-        avgWait:    r.wait_mean ?? 0,
-        totalCost:  r.total_cost ?? 0,
+        total:          r.total ?? 0,
+        served:         r.served,
+        reneged:        r.reneged,
+        avgSojourn:     r.avg_sojourn,
+        avgTimeInSystem:r.avg_sojourn,
+        avgWait:        r.wait_mean ?? 0,
+        avgSvc:         r.svc_mean  ?? 0,
+        totalCost:      r.total_cost ?? 0,
       },
     },
   }));
   const aggregateStats = summarizeReplicationResults(replications, CI_METRICS);
+  const _totalServed  = repResults.reduce((s, r) => s + (r.served  || 0), 0);
+  const _totalArrived = repResults.reduce((s, r) => s + (r.total   || 0), 0);
   return {
     _source: "simpy",
     summary: {
-      served:      repResults.reduce((s, r) => s + (r.served  || 0), 0),
+      total:       _totalArrived,
+      served:      _totalServed,
       reneged:     repResults.reduce((s, r) => s + (r.reneged || 0), 0),
+      servedRatio: _totalArrived > 0 ? +(_totalServed / _totalArrived).toFixed(4) : null,
       avgSojourn:  mean(repResults.map(r => r.avg_sojourn)),
+      avgTimeInSystem: mean(repResults.map(r => r.avg_sojourn)),
       avgWait:     mean(repResults.map(r => r.wait_mean ?? 0)),
+      avgSvc:      mean(repResults.map(r => r.svc_mean  ?? 0)),
       totalCost:   mean(repResults.map(r => r.total_cost ?? 0)),
       perResource,
     },
