@@ -96,6 +96,7 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
     target: "",
     operator: "<",
     label: "",
+    description: null,
     scope: null,
   }]);
 
@@ -221,6 +222,19 @@ export function GoalsEditor({ goals = [], onChange, queues = [], entityTypes = [
                 {" "}{def?.unit || ""}
               </div>
             )}
+            <textarea
+              value={g.description || ""}
+              onChange={e => upd(i, { description: e.target.value || null })}
+              placeholder="Description (optional)"
+              rows={2}
+              aria-label="Goal description (optional)"
+              style={{
+                background: "transparent", border: `1px solid ${alpha(C.border, 0.25)}`,
+                borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 11,
+                padding: "5px 8px", outline: "none", resize: "vertical", lineHeight: 1.5,
+                width: "100%", boxSizing: "border-box",
+              }}
+            />
             {g.scope && needsScope && scopeOpts.length === 0 && (
               <div style={{ fontSize: 10, color: C.amber, fontFamily: FONT, fontStyle: "italic" }}>
                 Define at least one {scope} in the model to use this goal type.

@@ -36,8 +36,8 @@ function formatRunDate(value) {
   return `${dt.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})} ${dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}`;
 }
 
-const formatPercent = value => Number.isFinite(value) ? `${value.toFixed(1)}%` : "—";
-const formatTime = value => value != null && Number.isFinite(Number(value)) ? `${Number(value).toFixed(2)}t` : "—";
+const formatPercent = value => Number.isFinite(value) ? `${Math.round(value)}%` : "—";
+const formatTime = value => value != null && Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}t` : "—";
 
 export function ModelHistoryTab({
   historyRows, setHistoryRows,
@@ -445,7 +445,7 @@ export function ModelHistoryTab({
                           const total = row.total_served || 0;
                           const reps = row.replications || 1;
                           const avg = reps > 1 ? (total / reps) : total;
-                          const label = reps > 1 ? avg.toFixed(1) : total;
+                          const label = reps > 1 ? Math.round(avg) : total;
                           return (
                             <span title={reps > 1 ? `${total} total across ${reps} replications` : undefined}>
                               {label}
@@ -455,7 +455,7 @@ export function ModelHistoryTab({
                       </td>
                       <td style={{ padding: "6px 12px", color: row.total_reneged > 0 ? C.reneged : C.muted }}>{row.total_reneged || 0}</td>
                       <td style={{ padding: "6px 12px", color: C.amber }}>
-                        {row.avg_wait_time != null ? row.avg_wait_time.toFixed(2) : "—"}
+                        {row.avg_wait_time != null ? row.avg_wait_time.toFixed(1) : "—"}
                       </td>
                       <td style={{ padding: "6px 12px" }}>
                         {(() => {
@@ -465,7 +465,7 @@ export function ModelHistoryTab({
                           const color = relHw < 10 ? C.green : relHw < 25 ? C.amber : C.red;
                           return (
                             <span
-                              title={`±${ci.halfWidth.toFixed(2)} half-width, n=${ci.n} reps`}
+                              title={`±${ci.halfWidth.toFixed(1)} half-width, n=${ci.n} reps`}
                               style={{ fontSize: 10, fontWeight: 700, color, background: `${color}18`, border: `1px solid ${color}44`, borderRadius: 999, padding: "2px 7px", whiteSpace: "nowrap" }}
                             >±{relHw.toFixed(0)}%</span>
                           );
