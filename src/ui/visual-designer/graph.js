@@ -119,18 +119,21 @@ function withLayout(nodes, edges, graph = {}) {
 
 function conditionLabel(c, depth = 0) {
   if (!c) return "condition";
-  if (typeof c === "string") return c.length > 32 ? c.slice(0, 29) + "…" : c;
+  if (typeof c === "string") return c.length > 20 ? c.slice(0, 17) + "…" : c;
   if (typeof c !== "object") return "condition";
   if ((c.operator === "AND" || c.operator === "OR") && Array.isArray(c.clauses) && depth === 0) {
     const parts = c.clauses.map(cl => conditionLabel(cl, 1)).filter(p => p !== "condition");
     return parts.length ? parts.join(` ${c.operator} `) : "condition";
   }
-  const variable = clean(c.variable || c.left || c.token || "");
+  const rawVar  = clean(c.variable || c.left || c.token || "");
+  // Strip "Entity." / "entity." prefix so "Entity.severity" → "severity"
+  const variable = rawVar.replace(/^entity\./i, "");
   const op       = clean(c.operator || c.op || "");
   const value    = c.value !== undefined ? c.value : c.right;
-  if (variable && op && value !== undefined) return `${variable} ${op} ${value}`;
-  if (variable && value !== undefined) return `${variable} = ${value}`;
-  return "condition";
+  const label    = variable && op && value !== undefined ? `${variable} ${op} ${value}`
+                 : variable && value !== undefined       ? `${variable} = ${value}`
+                 : "condition";
+  return label.length > 20 ? label.slice(0, 17) + "…" : label;
 }
 
 export function deriveGraphFromModel(model = {}) {
