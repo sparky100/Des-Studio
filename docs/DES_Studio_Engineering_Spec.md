@@ -632,18 +632,29 @@ The generated script contains `RUN_MODE = "text"` in the configuration block. Se
 
 ```python
 {
-  "served": int,
-  "reneged": int,
+  "total":      int,           # post-warmup arrival count
+  "served":     int,
+  "reneged":    int,
   "avg_sojourn": float,
   "total_cost": float,
-  "wait_mean": float,
-  "wait_p50": float,
-  "wait_p90": float,
-  "wait_p99": float,
-  "svc_mean": float,
-  "util": dict[str, float]   # {server_name: utilisation_fraction}
+  "wait_mean":  float,
+  "wait_p50":   float,
+  "wait_p90":   float,
+  "wait_p99":   float,
+  "svc_mean":   float,
+  "util":       dict[str, float]   # {server_name: utilisation_fraction}
 }
 ```
+
+#### Distribution support
+
+The standard 7 distributions (Exponential, Uniform, Normal, Triangular, Fixed, Erlang, Lognormal) map directly to Python equivalents. Three additional distributions are fully Category 1:
+
+- **Piecewise** — generates a `_piecewise_NAME(t)` time-varying helper function; the arrival process calls the helper to obtain the current-period mean.
+- **Schedule** — generates a `for`-loop over `rows[]` with per-row attribute injection; used by the Appointment Clinic template.
+- **Empirical** — generates `random.choice([values])`.
+
+All 22 built-in templates produce valid Category 1 Python.
 
 #### C-event → B-event routing resolution
 
@@ -659,7 +670,7 @@ DES Studio `DRAIN` fails immediately if container level < amount (guard). SimPy 
 
 #### UI integration
 
-- `src/ui/editors/SimPyExportModal.jsx` — calls `exportToSimPy(model)` on mount; shows category badge, TODO macro list, filename, Download button, and **Run in Browser** button (Category 1 only). Progress bar streams per-replication updates; on completion calls `onResultsReady(results)` to push into ResultsWorkspace.
+- `src/ui/editors/SimPyExportModal.jsx` — calls `exportToSimPy(model)` on mount; shows category badge, TODO macro list, filename, Download button, and **Run in Browser** button (Category 1 only). Progress bar streams per-replication updates; on completion calls `onResultsReady(results)` to push into ResultsWorkspace and `saveSimulationRun` to persist the run to history with label `SimPy  DD/MM/YYYY HH:mm`.
 - `src/ui/hooks/useSimPyRunner.js` — React hook managing `simpy-runner-worker.js` lifecycle. Exposes `{ run, cancel, reset, status, progress, total, results, error }`. Normalises JSONL results to ResultsWorkspace shape (`{ replications, summary, _source: "simpy" }`).
 - `src/ui/ModelDetailHeader.jsx` — `onExportSimPy` prop; renders ⬇ SimPy button (no `canEdit` guard — export is read-only).
 - `src/ui/ModelDetail.jsx` — `showSimPyExport` state; Export SimPy row in Access tab → Export section.
