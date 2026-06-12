@@ -25,6 +25,7 @@ export function enumerateSweepableParams(model) {
 
   // 1a. Entity type count — only for servers WITHOUT a shift schedule
   for (const et of (model.entityTypes || [])) {
+    if (et.role !== "server") continue;
     if (Array.isArray(et.shiftSchedule) && et.shiftSchedule.length > 0) continue;
     params.push({
       type: "entityTypeCount",
