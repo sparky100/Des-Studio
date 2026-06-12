@@ -159,16 +159,18 @@ function toFlowNode(node) {
 }
 
 function toFlowEdge(edge, C, FONT) {
-  const isLoop         = edge.loop === true;
-  const isFallback     = edge.label === "fallback";
+  const isLoop          = edge.loop === true;
+  const isFallback      = edge.label === "fallback";
+  const isOverflow      = edge.label === "overflow";
   const isProbabilistic = typeof edge.label === "string" && edge.label.endsWith("%");
 
-  // Omit the edge.source fallback — "arrival" and "condition" are noise, not information
+  // Loops, fallback, and overflow are "special path" edges — amber + dashed.
+  const isSpecial   = isLoop || isFallback || isOverflow;
+  const strokeColor = isSpecial ? C.amber : C.muted;
+
   const label = isLoop
     ? `↻ rework (max ${edge.maxLoopCount || 3}x)`
     : edge.label || undefined;
-
-  const strokeColor = isLoop ? C.amber : C.muted;
 
   return {
     id: edge.id,
@@ -179,10 +181,10 @@ function toFlowEdge(edge, C, FONT) {
     style: {
       stroke: strokeColor,
       strokeWidth: isLoop ? 2 : 1.5,
-      strokeDasharray: isLoop ? "8,4" : isFallback ? "5,3" : undefined,
+      strokeDasharray: isLoop ? "8,4" : (isFallback || isOverflow) ? "5,3" : undefined,
     },
     labelStyle: {
-      fill: isLoop ? C.amber : isFallback ? C.amber : C.accent,
+      fill: isSpecial ? C.amber : C.accent,
       fontFamily: FONT,
       fontSize: 11,
       fontWeight: (isLoop || isProbabilistic) ? 700 : undefined,

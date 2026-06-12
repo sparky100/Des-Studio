@@ -117,6 +117,22 @@ function withLayout(nodes, edges, graph = {}) {
   });
 }
 
+function conditionLabel(c, depth = 0) {
+  if (!c) return "condition";
+  if (typeof c === "string") return c.length > 32 ? c.slice(0, 29) + "…" : c;
+  if (typeof c !== "object") return "condition";
+  if ((c.operator === "AND" || c.operator === "OR") && Array.isArray(c.clauses) && depth === 0) {
+    const parts = c.clauses.map(cl => conditionLabel(cl, 1)).filter(p => p !== "condition");
+    return parts.length ? parts.join(` ${c.operator} `) : "condition";
+  }
+  const variable = clean(c.variable || c.left || c.token || "");
+  const op       = clean(c.operator || c.op || "");
+  const value    = c.value !== undefined ? c.value : c.right;
+  if (variable && op && value !== undefined) return `${variable} ${op} ${value}`;
+  if (variable && value !== undefined) return `${variable} = ${value}`;
+  return "condition";
+}
+
 export function deriveGraphFromModel(model = {}) {
   const bEvents = model.bEvents || [];
   const cEvents = model.cEvents || [];
@@ -265,9 +281,7 @@ export function deriveGraphFromModel(model = {}) {
           if (Array.isArray(bEvent.routing) && bEvent.routing.length > 0) {
             bEvent.routing.forEach((branch, branchIdx) => {
               const c = branch.condition;
-              const condLabel = (c && c.variable && c.operator && c.value !== undefined)
-                ? `${c.variable} ${c.operator} ${c.value}`
-                : "condition";
+              const condLabel = conditionLabel(c);
               if (!branch.queueName) {
                 // null queueName = exit system → derive edge to synthetic Sink
                 const sinkId = getExitSinkId();
