@@ -10,7 +10,7 @@ The app lets simulation modellers define entity types, queues, B-Events, C-Event
 
 Version: `0.9.0 - Beta`
 
-The project has completed **84+ sprints** covering the full DES modelling lifecycle — from engine safety and correctness through advanced scheduling macros, resource reliability, statistical analytics, and AI-powered model authoring and analysis.
+The project has completed **79+ sprints** covering the full DES modelling lifecycle — from engine safety and correctness through advanced scheduling macros, resource reliability, statistical analytics, and AI-powered model authoring and analysis.
 
 | Area | Status |
 |---|---|
