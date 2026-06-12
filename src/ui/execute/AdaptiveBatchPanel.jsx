@@ -222,6 +222,7 @@ export function AdaptiveBatchPanel({
         schedulesMap,
         collectTimeSeries: collectCharts,
         signal,
+        onProgress: ({ completed }) => setTotalReps(completed),
         onRoundComplete: ({ totalReps: reps, relativeHalfWidth }) => {
           setTotalReps(reps);
           setCurrentCiPct(relativeHalfWidth != null ? +relativeHalfWidth.toFixed(1) : null);
