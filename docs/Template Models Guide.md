@@ -435,15 +435,19 @@ When you open a template, simmodlr saves a **private copy** to your account. The
 | `RELEASE(Resource, TargetQueue)` | B-Event | Frees the resource and routes the entity to another queue |
 | `ASSIGN(QueueName, ResourceType)` | C-Event | Seizes a resource for an entity, schedules completion |
 | `RENEGE(EntityType)` | B-Event | Removes the oldest waiting entity from queue (abandonment) |
+| `RENEGE_OLDEST(EntityType)` | B-Event | Removes the oldest waiting entity of a given type from queue |
 | `BATCH(QueueName, Count)` | C-Event | Accumulates N entities into one batch |
+| `UNBATCH(BatchEntity)` | B-Event | Restores children from parent batch entity |
 | `PREEMPT(ServerType)` | C-Event | Interrupts busy servers; re-queues entity with remaining service |
 | `FAIL(ServerType)` | B-Event | Sets matching servers to failed status; re-queues busy entities |
 | `REPAIR(ServerType)` | B-Event | Restores failed servers to idle status |
 | `SPLIT(EntityType, N, TargetQueue)` | B/C-Event | Creates N-1 clones of context entity |
 | `COSEIZE(Queue, ServerType1, ...)` | C-Event | Atomically seizes multiple server types simultaneously |
 | `MATCH(TypeA, QueueA, TypeB, QueueB, Output)` | C-Event | Pairs entities from two queues into one batch |
+| `FILL(ContainerName, Quantity)` | B-Event | Adds a quantity to a named container (tank/stock) |
+| `DRAIN(ContainerName, Quantity)` | C-Event | Removes a quantity from a named container; blocks if insufficient |
 | `SET_ATTR(AttrName, Value)` | B/C-Event | Updates an attribute on the current entity mid-simulation |
-| `COST(Expression)` | B-Event | Records a cost amount against the current entity; accumulates into totalCost |
+| `COST(Expression)` | B/C-Event | Records a cost amount against the current entity; accumulates into totalCost |
 | `SET(VarName, Value)` | Any | Sets a state variable to a given value |
 | `;` chaining | Any | Separate multiple actions, e.g. `RELEASE(Loader, Weigh); trucksLoaded++` |
 
