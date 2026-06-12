@@ -33,6 +33,8 @@ import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogr
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
+import { ParamBrowserPanel } from "./ParamBrowserPanel.jsx";
+import { alpha, RADIUS } from "../shared/tokens.js";
 import { generateReport, sanitizeFilename } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -222,6 +224,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [expFormName, setExpFormName] = useState("");
   const [expFormDesc, setExpFormDesc] = useState("");
   const [expFormOverrides, setExpFormOverrides] = useState([]);
+  const [expFormPickerOpen, setExpFormPickerOpen] = useState(false);
   const [expFormSaving, setExpFormSaving] = useState(false);
   const [reportGenerating, setReportGenerating] = useState(false);
   const [modelCheckerIssues, setModelCheckerIssues] = useState(null);
@@ -1568,6 +1571,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               setExpFormName("");
               setExpFormDesc("");
               setExpFormOverrides([]);
+              setExpFormPickerOpen(false);
+              if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
               setExpFormOpen(true);
             }}>
               New Experiment
@@ -1611,40 +1616,54 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER OVERRIDES</span>
-                <Btn small variant="ghost" onClick={() => {
-                  if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
-                  setExpFormOverrides(prev => [...prev, { path: "", value: "" }]);
-                }}>
-                  + Add
+                <Btn small variant="ghost" onClick={() => setExpFormPickerOpen(o => !o)}>
+                  {expFormPickerOpen ? "Done" : "+ Add"}
                 </Btn>
               </div>
-              {expFormOverrides.map((ov, idx) => (
-                <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <select
-                    aria-label={`Override parameter ${idx + 1}`}
-                    value={ov.path}
-                    onChange={e => {
-                      const path = e.target.value;
-                      setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, path } : o));
-                    }}
-                    style={{ flex: 2, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
-                  >
-                    <option value="">Select parameter...</option>
-                    {sweepParams.map(p => (
-                      <option key={p.path} value={p.path}>{p.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    aria-label={`Override value ${idx + 1}`}
-                    type="number"
-                    value={ov.value}
-                    onChange={e => setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, value: e.target.value } : o))}
-                    placeholder="value"
-                    style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "5px 6px", outline: "none" }}
-                  />
-                  <Btn small variant="ghost" ariaLabel={`Remove override ${idx+1}`} onClick={() => setExpFormOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
-                </div>
-              ))}
+              {expFormOverrides.map((ov, idx) => {
+                const param = sweepParams.find(p => p.path === ov.path);
+                const chipColor = (() => {
+                  const t = param?.type;
+                  if (t === "entityTypeCount" || t === "shiftCapacity") return C.server;
+                  if (t === "queueCapacity") return C.green;
+                  if (t === "bEventDistParam" || t === "bEventPiecewisePeriodParam") return C.bEvent;
+                  if (t === "cEventDistParam" || t === "cEventPiecewisePeriodParam") return C.cEvent;
+                  return C.muted;
+                })();
+                return (
+                  <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <div style={{
+                      flex: 2, display: "flex", flexDirection: "column", gap: 1,
+                      background: alpha(chipColor, 0.09), border: `1px solid ${alpha(chipColor, 0.27)}`,
+                      borderRadius: RADIUS.sm, padding: "3px 8px", minWidth: 0,
+                    }}>
+                      <span style={{ fontSize: 11, color: chipColor, fontFamily: FONT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {param?.label ?? ov.path}
+                      </span>
+                      {param?.subLabel && (
+                        <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{param.subLabel}</span>
+                      )}
+                    </div>
+                    <input
+                      aria-label={`Override value ${idx + 1}`}
+                      type="number"
+                      value={ov.value}
+                      onChange={e => setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, value: e.target.value } : o))}
+                      placeholder="value"
+                      style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px", outline: "none", flexShrink: 0 }}
+                    />
+                    <Btn small variant="ghost" ariaLabel={`Remove override ${idx + 1}`} onClick={() => setExpFormOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
+                  </div>
+                );
+              })}
+              {expFormPickerOpen && (
+                <ParamBrowserPanel
+                  params={sweepParams}
+                  alreadyAdded={new Set(expFormOverrides.map(o => o.path).filter(Boolean))}
+                  onSelect={path => setExpFormOverrides(prev => [...prev, { path, value: "" }])}
+                  onClose={() => setExpFormPickerOpen(false)}
+                />
+              )}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <Btn small variant="primary" disabled={!expFormName.trim() || expFormSaving} onClick={async () => {
@@ -1734,6 +1753,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                     setExpFormName(exp.name);
                     setExpFormDesc(exp.description || "");
                     setExpFormOverrides((exp.config.overrides || []).map(o => ({ path: o.path, value: String(o.value) })));
+                    if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
+                    setExpFormPickerOpen(false);
                     setExpFormOpen(true);
                   }}>
                     Edit
@@ -1811,12 +1832,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>{sweepMode === "2d" ? "PARAMETER X" : "PARAMETER"}</span>
               <select
                 aria-label={sweepMode === "2d" ? "Sweep parameter X" : "Sweep parameter"}
-                value={sweepSelectedParam ? `${sweepSelectedParam.type}|${sweepSelectedParam.targetId}|${sweepSelectedParam.paramKey || ""}` : ""}
+                value={sweepSelectedParam ? sweepSelectedParam.path : ""}
                 onChange={e => {
                   const val = e.target.value;
                   if (!val) { setSweepSelectedParam(null); return; }
-                  const [type, targetId, paramKey] = val.split("|");
-                  const found = sweepParams.find(p => p.type === type && p.targetId === targetId && (p.paramKey || "") === paramKey);
+                  const found = sweepParams.find(p => p.path === val);
                   setSweepSelectedParam(found || null);
                   if (found) {
                     const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
@@ -1827,31 +1847,41 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 }}
                 style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
                 <option value="">Select a parameter...</option>
-                <optgroup label="Entity Type Count">
-                  {sweepParams.filter(p => p.type === "entityTypeCount").map(p => (
-                    <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Queue Capacity">
-                  {sweepParams.filter(p => p.type === "queueCapacity").map(p => (
-                    <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue === Infinity ? "∞" : p.currentValue})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Distribution Parameters (B-Events)">
-                  {sweepParams.filter(p => p.type === "bEventDistParam").map(p => (
-                    <option key={p.path} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Distribution Parameters (C-Events)">
-                  {sweepParams.filter(p => p.type === "cEventDistParam").map(p => (
-                    <option key={p.path} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Model Data">
-                  {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
-                    <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
-                  ))}
-                </optgroup>
+                {sweepParams.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity").length > 0 && (
+                  <optgroup label="Servers & Capacity">
+                    {sweepParams.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity").map(p => (
+                      <option key={p.path} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
+                    ))}
+                  </optgroup>
+                )}
+                {sweepParams.filter(p => p.type === "queueCapacity").length > 0 && (
+                  <optgroup label="Queue Capacity">
+                    {sweepParams.filter(p => p.type === "queueCapacity").map(p => (
+                      <option key={p.path} value={p.path}>{p.label} ({p.currentValue === Infinity ? "∞" : p.currentValue})</option>
+                    ))}
+                  </optgroup>
+                )}
+                {sweepParams.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam").length > 0 && (
+                  <optgroup label="Arrival & Event Distributions">
+                    {sweepParams.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam").map(p => (
+                      <option key={p.path} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
+                    ))}
+                  </optgroup>
+                )}
+                {sweepParams.filter(p => p.type === "cEventDistParam" || p.type === "cEventPiecewisePeriodParam").length > 0 && (
+                  <optgroup label="Service Distributions">
+                    {sweepParams.filter(p => p.type === "cEventDistParam" || p.type === "cEventPiecewisePeriodParam").map(p => (
+                      <option key={p.path} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
+                    ))}
+                  </optgroup>
+                )}
+                {sweepParams.filter(p => p.type === "stateVarInit").length > 0 && (
+                  <optgroup label="State Variables">
+                    {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
+                      <option key={p.path} value={p.path}>{p.label} ({p.currentValue})</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
 
@@ -1860,12 +1890,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER Y</span>
                 <select
                   aria-label="Sweep parameter Y"
-                  value={sweepSelectedParamB ? `${sweepSelectedParamB.type}|${sweepSelectedParamB.targetId}|${sweepSelectedParamB.paramKey || ""}` : ""}
+                  value={sweepSelectedParamB ? sweepSelectedParamB.path : ""}
                   onChange={e => {
                     const val = e.target.value;
                     if (!val) { setSweepSelectedParamB(null); return; }
-                    const [type, targetId, paramKey] = val.split("|");
-                    const found = sweepParams.find(p => p.type === type && p.targetId === targetId && (p.paramKey || "") === paramKey);
+                    const found = sweepParams.find(p => p.path === val);
                     setSweepSelectedParamB(found || null);
                     if (found) {
                       const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
@@ -1876,31 +1905,41 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   }}
                   style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
                   <option value="">Select a parameter...</option>
-                  <optgroup label="Entity Type Count">
-                    {sweepParams.filter(p => p.type === "entityTypeCount").map(p => (
-                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Queue Capacity">
-                    {sweepParams.filter(p => p.type === "queueCapacity").map(p => (
-                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue === Infinity ? "∞" : p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Distribution Parameters (B-Events)">
-                    {sweepParams.filter(p => p.type === "bEventDistParam").map(p => (
-                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Distribution Parameters (C-Events)">
-                    {sweepParams.filter(p => p.type === "cEventDistParam").map(p => (
-                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Model Data">
-                    {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
-                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
+                  {sweepParams.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity").length > 0 && (
+                    <optgroup label="Servers & Capacity">
+                      {sweepParams.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity").map(p => (
+                        <option key={p.path + "_b"} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {sweepParams.filter(p => p.type === "queueCapacity").length > 0 && (
+                    <optgroup label="Queue Capacity">
+                      {sweepParams.filter(p => p.type === "queueCapacity").map(p => (
+                        <option key={p.path + "_b"} value={p.path}>{p.label} ({p.currentValue === Infinity ? "∞" : p.currentValue})</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {sweepParams.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam").length > 0 && (
+                    <optgroup label="Arrival & Event Distributions">
+                      {sweepParams.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam").map(p => (
+                        <option key={p.path + "_b"} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {sweepParams.filter(p => p.type === "cEventDistParam" || p.type === "cEventPiecewisePeriodParam").length > 0 && (
+                    <optgroup label="Service Distributions">
+                      {sweepParams.filter(p => p.type === "cEventDistParam" || p.type === "cEventPiecewisePeriodParam").map(p => (
+                        <option key={p.path + "_b"} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {sweepParams.filter(p => p.type === "stateVarInit").length > 0 && (
+                    <optgroup label="State Variables">
+                      {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
+                        <option key={p.path + "_b"} value={p.path}>{p.label} ({p.currentValue})</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
             )}
