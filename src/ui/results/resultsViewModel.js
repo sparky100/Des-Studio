@@ -119,19 +119,31 @@ export function buildWaitDistributions(results = {}) {
   const sourceSuffix = breakdown
     ? ` (${breakdown.served} served, ${breakdown.reneged} reneged${breakdown.inProgress > 0 ? `, ${breakdown.inProgress} in-progress` : ""})`
     : " from completed customers";
+  // Chartable when raw values survive (live/full runs) OR when only pre-computed
+  // histogram bins remain (compacted saved runs — see compactifyWaitDist).
   return Object.entries(waitDist)
-    .filter(([, dist]) => dist && Array.isArray(dist.values) && dist.values.length >= 2)
-    .map(([label, dist]) => ({
-      label,
-      n: finiteNumber(dist.n, dist.values.length),
-      mean: finiteNumber(dist.mean),
-      p50: finiteNumber(dist.p50),
-      p90: finiteNumber(dist.p90),
-      p95: finiteNumber(dist.p95),
-      p99: finiteNumber(dist.p99),
-      values: [...dist.values].map(v => finiteNumber(v)).sort((a, b) => a - b),
-      sourceLabel: `${finiteNumber(dist.n, dist.values.length)} wait samples${sourceSuffix}`,
-    }));
+    .filter(([, dist]) => dist && (
+      (Array.isArray(dist.values) && dist.values.length >= 2) ||
+      (Array.isArray(dist.histogram?.bins) && dist.histogram.bins.length >= 2)
+    ))
+    .map(([label, dist]) => {
+      const values = Array.isArray(dist.values)
+        ? [...dist.values].map(v => finiteNumber(v)).sort((a, b) => a - b)
+        : [];
+      const n = finiteNumber(dist.n, values.length);
+      return {
+        label,
+        n,
+        mean: finiteNumber(dist.mean),
+        p50: finiteNumber(dist.p50),
+        p90: finiteNumber(dist.p90),
+        p95: finiteNumber(dist.p95),
+        p99: finiteNumber(dist.p99),
+        values,
+        histogram: dist.histogram || null,
+        sourceLabel: `${n} wait samples${sourceSuffix}`,
+      };
+    });
 }
 
 export function buildChartSections(results = {}, model = {}) {

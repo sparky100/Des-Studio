@@ -149,7 +149,7 @@ export function ExperimentControls({
                 return (
                   <div style={{ marginTop: 8 }}>
                     <div style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 4 }}>
-                      HOW QUEUE SIZE SETTLED OVER TIME
+                      HOW QUEUE SIZE SETTLED OVER TIME (LAST REPLICATION)
                     </div>
                     <CumulativeMeanChart points={cumMean} warmupPeriod={warmupPeriod} />
                   </div>

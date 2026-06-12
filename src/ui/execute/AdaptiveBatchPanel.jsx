@@ -885,8 +885,16 @@ export function AdaptiveBatchPanel({
               Cancel
             </Btn>
           )}
-          {phase === "done" && savedRunId && (
-            <Btn small variant="primary" onClick={onGoToResults}>
+          {phase === "done" && (savedRunId || combinedBatchResult) && (
+            <Btn
+              small
+              variant="primary"
+              onClick={() => onGoToResults?.({
+                results: combinedBatchResult,
+                replicationResults,
+                runId: savedRunId,
+              })}
+            >
               View Results
             </Btn>
           )}

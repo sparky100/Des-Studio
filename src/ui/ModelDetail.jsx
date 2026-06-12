@@ -1661,7 +1661,19 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
             ? (result,config)=>saveSimulationRun(modelId,overrides.userId,result,config)
             : async()=>null}
           onSaveInsights={saveAiInsights}
-          onGoToResults={()=>{setShowExplorePanel(false);setTab("results");setResultsView("summary");}}
+          onGoToResults={(payload)=>{
+            setShowExplorePanel(false);
+            // Replace any stale results from a previous run with the Explore
+            // aggregate, otherwise the Results tab keeps showing the old run.
+            if(payload?.results){
+              setSelectedResultsRunId(payload.runId||"");
+              setLatestResults(payload.results);
+              setLatestReplicationResults(payload.replicationResults||[]);
+              setLatestWarmupDetection(null);
+              setLatestLog([]);
+            }
+            setTab("results");setResultsView("summary");
+          }}
           onApplyModel={(nextModel)=>{setWholeModel(nextModel);setShowExplorePanel(false);}}
           onClose={()=>setShowExplorePanel(false)}
         />

@@ -78,6 +78,22 @@ describe("results view model", () => {
     expect(distributions[0].values).toEqual([1, 3, 8]);
   });
 
+  test("buildWaitDistributions keeps histogram-only entries from compacted saved runs", () => {
+    const histogram = { bins: [{ low: 0, high: 5, count: 4 }, { low: 5, high: 10, count: 2 }] };
+    const distributions = buildWaitDistributions({
+      waitDist: {
+        "Queue A": { n: 6, mean: 4, p50: 4, p90: 8, p95: 9, p99: 10, histogram },
+        Empty: { n: 0, histogram: { bins: [] } },
+      },
+    });
+
+    expect(distributions).toHaveLength(1);
+    expect(distributions[0].label).toBe("Queue A");
+    expect(distributions[0].n).toBe(6);
+    expect(distributions[0].values).toEqual([]);
+    expect(distributions[0].histogram).toEqual(histogram);
+  });
+
   test("buildResultsViewModel reports chart availability", () => {
     const vm = buildResultsViewModel({ timeSeries: [{ t: 0, byType: {} }], waitDist: {} }, model);
     expect(vm.hasTimeSeries).toBe(true);
