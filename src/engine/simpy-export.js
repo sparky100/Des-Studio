@@ -253,6 +253,7 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
       lines.push(`    ${keyword} ${cond}:`);
       if (branch.queueName) {
         const storeId = safeId(branch.queueName) + '_store';
+        lines.push(`        entity.queue_join_time = env.now`);
         lines.push(`        yield ${storeId}.put(entity)`);
       } else {
         lines.push(`        if env.now >= WARMUP_PERIOD:`);
@@ -262,6 +263,7 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
     const defQ = completionBEvent.defaultQueueName;
     if (defQ) {
       lines.push(`    else:`);
+      lines.push(`        entity.queue_join_time = env.now`);
       lines.push(`        yield ${safeId(defQ)}_store.put(entity)`);
     } else {
       lines.push(`    else:`);
@@ -283,6 +285,7 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
       const keyword = i === 0 ? 'if' : 'elif';
       lines.push(`    ${keyword} _r < ${cumulative.toFixed(6)}:`);
       if (branch.queueName) {
+        lines.push(`        entity.queue_join_time = env.now`);
         lines.push(`        yield ${safeId(branch.queueName)}_store.put(entity)`);
       } else {
         lines.push(`        if env.now >= WARMUP_PERIOD:`);
@@ -299,6 +302,7 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
   const defQ = completionBEvent.defaultQueueName;
   if (defQ) {
     lines.push(`    # Route to "${defQ}" (defaultQueueName from B-event "${completionBEvent.name}")`);
+    lines.push(`    entity.queue_join_time = env.now`);
     lines.push(`    yield ${safeId(defQ)}_store.put(entity)`);
     return lines.join('\n') + '\n';
   }
@@ -310,6 +314,7 @@ function routingCode(completionBEvent, queues, statsRef = 'stats') {
     const targetQ = releaseArgs[1];
     if (targetQ) {
       lines.push(`    # RELEASE — return entity to "${targetQ}"`);
+      lines.push(`    entity.queue_join_time = env.now`);
       lines.push(`    yield ${safeId(targetQ)}_store.put(entity)`);
       return lines.join('\n') + '\n';
     }
@@ -419,6 +424,9 @@ def _lognormal(log_mean, log_sd): return random.lognormvariate(log_mean, log_sd)
       '    arrival_time: float = 0.0',
       '    sojourn_time: float = 0.0',
       '    service_start_time: float = 0.0',
+      '    queue_join_time: float = 0.0',
+      '    wait_time_acc: float = 0.0',
+      '    svc_time_acc: float = 0.0',
     ];
     for (const a of (et.attrDefs || [])) {
       const pyType = a.valueType === 'string' ? 'str' : a.valueType === 'boolean' ? 'bool' : 'float';
@@ -431,7 +439,7 @@ def _lognormal(log_mean, log_sd): return random.lognormvariate(log_mean, log_sd)
   }
   // Always provide a fallback generic Entity for models with no customer types
   if (customers.length === 0) {
-    entityClassParts.push(`@dataclass\nclass Entity:\n    id: int\n    arrival_time: float = 0.0\n    sojourn_time: float = 0.0\n    service_start_time: float = 0.0\n`);
+    entityClassParts.push(`@dataclass\nclass Entity:\n    id: int\n    arrival_time: float = 0.0\n    sojourn_time: float = 0.0\n    service_start_time: float = 0.0\n    queue_join_time: float = 0.0\n    wait_time_acc: float = 0.0\n    svc_time_acc: float = 0.0\n`);
   }
   parts.push(entityClassParts.join('\n') + '\n');
 
@@ -498,6 +506,7 @@ class Stats:
         fnBody += `        for _k, _v in _attrs.items():\n`;
         fnBody += `            try: setattr(entity, _k, _v)\n`;
         fnBody += `            except AttributeError: pass\n`;
+        fnBody += `        entity.queue_join_time = env.now\n`;
         fnBody += `        yield ${storeId}.put(entity)\n`;
       } else if (isPiecewiseDist(sched)) {
         // Time-varying arrivals — generate a helper function and reference it
@@ -513,6 +522,7 @@ class Stats:
           fnBody += `            continue\n`;
         }
         fnBody += `        entity = ${entityClass}(id=_counter, arrival_time=env.now)\n`;
+        fnBody += `        entity.queue_join_time = env.now\n`;
         fnBody += `        yield ${storeId}.put(entity)\n`;
       } else {
         const iaExpr = distToExpr(iaDist, iaParams);
@@ -527,6 +537,7 @@ class Stats:
           fnBody += `            continue\n`;
         }
         fnBody += `        entity = ${entityClass}(id=_counter, arrival_time=env.now)\n`;
+        fnBody += `        entity.queue_join_time = env.now\n`;
         fnBody += `        yield ${storeId}.put(entity)\n`;
       }
 
@@ -583,9 +594,11 @@ class Stats:
 `${reqDecls}
     yield simpy.AllOf(env, [${reqVars.join(', ')}])
     entity.service_start_time = env.now
+    entity.wait_time_acc += entity.service_start_time - entity.queue_join_time
     try:
 ${svcNoteLineCoseize}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
         _svc_t = env.now - entity.service_start_time
+        entity.svc_time_acc += _svc_t
 ${svcBusyLines}
     finally:
         for _req in [${reqVars.join(', ')}]:
@@ -597,8 +610,10 @@ ${svcBusyLines}
 `    with ${resVars[0]}.request() as _req:
         yield _req
         entity.service_start_time = env.now
+        entity.wait_time_acc += entity.service_start_time - entity.queue_join_time
 ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${placeholder ? '  # TODO: set service distribution' : ''}
         _svc_t = env.now - entity.service_start_time
+        entity.svc_time_acc += _svc_t
         stats.resource_busy["${serverTypes[0]}"] = stats.resource_busy.get("${serverTypes[0]}", 0.0) + _svc_t`;
       }
 
@@ -835,8 +850,8 @@ ${svcNoteLine}        yield env.timeout(${svcExpr})  # service: ${svcLabel}${pla
 
   runLines.push(`    _warmup_served = [e for e in stats.served if e.sojourn_time > 0]`);
   runLines.push(`    _soj_vals  = [e.sojourn_time for e in _warmup_served]`);
-  runLines.push(`    _wait_vals = [e.service_start_time - e.arrival_time for e in _warmup_served if e.service_start_time > 0]`);
-  runLines.push(`    _svc_vals  = [e.sojourn_time - (e.service_start_time - e.arrival_time) for e in _warmup_served if e.service_start_time > 0]`);
+  runLines.push(`    _wait_vals = [e.wait_time_acc for e in _warmup_served if e.wait_time_acc > 0]`);
+  runLines.push(`    _svc_vals  = [e.svc_time_acc  for e in _warmup_served if e.svc_time_acc  > 0]`);
   if (servers.length > 0) {
     runLines.push(`    _RES_CAPS  = {${resCapsEntries}}`);
     runLines.push(`    _warmup_t  = max(env.now - WARMUP_PERIOD, 1.0)`);
