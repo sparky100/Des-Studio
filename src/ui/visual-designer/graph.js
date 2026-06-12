@@ -237,15 +237,20 @@ export function deriveGraphFromModel(model = {}) {
       const bEvent = bEventById.get(schedule.eventId);
       if (!bEvent) return;
 
-      // Helper: get or create a synthetic Sink node for null-queueName routing branches
+      // Helper: get or create a Sink node for null-queueName routing branches.
+      // Prefers the existing COMPLETE/RENEGE sink for this bEvent so that the
+      // labeled routing edge and the COMPLETE edge point to the same node,
+      // preventing an unlabeled COMPLETE edge from rendering on top and hiding
+      // the probability/condition label.
       const getExitSinkId = () => {
+        const existing = sinkNodeByBEventId.get(bEvent.id);
+        if (existing) return existing;
         const syntheticId = `sink:exit-${bEvent.id}`;
-        const routeExitRefId = `route-exit:${bEvent.id || bEvent.name || "unknown"}`;
         if (!nodes.find(n => n.id === syntheticId)) {
           nodes.push({
             id: syntheticId,
             type: VISUAL_NODE_TYPES.SINK,
-            refId: routeExitRefId,
+            refId: `route-exit:${bEvent.id || bEvent.name || "unknown"}`,
             label: bEvent.name || "Exit",
             sublabel: "Direct exit",
           });
@@ -298,8 +303,17 @@ export function deriveGraphFromModel(model = {}) {
           }
         }
         if (call.macro === "COMPLETE" || call.macro === "RENEGE") {
-          const sinkId = sinkNodeByBEventId.get(bEvent.id);
-          if (sinkId) edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}`), from: id, to: sinkId, source: "terminal" });
+          // Skip the unlabeled COMPLETE edge when routing already handles all exits
+          // via labeled branches (null queueName). The routing edges already point to
+          // the same sink node (via getExitSinkId above), so a second unlabeled edge
+          // would render on top and hide the routing label.
+          const routingHandlesExit =
+            (Array.isArray(bEvent.probabilisticRouting) && bEvent.probabilisticRouting.some(b => !b.queueName)) ||
+            (Array.isArray(bEvent.routing) && bEvent.routing.some(b => !b.queueName));
+          if (!routingHandlesExit) {
+            const sinkId = sinkNodeByBEventId.get(bEvent.id);
+            if (sinkId) edges.push({ id: edgeId(id, sinkId, `${schedule.eventId}-${index}`), from: id, to: sinkId, source: "terminal" });
+          }
         }
       });
     });
