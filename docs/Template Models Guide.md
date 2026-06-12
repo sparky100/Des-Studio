@@ -14,6 +14,7 @@ Each template teaches a different modelling concept — from a single queue thro
 | v1.1 | Sprint 42 | Loop Guard added to `loopConfig` on entity types; `balkCondition` expression field added to queues. ER Triage updated to use `balkCondition`. |
 | v1.2 | Sprint 45 | Three new templates added: Machine Shop with Failures (FAIL/REPAIR macros, MTBF/MTTR), Priority Emergency Department with Triage Escalation (balkCondition, loopConfig Loop Guard, SET_ATTR), Cost-Optimised Call Centre (COST macro, totalCost goal, AI sweep feasibility). |
 | v1.3 | Sprints 62-66 | Appointment Clinic added: showcases Schedule distribution with per-arrival `rows[]` attributes, real-world clock (epoch/timeUnit), attribute-conditional routing at RELEASE, and `cSchedule.when` service-time branching. |
+| v1.4 | Sprint 33 / later | Four new templates added: Surgical Suite (COSEIZE multi-resource seize), Order Fulfillment (MATCH entity sync, EDD discipline), London Underground Live TfL (real-time schedule injection from TfL API), Airport Arrivals Live OpenSky (real-time inter-arrival calibration from OpenSky Network). |
 
 ---
 
@@ -379,6 +380,86 @@ Try modifying the schedule rows to add a no-show (remove a row) or a late arriva
 - `cSchedule.when` — attribute-conditional service time branching (first-match semantics)
 
 **Companion file:** `sample-appointment-schedule.csv` in the repository root contains the same 15 rows (time, severity, type) and can be imported via **↑ Load plan** to experiment with the CSV import workflow.
+
+---
+
+## 19. Surgical Suite
+
+**Concept:** Multi-resource simultaneous seize using `COSEIZE` — every operation requires a surgeon and an anesthetist at the same time.
+
+Patients arrive every 10 minutes on average. Surgery takes Triangular(10, 20, 40) minutes. There are 2 surgeons and 2 anesthetists. A surgery only starts when both resources are simultaneously free; if either is busy, the patient waits. The SurgeryQueue uses `PRIORITY(urgency)` discipline — patients with lower urgency numbers (more urgent) are served first.
+
+**What to watch:** When one resource type is exhausted, the other sits idle waiting for it to free up. This is the classic multi-resource deadlock risk — observe how utilisation of surgeons and anesthetists tracks together. Try reducing anesthetists to 1 to see the bottleneck effect.
+
+**Entity types:** Patient (arriving, with `urgency` attribute), Surgeon (2), Anesthetist (2)
+
+**Attribute:** `urgency` — Uniform(1, 5), lower = more urgent
+
+**Macro:** `COSEIZE(SurgeryQueue, Surgeon, Anesthetist)` — atomically seizes both resource types
+
+**Discipline:** PRIORITY(urgency) on SurgeryQueue
+
+**State variables:** `surgeriesCompleted`
+
+---
+
+## 20. Order Fulfillment
+
+**Concept:** Entity synchronisation — orders and items arrive independently and must be paired using the `MATCH` macro before packing can begin. Orders are processed in Earliest Due Date (EDD) order.
+
+Orders arrive with a `dueDate` attribute (Uniform 30–120 min). Items arrive independently at the same mean rate (Exponential mean 5 min). Neither can proceed until matched — `MATCH(Order, OrderQueue, Item, ItemQueue, FulfillmentQueue)` pairs one order with one item and moves the combined entity to the FulfillmentQueue. 2 packers then process each matched order (Triangular 3–5–8 min).
+
+**What to watch:** When one stream runs ahead of the other (e.g. items arrive faster than orders), entities accumulate in the uncoupled queue. The EDD discipline on the FulfillmentQueue means short-deadline orders get packed first even if they were matched later.
+
+**Entity types:** Order (arriving, with `dueDate` attribute), Item (arriving), Packer (2)
+
+**Attribute:** `dueDate` — Uniform(30, 120), lower = processed first under EDD
+
+**Macro:** `MATCH(Order, OrderQueue, Item, ItemQueue, FulfillmentQueue)` — pairs one entity from each queue into a single combined entity
+
+**Discipline:** EDD on OrderQueue and FulfillmentQueue; FIFO on ItemQueue
+
+**State variables:** `ordersFulfilled`
+
+---
+
+## 21. London Underground — Live Train Plan (TfL)
+
+**Concept:** Real-time schedule injection — each scheduled train from the TfL live arrivals API becomes a `Train` entity representing its alighting passenger cohort. Demonstrates live data sources and real-world clock alignment.
+
+The model targets King's Cross St. Pancras station (Victoria and Northern lines). Cohorts flow through 2 Platform Supervisors (Uniform 1–3 min platform clearance) then 6 Ticket Barriers (Uniform 0.5–2 min exit processing). Set `epoch` to the current datetime before running to align ISO arrival timestamps from the TfL API. Without an epoch update, the Exponential(4 min) fallback runs instead.
+
+**What to watch:** Run with a current epoch during a busy period to see real train headways driving the simulation. The event log shows wall-clock timestamps for each train arrival and processing stage. Goals are set to mean platform wait < 3 min and mean total exit time < 8 min — try reducing barrier count to 4 to see goal failure.
+
+**Entity types:** Train (arriving, with `line` attribute), Supervisor (2), Barrier (6)
+
+**Live data source:** TfL Arrivals API — King's Cross St. Pancras (`940GZZLUKSKX`). Change the StopPoint ID in `dataSources.url` for a different station.
+
+**Macros:** `ARRIVE`, `ASSIGN`, `RELEASE`, `COMPLETE`
+
+**Experiment defaults:** maxSimTime 45 min, warmupPeriod 0, replications 5, liveDataMode `calibrated_batch`
+
+**Goals:** Mean platform wait < 3 min; mean total exit time < 8 min
+
+---
+
+## 22. Airport Arrivals — Live (OpenSky)
+
+**Concept:** Real-time inter-arrival calibration from the OpenSky Network — live aircraft arrival rates at the configured airport drive the simulation's arrival process. Demonstrates the `paramSource` live-data adapter and two-stage ground handling.
+
+The model defaults to London Heathrow (ICAO: EGLL). The OpenSky adapter samples recent arrivals, computes a live mean inter-arrival time, and injects it into the Exponential arrival distribution before each run. Fallback is 3.5 min mean (≈ 17 arrivals/hr). 3 Gate Controllers assign stands (Uniform 2–8 min), then 5 Ground Crew perform turnaround (Triangular 25–45–90 min).
+
+**What to watch:** Compare simulated throughput against the live traffic level. Change `airportIcao` in the data source to `KJFK`, `KLAX`, `EDDF`, or `RJTT` to model a different airport. Reduce Ground Crew to 3 and observe how turnaround congestion builds under peak Heathrow traffic.
+
+**Entity types:** Aircraft (arriving), Gate Controller (3), Ground Crew (5)
+
+**Live data source:** OpenSky Network (unauthenticated, rate-limited). Inter-arrival mean updates after ≥ 2 arrivals detected; allow a few minutes warm-up.
+
+**Macros:** `ARRIVE`, `ASSIGN`, `RELEASE`, `COMPLETE`
+
+**Experiment defaults:** maxSimTime 480 min, warmupPeriod 60 min, replications 5, liveDataMode `calibrated_batch`
+
+**Goals:** Mean sojourn ≤ 90 min (gate assignment + turnaround); mean holding wait < 15 min
 
 ---
 

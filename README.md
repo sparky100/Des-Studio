@@ -30,7 +30,7 @@ The project has completed **79+ sprints** covering the full DES modelling lifecy
 | Statistical output analyzer (Welch, batch-means, Bonferroni) | Complete |
 | Shareable results dashboard + QR codes | Complete |
 | CSV import bridge with distribution fitting | Complete |
-| Community gallery and template library (18 templates) | Complete |
+| Community gallery and template library (22 templates) | Complete |
 | Resource preemption, breakdowns, MTBF/MTTR | Complete |
 | Advanced scheduling (SPLIT, COSEIZE, MATCH, dynamic BATCH) | Complete |
 | Queue disciplines (FIFO, LIFO, PRIORITY, SPT, EDD, PRIORITY(attr)) | Complete |
