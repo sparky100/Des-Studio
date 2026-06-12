@@ -230,7 +230,7 @@ function ValidationChecklist({ visualIssues, modelErrors, modelWarnings, graph, 
   );
 }
 
-export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit, flowKey = 0 }) {
+export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onModelInit, flowKey = 0, fitAllRef }) {
   const { C, FONT } = useTheme();
   const PALETTE_ITEMS = [
     { type: VISUAL_NODE_TYPES.SOURCE,   label: "Add Source",   icon: "S", color: C.green },
@@ -994,6 +994,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               selectionMode={selectionMode}
               errorNodeIds={errorNodeIds}
               fitNodeRef={fitNodeRef}
+              fitAllRef={fitAllRef}
               showSections={showSections}
               onNodeSelect={selectNode}
               onNodeSelectionChange={syncSelection}

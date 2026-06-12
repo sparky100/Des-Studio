@@ -247,7 +247,7 @@ function toFlowEdge(edge, C, FONT) {
   };
 }
 
-function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef }) {
+function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef }) {
   const { C, FONT } = useTheme();
   const panelBtnStyle = {
     background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4,
@@ -255,6 +255,10 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef }) {
     fontSize: 10, fontWeight: 600, letterSpacing: 0.5, padding: "5px 9px",
   };
   const { fitView, getNode, setCenter, getViewport } = useReactFlow();
+
+  if (fitAllRef) {
+    fitAllRef.current = () => fitView({ padding: 0.15, duration: 0 });
+  }
 
   // Pan to a specific node without re-zooming the whole canvas.
   // Using setCenter instead of fitView prevents the "whole diagram shifts" effect
@@ -330,6 +334,7 @@ export function FlowDiagramReactFlow({
   selectionMode = "pan",
   errorNodeIds,
   fitNodeRef,
+  fitAllRef,
   showSections = true,
   onNodeSelect,
   onNodeSelectionChange,
@@ -544,6 +549,7 @@ export function FlowDiagramReactFlow({
           onResetLayout={onResetLayout}
           connecting={connecting}
           fitNodeRef={fitNodeRef}
+          fitAllRef={fitAllRef}
         />
       </ReactFlow>
     </div>

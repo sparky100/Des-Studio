@@ -426,29 +426,24 @@ export function graphLayoutFromDerivedGraph(derivedGraph = {}) {
   };
 }
 
-export async function exportCanvasToPng() {
+export async function exportCanvasToPng(fitViewFn) {
   try {
-    const el = document.querySelector('.react-flow__renderer') || document.querySelector('.react-flow');
+    if (typeof fitViewFn === 'function') {
+      fitViewFn();
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+    const el = document.querySelector('.react-flow');
     if (!el) return null;
-    const html2canvas = (await import('html2canvas')).default;
-    const rect = el.getBoundingClientRect();
-    const canvas = await html2canvas(el, {
+    const { toPng } = await import('html-to-image');
+    return await toPng(el, {
+      pixelRatio: 2,
       backgroundColor: '#ffffff',
-      scale: 2,
-      useCORS: true,
-      allowTaint: false,
-      logging: false,
-      x: rect.left + window.scrollX,
-      y: rect.top + window.scrollY,
-      windowWidth: document.documentElement.scrollWidth,
-      windowHeight: document.documentElement.scrollHeight,
-      ignoreElements: node =>
-        node.classList?.contains('react-flow__controls') ||
-        node.classList?.contains('react-flow__minimap') ||
-        node.classList?.contains('react-flow__background') ||
-        node.getAttribute?.('data-id')?.startsWith('section-'),
+      filter: node =>
+        !node.classList?.contains('react-flow__controls') &&
+        !node.classList?.contains('react-flow__minimap') &&
+        !node.classList?.contains('react-flow__background') &&
+        !node.getAttribute?.('data-id')?.startsWith('section-'),
     });
-    return canvas.toDataURL('image/png');
   } catch (err) {
     console.warn('[simmodlr] Canvas export failed:', err);
     return null;

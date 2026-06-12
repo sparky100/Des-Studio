@@ -454,6 +454,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [exportMenuOpen,setExportMenuOpen]=useState(false);
   const [aiSidebarOpen,setAiSidebarOpen]=useState(false);
   const runWithPatchRef = useRef(null);
+  const fitAllRef = useRef(null);
   const [starterGuideDismissed,setStarterGuideDismissed]=useState(()=>{
     try { return localStorage.getItem(`des_starter_${modelId}`) === "1"; } catch { return false; }
   });
@@ -1061,9 +1062,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           const prevTab = tab;
           if (tab !== "visual") setTab("visual");
           await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+          fitAllRef.current?.();
+          await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
           const { exportCanvasToPng } = await import("./visual-designer/graph.js");
           const dataUrl = await exportCanvasToPng();
-          if (tab !== "visual") setTab(prevTab);
+          if (prevTab !== "visual") setTab(prevTab);
           const win = window.open("", "_blank");
           if (!win) return;
           const e = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -1098,7 +1101,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="visual"&&(
           renderAuthoringShell(
             <Suspense fallback={<SkeletonPanel rows={5} />}>
-              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
+              <VisualDesignerPanel model={model} canEdit={canEdit} onModelChange={setWholeModel} flowKey={discardKey} fitAllRef={fitAllRef} onModelInit={async (nextModel) => { setModel(nextModel); try { await overrides.onSave?.(nextModel); } catch {} }}/>
             </Suspense>
           )
         )}
