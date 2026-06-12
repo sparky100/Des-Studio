@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
+  BaseEdge,
   Controls,
+  EdgeLabelRenderer,
+  getBezierPath,
   Handle,
   MarkerType,
   MiniMap,
@@ -147,7 +150,51 @@ function DesNode({ data, selected }) {
   );
 }
 
+// Custom edge that renders labels via EdgeLabelRenderer (HTML portal) instead
+// of the built-in SVG EdgeText which relies on getBBox() — a measurement that
+// returns zero on some browsers/mobile, permanently hiding the label.
+function DesEdge({
+  id, sourceX, sourceY, targetX, targetY,
+  sourcePosition, targetPosition,
+  label, labelStyle, labelBgStyle, labelBgPadding,
+  style, markerEnd,
+}) {
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX, sourceY, sourcePosition,
+    targetX, targetY, targetPosition,
+  });
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
+      {label && (
+        <EdgeLabelRenderer>
+          <span
+            className="nodrag nopan"
+            style={{
+              position: "absolute",
+              transform: `translate(-50%,-50%) translate(${labelX}px,${labelY}px)`,
+              background: labelBgStyle?.fill ?? "transparent",
+              borderRadius: 3,
+              color: labelStyle?.fill,
+              fontFamily: labelStyle?.fontFamily,
+              fontSize: labelStyle?.fontSize,
+              fontWeight: labelStyle?.fontWeight,
+              lineHeight: 1,
+              padding: labelBgPadding ? `${labelBgPadding[1]}px ${labelBgPadding[0]}px` : "3px 6px",
+              pointerEvents: "none",
+              userSelect: "none",
+            }}
+          >
+            {label}
+          </span>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+
 const nodeTypes = { desNode: DesNode, sectionPanel: SectionPanelNode };
+const edgeTypes = { desEdge: DesEdge };
 
 function toFlowNode(node) {
   return {
@@ -174,6 +221,7 @@ function toFlowEdge(edge, C, FONT) {
 
   return {
     id: edge.id,
+    type: "desEdge",
     source: edge.from,
     target: edge.to,
     label,
@@ -413,6 +461,7 @@ export function FlowDiagramReactFlow({
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         defaultViewport={graph.viewport || { x: 0, y: 0, zoom: 1 }}
         minZoom={0.3}
         maxZoom={1.5}
