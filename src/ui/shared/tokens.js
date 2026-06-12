@@ -63,6 +63,9 @@ export const SHADOW = {
 // Z-index stack
 export const Z = { dropdown: 100, tooltip: 150, overlay: 180, modal: 200 };
 
+// Content column max-widths — apply with margin:"0 auto" to centre on wide screens
+export const CONTENT_WIDTHS = { narrow: 700, medium: 920, wide: 1120 };
+
 // Transition timings
 export const TRANS = { fast: "120ms ease", base: "200ms ease", slow: "300ms ease" };
 
