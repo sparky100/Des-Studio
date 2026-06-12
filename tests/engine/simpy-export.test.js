@@ -499,6 +499,31 @@ describe("exportToSimPy", () => {
     });
   });
 
+  describe("multi-stage wait/service time tracking (Bug C)", () => {
+    it("entity dataclass includes wait_time_acc and svc_time_acc fields", () => {
+      const result = exportToSimPy(multiStageModel);
+      expect(result.script).toContain("wait_time_acc: float = 0.0");
+      expect(result.script).toContain("svc_time_acc: float = 0.0");
+      expect(result.script).toContain("queue_join_time: float = 0.0");
+    });
+
+    it("routing code sets queue_join_time before each store put", () => {
+      const result = exportToSimPy(multiStageModel);
+      // queue_join_time must appear before QueueB_store.put in the script
+      const qjt = result.script.indexOf("entity.queue_join_time = env.now");
+      const put = result.script.indexOf("QueueB_store.put(entity)");
+      expect(qjt).toBeGreaterThan(-1);
+      expect(put).toBeGreaterThan(qjt);
+    });
+
+    it("statistics block uses wait_time_acc and svc_time_acc, not service_start_time arithmetic", () => {
+      const result = exportToSimPy(multiStageModel);
+      expect(result.script).toContain("e.wait_time_acc");
+      expect(result.script).toContain("e.svc_time_acc");
+      expect(result.script).not.toContain("e.service_start_time - e.arrival_time");
+    });
+  });
+
   describe("empty model edge case", () => {
     it("produces a valid (non-empty) script for a completely empty model", () => {
       const result = exportToSimPy(emptyModel);
