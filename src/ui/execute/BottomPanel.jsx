@@ -953,6 +953,12 @@ function EntitiesTab({ snap, selectedEntityId, onEntitySelect }) {
 
 // ── Resources tab ────────────────────────────────────────────────────────────
 
+function extractServerTypeName(cEvent) {
+  const effect = Array.isArray(cEvent.effect) ? cEvent.effect.join(' ') : (cEvent.effect || '');
+  const m = effect.match(/ASSIGN\s*\([^,]+,\s*([^)]+)\)/i);
+  return m ? m[1].trim() : (cEvent.serverType || cEvent.resourceType || null);
+}
+
 function ResourcesTab({ snap, model }) {
   const { C, FONT } = useTheme();
   const [filterText,   setFilterText]   = useState("");
@@ -963,6 +969,18 @@ function ResourcesTab({ snap, model }) {
 
   const toggleCollapse = (id) =>
     setCollapsed(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  // Map each server type name -> C-events that use it
+  const activitiesByServerType = useMemo(() => {
+    const map = {};
+    for (const ce of (model?.cEvents || [])) {
+      const stn = extractServerTypeName(ce);
+      if (!stn) continue;
+      if (!map[stn]) map[stn] = [];
+      map[stn].push(ce.name || ce.id);
+    }
+    return map;
+  }, [model?.cEvents]);
 
   const computed = useMemo(() => serverTypes.map(et => {
     const allEntities = snap?.entities || [];
@@ -1053,6 +1071,7 @@ function ResourcesTab({ snap, model }) {
           {visible.map(({ et, liveData }) => {
             const isCollapsed = collapsed.has(et.id);
             const utilColor = liveData.utilisation > 90 ? C.red : liveData.utilisation > 70 ? C.amber : C.green;
+            const activities = activitiesByServerType[et.name] || [];
             return (
               <div key={et.id} style={{ border: `1px solid ${C.border}`, borderRadius: 6, overflow: "hidden" }}>
                 <div
@@ -1061,9 +1080,16 @@ function ResourcesTab({ snap, model }) {
                     background: C.panel, cursor: "pointer", userSelect: "none" }}
                 >
                   <span style={{ color: C.muted, fontSize: 10 }}>{isCollapsed ? "▶" : "▼"}</span>
-                  <span style={{ flex: 1, fontFamily: FONT, fontSize: 12, fontWeight: 600, color: C.text }}>
-                    {et.name}
-                  </span>
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+                    <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: C.text }}>
+                      {et.name}
+                    </span>
+                    {activities.length > 0 && (
+                      <span style={{ fontSize: 10, color: C.cEvent, fontFamily: FONT }}>
+                        {activities.join(' · ')}
+                      </span>
+                    )}
+                  </div>
                   <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{liveData.capacity} cap</span>
                   <Tag label={`${liveData.busyCount} busy`}   color={C.busy} />
                   <Tag label={`${liveData.idleCount} idle`}   color={C.idle} />

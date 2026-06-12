@@ -162,7 +162,7 @@ function QueueDetail({ label, liveData, onEntitySelect }) {
 export function ActivityDetail({ label, liveData, onEntitySelect }) {
   const { C, FONT } = useTheme();
   const {
-    serverTypeName, capacity, busyCount, idleCount, failedCount, suspendedCount = 0,
+    serverTypeName, capacity, busyCount, activityBusyCount, idleCount, failedCount, suspendedCount = 0,
     utilisation, servers = [], clock,
   } = liveData || {};
 
@@ -171,6 +171,22 @@ export function ActivityDetail({ label, liveData, onEntitySelect }) {
 
   const activeServers = servers.filter(s => !s.suspended);
   const suspendedServers = servers.filter(s => s.suspended);
+
+  // If activityBusyCount is provided, show activity-split stats; otherwise show aggregate stats
+  const hasActivitySplit = activityBusyCount !== undefined;
+  const busyElsewhere = hasActivitySplit ? (busyCount - activityBusyCount) : null;
+
+  const statCards = hasActivitySplit ? [
+    { label: "Total capacity", value: capacity, color: C.text },
+    { label: "Busy here", value: activityBusyCount, color: C.busy },
+    { label: "Busy elsewhere", value: busyElsewhere, color: busyElsewhere > 0 ? C.amber : C.muted },
+    { label: "Idle", value: idleCount, color: C.idle },
+  ] : [
+    { label: "Capacity", value: capacity, color: C.text },
+    { label: "Busy", value: busyCount, color: C.busy },
+    { label: "Idle", value: idleCount, color: C.idle },
+    { label: "Failed", value: failedCount, color: C.red },
+  ];
 
   return (
     <div>
@@ -184,12 +200,7 @@ export function ActivityDetail({ label, liveData, onEntitySelect }) {
         display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: SPACE.sm,
         marginBottom: SPACE.sm,
       }}>
-        {[
-          { label: "Capacity", value: capacity, color: C.text },
-          { label: "Busy", value: busyCount, color: C.busy },
-          { label: "Idle", value: idleCount, color: C.idle },
-          { label: "Failed", value: failedCount, color: C.red },
-        ].map(stat => (
+        {statCards.map(stat => (
           <div key={stat.label} style={{
             background: C.surface, borderRadius: RADIUS.sm, padding: `${SPACE.sm}px`,
             textAlign: "center",
@@ -369,15 +380,18 @@ export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect, snap,
   if (!selectedNode) return null;
 
   const { nodeType, label } = selectedNode;
+  const nodeTypeTag = nodeType === "queueNode" ? "Queue" : "Activity";
+  const nodeTagColor = nodeType === "queueNode" ? C.cEvent : C.purple;
 
   return (
     <div style={{
       position: "absolute", top: 0, right: 0, bottom: 0,
       width: SIDEBAR_WIDTH, background: C.panel,
       borderLeft: `1px solid ${C.border}`,
-      boxShadow: "-8px 0 32px rgba(0,0,0,0.6)",
+      boxShadow: "-8px 0 32px rgba(0,0,0,0.4)",
       zIndex: Z.overlay,
       display: "flex", flexDirection: "column",
+      overflow: "hidden",
       animation: "slideIn 200ms ease",
     }}>
       <style>{`
@@ -386,43 +400,52 @@ export function NodeDetailSidebar({ selectedNode, onClose, onEntitySelect, snap,
           to { transform: translateX(0); opacity: 1; }
         }
       `}</style>
+      {/* Header — matches VisualNodeInspector */}
       <div style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: `${SPACE.md}px ${SPACE.lg}px`,
+        padding: "12px 14px",
         borderBottom: `1px solid ${C.border}`,
+        flexShrink: 0,
       }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, fontFamily: FONT, textTransform: "uppercase", letterSpacing: 1 }}>
-          {nodeType === "queueNode" ? "Queue Members" : "Server Pool"}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: SPACE.sm }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: "1.8px",
+            color: C.accent, fontFamily: FONT, textTransform: "uppercase",
+          }}>
+            Inspector
+          </span>
+          <span style={{
+            fontSize: 10, fontWeight: 700, color: nodeTagColor,
+            background: `${nodeTagColor}18`,
+            padding: "2px 6px", borderRadius: RADIUS.sm, fontFamily: FONT,
+          }}>
+            {nodeTypeTag}
+          </span>
+        </div>
         <button
           type="button"
           onClick={onClose}
           style={{
             background: C.surface,
             border: `1px solid ${C.border}`,
+            borderRadius: RADIUS.sm,
             color: C.text,
             cursor: "pointer",
-            fontSize: 14,
-            fontWeight: 700,
             fontFamily: FONT,
+            fontSize: 12,
+            fontWeight: 700,
+            lineHeight: 1,
             padding: "4px 10px",
-            borderRadius: RADIUS.sm,
           }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = C.border;
-            e.currentTarget.style.borderColor = C.muted;
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = C.surface;
-            e.currentTarget.style.borderColor = C.border;
-          }}
+          onMouseEnter={e => { e.currentTarget.style.background = C.border; }}
+          onMouseLeave={e => { e.currentTarget.style.background = C.surface; }}
           title="Close (Esc)"
         >
-          ✕ Close
+          ✕
         </button>
       </div>
       <div style={{
-        flex: 1, overflow: "auto", padding: `${SPACE.md}px ${SPACE.lg}px`,
+        flex: 1, overflowY: "auto", padding: 14,
       }}>
         {nodeType === "queueNode" ? (
           <QueueDetail label={label} liveData={liveData} onEntitySelect={onEntitySelect} />

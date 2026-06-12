@@ -1514,16 +1514,47 @@ export function buildModelDefinitionHtml(model = {}) {
     })
   ] : [];
 
+  // ── Condition formatting (handles string or structured object) ────────────
+  function formatConditionClause(c) {
+    if (!c || typeof c !== 'object') return '';
+    const variable = (c.variable || c.left || c.token || '').replace(/^entity\./i, '');
+    const op = c.operator || c.op || '';
+    const value = c.value !== undefined ? c.value : c.right;
+    if (variable && op && value !== undefined) return `${variable} ${op} ${value}`;
+    if (variable && value !== undefined) return `${variable} = ${value}`;
+    return '';
+  }
+  function formatCondition(condition) {
+    if (!condition) return '—';
+    if (typeof condition === 'string') return esc(condition.trim()) || '—';
+    if (typeof condition !== 'object') return '—';
+    if ((condition.operator === 'AND' || condition.operator === 'OR') && Array.isArray(condition.clauses)) {
+      const parts = condition.clauses.map(cl => formatConditionClause(cl)).filter(Boolean);
+      return parts.length ? esc(parts.join(` ${condition.operator} `)) : '—';
+    }
+    return esc(formatConditionClause(condition)) || '—';
+  }
+
   // ── C Events ───────────────────────────────────────────────────────────────
   const cEventRows = cEvents.length ? [
-    ['Name', 'Server', 'Service time', 'Condition', 'Priority'],
+    ['Name', 'Server', 'Service time', 'Schedules', 'Condition', 'Priority'],
     ...cEvents.map(ev => {
       const sched = fmtSchedule(ev.cSchedules);
+      const scheduledEvents = (ev.cSchedules || [])
+        .map(cs => {
+          const bev = bEvents.find(b => b.id === cs.eventId);
+          if (!bev) return null;
+          const timing = fmtSchedule([cs]);
+          return timing ? `${esc(bev.name)} (${timing} ${timeUnit})` : esc(bev.name);
+        })
+        .filter(Boolean)
+        .join(', ');
       return [
         esc(ev.name),
         esc(ev.serverType || ev.resourceType || '—'),
         sched ? `${sched} ${timeUnit}` : '—',
-        esc(ev.condition || '—'),
+        scheduledEvents || '—',
+        formatCondition(ev.condition),
         esc(String(ev.priority ?? 1)),
       ];
     })

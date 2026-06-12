@@ -16,7 +16,6 @@ const IconDraw     = () => ic(13, 13, <><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 2
 const IconDescribe = () => ic(13, 13, <><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M3 5h4"/><path d="M19 17v4"/><path d="M17 19h4"/></>);
 const IconDefine   = () => ic(13, 13, <><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>);
 const IconHealth   = () => ic(13, 13, <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>);
-const IconPrint    = () => ic(13, 13, <><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></>);
 
 // Sub-bar — 11×11
 const IconEntities  = () => ic(11, 11, <><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></>);
@@ -49,7 +48,7 @@ export function ModelTabBar({
   showMoreTabs, setShowMoreTabs,
   aiSidebarOpen = false, onToggleAiSidebar = null,
   onExplore = null, exploreVisible = false,
-  onPrintDiagram = null, onPrintDefinition = null,
+  onPrintDefinition = null,
 }) {
   const { C, FONT } = useTheme();
 
@@ -199,18 +198,10 @@ export function ModelTabBar({
             </button>
           )}
           <div style={{ flex: 1 }} />
-          {tab === "visual" && onPrintDiagram && (
-            <button type="button" title="Print diagram" onClick={onPrintDiagram}
-              style={btnTabStyle(false)}>
-              <IconPrint />
-              Print diagram
-            </button>
-          )}
           {onPrintDefinition && (
-            <button type="button" title="Print model definition" onClick={onPrintDefinition}
+            <button type="button" title="View model definition" onClick={onPrintDefinition}
               style={btnTabStyle(false)}>
-              <IconPrint />
-              Print definition
+              View definition
             </button>
           )}
         </div>
