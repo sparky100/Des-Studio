@@ -1,7 +1,7 @@
 // src/engine/adaptive-batch.js — Adaptive batch runner
 // Steps up replications until 95% CI relative half-width drops below the target
 // percentage of the mean, or the tier replication limit is reached.
-import { runReplications } from './replication-runner.js';
+import { runReplications, createReplicationPool } from './replication-runner.js';
 import { confidenceInterval95 } from './statistics.js';
 import { RUN_ADMISSION_TIERS } from './run-admission.js';
 
@@ -76,7 +76,9 @@ export async function runAdaptiveBatch(options = {}) {
     maxSimTime = 500,
     schedulesMap = {},
     targetRelativeCI = 5,
-    collectTimeSeries = true,
+    // Convergence only needs one scalar KPI per replication; time-series
+    // collection roughly doubles per-rep cost, so it is opt-in for batches.
+    collectTimeSeries = false,
     onRoundComplete,
     checkpointAt = 100,
     onCheckpoint,
@@ -96,6 +98,13 @@ export async function runAdaptiveBatch(options = {}) {
   const roundHistory = [];
   let checkpointFired = false;
 
+  // One pool for the whole batch: workers persist across rounds instead of
+  // being respawned per round (each spawn reloads the full engine module graph).
+  const pool = createReplicationPool(
+    typeof _createWorker === 'function' ? { createWorker: _createWorker } : {}
+  );
+
+  try {
   while (totalReps < tierMax) {
     round++;
     // Size batch to land exactly on checkpointAt before normal stepping resumes
@@ -116,7 +125,7 @@ export async function runAdaptiveBatch(options = {}) {
       maxSimTime,
       schedulesMap,
       collectTimeSeries,
-      ...(typeof _createWorker === 'function' ? { createWorker: _createWorker } : {}),
+      pool,
     };
 
     const roundResults = await runReplicationsPromise(runOpts, signal);
@@ -163,4 +172,7 @@ export async function runAdaptiveBatch(options = {}) {
   }
 
   return { finalReps: totalReps, converged: false, relativeHalfWidth, ci, kpiPath, results: allResults, roundHistory };
+  } finally {
+    pool.destroy();
+  }
 }

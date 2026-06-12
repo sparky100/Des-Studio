@@ -9,7 +9,12 @@ function deferredWorkerFactory() {
       onmessage: null,
       onerror: null,
       terminated: false,
+      initMessage: null,
       postMessage(message) {
+        if (message.type === 'INIT_RUN') {
+          this.initMessage = message;
+          return;
+        }
         this.message = message;
       },
       complete(result = {}) {
@@ -71,7 +76,7 @@ describe('runReplications', () => {
     expect(workers.map(worker => worker.message.payload.seed)).toEqual([100, 101, 102]);
   });
 
-  test('uses a bounded worker pool', () => {
+  test('uses a bounded worker pool and reuses workers across replications', () => {
     const { workers, createWorker } = deferredWorkerFactory();
 
     runReplications({
@@ -84,7 +89,28 @@ describe('runReplications', () => {
 
     expect(workers).toHaveLength(4);
     workers[0].complete();
-    expect(workers).toHaveLength(5);
+    // Worker 0 picks up the next replication instead of being respawned
+    expect(workers).toHaveLength(4);
+    expect(workers[0].message.payload.replicationIndex).toBe(4);
+    expect(workers[0].message.payload.seed).toBe(4);
+  });
+
+  test('sends shared run config once per worker via INIT_RUN', () => {
+    const { workers, createWorker } = deferredWorkerFactory();
+    const model = { name: 'm' };
+
+    runReplications({
+      model,
+      replications: 3,
+      baseSeed: 0,
+      workerCount: 2,
+      createWorker,
+    });
+
+    expect(workers[0].initMessage.payload.model).toBe(model);
+    // Per-replication messages carry only the job, not the model
+    expect(workers[0].message.payload.model).toBeUndefined();
+    expect(Object.keys(workers[0].message.payload).sort()).toEqual(['replicationIndex', 'seed']);
   });
 
   test('emits the shared batch progress shape', () => {

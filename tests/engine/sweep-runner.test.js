@@ -4,6 +4,7 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
 const mockRunReplications = vi.fn();
 vi.mock("../../src/engine/replication-runner.js", () => ({
   runReplications: (...args) => mockRunReplications(...args),
+  createReplicationPool: () => ({ destroyed: false, get: vi.fn(), destroy: vi.fn() }),
 }));
 
 import { runSweep } from "../../src/engine/sweep-runner.js";

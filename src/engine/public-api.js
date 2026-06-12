@@ -18,7 +18,7 @@
 
 export { buildEngine }          from './index.js';
 export { validateModel }        from './validation.js';
-export { runReplications }      from './replication-runner.js';
+export { runReplications, createReplicationPool } from './replication-runner.js';
 export {
   summarizeReplicationResults,
   confidenceInterval95,

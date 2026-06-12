@@ -2,7 +2,7 @@
 // Pure JS — no React, no DOM. Can run from main thread or worker.
 // Sweep points run sequentially (each modifies the model); replications within a point run in parallel.
 
-import { runReplications } from "./replication-runner.js";
+import { runReplications, createReplicationPool } from "./replication-runner.js";
 import { summarizeReplicationResults } from "./statistics.js";
 import { applySweepValues, applySweepValue, generateSweepValues, generate2DSweepValues } from "./sweep-params.js";
 
@@ -58,6 +58,8 @@ export function runSweep({
   let cancelled = false;
   let currentPoint = 0;
   const pointCancelRef = { current: null };
+  // Shared across sweep points so workers spawn once, not once per point.
+  const pool = createReplicationPool();
 
   const emitProgress = () => {
     onProgress?.({
@@ -75,6 +77,7 @@ export function runSweep({
 
   const runNextPoint = async () => {
     if (cancelled || currentPoint >= totalPoints) {
+      pool.destroy();
       if (cancelled) {
         onCancelled?.({ results, completedPoints: results.length, totalPoints });
       } else {
@@ -102,6 +105,7 @@ export function runSweep({
         terminationCondition,
         collectTimeSeries,
         schedulesMap,
+        pool,
         _cancelRef: pointCancelRef,
         onProgress(progress) {
           onProgress?.({
@@ -148,6 +152,7 @@ export function runSweep({
 
       runNextPoint();
     } catch (error) {
+      pool.destroy();
       onError?.({
         value,
         pointIndex,
@@ -197,6 +202,8 @@ export function run2DSweep({
   let cancelled = false;
   let currentPoint = 0;
   const pointCancelRef = { current: null };
+  // Shared across grid points so workers spawn once, not once per point.
+  const pool = createReplicationPool();
 
   const emitProgress = () => {
     onProgress?.({
@@ -214,6 +221,7 @@ export function run2DSweep({
 
   const runNextPoint = async () => {
     if (cancelled || currentPoint >= totalPoints) {
+      pool.destroy();
       if (cancelled) {
         onCancelled?.({ results, completedPoints: results.length, totalPoints });
       } else {
@@ -244,6 +252,7 @@ export function run2DSweep({
         terminationCondition,
         collectTimeSeries,
         schedulesMap,
+        pool,
         _cancelRef: pointCancelRef,
         onProgress(progress) {
           onProgress?.({
@@ -291,6 +300,7 @@ export function run2DSweep({
 
       runNextPoint();
     } catch (error) {
+      pool.destroy();
       onError?.({
         valueA,
         valueB,

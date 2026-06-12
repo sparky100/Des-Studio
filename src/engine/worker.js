@@ -1,12 +1,13 @@
 import { buildEngine } from "./index.js";
 
 export const WORKER_MESSAGE_TYPES = {
+  INIT_RUN: "INIT_RUN",
   RUN_REPLICATION: "RUN_REPLICATION",
   REPLICATION_COMPLETE: "REPLICATION_COMPLETE",
   REPLICATION_ERROR: "REPLICATION_ERROR",
 };
 
-export function runReplicationPayload(payload = {}) {
+export function runReplicationPayload(payload = {}, shared = null) {
   const {
     replicationIndex,
     model,
@@ -18,7 +19,7 @@ export function runReplicationPayload(payload = {}) {
     maxCPasses = 500,
     collectTimeSeries,
     schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
-  } = payload;
+  } = shared ? { ...shared, ...payload } : payload;
 
   const engine = buildEngine(
     model,
@@ -49,7 +50,7 @@ export function buildReplicationError(payload = {}, error) {
   };
 }
 
-export function handleWorkerMessage(message) {
+export function handleWorkerMessage(message, shared = null) {
   if (message?.type !== WORKER_MESSAGE_TYPES.RUN_REPLICATION) {
     return {
       type: WORKER_MESSAGE_TYPES.REPLICATION_ERROR,
@@ -60,7 +61,7 @@ export function handleWorkerMessage(message) {
   try {
     return {
       type: WORKER_MESSAGE_TYPES.REPLICATION_COMPLETE,
-      payload: runReplicationPayload(message.payload),
+      payload: runReplicationPayload(message.payload, shared),
     };
   } catch (error) {
     return {
@@ -71,7 +72,15 @@ export function handleWorkerMessage(message) {
 }
 
 if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+  // Shared run config (model, schedules, termination settings) is sent once per
+  // worker via INIT_RUN so each RUN_REPLICATION message only carries the seed.
+  let sharedRunConfig = null;
   self.onmessage = (event) => {
-    self.postMessage(handleWorkerMessage(event.data));
+    const message = event.data;
+    if (message?.type === WORKER_MESSAGE_TYPES.INIT_RUN) {
+      sharedRunConfig = message.payload || null;
+      return;
+    }
+    self.postMessage(handleWorkerMessage(message, sharedRunConfig));
   };
 }

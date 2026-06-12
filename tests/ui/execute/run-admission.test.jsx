@@ -9,6 +9,7 @@ const mockFetchUserSettings = vi.hoisted(() => vi.fn(() => new Promise(() => {})
 
 vi.mock("../../../src/engine/replication-runner.js", () => ({
   runReplications: mockRunReplications,
+  createReplicationPool: () => ({ destroyed: false, get: vi.fn(), destroy: vi.fn() }),
 }));
 
 vi.mock("../../../src/db/models.js", () => ({

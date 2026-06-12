@@ -115,6 +115,7 @@ describe('runAdaptiveBatch', () => {
         onmessage: null,
         onerror: null,
         postMessage(msg) {
+          if (msg?.type !== 'RUN_REPLICATION') return; // ignore INIT_RUN
           const { replicationIndex, seed } = msg?.payload || {};
           seenSeeds.push(seed);
           callCount++;

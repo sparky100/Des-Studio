@@ -17,6 +17,7 @@ vi.mock("../../../src/engine/index.js", async () => {
 
 vi.mock("../../../src/engine/replication-runner.js", () => ({
   runReplications: vi.fn(),
+  createReplicationPool: () => ({ destroyed: false, get: vi.fn(), destroy: vi.fn() }),
 }));
 
 vi.mock("../../../src/db/models.js", () => ({

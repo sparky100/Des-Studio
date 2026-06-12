@@ -5,7 +5,7 @@ function defaultWorkerCount(replications) {
   const cores = typeof navigator !== "undefined" && Number.isFinite(navigator.hardwareConcurrency)
     ? navigator.hardwareConcurrency
     : 2;
-  return Math.min(replications, Math.max(1, cores - 1), 4);
+  return Math.min(replications, Math.max(1, cores - 1));
 }
 
 function createBrowserWorker() {
@@ -17,14 +17,19 @@ function createBrowserWorker() {
 
 function createInlineWorker() {
   let terminated = false;
+  let shared = null;
   return {
     onmessage: null,
     onerror: null,
     postMessage(message) {
+      if (message?.type === WORKER_MESSAGE_TYPES.INIT_RUN) {
+        shared = message.payload || null;
+        return;
+      }
       Promise.resolve().then(() => {
         if (terminated) return;
         try {
-          const payload = runReplicationPayload(message.payload);
+          const payload = runReplicationPayload(message.payload, shared);
           this.onmessage?.({ data: { type: WORKER_MESSAGE_TYPES.REPLICATION_COMPLETE, payload } });
         } catch (error) {
           this.onmessage?.({
@@ -67,6 +72,35 @@ export function compactReplicationPayload(payload) {
   };
 }
 
+// A reusable pool of replication workers. Pass it to successive runReplications
+// calls (e.g. adaptive-batch rounds, sweep points) so workers are spawned once
+// instead of once per round. The pool is destroyed automatically if a run is
+// cancelled or fails; otherwise the owner must call destroy() when finished.
+export function createReplicationPool({ createWorker = createBrowserWorker } = {}) {
+  const workers = [];
+  let destroyed = false;
+  return {
+    get destroyed() {
+      return destroyed;
+    },
+    get(index) {
+      if (destroyed) throw new Error("Replication pool has been destroyed.");
+      while (workers.length <= index) {
+        workers.push(createWorker());
+      }
+      return workers[index];
+    },
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      for (const worker of workers) {
+        worker.terminate?.();
+      }
+      workers.length = 0;
+    },
+  };
+}
+
 export function runReplications(options = {}) {
   const {
     model,
@@ -80,6 +114,7 @@ export function runReplications(options = {}) {
     collectTimeSeries,
     schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
     workerCount,
+    pool,            // optional createReplicationPool() instance shared across runs
     onProgress,
     onReplicationComplete,
     onError,
@@ -91,7 +126,23 @@ export function runReplications(options = {}) {
   const total = Math.max(1, Number.parseInt(replications, 10) || 1);
   const poolSize = Math.max(1, Math.min(workerCount || defaultWorkerCount(total), total));
   const results = new Array(total);
-  const activeWorkers = new Map();
+
+  // Sent once per worker via INIT_RUN; RUN_REPLICATION messages then only carry
+  // {replicationIndex, seed}, avoiding a structured clone of the model per job.
+  const sharedConfig = {
+    model,
+    warmupPeriod,
+    maxSimTime,
+    terminationCondition,
+    maxCycles,
+    maxCPasses,
+    collectTimeSeries,
+    schedulesMap,
+  };
+
+  const workers = [];
+  const idleWorkers = [];
+  const activeJobs = new Map();
   let nextIndex = 0;
   let completed = 0;
   let cancelled = false;
@@ -100,108 +151,124 @@ export function runReplications(options = {}) {
   const progress = () => makeBatchProgress({
     completed,
     total,
-    running: activeWorkers.size,
-    pending: Math.max(0, total - completed - activeWorkers.size),
+    running: activeJobs.size,
+    pending: Math.max(0, total - completed - activeJobs.size),
     cancelled,
     workerCount: poolSize,
   });
 
   const emitProgress = () => onProgress?.(progress());
 
-  const cleanupWorker = (replicationIndex) => {
-    const worker = activeWorkers.get(replicationIndex);
-    if (worker) {
-      worker.terminate?.();
-      activeWorkers.delete(replicationIndex);
+  // Run finished cleanly: pooled workers stay alive for the next run.
+  const releaseWorkers = () => {
+    if (!pool) {
+      for (const worker of workers) {
+        worker.terminate?.();
+      }
     }
+    workers.length = 0;
+    idleWorkers.length = 0;
+    activeJobs.clear();
   };
 
-  const terminateActiveWorkers = () => {
-    for (const worker of activeWorkers.values()) {
-      worker.terminate?.();
+  // Cancel/failure: in-flight jobs cannot be reclaimed, so terminate everything.
+  const destroyWorkers = () => {
+    if (pool) {
+      pool.destroy();
+    } else {
+      for (const worker of workers) {
+        worker.terminate?.();
+      }
     }
-    activeWorkers.clear();
+    workers.length = 0;
+    idleWorkers.length = 0;
+    activeJobs.clear();
   };
 
   const failRun = (error) => {
     if (cancelled || failed) return;
     failed = true;
-    terminateActiveWorkers();
+    destroyWorkers();
     onError?.(error);
     emitProgress();
+  };
+
+  const attachWorker = (worker) => {
+    worker.onmessage = (event) => {
+      if (cancelled || failed) return;
+      const message = event.data;
+      const job = activeJobs.get(worker);
+      activeJobs.delete(worker);
+
+      if (message?.type === WORKER_MESSAGE_TYPES.REPLICATION_COMPLETE) {
+        const payload = compactReplicationPayload(message.payload);
+        results[payload.replicationIndex] = payload;
+        completed++;
+        idleWorkers.push(worker);
+        onReplicationComplete?.(payload, progress());
+        emitProgress();
+
+        if (completed === total) {
+          releaseWorkers();
+          onComplete?.(results.slice());
+        } else {
+          schedule();
+        }
+        return;
+      }
+
+      failRun(message?.payload || {
+        replicationIndex: job?.replicationIndex,
+        seed: job?.seed,
+        message: "Replication worker failed.",
+      });
+    };
+
+    worker.onerror = (error) => {
+      const job = activeJobs.get(worker);
+      failRun({
+        replicationIndex: job?.replicationIndex,
+        seed: job?.seed,
+        message: error?.message || "Replication worker failed.",
+        stack: error?.error?.stack || "",
+      });
+    };
+  };
+
+  const spawnWorker = () => {
+    const worker = pool ? pool.get(workers.length) : createWorker();
+    workers.push(worker);
+    attachWorker(worker);
+    worker.postMessage({ type: WORKER_MESSAGE_TYPES.INIT_RUN, payload: sharedConfig });
+    return worker;
   };
 
   const schedule = () => {
     if (cancelled || failed) return;
 
-    while (activeWorkers.size < poolSize && nextIndex < total) {
+    while (nextIndex < total && (idleWorkers.length > 0 || workers.length < poolSize)) {
       const replicationIndex = nextIndex++;
       const seed = baseSeed + replicationIndex;
-      let worker;
-      try {
-        worker = createWorker();
-      } catch (error) {
-        failRun({
-          replicationIndex,
-          seed,
-          message: error?.message || "Replication worker failed to start.",
-          stack: error?.stack || "",
-        });
-        return;
-      }
-      activeWorkers.set(replicationIndex, worker);
-
-      worker.onmessage = (event) => {
-        if (cancelled || failed) return;
-        const message = event.data;
-        cleanupWorker(replicationIndex);
-
-        if (message?.type === WORKER_MESSAGE_TYPES.REPLICATION_COMPLETE) {
-          const payload = compactReplicationPayload(message.payload);
-          results[payload.replicationIndex] = payload;
-          completed++;
-          onReplicationComplete?.(payload, progress());
-          emitProgress();
-
-          if (completed === total) {
-            onComplete?.(results.slice());
-          } else {
-            schedule();
-          }
+      let worker = idleWorkers.pop();
+      if (!worker) {
+        try {
+          worker = spawnWorker();
+        } catch (error) {
+          failRun({
+            replicationIndex,
+            seed,
+            message: error?.message || "Replication worker failed to start.",
+            stack: error?.stack || "",
+          });
           return;
         }
-
-        failRun(message?.payload || {
-          replicationIndex,
-          seed,
-          message: "Replication worker failed.",
-        });
-      };
-
-      worker.onerror = (error) => {
-        failRun({
-          replicationIndex,
-          seed,
-          message: error?.message || "Replication worker failed.",
-          stack: error?.error?.stack || "",
-        });
-      };
+      }
+      activeJobs.set(worker, { replicationIndex, seed });
 
       try {
         worker.postMessage({
           type: WORKER_MESSAGE_TYPES.RUN_REPLICATION,
-          payload: {
-            replicationIndex,
-            model,
-            seed,
-            warmupPeriod,
-            maxSimTime,
-            terminationCondition,
-            maxCycles,
-            maxCPasses,
-            collectTimeSeries,
-            schedulesMap,    // ADR-016: resolved schedule data
-          },
+          payload: { replicationIndex, seed },
         });
       } catch (error) {
         failRun({
@@ -221,9 +288,9 @@ export function runReplications(options = {}) {
 
   return {
     cancel() {
-      if (cancelled || completed === total) return;
+      if (cancelled || failed || completed === total) return;
       cancelled = true;
-      terminateActiveWorkers();
+      destroyWorkers();
       emitProgress();
       onCancelled?.(progress());
     },
