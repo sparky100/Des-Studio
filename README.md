@@ -8,7 +8,7 @@ The app lets simulation modellers define entity types, queues, B-Events, C-Event
 
 ## Current Status
 
-Version: `7.0.0`
+Version: `0.9.0 - Beta`
 
 The project has completed **79+ sprints** covering the full DES modelling lifecycle — from engine safety and correctness through advanced scheduling macros, resource reliability, statistical analytics, and AI-powered model authoring and analysis.
 
@@ -30,7 +30,7 @@ The project has completed **79+ sprints** covering the full DES modelling lifecy
 | Statistical output analyzer (Welch, batch-means, Bonferroni) | Complete |
 | Shareable results dashboard + QR codes | Complete |
 | CSV import bridge with distribution fitting | Complete |
-| Community gallery and template library (16 templates) | Complete |
+| Community gallery and template library (22 templates) | Complete |
 | Resource preemption, breakdowns, MTBF/MTTR | Complete |
 | Advanced scheduling (SPLIT, COSEIZE, MATCH, dynamic BATCH) | Complete |
 | Queue disciplines (FIFO, LIFO, PRIORITY, SPT, EDD, PRIORITY(attr)) | Complete |
@@ -120,11 +120,11 @@ Key rules:
 | `AGENTS.md` | Architectural contract, sprint history, coding conventions, test strategy |
 | `docs/simmodlr_Build_Plan.md` | Living roadmap, sprint status, implementation prompts |
 | `docs/simmodlr_User_Guide.md` | End-user guide for modellers |
-| `docs/Template Models Guide.md` | Detailed explanations of all 16 template models |
+| `docs/Template Models Guide.md` | Detailed explanations of all 18 template models |
 | `docs/addition1_entity_model.md` | Entity model, macros, distributions, validation schema |
 | `docs/capability-gap-analysis.md` | simmodlr vs professional tools (SimPy, AnyLogic, JaamSim) |
 | `docs/patterns/` | Reusable modelling pattern references (6 patterns) |
-| `docs/decisions/` | Architectural Decision Records (ADR-001 through ADR-014) |
+| `docs/decisions/` | Architectural Decision Records (ADR-001 through ADR-016) |
 | `docs/reviews/` | Sprint closure reports, capability guides, pre-sprint assessments |
 | `docs/archived/` | Superseded historical documents (reference only) |
 
