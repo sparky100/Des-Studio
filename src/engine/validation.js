@@ -949,6 +949,44 @@ export function validateModel(model) {
     }
   });
 
+  // ── V45: Detect orphaned queues (disconnected model fragments) ───────────────
+  // A queue that is never referenced as a routing destination will never receive
+  // entities. Guards against LLM-generated fragment patterns where extra queues
+  // and C-events are included without connecting them to the main model path.
+  // Only fires when at least one queue IS reachable (avoids false positives on
+  // models that use single-arg ARRIVE with implicit default routing).
+  {
+    const reachableNames = new Set();
+    const ARRIVE_QUEUE_G  = /ARRIVE\s*\([^,)]+,\s*([^)]+)\)/gi;
+    const RELEASE_QUEUE_G = /RELEASE\s*\([^,)]+,\s*([^)]+)\)/gi;
+
+    bEvents.forEach(b => {
+      const text = effectText(b.effect);
+      for (const m of text.matchAll(ARRIVE_QUEUE_G))  reachableNames.add(m[1].trim().toLowerCase());
+      for (const m of text.matchAll(RELEASE_QUEUE_G)) reachableNames.add(m[1].trim().toLowerCase());
+      if (b.defaultQueueName)
+        reachableNames.add(b.defaultQueueName.toLowerCase());
+      (b.routing || []).forEach(r => r.queueName && reachableNames.add(r.queueName.toLowerCase()));
+      (b.probabilisticRouting || []).forEach(r => r.queueName && reachableNames.add(r.queueName.toLowerCase()));
+      if (b.loopConfig?.exitQueueName)
+        reachableNames.add(b.loopConfig.exitQueueName.toLowerCase());
+    });
+    queues.forEach(q => {
+      if (q.overflowDestination) reachableNames.add(q.overflowDestination.toLowerCase());
+    });
+
+    if (reachableNames.size > 0) {
+      queues.forEach(q => {
+        if (!reachableNames.has((q.name || '').toLowerCase())) {
+          err('V45',
+            `Queue "${q.name}" is never used as a routing destination — it may be a disconnected fragment. Add an ARRIVE or RELEASE routing that targets it, or remove it.`,
+            'queues',
+            { queueIds: [q.id] });
+        }
+      });
+    }
+  }
+
   return { errors, warnings };
 }
 
