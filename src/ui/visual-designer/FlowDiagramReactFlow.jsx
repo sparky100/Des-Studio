@@ -159,8 +159,9 @@ function DesEdge({
   id, sourceX, sourceY, targetX, targetY,
   sourcePosition, targetPosition,
   label, labelStyle, labelBgStyle, labelBgPadding,
-  style, markerEnd,
+  style, markerEnd, selected, interactionWidth,
 }) {
+  const { C } = useTheme();
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
@@ -168,9 +169,12 @@ function DesEdge({
   // For upward edges push label down into the row gap; for downward push up.
   // Horizontal edges (same Y) keep the label at the geometric midpoint.
   const yOffset = targetY < sourceY ? 20 : targetY > sourceY ? -20 : 0;
+  const edgeStyle = selected
+    ? { ...style, stroke: C.accent, strokeWidth: (style?.strokeWidth || 1.5) + 1 }
+    : style;
   return (
     <>
-      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
+      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={edgeStyle} interactionWidth={interactionWidth} />
       {label && (
         <EdgeLabelRenderer>
           <span
@@ -249,6 +253,7 @@ function toFlowEdge(edge, C, FONT) {
 
 function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAllRef }) {
   const { C, FONT } = useTheme();
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const panelBtnStyle = {
     background: C.surface, border: `1px solid ${C.border}`, borderRadius: 4,
     color: C.muted, cursor: "pointer", fontFamily: FONT,
@@ -303,7 +308,33 @@ function CanvasControls({ canEdit, onResetLayout, connecting, fitNodeRef, fitAll
             ↺ Layout
           </button>
         )}
+        <button
+          type="button"
+          style={panelBtnStyle}
+          title="Show canvas shortcuts"
+          aria-pressed={showShortcuts}
+          onClick={() => setShowShortcuts(prev => !prev)}
+        >
+          ? Keys
+        </button>
       </Panel>
+      {showShortcuts && (
+        <Panel position="bottom-center">
+          <div style={{
+            background: C.surface,
+            border: `1px solid ${C.border}`,
+            borderRadius: 5,
+            color: C.muted,
+            fontFamily: FONT,
+            fontSize: 10,
+            fontWeight: 600,
+            padding: "5px 12px",
+            whiteSpace: "nowrap",
+          }}>
+            Drag = select &nbsp;·&nbsp; Space/middle-drag = pan &nbsp;·&nbsp; Scroll = pan &nbsp;·&nbsp; Ctrl+Scroll = zoom &nbsp;·&nbsp; Del = delete &nbsp;·&nbsp; Esc = deselect &nbsp;·&nbsp; Arrows = nudge (Shift = grid)
+          </div>
+        </Panel>
+      )}
       {connecting && (
         <Panel position="top-center">
           <div style={{
@@ -331,19 +362,19 @@ export function FlowDiagramReactFlow({
   canEdit = false,
   selectedNodeId = null,
   selectedNodeIds = [],
-  selectionMode = "pan",
+  selectedEdgeId = null,
   errorNodeIds,
   fitNodeRef,
   fitAllRef,
   showSections = true,
   onNodeSelect,
   onNodeSelectionChange,
+  onEdgeSelect,
   onNodeMove,
   onNodesMove,
   onViewportChange,
   onConnectNodes,
   onDropNode,
-  onDeleteEdge,
   onResetLayout,
 }) {
   const { C, FONT } = useTheme();
@@ -408,7 +439,11 @@ export function FlowDiagramReactFlow({
 
   const edges = useMemo(() => {
     return (graph.edges || []).map(e => {
-      const flowEdge = toFlowEdge(e, C, FONT);
+      const flowEdge = {
+        ...toFlowEdge(e, C, FONT),
+        selected: selectedEdgeId === e.id,
+        interactionWidth: 16,
+      };
       if (showSections && focusedSectionId != null) {
         const fromNode = nodeById.get(e.from);
         const toNode = nodeById.get(e.to);
@@ -424,7 +459,7 @@ export function FlowDiagramReactFlow({
       }
       return flowEdge;
     });
-  }, [graph.edges, C, FONT, showSections, focusedSectionId, nodeById]);
+  }, [graph.edges, C, FONT, showSections, focusedSectionId, nodeById, selectedEdgeId]);
 
   const isValidConnection = useCallback(connection => {
     const validation = validateVisualConnection(graph, connection.source, connection.target);
@@ -473,15 +508,17 @@ export function FlowDiagramReactFlow({
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultViewport={graph.viewport || { x: 0, y: 0, zoom: 1 }}
-        minZoom={0.3}
-        maxZoom={1.5}
+        minZoom={0.1}
+        maxZoom={2}
         nodesDraggable={canEdit}
         nodesConnectable={canEdit}
         deleteKeyCode={null}
         elementsSelectable
-        selectionOnDrag={canEdit && selectionMode === "select"}
-        selectionMode={ReactFlowSelectionMode.Full}
-        panOnDrag={selectionMode !== "select"}
+        edgesFocusable={canEdit}
+        selectionOnDrag={canEdit}
+        selectionMode={ReactFlowSelectionMode.Partial}
+        panOnDrag={canEdit ? [1, 2] : true}
+        panActivationKeyCode="Space"
         multiSelectionKeyCode={["Shift", "Control", "Meta"]}
         snapToGrid={canEdit}
         snapGrid={[24, 24]}
@@ -496,7 +533,9 @@ export function FlowDiagramReactFlow({
         onPaneClick={() => {
           setFocusedSectionId(null);
           onNodeSelect?.(null);
+          onEdgeSelect?.(null);
         }}
+        onEdgeClick={(_, edge) => onEdgeSelect?.(edge.id)}
         onSelectionChange={({ nodes: selectedNodes = [] }) => {
           // onNodeClick handles single-node selection; skip here to avoid overwriting it
           // with stale controlled `selected` props before React re-renders
@@ -527,13 +566,6 @@ export function FlowDiagramReactFlow({
         onConnect={connection => onConnectNodes?.(connection.source, connection.target)}
         onConnectStart={() => setConnecting(true)}
         onConnectEnd={() => setConnecting(false)}
-        onEdgeContextMenu={(event, edge) => {
-          if (!canEdit || !onDeleteEdge) return;
-          event.preventDefault();
-          if (window.confirm("Remove this connection?")) {
-            onDeleteEdge(edge.id);
-          }
-        }}
         proOptions={{ hideAttribution: true }}
       >
         <Background color={C.border} gap={24} size={1} />

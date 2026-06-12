@@ -30,7 +30,7 @@ vi.mock('@xyflow/react', () => ({
     setCenter: vi.fn(),
     getViewport: vi.fn(() => ({ zoom: 1 })),
   }),
-  ReactFlow: ({ nodes = [], edges = [], children, fitView, defaultViewport, onNodeClick, onNodeDragStop, onSelectionChange, onConnect }) => {
+  ReactFlow: ({ nodes = [], edges = [], children, fitView, defaultViewport, onNodeClick, onNodeDragStop, onSelectionChange, onConnect, onEdgeClick, selectionOnDrag, panOnDrag, panActivationKeyCode, minZoom, maxZoom }) => {
     const source = nodes.find(node => node.id.startsWith('source:'));
     const firstQueue = nodes.find(node => node.id.startsWith('queue:'));
     const overflow = nodes.find(node => node.id === 'queue:consult-q');
@@ -42,6 +42,12 @@ vi.mock('@xyflow/react', () => ({
         data-edge-count={edges.length}
         data-fit-view={String(Boolean(fitView))}
         data-viewport-zoom={defaultViewport?.zoom}
+        data-selection-on-drag={String(selectionOnDrag)}
+        data-pan-on-drag={JSON.stringify(panOnDrag)}
+        data-pan-activation={panActivationKeyCode}
+        data-min-zoom={minZoom}
+        data-max-zoom={maxZoom}
+        data-selected-edge={edges.find(edge => edge.selected)?.id || ''}
       >
         {children}
         {first && (
@@ -91,6 +97,11 @@ vi.mock('@xyflow/react', () => ({
         {source && overflow && (
           <button type="button" onClick={() => onConnect?.({ source: source.id, target: overflow.id })}>
             Mock connect source to consultant queue
+          </button>
+        )}
+        {edges.length > 0 && (
+          <button type="button" onClick={() => onEdgeClick?.({}, edges[0])}>
+            Mock select edge
           </button>
         )}
       </div>
@@ -560,4 +571,122 @@ describe('Visual Designer shell', () => {
       }),
     }));
   }, 15000);
+
+  it('configures modeless pan/select interaction props on the canvas', () => {
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={vi.fn()}
+      />
+    );
+
+    const flow = screen.getByTestId('react-flow');
+    expect(flow).toHaveAttribute('data-selection-on-drag', 'true');
+    expect(flow).toHaveAttribute('data-pan-on-drag', '[1,2]');
+    expect(flow).toHaveAttribute('data-pan-activation', 'Space');
+    expect(flow).toHaveAttribute('data-min-zoom', '0.1');
+    expect(flow).toHaveAttribute('data-max-zoom', '2');
+    expect(screen.queryByLabelText('Canvas interaction mode')).not.toBeInTheDocument();
+  });
+
+  it('falls back to drag-to-pan when the model is read-only', () => {
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit={false}
+        onModelChange={vi.fn()}
+      />
+    );
+
+    const flow = screen.getByTestId('react-flow');
+    expect(flow).toHaveAttribute('data-selection-on-drag', 'false');
+    expect(flow).toHaveAttribute('data-pan-on-drag', 'true');
+  });
+
+  it('deletes a selected edge with the Delete key and shows a status message', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={onModelChange}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock select edge/i }));
+    expect(screen.getByTestId('react-flow').getAttribute('data-selected-edge')).not.toBe('');
+
+    await user.keyboard('{Delete}');
+
+    expect(onModelChange).toHaveBeenCalledOnce();
+    expect(screen.getByText('Connection removed.')).toBeInTheDocument();
+  });
+
+  it('does not delete a selected edge when the model is read-only', async () => {
+    const user = userEvent.setup();
+    const onModelChange = vi.fn();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit={false}
+        onModelChange={onModelChange}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock select edge/i }));
+    await user.keyboard('{Delete}');
+
+    expect(onModelChange).not.toHaveBeenCalled();
+  });
+
+  it('clears node and edge selection with Escape', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock multi-select queues/i }));
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByText('2 selected')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /mock select edge/i }));
+    expect(screen.getByTestId('react-flow').getAttribute('data-selected-edge')).not.toBe('');
+
+    await user.keyboard('{Escape}');
+    expect(screen.getByTestId('react-flow').getAttribute('data-selected-edge')).toBe('');
+  });
+
+  it('keeps node and edge selection mutually exclusive', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <VisualDesignerPanel
+        model={twoStageModel}
+        canEdit
+        onModelChange={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mock select queue/i }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /mock select edge/i }));
+    expect(screen.queryByText('1 selected')).not.toBeInTheDocument();
+    expect(screen.getByTestId('react-flow').getAttribute('data-selected-edge')).not.toBe('');
+
+    await user.click(screen.getByRole('button', { name: /mock select queue/i }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    expect(screen.getByTestId('react-flow').getAttribute('data-selected-edge')).toBe('');
+  });
 });

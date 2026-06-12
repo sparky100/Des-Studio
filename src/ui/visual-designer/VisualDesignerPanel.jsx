@@ -245,7 +245,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   };
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedNodeIds, setSelectedNodeIds] = useState([]);
-  const [selectionMode, setSelectionMode] = useState("pan");
+  const [selectedEdgeId, setSelectedEdgeId] = useState(null);
   const [message, setMessage] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [selectedPatternId, setSelectedPatternId] = useState(VISUAL_PATTERNS[0]?.id || "");
@@ -324,6 +324,16 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
   const clearSelection = () => {
     setSelectedNodeIds([]);
     setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+  };
+
+  // Single selection model: node(s) XOR edge — selecting one clears the other.
+  const selectEdge = (edgeId) => {
+    setSelectedEdgeId(edgeId);
+    if (edgeId) {
+      setSelectedNodeIds([]);
+      setSelectedNodeId(null);
+    }
   };
 
   const selectNode = (nodeId, options = {}) => {
@@ -331,6 +341,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
       clearSelection();
       return;
     }
+    setSelectedEdgeId(null);
     if (options.toggle) {
       setSelectedNodeIds(prev => {
         const set = new Set(prev);
@@ -362,6 +373,11 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     setSelectedNodeIds(prev => prev.filter(id => validIds.has(id)));
     setSelectedNodeId(prev => prev && validIds.has(prev) ? prev : null);
   }, [graph.nodes]);
+
+  useEffect(() => {
+    const validEdgeIds = new Set((graph.edges || []).map(edge => edge.id));
+    setSelectedEdgeId(prev => prev && validEdgeIds.has(prev) ? prev : null);
+  }, [graph.edges]);
 
   const togglePalette = () => {
     setPaletteCollapsed(prev => {
@@ -410,9 +426,18 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     const onKeyDown = e => {
       const tag = e.target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
-      if (e.key === "Delete") {
+      if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
+        const { canEdit: ce, selectedEdgeId: edgeId, deleteEdge: delEdge } = kbRef.current;
+        if (ce && edgeId) {
+          delEdge(edgeId);
+          return;
+        }
         kbRef.current.deleteSelectedNodes();
+        return;
+      }
+      if (e.key === "Escape") {
+        kbRef.current.clearSelection();
         return;
       }
       const delta = ARROW_DELTA[e.key];
@@ -479,7 +504,6 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     if (!canEdit || !nodes?.length) return;
     applyModel(updateGraphLayout(model, graph, { nodes }));
   };
-  kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit };
   const changeViewport = viewport => {
     if (!canEdit || !viewport) return;
     try { localStorage.setItem(`des.vp.${model?.id}`, JSON.stringify(viewport)); } catch {}
@@ -511,6 +535,7 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
     applyModel(nextModel);
     setMessage({ state: "success", text: "Connection removed." });
   };
+  kbRef.current = { deleteSelectedNodes, graph, selectedNodeIds, moveNodes, canEdit, selectedEdgeId, deleteEdge, clearSelection };
   const resetLayout = () => {
     if (!canEdit) return;
     applyModel({ ...model, graph: model.graph ? { ...model.graph, nodes: [] } : undefined });
@@ -875,43 +900,8 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
             justifyContent: "space-between",
             minHeight: 34,
           }}>
-            <div
-              aria-label="Canvas interaction mode"
-              role="group"
-              style={{
-                background: C.panel,
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-                display: "flex",
-                gap: 2,
-                padding: 3,
-              }}
-            >
-              {[
-                { id: "pan", label: "Pan" },
-                { id: "select", label: "Select" },
-              ].map(mode => (
-                <button
-                  key={mode.id}
-                  type="button"
-                  aria-pressed={selectionMode === mode.id}
-                  disabled={!canEdit && mode.id === "select"}
-                  onClick={() => setSelectionMode(mode.id)}
-                  style={{
-                    background: selectionMode === mode.id ? `${C.accent}22` : "transparent",
-                    border: `1px solid ${selectionMode === mode.id ? C.accent : "transparent"}`,
-                    borderRadius: 4,
-                    color: selectionMode === mode.id ? C.accent : C.muted,
-                    cursor: canEdit || mode.id === "pan" ? "pointer" : "not-allowed",
-                    fontFamily: FONT,
-                    fontSize: 10,
-                    fontWeight: 700,
-                    padding: "5px 10px",
-                  }}
-                >
-                  {mode.label}
-                </button>
-              ))}
+            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 10, fontWeight: 600 }}>
+              {canEdit ? "Drag to select · Space or middle-drag to pan" : "Drag or scroll to pan · Click a node to inspect"}
             </div>
 
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
@@ -991,19 +981,19 @@ export function VisualDesignerPanel({ model, canEdit = false, onModelChange, onM
               canEdit={canEdit}
               selectedNodeId={inspectorNodeId}
               selectedNodeIds={selectedNodeIds}
-              selectionMode={selectionMode}
+              selectedEdgeId={selectedEdgeId}
               errorNodeIds={errorNodeIds}
               fitNodeRef={fitNodeRef}
               fitAllRef={fitAllRef}
               showSections={showSections}
               onNodeSelect={selectNode}
               onNodeSelectionChange={syncSelection}
+              onEdgeSelect={selectEdge}
               onNodeMove={moveNode}
               onNodesMove={moveNodes}
               onViewportChange={changeViewport}
               onConnectNodes={connectNodes}
               onDropNode={addNode}
-              onDeleteEdge={canEdit ? deleteEdge : null}
               onResetLayout={canEdit ? resetLayout : null}
             />
             {isStarterBlank && canEdit && (
