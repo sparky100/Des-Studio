@@ -32,7 +32,8 @@ Category 1 models can be executed without leaving the browser. Click **Run in Br
 - **First run:** Pyodide (~25 MB) and SimPy are downloaded and cached. Subsequent runs start immediately.
 - **Progress:** A bar tracks each replication as it completes.
 - **Results:** When all replications finish, results are loaded into the app and appear in the Results workspace — the same place JS-engine results appear. They carry a `[SimPy]` source label.
-- **Metrics available in browser results:** served/reneged counts, average sojourn, average wait, wait P50/P90/P99, mean service time, per-resource utilisation — richer than the text output of the standalone script.
+- **Metrics available in browser results:** served/reneged counts, arrivals (total), completion rate (servedRatio), average sojourn, average wait, average service time, wait P50/P90/P99, and per-resource utilisation — richer than the text output of the standalone script.
+- **History:** Browser runs are saved to your run history with the label `SimPy  DD/MM/YYYY HH:mm`, identical to JS-engine runs. They appear in the history dropdown on the Execute tab.
 
 The **Run in Browser** button is disabled for Category 2 models. Complete the `# TODO` sections in your IDE first, then run locally with `python your_model_simpy.py`.
 
@@ -45,6 +46,8 @@ If your model uses only fully-supported macros the export dialog shows
 
 Supported (Category 1) macros: `ARRIVE`, `ASSIGN`, `COSEIZE`, `COMPLETE`,
 `RELEASE`, `FILL`, `DRAIN`, `SPLIT`, `SET`, `SET_ATTR`, `COST`, `UNBATCH`.
+
+All 22 built-in templates export as Category 1 scripts, including the Appointment Clinic (Schedule distribution) and the TfL/OpenSky live-data templates.
 
 ---
 
@@ -122,6 +125,9 @@ These are initialised from the model's **Experiment Defaults** tab and can be fr
 | Fixed(value) | `float(value)` |
 | Erlang(k, mean) | Sum of k exponentials |
 | Lognormal(logMean, logStdDev) | `random.lognormvariate(logMean, logStdDev)` |
+| Piecewise(…) | `_piecewise_NAME(env.now)` time-varying helper function (Category 1) |
+| Schedule(rows[]) | `for`-loop over absolute arrival times with per-row attribute injection (Category 1) |
+| Empirical(values[]) | `random.choice([values])` (Category 1) |
 
 ---
 
@@ -131,6 +137,7 @@ These are initialised from the model's **Experiment Defaults** tab and can be fr
 
 | Field | Description |
 |---|---|
+| `total` | Number of entities that arrived post-warmup |
 | `served` | Number of entities that completed service (post warmup) |
 | `reneged` | Number of entities that left before being served |
 | `avg_sojourn` | Mean total time in system (queue + service) |

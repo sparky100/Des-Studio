@@ -290,7 +290,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
 A dialog shows whether the script is **Category 1** (complete) or **Category 2** (partial). For Category 1 models you have two options:
 
-- **Run in Browser** — executes the SimPy script directly in your browser tab via Pyodide (Python compiled to WebAssembly). No Python installation required. A progress bar tracks each replication; when all replications finish the results are loaded into the app and available in the Results workspace alongside any JS-engine runs. The first run downloads Pyodide (~25 MB, cached afterwards); subsequent runs start immediately.
+- **Run in Browser** — executes the SimPy script directly in your browser tab via Pyodide (Python compiled to WebAssembly). No Python installation required. A progress bar tracks each replication; when all replications finish the results are loaded into the app and available in the Results workspace alongside any JS-engine runs. The first run downloads Pyodide (~25 MB, cached afterwards); subsequent runs start immediately. Browser runs are saved to your run history with the label `SimPy  DD/MM/YYYY HH:mm` and appear in the history dropdown on the Execute tab. The Results workspace shows enriched KPI cards for SimPy runs: Arrived, Served, Completion Rate, average wait, wait percentiles, average service time, average sojourn, and per-resource utilisation.
 - **Download .py** — saves the script as `<model-name>_simpy.py` to run locally with `python your_model_simpy.py` after `pip install simpy`.
 
 Category 2 scripts contain macros that need manual completion. The **Run in Browser** button is disabled for Category 2 models — download the script and complete the `# TODO` sections first.
