@@ -48,10 +48,15 @@ describe("enumerateSweepableParams", () => {
   test("returns entity type count params with natural English labels", () => {
     const params = enumerateSweepableParams(basicModel);
     const etCounts = params.filter(p => p.type === "entityTypeCount");
-    expect(etCounts.length).toBe(2);
+    expect(etCounts.length).toBe(1);
     expect(etCounts[0].label).toBe("Number of Server");
     expect(etCounts[0].currentValue).toBe(1);
-    expect(etCounts[1].label).toBe("Number of Customer");
+  });
+
+  test("excludes customer/patient entity types from servers group", () => {
+    const params = enumerateSweepableParams(basicModel);
+    const labels = params.map(p => p.label);
+    expect(labels).not.toContain("Number of Customer");
   });
 
   test("returns queue capacity params with natural English labels", () => {
