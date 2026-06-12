@@ -18,6 +18,7 @@ export function runReplicationPayload(payload = {}, shared = null) {
     maxCycles = 5000,
     maxCPasses = 500,
     collectTimeSeries,
+    collectTrace,
     schedulesMap,    // ADR-016: resolved schedule rows keyed by scheduleRef UUID
   } = shared ? { ...shared, ...payload } : payload;
 
@@ -31,7 +32,7 @@ export function runReplicationPayload(payload = {}, shared = null) {
     maxCPasses,
     collectTimeSeries,
     undefined,
-    { schedulesMap }
+    { schedulesMap, collectTrace }
   );
 
   return {

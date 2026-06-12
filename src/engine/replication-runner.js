@@ -137,6 +137,9 @@ export function runReplications(options = {}) {
     maxCycles,
     maxCPasses,
     collectTimeSeries,
+    // Batch replications never surface the structured trace (compaction strips
+    // log, persistence strips trace), so skip building it inside the engine.
+    collectTrace: options.collectTrace === true,
     schedulesMap,
   };
 
