@@ -1,7 +1,7 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 1.6.0
-**Date:** 2026-06-09
+**Version:** 1.7.0
+**Date:** 2026-06-12
 **Sprint baseline:** Sprint 85
 
 | Version | Date | Sprint | Changes |
@@ -15,6 +15,7 @@
 | v1.4.0 | 2026-06-03 | Schema review | DES best-practice and consistency review: added V39 to §10 blocking errors; corrected V30/V31 to include RELEASE(); fixed balkCondition variable format in §16.13; added `terminationCondition` to §1; corrected §16.3 queue naming rule; added SPT/EDD/PRIORITY(attrName) attribute requirements to §3; added Empirical non-empty constraint to §4; added SPLIT/FILL/SPLIT to §5/§6 macro tables; added Normal distribution caveat to §4; added LIFO caveat to §3; expanded §16.6 with steady-state vs terminating guidance; added replication and stability best-practice notes; added §6.1 state variable and container predicates; added UI-parity notes for JSON-only settings |
 | v1.5.0 | 2026-06-05 | Results accuracy | **§9 Goals:** added `summary.avgWIP` metric; added batch-mode note on per-replication evaluation of count goals. **§11.1 Sections:** corrected factual error — the engine actively uses `entryQueues`/`exitQueues` to compute `entitiesIn`/`entitiesOut`/`avgSojourn` (was incorrectly stated as "engine ignores sections entirely"); clarified dual purpose (UI organisation + statistical boundary tracking); aligned "large model" threshold with TOP LLM MISTAKES #13 (≥8 queues or ≥3 stages, consistent throughout); added note that sections with empty entry/exit arrays are cosmetic only and produce zero in/out counts. |
 | v1.6.0 | 2026-06-09 | Sprint 85 | **§9 Goals:** added `summary.avgTimeInSystem` (weighted mean time across all entities including in-progress) and `summary.servedRatio` (service completion rate as decimal 0–1). Updated metric count from 13 to 15. Added `avgTimeInSystem` to percentile-capable time metrics. |
+| v1.7.0 | 2026-06-12 | Schema enforcement | Added TOP LLM MISTAKES #15 (disconnected queue fragment) and V45 blocking error to §10. |
 
 ---
 
@@ -45,6 +46,7 @@ Read this before writing any model JSON.
 | 12 | `RENEGE_OLDEST(CustomerType)` with non-existent type | The customer type argument must exactly match a defined entity type name (case-sensitive). A typo silently does nothing. |
 | 13 | Missing `sections[]` on large models | Any model with ≥8 queues or ≥3 named stages MUST include a populated `sections[]`. Use `memberIds` (not `elementIds`). Mark cross-section queues with `entryQueues` and `exitQueues`. See §11.1. |
 | 14 | Server `count` as a string instead of integer | `count` must be a JSON integer: `"count": 3`, never `"count": "3"`. When a `shiftSchedule` is present, always set `count` equal to `shiftSchedule[0].capacity`. Blocked by V19. |
+| 15 | Disconnected queue/activity fragment | Every declared queue must be reachable from an arrival source. A queue that is never named as a destination in any `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination` field is a fragment — it will never receive entities. Remove it, or add routing that targets it. Blocked by V45. |
 
 ---
 
@@ -919,6 +921,7 @@ All generated model JSON MUST pass every blocking rule below.
 | V35 | `warmupPeriod` must be strictly less than `maxSimTime` |
 | V36 | `mtbfDist` and `mttrDist` are only valid on entity types with `role: "server"` |
 | V37 | When either `mtbfDist` or `mttrDist` is set on a server entity type, **both** must be present with valid distribution parameters |
+| V45 | Every declared queue must appear as a routing destination (ARRIVE, RELEASE 2-arg, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination`). A queue not reachable by any of these is a disconnected fragment. Only enforced when at least one queue is explicitly named in routing (avoids false positives on single-arg `ARRIVE` models). |
 
 ### Warnings (run proceeds, banner shown)
 

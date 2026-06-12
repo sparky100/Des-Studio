@@ -1197,4 +1197,63 @@ describe("V5 — EntityAttr skips dist validation", () => {
     const { errors } = validateModel(model);
     expect(errors.filter(e => e.code === "V30")).toHaveLength(0);
   });
+
+  describe("V45 — orphaned queue detection", () => {
+    it("fires V45 for a queue that is never a routing destination", () => {
+      const model = {
+        entityTypes: [],
+        stateVariables: [],
+        queues: [
+          { id: "q_a", name: "Queue A", discipline: "FIFO" },
+          { id: "q_b", name: "Queue B", discipline: "FIFO" },
+        ],
+        bEvents: [
+          { id: "b_arr", name: "Arrival", effect: ["ARRIVE(Customer, Queue A)"], schedules: [] },
+          { id: "b_done", name: "Complete", effect: ["COMPLETE()"], schedules: [] },
+        ],
+        cEvents: [],
+      };
+      const { errors } = validateModel(model);
+      expect(errors).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: "V45", affectedIds: { queueIds: ["q_b"] } }),
+      ]));
+      expect(errors.filter(e => e.code === "V45" && e.affectedIds?.queueIds?.includes("q_a"))).toHaveLength(0);
+    });
+
+    it("does not fire V45 when the second queue is referenced by a RELEASE routing", () => {
+      const model = {
+        entityTypes: [],
+        stateVariables: [],
+        queues: [
+          { id: "q_a", name: "Queue A", discipline: "FIFO" },
+          { id: "q_b", name: "Queue B", discipline: "FIFO" },
+        ],
+        bEvents: [
+          { id: "b_arr", name: "Arrival", effect: ["ARRIVE(Customer, Queue A)"], schedules: [] },
+          { id: "b_route", name: "Route", effect: ["RELEASE(Server, Queue B)"], schedules: [] },
+          { id: "b_done", name: "Complete", effect: ["COMPLETE()"], schedules: [] },
+        ],
+        cEvents: [],
+      };
+      const { errors } = validateModel(model);
+      expect(errors.filter(e => e.code === "V45")).toHaveLength(0);
+    });
+
+    it("does not fire V45 when single-arg ARRIVE is used with one queue (implicit routing)", () => {
+      const model = {
+        entityTypes: [],
+        stateVariables: [],
+        queues: [
+          { id: "q_a", name: "Queue A", discipline: "FIFO" },
+        ],
+        bEvents: [
+          { id: "b_arr", name: "Arrival", effect: ["ARRIVE(Customer)"], schedules: [] },
+          { id: "b_done", name: "Complete", effect: ["COMPLETE()"], schedules: [] },
+        ],
+        cEvents: [],
+      };
+      const { errors } = validateModel(model);
+      expect(errors.filter(e => e.code === "V45")).toHaveLength(0);
+    });
+  });
 });
