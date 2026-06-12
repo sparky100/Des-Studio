@@ -931,6 +931,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {id:"design",label:"Design",primaryTab:"visual",tabs:["visual","ai","entities","queues","containers","bevents","cevents","sections","schedules","state","validate"]},
         {id:"execute",label:"Run",primaryTab:"execute",tabs:["execute"]},
         {id:"results",label:"Results",primaryTab:"results",tabs:["results"]},
+        ...(isOwner?[{id:"access",label:"Access",primaryTab:"access",tabs:["access"]}]:[]),
+        ...(isOwner?[{id:"versions",label:"Versions",primaryTab:"versions",tabs:["versions"]}]:[]),
       ]
     : NAV_MODES;
   const activeMode = DISPLAY_MODES.find(mode => mode.tabs.includes(tab)) || DISPLAY_MODES[0];
@@ -1141,7 +1143,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               </div>
             )}
             <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null}/>
-            <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={4}/>
+            <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={8}/>
             <div style={{display:"flex",justifyContent:"flex-end"}}>
               <Btn small variant="ghost" onClick={()=>{
                 const html = buildModelDefinitionHtml(model);
