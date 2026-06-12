@@ -33,7 +33,7 @@ import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogr
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
-import { ParamBrowserPanel } from "./ParamBrowserPanel.jsx";
+import { ParamBrowserPanel, paramColor } from "./ParamBrowserPanel.jsx";
 import { alpha, RADIUS } from "../shared/tokens.js";
 import { generateReport, sanitizeFilename } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
@@ -198,6 +198,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [sweepOpen, setSweepOpen] = useState(false);
   const [sweepParams, setSweepParams] = useState([]);
   const [sweepSelectedParam, setSweepSelectedParam] = useState(null);
+  const [sweepPickerOpen, setSweepPickerOpen] = useState(false);
+  const [sweepPickerBOpen, setSweepPickerBOpen] = useState(false);
   const [sweepMin, setSweepMin] = useState(1);
   const [sweepMax, setSweepMax] = useState(5);
   const [sweepStep, setSweepStep] = useState(1);
@@ -1830,117 +1832,89 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             {/* Parameter picker(s) */}
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>{sweepMode === "2d" ? "PARAMETER X" : "PARAMETER"}</span>
-              <select
-                aria-label={sweepMode === "2d" ? "Sweep parameter X" : "Sweep parameter"}
-                value={sweepSelectedParam ? sweepSelectedParam.path : ""}
-                onChange={e => {
-                  const val = e.target.value;
-                  if (!val) { setSweepSelectedParam(null); return; }
-                  const found = sweepParams.find(p => p.path === val);
-                  setSweepSelectedParam(found || null);
-                  if (found) {
-                    const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
-                    setSweepMin(cv);
-                    setSweepMax(cv * 3);
-                    setSweepStep(cv > 0 ? cv : 1);
-                  }
-                }}
-                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
-                <option value="">Select a parameter...</option>
-                {sweepParams.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity").length > 0 && (
-                  <optgroup label="Servers & Capacity">
-                    {sweepParams.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity").map(p => (
-                      <option key={p.path} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                )}
-                {sweepParams.filter(p => p.type === "queueCapacity").length > 0 && (
-                  <optgroup label="Queue Capacity">
-                    {sweepParams.filter(p => p.type === "queueCapacity").map(p => (
-                      <option key={p.path} value={p.path}>{p.label} ({p.currentValue === Infinity ? "∞" : p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                )}
-                {sweepParams.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam").length > 0 && (
-                  <optgroup label="Arrival & Event Distributions">
-                    {sweepParams.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam").map(p => (
-                      <option key={p.path} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                )}
-                {sweepParams.filter(p => p.type === "cEventDistParam" || p.type === "cEventPiecewisePeriodParam").length > 0 && (
-                  <optgroup label="Service Distributions">
-                    {sweepParams.filter(p => p.type === "cEventDistParam" || p.type === "cEventPiecewisePeriodParam").map(p => (
-                      <option key={p.path} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                )}
-                {sweepParams.filter(p => p.type === "stateVarInit").length > 0 && (
-                  <optgroup label="State Variables">
-                    {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
-                      <option key={p.path} value={p.path}>{p.label} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
+              {sweepSelectedParam ? (
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <button
+                    onClick={() => setSweepPickerOpen(o => !o)}
+                    style={{
+                      flex: 1, display: "flex", flexDirection: "column", gap: 1, textAlign: "left",
+                      background: alpha(paramColor(sweepSelectedParam.type, C), 0.09),
+                      border: `1px solid ${alpha(paramColor(sweepSelectedParam.type, C), 0.27)}`,
+                      borderRadius: RADIUS.sm, padding: "4px 8px", cursor: "pointer", outline: "none",
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: paramColor(sweepSelectedParam.type, C), fontFamily: FONT, fontWeight: 700 }}>{sweepSelectedParam.label}</span>
+                    {sweepSelectedParam.subLabel && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{sweepSelectedParam.subLabel}</span>}
+                  </button>
+                  <Btn small variant="ghost" ariaLabel="Clear sweep parameter" onClick={() => { setSweepSelectedParam(null); setSweepPickerOpen(false); }}>×</Btn>
+                </div>
+              ) : (
+                <Btn variant="ghost" onClick={() => setSweepPickerOpen(o => !o)} style={{ justifyContent: "flex-start", fontSize: 12 }}>
+                  {sweepPickerOpen ? "Cancel" : "Choose parameter…"}
+                </Btn>
+              )}
+              {sweepPickerOpen && (
+                <ParamBrowserPanel
+                  params={sweepParams}
+                  singleSelect
+                  selectedPath={sweepSelectedParam?.path ?? null}
+                  onSelect={path => {
+                    const found = sweepParams.find(p => p.path === path);
+                    setSweepSelectedParam(found || null);
+                    if (found) {
+                      const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
+                      setSweepMin(cv);
+                      setSweepMax(cv * 3);
+                      setSweepStep(cv > 0 ? cv : 1);
+                    }
+                  }}
+                  onClose={() => setSweepPickerOpen(false)}
+                />
+              )}
             </div>
 
             {sweepMode === "2d" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER Y</span>
-                <select
-                  aria-label="Sweep parameter Y"
-                  value={sweepSelectedParamB ? sweepSelectedParamB.path : ""}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (!val) { setSweepSelectedParamB(null); return; }
-                    const found = sweepParams.find(p => p.path === val);
-                    setSweepSelectedParamB(found || null);
-                    if (found) {
-                      const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
-                      setSweepMinB(cv);
-                      setSweepMaxB(cv * 3);
-                      setSweepStepB(cv > 0 ? cv : 1);
-                    }
-                  }}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
-                  <option value="">Select a parameter...</option>
-                  {sweepParams.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity").length > 0 && (
-                    <optgroup label="Servers & Capacity">
-                      {sweepParams.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity").map(p => (
-                        <option key={p.path + "_b"} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {sweepParams.filter(p => p.type === "queueCapacity").length > 0 && (
-                    <optgroup label="Queue Capacity">
-                      {sweepParams.filter(p => p.type === "queueCapacity").map(p => (
-                        <option key={p.path + "_b"} value={p.path}>{p.label} ({p.currentValue === Infinity ? "∞" : p.currentValue})</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {sweepParams.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam").length > 0 && (
-                    <optgroup label="Arrival & Event Distributions">
-                      {sweepParams.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam").map(p => (
-                        <option key={p.path + "_b"} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {sweepParams.filter(p => p.type === "cEventDistParam" || p.type === "cEventPiecewisePeriodParam").length > 0 && (
-                    <optgroup label="Service Distributions">
-                      {sweepParams.filter(p => p.type === "cEventDistParam" || p.type === "cEventPiecewisePeriodParam").map(p => (
-                        <option key={p.path + "_b"} value={p.path}>{p.label}{p.subLabel ? ` · ${p.subLabel}` : ""} ({p.currentValue})</option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {sweepParams.filter(p => p.type === "stateVarInit").length > 0 && (
-                    <optgroup label="State Variables">
-                      {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
-                        <option key={p.path + "_b"} value={p.path}>{p.label} ({p.currentValue})</option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
+                {sweepSelectedParamB ? (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <button
+                      onClick={() => setSweepPickerBOpen(o => !o)}
+                      style={{
+                        flex: 1, display: "flex", flexDirection: "column", gap: 1, textAlign: "left",
+                        background: alpha(paramColor(sweepSelectedParamB.type, C), 0.09),
+                        border: `1px solid ${alpha(paramColor(sweepSelectedParamB.type, C), 0.27)}`,
+                        borderRadius: RADIUS.sm, padding: "4px 8px", cursor: "pointer", outline: "none",
+                      }}
+                    >
+                      <span style={{ fontSize: 11, color: paramColor(sweepSelectedParamB.type, C), fontFamily: FONT, fontWeight: 700 }}>{sweepSelectedParamB.label}</span>
+                      {sweepSelectedParamB.subLabel && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{sweepSelectedParamB.subLabel}</span>}
+                    </button>
+                    <Btn small variant="ghost" ariaLabel="Clear sweep parameter Y" onClick={() => { setSweepSelectedParamB(null); setSweepPickerBOpen(false); }}>×</Btn>
+                  </div>
+                ) : (
+                  <Btn variant="ghost" onClick={() => setSweepPickerBOpen(o => !o)} style={{ justifyContent: "flex-start", fontSize: 12 }}>
+                    {sweepPickerBOpen ? "Cancel" : "Choose parameter…"}
+                  </Btn>
+                )}
+                {sweepPickerBOpen && (
+                  <ParamBrowserPanel
+                    params={sweepParams}
+                    singleSelect
+                    selectedPath={sweepSelectedParamB?.path ?? null}
+                    onSelect={path => {
+                      const found = sweepParams.find(p => p.path === path);
+                      setSweepSelectedParamB(found || null);
+                      if (found) {
+                        const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
+                        setSweepMinB(cv);
+                        setSweepMaxB(cv * 3);
+                        setSweepStepB(cv > 0 ? cv : 1);
+                      }
+                    }}
+                    onClose={() => setSweepPickerBOpen(false)}
+                  />
+                )}
               </div>
             )}
 

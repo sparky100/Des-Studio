@@ -1,4 +1,4 @@
-// ParamBrowserPanel — tree-structured parameter picker for experiment overrides
+// ParamBrowserPanel — tree-structured parameter picker for experiment overrides and sweep studies
 // Styled to match the B/C event editor visual language.
 
 import { useState } from "react";
@@ -6,7 +6,7 @@ import { useTheme } from "../shared/ThemeContext.jsx";
 import { Btn, SectionPanel } from "../shared/components.jsx";
 import { alpha, SPACE, RADIUS, TYPO } from "../shared/tokens.js";
 
-function paramColor(type, C) {
+export function paramColor(type, C) {
   if (type === "entityTypeCount" || type === "shiftCapacity") return C.server;
   if (type === "queueCapacity") return C.green;
   if (type === "bEventDistParam" || type === "bEventPiecewisePeriodParam") return C.bEvent;
@@ -14,9 +14,11 @@ function paramColor(type, C) {
   return C.muted;
 }
 
-function ParamRow({ p, color, added, onSelect }) {
+function ParamRow({ p, color, added, selected, onSelect }) {
   const { C, FONT } = useTheme();
   const [hovered, setHovered] = useState(false);
+
+  const isActive = selected || (hovered && !added);
 
   return (
     <button
@@ -28,8 +30,8 @@ function ParamRow({ p, color, added, onSelect }) {
       style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         gap: SPACE.sm, width: "100%", textAlign: "left",
-        background: added ? "transparent" : hovered ? alpha(color, 0.08) : C.bg,
-        border: `1px solid ${hovered && !added ? color : C.border}`,
+        background: added ? "transparent" : isActive ? alpha(color, 0.1) : C.bg,
+        border: `1px solid ${isActive ? color : C.border}`,
         borderRadius: RADIUS.sm,
         padding: "5px 10px",
         cursor: added ? "default" : "pointer",
@@ -40,8 +42,8 @@ function ParamRow({ p, color, added, onSelect }) {
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 11, color: added ? C.muted : C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {p.label}
+        <span style={{ fontSize: 11, color: added ? C.muted : selected ? color : C.text, fontWeight: selected ? 700 : 400, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {selected && "✓ "}{p.label}
         </span>
         {p.subLabel && (
           <span style={{ fontSize: 10, color: C.muted }}>{p.subLabel}</span>
@@ -58,13 +60,15 @@ function ParamRow({ p, color, added, onSelect }) {
 }
 
 /**
- * @param {Object} props
- * @param {Array}  props.params        — from enumerateSweepableParams(model)
- * @param {Set}    props.alreadyAdded  — paths already in overrides (greyed out)
- * @param {function(path: string)} props.onSelect — called when user picks a param
- * @param {function} props.onClose     — called when user dismisses the browser
+ * @param {Object}   props
+ * @param {Array}    props.params        — from enumerateSweepableParams(model)
+ * @param {Set}      [props.alreadyAdded]  — paths already in overrides (greyed out); for multi-select mode
+ * @param {string}   [props.selectedPath]  — currently selected path; for single-select mode
+ * @param {boolean}  [props.singleSelect]  — if true, closes after selecting (for sweep parameter pickers)
+ * @param {function(path: string)} props.onSelect
+ * @param {function} props.onClose
  */
-export function ParamBrowserPanel({ params, alreadyAdded = new Set(), onSelect, onClose }) {
+export function ParamBrowserPanel({ params, alreadyAdded = new Set(), selectedPath = null, singleSelect = false, onSelect, onClose }) {
   const { C, FONT } = useTheme();
   const [query, setQuery] = useState("");
 
@@ -77,11 +81,16 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), onSelect, 
       )
     : null; // null = show sections
 
+  function handleSelect(path) {
+    onSelect(path);
+    if (singleSelect) onClose();
+  }
+
   const servers   = params.filter(p => p.type === "entityTypeCount" || p.type === "shiftCapacity");
-  const queues    = params.filter(p => p.type === "queueCapacity");
-  const bEvents   = params.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam");
   const cEvents   = params.filter(p => p.type === "cEventDistParam" || p.type === "cEventPiecewisePeriodParam");
+  const bEvents   = params.filter(p => p.type === "bEventDistParam" || p.type === "bEventPiecewisePeriodParam");
   const stateVars = params.filter(p => p.type === "stateVarInit");
+  const queues    = params.filter(p => p.type === "queueCapacity");
 
   return (
     <div style={{
@@ -91,7 +100,7 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), onSelect, 
     }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ ...TYPO.label, color: C.muted, fontFamily: FONT }}>Select parameter</span>
+        <span style={{ ...TYPO.label, color: C.muted, fontFamily: FONT }}>{singleSelect ? "Choose parameter" : "Select parameter"}</span>
         <Btn small variant="ghost" onClick={onClose} ariaLabel="Close parameter browser">✕</Btn>
       </div>
 
@@ -120,7 +129,12 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), onSelect, 
         filtered.length === 0
           ? <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>No parameters match "{query}".</span>
           : filtered.map(p => (
-              <ParamRow key={p.path} p={p} color={paramColor(p.type, C)} added={alreadyAdded.has(p.path)} onSelect={onSelect} />
+              <ParamRow
+                key={p.path} p={p} color={paramColor(p.type, C)}
+                added={alreadyAdded.has(p.path)}
+                selected={p.path === selectedPath}
+                onSelect={handleSelect}
+              />
             ))
       )}
 
@@ -130,35 +144,35 @@ export function ParamBrowserPanel({ params, alreadyAdded = new Set(), onSelect, 
           {servers.length > 0 && (
             <SectionPanel label="Servers & Capacity" color={C.server} status={String(servers.length)} defaultOpen={true}>
               {servers.map(p => (
-                <ParamRow key={p.path} p={p} color={C.server} added={alreadyAdded.has(p.path)} onSelect={onSelect} />
+                <ParamRow key={p.path} p={p} color={C.server} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
               ))}
             </SectionPanel>
           )}
           {cEvents.length > 0 && (
             <SectionPanel label="Service Distributions" color={C.cEvent} status={String(cEvents.length)}>
               {cEvents.map(p => (
-                <ParamRow key={p.path} p={p} color={C.cEvent} added={alreadyAdded.has(p.path)} onSelect={onSelect} />
+                <ParamRow key={p.path} p={p} color={C.cEvent} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
               ))}
             </SectionPanel>
           )}
           {bEvents.length > 0 && (
             <SectionPanel label="Arrival Distributions" color={C.bEvent} status={String(bEvents.length)} defaultOpen={servers.length === 0 && cEvents.length === 0}>
               {bEvents.map(p => (
-                <ParamRow key={p.path} p={p} color={C.bEvent} added={alreadyAdded.has(p.path)} onSelect={onSelect} />
+                <ParamRow key={p.path} p={p} color={C.bEvent} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
               ))}
             </SectionPanel>
           )}
           {stateVars.length > 0 && (
             <SectionPanel label="State Variables" color={C.muted} status={String(stateVars.length)}>
               {stateVars.map(p => (
-                <ParamRow key={p.path} p={p} color={C.muted} added={alreadyAdded.has(p.path)} onSelect={onSelect} />
+                <ParamRow key={p.path} p={p} color={C.muted} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
               ))}
             </SectionPanel>
           )}
           {queues.length > 0 && (
             <SectionPanel label="Queue Capacity" color={C.green} status={String(queues.length)}>
               {queues.map(p => (
-                <ParamRow key={p.path} p={p} color={C.green} added={alreadyAdded.has(p.path)} onSelect={onSelect} />
+                <ParamRow key={p.path} p={p} color={C.green} added={alreadyAdded.has(p.path)} selected={p.path === selectedPath} onSelect={handleSelect} />
               ))}
             </SectionPanel>
           )}
