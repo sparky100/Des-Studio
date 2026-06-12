@@ -153,6 +153,8 @@ function DesNode({ data, selected }) {
 // Custom edge that renders labels via EdgeLabelRenderer (HTML portal) instead
 // of the built-in SVG EdgeText which relies on getBBox() — a measurement that
 // returns zero on some browsers/mobile, permanently hiding the label.
+// Labels are offset perpendicular to the edge direction so they sit in the
+// open space between node rows rather than overlapping with node bodies.
 function DesEdge({
   id, sourceX, sourceY, targetX, targetY,
   sourcePosition, targetPosition,
@@ -163,6 +165,9 @@ function DesEdge({
     sourceX, sourceY, sourcePosition,
     targetX, targetY, targetPosition,
   });
+  // For upward edges push label down into the row gap; for downward push up.
+  // Horizontal edges (same Y) keep the label at the geometric midpoint.
+  const yOffset = targetY < sourceY ? 20 : targetY > sourceY ? -20 : 0;
   return (
     <>
       <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
@@ -172,7 +177,7 @@ function DesEdge({
             className="nodrag nopan"
             style={{
               position: "absolute",
-              transform: `translate(-50%,-50%) translate(${labelX}px,${labelY}px)`,
+              transform: `translate(-50%,-50%) translate(${labelX}px,${labelY + yOffset}px)`,
               background: labelBgStyle?.fill ?? "transparent",
               borderRadius: 3,
               color: labelStyle?.fill,
