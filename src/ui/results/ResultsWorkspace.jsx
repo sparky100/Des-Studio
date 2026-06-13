@@ -1402,6 +1402,10 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <div style={{ background: `${sec.color}18`, border: `1px solid ${sec.color}44`, borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
+                <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>VISITED</span>
+                <span style={{ fontFamily: FONT, fontSize: 12, color: C.text, fontWeight: 700 }}>{fmtCount(stats.count)}</span>
+              </div>
+              <div style={{ background: `${sec.color}18`, border: `1px solid ${sec.color}44`, borderRadius: 4, padding: "4px 8px", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 1 }}>
                 <span style={{ fontFamily: FONT, fontSize: 8, color: C.muted, letterSpacing: 0.8, fontWeight: 700 }}>AVG TIME IN SECTION</span>
                 <span style={{ fontFamily: FONT, fontSize: 12, color: C.text, fontWeight: 700 }}>{fmtT(stats.avgSojourn)}</span>
               </div>
