@@ -12,6 +12,7 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
   const [authPassword, setAuthPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [showResetSent, setShowResetSent] = useState(false);
+  const [showVerifyPrompt, setShowVerifyPrompt] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
 
@@ -24,6 +25,8 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
       } else {
         const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
         if (error) throw error;
+        setShowVerifyPrompt(true);
+        return;
       }
     } catch (e) { setAuthError(e.message); }
   }, [authMode, authEmail, authPassword]);
@@ -110,7 +113,11 @@ export function AuthShell({ isRecoverySession, onRecoveryComplete, signOut }) {
               <button type="button" onClick={() => { setAuthMode("signup"); setAuthError(""); }}
                 style={{ flex: 1, background: authMode === "signup" ? C.accent + "18" : "none", border: authMode === "signup" ? `1px solid ${C.accent}44` : `1px solid ${C.border}`, borderRadius: 4, color: authMode === "signup" ? C.accent : C.muted, fontFamily: FONT, fontSize: 12, padding: "6px 12px", cursor: "pointer", fontWeight: 600 }}>Sign Up</button>
             </div>
-            {showResetSent ? (
+            {showVerifyPrompt ? (
+              <div style={{ fontSize: 12, color: C.green, lineHeight: 1.6 }}>
+                A verification email has been sent to <strong>{authEmail}</strong>. Please check your inbox and click the link to activate your account.
+              </div>
+            ) : showResetSent ? (
               <div style={{ fontSize: 12, color: C.green, lineHeight: 1.6 }}>
                 Password reset email sent. Check your inbox and click the link to set a new password.
               </div>

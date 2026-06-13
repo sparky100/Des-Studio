@@ -1,5 +1,5 @@
 // ui/ModelLibrary.jsx — Model library: My Models / Templates / Public / Community tabs
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useEffect } from "react";
 import { SHADOW, RADIUS, Z } from "./shared/tokens.js";
 import { Tag, Avatar, Btn, Field, Empty } from "./shared/components.jsx";
 import { TEMPLATES } from "../engine/templates.js";
@@ -399,10 +399,16 @@ function ModelGrid({
   currentUserId, profiles,
   onCreateBlank, onBrowseTemplates,
 }) {
+  const didAutoOpen = useRef(false);
+  useEffect(() => {
+    if (firstRun && source.length === 0 && !didAutoOpen.current) {
+      didAutoOpen.current = true;
+      onCreateBlank?.();
+    }
+  }, [firstRun, source.length, onCreateBlank]);
+
   if (source.length === 0) {
-    return firstRun
-      ? <FirstRunPanel onCreateBlank={onCreateBlank} onBrowseTemplates={onBrowseTemplates} />
-      : <Empty icon={emptyIcon} msg={emptyMsg} />;
+    return firstRun ? null : <Empty icon={emptyIcon} msg={emptyMsg} />;
   }
   return (
     <div>
