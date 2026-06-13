@@ -880,9 +880,10 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
 export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, results = {}, ciResults = []) {
   const system = [
     "You are an expert simulation analyst and queueing systems expert.",
-    "Interpret the following discrete-event simulation results for a non-specialist audience.",
-    "Provide a comprehensive analysis in three sections: What Happened, How Reliable, and What to Change.",
-    "Be concise: 300-500 words total. Use plain English. Technical terms should appear only in helper text or after a plain-English explanation.",
+    "Interpret the following discrete-event simulation results and produce a structured JSON response.",
+    "The response must be a single JSON block — no narrative text outside the JSON.",
+    "The 'analysis' field contains a brief plain-English markdown narrative (under 200 words). The 'suggestions' array contains specific, actionable improvement recommendations.",
+    "Use plain English in the analysis. Technical terms should appear only after a plain-English explanation.",
   ].join(" ");
 
   const perQueue = results.perQueue || {};
