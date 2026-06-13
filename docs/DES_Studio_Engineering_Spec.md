@@ -699,13 +699,13 @@ DES Studio `DRAIN` fails immediately if container level < amount (guard). SimPy 
 | Scenario | Target | Notes |
 |---------|--------|-------|
 | Single replication, 10,000 events | < 2 seconds | Main thread or Web Worker |
-| 30 replications, 100,000 events each | < 60 seconds | Worker pool, 4 workers |
+| 30 replications, 100,000 events each | < 60 seconds | Persistent worker pool, `hardwareConcurrency − 1` workers |
 | M/M/1 analytical accuracy | Within 5% of formula | Benchmark gate in CI (`mm1_benchmark.js`) |
 | M/M/c analytical accuracy | Within 5% of formula | Benchmark gate in CI (`mmc_benchmark.js`) |
 | model_json parse + validate | < 100 ms | V1–V39 (V7 unused); 38 distinct rules |
 | Visual Designer canvas: 50 nodes | 60 fps | @xyflow/react default render loop |
 
-Worker pool size defaults to `navigator.hardwareConcurrency - 1` (minimum 2). The replication runner distributes seeds sequentially to workers; each worker is stateless and receives the full `model_json` on each call.
+Worker pool size defaults to `navigator.hardwareConcurrency - 1` (minimum 1, no upper cap). Workers are **persistent** — spawned once per batch run via `createReplicationPool()` and reused across all rounds (adaptive batch, sweep points). The model and run configuration are sent to each worker exactly once via an `INIT_RUN` message; subsequent `RUN_REPLICATION` messages carry only `{ replicationIndex, seed, entityDetail }`, avoiding a `structuredClone` of the full model per job.
 
 ### 4.3 Results persistence limits
 
@@ -738,6 +738,20 @@ AI-driven adaptive replication orchestration used by the Explore panel. `runAdap
 #### Confidence Interval method
 
 The primary CI method is **between-replication t-CI**: `confidenceInterval95()` in `src/engine/statistics.js` computes a 95% t-CI across replication-level means. `batchMeansCI()` is also available for single-replication within-run analysis but is not the default CI reported in the Results panel.
+
+#### Batch performance architecture
+
+Four layers work together to reduce per-replication cost in any multi-rep path (adaptive batch, sweep, plain replication batch):
+
+| Mechanism | Where | Effect |
+|---|---|---|
+| **Persistent worker pool** (`createReplicationPool`) | `replication-runner.js` | Workers spawned once, reused across rounds. No worker start-up cost after the first round. |
+| **INIT_RUN protocol** | `worker.js` + `replication-runner.js` | Model + config sent once per worker via `INIT_RUN`; each job carries only `{replicationIndex, seed, entityDetail}`. Eliminates `structuredClone` of model per job. |
+| **`collectTrace: false`** | `buildEngine` option | Skips all per-cycle trace-entry construction and the final `buildTraceFromLog` call. Batch consumers never read `log` or `trace`. ~7–26% per-replication speedup on C-heavy models. |
+| **`entityDetail: false`** | `buildEngine` option | Reps ≥ 1 return `entitySummaryCompact` (pre-aggregated counts built inside the worker) instead of cloning every entity object. Rep 0 keeps the full `entitySummary` for the AI-explore verify flow, report generation, and `EntitySummaryTable`. |
+| **`runtimeModel` WeakMap cache** | `index.js` (module-level) | `resolveInlineSchedules` + `modelWithShiftInitialCapacity` computed once per model object; all reps in a persistent worker hit the cache from rep 2 onwards. The engine must never mutate its model argument — enforced by `tests/engine/model-immutability.test.js`. |
+
+The determinism contract is maintained across all these optimisations: the same `model_json` + `seed` always produces byte-identical summary fields. This is enforced by fixed-seed inline snapshots in `tests/engine/determinism-parity.test.js`.
 
 #### Voice Input
 
