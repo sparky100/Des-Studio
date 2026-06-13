@@ -1008,21 +1008,43 @@ export function parseSuggestionResponse(text = "") {
     ? text.replace(jsonBlock, "").trim()
     : null;
 
-  try {
-    const parsed = JSON.parse(rawJson);
-    const analysis = typeof parsed.analysis === "string"
-      ? parsed.analysis
-      : (narrativeOnly || "");
-    const suggestions = Array.isArray(parsed.suggestions)
-      ? parsed.suggestions.filter(s => s && typeof s === "object" && typeof s.rank === "number" && s.change && typeof s.change.type === "string")
-      : [];
-    return { analysis, suggestions };
-  } catch {
-    // JSON parse failed — keep any plain-English narrative, but strip the
-    // structured JSON block even if the closing fence/tag is missing.
-    const cleaned = stripStructuredBlock(text);
-    return { analysis: cleaned || text, suggestions: [] };
+  // Repair common LLM structural error: premature } closes a suggestion object before
+  // predicted/goalImpact/confidence are written, leaving them as stray array properties.
+  // e.g. { ..., "to": 4 }, "predicted": "..." → { ..., "to": 4, "predicted": "..."
+  const tryRepair = (json) => json
+    .replace(/([\d"'true|false|null])\s*\}\s*,\s*"predicted"\s*:/g, '$1, "predicted":')
+    .replace(/([\d"'true|false|null])\s*\}\s*,\s*"goalImpact"\s*:/g, '$1, "goalImpact":')
+    .replace(/([\d"'true|false|null])\s*\}\s*,\s*"confidence"\s*:/g, '$1, "confidence":');
+
+  // Normalise a suggestion that has type/target/from/to at the top level (no change wrapper).
+  const normaliseSuggestion = (s) => {
+    if (s.change) return s;
+    const type = s.type || s.changeType;
+    if (!type) return s;
+    return {
+      ...s,
+      change: { type, target: s.target ?? s.changeTarget ?? null, from: s.from ?? s.changeFrom ?? null, to: s.to ?? s.changeTo ?? null },
+    };
+  };
+
+  const parseSuggestions = (parsed) => Array.isArray(parsed.suggestions)
+    ? parsed.suggestions
+        .filter(s => s && typeof s === "object")
+        .map(normaliseSuggestion)
+        .filter(s => typeof s.rank === "number" && s.change && typeof s.change.type === "string")
+    : [];
+
+  for (const candidate of [rawJson, tryRepair(rawJson)]) {
+    try {
+      const parsed = JSON.parse(candidate);
+      const analysis = typeof parsed.analysis === "string" ? parsed.analysis : (narrativeOnly || "");
+      return { analysis, suggestions: parseSuggestions(parsed) };
+    } catch { /* try next candidate */ }
   }
+
+  // Both parse attempts failed — return narrative only.
+  const cleaned = stripStructuredBlock(text);
+  return { analysis: cleaned || text, suggestions: [] };
 }
 
 export function applySuggestionPatch(model, change) {

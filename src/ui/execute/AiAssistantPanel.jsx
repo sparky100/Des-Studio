@@ -107,12 +107,22 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
 function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult, onSaved, onRefineInDescribe }) {
   const { C, FONT } = useTheme();
   const change = suggestion.change;
-  const AUTOMATABLE = new Set(["entityTypeCount", "queueCapacity", "stateVariable"]);
-  const targetExists = change?.target && (
-    (model?.entityTypes  || []).some(e => e.name === change.target) ||
-    (model?.queues       || []).some(q => q.name === change.target) ||
-    (model?.stateVariables || []).some(v => v.name === change.target)
-  );
+  const AUTOMATABLE = new Set(["entityTypeCount", "queueCapacity", "stateVariable", "bEventDistParam", "cEventDistParam"]);
+  const targetExists = change?.target && (() => {
+    if (change.type === "bEventDistParam") {
+      const [evName] = change.target.split(".");
+      return (model?.bEvents || []).some(e => e.name === evName);
+    }
+    if (change.type === "cEventDistParam") {
+      const [evName] = change.target.split(".");
+      return (model?.cEvents || []).some(e => e.name === evName);
+    }
+    return (
+      (model?.entityTypes  || []).some(e => e.name === change.target) ||
+      (model?.queues       || []).some(q => q.name === change.target) ||
+      (model?.stateVariables || []).some(v => v.name === change.target)
+    );
+  })();
   const isManual = change?.type === "manual"
     || !AUTOMATABLE.has(change?.type)
     || !Number.isFinite(Number(change?.to))
