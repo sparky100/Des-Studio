@@ -1665,7 +1665,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 <ParamBrowserPanel
                   params={sweepParams}
                   alreadyAdded={new Set(expFormOverrides.map(o => o.path).filter(Boolean))}
-                  onSelect={path => setExpFormOverrides(prev => [...prev, { path, value: "" }])}
+                  onSelect={path => {
+                    const found = sweepParams.find(p => p.path === path);
+                    const cv = found?.currentValue;
+                    const defaultVal = (cv !== undefined && Number.isFinite(cv)) ? String(cv) : "";
+                    setExpFormOverrides(prev => [...prev, { path, value: defaultVal }]);
+                  }}
                   onClose={() => setExpFormPickerOpen(false)}
                 />
               )}
