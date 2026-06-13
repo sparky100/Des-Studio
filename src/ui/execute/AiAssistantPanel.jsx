@@ -449,10 +449,10 @@ export const AiAssistantPanel = ({
   }, [contextGroup]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (responseAreaRef.current) {
+    if (isStreaming && responseAreaRef.current) {
       responseAreaRef.current.scrollTop = responseAreaRef.current.scrollHeight;
     }
-  }, [response, conversationHistory]);
+  }, [isStreaming, response, conversationHistory]);
 
   const runPrompt = useCallback((prompt, kind = null) => {
     abortRef.current?.abort();
