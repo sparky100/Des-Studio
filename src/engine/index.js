@@ -372,13 +372,26 @@ export function resolveInlineSchedules(model, schedulesMap = {}) {
   };
 }
 
+// Cache the resolved runtimeModel across engine instances that share the same
+// model+schedulesMap references (all reps in a persistent worker). The WeakMap
+// key is the raw model object so entries are GC'd when the model is released.
+const _runtimeModelCache = new WeakMap();
+
 export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, terminationCondition = null, maxCycles = 5000, maxCPasses = 500, collectTimeSeries = false, registry = nullRegistry, options = {}) {
   const engineOptions = options || {};
+  const schedulesMap = engineOptions.schedulesMap;
   // Resolve external schedule references before any processing.
   // When options.schedulesMap is provided, inline rows[] are merged from the
   // model_schedules table. Falls back to inline rows if no map is provided.
-  const resolvedModel = resolveInlineSchedules(model, engineOptions.schedulesMap);
-  const runtimeModel = modelWithShiftInitialCapacity(resolvedModel);
+  let runtimeModel;
+  const _cached = _runtimeModelCache.get(model);
+  if (_cached && _cached.schedulesMap === schedulesMap) {
+    runtimeModel = _cached.runtimeModel;
+  } else {
+    const resolvedModel = resolveInlineSchedules(model, schedulesMap);
+    runtimeModel = modelWithShiftInitialCapacity(resolvedModel);
+    _runtimeModelCache.set(model, { schedulesMap, runtimeModel });
+  }
   // ── Seeded PRNG — all sampling in this engine instance uses this rng ──────
   const rng = mulberry32(seed);
   const streamRegistry = createStreamRegistry(seed);
