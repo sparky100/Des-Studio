@@ -205,7 +205,9 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
   const useTemplate = () => { onUseTemplate?.(name.trim(), desc.trim()); onClose(); };
   const useAi = () => { onUseAi?.(name.trim(), desc.trim()); onClose(); };
   const inputStyle = { width: "100%", background: C.bg, border: `1px solid ${C.border}`, borderRadius: 5, color: C.text, fontFamily: FONT, fontSize: 12, padding: "8px 10px", outline: "none", boxSizing: "border-box" };
-  const optionBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16", cursor: "pointer", display: "flex", flexDirection: "column", gap: 4, textAlign: "left", color: "inherit", fontFamily: FONT };
+  const optionBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 10, textAlign: "left", color: "inherit", fontFamily: FONT };
+  const iconBox = { width: 30, height: 30, background: C.border + "44", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+  const importBtn = { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "10px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textAlign: "left", color: "inherit", fontFamily: FONT };
   if (mode === "paste") {
     return (
       <div style={{ position: "fixed", inset: 0, background: C.overlay, display: "flex", alignItems: "center", justifyContent: "center", zIndex: Z.modal }}>
@@ -239,30 +241,61 @@ export const NewModelModal = ({ onClose, onStartDesign, onUseTemplate, onImportF
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>DESCRIPTION</label>
-            <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Optional — helps AI tailor suggestions" rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Optional — helps the model assistant start to build your model" rows={2} style={{ ...inputStyle, resize: "vertical" }} />
           </div>
         </div>
         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>START WITH</div>
+        <button type="button" onClick={useAi} style={{ background: C.bg, border: `2px solid ${C.accent}`, borderRadius: 8, padding: "14px 16px", cursor: "pointer", display: "flex", alignItems: "flex-start", gap: 12, textAlign: "left", color: "inherit", fontFamily: FONT, width: "100%" }}>
+          <div style={{ width: 36, height: 36, background: C.accent + "22", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.063A2 2 0 0 0 14.063 15.5l-1.582 6.135a.5.5 0 0 1-.962 0z"/></svg>
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Model assistant</div>
+              <div style={{ fontSize: 10, color: C.accent, background: C.accent + "18", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>Recommended</div>
+            </div>
+            <div style={{ fontSize: 10, color: C.muted }}>Helps the model assistant start to build your model</div>
+          </div>
+        </button>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <button type="button" onClick={startDesign} disabled={!name.trim() || saving} style={optionBtn}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Draw</div>
-            <div style={{ fontSize: 10, color: C.muted }}>Draw your model</div>
+            <div style={iconBox}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Draw</div>
+              <div style={{ fontSize: 10, color: C.muted }}>Build from a blank canvas</div>
+            </div>
           </button>
           <button type="button" onClick={useTemplate} style={optionBtn}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Use a template</div>
-            <div style={{ fontSize: 10, color: C.muted }}>Pick a pre-built scenario</div>
+            <div style={iconBox}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Use a template</div>
+              <div style={{ fontSize: 10, color: C.muted }}>Start from a pre-built scenario</div>
+            </div>
           </button>
-          <button type="button" onClick={triggerImport} style={optionBtn}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Import a file</div>
-            <div style={{ fontSize: 10, color: C.muted }}>Upload a .json model</div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ flex: 1, height: 1, background: C.border }} />
+          <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1 }}>OR IMPORT</div>
+          <div style={{ flex: 1, height: 1, background: C.border }} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <button type="button" onClick={triggerImport} style={importBtn}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Import a file</div>
+              <div style={{ fontSize: 10, color: C.muted }}>Upload a .json model</div>
+            </div>
           </button>
-          <button type="button" onClick={() => setMode("paste")} style={optionBtn}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Paste model</div>
-            <div style={{ fontSize: 10, color: C.muted }}>Paste JSON from clipboard</div>
-          </button>
-          <button type="button" onClick={useAi} style={{ ...optionBtn, gridColumn: "1 / -1" }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Describe</div>
-            <div style={{ fontSize: 10, color: C.muted }}>Use AI to describe your model</div>
+          <button type="button" onClick={() => setMode("paste")} style={importBtn}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={C.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.text }}>Paste model</div>
+              <div style={{ fontSize: 10, color: C.muted }}>JSON from clipboard</div>
+            </div>
           </button>
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
