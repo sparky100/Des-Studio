@@ -2266,6 +2266,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       )}
 
 
+      {executeSection === "run" && (
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, padding: 14, display: "flex", gap: 10, rowGap: 10, alignItems: "center", flexWrap: "wrap" }}>
         {/* Validation status indicator — informational only, positioned first */}
         {hasAdmissionErrors ? (
@@ -2470,6 +2471,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
       </div>
+      )}
 
       {executeSection === "run" && (
         <>
