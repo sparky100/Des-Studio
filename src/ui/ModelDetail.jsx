@@ -1424,18 +1424,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         return <option key={row.id} value={row.id}>{label}</option>;
                       })}
                     </select>
-                    {/* Show the selected run's label as an explicit badge so it is
-                        visible even when the dropdown is collapsed */}
-                    {selectedResultsRunId && (() => {
-                      const selRow = historyRows.find(r => r.id === selectedResultsRunId);
-                      const selLabel = selRow?.run_label;
-                      if (!selLabel) return null;
-                      return (
-                        <span style={{fontSize:11,color:C.accent,fontFamily:FONT,fontWeight:600,background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,padding:"2px 7px"}}>
-                          {selLabel}
-                        </span>
-                      );
-                    })()}
                   </div>
                 )}
                 {latestResults ? (
