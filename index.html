@@ -17,7 +17,7 @@
           resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
             ? 'dark' : 'light';
         }
-        document.body.style.background = {
+        document.documentElement.style.background = {
           'light': '#f0f4f8',
           'high-contrast-dark': '#000000'
         }[resolved] || '#080c10';
