@@ -509,7 +509,7 @@ export function addVisualPattern(model, patternId, options = {}) {
       prefix: "single-service",
       queueBase: "Service Queue",
       arrivalBase: "Customer Arrival",
-      activityBase: "Start Service",
+      activityBase: "Service",
       completeBase: "Service Complete",
       customer,
       server,
@@ -522,7 +522,7 @@ export function addVisualPattern(model, patternId, options = {}) {
       prefix: "reneging",
       queueBase: "Waiting Queue",
       arrivalBase: "Customer Arrival",
-      activityBase: "Start Service",
+      activityBase: "Service",
       completeBase: "Service Complete",
       customer,
       server,
@@ -547,7 +547,7 @@ export function addVisualPattern(model, patternId, options = {}) {
       prefix: "finite-capacity",
       queueBase: "Waiting Area",
       arrivalBase: "Customer Arrival",
-      activityBase: "Start Service",
+      activityBase: "Service",
       completeBase: "Service Complete",
       customer,
       server,
@@ -559,7 +559,7 @@ export function addVisualPattern(model, patternId, options = {}) {
       prefix: "priority",
       queueBase: "Priority Queue",
       arrivalBase: "Customer Arrival",
-      activityBase: "Start Priority Service",
+      activityBase: "Priority Service",
       completeBase: "Service Complete",
       customer,
       server,
@@ -591,8 +591,8 @@ export function addVisualPattern(model, patternId, options = {}) {
     );
     const priority = nextPriority(cEvents);
     cEvents.push(
-      { id: stage1Id, name: "Start Stage 1", priority, condition: `queue(${q1}).length > 0 AND idle(${server}).count > 0`, effect: `ASSIGN(${q1}, ${server})`, cSchedules: [{ eventId: stage1DoneId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
-      { id: stage2Id, name: "Start Stage 2", priority: priority + 1, condition: `queue(${q2}).length > 0 AND idle(${server}).count > 0`, effect: `ASSIGN(${q2}, ${server})`, cSchedules: [{ eventId: stage2DoneId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+      { id: stage1Id, name: "Stage 1", priority, condition: `queue(${q1}).length > 0 AND idle(${server}).count > 0`, effect: `ASSIGN(${q1}, ${server})`, cSchedules: [{ eventId: stage1DoneId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
+      { id: stage2Id, name: "Stage 2", priority: priority + 1, condition: `queue(${q2}).length > 0 AND idle(${server}).count > 0`, effect: `ASSIGN(${q2}, ${server})`, cSchedules: [{ eventId: stage2DoneId, dist: "Fixed", distParams: { value: "1" }, useEntityCtx: true }] },
     );
     next = { ...next, bEvents, cEvents, queues };
   } else if (patternId === "batching") {
@@ -629,7 +629,7 @@ export function addVisualPattern(model, patternId, options = {}) {
       prefix: "failure",
       queueBase: "Machine Queue",
       arrivalBase: "Job Arrival",
-      activityBase: "Start Machine Work",
+      activityBase: "Machine Work",
       completeBase: "Job Complete",
       customer,
       server,
@@ -650,7 +650,7 @@ export function addVisualPattern(model, patternId, options = {}) {
       prefix: "cost",
       queueBase: "Costed Queue",
       arrivalBase: "Customer Arrival",
-      activityBase: "Start Costed Service",
+      activityBase: "Costed Service",
       completeBase: "Service Complete",
       customer,
       server,
