@@ -9,7 +9,7 @@
 //   const felSz  = engine.getFelSize()    // events in FEL
 
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods, createStreamRegistry } from "./distributions.js";
-import { buildWaitDistEntry, finalizeWeightedStats } from "./statistics.js";
+import { buildWaitDistEntry, finalizeWeightedStats, summarizeEntitySummary } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
 import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers } from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
@@ -396,6 +396,9 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   // collectTrace=false (batch mode) skips per-cycle trace entry construction and
   // the final trace build — purely observational output that batch paths discard.
   const collectTrace = engineOptions.collectTrace !== false;
+  // entityDetail=false (batch reps ≥ 1) builds entitySummaryCompact in the worker
+  // instead of cloning every entity object, reducing structured-clone payload size.
+  const entityDetail = engineOptions.entityDetail !== false;
   const warnings = [];
 
   // ── Per-queue metrics (F11.4): blockingCount, balkCount per queue name ───────
@@ -1063,7 +1066,9 @@ const cycleLog = [];
       runtimeMetrics:  getRuntimeMetrics(engineSummary.served),
       phaseCTruncated: _phaseCTruncated,
       warnings:        warnings.slice(),
-      entitySummary:   entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
+      ...(entityDetail
+        ? { entitySummary: entities.map(e => ({ ...e, attrs: { ...e.attrs } })) }
+        : { entitySummaryCompact: summarizeEntitySummary(entities) }),
       timeSeries:      _timeSeries ?? undefined,
       waitDist:        computeWaitDist(entities),
       perQueue:        Object.keys(_perQueue).length ? { ..._perQueue } : undefined,

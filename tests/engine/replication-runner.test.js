@@ -110,7 +110,7 @@ describe('runReplications', () => {
     expect(workers[0].initMessage.payload.model).toBe(model);
     // Per-replication messages carry only the job, not the model
     expect(workers[0].message.payload.model).toBeUndefined();
-    expect(Object.keys(workers[0].message.payload).sort()).toEqual(['replicationIndex', 'seed']);
+    expect(Object.keys(workers[0].message.payload).sort()).toEqual(['entityDetail', 'replicationIndex', 'seed']);
   });
 
   test('emits the shared batch progress shape', () => {
