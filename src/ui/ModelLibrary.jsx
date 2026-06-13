@@ -440,6 +440,7 @@ export function ModelLibrary({
   onImportFile,
   onPasteJsonImport,
   tab, onTabChange,
+  modelsLoading,
 }) {
   const { C, FONT } = useTheme();
   const setTab = onTabChange;
@@ -557,7 +558,7 @@ export function ModelLibrary({
         <ModelGrid
           models={visibleMy} tabKey="my"
           filter={myFilter} onFilterChange={setMyFilter}
-          source={myModels} firstRun
+          source={myModels} firstRun={!modelsLoading}
           emptyIcon="📁" emptyMsg="No models yet."
           onOpenModel={onOpenModel} onDeleteModel={onDeleteModel} onCopyModel={onCopyModel}
           onTagClick={tag => addTagFilter("my", tag)}

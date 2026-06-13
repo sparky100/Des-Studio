@@ -642,6 +642,7 @@ export default function App({ onThemeChange }){
         currentPage={openId ? `model/${openId}` : shareToken ? `share/${shareToken}` : 'library'}
       />
       <ModelLibrary
+        modelsLoading={loading}
         myModels={myModels}
         pubModels={pubModels}
         communityModels={communityModels}
