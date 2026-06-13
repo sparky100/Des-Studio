@@ -59,15 +59,15 @@ describe('resolveInlineSchedules — unit', () => {
     expect(result).toBe(model);
   });
 
-  test('does not overwrite already-populated rows (idempotent)', () => {
+  test('schedulesMap always wins over pre-populated rows (named-schedule update)', () => {
     const existingRows = [{ time: 5, attrs: { train_id: 'HL0099' } }];
     const model = makeModel([{ eventId: 'b_arrive', scheduleRef: SCHEDULE_UUID, rows: existingRows }]);
     const schedulesMap = { [SCHEDULE_UUID]: { eventId: 'b_arrive', rows: ROWS_A } };
 
     const result = resolveInlineSchedules(model, schedulesMap);
 
-    // existing rows not overwritten
-    expect(result.bEvents[0].schedules[0].rows).toEqual(existingRows);
+    // schedulesMap rows override any stale inline rows from a prior import
+    expect(result.bEvents[0].schedules[0].rows).toEqual(ROWS_A);
   });
 
   test('entry without scheduleRef is left untouched', () => {

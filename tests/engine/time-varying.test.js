@@ -142,7 +142,7 @@ describe('time-varying model validation', () => {
         id: 'srv',
         name: 'Server',
         role: 'server',
-        count: '1',
+        count: 1,
         attrDefs: [],
         shiftSchedule: [
           { time: '0', capacity: '1' },
@@ -167,7 +167,7 @@ describe('time-varying model validation', () => {
         id: 'srv',
         name: 'Server',
         role: 'server',
-        count: '1',
+        count: 1,
         attrDefs: [],
         shiftSchedule: [
           { time: '0', capacity: '1' },

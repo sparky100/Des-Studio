@@ -960,6 +960,9 @@ export function validateModel(model) {
     const ARRIVE_QUEUE_G  = /ARRIVE\s*\([^,)]+,\s*([^)]+)\)/gi;
     const RELEASE_QUEUE_G = /RELEASE\s*\([^,)]+,\s*([^)]+)\)/gi;
 
+    // MATCH(T1, Q1, T2, Q2, DestQueue) — 5th arg is the destination queue
+    const MATCH_QUEUE_G = /MATCH\s*\([^,)]+\s*,\s*[^,)]+\s*,\s*[^,)]+\s*,\s*[^,)]+\s*,\s*([^)]+)\)/gi;
+
     bEvents.forEach(b => {
       const text = effectText(b.effect);
       for (const m of text.matchAll(ARRIVE_QUEUE_G))  reachableNames.add(m[1].trim().toLowerCase());
@@ -970,6 +973,10 @@ export function validateModel(model) {
       (b.probabilisticRouting || []).forEach(r => r.queueName && reachableNames.add(r.queueName.toLowerCase()));
       if (b.loopConfig?.exitQueueName)
         reachableNames.add(b.loopConfig.exitQueueName.toLowerCase());
+    });
+    cEvents.forEach(c => {
+      const text = effectText(c.effect);
+      for (const m of text.matchAll(MATCH_QUEUE_G)) reachableNames.add(m[1].trim().toLowerCase());
     });
     queues.forEach(q => {
       if (q.overflowDestination) reachableNames.add(q.overflowDestination.toLowerCase());

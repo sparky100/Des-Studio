@@ -6,6 +6,7 @@ import {
   generateEntityType,
   csvToEntityType,
 } from '../../src/engine/distribution-fitting.js';
+import { mulberry32 } from '../../src/engine/distributions.js';
 
 describe('parseCsv', () => {
   it('parses a simple CSV with headers', () => {
@@ -102,11 +103,12 @@ describe('fitDistribution', () => {
   });
 
   it('fits normal to normal samples', () => {
-    // Box-Muller for normal(10, 2)
+    // Box-Muller for normal(10, 2) — seeded for determinism
+    const rng = mulberry32(42);
     const values = [];
     for (let i = 0; i < 200; i++) {
-      const u1 = Math.random();
-      const u2 = Math.random();
+      const u1 = Math.max(1e-10, rng());
+      const u2 = rng();
       const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
       values.push(10 + 2 * z);
     }

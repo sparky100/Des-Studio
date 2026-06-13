@@ -322,7 +322,7 @@ describe('ASSIGN macro — customerType queue matching', () => {
     };
 
     const result = buildEngine(model, 42).runAll();
-    const completed = result.entities?.filter(e => e.status === 'done') ?? [];
+    const completed = result.entitySummary?.filter(e => e.status === 'done' && e.role !== 'server') ?? [];
     expect(completed).toHaveLength(1);
     expect(result.runtimeMetrics.c_events_fired).toBeGreaterThanOrEqual(1);
   });

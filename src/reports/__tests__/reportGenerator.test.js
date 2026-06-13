@@ -164,7 +164,7 @@ describe('generateReport', () => {
     const html = await generateReport(minimalModel, minimalResults, experimentConfig, runMeta);
 
     expect(html).toContain('<svg');
-    expect(html).toContain('Journey Time Breakdown');
+    expect(html).toContain('Wait &amp; Service Time Metrics');
   });
 
   test('includes resource utilisation chart when perResource data present', async () => {
