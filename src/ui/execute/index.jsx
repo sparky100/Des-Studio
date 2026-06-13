@@ -2470,6 +2470,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
       </div>
       </div>
+      )}
 
       {executeSection === "run" && (
         <>
