@@ -979,7 +979,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
   return {
     kind: "explainResults",
     messages: makeMessages(system, payload, instruction),
-    max_tokens: 1600,
+    max_tokens: 2400,
   };
 }
 
