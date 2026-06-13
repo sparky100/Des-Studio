@@ -59,9 +59,9 @@ describe("ResultsWorkspace", () => {
   test("renders chart sections as analysis questions", () => {
     render(<ResultsWorkspace results={results} model={model} />);
 
-    expect(screen.getByText(/Where do queues build up/i)).toBeInTheDocument();
-    expect(screen.getByText(/How busy are resources/i)).toBeInTheDocument();
-    expect(screen.getByText(/How spread out are waiting times/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Where do queues build up/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/How busy are resources/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/How much time is spent queueing/i).length).toBeGreaterThanOrEqual(1);
   });
 
   test("shows data provenance labels", () => {

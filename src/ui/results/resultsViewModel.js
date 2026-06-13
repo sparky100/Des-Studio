@@ -153,13 +153,13 @@ export function buildChartSections(results = {}, model = {}) {
 
   return [
     {
-      id: "queue-depth",
-      title: "How queue size changed over time",
-      question: "Where do queues build up?",
-      method: "Shows how many entities were waiting as the run progressed.",
-      emptyMessage: "Run with Detailed output enabled to see queue depth over time.",
-      series: queueDepthSeries,
-      maxValue: Math.max(0, ...queueDepthSeries.map(maxPointValue)),
+      id: "wait-distribution",
+      title: "Waiting time distribution",
+      question: "How much time is spent queueing?",
+      method: "Shows the range of completed waiting times, with percentile markers.",
+      emptyMessage: "Complete at least two customer waits to see wait-time distributions.",
+      distributions: waitDistributions,
+      maxValue: Math.max(0, ...waitDistributions.map(d => finiteNumber(d.p99))),
     },
     {
       id: "server-utilization",
@@ -171,13 +171,13 @@ export function buildChartSections(results = {}, model = {}) {
       maxValue: Math.max(0, ...serverUtilizationSeries.map(maxPointValue)),
     },
     {
-      id: "wait-distribution",
-      title: "How waiting times were spread out",
-      question: "How spread out are waiting times?",
-      method: "Shows the range of completed waiting times, with percentile markers.",
-      emptyMessage: "Complete at least two customer waits to see wait-time distributions.",
-      distributions: waitDistributions,
-      maxValue: Math.max(0, ...waitDistributions.map(d => finiteNumber(d.p99))),
+      id: "queue-depth",
+      title: "How queue size changed over time",
+      question: "Where do queues build up?",
+      method: "Shows how many entities were waiting as the run progressed.",
+      emptyMessage: "Run with Detailed output enabled to see queue depth over time.",
+      series: queueDepthSeries,
+      maxValue: Math.max(0, ...queueDepthSeries.map(maxPointValue)),
     },
   ];
 }

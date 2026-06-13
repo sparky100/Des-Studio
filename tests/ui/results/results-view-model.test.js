@@ -138,12 +138,13 @@ describe("results view model", () => {
     }, model);
 
     expect(sections.map(section => section.id)).toEqual([
-      "queue-depth",
-      "server-utilization",
       "wait-distribution",
+      "server-utilization",
+      "queue-depth",
     ]);
-    expect(sections[0].question).toBe("Where do queues build up?");
+    expect(sections[0].question).toBe("How much time is spent queueing?");
+    expect(sections[0].title).toBe("Waiting time distribution");
     expect(sections[1].method).toMatch(/busy over time/i);
-    expect(sections[2].question).toMatch(/waiting time/i);
+    expect(sections[2].question).toBe("Where do queues build up?");
   });
 });

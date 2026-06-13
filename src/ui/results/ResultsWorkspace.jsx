@@ -14,7 +14,7 @@ const HIST_BINS = 20;
 const CHART_W = 400;
 const CHART_H = 140;
 
-const SECTION_DEFAULTS = { summary: true, bottlenecks: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true };
+const SECTION_DEFAULTS = { summary: true, bottlenecks: true, waitDist: true, serverUtil: true, queueDepth: true, sections: true, journeys: true, cost: true, analysis: true, runtime: true };
 
 function SectionHeader({ id, label, badge, isOpen, onToggle }) {
   const { C, FONT } = useTheme();
@@ -589,7 +589,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
             <div style={{ fontSize: 10, color: C.accent, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginTop: 4 }}>
               GOALS
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: 6 }}>
               {gaps.map(g => {
                 const pass = g.current != null && g.met;
                 const chipColor = g.current == null ? C.muted : pass ? C.green : C.red;
@@ -1133,20 +1133,18 @@ export function ResultsAnalysisPanel({ results, replicationResults = [], warmupD
           <div style={{ fontSize: 10, color: C.green, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 8 }}>
             ESTIMATED RANGE FOR THE TRUE RESULT
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 8 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 140 }}>
-              <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>Result to assess</span>
-              <select
-                aria-label="Batch-means metric"
-                value={batchMetric}
-                onChange={e => { setBatchMetric(e.target.value); setBatchResult(null); }}
-                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
-              >
-                {ANALYSIS_METRICS.map(metric => (
-                  <option key={metric.path} value={metric.path}>{metric.label}</option>
-                ))}
-              </select>
-            </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>Result to assess</span>
+            <select
+              aria-label="Batch-means metric"
+              value={batchMetric}
+              onChange={e => { setBatchMetric(e.target.value); setBatchResult(null); }}
+              style={{ flex: 1, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "5px 8px", outline: "none" }}
+            >
+              {ANALYSIS_METRICS.map(metric => (
+                <option key={metric.path} value={metric.path}>{metric.label}</option>
+              ))}
+            </select>
             <Btn small variant="primary" onClick={runBatchMeans} disabled={replications.length < 2}>
               Assess
             </Btn>
@@ -1322,9 +1320,8 @@ function JourneysPanel({ queueJourneys, queueNames, repCount = 1, C, FONT }) {
             <div style={{ height: 3, background: C.border, borderRadius: 2, marginBottom: 4 }}>
               <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 600 }}>{isMultiRep ? +(count / repCount).toFixed(1) : count}</span>
-              <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted }}>{pct}%</span>
+            <div>
+              <span style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 600 }}>{Math.round(isMultiRep ? count / repCount : count)} ({pct}%)</span>
             </div>
           </div>
         );
@@ -1346,9 +1343,7 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
   const fmtT = v => v == null ? "—" : formatNumber(v, 1);
 
   const isMultiRep = repCount > 1;
-  const fmtCount = (n) => isMultiRep
-    ? String(+(n / repCount).toFixed(1))
-    : String(n);
+  const fmtCount = (n) => String(Math.round(isMultiRep ? n / repCount : n));
 
   const [queueOpen, setQueueOpen] = useState({});
   const toggleQueue = id => setQueueOpen(prev => ({ ...prev, [id]: !prev[id] }));
@@ -1504,9 +1499,8 @@ function SectionResultsPanel({ sectionsDef, sectionStats, journeys, waitDist, qu
                     <div style={{ height: 3, background: C.border, borderRadius: 2, marginBottom: 4 }}>
                       <div style={{ height: 3, width: `${(count / maxCount) * 100}%`, background: C.accent, borderRadius: 2 }} />
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 600 }}>{isMultiRep ? +(count / repCount).toFixed(1) : count}</span>
-                      <span style={{ fontFamily: FONT, fontSize: 9, color: C.muted }}>{pct}%</span>
+                    <div>
+                      <span style={{ fontFamily: FONT, fontSize: 11, color: C.text, fontWeight: 600 }}>{Math.round(isMultiRep ? count / repCount : count)} ({pct}%)</span>
                     </div>
                   </div>
                 );
@@ -1674,8 +1668,6 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
     );
   }
 
-  const bottleneckBadge = (queueSection?.series.length ?? 0) + (serverSection?.series.length ?? 0) + (waitSection?.distributions.length ?? 0);
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
       {/* ── 1. Headline KPIs ───────────────────────────────────────────────── */}
@@ -1686,20 +1678,74 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         </div>
       </div>
 
-      {/* ── 2. Bottleneck section — header + peak-queue strip + charts ──────── */}
+      {/* ── 2. Bottleneck section — header + nested collapsible charts ─────── */}
       {(chartModel.hasTimeSeries || hasWaitDistributions || queuePeaks.length > 0) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-          <SectionHeader id="bottlenecks" label="Where Are the Bottlenecks?" badge={bottleneckBadge} isOpen={sectionsOpen.bottlenecks} onToggle={toggleSection} />
-          <div id="results-section-bottlenecks" style={{ display: sectionsOpen.bottlenecks ? "flex" : "none", flexDirection: "column", gap: 14, paddingTop: 14 }}>
+          <SectionHeader id="bottlenecks" label="Where Are the Bottlenecks?" isOpen={sectionsOpen.bottlenecks} onToggle={toggleSection} />
+          <div id="results-section-bottlenecks" style={{ display: sectionsOpen.bottlenecks ? "flex" : "none", flexDirection: "column", gap: 0, paddingTop: 8 }}>
 
-            {/* Subtitle */}
-            <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.6 }}>
-              Use these charts to see where queues build up, how busy resources are, and how uneven waiting times become.
-            </div>
+            {/* 1. Wait-time distributions */}
+            {hasWaitDistributions && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <SectionHeader id="waitDist" label="How much time is spent queueing?" isOpen={sectionsOpen.waitDist} onToggle={toggleSection} />
+                <div id="results-section-waitDist" style={{ display: sectionsOpen.waitDist ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+                  <ChartSectionShell section={waitSection}>
+                    <div aria-label="Wait-time distribution grid" style={CHART_GRID}>
+                      {waitSection.distributions.map((dist, idx) => {
+                        const color = CHART_COLORS[idx % CHART_COLORS.length];
+                        return (
+                          <ChartCard
+                            key={dist.label}
+                            title={dist.label}
+                            color={color}
+                            sourceLabel={dist.sourceLabel}
+                            dataPreview={<WaitValuesPreview dist={dist} />}
+                          >
+                            <WaitHistogram dist={dist} color={color} />
+                          </ChartCard>
+                        );
+                      })}
+                    </div>
+                  </ChartSectionShell>
+                </div>
+              </div>
+            )}
 
-            {/* Peak queue strip */}
+            {/* 2. Server utilisation charts */}
+            {chartModel.hasTimeSeries && serverSection?.series.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <SectionHeader id="serverUtil" label="How busy are resources?" isOpen={sectionsOpen.serverUtil} onToggle={toggleSection} />
+                <div id="results-section-serverUtil" style={{ display: sectionsOpen.serverUtil ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+                  <ChartSectionShell section={serverSection}>
+                    <div aria-label="Server utilisation chart grid" style={CHART_GRID}>
+                      {serverSection.series.map((series, idx) => {
+                        const color = CHART_COLORS[(idx + 3) % CHART_COLORS.length];
+                        const fmtPct = v => `${Math.round(v ?? 0)}%`;
+                        return (
+                          <ChartCard
+                            key={series.id}
+                            title={series.label}
+                            color={color}
+                            sourceLabel={series.sourceLabel}
+                            statItems={lineSeriesStats(series, "% busy", color, fmtPct)}
+                            dataPreview={<SeriesDataPreview series={series} />}
+                          >
+                            <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="% busy" formatY={fmtPct} />
+                            {series.hasShiftSchedule && Array.isArray(series.capacitySeries) && series.capacitySeries.length >= 2 && (
+                              <MiniLineChart title="Resources available over time" ariaTitle={`${series.label} capacity`} points={series.capacitySeries} color={C.muted} yLabel="servers" />
+                            )}
+                          </ChartCard>
+                        );
+                      })}
+                    </div>
+                  </ChartSectionShell>
+                </div>
+              </div>
+            )}
+
+            {/* 3. Peak queue strip */}
             {queuePeaks.length > 0 && (
-              <div aria-label="Peak queue lengths" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div aria-label="Peak queue lengths" style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 10, paddingBottom: 14 }}>
                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>
                   PEAK QUEUE LENGTH BY QUEUE
                 </div>
@@ -1726,79 +1772,35 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               </div>
             )}
 
-            {/* Queue depth charts */}
+            {/* 4. Queue depth charts */}
             {chartModel.hasTimeSeries && queueSection?.series.length > 0 && (
-              <ChartSectionShell section={queueSection}>
-                <div aria-label="Queue depth chart grid" style={CHART_GRID}>
-                  {queueSection.series.map((series, idx) => {
-                    const color = CHART_COLORS[idx % CHART_COLORS.length];
-                    const title = series.source === "type-fallback"
-                      ? `${series.label} (type-level)`
-                      : series.label;
-                    return (
-                      <ChartCard
-                        key={series.id}
-                        title={title}
-                        color={color}
-                        sourceLabel={series.sourceLabel}
-                        statItems={lineSeriesStats(series, "depth", color)}
-                        dataPreview={<SeriesDataPreview series={series} />}
-                      >
-                        <MiniLineChart title="" ariaTitle={title} points={series.points} color={color} yLabel="depth" />
-                      </ChartCard>
-                    );
-                  })}
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <SectionHeader id="queueDepth" label="Queue depth over time" isOpen={sectionsOpen.queueDepth} onToggle={toggleSection} />
+                <div id="results-section-queueDepth" style={{ display: sectionsOpen.queueDepth ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+                  <ChartSectionShell section={queueSection}>
+                    <div aria-label="Queue depth chart grid" style={CHART_GRID}>
+                      {queueSection.series.map((series, idx) => {
+                        const color = CHART_COLORS[idx % CHART_COLORS.length];
+                        const title = series.source === "type-fallback"
+                          ? `${series.label} (type-level)`
+                          : series.label;
+                        return (
+                          <ChartCard
+                            key={series.id}
+                            title={title}
+                            color={color}
+                            sourceLabel={series.sourceLabel}
+                            statItems={lineSeriesStats(series, "depth", color)}
+                            dataPreview={<SeriesDataPreview series={series} />}
+                          >
+                            <MiniLineChart title="" ariaTitle={title} points={series.points} color={color} yLabel="depth" />
+                          </ChartCard>
+                        );
+                      })}
+                    </div>
+                  </ChartSectionShell>
                 </div>
-              </ChartSectionShell>
-            )}
-
-            {/* Server utilisation charts */}
-            {chartModel.hasTimeSeries && serverSection?.series.length > 0 && (
-              <ChartSectionShell section={serverSection}>
-                <div aria-label="Server utilisation chart grid" style={CHART_GRID}>
-                  {serverSection.series.map((series, idx) => {
-                    const color = CHART_COLORS[(idx + 3) % CHART_COLORS.length];
-                    const fmtPct = v => `${Math.round(v ?? 0)}%`;
-                    return (
-                      <ChartCard
-                        key={series.id}
-                        title={series.label}
-                        color={color}
-                        sourceLabel={series.sourceLabel}
-                        statItems={lineSeriesStats(series, "% busy", color, fmtPct)}
-                        dataPreview={<SeriesDataPreview series={series} />}
-                      >
-                        <MiniLineChart title="" ariaTitle={series.label} points={series.points} color={color} yLabel="% busy" formatY={fmtPct} />
-                        {series.hasShiftSchedule && Array.isArray(series.capacitySeries) && series.capacitySeries.length >= 2 && (
-                          <MiniLineChart title="Resources available over time" ariaTitle={`${series.label} capacity`} points={series.capacitySeries} color={C.muted} yLabel="servers" />
-                        )}
-                      </ChartCard>
-                    );
-                  })}
-                </div>
-              </ChartSectionShell>
-            )}
-
-            {/* Wait-time distributions */}
-            {hasWaitDistributions && (
-              <ChartSectionShell section={waitSection}>
-                <div aria-label="Wait-time distribution grid" style={CHART_GRID}>
-                  {waitSection.distributions.map((dist, idx) => {
-                    const color = CHART_COLORS[idx % CHART_COLORS.length];
-                    return (
-                      <ChartCard
-                        key={dist.label}
-                        title={dist.label}
-                        color={color}
-                        sourceLabel={dist.sourceLabel}
-                        dataPreview={<WaitValuesPreview dist={dist} />}
-                      >
-                        <WaitHistogram dist={dist} color={color} />
-                      </ChartCard>
-                    );
-                  })}
-                </div>
-              </ChartSectionShell>
+              </div>
             )}
           </div>
         </div>
