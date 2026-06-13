@@ -51,11 +51,14 @@ project root
 │       └── ADR-001-auth-model.md   ← Multi-user auth and public model rules
 ├── src/
 │   ├── engine/                      ← Pure JS Three-Phase DES engine. No React. No DOM.
-│   │   ├── index.js                 ← Main loop: Phase A, B, C
+│   │   ├── index.js                 ← Main loop: Phase A, B, C; buildEngine(); runtimeModel WeakMap cache
+│   │   ├── worker.js                ← Web Worker entry + INIT_RUN persistent-pool protocol
+│   │   ├── replication-runner.js    ← runReplications(), createReplicationPool(); compactReplicationPayload()
 │   │   ├── phases.js                ← fireBEvent(), fireCEvent()
 │   │   ├── entities.js              ← Entity pool, queue discipline, waitingOf()
 │   │   ├── distributions.js         ← Sampler functions
 │   │   ├── conditions.js            ← Condition evaluator (currently uses new Function — MUST BE REPLACED)
+│   │   ├── statistics.js            ← CI helpers, summarizeEntitySummary, histogram builders
 │   │   ├── macros.js                ← 19 effect macros — see §5.1 for full list
 │   │   └── adapters/                ← Real-time data adapter layer (Sprint 57+)
 │   │       ├── index.js             ← AdapterRegistry + nullRegistry (default, zero-cost pass-through)
@@ -105,6 +108,9 @@ project root
 │   │   └── shared/                  ← Predicate Builder, DistPicker tests
 │   ├── db/                          ← DB wrapper tests (mocked Supabase — Sprint 3)
 │   │   └── models.test.js
+│   │   ├── determinism-parity.test.js ← Fixed-seed snapshots; must stay unchanged across engine changes
+│   │   ├── quiet-mode.test.js       ← collectTrace=false suppresses trace without changing summaries
+│   │   └── model-immutability.test.js ← Frozen-model safety gate for runtimeModel cache
 │   └── setup.js                     ← Global setup: jsdom config, Supabase mock
 └── .env.local                       ← Not committed. See §7 for required vars.
 ```
@@ -147,7 +153,7 @@ If Codex finds itself rewriting a file that the audit marked as working (✓), s
 
 | File | What works | What is wrong |
 |---|---|---|
-| `src/engine/index.js` | Three-Phase A/B/C loop structure | C-scan restart granularity (fix in place) |
+| `src/engine/index.js` | Three-Phase A/B/C loop structure; collectTrace/entityDetail batch options; runtimeModel WeakMap cache | Nothing known broken — preserve entirely |
 | `src/engine/macros.js` | All 19 macros correct (see §5.1 for full list) | Nothing — preserve entirely |
 | `src/engine/entities.js` | FIFO discipline correct | LIFO/Priority never read (extend waitingOf) |
 | `src/engine/conditions.js` | Condition evaluation structure | new Function() call (replace with safe eval) |
@@ -208,7 +214,7 @@ while (fel.length > 0 && !terminationConditionMet()) {
 - **Phase C truncation must be visible.** When `MAX_C_PASSES` is hit, a warning banner must appear in the UI and a log entry must be written. Silent truncation is a correctness bug. The cap is currently 100 — raise to 500 and make it configurable.
 - **Phase B fires all events at `T_now`.** Use floating-point tolerance `< 1e-9` when comparing scheduled times. Do not advance the clock mid-Phase-B.
 - **The FEL is sorted at all times.** New B-Events are inserted in scheduled-time order. Never append to the end.
-- **The engine is stateless between calls.** `buildEngine(model, seed, maxCycles)` constructs a fresh state object. No module-level mutable state.
+- **The engine is stateless between calls.** `buildEngine(model, seed, maxCycles)` constructs a fresh state object. The one exception is a module-level `WeakMap` that caches the resolved `runtimeModel` keyed by the raw model object — this is safe because the engine must never mutate its model argument (enforced by `tests/engine/model-immutability.test.js`).
 
 ### 4.3 C-Event Priority
 

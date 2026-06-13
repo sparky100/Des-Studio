@@ -62,7 +62,22 @@ Sprint 4 will include cancellation for active replication batches. Cancelling st
 - Persist one run row per replication batch with per-replication results and aggregate CI in `results_json`.
 - Active replication batches must be cancellable.
 
+## Amendment — Sprint 79 batch performance optimisations
+
+The following changes were made after this ADR was originally accepted:
+
+**Persistent worker pool (`createReplicationPool`).**  Workers are now spawned once per batch run and reused across all rounds (adaptive batch, sweep points). The pool is created by the caller (`adaptive-batch.js`, `sweep-runner.js`) and passed into `runReplications()` via the `pool` option. Workers are terminated only on cancellation, error, or explicit `pool.destroy()` — not after each `runReplications` call.
+
+**INIT_RUN message protocol.**  The model, schedules, and run configuration are sent to each worker exactly once via an `INIT_RUN` message before any replications begin. Subsequent `RUN_REPLICATION` messages carry only `{ replicationIndex, seed, entityDetail }`, avoiding a `structuredClone` of the entire model per job.
+
+**Worker cap lifted.**  The original conservative cap of 4 workers has been removed. The pool size is now `min(replications, navigator.hardwareConcurrency - 1)` with a minimum of 1 and no upper cap beyond the replication count.
+
+**Batch-mode engine options.**  Two `buildEngine` options reduce per-replication cost in batch paths:
+- `collectTrace: false` — skips all per-cycle trace-entry construction and the final `buildTraceFromLog` call. Batch consumers do not read `log` or `trace`.
+- `entityDetail: false` — returns `entitySummaryCompact` (pre-aggregated counts) instead of cloning every entity object. Rep 0 always uses `entityDetail: true` to keep full entity data for the AI-explore verify flow and report generation.
+
+**`runtimeModel` cache.**  A module-level `WeakMap` in `src/engine/index.js` caches the result of `resolveInlineSchedules` + `modelWithShiftInitialCapacity` keyed by the raw model object. All reps in a persistent worker share the same model reference, so reps 2–N skip model resolution entirely.
+
 ## Open Questions
 
-- What exact upper bound should the worker pool use by default? Recommended implementation: `min(replications, navigator.hardwareConcurrency - 1)` with a lower bound of 1 and a conservative cap, such as 4, unless testing supports a higher cap.
 - Should a future sprint persist cancelled/partial batches for auditability?
