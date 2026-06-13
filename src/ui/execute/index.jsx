@@ -2243,6 +2243,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           </div>
         )}
       </div>
+      </div>
       )}
 
       {/* ADR-016: Schedule selector — shown when model has more than one schedule */}
@@ -2469,8 +2470,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
       </div>
-      </div>
-      )}
 
       {executeSection === "run" && (
         <>
