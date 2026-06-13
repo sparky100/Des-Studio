@@ -1535,6 +1535,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       </div>
 
       {executeSection === "setup" && (
+        <div style={{ maxWidth: 1120, margin: "0 auto" }}>
         <ExperimentControls
           warmupPeriod={warmupPeriod} setWarmupPeriod={setWarmupPeriod}
           replications={replications} setReplications={setReplications}
@@ -1557,9 +1558,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}
           onClose={() => setExecuteSection("run")}
         />
+        </div>
       )}
 
       {executeSection === "saved-experiments" && (
+      <div style={{ maxWidth: 1120, margin: "0 auto" }}>
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: "12px 16px 0", fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
           Save named run configurations — warm-up, replications, seed, and parameter overrides — so you can reload and re-run them later. Results are saved to run history when you run.
@@ -1788,9 +1791,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           ))}
         </div>
       </div>
+      </div>
       )}
 
       {executeSection === "experiments" && (
+      <div style={{ maxWidth: 1120, margin: "0 auto" }}>
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div
           onClick={() => {
@@ -2458,6 +2463,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         </div>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
+      </div>
       </div>
 
       {executeSection === "run" && (

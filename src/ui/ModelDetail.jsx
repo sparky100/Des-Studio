@@ -1318,7 +1318,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         )}
 
         <div style={{display: tab === "execute" ? undefined : "none"}}>
-          <div style={{maxWidth:1120,margin:"0 auto"}}>
           <ErrorBoundary
             title="Execute panel crashed"
             message="The simulation controls could not render."
@@ -1367,7 +1366,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               visible={tab === "execute"}
             />
           </ErrorBoundary>
-          </div>
         </div>
         {tab==="results"&&(
           <div style={{display:"flex",flexDirection:"column",gap:0,minWidth:0}}>
