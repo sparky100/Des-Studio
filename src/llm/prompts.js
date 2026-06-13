@@ -203,6 +203,15 @@ function extractBEvents(model = {}, results = {}) {
       const inlineCount = ev.schedules.filter(s => Array.isArray(s.rows) && s.rows.length > 0 && !s.scheduleRef).length;
       if (externalCount > 0) entry.externalSchedule = true;
       if (inlineCount > 0) entry.inlineRows = true;
+      // Include inter-arrival distribution so the LLM can suggest specific numeric param changes.
+      // Only populated for single-stream events where the target is unambiguous.
+      if (ev.schedules.length === 1) {
+        const s = ev.schedules[0];
+        if (s.dist && s.dist !== "schedule") {
+          entry.dist = s.dist;
+          entry.distParams = s.distParams || {};
+        }
+      }
     }
     if (eventCounts[ev.id]) entry.fireCount = eventCounts[ev.id];
     return entry;
@@ -222,6 +231,13 @@ function extractCEvents(model = {}) {
       effectTypes: effectTypes.length ? effectTypes : ["(none)"],
     };
     if (ev.priority != null) entry.priority = ev.priority;
+    // Include service distribution so the LLM can suggest specific numeric param changes.
+    // Only populated for single-schedule events where the target is unambiguous.
+    const cScheds = ev.cSchedules || [];
+    if (cScheds.length === 1 && cScheds[0].dist) {
+      entry.dist = cScheds[0].dist;
+      entry.distParams = cScheds[0].distParams || {};
+    }
     return entry;
   });
 }
@@ -824,25 +840,26 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "5. GOAL IMPACT: For each suggestion, state which goals would be met, which remain missed, which are unaffected.",
     "6. RANKING: If multiple suggestions, rank by expected impact on the binding constraint and explain the trade-off.",
     "",
-    "OUTPUT FORMAT — output a single JSON block wrapped in ```json ... ``` fences with this schema:",
-    '{ "analysis": "<narrative>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|moderate|low>" } ] }',
+    "OUTPUT FORMAT — output ONLY a single JSON block wrapped in ```json ... ``` fences — no other text before or after the fences:",
+    '{ "analysis": "<narrative>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|moderate|low>" } ] }',
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count.",
-    "  queueCapacity   — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
-    "  stateVariable   — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
-    "  THREE HARD REQUIREMENTS for any automatable type:",
-    "  1. 'target' MUST be an exact name match from the model's entityTypes, queues, or stateVariables.",
+    "  entityTypeCount  — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count.",
+    "  queueCapacity    — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
+    "  stateVariable    — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
+    "  bEventDistParam  — change a numeric parameter of a bEvent's inter-arrival distribution. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream — read dist and distParams from the model data provided.",
+    "  cEventDistParam  — change a numeric parameter of a cEvent's service distribution. 'target' = '<cEventName>.<paramKey>' (e.g. 'ServiceComplete.mean'). Only use when the cEvent has a single schedule — read dist and distParams from the model data provided.",
+    "  HARD REQUIREMENTS for ANY automatable type:",
+    "  1. 'target' MUST exactly match the name from the model data (entityTypes, queues, stateVariables, or bEvents/cEvents).",
     "  2. 'from' MUST be the exact current numeric value — read it from the model data above. Do not guess.",
     "  3. 'to' MUST be a specific number, not a range, not null. e.g. from 3 to 4, not 'more', not null.",
-    "  Saying 'add resources', 'increase capacity', or 'redistribute staff' without specific numbers is NOT automatable — use 'manual'.",
-    "  If the exact current value cannot be read from the model, use 'manual'.",
+    "  If the exact current value cannot be read from the model data, use 'manual'.",
     "MANUAL type — user must implement this change in the model editor:",
     "  Use type 'manual' for EVERY other kind of change, including:",
     "  - Resource suggestions phrased without specific from/to numbers ('add resources', 'redistribute capacity')",
     "  - Queue discipline changes (FIFO → Priority, shortest-job-first, etc.)",
     "  - Routing or priority rule changes (add priority queuing, bypass logic, conditional routing)",
-    "  - Arrival rate or inter-arrival distribution changes",
-    "  - Service time distribution changes",
+    "  - Distribution type changes (e.g. switching from Fixed to Exponential)",
+    "  - Distribution parameter changes on bEvents with multiple arrival streams",
     "  - Shift scheduling or staffing pattern adjustments",
     "  - Balking, reneging, or renege-condition modifications",
     "  - Adding a new entity type, queue, or event that does not yet exist in the model",
@@ -856,7 +873,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
   return {
     kind: "suggestion",
     messages: makeMessages(system, payload, instruction),
-    max_tokens: 800,
+    max_tokens: 1400,
   };
 }
 
@@ -947,7 +964,9 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "",
     "PART 2 — STRUCTURED SUGGESTIONS (JSON block)",
     "After the narrative, output a single JSON block wrapped in ```json ... ``` fences with this schema:",
-    '{ "analysis": "<narrative analysis text>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|moderate|low>" } ] }',
+    '{ "analysis": "<narrative analysis text>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|moderate|low>" } ] }',
+    "Automatable types: entityTypeCount (entity/server count), queueCapacity (queue cap), stateVariable (initialValue), bEventDistParam (bEvent dist param — target='EventName.paramKey'), cEventDistParam (cEvent dist param — target='EventName.paramKey').",
+    "Use bEventDistParam/cEventDistParam only for single-stream events where dist and distParams are visible in the model data. Use 'manual' for multi-stream events or distribution type changes.",
     "Use type 'manual' for structural changes that cannot be expressed as a single numeric field update.",
     "Never give vague advice — always name the exact parameter and specific value.",
     "When the model has a failure/repair model, factor availability into capacity calculations.",
@@ -1036,6 +1055,26 @@ export function applySuggestionPatch(model, change) {
     const found = vars.find(v => v.name === change.target || v.id === change.target);
     if (!found) return clone;
     found.initialValue = change.to;
+    return clone;
+  }
+
+  if (change.type === "bEventDistParam") {
+    const [eventName, paramKey] = (change.target || "").split(".");
+    const ev = (clone.bEvents || []).find(e => e.name === eventName || e.id === eventName);
+    const sched = ev?.schedules?.[0];
+    if (sched?.distParams && paramKey && paramKey in sched.distParams) {
+      sched.distParams[paramKey] = change.to;
+    }
+    return clone;
+  }
+
+  if (change.type === "cEventDistParam") {
+    const [eventName, paramKey] = (change.target || "").split(".");
+    const ev = (clone.cEvents || []).find(e => e.name === eventName || e.id === eventName);
+    const sched = ev?.cSchedules?.[0];
+    if (sched?.distParams && paramKey && paramKey in sched.distParams) {
+      sched.distParams[paramKey] = change.to;
+    }
     return clone;
   }
 
@@ -1551,11 +1590,18 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     : "unknown";
 
   const goalGaps = buildGoalGaps(model, aggregateStats, getSummary(combinedResult));
+  const bEvents = extractBEvents(model, combinedResult);
+  const cEvents = extractCEvents(model);
   const payload = {
     model: {
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description ? truncateWords(model.description, 60) : undefined,
       goals,
+      entityTypes: (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count })),
+      queues: (model.queues || []).map(q => ({ name: q.name, capacity: q.capacity ?? null })),
+      stateVariables: (model.stateVariables || []).filter(v => v.name).map(v => ({ name: v.name, initialValue: v.initialValue ?? null })),
+      ...(bEvents ? { bEvents } : {}),
+      ...(cEvents ? { cEvents } : {}),
     },
     statisticalContext: {
       finalReplications: ciSummary.finalReps,
@@ -1596,9 +1642,9 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     "### Quick Wins\nIn 2–3 sentences of prose (NO numbered list), describe the most impactful policy or scheduling change achievable without adding resources (e.g. priority rules, routing, warmup period). Do NOT use numbered list items in this section.\n" +
     "### Investment Opportunities\nIn 1–2 sentences of prose (NO numbered list), describe structural improvements requiring additional resources or redesign. Do NOT use numbered list items in this section.\n" +
     "### Automatable Changes\nList up to 3 changes that can be expressed as a single numeric parameter update to the existing model. " +
-    "ONLY include items of these types: (a) increasing or decreasing a server/entity-type count, (b) changing a queue capacity limit, (c) changing a state variable's initial value. " +
+    "Allowed types: (a) server/entity-type count, (b) queue capacity limit, (c) state variable initial value, (d) a numeric distribution parameter on a bEvent (inter-arrival) or cEvent (service) that has a single schedule — cite the event name, param key, current value, and proposed value from the model data. " +
     "For each item cite the exact current value from the model data and propose a specific new number — no ranges, no vague directions. " +
-    "Format each as a numbered item, e.g. '1. Increase Nurse count from 2 to 3 — expected to reduce avgWait by ~30%'. " +
+    "Format each as a numbered item, e.g. '1. Increase Nurse count from 2 to 3 — expected to reduce avgWait by ~30%' or '2. Reduce Arrivals inter-arrival rate from 0.5 to 0.4'. " +
     "If no such changes are warranted by the data, omit this section entirely.\n" +
     "### Confidence Summary\nOne paragraph: state whether results are statistically robust, " +
     "cite the CI and replication count, and flag any caveats from non-convergence or warnings.\n\n" +
@@ -1608,7 +1654,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
   return {
     kind: "batch_analysis",
     messages: makeMessages(system, payload, instruction),
-    max_tokens: 800,
+    max_tokens: 1000,
   };
 }
 
@@ -1635,6 +1681,8 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
   const stateVariables = (model.stateVariables || []).filter(v => v.name).map(v => ({
     name: v.name, initialValue: v.initialValue ?? null,
   }));
+  const bEvents = extractBEvents(model, results || {});
+  const cEvents = extractCEvents(model);
   const kpis = buildKpis(model, results || {});
 
   const payload = {
@@ -1644,6 +1692,8 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
       entityTypes,
       queues,
       stateVariables,
+      ...(bEvents ? { bEvents } : {}),
+      ...(cEvents ? { cEvents } : {}),
     },
     kpis,
   };
@@ -1651,24 +1701,25 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
   const instruction = [
     "Convert this improvement opportunity into a single structured change.",
     "Output one JSON block wrapped in ```json ... ``` fences with this schema:",
-    '{ "analysis": "<one sentence explaining what will change and why>", "suggestions": [ { "rank": 1, "constraint": "<metric=value>", "cause": "<brief cause>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|manual>", "target": "<exact name from model>", "from": <current number or null>, "to": <proposed number or null> }, "predicted": "<expected improvement>", "goalImpact": "<MET|MISSED|N/A>", "confidence": "<high|moderate|low>" } ] }',
+    '{ "analysis": "<one sentence explaining what will change and why>", "suggestions": [ { "rank": 1, "constraint": "<metric=value>", "cause": "<brief cause>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual>", "target": "<exact name from model>", "from": <current number or null>, "to": <proposed number or null> }, "predicted": "<expected improvement>", "goalImpact": "<MET|MISSED|N/A>", "confidence": "<high|moderate|low>" } ] }',
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count.",
-    "  queueCapacity   — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
-    "  stateVariable   — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
-    "  THREE HARD REQUIREMENTS for any automatable type:",
-    "  1. 'target' MUST be an exact name match from the model's entityTypes, queues, or stateVariables.",
+    "  entityTypeCount  — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count.",
+    "  queueCapacity    — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
+    "  stateVariable    — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
+    "  bEventDistParam  — change a numeric distribution parameter on a bEvent. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream with dist and distParams visible in the model data.",
+    "  cEventDistParam  — change a numeric distribution parameter on a cEvent. 'target' = '<cEventName>.<paramKey>' (e.g. 'ServiceComplete.mean'). Only use when the cEvent has a single schedule with dist and distParams visible in the model data.",
+    "  HARD REQUIREMENTS for ANY automatable type:",
+    "  1. 'target' MUST exactly match the name from the model data.",
     "  2. 'from' MUST be the exact current numeric value — read it from the model data above. Do not guess.",
-    "  3. 'to' MUST be a specific number, not a range, not null. e.g. from 3 to 4, not 'more', not null.",
-    "  Saying 'add resources', 'increase capacity', or 'redistribute staff' without specific numbers is NOT automatable — use 'manual'.",
+    "  3. 'to' MUST be a specific number, not a range, not null.",
     "  If the exact current value cannot be read from the model, use 'manual'.",
     "MANUAL type — user must implement this change in the model editor:",
     "  Use type 'manual' for EVERY other kind of change, including:",
     "  - Resource suggestions phrased without specific from/to numbers ('add resources', 'redistribute capacity')",
     "  - Queue discipline changes (FIFO → Priority, shortest-job-first, etc.)",
-    "  - Routing or priority rule changes (add priority queuing, bypass logic, conditional routing)",
-    "  - Arrival rate or inter-arrival distribution changes",
-    "  - Service time distribution changes",
+    "  - Routing or priority rule changes",
+    "  - Distribution type changes (e.g. switching from Fixed to Exponential)",
+    "  - Distribution parameter changes on bEvents with multiple arrival streams",
     "  - Shift scheduling or staffing pattern adjustments",
     "  - Balking, reneging, or renege-condition modifications",
     "  - Adding a new entity type, queue, or event that does not yet exist in the model",
@@ -1679,6 +1730,6 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
   return {
     kind: "suggestion",
     messages: makeMessages(system, payload, instruction),
-    max_tokens: 500,
+    max_tokens: 800,
   };
 }

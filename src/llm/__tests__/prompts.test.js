@@ -3,6 +3,7 @@ import {
   buildModelDescriptionPrompt,
   buildReportRecommendationsPrompt,
   parseReportRecommendations,
+  applySuggestionPatch,
 } from '../prompts.js';
 
 const FORBIDDEN_TERMS = ['B-event', 'C-event', 'macro', 'ARRIVE', 'COMPLETE', 'ASSIGN', 'Phase'];
@@ -132,5 +133,83 @@ describe('parseReportRecommendations', () => {
     const result = parseReportRecommendations(input);
     expect(Array.isArray(result)).toBe(true);
     expect(result.length).toBe(0);
+  });
+});
+
+describe('applySuggestionPatch — bEventDistParam', () => {
+  const baseModel = {
+    bEvents: [
+      {
+        name: "Arrivals",
+        schedules: [{ dist: "exponential", distParams: { rate: 1.0 } }],
+      },
+    ],
+    cEvents: [],
+    entityTypes: [],
+    queues: [],
+    stateVariables: [],
+  };
+
+  test('patches a numeric distParam on a bEvent', () => {
+    const change = { type: "bEventDistParam", target: "Arrivals.rate", from: 1.0, to: 0.8 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.bEvents[0].schedules[0].distParams.rate).toBe(0.8);
+  });
+
+  test('does not mutate the original model', () => {
+    const change = { type: "bEventDistParam", target: "Arrivals.rate", from: 1.0, to: 0.5 };
+    applySuggestionPatch(baseModel, change);
+    expect(baseModel.bEvents[0].schedules[0].distParams.rate).toBe(1.0);
+  });
+
+  test('returns clone unchanged when bEvent name does not match', () => {
+    const change = { type: "bEventDistParam", target: "NonExistent.rate", from: 1.0, to: 0.5 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.bEvents[0].schedules[0].distParams.rate).toBe(1.0);
+  });
+
+  test('returns clone unchanged when paramKey does not exist in distParams', () => {
+    const change = { type: "bEventDistParam", target: "Arrivals.mean", from: 1.0, to: 2.0 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.bEvents[0].schedules[0].distParams).toEqual({ rate: 1.0 });
+  });
+});
+
+describe('applySuggestionPatch — cEventDistParam', () => {
+  const baseModel = {
+    bEvents: [],
+    cEvents: [
+      {
+        name: "ServiceComplete",
+        cSchedules: [{ dist: "normal", distParams: { mean: 5, std: 1 } }],
+      },
+    ],
+    entityTypes: [],
+    queues: [],
+    stateVariables: [],
+  };
+
+  test('patches a numeric distParam on a cEvent', () => {
+    const change = { type: "cEventDistParam", target: "ServiceComplete.mean", from: 5, to: 4 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.cEvents[0].cSchedules[0].distParams.mean).toBe(4);
+  });
+
+  test('patches std param on a cEvent', () => {
+    const change = { type: "cEventDistParam", target: "ServiceComplete.std", from: 1, to: 0.5 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.cEvents[0].cSchedules[0].distParams.std).toBe(0.5);
+  });
+
+  test('does not mutate the original model', () => {
+    const change = { type: "cEventDistParam", target: "ServiceComplete.mean", from: 5, to: 3 };
+    applySuggestionPatch(baseModel, change);
+    expect(baseModel.cEvents[0].cSchedules[0].distParams.mean).toBe(5);
+  });
+
+  test('returns clone unchanged when cEvent name does not match', () => {
+    const change = { type: "cEventDistParam", target: "Unknown.mean", from: 5, to: 3 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.cEvents[0].cSchedules[0].distParams.mean).toBe(5);
   });
 });
