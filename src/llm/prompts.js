@@ -1122,7 +1122,7 @@ export function buildResultsQueryPrompt(question, model = {}, results = {}, conv
       perQueue: Object.keys(perQueue).length ? perQueue : null,
       timeSeriesAvailable: !!(Array.isArray(results.timeSeries) && results.timeSeries.length > 0),
     };
-    userContent = truncateWords(JSON.stringify({ data: dataPayload, question }));
+    userContent = truncateWords(JSON.stringify({ question, data: dataPayload }));
   } else {
     userContent = question;
   }
@@ -1262,7 +1262,7 @@ export function buildPlanRefinementPrompt(model = {}, experimentConfig = {}, res
       { role: "system", content: system },
       {
         role: "user",
-        content: truncateWords(JSON.stringify({ ...payload, instruction }, null, 2)),
+        content: truncateWords(JSON.stringify({ instruction, ...payload }, null, 2)),
       },
     ],
     max_tokens: 1800,
@@ -1543,7 +1543,7 @@ export function buildModelQueryPrompt(question, model = {}, history = [], contex
       "Do not invent data not present in the model context above.",
     ].join('\n\n');
 
-    userContent = truncateWords(JSON.stringify({ model: modelDigest, question }, null, 2));
+    userContent = truncateWords(JSON.stringify({ question, model: modelDigest }, null, 2));
   } else {
     userContent = question;
   }
