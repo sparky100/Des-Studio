@@ -377,7 +377,7 @@ function makeMessages(system, payload, instruction) {
     { role: "system", content: system },
     {
       role: "user",
-      content: truncateWords(JSON.stringify({ ...payload, instruction }, null, 2)),
+      content: truncateWords(JSON.stringify(instruction ? { instruction, ...payload } : payload, null, 2)),
     },
   ];
 }
