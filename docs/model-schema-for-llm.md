@@ -16,7 +16,7 @@
 | v1.5.0 | 2026-06-05 | Results accuracy | **§9 Goals:** added `summary.avgWIP` metric; added batch-mode note on per-replication evaluation of count goals. **§11.1 Sections:** corrected factual error — the engine actively uses `entryQueues`/`exitQueues` to compute `entitiesIn`/`entitiesOut`/`avgSojourn` (was incorrectly stated as "engine ignores sections entirely"); clarified dual purpose (UI organisation + statistical boundary tracking); aligned "large model" threshold with TOP LLM MISTAKES #13 (≥8 queues or ≥3 stages, consistent throughout); added note that sections with empty entry/exit arrays are cosmetic only and produce zero in/out counts. |
 | v1.6.0 | 2026-06-09 | Sprint 85 | **§9 Goals:** added `summary.avgTimeInSystem` (weighted mean time across all entities including in-progress) and `summary.servedRatio` (service completion rate as decimal 0–1). Updated metric count from 13 to 15. Added `avgTimeInSystem` to percentile-capable time metrics. |
 | v1.7.0 | 2026-06-12 | Schema enforcement | Added TOP LLM MISTAKES #15 (disconnected queue fragment) and V45 blocking error to §10. |
-| v1.8.0 | 2026-06-13 | Schema correction | **§11.1 Sections:** corrected results-contract description (`count`/`avgSojourn` require `memberIds` only, not entry/exit queues); added per-section metric table (`count`, `avgSojourn`, `entitiesIn`, `entitiesOut`) with non-zero conditions; documented `summary.journeys` and `summary.queueJourneys` outputs; replaced imprecise entry/exit selection prose with concrete front-door/handoff-queue rules. |
+| v1.8.0 | 2026-06-13 | Schema correction | **§11.1 Sections:** corrected results-contract description (`count`/`avgSojourn` require `memberIds` only, not entry/exit queues); added per-section metric table (`count`, `avgSojourn`, `entitiesIn`, `entitiesOut`) with non-zero conditions; documented `summary.journeys` and `summary.queueJourneys` outputs; replaced imprecise entry/exit selection prose with concrete front-door/handoff-queue rules; added suggested colour palette for sections. |
 
 ---
 
@@ -1007,10 +1007,25 @@ Notice the handoff: `q_nhs24_clinical` is in `exitQueues` for the NHS 24 section
 |---|---|---|
 | `id` | string | Unique section ID (e.g. `"sec_nhs24"`) |
 | `name` | string | Human-readable label shown in filter tabs and swimlane headers |
-| `color` | string | CSS hex colour used for swimlane background and filter tab indicators |
+| `color` | string | CSS hex colour used for swimlane background and filter tab indicators. Always assign a distinct colour per section — use the palette below. |
 | `memberIds` | string[] | IDs of queues, entity types, B-events, and/or C-events that belong to this section. Each element may appear in at most one section. |
 | `entryQueues` | string[] | Subset of `memberIds` — queues where entities arrive from another section |
 | `exitQueues` | string[] | Subset of `memberIds` — queues where entities leave to another section |
+
+**Section colours:** assign a visually distinct colour to each section so swimlane headers and filter tabs are easy to tell apart. Suggested palette (use in order, then cycle):
+
+| # | Hex | Name |
+|---|---|---|
+| 1 | `#4A90D9` | Blue |
+| 2 | `#27AE60` | Green |
+| 3 | `#E67E22` | Orange |
+| 4 | `#8E44AD` | Purple |
+| 5 | `#E74C3C` | Red |
+| 6 | `#16A085` | Teal |
+| 7 | `#F39C12` | Amber |
+| 8 | `#2C3E50` | Slate |
+
+Do not repeat the same colour across sections in the same model.
 
 **Results contract — `summary.sections[sectionId]`:**
 
