@@ -45,9 +45,10 @@ simmodlr is a single-page application with a pure-JavaScript simulation engine, 
 │  └───────────────────────────────────────────────────────┘  │
 │                                                             │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │         Web Workers (replication pool)                │  │
-│  │  Each worker receives model_json + seed, runs        │  │
-│  │  buildEngine(), returns result object                 │  │
+│  │    Web Workers (persistent replication pool)          │  │
+│  │  INIT_RUN: model sent once per worker                │  │
+│  │  RUN_REPLICATION: {seed, replicationIndex} only      │  │
+│  │  buildEngine() → runAll() → compact result           │  │
 │  └───────────────────────────────────────────────────────┘  │
 └───────────────┬─────────────────────────────────────────────┘
                 │ HTTPS / Supabase JS client
@@ -94,16 +95,16 @@ src/db/       ← Supabase CRUD wrappers. User-scoped queries. RLS enforced.
 
 | File | Responsibility |
 |------|---------------|
-| `index.js` | `buildEngine()` factory, FEL management, run orchestration |
+| `index.js` | `buildEngine()` factory, FEL management, run orchestration; module-level WeakMap caches resolved `runtimeModel` across reps |
 | `phases.js` | Phase A (clock advance), Phase B (B-Event fire), Phase C (C-scan with restart rule) |
 | `macros.js` | 19 effect macros: ARRIVE, ASSIGN, BATCH, COMPLETE, COSEIZE, COST, DRAIN, FAIL, FILL, MATCH, PREEMPT, RELEASE, RENEGE, RENEGE_OLDEST, REPAIR, SET, SET_ATTR, SPLIT, UNBATCH |
 | `entities.js` | Entity lifecycle, queue discipline sort functions, server pool management, `_busyStart`/`_busyTime` utilisation tracking |
 | `distributions.js` | Sampler registry, seeded RNG (mulberry32), all 11 distribution types |
 | `conditions.js` | Safe predicate evaluator — no `eval`, no `new Function` |
 | `validation.js` | V1–V39 (V7 unused); 38 distinct rules, pre-run gate |
-| `statistics.js` | CI, batch means, ANOVA, Tukey HSD, Welch test |
-| `replication-runner.js` | Parallel replication orchestration |
-| `worker.js` | Web Worker entry point |
+| `statistics.js` | CI, batch means, ANOVA, Tukey HSD, Welch test; exports `summarizeEntitySummary` used by engine and persistence |
+| `replication-runner.js` | Persistent worker pool (`createReplicationPool`), INIT_RUN protocol, compact per-rep payload |
+| `worker.js` | Web Worker entry point — receives INIT_RUN once, then RUN_REPLICATION per rep |
 | `run-admission.js` | Tier-based run limits (Free/Standard/Pro) enforced before any run |
 | `adaptive-batch.js` | Adaptive replication logic for Explore panel |
 | `sweep-runner.js` | Parametric sweep execution |
@@ -432,6 +433,8 @@ function buildEngine(
   options?: {
     schedulesMap?: Record<string, ScheduleRow[]>;  // ADR-016
     dataSourceValues?: Record<string, number>;     // real-time adapter bindings
+    collectTrace?: boolean;     // default true; false skips trace construction in batch paths
+    entityDetail?: boolean;     // default true; false returns entitySummaryCompact (aggregate only)
   }
 ): Engine
 ```
@@ -956,3 +959,7 @@ These rules are enforced in code and must not be violated by any PR. They are re
 9. **One canonical model_json.** All three authoring modes (Define editors, Describe / AI Generator, Draw / Visual Designer) write to the same `model_json` object. A change made in one mode is immediately visible in the others. No per-mode model shadow state.
 
 10. **Schema contract.** Any field added to `model_json`, to the DB serialisation in `models.js`, or to the Supabase schema requires a Vitest round-trip test in `tests/db/`. This is a PR gate, not a suggestion.
+
+11. **Engine never mutates its model argument.** `buildEngine()` must not modify the `model` object it receives. This invariant is required for the module-level `WeakMap` runtimeModel cache to be safe (multiple reps share the same object reference). Enforced by `tests/engine/model-immutability.test.js`, which deep-freezes the model before calling `buildEngine()`.
+
+12. **Determinism contract.** The same `model_json` + `seed` must produce byte-identical summary fields (`served`, `reneged`, `avgWait`, `avgSojourn`, `avgWIP`, `finalTime`, `events_processed`) across any two runs, regardless of batch optimisation flags (`collectTrace`, `entityDetail`). Fixed-seed inline snapshots in `tests/engine/determinism-parity.test.js` are the enforcement gate.
