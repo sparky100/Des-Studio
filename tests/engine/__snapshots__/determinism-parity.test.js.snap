@@ -1,0 +1,199 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`determinism parity — fixed-seed benchmark scenarios > glasgow-train-plan (seed=44) 1`] = `
+{
+  "avgSojourn": 3.3305,
+  "avgSvc": 3.3305,
+  "avgWIP": 0.5809,
+  "avgWait": 0,
+  "c_event_scans": 81,
+  "c_events_fired": 18,
+  "entities_created": 17,
+  "events_processed": 45,
+  "finalTime": 70,
+  "max_future_event_list_size": 4,
+  "reneged": 0,
+  "served": 9,
+  "total": 9,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > large-queues-stress (seed=48) 1`] = `
+{
+  "avgSojourn": 404.2496,
+  "avgSvc": 2.4893,
+  "avgWIP": 971.5153,
+  "avgWait": 411.4336,
+  "c_event_scans": 3148,
+  "c_events_fired": 401,
+  "entities_created": 2348,
+  "events_processed": 3148,
+  "finalTime": 1000,
+  "max_future_event_list_size": 3,
+  "reneged": 0,
+  "served": 400,
+  "total": 2347,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > many-c-events-high-churn (seed=47) 1`] = `
+{
+  "avgSojourn": 14.7644,
+  "avgSvc": 1.2261,
+  "avgWIP": 49.5838,
+  "avgWait": 20.6245,
+  "c_event_scans": 11456,
+  "c_events_fired": 817,
+  "entities_created": 881,
+  "events_processed": 2511,
+  "finalTime": 500,
+  "max_future_event_list_size": 15,
+  "reneged": 0,
+  "served": 815,
+  "total": 879,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > many-c-events-mostly-false (seed=46) 1`] = `
+{
+  "avgSojourn": 7.4855,
+  "avgSvc": 1.5,
+  "avgWIP": 4.723,
+  "avgWait": 5.9606,
+  "c_event_scans": 12521,
+  "c_events_fired": 291,
+  "entities_created": 301,
+  "events_processed": 881,
+  "finalTime": 450,
+  "max_future_event_list_size": 3,
+  "reneged": 0,
+  "served": 290,
+  "total": 300,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > mm1-high-util (seed=42) 1`] = `
+{
+  "avgSojourn": 8.8036,
+  "avgSvc": 1.0442,
+  "avgWIP": 7.9992,
+  "avgWait": 7.765,
+  "c_event_scans": 1608,
+  "c_events_fired": 533,
+  "entities_created": 544,
+  "events_processed": 1608,
+  "finalTime": 600,
+  "max_future_event_list_size": 3,
+  "reneged": 0,
+  "served": 532,
+  "total": 543,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > mm1-small (seed=42) 1`] = `
+{
+  "avgSojourn": 2.9839,
+  "avgSvc": 0.9436,
+  "avgWIP": 2.9179,
+  "avgWait": 2.0665,
+  "c_event_scans": 317,
+  "c_events_fired": 104,
+  "entities_created": 111,
+  "events_processed": 317,
+  "finalTime": 120,
+  "max_future_event_list_size": 3,
+  "reneged": 0,
+  "served": 103,
+  "total": 110,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > post-office-multi-stage (seed=43) 1`] = `
+{
+  "avgSojourn": 56.5865,
+  "avgSvc": 6.5677,
+  "avgWIP": 22.8997,
+  "avgWait": 51.2599,
+  "c_event_scans": 1215,
+  "c_events_fired": 265,
+  "entities_created": 162,
+  "events_processed": 687,
+  "finalTime": 400,
+  "max_future_event_list_size": 6,
+  "reneged": 0,
+  "served": 105,
+  "total": 159,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > queue-depth-scaling-heavy (seed=51) 1`] = `
+{
+  "avgSojourn": 22.7528,
+  "avgSvc": 0.982,
+  "avgWIP": 22.8025,
+  "avgWait": 21.4917,
+  "c_event_scans": 1805,
+  "c_events_fired": 595,
+  "entities_created": 617,
+  "events_processed": 1805,
+  "finalTime": 600,
+  "max_future_event_list_size": 3,
+  "reneged": 0,
+  "served": 594,
+  "total": 616,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > queue-depth-scaling-light (seed=49) 1`] = `
+{
+  "avgSojourn": 5.1528,
+  "avgSvc": 1.0042,
+  "avgWIP": 4.5887,
+  "avgWait": 4.2533,
+  "c_event_scans": 1471,
+  "c_events_fired": 485,
+  "entities_created": 503,
+  "events_processed": 1471,
+  "finalTime": 600,
+  "max_future_event_list_size": 3,
+  "reneged": 0,
+  "served": 484,
+  "total": 502,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > queue-depth-scaling-medium (seed=50) 1`] = `
+{
+  "avgSojourn": 31.0052,
+  "avgSvc": 1.0303,
+  "avgWIP": 30.4793,
+  "avgWait": 29.7261,
+  "c_event_scans": 1677,
+  "c_events_fired": 539,
+  "entities_created": 601,
+  "events_processed": 1677,
+  "finalTime": 600,
+  "max_future_event_list_size": 3,
+  "reneged": 0,
+  "served": 538,
+  "total": 600,
+}
+`;
+
+exports[`determinism parity — fixed-seed benchmark scenarios > stadium-grouped-spectators (seed=45) 1`] = `
+{
+  "avgSojourn": 1.5504,
+  "avgSvc": 1.5504,
+  "avgWIP": 0.7491,
+  "avgWait": 0,
+  "c_event_scans": 99,
+  "c_events_fired": 22,
+  "entities_created": 22,
+  "events_processed": 55,
+  "finalTime": 40,
+  "max_future_event_list_size": 5,
+  "reneged": 0,
+  "served": 11,
+  "total": 11,
+}
+`;

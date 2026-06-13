@@ -9,7 +9,7 @@
 //   const felSz  = engine.getFelSize()    // events in FEL
 
 import { DISTRIBUTIONS, sample, sampleAttrs, mulberry32, normalizeDistributionName, getPiecewisePeriods, createStreamRegistry } from "./distributions.js";
-import { buildWaitDistEntry, finalizeWeightedStats } from "./statistics.js";
+import { buildWaitDistEntry, finalizeWeightedStats, summarizeEntitySummary } from "./statistics.js";
 import { buildTraceFromLog } from "../simulation/traceCollector.js";
 import { makeHelpers, createServerEntities, releaseServerClaim, clearWaitingState, markEntityWaiting, preemptCustomer, repairServers } from "./entities.js";
 import { compilePredicate, getPredicateDependencies } from "./conditions.js";
@@ -393,6 +393,12 @@ export function buildEngine(model, seed, warmupPeriod = 0, maxSimTime = null, te
   const purgeConfig = engineOptions.purgePeriod || {};
   const purgeEnabled = !!purgeConfig.enabled;
   const maxPurgeTime = purgeConfig.maxPurgeTime || Math.min(2 * (maxSimTime || 500), 5000);
+  // collectTrace=false (batch mode) skips per-cycle trace entry construction and
+  // the final trace build — purely observational output that batch paths discard.
+  const collectTrace = engineOptions.collectTrace !== false;
+  // entityDetail=false (batch reps ≥ 1) builds entitySummaryCompact in the worker
+  // instead of cloning every entity object, reducing structured-clone payload size.
+  const entityDetail = engineOptions.entityDetail !== false;
   const warnings = [];
 
   // ── Per-queue metrics (F11.4): blockingCount, balkCount per queue name ───────
@@ -779,11 +785,13 @@ const cycleLog = [];
       if (endEntry) return { done: true, cycleLog: [endEntry], snap: stepSnapshot() };
     }
 
-    const phaseAClock = { from: previousClock, to: clock, dueEvents: due.map(e => ({ id: e.id || e.name, name: e.name || e.id || "?", type: e.type || "B" })) };
     _cycleCount++;
-    const phaseAEntry = makeTraceEntry("A", { message: `Clock → t=${clock.toFixed(3)}`, clock: phaseAClock });
-    cycleLog.push(phaseAEntry);
-    log.push(phaseAEntry);
+    if (collectTrace) {
+      const phaseAClock = { from: previousClock, to: clock, dueEvents: due.map(e => ({ id: e.id || e.name, name: e.name || e.id || "?", type: e.type || "B" })) };
+      const phaseAEntry = makeTraceEntry("A", { message: `Clock → t=${clock.toFixed(3)}`, clock: phaseAClock });
+      cycleLog.push(phaseAEntry);
+      log.push(phaseAEntry);
+    }
 
     // Phase B — fire all due events
     fel = fel.filter(ev => Math.abs(ev.scheduledTime - clock) >= 1e-9);
@@ -846,9 +854,11 @@ const cycleLog = [];
           srv._failedAt = clock;
           failedCount++;
         }
-        const msg = `FAILURE: ${failedCount} ${sType} server(s) failed at t=${clock.toFixed(3)}`;
-        cycleLog.push({ phase: "B", time: clock, message: msg });
-        log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: servers.map(s => s.id) } }));
+        if (collectTrace) {
+          const msg = `FAILURE: ${failedCount} ${sType} server(s) failed at t=${clock.toFixed(3)}`;
+          cycleLog.push({ phase: "B", time: clock, message: msg });
+          log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: servers.map(s => s.id) } }));
+        }
         continue;
       }
 
@@ -859,9 +869,11 @@ const cycleLog = [];
           e.role === "server" && e.type.trim().toLowerCase() === key && e.status === "failed"
         );
         const repairedCount = repairServers(failedServers, clock);
-        const msg = `REPAIR: ${repairedCount} ${sType} server(s) restored at t=${clock.toFixed(3)}`;
-        cycleLog.push({ phase: "B", time: clock, message: msg });
-        log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: failedServers.map(s => s.id) } }));
+        if (collectTrace) {
+          const msg = `REPAIR: ${repairedCount} ${sType} server(s) restored at t=${clock.toFixed(3)}`;
+          cycleLog.push({ phase: "B", time: clock, message: msg });
+          log.push(_trace("B", { message: msg, event: { type: "B", id: ev.id, name: ev.name, fired: true, result: [msg], entityIds: failedServers.map(s => s.id) } }));
+        }
         continue;
       }
 
@@ -883,9 +895,11 @@ const cycleLog = [];
       fel.sort((a, b) => a.scheduledTime - b.scheduledTime);
       noteFelSize();
 
-      const { msg, entityIds, newEvents } = buildFelEventLog("B", ev, msgs, ctx, felEntries);
-      cycleLog.push({ phase: "B", time: clock, message: msg, skipped, event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents } });
-      log.push(_trace("B", { event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents }, message: msg, skipped }));
+      if (collectTrace) {
+        const { msg, entityIds, newEvents } = buildFelEventLog("B", ev, msgs, ctx, felEntries);
+        cycleLog.push({ phase: "B", time: clock, message: msg, skipped, event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents } });
+        log.push(_trace("B", { event: { type: "B", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: !skipped, result: msgs, entityIds, newEvents }, message: msg, skipped }));
+      }
     }
 
 // Phase C — evaluate conditionals until stable
@@ -903,19 +917,21 @@ const cycleLog = [];
         _runtimeMetrics.cEventScans++;
         const condTrue = ev._compiledCondition(predicateCtx);
         if (!condTrue) {
-          const falseEntry = makeTraceEntry("C", {
-            message: `C: "${ev.name || ev.id}" — condition false`,
-            cEval: {
-              eventId: ev.id || ev.name || "?",
-              eventName: ev.name || ev.id || "?",
-              priority: ev.priority ?? 9999,
-              pass: cPass,
-              conditionTrue: false,
-              failureReason: "condition false",
-            },
-          });
-          cycleLog.push(falseEntry);
-          log.push(falseEntry);
+          if (collectTrace) {
+            const falseEntry = makeTraceEntry("C", {
+              message: `C: "${ev.name || ev.id}" — condition false`,
+              cEval: {
+                eventId: ev.id || ev.name || "?",
+                eventName: ev.name || ev.id || "?",
+                priority: ev.priority ?? 9999,
+                pass: cPass,
+                conditionTrue: false,
+                failureReason: "condition false",
+              },
+            });
+            cycleLog.push(falseEntry);
+            log.push(falseEntry);
+          }
           continue;
         }
         // Clear arbitration from any prior C-event pass, then build fresh ctx
@@ -932,34 +948,36 @@ const cycleLog = [];
         _runtimeMetrics.cEventsFired++;
         _runtimeMetrics.eventsProcessed++;
         cFired = true;
-        const { msg, entityIds, newEvents } = buildFelEventLog("C", ev, msgs, ctx, felEntries);
-        const firedEntry = makeTraceEntry("C", {
-          cEval: { eventId: ev.id || ev.name || "?", eventName: ev.name || ev.id || "?", priority: ev.priority ?? 9999, pass: cPass, conditionTrue: true },
-          event: { type: "C", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: true, result: msgs, entityIds, newEvents },
-          message: msg,
-          arbitration: Object.keys(ctx._arbitration).length ? { ...ctx._arbitration } : undefined,
-        });
-        cycleLog.push(firedEntry);
-        log.push(firedEntry);
-        for (let skippedIndex = idx + 1; skippedIndex < sortedCEvents.length; skippedIndex++) {
-          const skippedEvent = sortedCEvents[skippedIndex];
-          const skippedEntry = makeTraceEntry("C", {
-            cEval: {
-              eventId: skippedEvent.id || skippedEvent.name || "?",
-              eventName: skippedEvent.name || skippedEvent.id || "?",
-              priority: skippedEvent.priority ?? 9999,
-              pass: cPass,
-              conditionTrue: false,
-              skippedBecause: "restart",
-            },
-            message: `C: "${skippedEvent.name || skippedEvent.id}" skipped (restart)`,
+        if (collectTrace) {
+          const { msg, entityIds, newEvents } = buildFelEventLog("C", ev, msgs, ctx, felEntries);
+          const firedEntry = makeTraceEntry("C", {
+            cEval: { eventId: ev.id || ev.name || "?", eventName: ev.name || ev.id || "?", priority: ev.priority ?? 9999, pass: cPass, conditionTrue: true },
+            event: { type: "C", id: ev.id || ev.name || "?", name: ev.name || ev.id || "?", fired: true, result: msgs, entityIds, newEvents },
+            message: msg,
+            arbitration: Object.keys(ctx._arbitration).length ? { ...ctx._arbitration } : undefined,
           });
-          cycleLog.push(skippedEntry);
-          log.push(skippedEntry);
+          cycleLog.push(firedEntry);
+          log.push(firedEntry);
+          for (let skippedIndex = idx + 1; skippedIndex < sortedCEvents.length; skippedIndex++) {
+            const skippedEvent = sortedCEvents[skippedIndex];
+            const skippedEntry = makeTraceEntry("C", {
+              cEval: {
+                eventId: skippedEvent.id || skippedEvent.name || "?",
+                eventName: skippedEvent.name || skippedEvent.id || "?",
+                priority: skippedEvent.priority ?? 9999,
+                pass: cPass,
+                conditionTrue: false,
+                skippedBecause: "restart",
+              },
+              message: `C: "${skippedEvent.name || skippedEvent.id}" skipped (restart)`,
+            });
+            cycleLog.push(skippedEntry);
+            log.push(skippedEntry);
+          }
         }
         break; // restart from Priority 1 — Three-Phase restart rule
       }
-      if (!cFired) {
+      if (!cFired && collectTrace) {
         const stableEntry = makeTraceEntry("C", { message: "No C-events can fire → Phase A" });
         cycleLog.push(stableEntry);
         log.push(stableEntry);
@@ -972,8 +990,10 @@ const cycleLog = [];
       const truncMsg = `Phase C truncated after ${maxCPasses} passes at t=${clock.toFixed(3)} — model may have an unstable condition`;
       _phaseCTruncated = true;
       warnings.push(truncMsg);
-      cycleLog.push({ phase: "C", time: clock, message: truncMsg });
-      log.push(_trace("WARNING", { warning: { code: "PHASE_C_TRUNCATED", message: truncMsg, detail: `reached ${maxCPasses} passes` }, message: truncMsg }));
+      if (collectTrace) {
+        cycleLog.push({ phase: "C", time: clock, message: truncMsg });
+        log.push(_trace("WARNING", { warning: { code: "PHASE_C_TRUNCATED", message: truncMsg, detail: `reached ${maxCPasses} passes` }, message: truncMsg }));
+      }
     }
 
     // Condition-based termination check (post-step)
@@ -1032,17 +1052,23 @@ const cycleLog = [];
 
     const engineSummary = getSummary();
     const engineSummaryWithDuration = { ...engineSummary, simulatedDuration: clock };
-    const { trace, traceTruncated } = buildTraceFromLog(log, runtimeModel, engineSummaryWithDuration);
+    // Quiet mode: trace is observational only and batch consumers discard it —
+    // skip the (expensive) trace build entirely and return an empty log.
+    const { trace, traceTruncated } = collectTrace
+      ? buildTraceFromLog(log, runtimeModel, engineSummaryWithDuration)
+      : { trace: undefined, traceTruncated: undefined };
 
     return {
       finalTime: clock,
-      log,
+      log: collectTrace ? log : [],
       snap:            snap(clock),
       summary:         engineSummary,
       runtimeMetrics:  getRuntimeMetrics(engineSummary.served),
       phaseCTruncated: _phaseCTruncated,
       warnings:        warnings.slice(),
-      entitySummary:   entities.map(e => ({ ...e, attrs: { ...e.attrs } })),
+      ...(entityDetail
+        ? { entitySummary: entities.map(e => ({ ...e, attrs: { ...e.attrs } })) }
+        : { entitySummaryCompact: summarizeEntitySummary(entities) }),
       timeSeries:      _timeSeries ?? undefined,
       waitDist:        computeWaitDist(entities),
       perQueue:        Object.keys(_perQueue).length ? { ..._perQueue } : undefined,

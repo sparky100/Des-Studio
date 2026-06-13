@@ -80,6 +80,7 @@ export async function runAdaptiveBatch(options = {}) {
     // collection roughly doubles per-rep cost, so it is opt-in for batches.
     collectTimeSeries = false,
     onRoundComplete,
+    onProgress,
     checkpointAt = 100,
     onCheckpoint,
     signal,
@@ -117,6 +118,7 @@ export async function runAdaptiveBatch(options = {}) {
       batchSize = Math.min(stepSize, tierMax - totalReps);
     }
 
+    const repsBefore = totalReps;
     const runOpts = {
       model,
       replications: batchSize,
@@ -126,6 +128,9 @@ export async function runAdaptiveBatch(options = {}) {
       schedulesMap,
       collectTimeSeries,
       pool,
+      onProgress: onProgress
+        ? prog => onProgress({ ...prog, completed: repsBefore + prog.completed, total: tierMax })
+        : undefined,
     };
 
     const roundResults = await runReplicationsPromise(runOpts, signal);

@@ -45,49 +45,176 @@ describe("enumerateSweepableParams", () => {
     ],
   };
 
-  test("returns entity type count params", () => {
+  test("returns entity type count params with natural English labels", () => {
     const params = enumerateSweepableParams(basicModel);
     const etCounts = params.filter(p => p.type === "entityTypeCount");
-    expect(etCounts.length).toBe(2);
-    expect(etCounts[0].label).toBe("Server.count");
+    expect(etCounts.length).toBe(1);
+    expect(etCounts[0].label).toBe("Number of Server");
     expect(etCounts[0].currentValue).toBe(1);
-    expect(etCounts[1].label).toBe("Customer.count");
   });
 
-  test("returns queue capacity params", () => {
+  test("excludes customer/patient entity types from servers group", () => {
+    const params = enumerateSweepableParams(basicModel);
+    const labels = params.map(p => p.label);
+    expect(labels).not.toContain("Number of Customer");
+  });
+
+  test("returns queue capacity params with natural English labels", () => {
     const params = enumerateSweepableParams(basicModel);
     const caps = params.filter(p => p.type === "queueCapacity");
     expect(caps.length).toBe(2);
-    expect(caps[0].label).toBe("Customer.capacity");
+    expect(caps[0].label).toBe("Customer — maximum capacity");
     expect(caps[0].currentValue).toBe(10);
     expect(caps[1].currentValue).toBe(Infinity);
   });
 
-  test("returns B-Event distribution params", () => {
+  test("returns B-Event distribution params with natural English labels", () => {
     const params = enumerateSweepableParams(basicModel);
     const bDist = params.filter(p => p.type === "bEventDistParam");
     expect(bDist.length).toBe(1);
-    expect(bDist[0].label).toBe("Arrival.Exponential.mean");
+    expect(bDist[0].label).toBe("Arrival — mean");
     expect(bDist[0].currentValue).toBeCloseTo(1.111);
   });
 
-  test("returns C-Event distribution params", () => {
+  test("returns C-Event distribution params with natural English labels", () => {
     const params = enumerateSweepableParams(basicModel);
     const cDist = params.filter(p => p.type === "cEventDistParam");
     expect(cDist.length).toBe(1);
-    expect(cDist[0].label).toBe("Seize.Exponential.mean");
+    expect(cDist[0].label).toBe("Seize — mean");
   });
 
-  test("returns state variable initial values", () => {
+  test("returns state variable initial values with natural English labels", () => {
     const params = enumerateSweepableParams(basicModel);
     const svs = params.filter(p => p.type === "stateVarInit");
     expect(svs.length).toBe(1);
-    expect(svs[0].label).toBe("threshold.initialValue");
+    expect(svs[0].label).toBe("threshold — starting value");
   });
 
   test("handles model with no entity types gracefully", () => {
     const params = enumerateSweepableParams({});
     expect(Array.isArray(params)).toBe(true);
+  });
+
+  // ── Shift schedule tests ────────────────────────────────────────────────────
+
+  test("skips entityTypeCount for servers with shift schedules", () => {
+    const model = {
+      entityTypes: [
+        { id: "et_nurse", name: "Nurse", role: "server", count: "3",
+          shiftSchedule: [{ time: 0, capacity: 3 }, { time: 480, capacity: 6 }] },
+      ],
+    };
+    const params = enumerateSweepableParams(model);
+    expect(params.filter(p => p.type === "entityTypeCount")).toHaveLength(0);
+  });
+
+  test("enumerates shiftCapacity params for each shift period", () => {
+    const model = {
+      entityTypes: [
+        { id: "et_nurse", name: "Nurse", role: "server", count: "3",
+          shiftSchedule: [{ time: 0, capacity: 3 }, { time: 480, capacity: 6 }, { time: 960, capacity: 2 }] },
+      ],
+    };
+    const params = enumerateSweepableParams(model);
+    const shiftParams = params.filter(p => p.type === "shiftCapacity");
+    expect(shiftParams).toHaveLength(3);
+    expect(shiftParams[0].label).toBe("Nurse — shift 1 capacity");
+    expect(shiftParams[0].subLabel).toBe("from minute 0");
+    expect(shiftParams[0].currentValue).toBe(3);
+    expect(shiftParams[1].label).toBe("Nurse — shift 2 capacity");
+    expect(shiftParams[1].subLabel).toBe("from minute 480");
+    expect(shiftParams[1].currentValue).toBe(6);
+    expect(shiftParams[2].label).toBe("Nurse — shift 3 capacity");
+    expect(shiftParams[2].currentValue).toBe(2);
+  });
+
+  test("entity type without shift schedule still appears as entityTypeCount", () => {
+    const model = {
+      entityTypes: [
+        { id: "et_doc", name: "Doctor", role: "server", count: "4" },
+        { id: "et_nurse", name: "Nurse", role: "server", count: "3",
+          shiftSchedule: [{ time: 0, capacity: 3 }] },
+      ],
+    };
+    const params = enumerateSweepableParams(model);
+    const etCounts = params.filter(p => p.type === "entityTypeCount");
+    expect(etCounts).toHaveLength(1);
+    expect(etCounts[0].label).toBe("Number of Doctor");
+    const shiftParams = params.filter(p => p.type === "shiftCapacity");
+    expect(shiftParams).toHaveLength(1);
+    expect(shiftParams[0].label).toBe("Nurse — shift 1 capacity");
+  });
+
+  // ── Piecewise distribution tests ────────────────────────────────────────────
+
+  test("enumerates piecewise period params for B-events, not a broken 'periods' entry", () => {
+    const model = {
+      bEvents: [{
+        id: "b_arr", name: "Arrivals",
+        schedules: [{
+          dist: "Piecewise",
+          distParams: {
+            periods: [
+              { startTime: 0,   distribution: { dist: "Exponential", distParams: { mean: "2" } } },
+              { startTime: 480, distribution: { dist: "Exponential", distParams: { mean: "5" } } },
+            ],
+          },
+        }],
+      }],
+    };
+    const params = enumerateSweepableParams(model);
+
+    // No broken "periods" param
+    expect(params.find(p => p.label?.includes("periods"))).toBeUndefined();
+
+    // Two piecewise period params
+    const piecewiseParams = params.filter(p => p.type === "bEventPiecewisePeriodParam");
+    expect(piecewiseParams).toHaveLength(2);
+    expect(piecewiseParams[0].label).toBe("Arrivals — period 1 mean");
+    expect(piecewiseParams[0].subLabel).toBe("from minute 0");
+    expect(piecewiseParams[0].currentValue).toBe(2);
+    expect(piecewiseParams[1].label).toBe("Arrivals — period 2 mean");
+    expect(piecewiseParams[1].subLabel).toBe("from minute 480");
+    expect(piecewiseParams[1].currentValue).toBe(5);
+  });
+
+  test("enumerates piecewise period params for C-events", () => {
+    const model = {
+      cEvents: [{
+        id: "c_svc", name: "Service",
+        cSchedules: [{
+          dist: "Piecewise",
+          distParams: {
+            periods: [
+              { startTime: 0, distribution: { dist: "Exponential", distParams: { mean: "3" } } },
+            ],
+          },
+        }],
+      }],
+    };
+    const params = enumerateSweepableParams(model);
+    const piecewiseParams = params.filter(p => p.type === "cEventPiecewisePeriodParam");
+    expect(piecewiseParams).toHaveLength(1);
+    expect(piecewiseParams[0].label).toBe("Service — period 1 mean");
+    expect(piecewiseParams[0].currentValue).toBe(3);
+  });
+
+  test("handles lowercase piecewise dist name", () => {
+    const model = {
+      bEvents: [{
+        id: "b_arr", name: "Arrivals",
+        schedules: [{
+          dist: "piecewise",
+          distParams: {
+            periods: [
+              { startTime: 0, distribution: { dist: "Exponential", distParams: { mean: "1" } } },
+            ],
+          },
+        }],
+      }],
+    };
+    const params = enumerateSweepableParams(model);
+    expect(params.filter(p => p.type === "bEventPiecewisePeriodParam")).toHaveLength(1);
   });
 });
 
@@ -141,6 +268,77 @@ describe("applySweepValue", () => {
     const cloned = applySweepValue(model, param, 0);
     expect(parseFloat(cloned.bEvents[0].schedules[0].distParams.mean)).toBeGreaterThanOrEqual(0.001);
   });
+
+  // ── Shift capacity ──────────────────────────────────────────────────────────
+
+  test("modifies shift schedule period capacity", () => {
+    const model = {
+      entityTypes: [{
+        id: "et_nurse", name: "Nurse", role: "server",
+        shiftSchedule: [{ time: 0, capacity: 3 }, { time: 480, capacity: 6 }],
+      }],
+    };
+    const param = { type: "shiftCapacity", targetId: "et_nurse", periodIndex: 1 };
+    const cloned = applySweepValue(model, param, 8);
+    expect(cloned.entityTypes[0].shiftSchedule[1].capacity).toBe("8");
+    expect(model.entityTypes[0].shiftSchedule[1].capacity).toBe(6); // original unchanged
+  });
+
+  test("clamps shift capacity to minimum 1", () => {
+    const model = {
+      entityTypes: [{ id: "et_srv", name: "Server", role: "server",
+        shiftSchedule: [{ time: 0, capacity: 2 }] }],
+    };
+    const param = { type: "shiftCapacity", targetId: "et_srv", periodIndex: 0 };
+    const cloned = applySweepValue(model, param, 0);
+    expect(parseInt(cloned.entityTypes[0].shiftSchedule[0].capacity, 10)).toBeGreaterThanOrEqual(1);
+  });
+
+  // ── Piecewise period params ─────────────────────────────────────────────────
+
+  test("modifies a B-event piecewise period parameter", () => {
+    const model = {
+      bEvents: [{
+        id: "b_arr", name: "Arrivals",
+        schedules: [{
+          dist: "Piecewise",
+          distParams: {
+            periods: [
+              { startTime: 0,   distribution: { dist: "Exponential", distParams: { mean: "2" } } },
+              { startTime: 480, distribution: { dist: "Exponential", distParams: { mean: "5" } } },
+            ],
+          },
+        }],
+      }],
+    };
+    const param = { type: "bEventPiecewisePeriodParam", targetId: "b_arr", scheduleIndex: 0, periodIndex: 1, paramKey: "mean" };
+    const cloned = applySweepValue(model, param, 10);
+    expect(cloned.bEvents[0].schedules[0].distParams.periods[1].distribution.distParams.mean).toBe("10");
+    // other period unchanged
+    expect(cloned.bEvents[0].schedules[0].distParams.periods[0].distribution.distParams.mean).toBe("2");
+    // original unchanged
+    expect(model.bEvents[0].schedules[0].distParams.periods[1].distribution.distParams.mean).toBe("5");
+  });
+
+  test("modifies a C-event piecewise period parameter", () => {
+    const model = {
+      cEvents: [{
+        id: "c_svc", name: "Service",
+        cSchedules: [{
+          dist: "Piecewise",
+          distParams: {
+            periods: [
+              { startTime: 0, distribution: { dist: "Exponential", distParams: { mean: "3" } } },
+            ],
+          },
+        }],
+      }],
+    };
+    const param = { type: "cEventPiecewisePeriodParam", targetId: "c_svc", scheduleIndex: 0, periodIndex: 0, paramKey: "mean" };
+    const cloned = applySweepValue(model, param, 7);
+    expect(cloned.cEvents[0].cSchedules[0].distParams.periods[0].distribution.distParams.mean).toBe("7");
+    expect(model.cEvents[0].cSchedules[0].distParams.periods[0].distribution.distParams.mean).toBe("3");
+  });
 });
 
 describe("M/M/1 template sweep", () => {
@@ -148,14 +346,13 @@ describe("M/M/1 template sweep", () => {
     const mm1 = TEMPLATES.find(t => t.name === "M/M/1 Queue");
     expect(mm1).toBeDefined();
     const params = enumerateSweepableParams(mm1);
-    // Server.count, Customer.count, Customer queue capacity, Arrival mean, Complete (no schedules), Seize mean
     const labels = params.map(p => p.label);
-    expect(labels).toContain("Server.count");
-    expect(labels).toContain("Arrival.Exponential.mean");
-    expect(labels).toContain("Seize.Exponential.mean");
+    expect(labels).toContain("Number of Server");
+    expect(labels).toContain("Arrival — mean");
+    expect(labels).toContain("Seize — mean");
   });
 
-  test("applying Server count 2 produces valid model structure", () => {
+  test("applying server count 2 produces valid model structure", () => {
     const mm1 = TEMPLATES.find(t => t.name === "M/M/1 Queue");
     const param = { type: "entityTypeCount", targetId: mm1.entityTypes.find(e => e.name === "Server").id };
     const cloned = applySweepValue(mm1, param, 2);

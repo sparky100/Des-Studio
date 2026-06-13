@@ -16,6 +16,7 @@
 | v1.5.0 | 2026-06-05 | Results accuracy | **§9 Goals:** added `summary.avgWIP` metric; added batch-mode note on per-replication evaluation of count goals. **§11.1 Sections:** corrected factual error — the engine actively uses `entryQueues`/`exitQueues` to compute `entitiesIn`/`entitiesOut`/`avgSojourn` (was incorrectly stated as "engine ignores sections entirely"); clarified dual purpose (UI organisation + statistical boundary tracking); aligned "large model" threshold with TOP LLM MISTAKES #13 (≥8 queues or ≥3 stages, consistent throughout); added note that sections with empty entry/exit arrays are cosmetic only and produce zero in/out counts. |
 | v1.6.0 | 2026-06-09 | Sprint 85 | **§9 Goals:** added `summary.avgTimeInSystem` (weighted mean time across all entities including in-progress) and `summary.servedRatio` (service completion rate as decimal 0–1). Updated metric count from 13 to 15. Added `avgTimeInSystem` to percentile-capable time metrics. |
 | v1.7.0 | 2026-06-12 | Schema enforcement | Added TOP LLM MISTAKES #15 (disconnected queue fragment) and V45 blocking error to §10. |
+| v1.8.0 | 2026-06-13 | Schema correction | **§11.1 Sections:** corrected results-contract description (`count`/`avgSojourn` require `memberIds` only, not entry/exit queues); added per-section metric table (`count`, `avgSojourn`, `entitiesIn`, `entitiesOut`) with non-zero conditions; documented `summary.journeys` and `summary.queueJourneys` outputs; replaced imprecise entry/exit selection prose with concrete front-door/handoff-queue rules. |
 
 ---
 
@@ -975,7 +976,7 @@ All generated model JSON MUST pass every blocking rule below.
 
 1. **UI organisation** — groups queues, entity types, B-events, and C-events into named, coloured swimlanes and filter tabs. Always beneficial for navigation on large models.
 
-2. **Statistical boundary tracking** — the engine reads `entryQueues` and `exitQueues` to count entities crossing section boundaries and compute per-section metrics (`entitiesIn`, `entitiesOut`, `avgSojourn`) that appear in the Results panel and AI exports. **`entryQueues` and `exitQueues` must be set for these counts to be non-zero.** Sections with both arrays empty are cosmetic only.
+2. **Statistical boundary tracking** — the engine computes per-section metrics that appear in the Results panel and AI exports. `count` and `avgSojourn` are computed from `memberIds` alone — every section with at least one queue in `memberIds` will produce non-zero values for these. `entitiesIn` and `entitiesOut` require `entryQueues` and `exitQueues` to be populated; sections with both arrays empty will show zero for those two fields only.
 
 > **For small models (< 8 queues, single stage):** sections add no value. Omit `sections: []` entirely unless the model has distinct named stages or the user explicitly requests swimlane views.
 
@@ -1011,12 +1012,26 @@ Notice the handoff: `q_nhs24_clinical` is in `exitQueues` for the NHS 24 section
 | `entryQueues` | string[] | Subset of `memberIds` — queues where entities arrive from another section |
 | `exitQueues` | string[] | Subset of `memberIds` — queues where entities leave to another section |
 
+**Results contract — `summary.sections[sectionId]`:**
+
+| Field | Meaning | Non-zero when |
+|---|---|---|
+| `count` | Entities that visited any queue in `memberIds` | ≥1 entity stage maps to a memberIds queue |
+| `avgSojourn` | Mean time (wait + service) across all `count` entities | `count` > 0 |
+| `entitiesIn` | Entities that passed through an `entryQueues` member | `entryQueues` is non-empty |
+| `entitiesOut` | Entities that passed through an `exitQueues` member | `exitQueues` is non-empty |
+
+The engine also produces journey breakdowns in the same summary:
+- `summary.journeys` — section-level path counts, e.g. `"sec_triage→sec_ed→exit": 42`
+- `summary.queueJourneys` — queue-level path counts, e.g. `"q_triage→q_ed_wait→q_discharge": 42`
+
 **entryQueues / exitQueues semantics:**
 - `entryQueues` marks the **arrival boundary** — queues where entities first enter this section coming from another section (or from outside the model).
 - `exitQueues` marks the **departure boundary** — queues that feed into another section's `entryQueues`.
 - A queue that only exists inside one section (no cross-section flow) appears in `memberIds` but NOT in `entryQueues` or `exitQueues`.
 - A terminal section (last stage, entities complete here) has no `exitQueues`.
-- For sections that model a service stage, `entryQueues` should contain the queue where entities wait *before* being served (the "in-queue" for this stage). For non-terminal sections, `exitQueues` should contain the queue that acts as the "out-queue" or handoff point — the queue entities join after service, which becomes the next section's `entryQueues`. Example: if "Triage" processes patients and places them into `q_ed_wait` before the "ED" section, then `q_ed_wait` is in Triage's `exitQueues` AND in ED's `entryQueues`.
+- **Which queue to mark as `entryQueues`:** the first queue an entity joins upon entering this section — the waiting queue at the front door. For a section with a single waiting queue before a server, that queue is the entry queue.
+- **Which queue to mark as `exitQueues`:** the last queue an entity visits before leaving this section — the handoff queue that routes into another section's entry queue. At a boundary, this same queue should appear in the next section's `entryQueues`. Example: if "Triage" processes patients and places them into `q_ed_wait` before the "ED" section, then `q_ed_wait` is in Triage's `exitQueues` AND in ED's `entryQueues`.
 - Sections with neither `entryQueues` nor `exitQueues` (both empty) are purely cosmetic groupings — they provide no boundary information for journey analysis. Prefer at least one `entryQueues` entry for any section that has a distinct waiting-to-be-served queue.
 
 ⚠ **Coverage requirement:** For any model that uses sections, every queue `id`, entity type `id`, B-event `id`, and C-event `id` in the model **must** appear in exactly one section's `memberIds`. Items absent from all `memberIds` arrays are invisible to the swimlane UI and filter tabs. When in doubt, assign supporting events and entity types to the section they are primarily associated with.

@@ -65,6 +65,7 @@ export function compactReplicationPayload(payload) {
       phaseCTruncated: result.phaseCTruncated || result.summary?.phaseCTruncated || false,
       warnings: result.warnings || result.summary?.warnings || [],
       entitySummary: result.entitySummary,
+      entitySummaryCompact: result.entitySummaryCompact,
       log: [],
       timeSeries: result.timeSeries,
       waitDist: result.waitDist,
@@ -137,6 +138,9 @@ export function runReplications(options = {}) {
     maxCycles,
     maxCPasses,
     collectTimeSeries,
+    // Batch replications never surface the structured trace (compaction strips
+    // log, persistence strips trace), so skip building it inside the engine.
+    collectTrace: options.collectTrace === true,
     schedulesMap,
   };
 
@@ -268,7 +272,7 @@ export function runReplications(options = {}) {
       try {
         worker.postMessage({
           type: WORKER_MESSAGE_TYPES.RUN_REPLICATION,
-          payload: { replicationIndex, seed },
+          payload: { replicationIndex, seed, entityDetail: replicationIndex === 0 },
         });
       } catch (error) {
         failRun({

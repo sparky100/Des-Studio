@@ -33,6 +33,8 @@ import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogr
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
 import { ExperimentControls } from "./ExperimentControls.jsx";
+import { ParamBrowserPanel, paramColor } from "./ParamBrowserPanel.jsx";
+import { alpha, RADIUS } from "../shared/tokens.js";
 import { generateReport, sanitizeFilename } from '../../reports/index.js';
 import { getModelImageDataUrl } from '../visual-designer/graph.js';
 import { useTheme } from "../shared/ThemeContext.jsx";
@@ -196,6 +198,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [sweepOpen, setSweepOpen] = useState(false);
   const [sweepParams, setSweepParams] = useState([]);
   const [sweepSelectedParam, setSweepSelectedParam] = useState(null);
+  const [sweepPickerOpen, setSweepPickerOpen] = useState(false);
+  const [sweepPickerBOpen, setSweepPickerBOpen] = useState(false);
   const [sweepMin, setSweepMin] = useState(1);
   const [sweepMax, setSweepMax] = useState(5);
   const [sweepStep, setSweepStep] = useState(1);
@@ -222,6 +226,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [expFormName, setExpFormName] = useState("");
   const [expFormDesc, setExpFormDesc] = useState("");
   const [expFormOverrides, setExpFormOverrides] = useState([]);
+  const [expFormPickerOpen, setExpFormPickerOpen] = useState(false);
   const [expFormSaving, setExpFormSaving] = useState(false);
   const [reportGenerating, setReportGenerating] = useState(false);
   const [modelCheckerIssues, setModelCheckerIssues] = useState(null);
@@ -1530,6 +1535,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       </div>
 
       {executeSection === "setup" && (
+        <div style={{ maxWidth: 1120, margin: "0 auto" }}>
         <ExperimentControls
           warmupPeriod={warmupPeriod} setWarmupPeriod={setWarmupPeriod}
           replications={replications} setReplications={setReplications}
@@ -1552,9 +1558,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}
           onClose={() => setExecuteSection("run")}
         />
+        </div>
       )}
 
       {executeSection === "saved-experiments" && (
+      <div style={{ maxWidth: 1120, margin: "0 auto" }}>
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div style={{ padding: "12px 16px 0", fontSize: 11, color: C.muted, fontFamily: FONT, lineHeight: 1.5 }}>
           Save named run configurations — warm-up, replications, seed, and parameter overrides — so you can reload and re-run them later. Results are saved to run history when you run.
@@ -1568,6 +1576,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               setExpFormName("");
               setExpFormDesc("");
               setExpFormOverrides([]);
+              setExpFormPickerOpen(false);
+              if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
               setExpFormOpen(true);
             }}>
               New Experiment
@@ -1611,40 +1621,59 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER OVERRIDES</span>
-                <Btn small variant="ghost" onClick={() => {
-                  if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
-                  setExpFormOverrides(prev => [...prev, { path: "", value: "" }]);
-                }}>
-                  + Add
+                <Btn small variant="ghost" onClick={() => setExpFormPickerOpen(o => !o)}>
+                  {expFormPickerOpen ? "Done" : "+ Add"}
                 </Btn>
               </div>
-              {expFormOverrides.map((ov, idx) => (
-                <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <select
-                    aria-label={`Override parameter ${idx + 1}`}
-                    value={ov.path}
-                    onChange={e => {
-                      const path = e.target.value;
-                      setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, path } : o));
-                    }}
-                    style={{ flex: 2, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 11, padding: "5px 6px", outline: "none" }}
-                  >
-                    <option value="">Select parameter...</option>
-                    {sweepParams.map(p => (
-                      <option key={p.path} value={p.path}>{p.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    aria-label={`Override value ${idx + 1}`}
-                    type="number"
-                    value={ov.value}
-                    onChange={e => setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, value: e.target.value } : o))}
-                    placeholder="value"
-                    style={{ flex: 1, background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12, padding: "5px 6px", outline: "none" }}
-                  />
-                  <Btn small variant="ghost" ariaLabel={`Remove override ${idx+1}`} onClick={() => setExpFormOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
-                </div>
-              ))}
+              {expFormOverrides.map((ov, idx) => {
+                const param = sweepParams.find(p => p.path === ov.path);
+                const chipColor = (() => {
+                  const t = param?.type;
+                  if (t === "entityTypeCount" || t === "shiftCapacity") return C.server;
+                  if (t === "queueCapacity") return C.green;
+                  if (t === "bEventDistParam" || t === "bEventPiecewisePeriodParam") return C.bEvent;
+                  if (t === "cEventDistParam" || t === "cEventPiecewisePeriodParam") return C.cEvent;
+                  return C.muted;
+                })();
+                return (
+                  <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <div style={{
+                      flex: 2, display: "flex", flexDirection: "column", gap: 1,
+                      background: alpha(chipColor, 0.09), border: `1px solid ${alpha(chipColor, 0.27)}`,
+                      borderRadius: RADIUS.sm, padding: "3px 8px", minWidth: 0,
+                    }}>
+                      <span style={{ fontSize: 11, color: chipColor, fontFamily: FONT, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {param?.label ?? ov.path}
+                      </span>
+                      {param?.subLabel && (
+                        <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{param.subLabel}</span>
+                      )}
+                    </div>
+                    <input
+                      aria-label={`Override value ${idx + 1}`}
+                      type="number"
+                      value={ov.value}
+                      onChange={e => setExpFormOverrides(prev => prev.map((o, i) => i === idx ? { ...o, value: e.target.value } : o))}
+                      placeholder="value"
+                      style={{ width: 80, background: "transparent", border: `1px solid ${C.border}`, borderRadius: RADIUS.sm, color: C.amber, fontFamily: FONT, fontSize: 11, padding: "4px 6px", outline: "none", flexShrink: 0 }}
+                    />
+                    <Btn small variant="ghost" ariaLabel={`Remove override ${idx + 1}`} onClick={() => setExpFormOverrides(prev => prev.filter((_, i) => i !== idx))}>×</Btn>
+                  </div>
+                );
+              })}
+              {expFormPickerOpen && (
+                <ParamBrowserPanel
+                  params={sweepParams}
+                  alreadyAdded={new Set(expFormOverrides.map(o => o.path).filter(Boolean))}
+                  onSelect={path => {
+                    const found = sweepParams.find(p => p.path === path);
+                    const cv = found?.currentValue;
+                    const defaultVal = (cv !== undefined && Number.isFinite(cv)) ? String(cv) : "";
+                    setExpFormOverrides(prev => [...prev, { path, value: defaultVal }]);
+                  }}
+                  onClose={() => setExpFormPickerOpen(false)}
+                />
+              )}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <Btn small variant="primary" disabled={!expFormName.trim() || expFormSaving} onClick={async () => {
@@ -1734,6 +1763,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                     setExpFormName(exp.name);
                     setExpFormDesc(exp.description || "");
                     setExpFormOverrides((exp.config.overrides || []).map(o => ({ path: o.path, value: String(o.value) })));
+                    if (sweepParams.length === 0) setSweepParams(enumerateSweepableParams(model));
+                    setExpFormPickerOpen(false);
                     setExpFormOpen(true);
                   }}>
                     Edit
@@ -1765,9 +1796,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           ))}
         </div>
       </div>
+      </div>
       )}
 
       {executeSection === "experiments" && (
+      <div style={{ maxWidth: 1120, margin: "0 auto" }}>
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
         <div
           onClick={() => {
@@ -1809,99 +1842,89 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             {/* Parameter picker(s) */}
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>{sweepMode === "2d" ? "PARAMETER X" : "PARAMETER"}</span>
-              <select
-                aria-label={sweepMode === "2d" ? "Sweep parameter X" : "Sweep parameter"}
-                value={sweepSelectedParam ? `${sweepSelectedParam.type}|${sweepSelectedParam.targetId}|${sweepSelectedParam.paramKey || ""}` : ""}
-                onChange={e => {
-                  const val = e.target.value;
-                  if (!val) { setSweepSelectedParam(null); return; }
-                  const [type, targetId, paramKey] = val.split("|");
-                  const found = sweepParams.find(p => p.type === type && p.targetId === targetId && (p.paramKey || "") === paramKey);
-                  setSweepSelectedParam(found || null);
-                  if (found) {
-                    const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
-                    setSweepMin(cv);
-                    setSweepMax(cv * 3);
-                    setSweepStep(cv > 0 ? cv : 1);
-                  }
-                }}
-                style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
-                <option value="">Select a parameter...</option>
-                <optgroup label="Entity Type Count">
-                  {sweepParams.filter(p => p.type === "entityTypeCount").map(p => (
-                    <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Queue Capacity">
-                  {sweepParams.filter(p => p.type === "queueCapacity").map(p => (
-                    <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue === Infinity ? "∞" : p.currentValue})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Distribution Parameters (B-Events)">
-                  {sweepParams.filter(p => p.type === "bEventDistParam").map(p => (
-                    <option key={p.path} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Distribution Parameters (C-Events)">
-                  {sweepParams.filter(p => p.type === "cEventDistParam").map(p => (
-                    <option key={p.path} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
-                  ))}
-                </optgroup>
-                <optgroup label="Model Data">
-                  {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
-                    <option key={p.path} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
-                  ))}
-                </optgroup>
-              </select>
+              {sweepSelectedParam ? (
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <button
+                    onClick={() => setSweepPickerOpen(o => !o)}
+                    style={{
+                      flex: 1, display: "flex", flexDirection: "column", gap: 1, textAlign: "left",
+                      background: alpha(paramColor(sweepSelectedParam.type, C), 0.09),
+                      border: `1px solid ${alpha(paramColor(sweepSelectedParam.type, C), 0.27)}`,
+                      borderRadius: RADIUS.sm, padding: "4px 8px", cursor: "pointer", outline: "none",
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: paramColor(sweepSelectedParam.type, C), fontFamily: FONT, fontWeight: 700 }}>{sweepSelectedParam.label}</span>
+                    {sweepSelectedParam.subLabel && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{sweepSelectedParam.subLabel}</span>}
+                  </button>
+                  <Btn small variant="ghost" ariaLabel="Clear sweep parameter" onClick={() => { setSweepSelectedParam(null); setSweepPickerOpen(false); }}>×</Btn>
+                </div>
+              ) : (
+                <Btn variant="ghost" onClick={() => setSweepPickerOpen(o => !o)} style={{ justifyContent: "flex-start", fontSize: 12 }}>
+                  {sweepPickerOpen ? "Cancel" : "Choose parameter…"}
+                </Btn>
+              )}
+              {sweepPickerOpen && (
+                <ParamBrowserPanel
+                  params={sweepParams}
+                  singleSelect
+                  selectedPath={sweepSelectedParam?.path ?? null}
+                  onSelect={path => {
+                    const found = sweepParams.find(p => p.path === path);
+                    setSweepSelectedParam(found || null);
+                    if (found) {
+                      const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
+                      setSweepMin(cv);
+                      setSweepMax(cv * 3);
+                      setSweepStep(cv > 0 ? cv : 1);
+                    }
+                  }}
+                  onClose={() => setSweepPickerOpen(false)}
+                />
+              )}
             </div>
 
             {sweepMode === "2d" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={{ fontSize: 10, color: C.label, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>PARAMETER Y</span>
-                <select
-                  aria-label="Sweep parameter Y"
-                  value={sweepSelectedParamB ? `${sweepSelectedParamB.type}|${sweepSelectedParamB.targetId}|${sweepSelectedParamB.paramKey || ""}` : ""}
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (!val) { setSweepSelectedParamB(null); return; }
-                    const [type, targetId, paramKey] = val.split("|");
-                    const found = sweepParams.find(p => p.type === type && p.targetId === targetId && (p.paramKey || "") === paramKey);
-                    setSweepSelectedParamB(found || null);
-                    if (found) {
-                      const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
-                      setSweepMinB(cv);
-                      setSweepMaxB(cv * 3);
-                      setSweepStepB(cv > 0 ? cv : 1);
-                    }
-                  }}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 4, color: C.text, fontFamily: FONT, fontSize: 12, padding: "7px 8px", outline: "none", width: "100%" }}>
-                  <option value="">Select a parameter...</option>
-                  <optgroup label="Entity Type Count">
-                    {sweepParams.filter(p => p.type === "entityTypeCount").map(p => (
-                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Queue Capacity">
-                    {sweepParams.filter(p => p.type === "queueCapacity").map(p => (
-                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue === Infinity ? "∞" : p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Distribution Parameters (B-Events)">
-                    {sweepParams.filter(p => p.type === "bEventDistParam").map(p => (
-                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Distribution Parameters (C-Events)">
-                    {sweepParams.filter(p => p.type === "cEventDistParam").map(p => (
-                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|${p.paramKey || ""}`}>{p.label} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Model Data">
-                    {sweepParams.filter(p => p.type === "stateVarInit").map(p => (
-                      <option key={p.path + "_b"} value={`${p.type}|${p.targetId}|`}>{p.label} ({p.currentValue})</option>
-                    ))}
-                  </optgroup>
-                </select>
+                {sweepSelectedParamB ? (
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <button
+                      onClick={() => setSweepPickerBOpen(o => !o)}
+                      style={{
+                        flex: 1, display: "flex", flexDirection: "column", gap: 1, textAlign: "left",
+                        background: alpha(paramColor(sweepSelectedParamB.type, C), 0.09),
+                        border: `1px solid ${alpha(paramColor(sweepSelectedParamB.type, C), 0.27)}`,
+                        borderRadius: RADIUS.sm, padding: "4px 8px", cursor: "pointer", outline: "none",
+                      }}
+                    >
+                      <span style={{ fontSize: 11, color: paramColor(sweepSelectedParamB.type, C), fontFamily: FONT, fontWeight: 700 }}>{sweepSelectedParamB.label}</span>
+                      {sweepSelectedParamB.subLabel && <span style={{ fontSize: 10, color: C.muted, fontFamily: FONT }}>{sweepSelectedParamB.subLabel}</span>}
+                    </button>
+                    <Btn small variant="ghost" ariaLabel="Clear sweep parameter Y" onClick={() => { setSweepSelectedParamB(null); setSweepPickerBOpen(false); }}>×</Btn>
+                  </div>
+                ) : (
+                  <Btn variant="ghost" onClick={() => setSweepPickerBOpen(o => !o)} style={{ justifyContent: "flex-start", fontSize: 12 }}>
+                    {sweepPickerBOpen ? "Cancel" : "Choose parameter…"}
+                  </Btn>
+                )}
+                {sweepPickerBOpen && (
+                  <ParamBrowserPanel
+                    params={sweepParams}
+                    singleSelect
+                    selectedPath={sweepSelectedParamB?.path ?? null}
+                    onSelect={path => {
+                      const found = sweepParams.find(p => p.path === path);
+                      setSweepSelectedParamB(found || null);
+                      if (found) {
+                        const cv = typeof found.currentValue === "number" ? found.currentValue : 1;
+                        setSweepMinB(cv);
+                        setSweepMaxB(cv * 3);
+                        setSweepStepB(cv > 0 ? cv : 1);
+                      }
+                    }}
+                    onClose={() => setSweepPickerBOpen(false)}
+                  />
+                )}
               </div>
             )}
 
@@ -2219,6 +2242,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             )}
           </div>
         )}
+      </div>
       </div>
       )}
 
