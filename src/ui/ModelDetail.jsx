@@ -1286,7 +1286,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               {[
                 {label:"Blockers",value:validation.errors.length,color:validation.errors.length?C.red:C.green},
                 {label:"Warnings",value:validation.warnings.length,color:validation.warnings.length?C.amber:C.green},
-                {label:"Sections",value:Object.keys(tabIssueCounts).filter(id=>id!=="validate").length,color:C.accent},
+                {label:"Queues",value:(tabIssueCounts["queues"]?.errors||0)+(tabIssueCounts["queues"]?.warnings||0),color:(tabIssueCounts["queues"]?.errors||0)>0?C.red:(tabIssueCounts["queues"]?.warnings||0)>0?C.amber:C.green},
+                {label:"B-Events",value:(tabIssueCounts["bevents"]?.errors||0)+(tabIssueCounts["bevents"]?.warnings||0),color:(tabIssueCounts["bevents"]?.errors||0)>0?C.red:(tabIssueCounts["bevents"]?.warnings||0)>0?C.amber:C.green},
+                {label:"C-Events",value:(tabIssueCounts["cevents"]?.errors||0)+(tabIssueCounts["cevents"]?.warnings||0),color:(tabIssueCounts["cevents"]?.errors||0)>0?C.red:(tabIssueCounts["cevents"]?.warnings||0)>0?C.amber:C.green},
               ].map(item=>(
                 <div key={item.label} style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:6,padding:"10px 12px"}}>
                   <div style={{fontSize:9,color:C.muted,fontFamily:FONT,letterSpacing:1.1,fontWeight:700,marginBottom:4}}>{item.label.toUpperCase()}</div>
