@@ -1006,14 +1006,12 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     : "";
 
   const instruction = [
-    "OUTPUT FORMAT — output ONLY a single JSON block wrapped in ```json ... ``` fences — no other text before or after.",
-    '{ "analysis": "<markdown narrative — see below>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|moderate|low>" } ] }',
+    "CRITICAL: Your ENTIRE response must be a single JSON code block wrapped in ```json ... ``` fences. No text before or after.",
+    '{ "analysis": "## What Happened\\n<2–4 sentences: binding bottleneck, utilisation highlights, queue percentile data>\\n\\n## What to Change\\n<1–3 plain-English recommendations, one sentence each>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual", "target": "<name>", "from": 0, "to": 0 }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "high|moderate|low" } ] }',
     "",
-    "The 'analysis' field must contain a markdown narrative with exactly two sections (keep the total under 200 words):",
-    "## What Happened",
-    "2–4 sentences: most significant findings, flag the binding bottleneck (highest utilisation or longest queue), per-queue percentile highlights." + goalsInstr + warningsInstr + wipInstr,
-    "## What to Change",
-    "Top 1–3 recommendations in plain English, one sentence each. Each recommendation should correspond to a suggestion in the array.",
+    "The 'analysis' value is a markdown string with exactly two headings (total under 200 words):",
+    "  Heading '## What Happened': 2–4 sentences — binding bottleneck, utilisation highlights, queue percentile data." + goalsInstr + warningsInstr + wipInstr,
+    "  Heading '## What to Change': 1–3 plain-English recommendations, one sentence each. Each must correspond to a suggestion object in the array.",
     "",
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
     "  entityTypeCount  — change a server/entity type's numeric count.",
