@@ -137,6 +137,55 @@ describe('parseReportRecommendations', () => {
   });
 });
 
+describe('applySuggestionPatch — shiftPeriodCapacity', () => {
+  const baseModel = {
+    entityTypes: [
+      { name: "TriageNurse", count: 4, shiftSchedule: [{ time: 0, capacity: 4 }, { time: 480, capacity: 2 }] },
+    ],
+    queues: [], bEvents: [], cEvents: [], stateVariables: [],
+  };
+
+  test('patches the capacity of the matching period by time value', () => {
+    const change = { type: "shiftPeriodCapacity", target: "TriageNurse.0", from: 4, to: 6 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.entityTypes[0].shiftSchedule[0].capacity).toBe(6);
+    expect(result.entityTypes[0].shiftSchedule[1].capacity).toBe(2);
+  });
+
+  test('also updates count when period time is 0', () => {
+    const change = { type: "shiftPeriodCapacity", target: "TriageNurse.0", from: 4, to: 6 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.entityTypes[0].count).toBe(6);
+  });
+
+  test('patches a non-zero period without changing count', () => {
+    const change = { type: "shiftPeriodCapacity", target: "TriageNurse.480", from: 2, to: 3 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.entityTypes[0].shiftSchedule[1].capacity).toBe(3);
+    expect(result.entityTypes[0].count).toBe(4);
+  });
+
+  test('does not mutate the original model', () => {
+    const change = { type: "shiftPeriodCapacity", target: "TriageNurse.0", from: 4, to: 8 };
+    applySuggestionPatch(baseModel, change);
+    expect(baseModel.entityTypes[0].shiftSchedule[0].capacity).toBe(4);
+    expect(baseModel.entityTypes[0].count).toBe(4);
+  });
+
+  test('returns clone unchanged when entity name does not match', () => {
+    const change = { type: "shiftPeriodCapacity", target: "Unknown.0", from: 4, to: 6 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.entityTypes[0].shiftSchedule[0].capacity).toBe(4);
+  });
+
+  test('returns clone unchanged when periodTime does not match any period', () => {
+    const change = { type: "shiftPeriodCapacity", target: "TriageNurse.999", from: 4, to: 6 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.entityTypes[0].shiftSchedule[0].capacity).toBe(4);
+    expect(result.entityTypes[0].shiftSchedule[1].capacity).toBe(2);
+  });
+});
+
 describe('applySuggestionPatch — entityTypeCount with shift schedule', () => {
   const baseModel = {
     entityTypes: [

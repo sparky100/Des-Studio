@@ -107,7 +107,7 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
 function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult, onSaved, onRefineInDescribe }) {
   const { C, FONT } = useTheme();
   const change = suggestion.change;
-  const AUTOMATABLE = new Set(["entityTypeCount", "queueCapacity", "stateVariable", "bEventDistParam", "cEventDistParam"]);
+  const AUTOMATABLE = new Set(["entityTypeCount", "queueCapacity", "stateVariable", "bEventDistParam", "cEventDistParam", "shiftPeriodCapacity"]);
   const targetExists = change?.target && (() => {
     if (change.type === "bEventDistParam") {
       const [evName] = change.target.split(".");
@@ -116,6 +116,11 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
     if (change.type === "cEventDistParam") {
       const [evName] = change.target.split(".");
       return (model?.cEvents || []).some(e => e.name === evName);
+    }
+    if (change.type === "shiftPeriodCapacity") {
+      const dotIdx = change.target.lastIndexOf(".");
+      const entityName = change.target.slice(0, dotIdx);
+      return (model?.entityTypes || []).some(e => e.name === entityName || e.id === entityName);
     }
     return (
       (model?.entityTypes  || []).some(e => e.name === change.target) ||
@@ -135,7 +140,14 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
 
   const changeLabel = isManual
     ? "Manual change required — implement in model editor"
-    : `${change?.target}: ${change?.from} → ${change?.to}`;
+    : change?.type === "shiftPeriodCapacity"
+      ? (() => {
+          const dotIdx = (change.target || "").lastIndexOf(".");
+          const entity = change.target.slice(0, dotIdx);
+          const t = change.target.slice(dotIdx + 1);
+          return `${entity} shift (t=${t}): ${change.from} → ${change.to}`;
+        })()
+      : `${change?.target}: ${change?.from} → ${change?.to}`;
 
   const handleRefineInDescribe = () => {
     if (!onRefineInDescribe) return;
