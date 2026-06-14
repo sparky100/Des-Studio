@@ -46,9 +46,11 @@ describe('first-run onboarding', () => {
 
   it('shows onboarding actions for an empty model list', async () => {
     await renderApp();
+    // When there are no models, the New Model dialog auto-opens as the first-run experience.
+    await screen.findByRole('dialog');
 
-    expect(screen.getByText('Start your first model')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /create a model/i })).toBeInTheDocument();
+    expect(screen.getByText('New Model')).toBeInTheDocument();
+    expect(screen.getByText(/^Draw$/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /use a template/i })).toBeInTheDocument();
     expect(screen.queryByText(/import an existing simmodlr model file/i)).not.toBeInTheDocument();
   });
@@ -59,12 +61,14 @@ describe('first-run onboarding', () => {
     await renderApp();
 
     expect(await screen.findByRole('button', { name: /open model existing/i })).toBeInTheDocument();
-    expect(screen.queryByText('Start your first model')).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('opens the templates catalog from the first-run panel', async () => {
     const user = userEvent.setup();
     await renderApp();
+    // Wait for the New Model dialog to auto-open (first-run experience).
+    await screen.findByRole('dialog');
 
     await user.click(screen.getByRole('button', { name: /use a template/i }));
 

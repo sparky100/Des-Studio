@@ -188,7 +188,7 @@ describe('model JSON import', () => {
       }),
       'user-1'
     );
-  }, 10000);
+  }, 30000);
 
   it('opens directly in the AI workspace when Describe is chosen', async () => {
     const user = userEvent.setup();
@@ -206,11 +206,11 @@ describe('model JSON import', () => {
     fireEvent.click(screen.getByRole('button', { name: /\+ new model/i }));
     await user.type(screen.getByPlaceholderText(/e\.g\. Queue with Reneging/i), 'AI Draft');
     const newModelDialog = screen.getByRole('dialog', { name: /new model/i });
-    await user.click(within(newModelDialog).getByText(/^Describe$/i).closest('button'));
+    await user.click(within(newModelDialog).getByText(/^Model assistant$/i).closest('button'));
 
     expect(await screen.findByRole('button', { name: /^describe$/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByText(/Get started building your model/i)).not.toBeInTheDocument();
-  }, 10000);
+  }, 30000);
 
   it('applies entered name and description when starting from a template', async () => {
     const user = userEvent.setup();

@@ -69,7 +69,7 @@ describe("ResultsWorkspace", () => {
 
     expect(screen.getByText(/Queue measurements taken during the run/i)).toBeInTheDocument();
     expect(screen.getByText(/Busy Clerk resources measured during the run/i)).toBeInTheDocument();
-    expect(screen.getByText(/3 waiting times from completed customers/i)).toBeInTheDocument();
+    expect(screen.getByText(/3 wait samples from completed customers/i)).toBeInTheDocument();
   });
 
   test("shows compact data checks under charts", () => {

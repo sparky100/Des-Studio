@@ -51,9 +51,9 @@ describe("results view model", () => {
   test("buildServerUtilizationSeries normalizes busy servers by capacity", () => {
     const series = buildServerUtilizationSeries({
       timeSeries: [
-        { t: 0, byType: { Clerk: { busy: 0 } } },
-        { t: 5, byType: { Clerk: { busy: 1 } } },
-        { t: 10, byType: { Clerk: { busy: 2 } } },
+        { t: 0, byType: { Clerk: { busy: 0, total: 2 } } },
+        { t: 5, byType: { Clerk: { busy: 1, total: 2 } } },
+        { t: 10, byType: { Clerk: { busy: 2, total: 2 } } },
       ],
     }, model);
 

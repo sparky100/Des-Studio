@@ -16,7 +16,7 @@ describe('NewModelModal', () => {
     expect(screen.getByText(/Use a template/i)).toBeInTheDocument();
     expect(screen.getByText(/Import a file/i)).toBeInTheDocument();
     expect(screen.getByText(/Paste model/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Describe$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Model assistant$/i)).toBeInTheDocument();
   });
 
   it('requires name before enabling design start', () => {

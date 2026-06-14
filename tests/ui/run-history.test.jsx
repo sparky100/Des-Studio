@@ -89,7 +89,7 @@ describe('run history', () => {
     expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('CUSTOMERS SERVED');
     expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('81');
     expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('LEFT BEFORE SERVICE');
-    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('0.0%');
+    expect(screen.getByLabelText(/run history summary/i)).toHaveTextContent('0%');
     expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Export list/i })).toBeEnabled();
   });

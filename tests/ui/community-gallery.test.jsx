@@ -96,8 +96,8 @@ describe('Community Gallery tab', () => {
     const card = await screen.findByLabelText(/open model bobs/i);
     fireEvent.click(card);
 
-    expect(await screen.findByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByText(/run public model/i)).toBeInTheDocument();
+    expect(await screen.findByText(/run public model/i)).toBeInTheDocument();
+    expect(screen.getAllByRole('dialog').length).toBeGreaterThanOrEqual(1);
   });
 
   it('forks from gallery and opens the new private copy', async () => {

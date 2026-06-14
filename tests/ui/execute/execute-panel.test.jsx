@@ -58,9 +58,17 @@ const validModel = {
 };
 
 describe('ExecutePanel', () => {
+  // Navigate to the Setup section and expand the setup form.
   const openSetup = () => {
     fireEvent.click(screen.getByRole('button', { name: /^setup$/i }));
     fireEvent.click(screen.getByRole('button', { name: /edit setup/i }));
+  };
+
+  // After making changes in Setup, return to the Run section so the run
+  // controls toolbar (with "Batch Run" / blocker buttons) becomes visible again.
+  // The run controls toolbar only renders when executeSection === "run".
+  const goToRun = () => {
+    fireEvent.click(screen.getByRole('button', { name: /^run$/i }));
   };
 
   beforeEach(() => {
@@ -126,6 +134,8 @@ describe('ExecutePanel', () => {
 
     openSetup();
     fireEvent.change(screen.getByLabelText(/replication count/i), { target: { value: '0' } });
+    // Navigate back to Run so the run controls toolbar becomes visible.
+    goToRun();
 
     expect(screen.getAllByRole('button', { name: /blocker/i }).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole('button', { name: /batch run/i })).not.toBeInTheDocument();
@@ -140,6 +150,8 @@ describe('ExecutePanel', () => {
     openSetup();
     fireEvent.change(screen.getByLabelText(/warm-up period/i), { target: { value: '500' } });
     fireEvent.change(screen.getByLabelText(/run duration/i), { target: { value: '500' } });
+    // Navigate back to Run so the run controls toolbar becomes visible.
+    goToRun();
 
     expect(screen.getAllByRole('button', { name: /blocker/i }).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole('button', { name: /batch run/i })).not.toBeInTheDocument();
@@ -154,6 +166,8 @@ describe('ExecutePanel', () => {
 
     openSetup();
     fireEvent.change(screen.getByLabelText(/run label/i), { target: { value: 'Baseline' } });
+    // Navigate back to Run so the Batch Run button is visible.
+    goToRun();
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
@@ -189,6 +203,8 @@ describe('ExecutePanel', () => {
 
     openSetup();
     fireEvent.click(screen.getByRole('button', { name: /^full$/i }));
+    // Navigate back to Run so the Batch Run button is visible.
+    goToRun();
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
@@ -213,7 +229,8 @@ describe('ExecutePanel', () => {
     const onRunSaved = vi.fn();
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
 
-    openSetup();
+    // Navigate to Run section so the Batch Run button is visible (default section is "run",
+    // but openSetup() is not called here so we stay on Run).
     for (let i = 0; i < 10; i++) {
       fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
       await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(i + 1));
@@ -251,9 +268,11 @@ describe('ExecutePanel', () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" onRunSaved={onRunSaved} />);
 
+    // Change replications in Setup, then return to Run to click Batch Run.
     openSetup();
     const spinButtons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinButtons[1], { target: { value: String(N) } });
+    goToRun();
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));
@@ -280,6 +299,9 @@ describe('ExecutePanel', () => {
     );
     await waitFor(() => expect(onRunSaved).toHaveBeenCalledOnce());
 
+    // Expand the replication detail table (collapsed by default) so per-row "complete" tags are visible.
+    fireEvent.click(screen.getByText(/replication detail/i));
+
     // The batch status badge and each replication row both render "complete" tags
     expect(screen.getAllByText('complete').length).toBeGreaterThanOrEqual(N + 1);
   });
@@ -293,9 +315,11 @@ describe('ExecutePanel', () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
+    // Change replications in Setup, then return to Run to click Batch Run.
     openSetup();
     const spinButtons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinButtons[1], { target: { value: '3' } });
+    goToRun();
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
     expect(await screen.findByText('REPLICATION BATCH')).toBeInTheDocument();
@@ -338,10 +362,16 @@ describe('ExecutePanel', () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
+    // Change replications in Setup, then return to Run to click Batch Run.
     openSetup();
     const spinButtons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinButtons[1], { target: { value: '2' } });
+    goToRun();
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
+
+    // Expand the replication detail table (collapsed by default) so the detail header is visible.
+    // 'Avg wait' appears once in the CI table and once in the replication detail table header.
+    fireEvent.click(screen.getByText(/replication detail/i));
 
     expect(await screen.findAllByText('Avg wait')).toHaveLength(2);
     expect(screen.getByText('5.0')).toBeInTheDocument();
@@ -370,9 +400,11 @@ describe('ExecutePanel', () => {
 
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
 
+    // Change replications in Setup, then return to Run to click Batch Run.
     openSetup();
     const spinButtons = screen.getAllByRole('spinbutton');
     fireEvent.change(spinButtons[1], { target: { value: '2' } });
+    goToRun();
     fireEvent.click(screen.getByRole('button', { name: /batch run/i }));
 
     await waitFor(() => expect(mockSaveSimulationRun).toHaveBeenCalledTimes(1));

@@ -11,6 +11,13 @@ export default defineConfig({
     ),
   },
   test: {
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      '.claude/worktrees/**',
+      'supabase/**',
+    ],
     environment: 'node',
     environmentMatchGlobs: [
       ['tests/ui/**',               'jsdom'],

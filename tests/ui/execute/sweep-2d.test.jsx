@@ -92,21 +92,42 @@ const validModel = {
   ],
 };
 
+// Open the Studies section in the Execute panel.
 function openSweepSection() {
   fireEvent.click(screen.getByRole('button', { name: /^studies$/i }));
   const header = screen.getByText('STUDIES');
   fireEvent.click(header.closest('div') || header);
 }
 
+// Render the panel and open the Studies section in 2D sweep mode.
 function setup2DPanel() {
   render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
   openSweepSection();
   fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
 }
 
-function selectParamFromDropdown(ariaLabel, optionText) {
-  const select = screen.getByRole('combobox', { name: ariaLabel });
-  fireEvent.change(select, { target: { value: optionText } });
+/**
+ * Select the X (or only) sweep parameter via the ParamBrowserPanel.
+ * The UI renders a "Choose parameter…" button that opens a browser popup;
+ * the caller supplies the exact label text of the param row to click.
+ * After calling this, "Choose parameter…" for Y becomes available.
+ */
+function selectSweepParamX(paramLabel) {
+  // In 2D mode before any selection, there is one "Choose parameter…" button (for X).
+  const chooseBtns = screen.getAllByRole('button', { name: /choose parameter/i });
+  fireEvent.click(chooseBtns[0]);
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(paramLabel.replace('.', '\\.')) }));
+}
+
+/**
+ * Select the Y sweep parameter via the ParamBrowserPanel.
+ * Must be called after selectSweepParamX so the Y picker button is rendered.
+ */
+function selectSweepParamY(paramLabel) {
+  // After X is selected, the "Choose parameter…" button is now for Y.
+  const chooseBtns = screen.getAllByRole('button', { name: /choose parameter/i });
+  fireEvent.click(chooseBtns[0]);
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(paramLabel.replace('.', '\\.')) }));
 }
 
 function mock2DSweepRunner(results) {
@@ -131,40 +152,39 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     render(<ExecutePanel model={validModel} modelId="model-1" userId="user-1" />);
     openSweepSection();
 
-    // Default is 1D: only one parameter picker visible
-    expect(screen.getByRole('combobox', { name: /sweep parameter$/i })).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: /sweep parameter y/i })).not.toBeInTheDocument();
+    // Default is 1D: only the X "Choose parameter…" button is visible (one picker).
+    // In 1D mode there is exactly one "Choose parameter…" button and no Y picker.
+    expect(screen.getAllByRole('button', { name: /choose parameter/i })).toHaveLength(1);
+    // Confirm no Y-specific indicator yet (the PARAMETER Y label only shows in 2D mode).
+    expect(screen.queryByText('PARAMETER Y')).not.toBeInTheDocument();
 
-    // Switch to 2D
+    // Switch to 2D — now two "Choose parameter…" buttons (X and Y).
     fireEvent.click(screen.getByRole('button', { name: /2d sweep/i }));
-    expect(screen.getByRole('combobox', { name: /sweep parameter x/i })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: /sweep parameter y/i })).toBeInTheDocument();
+    expect(screen.getByText('PARAMETER Y')).toBeInTheDocument();
 
-    // Switch back to 1D
+    // Switch back to 1D — Y picker disappears.
     fireEvent.click(screen.getByRole('button', { name: /1d sweep/i }));
-    expect(screen.getByRole('combobox', { name: /sweep parameter$/i })).toBeInTheDocument();
-    expect(screen.queryByRole('combobox', { name: /sweep parameter y/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('PARAMETER Y')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /choose parameter/i })).toHaveLength(1);
   });
 
   it('validation blocks run when 2D grid exceeds 50 points', () => {
     setup2DPanel();
 
-    // Select parameter X
-    const selectX = screen.getByRole('combobox', { name: /sweep parameter x/i });
-    fireEvent.change(selectX, { target: { value: 'entityTypeCount|et_server|' } });
+    // Select parameter X: Server.count
+    selectSweepParamX('Server.count');
 
-    // Select parameter Y
-    const selectY = screen.getByRole('combobox', { name: /sweep parameter y/i });
-    fireEvent.change(selectY, { target: { value: 'queueCapacity|q_wait|' } });
+    // Select parameter Y: Waiting.capacity
+    selectSweepParamY('Waiting.capacity');
 
-    // Mock grid validation to throw
+    // Mock grid validation to throw an error.
     mockGenerate2DSweepValues.mockImplementation(() => {
       throw new Error('2D sweep grid exceeds 50 points (8 x 7 = 56). Reduce one range or increase step size.');
     });
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
-    // The error appears in both the live counter and the validation banner
+    // The error appears in the validation banner.
     const errors = screen.getAllByText(/2d sweep grid exceeds 50 points/i);
     expect(errors.length).toBeGreaterThanOrEqual(1);
     expect(mockRun2DSweep).not.toHaveBeenCalled();
@@ -187,8 +207,8 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     mock2DSweepRunner(results);
 
     setup2DPanel();
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter x/i }), { target: { value: 'entityTypeCount|et_server|' } });
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter y/i }), { target: { value: 'queueCapacity|q_wait|' } });
+    selectSweepParamX('Server.count');
+    selectSweepParamY('Waiting.capacity');
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
@@ -221,8 +241,8 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     mock2DSweepRunner(results);
 
     setup2DPanel();
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter x/i }), { target: { value: 'entityTypeCount|et_server|' } });
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter y/i }), { target: { value: 'queueCapacity|q_wait|' } });
+    selectSweepParamX('Server.count');
+    selectSweepParamY('Waiting.capacity');
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 
@@ -252,16 +272,14 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     // Before selecting any parameter, the Run Sweep button is not rendered
     expect(screen.queryByRole('button', { name: /run sweep/i })).not.toBeInTheDocument();
 
-    // Select X only — button now appears but is disabled
-    const selectX = screen.getByRole('combobox', { name: /sweep parameter x/i });
-    fireEvent.change(selectX, { target: { value: 'entityTypeCount|et_server|' } });
+    // Select X only — Run Sweep button now appears but is disabled
+    selectSweepParamX('Server.count');
 
     const runBtn = screen.getByRole('button', { name: /run sweep/i });
     expect(runBtn).toBeDisabled();
 
     // Select Y — button becomes enabled
-    const selectY = screen.getByRole('combobox', { name: /sweep parameter y/i });
-    fireEvent.change(selectY, { target: { value: 'queueCapacity|q_wait|' } });
+    selectSweepParamY('Waiting.capacity');
     expect(runBtn).not.toBeDisabled();
   });
 
@@ -276,8 +294,8 @@ describe('ExecutePanel — 2D Parametric Sweep', () => {
     });
 
     setup2DPanel();
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter x/i }), { target: { value: 'entityTypeCount|et_server|' } });
-    fireEvent.change(screen.getByRole('combobox', { name: /sweep parameter y/i }), { target: { value: 'queueCapacity|q_wait|' } });
+    selectSweepParamX('Server.count');
+    selectSweepParamY('Waiting.capacity');
 
     fireEvent.click(screen.getByRole('button', { name: /run sweep/i }));
 

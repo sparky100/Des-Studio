@@ -164,12 +164,12 @@ describe('ModelHistoryTab — Run History UI', () => {
   it('renders summary cards with latest run data', () => {
     renderTab({ historyRows: [makeRow({ total_served: 42, total_reneged: 3, avg_wait_time: 7.5 })] });
     expect(screen.getAllByText(/42/i).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/7\.50t/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/7\.5t/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows renege rate percentage when there are arrivals', () => {
     renderTab({ historyRows: [makeRow({ total_arrived: 100, total_reneged: 10 })] });
-    expect(screen.getByText('10.0%')).toBeInTheDocument();
+    expect(screen.getByText('10%')).toBeInTheDocument();
   });
 
   it('shows dash for renege rate when no arrivals', () => {

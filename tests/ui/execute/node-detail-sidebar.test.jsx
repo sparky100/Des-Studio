@@ -90,8 +90,8 @@ describe("NodeDetailSidebar", () => {
         model={mockModel}
       />
     );
-    expect(screen.getByText("Queue Members")).toBeInTheDocument();
-    expect(screen.getByText("Queue")).toBeInTheDocument();
+    expect(screen.getByText("Inspector")).toBeInTheDocument();
+    expect(screen.getAllByText("Queue").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("FIFO")).toBeInTheDocument();
     expect(screen.getByText("3 / 5")).toBeInTheDocument();
   });
@@ -190,7 +190,7 @@ describe("NodeDetailSidebar", () => {
         model={mockModel}
       />
     );
-    expect(screen.getByText("Server Pool")).toBeInTheDocument();
+    expect(screen.getByText("Inspector")).toBeInTheDocument();
     expect(screen.getByText("ServiceActivity")).toBeInTheDocument();
     expect(screen.getByText("Server")).toBeInTheDocument();
   });
@@ -318,7 +318,7 @@ describe("NodeDetailSidebar", () => {
         model={mockModel}
       />
     );
-    fireEvent.click(screen.getByText(/Close/));
+    fireEvent.click(screen.getByTitle(/Close/));
     expect(onClose).toHaveBeenCalled();
   });
 

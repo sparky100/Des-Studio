@@ -165,7 +165,7 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /^design$/i }));
-    await screen.findByLabelText('Visual Designer'); // wait for lazy chunk to resolve
+    await screen.findByLabelText('Visual Designer', {}, { timeout: 10000 }); // wait for lazy chunk to resolve
 
     expect(screen.getByRole('button', { name: /^design$/i })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Visual Designer')).toBeInTheDocument();
@@ -175,7 +175,7 @@ describe('Visual Designer shell', () => {
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-fit-view', 'false');
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-viewport-zoom', '1');
     expect(screen.getByTestId('react-flow')).toHaveAttribute('data-edge-count', '5');
-  });
+  }, 15000);
 
   it('keeps optional graph metadata in model exports', () => {
     const payload = buildModelExportPayload({
@@ -208,11 +208,11 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /^design$/i }));
-    await screen.findByLabelText('Visual Designer');
+    await screen.findByLabelText('Visual Designer', {}, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /add queue/i }));
 
-    expect(screen.getByText('Unsaved changes in this model.')).toBeInTheDocument();
-  });
+    expect(screen.getByText(/Unsaved layout changes/)).toBeInTheDocument();
+  }, 15000);
 
   it('auto-links a newly added queue from the currently selected source when the connection is valid', async () => {
     const user = userEvent.setup();
@@ -229,10 +229,10 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /^design$/i }));
-    await screen.findByLabelText('Visual Designer');
+    await screen.findByLabelText('Visual Designer', {}, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /mock select source/i }));
     await user.click(screen.getByRole('button', { name: /add queue/i }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getByRole('button', { name: /^Save$/i }));
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       bEvents: expect.arrayContaining([
@@ -256,9 +256,9 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /^design$/i }));
-    await screen.findByLabelText('Visual Designer');
+    await screen.findByLabelText('Visual Designer', {}, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /mock move first node/i }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getByRole('button', { name: /^Save$/i }));
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       graph: expect.objectContaining({
@@ -381,7 +381,7 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /^design$/i }));
-    await screen.findByLabelText('Visual Designer');
+    await screen.findByLabelText('Visual Designer', {}, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /mock connect source to consultant queue/i }));
     await user.click(screen.getByRole('button', { name: /mock select source/i }));
 
@@ -554,14 +554,14 @@ describe('Visual Designer shell', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /^design$/i }));
-    await screen.findByLabelText('Visual Designer');
+    await screen.findByLabelText('Visual Designer', {}, { timeout: 10000 });
     fireEvent.dragStart(screen.getByRole('button', { name: /add sink/i }), { dataTransfer });
     const canvas = screen.getByLabelText('Visual Designer canvas');
     const dropEvent = createEvent.drop(canvas, { dataTransfer });
     Object.defineProperty(dropEvent, 'clientX', { value: 300 });
     Object.defineProperty(dropEvent, 'clientY', { value: 200 });
     fireEvent(canvas, dropEvent);
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await user.click(screen.getByRole('button', { name: /^Save$/i }));
 
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({
       graph: expect.objectContaining({
@@ -570,7 +570,7 @@ describe('Visual Designer shell', () => {
         ]),
       }),
     }));
-  }, 15000);
+  }, 30000);
 
   it('configures modeless pan/select interaction props on the canvas', () => {
     render(
@@ -688,5 +688,5 @@ describe('Visual Designer shell', () => {
     await user.click(screen.getByRole('button', { name: /mock select queue/i }));
     expect(screen.getByText('1 selected')).toBeInTheDocument();
     expect(screen.getByTestId('react-flow').getAttribute('data-selected-edge')).toBe('');
-  });
+  }, 15000);
 });

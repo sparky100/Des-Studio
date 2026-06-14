@@ -43,7 +43,7 @@ describe('EntityTypeEditor — shift schedules (F7.6)', () => {
     // Entity type card is collapsed by default — expand it first
     fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
 
-    expect(screen.getByText('+ Add Shift')).toBeInTheDocument();
+    expect(screen.getByText('+ Add Shift Period')).toBeInTheDocument();
     // The first shift row's time field is always locked at t=0
     expect(container.querySelector('input[type="number"][disabled]')).toBeInTheDocument();
     expect(screen.getAllByDisplayValue('3')).toHaveLength(1);
@@ -62,7 +62,7 @@ describe('EntityTypeEditor — shift schedules (F7.6)', () => {
     // Entity type card is collapsed by default — expand it first
     fireEvent.click(screen.getByRole('button', { name: /Expand/i }));
 
-    fireEvent.click(screen.getByText('+ Add Shift'));
+    fireEvent.click(screen.getByText('+ Add Shift Period'));
 
     expect(handleChange).toHaveBeenCalledOnce();
     expect(handleChange.mock.calls[0][0][0].shiftSchedule).toHaveLength(2);

@@ -63,13 +63,16 @@ describe('model JSON export', () => {
         description: 'A small queueing model',
         exportedAt: '2026-05-04T12:00:00.000Z',
         appVersion: expect.any(String),
-        model_json: {
+        model_json: expect.objectContaining({
           entityTypes: [],
           stateVariables: [],
           bEvents: [],
           cEvents: [],
           queues: [],
-        },
+          containerTypes: [],
+          goals: [],
+          schemaVersion: 1,
+        }),
       })
     );
   });

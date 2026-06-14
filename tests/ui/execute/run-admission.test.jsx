@@ -65,6 +65,12 @@ function openSetup() {
   fireEvent.click(screen.getByRole("button", { name: /edit setup/i }));
 }
 
+// After making changes in Setup, navigate back to the Run section so the run
+// controls toolbar (with "Batch Run" / blocker buttons) becomes visible again.
+function goToRun() {
+  fireEvent.click(screen.getByRole("button", { name: /^run$/i }));
+}
+
 describe("ExecutePanel run admission", () => {
   beforeEach(() => {
     mockRunReplications.mockReset();
@@ -82,6 +88,8 @@ describe("ExecutePanel run admission", () => {
 
     openSetup();
     fireEvent.change(screen.getByLabelText(/replication count/i), { target: { value: "31" } });
+    // Navigate back to Run so the run controls toolbar with blocker buttons is visible.
+    goToRun();
 
     expect(screen.getAllByRole("button", { name: /blocker/i }).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByRole("button", { name: /batch run/i })).not.toBeInTheDocument();
