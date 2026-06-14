@@ -631,13 +631,15 @@ function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}
     if (aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`]?.mean != null) {
       return aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`].mean;
     }
-    const wd = Array.isArray(summary.waitDist) ? summary.waitDist : [];
-    const q = wd.find(w => w.queueId === qId || w.queue === qId);
+    // waitDist is an object keyed by queue name (not an array)
+    const wd = summary.waitDist;
+    const q = wd && (wd[scope.name] || wd[qId]
+      || Object.values(wd).find(w => w.queueId === qId || w.queue === qId));
     if (q) {
-      if (metric === "summary.avgWait") return q.mean;
-      if (metric === "summary.served") return q.n;
-      if (metric === "summary.reneged") return q.reneged;
-      if (metric === "summary.avgWIP" || metric === "summary.maxWIP") return q.avgDepth;
+      if (metric === "summary.avgWait") return q.mean ?? null;
+      if (metric === "summary.served") return q.n ?? null;
+      if (metric === "summary.reneged") return q.reneged ?? null;
+      if (metric === "summary.avgWIP" || metric === "summary.maxWIP") return q.avgDepth ?? null;
     }
     if (summary.byQueue?.[qId]) {
       const bq = summary.byQueue[qId];

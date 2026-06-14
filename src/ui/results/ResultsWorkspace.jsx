@@ -566,7 +566,7 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
         if (!goals.length) return null;
         const storedAgg = results?.aggregateStats && Object.keys(results.aggregateStats).length > 0
           ? results.aggregateStats : null;
-        const summary = results?.summary || {};
+        const summary = { ...(results?.summary || {}), waitDist: results?.waitDist };
         const aggForGoals = storedAgg || (() => {
           const s = summary;
           const pt = v => (v != null && Number.isFinite(Number(v)) ? { mean: Number(v), n: 1 } : null);

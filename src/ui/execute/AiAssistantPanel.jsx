@@ -31,7 +31,26 @@ const KPI_ROWS = [
   { key: "summary.costPerServed", label: "Cost per served", higherIsBetter: false },
 ];
 
-function BeforeAfterTable({ goals, baselineStats, afterStats }) {
+function resolveGoalValue(g, stats, waitDist, summary) {
+  if (g.scope?.type === "queue") {
+    const wd = waitDist;
+    const q = wd && (wd[g.scope.name] || wd[g.scope.id]
+      || Object.values(wd).find(w => w.queueId === g.scope.id || w.queue === g.scope.id));
+    if (q) {
+      if (g.metric === "summary.avgWait") return q.mean ?? null;
+      if (g.metric === "summary.served") return q.n ?? null;
+      if (g.metric === "summary.avgWIP" || g.metric === "summary.maxWIP") return q.avgDepth ?? null;
+    }
+    return summary?.byQueue?.[g.scope.id]?.avgWait ?? null;
+  }
+  if (g.scope?.type === "resource") {
+    const rName = g.scope.name || g.scope.id;
+    return summary?.perResource?.[rName]?.utilisation ?? null;
+  }
+  return stats?.[g.metric]?.mean ?? null;
+}
+
+function BeforeAfterTable({ goals, baselineStats, afterStats, beforeWaitDist, afterWaitDist, beforeSummary, afterSummary }) {
   const { C, FONT } = useTheme();
   const fmt = v => v === null ? "—" : Number.isFinite(v) ? (Number.isInteger(v) ? v.toString() : v.toFixed(1)) : "—";
   const delta = (before, after) => {
@@ -65,10 +84,8 @@ function BeforeAfterTable({ goals, baselineStats, afterStats }) {
 
   if (goals?.length) {
     for (const g of goals) {
-      const beforeStat = baselineStats?.[g.metric];
-      const afterStat = afterStats?.[g.metric];
-      const beforeVal = beforeStat?.mean ?? null;
-      const afterVal = afterStat?.mean ?? null;
+      const beforeVal = resolveGoalValue(g, baselineStats, beforeWaitDist, beforeSummary);
+      const afterVal  = resolveGoalValue(g, afterStats,    afterWaitDist,  afterSummary);
       const met = afterVal !== null
         ? (g.operator === "<"  ? afterVal < g.target
          : g.operator === "<=" ? afterVal <= g.target
@@ -238,6 +255,10 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
             goals={model?.goals || []}
             baselineStats={verifyResult._baselineStats ?? aggregateStats}
             afterStats={verifyResult.aggregateStats}
+            beforeWaitDist={results?.waitDist}
+            afterWaitDist={verifyResult.waitDist}
+            beforeSummary={results?.summary}
+            afterSummary={verifyResult.summary}
           />
           <div style={{ marginTop: 8, padding: "8px 10px", background: `${C.accent}11`, borderRadius: 4, border: `1px solid ${C.accent}33` }}>
             <div style={{ fontSize: 10, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
