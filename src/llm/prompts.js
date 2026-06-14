@@ -264,11 +264,6 @@ function buildSectionsDigest(model = {}) {
   return sections.map(s => ({
     name: s.name || s.id,
     memberQueues: (s.memberIds || []).map(id => queueNameById[id] || id).filter(Boolean),
-    entryQueues:  (s.entryQueues || []).map(id => queueNameById[id] || id).filter(Boolean),
-    exitQueues:   (s.exitQueues  || []).map(id => queueNameById[id] || id).filter(Boolean),
-    note: (s.entryQueues || []).length === 0
-      ? "No entry queue configured — entitiesIn count will be 0 in results"
-      : null,
   }));
 }
 

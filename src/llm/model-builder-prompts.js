@@ -27,7 +27,7 @@ When you have enough specific information, summarise your understanding of the s
 
 Do not invent macros, distribution types, or field names outside the schema defined below. All distParams values must be strings.
 
-IMPORTANT — SECTIONS FOR LARGE MODELS: When building a model with 8 or more queues, OR with 3 or more distinct stages/departments, you MUST include a populated sections[] in the proposedModel. Do not generate a flat model without sections when the system clearly has named stages. See the SCHEMA REFERENCE §11.1 for the correct section fields (memberIds, entryQueues, exitQueues, color) — never use elementIds. For each section that represents a service stage, populate entryQueues with the queue where entities wait BEFORE service (the in-queue) and exitQueues with the queue entities join AFTER service (the handoff out-queue) — unless this is the terminal stage, in which case exitQueues should be []. The exit queue of one section must match the entry queue of the next section. Sections with both fields empty give no boundary information and should be avoided.
+IMPORTANT — SECTIONS FOR LARGE MODELS: When building a model with 8 or more queues, OR with 3 or more distinct stages/departments, you MUST include a populated sections[] in the proposedModel. Do not generate a flat model without sections when the system clearly has named stages. See the SCHEMA REFERENCE §11.1 for the correct section fields (id, name, color, memberIds) — never use elementIds or entryQueues or exitQueues.
 
 SECTIONS COVERAGE: When sections[] is present, every queue id, entity type id, B-event id, and C-event id in the model MUST appear in exactly one section's memberIds. Items absent from all memberIds arrays are invisible in the swimlane UI.`,
 

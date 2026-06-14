@@ -198,33 +198,25 @@ function StageKpisTable({ snap, model }) {
       if (q.id && q.name) queueIdByName[q.name.trim().toLowerCase()] = q.id;
     }
     const sectionMemberSet = {};
-    const sectionEntrySet  = {};
-    const sectionExitSet   = {};
     for (const sec of modelSections) {
-      sectionMemberSet[sec.id] = new Set(sec.memberIds  || []);
-      sectionEntrySet[sec.id]  = new Set(sec.entryQueues || []);
-      sectionExitSet[sec.id]   = new Set(sec.exitQueues  || []);
-      sectionStats[sec.id]     = { count: 0, _sojournSum: 0, entitiesIn: 0, entitiesOut: 0 };
+      sectionMemberSet[sec.id] = new Set(sec.memberIds || []);
+      sectionStats[sec.id]     = { count: 0, _sojournSum: 0 };
     }
     for (const entity of entities) {
       if (entity.role === "server" || !entity.stages?.length) continue;
       if (entity.status !== "done" && entity.status !== "reneged") continue;
       for (const sec of modelSections) {
-        let sojourn = 0, didVisit = false, didEnter = false, didExit = false;
+        let sojourn = 0, didVisit = false;
         for (const stage of entity.stages) {
           const qid = queueIdByName[stage.queueName?.trim().toLowerCase()];
           if (!qid || !sectionMemberSet[sec.id].has(qid)) continue;
           didVisit = true;
           if (Number.isFinite(stage.stageWait))    sojourn += stage.stageWait;
           if (Number.isFinite(stage.stageService))  sojourn += stage.stageService;
-          if (sectionEntrySet[sec.id].has(qid)) didEnter = true;
-          if (sectionExitSet[sec.id].has(qid))  didExit  = true;
         }
         if (didVisit) {
           sectionStats[sec.id].count++;
           sectionStats[sec.id]._sojournSum += sojourn;
-          if (didEnter) sectionStats[sec.id].entitiesIn++;
-          if (didExit)  sectionStats[sec.id].entitiesOut++;
         }
       }
     }
@@ -434,8 +426,6 @@ function StageKpisTable({ snap, model }) {
                   <div style={metricGridStyle}>
                     {metricCard("Entities", s.count)}
                     {s.avgSojourn != null && metricCard("Avg time", fmt(s.avgSojourn, 1))}
-                    {s.entitiesIn  > 0 && metricCard("In",  s.entitiesIn,  C.served)}
-                    {s.entitiesOut > 0 && metricCard("Out", s.entitiesOut, C.reneged)}
                   </div>
                 </div>
               );
