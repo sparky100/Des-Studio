@@ -63,13 +63,9 @@ function extractResources(model = {}, summary = {}) {
   const servers = (model.entityTypes || []).filter(entity => entity.role === "server");
   return servers.map(server => {
     const pr = summary.perResource?.[server.name];
-    const hasShift = Array.isArray(server.shiftSchedule) && server.shiftSchedule.length > 0;
     const result = {
       name: server.name || server.id || "Server",
-      // count is omitted when shiftWindows is present — engine uses shiftWindows[0].capacity as
-      // the runtime initial count; showing count alongside shiftWindows causes the LLM to
-      // misread it as the "base" capacity that the schedule deviates from.
-      ...(hasShift ? {} : { count: finiteOrNull(server.count) }),
+      count: finiteOrNull(server.count),
       utilisation: (() => { const v = pr?.utilisation ?? summary.resourceUtilisation?.[server.name] ?? summary.utilisation; return Number.isFinite(v) ? Math.round(v * 100) : null; })(),
       busyCount: finiteOrNull(pr?.busyCount ?? summary.busyCount),
       idleCount: finiteOrNull(pr?.idleCount),
@@ -83,7 +79,8 @@ function extractResources(model = {}, summary = {}) {
         mttrParams: server.mttrDistParams || {},
       };
     }
-    if (hasShift) {
+    if (Array.isArray(server.shiftSchedule) && server.shiftSchedule.length > 0) {
+      result.shiftSchedule = `${server.shiftSchedule.length} period(s)`;
       result.shiftWindows = server.shiftSchedule.map(p => ({
         time: parseInt(p.time, 10) || 0,
         capacity: parseInt(p.capacity, 10) || 1,
@@ -267,11 +264,6 @@ function buildSectionsDigest(model = {}) {
   return sections.map(s => ({
     name: s.name || s.id,
     memberQueues: (s.memberIds || []).map(id => queueNameById[id] || id).filter(Boolean),
-    entryQueues:  (s.entryQueues || []).map(id => queueNameById[id] || id).filter(Boolean),
-    exitQueues:   (s.exitQueues  || []).map(id => queueNameById[id] || id).filter(Boolean),
-    note: (s.entryQueues || []).length === 0
-      ? "No entry queue configured — entitiesIn will be 0. entitiesOut counts sink exits (done/reneged) only."
-      : "entitiesOut counts exit-queue crossings plus sink exits (done/reneged without reaching exit queue).",
   }));
 }
 
@@ -634,15 +626,13 @@ function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}
     if (aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`]?.mean != null) {
       return aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`].mean;
     }
-    // waitDist is an object keyed by queue name (not an array)
-    const wd = summary.waitDist;
-    const q = wd && (wd[scope.name] || wd[qId]
-      || Object.values(wd).find(w => w.queueId === qId || w.queue === qId));
+    const wd = Array.isArray(summary.waitDist) ? summary.waitDist : [];
+    const q = wd.find(w => w.queueId === qId || w.queue === qId);
     if (q) {
-      if (metric === "summary.avgWait") return q.mean ?? null;
-      if (metric === "summary.served") return q.n ?? null;
-      if (metric === "summary.reneged") return q.reneged ?? null;
-      if (metric === "summary.avgWIP" || metric === "summary.maxWIP") return q.avgDepth ?? null;
+      if (metric === "summary.avgWait") return q.mean;
+      if (metric === "summary.served") return q.n;
+      if (metric === "summary.reneged") return q.reneged;
+      if (metric === "summary.avgWIP" || metric === "summary.maxWIP") return q.avgDepth;
     }
     if (summary.byQueue?.[qId]) {
       const bq = summary.byQueue[qId];
@@ -893,14 +883,13 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "6. RANKING: If multiple suggestions, rank by expected impact on the binding constraint and explain the trade-off.",
     "",
     "OUTPUT FORMAT — output ONLY a single JSON block wrapped in ```json ... ``` fences — no other text before or after the fences:",
-    '{ "analysis": "<narrative>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value vs target — one line, max 60 chars>", "cause": "<mechanism — one sentence>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|shiftPeriodCapacity|manual", "target": "<name>", "from": 0, "to": 0 }, "predicted": "<new KPI range — one sentence>", "goalImpact": "<goal label MET|MISSED — one line>", "confidence": "high|moderate|low" } ] }',
+    '{ "analysis": "<narrative>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|moderate|low>" } ] }',
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount    — flat resource count only. INVALID if shiftWindows is present — use shiftPeriodCapacity instead. 'from' = exact current count, 'to' = exact new count.",
-    "  queueCapacity      — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
-    "  stateVariable      — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
-    "  bEventDistParam    — change a numeric parameter of a bEvent's inter-arrival distribution. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream — read dist and distParams from the model data provided.",
-    "  cEventDistParam    — change a numeric parameter of a cEvent's service distribution. 'target' = '<cEventName>.<paramKey>' (e.g. 'ServiceComplete.mean'). Only use when the cEvent has a single schedule — read dist and distParams from the model data provided.",
-    "  shiftPeriodCapacity — change the capacity of ONE specific period in a resource's shift schedule. 'target' = '<EntityName>.<periodTime>' where periodTime is the integer start time shown in shiftWindows (e.g. 'TriageNurse.0' for the period starting at time 0, 'TriageNurse.480' for the period starting at time 480). 'from' = current capacity of that period from shiftWindows, 'to' = new capacity. Use this for ANY resource that shows shiftWindows.",
+    "  entityTypeCount  — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count.",
+    "  queueCapacity    — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
+    "  stateVariable    — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
+    "  bEventDistParam  — change a numeric parameter of a bEvent's inter-arrival distribution. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream — read dist and distParams from the model data provided.",
+    "  cEventDistParam  — change a numeric parameter of a cEvent's service distribution. 'target' = '<cEventName>.<paramKey>' (e.g. 'ServiceComplete.mean'). Only use when the cEvent has a single schedule — read dist and distParams from the model data provided.",
     "  HARD REQUIREMENTS for ANY automatable type:",
     "  1. 'target' MUST exactly match the name from the model data (entityTypes, queues, stateVariables, or bEvents/cEvents).",
     "  2. 'from' MUST be the exact current numeric value — read it from the model data above. Do not guess.",
@@ -1013,25 +1002,24 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
 
   const instruction = [
     "CRITICAL: Your ENTIRE response must be a single JSON code block wrapped in ```json ... ``` fences. No text before or after.",
-    '{ "analysis": "## What Happened\\n<2–4 sentences: binding bottleneck, utilisation highlights, queue percentile data>\\n\\n## What to Change\\n<1–3 plain-English recommendations, one sentence each>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value vs target — one line, max 60 chars>", "cause": "<mechanism — one sentence>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|shiftPeriodCapacity|manual", "target": "<name>", "from": 0, "to": 0 }, "predicted": "<new KPI range — one sentence>", "goalImpact": "<goal label MET|MISSED — one line>", "confidence": "high|moderate|low" } ] }',
+    '{ "analysis": "## What Happened\\n<2–4 sentences: binding bottleneck, utilisation highlights, queue percentile data>\\n\\n## What to Change\\n<1–3 plain-English recommendations, one sentence each>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual", "target": "<name>", "from": 0, "to": 0 }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "high|moderate|low" } ] }',
     "",
     "The 'analysis' value is a markdown string with exactly two headings (total under 200 words):",
     "  Heading '## What Happened': 2–4 sentences — binding bottleneck, utilisation highlights, queue percentile data." + goalsInstr + warningsInstr + wipInstr,
     "  Heading '## What to Change': 1–3 plain-English recommendations, one sentence each. Each must correspond to a suggestion object in the array.",
     "",
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount     — flat resource count only. INVALID if shiftWindows is present — use shiftPeriodCapacity instead.",
-    "  queueCapacity       — change a queue's numeric capacity limit.",
-    "  stateVariable       — change a state variable's numeric initialValue.",
-    "  bEventDistParam     — change a numeric distribution param on a bEvent (single stream). target='EventName.paramKey'.",
-    "  cEventDistParam     — change a numeric distribution param on a cEvent (single schedule). target='EventName.paramKey'.",
-    "  shiftPeriodCapacity — change ONE shift period capacity for a resource with shiftWindows. target='EntityName.<periodTime>' (e.g. 'TriageNurse.0'). 'from' = current capacity of that period from shiftWindows, 'to' = new capacity.",
+    "  entityTypeCount  — change a server/entity type's numeric count.",
+    "  queueCapacity    — change a queue's numeric capacity limit.",
+    "  stateVariable    — change a state variable's numeric initialValue.",
+    "  bEventDistParam  — change a numeric distribution param on a bEvent (single stream). target='EventName.paramKey'.",
+    "  cEventDistParam  — change a numeric distribution param on a cEvent (single schedule). target='EventName.paramKey'.",
     "  HARD REQUIREMENTS for ANY automatable type:",
     "  1. 'target' MUST exactly match the name from model.entityTypes, model.queues, or model.stateVariables.",
-    "  2. 'from' MUST be the exact current numeric value — read it from model data. Do not guess.",
+    "  2. 'from' MUST be the exact current numeric value — read it from model.entityTypes[n].count, model.queues[n].capacity, or model.stateVariables[n].initialValue. Do not guess.",
     "  3. 'to' MUST be a specific number, not a range, not null.",
     "  If the exact current value cannot be confirmed from the model data, use 'manual'.",
-    "MANUAL type — use for: discipline changes, routing, distribution type changes, structural additions, multi-stream events, or multi-period shift adjustments.",
+    "MANUAL type — use for everything else: discipline changes, routing, distribution type changes, structural additions, multi-stream events.",
     "When in doubt, use 'manual'. A grayed-out button is far better than a comparison that makes no actual change.",
     "Never give vague advice — always name the exact parameter and specific value.",
     "When the model has a failure/repair model, factor availability into capacity calculations.",
@@ -1191,16 +1179,15 @@ export function applySuggestionPatch(model, change) {
 
   if (change.type === "shiftPeriodCapacity") {
     const dotIdx = (change.target || "").lastIndexOf(".");
+    if (dotIdx === -1) return clone;
     const entityName = change.target.slice(0, dotIdx);
     const periodTime = Number(change.target.slice(dotIdx + 1));
     const et = (clone.entityTypes || []).find(e => e.name === entityName || e.id === entityName);
-    if (et && Array.isArray(et.shiftSchedule)) {
-      const period = et.shiftSchedule.find(p => Number(p.time) === periodTime);
-      if (period) {
-        period.capacity = change.to;
-        if (periodTime === 0) et.count = change.to;
-      }
-    }
+    if (!et || !Array.isArray(et.shiftSchedule)) return clone;
+    const period = et.shiftSchedule.find(p => Number(p.time) === periodTime);
+    if (!period) return clone;
+    period.capacity = change.to;
+    if (periodTime === 0) et.count = change.to;
     return clone;
   }
 
@@ -1723,7 +1710,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description ? truncateWords(model.description, 60) : undefined,
       goals,
-      entityTypes: (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count, ...(Array.isArray(e.shiftSchedule) && e.shiftSchedule.length ? { shiftWindows: e.shiftSchedule.map(p => ({ time: parseInt(p.time, 10) || 0, capacity: parseInt(p.capacity, 10) || 1 })) } : {}) })),
+      entityTypes: (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count })),
       queues: (model.queues || []).map(q => ({ name: q.name, capacity: q.capacity ?? null })),
       stateVariables: (model.stateVariables || []).filter(v => v.name).map(v => ({ name: v.name, initialValue: v.initialValue ?? null })),
       ...(bEvents ? { bEvents } : {}),
@@ -1768,7 +1755,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     "### Quick Wins\nIn 2–3 sentences of prose (NO numbered list), describe the most impactful policy or scheduling change achievable without adding resources (e.g. priority rules, routing, warmup period). Do NOT use numbered list items in this section.\n" +
     "### Investment Opportunities\nIn 1–2 sentences of prose (NO numbered list), describe structural improvements requiring additional resources or redesign. Do NOT use numbered list items in this section.\n" +
     "### Automatable Changes\nList up to 3 changes that can be expressed as a single numeric parameter update to the existing model. " +
-    "Allowed types: (a) server/entity-type count — INVALID for resources with shiftWindows; use shift period capacity instead, (b) a single shift period capacity for a resource that shows shiftWindows — format 'EntityName.<periodTime>' e.g. 'TriageNurse.0' for period at time 0 — cite the period time, current capacity, and proposed capacity from shiftWindows, (c) queue capacity limit, (d) state variable initial value, (e) a numeric distribution parameter on a bEvent or cEvent with a single schedule. " +
+    "Allowed types: (a) server/entity-type count, (b) queue capacity limit, (c) state variable initial value, (d) a numeric distribution parameter on a bEvent (inter-arrival) or cEvent (service) that has a single schedule — cite the event name, param key, current value, and proposed value from the model data. " +
     "For each item cite the exact current value from the model data and propose a specific new number — no ranges, no vague directions. " +
     "Format each as a numbered item, e.g. '1. Increase Nurse count from 2 to 3 — expected to reduce avgWait by ~30%' or '2. Reduce Arrivals inter-arrival rate from 0.5 to 0.4'. " +
     "If no such changes are warranted by the data, omit this section entirely.\n" +
@@ -1800,7 +1787,6 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
 
   const entityTypes = (model.entityTypes || []).map(e => ({
     name: e.name, role: e.role, count: e.count,
-    ...(Array.isArray(e.shiftSchedule) && e.shiftSchedule.length ? { shiftWindows: e.shiftSchedule.map(p => ({ time: parseInt(p.time, 10) || 0, capacity: parseInt(p.capacity, 10) || 1 })) } : {}),
   }));
   const queues = (model.queues || []).map(q => ({
     name: q.name, capacity: q.capacity ?? null,
@@ -1828,14 +1814,13 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
   const instruction = [
     "Convert this improvement opportunity into a single structured change.",
     "Output one JSON block wrapped in ```json ... ``` fences with this schema:",
-    '{ "analysis": "<one sentence explaining what will change and why>", "suggestions": [ { "rank": 1, "constraint": "<metric=value vs target — one line, max 60 chars>", "cause": "<brief cause — one sentence>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|shiftPeriodCapacity|manual", "target": "<exact name from model>", "from": 0, "to": 0 }, "predicted": "<expected improvement — one sentence>", "goalImpact": "<MET|MISSED — one line>", "confidence": "high|moderate|low" } ] }',
+    '{ "analysis": "<one sentence explaining what will change and why>", "suggestions": [ { "rank": 1, "constraint": "<metric=value>", "cause": "<brief cause>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual>", "target": "<exact name from model>", "from": <current number or null>, "to": <proposed number or null> }, "predicted": "<expected improvement>", "goalImpact": "<MET|MISSED|N/A>", "confidence": "<high|moderate|low>" } ] }',
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount     — flat resource count only. INVALID if shiftWindows is present — use shiftPeriodCapacity instead. 'from' = exact current count, 'to' = exact new count.",
-    "  queueCapacity       — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
-    "  stateVariable       — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
-    "  bEventDistParam     — change a numeric distribution parameter on a bEvent. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream with dist and distParams visible in the model data.",
-    "  cEventDistParam     — change a numeric distribution parameter on a cEvent. 'target' = '<cEventName>.<paramKey>' (e.g. 'ServiceComplete.mean'). Only use when the cEvent has a single schedule with dist and distParams visible in the model data.",
-    "  shiftPeriodCapacity — change ONE shift period capacity for a resource with shiftWindows. 'target' = '<EntityName>.<periodTime>' where periodTime is the integer start time from shiftWindows (e.g. 'TriageNurse.0' for period at time 0, 'TriageNurse.480' for period at time 480). 'from' = current capacity of that period from shiftWindows, 'to' = new capacity.",
+    "  entityTypeCount  — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count.",
+    "  queueCapacity    — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
+    "  stateVariable    — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
+    "  bEventDistParam  — change a numeric distribution parameter on a bEvent. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream with dist and distParams visible in the model data.",
+    "  cEventDistParam  — change a numeric distribution parameter on a cEvent. 'target' = '<cEventName>.<paramKey>' (e.g. 'ServiceComplete.mean'). Only use when the cEvent has a single schedule with dist and distParams visible in the model data.",
     "  HARD REQUIREMENTS for ANY automatable type:",
     "  1. 'target' MUST exactly match the name from the model data.",
     "  2. 'from' MUST be the exact current numeric value — read it from the model data above. Do not guess.",

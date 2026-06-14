@@ -1387,37 +1387,26 @@ const cycleLog = [];
         if (q.id && q.name) queueIdByName[q.name.trim().toLowerCase()] = q.id;
       }
       const sectionMemberSet = {};
-      const sectionEntrySet = {};
-      const sectionExitSet = {};
       for (const sec of runtimeModel.sections) {
         sectionMemberSet[sec.id] = new Set(sec.memberIds || []);
-        sectionEntrySet[sec.id]  = new Set(sec.entryQueues || []);
-        sectionExitSet[sec.id]   = new Set(sec.exitQueues || []);
-        sectionStats[sec.id] = { count: 0, _sojournSum: 0, entitiesIn: 0, entitiesOut: 0 };
+        sectionStats[sec.id] = { count: 0, _sojournSum: 0 };
       }
       for (const entity of customers) {
         if (!entity.stages?.length) continue;
         const visitedSections = [];
         let lastSection = null;
         for (const sec of runtimeModel.sections) {
-          let sojourn = 0, didVisit = false, didEnter = false, didExit = false;
+          let sojourn = 0, didVisit = false;
           for (const stage of entity.stages) {
             const qid = queueIdByName[stage.queueName?.trim().toLowerCase()];
             if (!qid || !sectionMemberSet[sec.id].has(qid)) continue;
             didVisit = true;
             sojourn += truncateInterval(stage.waitStartedAt, stage.serviceStartedAt)
                      + truncateInterval(stage.serviceStartedAt, stage.serviceEndedAt);
-            if (sectionEntrySet[sec.id].has(qid)) didEnter = true;
-            if (sectionExitSet[sec.id].has(qid)) didExit = true;
           }
           if (didVisit) {
             sectionStats[sec.id].count++;
             sectionStats[sec.id]._sojournSum += sojourn;
-            if (didEnter) sectionStats[sec.id].entitiesIn++;
-            // Count as OUT if entity passed through the exit queue OR left via a sink
-            // (done/reneged without reaching exit queue — e.g. direct-exit C-events, reneging)
-            const entityIsDone = entity.status === "done" || entity.status === "reneged";
-            if (didExit || entityIsDone) sectionStats[sec.id].entitiesOut++;
             if (sec.id !== lastSection) { visitedSections.push(sec.id); lastSection = sec.id; }
           }
         }

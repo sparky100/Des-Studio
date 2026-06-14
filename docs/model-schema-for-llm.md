@@ -17,6 +17,7 @@
 | v1.6.0 | 2026-06-09 | Sprint 85 | **§9 Goals:** added `summary.avgTimeInSystem` (weighted mean time across all entities including in-progress) and `summary.servedRatio` (service completion rate as decimal 0–1). Updated metric count from 13 to 15. Added `avgTimeInSystem` to percentile-capable time metrics. |
 | v1.7.0 | 2026-06-12 | Schema enforcement | Added TOP LLM MISTAKES #15 (disconnected queue fragment) and V45 blocking error to §10. |
 | v1.8.0 | 2026-06-13 | Schema correction | **§11.1 Sections:** corrected results-contract description (`count`/`avgSojourn` require `memberIds` only, not entry/exit queues); added per-section metric table (`count`, `avgSojourn`, `entitiesIn`, `entitiesOut`) with non-zero conditions; documented `summary.journeys` and `summary.queueJourneys` outputs; replaced imprecise entry/exit selection prose with concrete front-door/handoff-queue rules; added suggested colour palette for sections; clarified terminal-section `exitQueues` — journey tracking uses entity completion status (not exitQueues), but marking the sink queue as exitQueues enables `entitiesOut` throughput counting. Added TOP LLM MISTAKE #16 (sections without entryQueues/exitQueues — silent zero counts); hardened "Prefer" wording to MUST rule; added 4-step generation checklist; added terminal-section warning on exitQueues: [] pattern. |
+| v2.0.0 | 2026-06-14 | Sections simplification | **§11.1 Sections:** removed `entryQueues`/`exitQueues` fields and all `entitiesIn`/`entitiesOut` stat tracking — journey counts (`summary.journeys`) already capture full flow. Simplified section schema to `memberIds` only. Removed TOP LLM MISTAKE #16. Updated engine, UI, LLM exports, and reference model accordingly. |
 | v1.9.0 | 2026-06-14 | Doc quality | Fixed section numbering (§11–§16 were out of order; renumbered to match presentation order). Removed duplicate PREEMPT/FAIL/REPAIR rows from §5 macro table. Added §12 Response Format (was a dangling cross-reference). Expanded §5 loop guard into §5.1 with a worked example. Added §13 Complete Reference Model (3-section clinic). Clarified `defaultValue` vs `distParams` string rules in §2. Added API validation scope warning to §14. Added container vs state variable decision rule to §8. |
 
 ---
@@ -46,10 +47,9 @@ Read this before writing any model JSON.
 | 10 | No `COMPLETE()` or `RENEGE()` sink | Every model needs at least one exit path. Missing sinks = entities accumulate forever. Blocked by V8 / CHK-002. |
 | 11 | Queue fed but no C-event consumes it | Every queue receiving entities via `ARRIVE()`, `RELEASE()`, or routing must have a C-event whose `effect` includes `ASSIGN(QueueName,...)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH`. Warning CHK-013. |
 | 12 | `RENEGE_OLDEST(CustomerType)` with non-existent type | The customer type argument must exactly match a defined entity type name (case-sensitive). A typo silently does nothing. |
-| 13 | Missing `sections[]` on large models | Any model with ≥8 queues or ≥3 named stages MUST include a populated `sections[]`. Use `memberIds` (not `elementIds`). Mark cross-section queues with `entryQueues` and `exitQueues`. See §12.1. |
+| 13 | Missing `sections[]` on large models | Any model with ≥8 queues or ≥3 named stages MUST include a populated `sections[]`. Use `memberIds` (not `elementIds`). See §12.1. |
 | 14 | Server `count` as a string instead of integer | `count` must be a JSON integer: `"count": 3`, never `"count": "3"`. When a `shiftSchedule` is present, always set `count` equal to `shiftSchedule[0].capacity`. Blocked by V19. |
 | 15 | Disconnected queue/activity fragment | Every declared queue must be reachable from an arrival source. A queue that is never named as a destination in any `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination` field is a fragment — it will never receive entities. Remove it, or add routing that targets it. Blocked by V45. |
-| 16 | Sections without `entryQueues` set | Sections with empty `entryQueues` silently produce zero `entitiesIn` counts — no error is raised. For **every** section in a multi-section model, set `entryQueues` to the first queue entities join when entering that section. `exitQueues` is optional: the engine automatically counts done/reneged entities as OUT even without an exit queue. Only set `exitQueues` when you need to track a specific inter-section handoff queue. See §12.1 generation checklist. |
 
 ---
 
@@ -1012,7 +1012,7 @@ All generated model JSON MUST pass every blocking rule below.
 
 1. **UI organisation** — groups queues, entity types, B-events, and C-events into named, coloured swimlanes and filter tabs. Always beneficial for navigation on large models.
 
-2. **Statistical boundary tracking** — the engine computes per-section metrics that appear in the Results panel and AI exports. `count` and `avgSojourn` are computed from `memberIds` alone. `entitiesIn` requires `entryQueues` to be set — sections without entry queues will show zero for `entitiesIn`. `entitiesOut` is non-zero automatically: it counts both exit-queue crossings (when `exitQueues` is set) **and** entities that leave the section via a sink (done or reneged without reaching an exit queue). `exitQueues` is therefore optional.
+2. **Statistical boundary tracking** — the engine computes per-section metrics that appear in the Results panel and AI exports. `count` and `avgSojourn` are computed from `memberIds` alone. Journey breakdowns (`summary.journeys`, `summary.queueJourneys`) capture full flow paths including sinks automatically.
 
 > **For small models (< 8 queues, single stage):** sections add no value. Omit `sections: []` entirely unless the model has distinct named stages or the user explicitly requests swimlane views.
 
@@ -1022,24 +1022,17 @@ All generated model JSON MUST pass every blocking rule below.
     "id": "sec_nhs24",
     "name": "NHS 24 / 111 Triage",
     "color": "#4A90D9",
-    "memberIds": ["q_nhs24_call", "q_nhs24_clinical", "et_call_handler", "b_arrive_111", "c_assign_handler"],
-    "entryQueues": ["q_nhs24_call"],
-    "exitQueues":  ["q_nhs24_clinical"]
+    "memberIds": ["q_nhs24_call", "q_nhs24_clinical", "et_call_handler", "b_arrive_111", "c_assign_handler"]
   },
   {
     "id": "sec_miu",
     "name": "Minor Injuries Unit",
     "color": "#27AE60",
-    "memberIds": ["q_miu_wait", "q_miu_treatment", "et_miu_nurse", "c_assign_miu", "b_complete_miu"],
-    "entryQueues": ["q_miu_wait"],
-    "exitQueues":  []
+    "memberIds": ["q_miu_wait", "q_miu_treatment", "et_miu_nurse", "c_assign_miu", "b_complete_miu"]
   }
 ]
 ```
 
-Notice the handoff: `q_nhs24_clinical` is in `exitQueues` for the NHS 24 section, and `q_miu_wait` is in `entryQueues` for the MIU section. These are the queues that sit on the boundary — entities leave one section through its exitQueue and arrive at the next section via its entryQueue.
-
-MIU has `exitQueues: []` because it is the **terminal section** — entities complete or renege here with no downstream handoff. The engine automatically counts done/reneged entities as OUT, so `entitiesOut` will be non-zero even with an empty `exitQueues`. Only set `exitQueues` on a terminal section if you want to track a specific queue crossing at the boundary (e.g. a boarding queue before discharge). For non-terminal sections, set `exitQueues` to the handoff queue that feeds the next section's `entryQueues` — this ensures inter-section boundary crossings are counted precisely.
 
 | Field | Type | Description |
 |---|---|---|
@@ -1047,8 +1040,6 @@ MIU has `exitQueues: []` because it is the **terminal section** — entities com
 | `name` | string | Human-readable label shown in filter tabs and swimlane headers |
 | `color` | string | CSS hex colour used for swimlane background and filter tab indicators. Always assign a distinct colour per section — use the palette below. |
 | `memberIds` | string[] | IDs of queues, entity types, B-events, and/or C-events that belong to this section. Each element may appear in at most one section. |
-| `entryQueues` | string[] | Subset of `memberIds` — queues where entities arrive from another section |
-| `exitQueues` | string[] | Subset of `memberIds` — queues where entities leave to another section |
 
 **Section colours:** assign a visually distinct colour to each section so swimlane headers and filter tabs are easy to tell apart. Suggested palette (use in order, then cycle):
 
@@ -1071,28 +1062,17 @@ Do not repeat the same colour across sections in the same model.
 |---|---|---|
 | `count` | Entities that visited any queue in `memberIds` | ≥1 entity stage maps to a memberIds queue |
 | `avgSojourn` | Mean time (wait + service) across all `count` entities | `count` > 0 |
-| `entitiesIn` | Entities that passed through an `entryQueues` member | `entryQueues` is non-empty |
-| `entitiesOut` | Entities that passed through an `exitQueues` member **or** left via a sink (done/reneged) | Always non-zero when any entities visited the section |
 
 The engine also produces journey breakdowns in the same summary:
 - `summary.journeys` — section-level path counts, e.g. `"sec_triage→sec_ed→exit": 42`
 - `summary.queueJourneys` — queue-level path counts, e.g. `"q_triage→q_ed_wait→q_discharge": 42`
 
-**entryQueues / exitQueues semantics:**
-- `entryQueues` marks the **arrival boundary** — queues where entities first enter this section coming from another section (or from outside the model).
-- `exitQueues` marks the **departure boundary** — queues that feed into another section's `entryQueues`.
-- A queue that only exists inside one section (no cross-section flow) appears in `memberIds` but NOT in `entryQueues` or `exitQueues`.
-- A terminal section (last stage, entities complete or renege here) does not need `exitQueues`. The engine automatically counts done/reneged entities as OUT — `entitiesOut` will be non-zero even with `exitQueues: []`. Journey tracking also works automatically: the engine appends a completion token (`routeLabel`, `"Reneged"`, or `"Incomplete"`) to the path.
-- **Which queue to mark as `entryQueues`:** the first queue an entity joins upon entering this section — the waiting queue at the front door. For a section with a single waiting queue before a server, that queue is the entry queue.
-- **Which queue to mark as `exitQueues`:** only needed for non-terminal inter-section handoffs — the handoff queue that routes into another section's `entryQueues`. At a boundary, this queue should appear in the current section's `exitQueues` AND the next section's `entryQueues`. Example: if "Triage" places patients into `q_ed_wait` before "ED", then `q_ed_wait` is in Triage's `exitQueues` AND ED's `entryQueues`.
-- Sections with empty `entryQueues` produce zero `entitiesIn`. `entitiesOut` is always non-zero when entities visit and complete/renege. **For any model with ≥2 sections, you MUST set `entryQueues` on every section.** `exitQueues` is only required on non-terminal inter-section boundaries — omitting it on terminal sections is correct and expected.
 
 **Generation checklist — run this for every section you define:**
 
-1. **Set `entryQueues`** — identify the first queue entities join when entering this section and add its `id` to `entryQueues`. Every section must have at least one entry queue.
-2. **Set `exitQueues`** (non-terminal sections only) — identify the handoff queue entities visit before leaving this section into the next, and add its `id` to `exitQueues`. This same queue must appear in the next section's `entryQueues`.
-3. **Terminal sections** — leave `exitQueues: []`. Done/reneged entities are automatically counted as OUT. No action needed for throughput counts on terminal sections.
-4. **Verify the handoff chain** — for each adjacent pair of sections, confirm that section A's `exitQueues` queue appears in section B's `entryQueues`. A broken chain means inter-section boundary crossings won't be counted precisely.
+1. **Assign `memberIds`** — include every queue, entity type, B-event, and C-event that belongs to this section.
+2. **Cover all elements** — every element in the model must appear in exactly one section's `memberIds`. Elements absent from all sections are invisible to the swimlane UI.
+3. **Assign distinct colours** — use a different hex colour per section so swimlane headers are easy to distinguish.
 
 ⚠ **Coverage requirement:** For any model that uses sections, every queue `id`, entity type `id`, B-event `id`, and C-event `id` in the model **must** appear in exactly one section's `memberIds`. Items absent from all `memberIds` arrays are invisible to the swimlane UI and filter tabs. When in doubt, assign supporting events and entity types to the section they are primarily associated with.
 
@@ -1125,7 +1105,6 @@ Sections are **not** needed for:
 - Exploratory or template models
 
 **Rules:**
-- `entryQueues` and `exitQueues` must be subsets of `memberIds` and must reference queue IDs (not other element types).
 - An element appearing in multiple sections is a modelling error (the UI will assign it to the last section that claims it).
 - When generating a model JSON, you **SHOULD** populate `sections[]` if the model is clearly multi-stage (≥8 queues or ≥3 named stages). Omitting sections from a large model is a missed usability opportunity — always include them when the structure is clear. Reference the actual `id` values of the queues and events you defined earlier in the JSON — do not invent IDs.
 - If you are unsure which elements belong to which stage, omit `sections` or set it to `[]` and note in your response that the user can assign sections via the Sections tab.
@@ -1352,7 +1331,7 @@ Import this CSV in the model editor → Schedules tab.
 
 ### 12.3 Complete Reference Model — 3-Section Urgent Care Pathway
 
-This is a canonical reference model. Use it as a template when generating multi-section models. It exercises: entity attributes, PRIORITY queue discipline, shift schedule, probabilistic routing, state variable, goals, and sections with correct `entryQueues`/`exitQueues` wiring.
+This is a canonical reference model. Use it as a template when generating multi-section models. It exercises: entity attributes, PRIORITY queue discipline, shift schedule, probabilistic routing, state variable, goals, and multi-section `memberIds` grouping.
 
 The model represents a 3-stage urgent care pathway: **NHS 24 triage → Minor Injuries Unit → Emergency Department**. Patients arrive via phone triage and are routed probabilistically to MIU (60%) or ED (40%).
 
@@ -1515,25 +1494,19 @@ The model represents a 3-stage urgent care pathway: **NHS 24 triage → Minor In
       "id": "sec_nhs24",
       "name": "NHS 24 Triage",
       "color": "#4A90D9",
-      "memberIds": ["q_nhs24", "et_call_handler", "b_arrive", "b_triage_done", "c_triage"],
-      "entryQueues": ["q_nhs24"],
-      "exitQueues":  ["q_miu", "q_ed_wait"]
+      "memberIds": ["q_nhs24", "et_call_handler", "b_arrive", "b_triage_done", "c_triage"]
     },
     {
       "id": "sec_miu",
       "name": "Minor Injuries Unit",
       "color": "#27AE60",
-      "memberIds": ["q_miu", "et_miu_nurse", "c_miu_treat", "b_miu_done", "q_discharge", "c_discharge", "b_discharge_done"],
-      "entryQueues": ["q_miu"],
-      "exitQueues":  []
+      "memberIds": ["q_miu", "et_miu_nurse", "c_miu_treat", "b_miu_done", "q_discharge", "c_discharge", "b_discharge_done"]
     },
     {
       "id": "sec_ed",
       "name": "Emergency Department",
       "color": "#E67E22",
-      "memberIds": ["q_ed_wait", "q_ed_overflow", "et_ed_doctor", "c_ed_treat", "b_ed_done"],
-      "entryQueues": ["q_ed_wait"],
-      "exitQueues":  []
+      "memberIds": ["q_ed_wait", "q_ed_overflow", "et_ed_doctor", "c_ed_treat", "b_ed_done"]
     }
   ]
 }
@@ -1551,17 +1524,14 @@ The model represents a 3-stage urgent care pathway: **NHS 24 triage → Minor In
 | Different distribution types | Triangular (triage, MIU), Erlang (ED), Fixed (discharge) |
 | State variable | `sv_peak` (peakConcurrent) |
 | Scoped goals (queue + resource + percentile) | `goals[]` |
-| 3-section model with entryQueues/exitQueues | `sections[]` |
-| Terminal sections with `exitQueues: []` | MIU and ED sections |
+| 3-section model | `sections[]` |
 | C-event priority ordering (discharge = 0, treatment = 1) | `c_discharge.priority: 0` |
 
 **Key points to note when adapting this model:**
 
 1. `q_miu` and `q_ed_wait` use `PRIORITY` discipline — patients need a `priority` attribute (`et_patient.attrDefs[0]`).
-2. `sec_nhs24.exitQueues` includes both downstream entry queues (`q_miu` and `q_ed_wait`) because probabilistic routing can send entities to either. Both must be listed.
-3. MIU and ED sections have `exitQueues: []` because they are terminal — entities complete or discharge here.
-4. `q_discharge` is in the MIU section's `memberIds` (not a separate section) because discharge is part of the MIU flow.
-5. `c_discharge.priority: 0` ensures completions fire before new arrivals are seized, avoiding head-of-line starvation.
+2. `q_discharge` is in the MIU section's `memberIds` (not a separate section) because discharge is part of the MIU flow.
+3. `c_discharge.priority: 0` ensures completions fire before new arrivals are seized, avoiding head-of-line starvation.
 
 ---
 

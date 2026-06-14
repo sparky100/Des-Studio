@@ -120,11 +120,9 @@ export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, wa
   const journeyAcc = {};
   for (const s of summaries) {
     for (const [secId, sec] of Object.entries(s.sections || {})) {
-      if (!sectionAcc[secId]) sectionAcc[secId] = { count: 0, _sojournSum: 0, entitiesIn: 0, entitiesOut: 0 };
+      if (!sectionAcc[secId]) sectionAcc[secId] = { count: 0, _sojournSum: 0 };
       sectionAcc[secId].count      += sec.count      || 0;
       sectionAcc[secId]._sojournSum += (sec.avgSojourn || 0) * (sec.count || 0);
-      sectionAcc[secId].entitiesIn  += sec.entitiesIn  || 0;
-      sectionAcc[secId].entitiesOut += sec.entitiesOut || 0;
     }
     for (const [key, count] of Object.entries(s.journeys || {})) {
       journeyAcc[key] = (journeyAcc[key] || 0) + count;

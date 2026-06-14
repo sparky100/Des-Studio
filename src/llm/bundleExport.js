@@ -156,19 +156,13 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     for (const q of model.queues || []) { if (q.id && q.name) queueNameById[q.id] = q.name; }
     lines.push('### Sections');
     lines.push('');
-    lines.push(
-      'Sections group queues into logical stages. ' +
-      '`entitiesIn` increments when an entity passes through a designated entry queue. ' +
-      '`entitiesOut` increments when an entity passes through a designated exit queue **or** leaves the section via a sink ' +
-      '(i.e. the entity is done or reneged without reaching an exit queue — direct-exit C-events, completion sinks, reneging). ' +
-      'If no entry queues are configured, `entitiesIn` will be 0. Exit queues are optional: sink exits are counted automatically.'
-    );
+    lines.push('Sections group queues into logical stages.');
     lines.push('');
-    lines.push('| Section | Member queues | Entry queues | Exit queues |');
-    lines.push('|---------|---------------|--------------|-------------|');
+    lines.push('| Section | Member queues |');
+    lines.push('|---------|---------------|');
     for (const s of sectionsDef) {
       const names = (ids) => (ids || []).map(id => queueNameById[id] || id).filter(Boolean).join(', ') || '—';
-      lines.push(`| ${s.name || s.id} | ${names(s.memberIds)} | ${names(s.entryQueues)} | ${names(s.exitQueues)} |`);
+      lines.push(`| ${s.name || s.id} | ${names(s.memberIds)} |`);
     }
     lines.push('');
   }
@@ -400,25 +394,17 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('### Section Performance');
     lines.push('');
     if (isMultiRepBundle) {
-      lines.push(
-        `Counts below are **averages per replication** (÷ ${nReps} runs). ` +
-        '`In` is only non-zero when entry queues are configured. `Out` counts entities that left via an exit queue or via a sink (done/reneged).'
-      );
-    } else {
-      lines.push(
-        '`In` is only non-zero when entry queues are configured. `Out` counts entities that left via an exit queue or via a sink (done/reneged).'
-      );
+      lines.push(`Counts below are **averages per replication** (÷ ${nReps} runs).`);
     }
     lines.push('');
-    const inLabel  = isMultiRepBundle ? 'Avg in / run' : 'Entities in';
-    const outLabel = isMultiRepBundle ? 'Avg out / run' : 'Entities out';
-    lines.push(`| Section | ${inLabel} | ${outLabel} | Avg sojourn |`);
-    lines.push(`|---------|${'-'.repeat(inLabel.length + 2)}|${'-'.repeat(outLabel.length + 2)}|------------|`);
+    const visitedLabel = isMultiRepBundle ? 'Avg visited / run' : 'Visited';
+    lines.push(`| Section | ${visitedLabel} | Avg sojourn |`);
+    lines.push(`|---------|${'-'.repeat(visitedLabel.length + 2)}|------------|`);
     for (const [secId, sec] of Object.entries(sections)) {
       const name = sectionNameById[secId] || secId;
       const f = v => v != null ? Number(v).toFixed(2) : '—';
       const fCount = n => n == null ? '—' : isMultiRepBundle ? +(n / nReps).toFixed(1) : n;
-      lines.push(`| ${name} | ${fCount(sec.entitiesIn)} | ${fCount(sec.entitiesOut)} | ${f(sec.avgSojourn)} |`);
+      lines.push(`| ${name} | ${fCount(sec.count)} | ${f(sec.avgSojourn)} |`);
     }
     lines.push('');
   }
