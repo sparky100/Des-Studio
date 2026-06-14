@@ -1740,20 +1740,26 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     ...(goalGaps?.length ? { goalGaps } : {}),
   };
 
-  const goalsInstr = goalGaps?.length
-    ? ` Performance goals were set. For each goal use this format: "[goal label]: current = [value], target [op] [target] → MET / MISSED (gap: [gap])". Cite exact numbers from the goalGaps data.`
+  const goalsSection = goalGaps?.length
+    ? "### Goals\nFor each goal state: \"[label]: [current value] vs target [op] [target] → MET / MISSED (gap: [gap])\". " +
+      "Cite exact values from the goalGaps data. One line per goal.\n"
     : "";
 
   const truncatedInstr = kpis.warning_phaseCTruncated
     ? " NOTE: Phase C was truncated during this run — some conditional events may not have fired. Mention this caveat in the Confidence Summary."
     : "";
 
+  const sectionList = goalGaps?.length
+    ? "Bottlenecks, Quick Wins, Investment Opportunities, Goals, Automatable Changes, Confidence Summary"
+    : "Bottlenecks, Quick Wins, Investment Opportunities, Automatable Changes, Confidence Summary";
+
   const instruction =
-    "Produce a structured analysis with exactly these five sections:\n" +
+    `Produce a structured analysis with exactly these sections: ${sectionList}.\n` +
     "### Bottlenecks\nRank the top 3 bottlenecks by impact on throughput or wait time. " +
     "For each state the queue/resource name, utilisation or wait metric, and why it is a bottleneck.\n" +
     "### Quick Wins\nIn 2–3 sentences of prose (NO numbered list), describe the most impactful policy or scheduling change achievable without adding resources (e.g. priority rules, routing, warmup period). Do NOT use numbered list items in this section.\n" +
     "### Investment Opportunities\nIn 1–2 sentences of prose (NO numbered list), describe structural improvements requiring additional resources or redesign. Do NOT use numbered list items in this section.\n" +
+    goalsSection +
     "### Automatable Changes\nList up to 3 changes that can be expressed as a single numeric parameter update to the existing model. " +
     "Allowed types: (a) server/entity-type count, (b) queue capacity limit, (c) state variable initial value, (d) a numeric distribution parameter on a bEvent (inter-arrival) or cEvent (service) that has a single schedule — cite the event name, param key, current value, and proposed value from the model data. " +
     "For each item cite the exact current value from the model data and propose a specific new number — no ranges, no vague directions. " +
@@ -1762,12 +1768,12 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     "### Confidence Summary\nOne paragraph: state whether results are statistically robust, " +
     "cite the CI and replication count, and flag any caveats from non-convergence or warnings.\n\n" +
     "NUMBER FORMAT: Express all numeric values to at most 1 decimal place. Express all utilisation values as integer percentages (e.g. '57%' not '57.3%' or '0.57'). Express all time values to at most 1 decimal place." +
-    goalsInstr + truncatedInstr;
+    truncatedInstr;
 
   return {
     kind: "batch_analysis",
     messages: makeMessages(system, payload, instruction),
-    max_tokens: 1000,
+    max_tokens: 2000,
   };
 }
 
