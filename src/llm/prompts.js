@@ -890,6 +890,14 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
   const stateVariables = (model.stateVariables || []).filter(v => v.name).map(v => ({
     name: v.name, initialValue: v.initialValue ?? null,
   }));
+  const entityTypes = (model.entityTypes || []).map(e => ({
+    name: e.name, role: e.role, count: e.count ?? null,
+  }));
+  const queues = (model.queues || []).map(q => ({
+    name: q.name, discipline: q.discipline, capacity: q.capacity ?? null,
+  }));
+  const bEvents = extractBEvents(model, results);
+  const cEvents = extractCEvents(model);
 
   const agg = results.aggregateStats || {};
   const confidenceIntervals = Object.entries(agg)
@@ -908,7 +916,11 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description || "",
       goals: goalsToPrompt(model),
+      ...(entityTypes.length ? { entityTypes } : {}),
+      ...(queues.length ? { queues } : {}),
       ...(stateVariables.length ? { stateVariables } : {}),
+      ...(bEvents ? { bEvents } : {}),
+      ...(cEvents ? { cEvents } : {}),
     },
     experiment: extractExperiment(experimentConfig),
     kpis: buildKpis(model, results),
@@ -962,8 +974,13 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "  stateVariable    — change a state variable's numeric initialValue.",
     "  bEventDistParam  — change a numeric distribution param on a bEvent (single stream). target='EventName.paramKey'.",
     "  cEventDistParam  — change a numeric distribution param on a cEvent (single schedule). target='EventName.paramKey'.",
-    "  HARD REQUIREMENTS: 'target' must be an exact name from the model data. 'from' must be the exact current value. 'to' must be a specific number.",
+    "  HARD REQUIREMENTS for ANY automatable type:",
+    "  1. 'target' MUST exactly match the name from model.entityTypes, model.queues, or model.stateVariables.",
+    "  2. 'from' MUST be the exact current numeric value — read it from model.entityTypes[n].count, model.queues[n].capacity, or model.stateVariables[n].initialValue. Do not guess.",
+    "  3. 'to' MUST be a specific number, not a range, not null.",
+    "  If the exact current value cannot be confirmed from the model data, use 'manual'.",
     "MANUAL type — use for everything else: discipline changes, routing, distribution type changes, structural additions, multi-stream events.",
+    "When in doubt, use 'manual'. A grayed-out button is far better than a comparison that makes no actual change.",
     "Never give vague advice — always name the exact parameter and specific value.",
     "When the model has a failure/repair model, factor availability into capacity calculations.",
     "When state variables are present, they may represent conditions that affect routing or service rates.",
