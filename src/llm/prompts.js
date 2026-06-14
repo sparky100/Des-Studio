@@ -63,9 +63,13 @@ function extractResources(model = {}, summary = {}) {
   const servers = (model.entityTypes || []).filter(entity => entity.role === "server");
   return servers.map(server => {
     const pr = summary.perResource?.[server.name];
+    const hasShift = Array.isArray(server.shiftSchedule) && server.shiftSchedule.length > 0;
     const result = {
       name: server.name || server.id || "Server",
-      count: finiteOrNull(server.count),
+      // count is omitted when shiftWindows is present — engine uses shiftWindows[0].capacity as
+      // the runtime initial count; showing count alongside shiftWindows causes the LLM to
+      // misread it as the "base" capacity that the schedule deviates from.
+      ...(hasShift ? {} : { count: finiteOrNull(server.count) }),
       utilisation: (() => { const v = pr?.utilisation ?? summary.resourceUtilisation?.[server.name] ?? summary.utilisation; return Number.isFinite(v) ? Math.round(v * 100) : null; })(),
       busyCount: finiteOrNull(pr?.busyCount ?? summary.busyCount),
       idleCount: finiteOrNull(pr?.idleCount),
@@ -79,8 +83,7 @@ function extractResources(model = {}, summary = {}) {
         mttrParams: server.mttrDistParams || {},
       };
     }
-    if (Array.isArray(server.shiftSchedule) && server.shiftSchedule.length > 0) {
-      result.shiftSchedule = `${server.shiftSchedule.length} period(s)`;
+    if (hasShift) {
       result.shiftWindows = server.shiftSchedule.map(p => ({
         time: parseInt(p.time, 10) || 0,
         capacity: parseInt(p.capacity, 10) || 1,

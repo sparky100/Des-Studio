@@ -88,6 +88,23 @@ function parseBlocks(text) {
       continue;
     }
 
+    // GFM tables — lines that start with |
+    if (line.startsWith("|")) {
+      const tableLines = [];
+      while (i < lines.length && lines[i].startsWith("|")) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+      if (tableLines.length >= 2) {
+        const parseRow = r => r.split("|").map(c => c.trim()).filter(Boolean);
+        const headers = parseRow(tableLines[0]);
+        // tableLines[1] is the separator (---|---|--)
+        const rows = tableLines.slice(2).map(parseRow);
+        blocks.push({ type: "table", headers, rows });
+      }
+      continue;
+    }
+
     // Headings
     const headingMatch = line.match(/^(#{1,4})\s+(.*)/);
     if (headingMatch) {
@@ -196,6 +213,31 @@ export function MarkdownContent({ text, style }) {
                   </div>
                 ))}
               </div>
+            );
+          case "table":
+            return (
+              <table key={key} style={{ borderCollapse: "collapse", width: "100%", marginBottom: SPACE.sm, fontSize: 11 }}>
+                <thead>
+                  <tr>
+                    {block.headers.map((h, j) => (
+                      <th key={j} style={{ padding: "4px 8px", textAlign: "left", borderBottom: `1px solid ${C.border}`, color: C.muted, fontWeight: 700, whiteSpace: "nowrap" }}>
+                        {renderInline(h, `${key}-h${j}`)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, j) => (
+                    <tr key={j}>
+                      {row.map((cell, k) => (
+                        <td key={k} style={{ padding: "4px 8px", borderBottom: `1px solid ${C.border}33`, color: C.text, lineHeight: 1.5 }}>
+                          {renderInline(cell, `${key}-r${j}c${k}`)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             );
           case "codeblock":
             return (
