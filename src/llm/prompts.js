@@ -508,10 +508,57 @@ function diffModelStructure(modelA = {}, modelB = {}) {
     if (!qNamesA.has(name)) differences.push(`Queue "${name}" present in Option B only`);
   }
 
-  // Arrival events
+  // Arrival events — count + distribution params on first schedule
   const beCountA = (modelA.bEvents || []).length;
   const beCountB = (modelB.bEvents || []).length;
   if (beCountA !== beCountB) differences.push(`Arrival event count: ${beCountA} → ${beCountB}`);
+  for (const ev of (modelA.bEvents || [])) {
+    const evB = (modelB.bEvents || []).find(e => (e.name || e.id) === (ev.name || ev.id));
+    if (!evB) continue;
+    const sA = ev.schedules?.[0]; const sB = evB.schedules?.[0];
+    if (!sA || !sB) continue;
+    if (sA.dist !== sB.dist) differences.push(`"${ev.name}" arrival dist: ${sA.dist} → ${sB.dist}`);
+    for (const k of Object.keys(sA.distParams || {})) {
+      if ((sA.distParams[k]) !== (sB.distParams?.[k])) {
+        differences.push(`"${ev.name}.${k}": ${sA.distParams[k]} → ${sB.distParams?.[k]}`);
+      }
+    }
+  }
+
+  // Service events — distribution params on first cSchedule
+  for (const ev of (modelA.cEvents || [])) {
+    const evB = (modelB.cEvents || []).find(e => (e.name || e.id) === (ev.name || ev.id));
+    if (!evB) continue;
+    const sA = ev.cSchedules?.[0]; const sB = evB.cSchedules?.[0];
+    if (!sA || !sB) continue;
+    if (sA.dist !== sB.dist) differences.push(`"${ev.name}" service dist: ${sA.dist} → ${sB.dist}`);
+    for (const k of Object.keys(sA.distParams || {})) {
+      if ((sA.distParams[k]) !== (sB.distParams?.[k])) {
+        differences.push(`"${ev.name}.${k}": ${sA.distParams[k]} → ${sB.distParams?.[k]}`);
+      }
+    }
+  }
+
+  // Entity shift schedule capacities
+  for (const et of etA) {
+    const etBItem = (modelB.entityTypes || []).find(e => (e.name || e.id) === et.name);
+    const ssA = (modelA.entityTypes || []).find(e => (e.name || e.id) === et.name)?.shiftSchedule;
+    const ssB = etBItem?.shiftSchedule;
+    if (!Array.isArray(ssA) || !Array.isArray(ssB)) continue;
+    ssA.forEach((p, i) => {
+      if (ssB[i] && p.capacity !== ssB[i].capacity) {
+        differences.push(`"${et.name}" shift @t=${p.time}: capacity ${ssB[i].capacity} → ${p.capacity}`);
+      }
+    });
+  }
+
+  // State variables
+  for (const sv of (modelA.stateVariables || [])) {
+    const svB = (modelB.stateVariables || []).find(v => (v.name || v.id) === (sv.name || sv.id));
+    if (svB && sv.initialValue !== svB.initialValue) {
+      differences.push(`"${sv.name}" initialValue: ${svB.initialValue} → ${sv.initialValue}`);
+    }
+  }
 
   // Schedules
   const schedCountA = (modelA.schedules || []).length + (modelA.shiftSchedules || []).length;
@@ -519,7 +566,7 @@ function diffModelStructure(modelA = {}, modelB = {}) {
   if (schedCountA !== schedCountB) differences.push(`Schedule entry count: ${schedCountA} → ${schedCountB}`);
 
   if (differences.length === 0) {
-    return { identical: true, note: "Both runs use identical model structure — differences reflect parameter or seed variation only." };
+    return { identical: true, note: "Both runs use identical model structure and parameter values — differences reflect seed variation only." };
   }
   return { identical: false, note: `Model structure differs between runs: ${differences.join("; ")}.` };
 }
@@ -1087,7 +1134,17 @@ export function applySuggestionPatch(model, change) {
     const entities = clone.entityTypes || [];
     const found = entities.find(e => e.name === change.target || e.id === change.target);
     if (!found) return clone;
-    found.count = Number.isInteger(change.to) ? change.to : parseInt(change.to, 10);
+    const oldCount = Number(found.count) || 1;
+    const newCount = Number.isInteger(change.to) ? change.to : parseInt(change.to, 10);
+    found.count = newCount;
+    // Engine overwrites count with shiftSchedule[0].capacity — scale all shift periods too.
+    if (Array.isArray(found.shiftSchedule) && found.shiftSchedule.length > 0 && oldCount > 0) {
+      const scale = newCount / oldCount;
+      found.shiftSchedule = found.shiftSchedule.map(p => ({
+        ...p,
+        capacity: Math.max(1, Math.round(p.capacity * scale)),
+      }));
+    }
     return clone;
   }
 

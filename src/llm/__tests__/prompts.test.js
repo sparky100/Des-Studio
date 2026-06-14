@@ -137,6 +137,31 @@ describe('parseReportRecommendations', () => {
   });
 });
 
+describe('applySuggestionPatch — entityTypeCount with shift schedule', () => {
+  const baseModel = {
+    entityTypes: [
+      { name: "BloodsLab", count: 3, shiftSchedule: [{ time: 0, capacity: 3 }, { time: 480, capacity: 2 }] },
+    ],
+    queues: [], bEvents: [], cEvents: [], stateVariables: [],
+  };
+
+  test('scales all shift period capacities proportionally when entity has a shift schedule', () => {
+    const change = { type: "entityTypeCount", target: "BloodsLab", from: 3, to: 6 };
+    const result = applySuggestionPatch(baseModel, change);
+    expect(result.entityTypes[0].count).toBe(6);
+    expect(result.entityTypes[0].shiftSchedule[0].capacity).toBe(6);
+    expect(result.entityTypes[0].shiftSchedule[1].capacity).toBe(4);
+  });
+
+  test('does not mutate original model when patching shifted entity', () => {
+    const change = { type: "entityTypeCount", target: "BloodsLab", from: 3, to: 6 };
+    applySuggestionPatch(baseModel, change);
+    expect(baseModel.entityTypes[0].count).toBe(3);
+    expect(baseModel.entityTypes[0].shiftSchedule[0].capacity).toBe(3);
+    expect(baseModel.entityTypes[0].shiftSchedule[1].capacity).toBe(2);
+  });
+});
+
 describe('applySuggestionPatch — bEventDistParam', () => {
   const baseModel = {
     bEvents: [

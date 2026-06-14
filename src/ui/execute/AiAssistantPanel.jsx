@@ -1153,7 +1153,7 @@ export const AiAssistantPanel = ({
               Save at least two runs to compare results.
             </div>
           )}
-          <Btn variant="ghost" onClick={compareRuns} disabled={!results || !selectedRun || isStreaming} style={panelButtonStyle}>
+          <Btn variant="primary" onClick={compareRuns} disabled={!results || !selectedRun || isStreaming} style={panelButtonStyle}>
             Compare
           </Btn>
         </div>
