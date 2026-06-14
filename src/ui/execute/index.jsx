@@ -2696,12 +2696,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         </div>
       )}
 
-      {resolvedSeed !== null && (
-        <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT }}>
-          Seed: {resolvedSeed}
-        </div>
-      )}
-
       {isModelModified && (
         <div style={{
           background: C.warmup,
