@@ -890,7 +890,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "OUTPUT FORMAT — output ONLY a single JSON block wrapped in ```json ... ``` fences — no other text before or after the fences:",
     '{ "analysis": "<narrative>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|moderate|low>" } ] }',
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount  — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count.",
+    "  entityTypeCount  — change a server/entity type's flat numeric count. ONLY for resources where hasShiftSchedule is absent/false. If hasShiftSchedule is true, use 'manual' and describe the specific shift period(s) and capacity values to adjust.",
     "  queueCapacity    — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
     "  stateVariable    — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
     "  bEventDistParam  — change a numeric parameter of a bEvent's inter-arrival distribution. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream — read dist and distParams from the model data provided.",
@@ -1014,7 +1014,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "  Heading '## What to Change': 1–3 plain-English recommendations, one sentence each. Each must correspond to a suggestion object in the array.",
     "",
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount  — change a server/entity type's numeric count.",
+    "  entityTypeCount  — change a server/entity type's flat numeric count. ONLY for resources where shiftSchedule is absent. If the resource shows shiftSchedule in the model data, use 'manual' and describe the specific shift period(s) and capacity values to adjust.",
     "  queueCapacity    — change a queue's numeric capacity limit.",
     "  stateVariable    — change a state variable's numeric initialValue.",
     "  bEventDistParam  — change a numeric distribution param on a bEvent (single stream). target='EventName.paramKey'.",
@@ -1024,7 +1024,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "  2. 'from' MUST be the exact current numeric value — read it from model.entityTypes[n].count, model.queues[n].capacity, or model.stateVariables[n].initialValue. Do not guess.",
     "  3. 'to' MUST be a specific number, not a range, not null.",
     "  If the exact current value cannot be confirmed from the model data, use 'manual'.",
-    "MANUAL type — use for everything else: discipline changes, routing, distribution type changes, structural additions, multi-stream events.",
+    "MANUAL type — use for: resources with a shiftSchedule (adjust the specific shift periods and capacities), discipline changes, routing, distribution type changes, structural additions, multi-stream events.",
     "When in doubt, use 'manual'. A grayed-out button is far better than a comparison that makes no actual change.",
     "Never give vague advice — always name the exact parameter and specific value.",
     "When the model has a failure/repair model, factor availability into capacity calculations.",
@@ -1701,7 +1701,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
       name: model.name || DEFAULT_MODEL_NAME,
       description: model.description ? truncateWords(model.description, 60) : undefined,
       goals,
-      entityTypes: (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count })),
+      entityTypes: (model.entityTypes || []).map(e => ({ name: e.name, role: e.role, count: e.count, ...(Array.isArray(e.shiftSchedule) && e.shiftSchedule.length ? { hasShiftSchedule: true } : {}) })),
       queues: (model.queues || []).map(q => ({ name: q.name, capacity: q.capacity ?? null })),
       stateVariables: (model.stateVariables || []).filter(v => v.name).map(v => ({ name: v.name, initialValue: v.initialValue ?? null })),
       ...(bEvents ? { bEvents } : {}),
@@ -1746,7 +1746,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     "### Quick Wins\nIn 2–3 sentences of prose (NO numbered list), describe the most impactful policy or scheduling change achievable without adding resources (e.g. priority rules, routing, warmup period). Do NOT use numbered list items in this section.\n" +
     "### Investment Opportunities\nIn 1–2 sentences of prose (NO numbered list), describe structural improvements requiring additional resources or redesign. Do NOT use numbered list items in this section.\n" +
     "### Automatable Changes\nList up to 3 changes that can be expressed as a single numeric parameter update to the existing model. " +
-    "Allowed types: (a) server/entity-type count, (b) queue capacity limit, (c) state variable initial value, (d) a numeric distribution parameter on a bEvent (inter-arrival) or cEvent (service) that has a single schedule — cite the event name, param key, current value, and proposed value from the model data. " +
+    "Allowed types: (a) server/entity-type count — ONLY for resources where hasShiftSchedule is absent; resources with hasShiftSchedule must be listed as manual with specific shift period guidance, (b) queue capacity limit, (c) state variable initial value, (d) a numeric distribution parameter on a bEvent (inter-arrival) or cEvent (service) that has a single schedule — cite the event name, param key, current value, and proposed value from the model data. " +
     "For each item cite the exact current value from the model data and propose a specific new number — no ranges, no vague directions. " +
     "Format each as a numbered item, e.g. '1. Increase Nurse count from 2 to 3 — expected to reduce avgWait by ~30%' or '2. Reduce Arrivals inter-arrival rate from 0.5 to 0.4'. " +
     "If no such changes are warranted by the data, omit this section entirely.\n" +
@@ -1778,6 +1778,7 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
 
   const entityTypes = (model.entityTypes || []).map(e => ({
     name: e.name, role: e.role, count: e.count,
+    ...(Array.isArray(e.shiftSchedule) && e.shiftSchedule.length ? { hasShiftSchedule: true } : {}),
   }));
   const queues = (model.queues || []).map(q => ({
     name: q.name, capacity: q.capacity ?? null,
@@ -1807,7 +1808,7 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
     "Output one JSON block wrapped in ```json ... ``` fences with this schema:",
     '{ "analysis": "<one sentence explaining what will change and why>", "suggestions": [ { "rank": 1, "constraint": "<metric=value>", "cause": "<brief cause>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual>", "target": "<exact name from model>", "from": <current number or null>, "to": <proposed number or null> }, "predicted": "<expected improvement>", "goalImpact": "<MET|MISSED|N/A>", "confidence": "<high|moderate|low>" } ] }',
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount  — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count.",
+    "  entityTypeCount  — change a server/entity type's flat numeric count. 'from' = exact current count, 'to' = exact new count. ONLY for resources where hasShiftSchedule is absent/false. If hasShiftSchedule is true, use 'manual' and describe the specific shift period(s) and capacity values to adjust.",
     "  queueCapacity    — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
     "  stateVariable    — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
     "  bEventDistParam  — change a numeric distribution parameter on a bEvent. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream with dist and distParams visible in the model data.",
