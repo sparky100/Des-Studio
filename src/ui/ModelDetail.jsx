@@ -1447,7 +1447,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 <LogViewer log={latestLog.length > 0 ? latestLog : latestResults?.log || []} model={model}/>
               ) : (
                 <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
-                  No log available. Run the simulation first to capture event log data.
+                  {latestResults && latestReplicationResults.length > 1
+                    ? "Event log is only captured for single-replication runs. Set replications to 1 and run again to see the log."
+                    : "No log available. Run the simulation first to capture event log data."}
                 </div>
               )
             )}
@@ -1459,7 +1461,9 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 />
               ) : (
                 <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:18,color:C.muted,fontFamily:FONT,fontSize:12,lineHeight:1.7}}>
-                  No entity data yet. Run the simulation first to see per-entity-type breakdowns.
+                  {latestResults && latestReplicationResults.length > 1
+                    ? "Per-entity breakdowns are only available for single-replication runs. Set replications to 1 and run again to see entity data."
+                    : "No entity data yet. Run the simulation first to see per-entity-type breakdowns."}
                 </div>
               )
             )}

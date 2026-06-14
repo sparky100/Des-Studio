@@ -1223,7 +1223,29 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           const aggregateStats = summarizeReplicationResults(valid, CI_METRICS);
           const first = valid[0]?.result || valid[0] || {};
           const summary = first.summary || {};
-          const waitDist = first.waitDist || {};
+          // Aggregate waitDist means across all replications so goal checks
+          // are not based on a single noisy replication.
+          const waitDist = (() => {
+            const acc = {};
+            for (const p of valid) {
+              const wd = p?.result?.waitDist || p?.waitDist || {};
+              for (const [qName, stats] of Object.entries(wd)) {
+                if (!acc[qName]) acc[qName] = { means: [], n: 0 };
+                if (stats?.mean != null) acc[qName].means.push(stats.mean);
+                acc[qName].n += stats?.n || 0;
+              }
+            }
+            const out = {};
+            for (const [qName, agg] of Object.entries(acc)) {
+              if (agg.means.length > 0) {
+                out[qName] = {
+                  mean: agg.means.reduce((s, v) => s + v, 0) / agg.means.length,
+                  n: agg.n,
+                };
+              }
+            }
+            return out;
+          })();
           resolve({ aggregateStats, summary, waitDist });
         },
         onError: () => resolve(null),
