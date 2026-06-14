@@ -1,7 +1,7 @@
 # simmodlr — Model Schema Reference for LLM Generation
 
-**Version:** 1.7.0
-**Date:** 2026-06-12
+**Version:** 1.9.0
+**Date:** 2026-06-14
 **Sprint baseline:** Sprint 85
 
 | Version | Date | Sprint | Changes |
@@ -17,6 +17,7 @@
 | v1.6.0 | 2026-06-09 | Sprint 85 | **§9 Goals:** added `summary.avgTimeInSystem` (weighted mean time across all entities including in-progress) and `summary.servedRatio` (service completion rate as decimal 0–1). Updated metric count from 13 to 15. Added `avgTimeInSystem` to percentile-capable time metrics. |
 | v1.7.0 | 2026-06-12 | Schema enforcement | Added TOP LLM MISTAKES #15 (disconnected queue fragment) and V45 blocking error to §10. |
 | v1.8.0 | 2026-06-13 | Schema correction | **§11.1 Sections:** corrected results-contract description (`count`/`avgSojourn` require `memberIds` only, not entry/exit queues); added per-section metric table (`count`, `avgSojourn`, `entitiesIn`, `entitiesOut`) with non-zero conditions; documented `summary.journeys` and `summary.queueJourneys` outputs; replaced imprecise entry/exit selection prose with concrete front-door/handoff-queue rules; added suggested colour palette for sections; clarified terminal-section `exitQueues` — journey tracking uses entity completion status (not exitQueues), but marking the sink queue as exitQueues enables `entitiesOut` throughput counting. Added TOP LLM MISTAKE #16 (sections without entryQueues/exitQueues — silent zero counts); hardened "Prefer" wording to MUST rule; added 4-step generation checklist; added terminal-section warning on exitQueues: [] pattern. |
+| v1.9.0 | 2026-06-14 | Doc quality | Fixed section numbering (§11–§16 were out of order; renumbered to match presentation order). Removed duplicate PREEMPT/FAIL/REPAIR rows from §5 macro table. Added §12 Response Format (was a dangling cross-reference). Expanded §5 loop guard into §5.1 with a worked example. Added §13 Complete Reference Model (3-section clinic). Clarified `defaultValue` vs `distParams` string rules in §2. Added API validation scope warning to §14. Added container vs state variable decision rule to §8. |
 
 ---
 
@@ -45,10 +46,10 @@ Read this before writing any model JSON.
 | 10 | No `COMPLETE()` or `RENEGE()` sink | Every model needs at least one exit path. Missing sinks = entities accumulate forever. Blocked by V8 / CHK-002. |
 | 11 | Queue fed but no C-event consumes it | Every queue receiving entities via `ARRIVE()`, `RELEASE()`, or routing must have a C-event whose `effect` includes `ASSIGN(QueueName,...)`, `BATCH(QueueName,N)`, `COSEIZE(QueueName,...)`, or `MATCH`. Warning CHK-013. |
 | 12 | `RENEGE_OLDEST(CustomerType)` with non-existent type | The customer type argument must exactly match a defined entity type name (case-sensitive). A typo silently does nothing. |
-| 13 | Missing `sections[]` on large models | Any model with ≥8 queues or ≥3 named stages MUST include a populated `sections[]`. Use `memberIds` (not `elementIds`). Mark cross-section queues with `entryQueues` and `exitQueues`. See §11.1. |
+| 13 | Missing `sections[]` on large models | Any model with ≥8 queues or ≥3 named stages MUST include a populated `sections[]`. Use `memberIds` (not `elementIds`). Mark cross-section queues with `entryQueues` and `exitQueues`. See §12.1. |
 | 14 | Server `count` as a string instead of integer | `count` must be a JSON integer: `"count": 3`, never `"count": "3"`. When a `shiftSchedule` is present, always set `count` equal to `shiftSchedule[0].capacity`. Blocked by V19. |
 | 15 | Disconnected queue/activity fragment | Every declared queue must be reachable from an arrival source. A queue that is never named as a destination in any `ARRIVE(Type, QueueName)`, `RELEASE(Server, QueueName)`, `defaultQueueName`, `routing[].queueName`, `probabilisticRouting[].queueName`, `loopConfig.exitQueueName`, or `overflowDestination` field is a fragment — it will never receive entities. Remove it, or add routing that targets it. Blocked by V45. |
-| 16 | Sections without `entryQueues`/`exitQueues` set | Sections that have `memberIds` but empty `entryQueues` and `exitQueues` silently produce zero `entitiesIn` and `entitiesOut` counts — no error is raised. For **every** section in a multi-section model, set `entryQueues` to the first queue entities join when entering that section. For every **non-terminal** section, set `exitQueues` to the handoff queue that feeds the next section. See §11.1 generation checklist. |
+| 16 | Sections without `entryQueues`/`exitQueues` set | Sections that have `memberIds` but empty `entryQueues` and `exitQueues` silently produce zero `entitiesIn` and `entitiesOut` counts — no error is raised. For **every** section in a multi-section model, set `entryQueues` to the first queue entities join when entering that section. For every **non-terminal** section, set `exitQueues` to the handoff queue that feeds the next section. See §12.1 generation checklist. |
 
 ---
 
@@ -94,7 +95,7 @@ Read this before writing any model JSON.
 | `experimentDefaults.terminationCondition` | string \| null | No | Stop expression evaluated after each event, e.g. `"summary.served >= 100"`. When set, the run stops when the condition becomes true — regardless of `maxSimTime`. Editable in the UI's Execute panel → Run Configuration tab. Set `null` or omit for pure time-bounded runs. Warning V16 fires if neither `maxSimTime` nor `terminationCondition` is configured. |
 | `experimentDefaults.liveDataMode` | `null` \| `"calibrated_batch"` \| `"rolling"` \| `"lookahead"` | No | Live-data run mode. `null` = static (default). See §15 for live data. |
 | `dataSources` | array | No | Live data source definitions. See §15. |
-| `sections` | array | No | Named groupings of model elements. See §11.1. |
+| `sections` | array | No | Named groupings of model elements. See §12.1. |
 
 ---
 
@@ -147,6 +148,8 @@ Every model has entity types. There are two roles: **customer** (flows through t
   - `boolean` → `"true"` or `"false"` (string)
   - `string` → any string
 - If `dist` is set, `distParams` is required. See §4 for valid distributions.
+
+> **String rules: `defaultValue` vs `distParams`:** `defaultValue` for `number` type accepts either form (`"3"` or `3`). However, **all `distParams` values must always be strings** (`"3"`, never `3`) — the engine's distribution sampler requires the string form, and numeric `distParams` values will be blocked by V5. Do not carry the `defaultValue` leniency across to distribution parameters.
 
 ### Optional: Server Shift Schedule
 
@@ -440,9 +443,6 @@ The `effect` field is **always an array of strings**. Each string is one macro c
 | `SET` | `SET(varName, expression)` | Sets a state variable to an arithmetic expression. Supports `Entity.attrName`, state variables, `clock`, +−×÷, `min`/`max`/`abs`/`round`/`floor`/`ceil`. |
 | `SET_ATTR` | `SET_ATTR(attrName, expression)` | Sets the context entity's attribute to the result of an arithmetic expression. |
 | `COST` | `COST(expression)` | Accumulates a numeric expression to `summary.totalCost` and the entity's `__cost` attribute. |
-| `PREEMPT` | `PREEMPT(ServerType)` | Interrupts in-progress service for a server of `ServerType`. The displaced entity re-queues with its remaining service time. `ServerType` must match a defined server entity type name. |
-| `FAIL` | `FAIL(ServerType)` | Marks matching servers as failed; interrupts any in-progress service. Pair with a scheduled `REPAIR` B-event. `ServerType` must match a defined server entity type. Note: for random failures, prefer the `mtbfDist`/`mttrDist` failure model on the entity type (§2) — the engine auto-generates FAIL/REPAIR events. |
-| `REPAIR` | `REPAIR(ServerType)` | Restores failed servers to idle. `ServerType` must match a defined server entity type. Triggers a C-scan for waiting entities. |
 
 > ⚠ **SET_ATTR ordering — V44:** `SET_ATTR` requires a context entity established by a preceding `ARRIVE`, `ASSIGN`, `COSEIZE`, `SEIZE`, `BATCH`, or `SPLIT` macro in the same effect array. A `SET_ATTR` appearing before any such macro is silently skipped at runtime.
 > 
@@ -576,17 +576,50 @@ Or condition-based — `balkCondition` is a **predicate object** (never a string
 
 - **Do not use a string condition** (e.g. `"queue(X).length > 10"`) — that format is only valid in C-event `condition` fields; a string `balkCondition` will cause a pre-run error (CHK-011).
 
-### Optional: Loop Guard (Recirculation)
+### 5.1 Loop Guard (Recirculation)
+
+Use `loopConfig` when an entity can cycle through a stage more than once — for example, a patient returning for a follow-up review, or a job re-entering a machine for a second pass.
 
 ```json
 "loopConfig": {
   "maxLoopCount": 3,
-  "exitQueueName": "Exit Queue"
+  "exitQueueName": "Discharge Queue"
 }
 ```
 
-- `maxLoopCount` must be an integer ≥ 1.
-- `exitQueueName` must reference a valid queue name.
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `maxLoopCount` | integer ≥ 1 | Yes | Maximum times the entity may re-enter this B-event's upstream queue before being forced to the exit path |
+| `exitQueueName` | string | No | Queue to route the entity to when `maxLoopCount` is reached. Must reference a valid queue name (V24). Omit to let the entity renege or complete via its normal routing on the final pass. |
+
+**When to use `loopConfig` vs explicit routing:**
+
+| Approach | Use when |
+|---|---|
+| `loopConfig` | The recirculation count is the key variable (e.g. "up to 3 review cycles"). Simple to express; engine tracks the loop count automatically. |
+| Explicit routing + state variable | You need conditional logic at each pass (e.g. "if severity > 2, continue; else discharge"). Use a `SET(loopCount, loopCount + 1)` state variable and a `routing` condition on the completion B-event. |
+
+**Worked example — review cycle (max 3 passes):**
+
+```json
+{
+  "id": "b_review_done",
+  "name": "Review Complete",
+  "scheduledTime": "9999",
+  "effect": ["RELEASE(Clinician, Review Queue)"],
+  "loopConfig": {
+    "maxLoopCount": 3,
+    "exitQueueName": "Discharge Queue"
+  },
+  "schedules": []
+}
+```
+
+The entity re-enters `Review Queue` on each pass. After 3 passes, the engine routes it to `Discharge Queue` instead, bypassing the normal `RELEASE` destination.
+
+**Interaction with `terminationCondition`:** `loopConfig` operates at the entity level (per-entity loop counter). `terminationCondition` operates at the run level (global state expression). Both can coexist — the loop guard fires first; if the entity exits via `exitQueueName`, the global termination expression is then re-evaluated on the next event.
+
+**Validation:** V24 — `maxLoopCount` must be an integer ≥ 1; `exitQueueName` must reference a defined queue.
 
 ---
 
@@ -754,6 +787,8 @@ Global variables that can be read and written during simulation.
 ## 8. Container Types
 
 Continuous-level resources (tanks, buffers, stock).
+
+> **Container vs state variable — when to use each:** Use a `containerType` when the resource has a physical level that is bounded, shared across entity interactions, and must be tracked continuously (e.g. a fuel tank, a blood inventory, a buffer). Use a **state variable** when you need a simple scalar counter or flag that is set/incremented by events and read in C-event conditions (e.g. a shift active flag, an entity count, a mode toggle). Containers expose `FILL`/`DRAIN` semantics with capacity clamping; state variables expose `SET()` arithmetic with no bounds enforcement.
 
 > **UI note:** Container types are currently configured via JSON import only — the UI editor tab is not yet active. Users cannot view or edit containers in the UI after import. When generating models with containers, note this limitation to users.
 
@@ -946,7 +981,7 @@ All generated model JSON MUST pass every blocking rule below.
 
 ---
 
-## 13. IDs and Naming Conventions
+## 11. IDs and Naming Conventions
 
 - `id` fields are for internal references only. Use a short prefix + descriptive name:
   - Entity types: `et_` prefix (e.g. `et_patient`, `et_nurse`)
@@ -969,9 +1004,9 @@ All generated model JSON MUST pass every blocking rule below.
 
 ---
 
-## 11. Common Patterns
+## 12. Common Patterns
 
-### 11.1 Sections (Large-Model Organisation)
+### 12.1 Sections (Large-Model Organisation)
 
 `sections[]` serves two distinct purposes:
 
@@ -1261,11 +1296,280 @@ And the renege B-event:
 
 ---
 
-## 16. Patterns & Anti-Patterns
+### 12.2 Response Format — How to Structure Your Reply
+
+When an LLM generates a simmodlr model, the reply must be structured as a JSON object with the following envelope:
+
+```json
+{
+  "model": { ... },
+  "companionCsv": null,
+  "notes": ""
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `model` | object | Yes | The complete simmodlr model JSON, matching the schema in §1–§11 |
+| `companionCsv` | string \| null | Yes | CSV text for planned arrival data (see §5 Format 1 / Format 2). Set to `null` when the model does not use `rows[]` or `times[]` schedules. **Always include this field** — omitting it when the model has `rows[]` will leave the user without import data. |
+| `notes` | string | No | Optional human-readable notes for the user: assumptions made, recommended parameter values to adjust, UI steps to follow after import. Keep brief (3–5 bullet points max). |
+
+**Delivery instructions:**
+
+1. Output the JSON envelope as a single fenced code block (` ```json `).
+2. If `companionCsv` is non-null, also output the CSV as a separate fenced code block (` ```csv `) immediately after, with a one-line instruction: "Import this CSV in the model editor → Schedules tab."
+3. After the code blocks, write a 2–3 sentence plain-English summary of what the model does and what the user should adjust first.
+
+**Example — model with no planned arrivals:**
+
+```json
+{
+  "model": { "name": "M/M/1 Queue", "entityTypes": [...], ... },
+  "companionCsv": null,
+  "notes": "Set Exponential mean in the Arrival B-event to match your observed inter-arrival time. Increase replications to 30 for tighter confidence intervals."
+}
+```
+
+**Example — model with planned arrivals (Format 1):**
+
+```json
+{
+  "model": { "name": "Clinic Schedule", "entityTypes": [...], ... },
+  "companionCsv": "time,severity,age\n08:00,3,45\n08:15,1,32\n08:30,2,28"
+}
+```
+
+```csv
+time,severity,age
+08:00,3,45
+08:15,1,32
+08:30,2,28
+```
+
+Import this CSV in the model editor → Schedules tab.
+
+---
+
+### 12.3 Complete Reference Model — 3-Section Urgent Care Pathway
+
+This is a canonical reference model. Use it as a template when generating multi-section models. It exercises: entity attributes, PRIORITY queue discipline, shift schedule, probabilistic routing, state variable, goals, and sections with correct `entryQueues`/`exitQueues` wiring.
+
+The model represents a 3-stage urgent care pathway: **NHS 24 triage → Minor Injuries Unit → Emergency Department**. Patients arrive via phone triage and are routed probabilistically to MIU (60%) or ED (40%).
+
+```json
+{
+  "name": "Urgent Care Pathway — Reference Model",
+  "description": "3-stage pathway: NHS 24 triage routes patients to MIU (60%) or ED (40%). Demonstrates sections, shift schedules, PRIORITY discipline, goals, and state variables.",
+  "visibility": "private",
+  "timeUnit": "minutes",
+  "entityTypes": [
+    {
+      "id": "et_patient",
+      "name": "Patient",
+      "role": "customer",
+      "count": 0,
+      "attrDefs": [
+        { "name": "priority", "valueType": "number", "defaultValue": 3, "mutable": true,
+          "dist": "Uniform", "distParams": { "min": "1", "max": "5" } },
+        { "name": "acuity", "valueType": "string", "defaultValue": "low", "mutable": false }
+      ]
+    },
+    {
+      "id": "et_call_handler",
+      "name": "Call Handler",
+      "role": "server",
+      "count": 4,
+      "attrDefs": []
+    },
+    {
+      "id": "et_miu_nurse",
+      "name": "MIU Nurse",
+      "role": "server",
+      "count": 3,
+      "shiftSchedule": [
+        { "time": 0,   "capacity": 3 },
+        { "time": 480, "capacity": 2 },
+        { "time": 960, "capacity": 3 }
+      ],
+      "attrDefs": []
+    },
+    {
+      "id": "et_ed_doctor",
+      "name": "ED Doctor",
+      "role": "server",
+      "count": 5,
+      "attrDefs": []
+    }
+  ],
+  "queues": [
+    { "id": "q_nhs24",   "name": "NHS 24 Queue",  "customerType": "Patient", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_miu",     "name": "MIU Queue",      "customerType": "Patient", "capacity": "", "discipline": "PRIORITY" },
+    { "id": "q_ed_wait", "name": "ED Wait Queue",  "customerType": "Patient", "capacity": "50", "discipline": "PRIORITY", "overflowDestination": "q_ed_overflow" },
+    { "id": "q_ed_overflow", "name": "ED Overflow Queue", "customerType": "Patient", "capacity": "", "discipline": "FIFO" },
+    { "id": "q_discharge", "name": "Discharge Queue", "customerType": "Patient", "capacity": "", "discipline": "FIFO" }
+  ],
+  "bEvents": [
+    {
+      "id": "b_arrive",
+      "name": "Patient Arrives",
+      "scheduledTime": "0",
+      "effect": ["ARRIVE(Patient, NHS 24 Queue)"],
+      "schedules": [{ "eventId": "b_arrive", "dist": "Exponential", "distParams": { "mean": "4" } }]
+    },
+    {
+      "id": "b_triage_done",
+      "name": "Triage Complete",
+      "scheduledTime": "9999",
+      "effect": ["RELEASE(Call Handler)"],
+      "probabilisticRouting": [
+        { "probability": 0.6, "queueName": "MIU Queue" },
+        { "probability": 0.4, "queueName": "ED Wait Queue" }
+      ],
+      "schedules": []
+    },
+    {
+      "id": "b_miu_done",
+      "name": "MIU Treatment Complete",
+      "scheduledTime": "9999",
+      "effect": ["RELEASE(MIU Nurse, Discharge Queue)"],
+      "schedules": []
+    },
+    {
+      "id": "b_ed_done",
+      "name": "ED Treatment Complete",
+      "scheduledTime": "9999",
+      "effect": ["COMPLETE()"],
+      "schedules": []
+    },
+    {
+      "id": "b_discharge_done",
+      "name": "Discharge Complete",
+      "scheduledTime": "9999",
+      "effect": ["COMPLETE()"],
+      "schedules": []
+    }
+  ],
+  "cEvents": [
+    {
+      "id": "c_triage",
+      "name": "Triage",
+      "priority": 1,
+      "condition": "queue(NHS 24 Queue).length > 0 AND idle(Call Handler).count > 0",
+      "effect": ["ASSIGN(NHS 24 Queue, Call Handler)"],
+      "cSchedules": [{ "eventId": "b_triage_done", "dist": "Triangular",
+                       "distParams": { "min": "3", "mode": "7", "max": "15" }, "useEntityCtx": true }]
+    },
+    {
+      "id": "c_miu_treat",
+      "name": "MIU Treat",
+      "priority": 1,
+      "condition": "queue(MIU Queue).length > 0 AND idle(MIU Nurse).count > 0",
+      "effect": ["ASSIGN(MIU Queue, MIU Nurse)"],
+      "cSchedules": [{ "eventId": "b_miu_done", "dist": "Triangular",
+                       "distParams": { "min": "15", "mode": "30", "max": "60" }, "useEntityCtx": true }]
+    },
+    {
+      "id": "c_ed_treat",
+      "name": "ED Treat",
+      "priority": 1,
+      "condition": "queue(ED Wait Queue).length > 0 AND idle(ED Doctor).count > 0",
+      "effect": ["ASSIGN(ED Wait Queue, ED Doctor)"],
+      "cSchedules": [{ "eventId": "b_ed_done", "dist": "Erlang",
+                       "distParams": { "k": "3", "mean": "90" }, "useEntityCtx": true }]
+    },
+    {
+      "id": "c_discharge",
+      "name": "Discharge",
+      "priority": 0,
+      "condition": "queue(Discharge Queue).length > 0",
+      "effect": ["ASSIGN(Discharge Queue, MIU Nurse)"],
+      "cSchedules": [{ "eventId": "b_discharge_done", "dist": "Fixed",
+                       "distParams": { "value": "5" }, "useEntityCtx": true }]
+    }
+  ],
+  "stateVariables": [
+    { "id": "sv_peak", "name": "peakConcurrent", "valueType": "number", "initialValue": 0, "resetOnWarmup": true }
+  ],
+  "goals": [
+    { "metric": "summary.avgWait", "operator": "<", "target": 10,
+      "label": "Mean triage wait under 10 min",
+      "scope": { "type": "queue", "id": "q_nhs24", "name": "NHS 24 Queue" } },
+    { "metric": "summary.avgWait", "operator": "p90", "target": 30,
+      "label": "90th-percentile ED wait under 30 min",
+      "scope": { "type": "queue", "id": "q_ed_wait", "name": "ED Wait Queue" } },
+    { "metric": "resource.utilisation", "operator": "<", "target": 0.85,
+      "label": "MIU Nurse utilisation under 85%",
+      "scope": { "type": "resource", "id": "et_miu_nurse", "name": "MIU Nurse" } }
+  ],
+  "containerTypes": [],
+  "experimentDefaults": {
+    "maxSimTime": 720,
+    "warmupPeriod": 60,
+    "replications": 20,
+    "liveDataMode": null,
+    "terminationCondition": null
+  },
+  "dataSources": [],
+  "sections": [
+    {
+      "id": "sec_nhs24",
+      "name": "NHS 24 Triage",
+      "color": "#4A90D9",
+      "memberIds": ["q_nhs24", "et_call_handler", "b_arrive", "b_triage_done", "c_triage"],
+      "entryQueues": ["q_nhs24"],
+      "exitQueues":  ["q_miu", "q_ed_wait"]
+    },
+    {
+      "id": "sec_miu",
+      "name": "Minor Injuries Unit",
+      "color": "#27AE60",
+      "memberIds": ["q_miu", "et_miu_nurse", "c_miu_treat", "b_miu_done", "q_discharge", "c_discharge", "b_discharge_done"],
+      "entryQueues": ["q_miu"],
+      "exitQueues":  []
+    },
+    {
+      "id": "sec_ed",
+      "name": "Emergency Department",
+      "color": "#E67E22",
+      "memberIds": ["q_ed_wait", "q_ed_overflow", "et_ed_doctor", "c_ed_treat", "b_ed_done"],
+      "entryQueues": ["q_ed_wait"],
+      "exitQueues":  []
+    }
+  ]
+}
+```
+
+**What this model demonstrates:**
+
+| Feature | Where |
+|---|---|
+| Entity attributes (`priority`, `acuity`) | `et_patient.attrDefs` |
+| PRIORITY queue discipline | `q_miu`, `q_ed_wait` |
+| Finite capacity + overflow destination | `q_ed_wait` → `q_ed_overflow` |
+| Server shift schedule (MIU Nurse) | `et_miu_nurse.shiftSchedule` |
+| Probabilistic routing at triage | `b_triage_done.probabilisticRouting` |
+| Different distribution types | Triangular (triage, MIU), Erlang (ED), Fixed (discharge) |
+| State variable | `sv_peak` (peakConcurrent) |
+| Scoped goals (queue + resource + percentile) | `goals[]` |
+| 3-section model with entryQueues/exitQueues | `sections[]` |
+| Terminal sections with `exitQueues: []` | MIU and ED sections |
+| C-event priority ordering (discharge = 0, treatment = 1) | `c_discharge.priority: 0` |
+
+**Key points to note when adapting this model:**
+
+1. `q_miu` and `q_ed_wait` use `PRIORITY` discipline — patients need a `priority` attribute (`et_patient.attrDefs[0]`).
+2. `sec_nhs24.exitQueues` includes both downstream entry queues (`q_miu` and `q_ed_wait`) because probabilistic routing can send entities to either. Both must be listed.
+3. MIU and ED sections have `exitQueues: []` because they are terminal — entities complete or discharge here.
+4. `q_discharge` is in the MIU section's `memberIds` (not a separate section) because discharge is part of the MIU flow.
+5. `c_discharge.priority: 0` ensures completions fire before new arrivals are seized, avoiding head-of-line starvation.
+
+---
+
+## 13. Patterns & Anti-Patterns
 
 Common modelling patterns and the mistakes to avoid when generating simmodlr models.
 
-### 16.1 Terminal Completion (V30, V38)
+### 13.1 Terminal Completion (V30, V38)
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1278,7 +1582,7 @@ Common modelling patterns and the mistakes to avoid when generating simmodlr mod
 
 ---
 
-### 16.2 Entity Lifecycle Completeness
+### 13.2 Entity Lifecycle Completeness
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1290,7 +1594,7 @@ Common modelling patterns and the mistakes to avoid when generating simmodlr mod
 
 ---
 
-### 16.3 Queue-to-Activity Binding (ADR-005)
+### 13.3 Queue-to-Activity Binding (ADR-005)
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1301,7 +1605,7 @@ Common modelling patterns and the mistakes to avoid when generating simmodlr mod
 
 ---
 
-### 16.4 C-Event Priority & Restart Rule
+### 13.4 C-Event Priority & Restart Rule
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1315,7 +1619,7 @@ Common modelling patterns and the mistakes to avoid when generating simmodlr mod
 
 ---
 
-### 16.5 Distribution Parameter Types
+### 13.5 Distribution Parameter Types
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1326,7 +1630,7 @@ Common modelling patterns and the mistakes to avoid when generating simmodlr mod
 
 ---
 
-### 16.6 Warm-up & Termination
+### 13.6 Warm-up & Termination
 
 #### Terminating vs Steady-State simulations
 
@@ -1351,7 +1655,7 @@ For steady-state runs, set `warmupPeriod` to approximately the time it takes the
 
 ---
 
-### 16.7 State Variable Namespaces
+### 13.7 State Variable Namespaces
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1362,7 +1666,7 @@ For steady-state runs, set `warmupPeriod` to approximately the time it takes the
 
 ---
 
-### 16.8 Replication Configuration
+### 13.8 Replication Configuration
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1383,7 +1687,7 @@ For steady-state runs, set `warmupPeriod` to approximately the time it takes the
 
 ---
 
-### 16.9 Effect Macro Syntax
+### 13.9 Effect Macro Syntax
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1396,7 +1700,7 @@ For steady-state runs, set `warmupPeriod` to approximately the time it takes the
 
 ---
 
-### 16.10 Routing Table Completeness (V29)
+### 13.10 Routing Table Completeness (V29)
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1407,7 +1711,7 @@ For steady-state runs, set `warmupPeriod` to approximately the time it takes the
 
 ---
 
-### 16.11 ARRIVE + probabilisticRouting Anti-Pattern
+### 13.11 ARRIVE + probabilisticRouting Anti-Pattern
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1421,7 +1725,7 @@ For steady-state runs, set `warmupPeriod` to approximately the time it takes the
 
 ---
 
-### 16.12 Missing `useEntityCtx` on C-Event Schedules
+### 13.12 Missing `useEntityCtx` on C-Event Schedules
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1432,7 +1736,7 @@ For steady-state runs, set `warmupPeriod` to approximately the time it takes the
 
 ---
 
-### 16.13 Predicate Objects vs. Strings
+### 13.13 Predicate Objects vs. Strings
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1449,7 +1753,7 @@ Valid operators: `==`, `!=`, `<`, `>`, `<=`, `>=`. The `value` field type must m
 
 ---
 
-### 16.14 `effect` as Array vs. Bare String
+### 13.14 `effect` as Array vs. Bare String
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1460,7 +1764,7 @@ Valid operators: `==`, `!=`, `<`, `>`, `<=`, `>=`. The `value` field type must m
 
 ---
 
-### 16.15 Queue-to-C-Event Binding (CHK-013)
+### 13.15 Queue-to-C-Event Binding (CHK-013)
 
 Every queue that receives entities must have at least one C-event that consumes from it. A queue populated by `ARRIVE()`, `RELEASE()`, or routing with no consuming C-event will fill indefinitely — entities never leave.
 
@@ -1473,7 +1777,7 @@ Every queue that receives entities must have at least one C-event that consumes 
 
 ---
 
-### 16.16 `scheduledTime` as String vs. Number
+### 13.16 `scheduledTime` as String vs. Number
 
 | Pattern | When to Use | Example |
 |---|---|---|
@@ -1484,7 +1788,7 @@ Every queue that receives entities must have at least one C-event that consumes 
 
 ---
 
-### 16.17 Queue Stability — Traffic Intensity Check
+### 13.17 Queue Stability — Traffic Intensity Check
 
 Before finalising any model, verify that each queue stage is stable. A queue is stable only when arrival rate < service capacity. If not, the queue grows without bound and the model runs until its cycle limit rather than reaching meaningful steady-state results.
 
@@ -1507,7 +1811,7 @@ For multi-stage pipelines, check each stage independently. Bottleneck identifica
 
 ---
 
-### 16.18 JSON-Only Settings (no UI editor)
+### 13.18 JSON-Only Settings (no UI editor)
 
 Some model fields can only be set at model-generation time (via LLM or JSON import) and **cannot be changed in the UI** after import. When generating models that use these features, tell the user they cannot be adjusted via the UI:
 
@@ -1667,6 +1971,8 @@ The endpoint applies the same structural validation as the UI import pipeline. T
 V1 (entity names), V2 (attribute names), V4 (PRIORITY discipline), V8 (arrival/sink), V9 (queue condition refs), V19 (server count), V20 (queue capacity), V21 (balk probability).
 
 Full distribution-parameter validation (V5, V11–V13) and shift-schedule validation (V14–V15) are enforced by the engine at run time. The API focuses on structural correctness sufficient to save a model safely.
+
+> **Important — a 201 response does NOT guarantee the model will run without errors.** The API checks 8 structural rules. The remaining 37+ rules (V5, V11–V15, V22–V45, all CHK-* checks) run when the engine starts a simulation. A model that imports successfully may still fail to run if, for example, a distribution parameter is numeric instead of a string (V5), a shift schedule starts after `maxSimTime` (V15), or a queue feeds no C-event (CHK-013). Always verify your generated model by running it in the UI after import.
 
 ---
 
