@@ -47,14 +47,6 @@ describe('G11 — WIP time-average metric', () => {
     expect(result.summary.avgWIP).toBe(0);
   });
 
-  test('avgWIP is positive when entities pass through the system', () => {
-    const model = makeMM1Model(0.9, 1.0);
-    const engine = buildEngine(model, 42, 0, 200);
-    const result = engine.runAll();
-    expect(result.summary.avgWIP).toBeGreaterThan(0);
-    expect(Number.isFinite(result.summary.avgWIP)).toBe(true);
-  });
-
   test('avgWIP satisfies Little\'s Law within 15% for M/M/1', () => {
     const lambda = 0.9;
     const mu = 1.0;

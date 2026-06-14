@@ -226,6 +226,21 @@ describe("saveSimulationRun payload metadata", () => {
     expect(insertPayload.results_json.waitDist.Main.values).toEqual([2, 4]);
   });
 
+  it("persists durationMs option as duration_ms column and runtimeMetrics in results_json", async () => {
+    await saveSimulationRun("model-1", "user-1", {
+      summary: { total: 3, served: 2, reneged: 1, avgWait: 4, avgSvc: 2 },
+      runtimeMetrics: { wall_clock_ms: 42, replications: 1, events_processed: 9, c_event_scans: 5, c_events_fired: 2, entities_created: 3, entities_completed: 2, max_queue_length_by_queue: { Main: 2 } },
+    }, { durationMs: 42 });
+
+    const insertPayload = supabase.from("simulation_runs").insert.mock.calls.at(-1)[0];
+    expect(insertPayload.duration_ms).toBe(42);
+    expect(insertPayload.results_json.runtimeMetrics).toEqual(expect.objectContaining({
+      wall_clock_ms: 42,
+      events_processed: 9,
+      max_queue_length_by_queue: { Main: 2 },
+    }));
+  });
+
   it("persists large runs in compact form by default when requested", async () => {
     await saveSimulationRun("model-1", "user-1", {
       summary: { total: 3000, served: 2500, reneged: 500, avgWait: 12, avgSvc: 4 },
