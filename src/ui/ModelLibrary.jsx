@@ -439,6 +439,7 @@ export function ModelLibrary({
   modelsLoading,
   onHelpOpen,
   signedInThisSession,
+  onWelcomeShown,
 }) {
   const { C, FONT } = useTheme();
   const setTab = onTabChange;
@@ -448,11 +449,10 @@ export function ModelLibrary({
   const [tmplDomain, setTmplDomain] = useState("All");
   const [showPatternsGuide, setShowPatternsGuide] = useState(false);
   const pendingTemplateDraftRef = useRef(null);
-  const didShowWelcome = useRef(false);
 
   useEffect(() => {
-    if (!modelsLoading && !didShowWelcome.current && signedInThisSession) {
-      didShowWelcome.current = true;
+    if (!modelsLoading && signedInThisSession) {
+      onWelcomeShown?.();
       setShowWelcome(true);
     }
   }, [modelsLoading, signedInThisSession]);
@@ -614,7 +614,7 @@ export function ModelLibrary({
         <WelcomeDialog
           onClose={() => setShowWelcome(false)}
           onCreateModel={() => { setShowWelcome(false); setShowNew(true); }}
-          onOpenLibrary={() => { setShowWelcome(false); setTab("public"); }}
+          onOpenLibrary={() => { setShowWelcome(false); setTab("my"); }}
           onHelp={() => { setShowWelcome(false); onHelpOpen?.(); }}
           onExportSchema={() => {
             downloadTextFile(buildLLMSchemaPromptPack(), "simmodlr-ai-prompt-pack.md", "text/markdown");

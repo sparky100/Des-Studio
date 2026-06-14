@@ -646,6 +646,7 @@ export default function App({ onThemeChange }){
       <ModelLibrary
         modelsLoading={loading}
         signedInThisSession={signedInThisSession}
+        onWelcomeShown={() => setSignedInThisSession(false)}
         onHelpOpen={() => setHelpOpen(true)}
         myModels={myModels}
         pubModels={pubModels}
