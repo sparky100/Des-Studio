@@ -896,6 +896,8 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
   const queues = (model.queues || []).map(q => ({
     name: q.name, discipline: q.discipline, capacity: q.capacity ?? null,
   }));
+  const bEvents = extractBEvents(model, results);
+  const cEvents = extractCEvents(model);
 
   const agg = results.aggregateStats || {};
   const confidenceIntervals = Object.entries(agg)
@@ -917,6 +919,8 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
       ...(entityTypes.length ? { entityTypes } : {}),
       ...(queues.length ? { queues } : {}),
       ...(stateVariables.length ? { stateVariables } : {}),
+      ...(bEvents ? { bEvents } : {}),
+      ...(cEvents ? { cEvents } : {}),
     },
     experiment: extractExperiment(experimentConfig),
     kpis: buildKpis(model, results),
