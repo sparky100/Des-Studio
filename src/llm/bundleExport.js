@@ -158,10 +158,10 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     lines.push('');
     lines.push(
       'Sections group queues into logical stages. ' +
-      '**Entry queues** and **exit queues** are the measurement boundary: ' +
-      '`entitiesIn` increments when an entity passes through an entry queue, ' +
-      '`entitiesOut` when it passes through an exit queue. ' +
-      'If no entry/exit queues are configured the counts will be zero even if entities traverse the section.'
+      '`entitiesIn` increments when an entity passes through a designated entry queue. ' +
+      '`entitiesOut` increments when an entity passes through a designated exit queue **or** leaves the section via a sink ' +
+      '(i.e. the entity is done or reneged without reaching an exit queue — direct-exit C-events, completion sinks, reneging). ' +
+      'If no entry queues are configured, `entitiesIn` will be 0. Exit queues are optional: sink exits are counted automatically.'
     );
     lines.push('');
     lines.push('| Section | Member queues | Entry queues | Exit queues |');
@@ -402,11 +402,11 @@ export function buildLLMBundle(model = {}, results = {}, config = {}) {
     if (isMultiRepBundle) {
       lines.push(
         `Counts below are **averages per replication** (÷ ${nReps} runs). ` +
-        '`In`/`Out` are only non-zero when entry/exit queues are configured on the section.'
+        '`In` is only non-zero when entry queues are configured. `Out` counts entities that left via an exit queue or via a sink (done/reneged).'
       );
     } else {
       lines.push(
-        '`In`/`Out` counts are only non-zero when entry/exit queues are configured on the section.'
+        '`In` is only non-zero when entry queues are configured. `Out` counts entities that left via an exit queue or via a sink (done/reneged).'
       );
     }
     lines.push('');

@@ -224,7 +224,8 @@ function StageKpisTable({ snap, model }) {
           sectionStats[sec.id].count++;
           sectionStats[sec.id]._sojournSum += sojourn;
           if (didEnter) sectionStats[sec.id].entitiesIn++;
-          if (didExit)  sectionStats[sec.id].entitiesOut++;
+          // All entities reaching here are done/reneged (filtered above), so always count as OUT
+          sectionStats[sec.id].entitiesOut++;
         }
       }
     }

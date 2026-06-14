@@ -1414,7 +1414,10 @@ const cycleLog = [];
             sectionStats[sec.id].count++;
             sectionStats[sec.id]._sojournSum += sojourn;
             if (didEnter) sectionStats[sec.id].entitiesIn++;
-            if (didExit)  sectionStats[sec.id].entitiesOut++;
+            // Count as OUT if entity passed through the exit queue OR left via a sink
+            // (done/reneged without reaching exit queue — e.g. direct-exit C-events, reneging)
+            const entityIsDone = entity.status === "done" || entity.status === "reneged";
+            if (didExit || entityIsDone) sectionStats[sec.id].entitiesOut++;
             if (sec.id !== lastSection) { visitedSections.push(sec.id); lastSection = sec.id; }
           }
         }

@@ -270,8 +270,8 @@ function buildSectionsDigest(model = {}) {
     entryQueues:  (s.entryQueues || []).map(id => queueNameById[id] || id).filter(Boolean),
     exitQueues:   (s.exitQueues  || []).map(id => queueNameById[id] || id).filter(Boolean),
     note: (s.entryQueues || []).length === 0
-      ? "No entry queue configured — entitiesIn count will be 0 in results"
-      : null,
+      ? "No entry queue configured — entitiesIn will be 0. entitiesOut counts sink exits (done/reneged) only."
+      : "entitiesOut counts exit-queue crossings plus sink exits (done/reneged without reaching exit queue).",
   }));
 }
 
