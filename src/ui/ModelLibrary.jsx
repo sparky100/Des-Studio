@@ -400,15 +400,8 @@ function ModelGrid({
   models, tabKey, filter, onFilterChange, source, emptyIcon, emptyMsg, firstRun,
   onOpenModel, onDeleteModel, onCopyModel, onTagClick,
   currentUserId, profiles,
-  onCreateBlank, onBrowseTemplates, onShowWelcome,
+  onCreateBlank, onBrowseTemplates,
 }) {
-  const didAutoOpen = useRef(false);
-  useEffect(() => {
-    if (firstRun && source.length === 0 && !didAutoOpen.current) {
-      didAutoOpen.current = true;
-      onShowWelcome?.();
-    }
-  }, [firstRun, source.length, onShowWelcome]);
 
   if (source.length === 0) {
     return firstRun ? null : <Empty icon={emptyIcon} msg={emptyMsg} />;
@@ -445,6 +438,7 @@ export function ModelLibrary({
   tab, onTabChange,
   modelsLoading,
   onHelpOpen,
+  signedInThisSession,
 }) {
   const { C, FONT } = useTheme();
   const setTab = onTabChange;
@@ -454,6 +448,14 @@ export function ModelLibrary({
   const [tmplDomain, setTmplDomain] = useState("All");
   const [showPatternsGuide, setShowPatternsGuide] = useState(false);
   const pendingTemplateDraftRef = useRef(null);
+  const didShowWelcome = useRef(false);
+
+  useEffect(() => {
+    if (!modelsLoading && !didShowWelcome.current && signedInThisSession) {
+      didShowWelcome.current = true;
+      setShowWelcome(true);
+    }
+  }, [modelsLoading, signedInThisSession]);
 
   // per-tab filter state
   const [myFilter, setMyFilter]   = useState(BLANK_FILTER);
@@ -483,6 +485,7 @@ export function ModelLibrary({
           <p style={{ fontSize: 12, color: C.muted }}>Build and share discrete-event simulation models.</p>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <Btn variant="ghost" onClick={() => downloadTextFile(buildLLMSchemaPromptPack(), "simmodlr-ai-prompt-pack.md", "text/markdown")}>↓ AI Prompt Pack</Btn>
           <Btn variant="primary" onClick={() => { pendingTemplateDraftRef.current = null; setShowNew(true); }}>+ New Model</Btn>
         </div>
       </div>
@@ -568,8 +571,7 @@ export function ModelLibrary({
           onOpenModel={onOpenModel} onDeleteModel={onDeleteModel} onCopyModel={onCopyModel}
           onTagClick={tag => addTagFilter("my", tag)}
           currentUserId={currentUserId} profiles={profiles}
-          onCreateBlank={() => setShowNew(true)} onBrowseTemplates={() => setTab("templates")}
-          onShowWelcome={() => setShowWelcome(true)} />
+          onCreateBlank={() => setShowNew(true)} onBrowseTemplates={() => setTab("templates")} />
       )}
       {tab === "public" && (
         <ModelGrid

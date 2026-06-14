@@ -6,21 +6,12 @@ import { useTheme } from "./shared/ThemeContext.jsx";
 
 const OPTIONS = [
   {
-    id: "ai",
-    icon: "✦",
-    heading: "Build with AI Tools",
-    friendly: "Let an AI design your model structure — then import it in one click",
-    guidance:
-      "Download the simmodlr AI Prompt Pack: a schema guide with a ready-to-paste prompt. Give it to Claude, ChatGPT, or any AI assistant, describe your system, and import the JSON response back here via + New Model → Import.",
-    accent: true,
-  },
-  {
     id: "create",
     icon: "✏",
     heading: "Create a Model",
-    friendly: "Design your simulation from scratch",
+    friendly: "Choose how to build a model — describe, draw or define",
     guidance:
-      "Use the editors to define entity types, queues, B-Events and C-Events. Best when you know your system and want full control over every parameter.",
+      "Open the model builder and choose your approach: describe your system to the AI assistant, draw it on the visual canvas, or define it directly in the editors.",
     accent: false,
   },
   {
@@ -29,8 +20,17 @@ const OPTIONS = [
     heading: "Access the Model Library",
     friendly: "Browse and fork models from the public library",
     guidance:
-      "Explore ready-to-run models from the public library and community — hospital wards, factory lines, queuing systems, and more. Fork any model to make it your own. Templates are also available.",
+      "Explore ready-to-run models — hospital wards, factory lines, queuing systems and more. Fork any model to make it your own. Templates are also available.",
     accent: false,
+  },
+  {
+    id: "ai",
+    icon: "✦",
+    heading: "Build with AI Tools",
+    friendly: "Let an external AI design your model — then import it in one click",
+    guidance:
+      "Download the simmodlr AI Prompt Pack: the full schema spec with a ready-to-paste prompt. Give it to Claude, ChatGPT, or any AI assistant, describe your system, and import the JSON response back here via + New Model → Import.",
+    accent: true,
   },
   {
     id: "help",
