@@ -171,6 +171,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [phaseCTruncated, setPhaseCTruncated] = useState(false);
   const [results, setResults] = useState(null);
   const [liveWaitDist, setLiveWaitDist] = useState(null);
+  const [liveSummary, setLiveSummary] = useState(null);
   const [singleRunStatus, setSingleRunStatus] = useState("idle");
   const [singleRunProgress, setSingleRunProgress] = useState(null);
   const [batchStatus, setBatchStatus] = useState("idle");
@@ -468,6 +469,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setResults(null);
     setLatestRunId(null);
     setLiveWaitDist(null);
+    setLiveSummary(null);
     liveHistThrottleRef.current = 0;
     onResultsReady?.(null);
     onRunComplete?.({ results: null, replicationResults: [], warmupDetection: null, log: [] });
@@ -556,6 +558,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       if (now - liveHistThrottleRef.current > 400) {
         liveHistThrottleRef.current = now;
         setLiveWaitDist(engineRef.current.getWaitDist?.() || null);
+        setLiveSummary(engineRef.current.getSummary?.() || null);
       }
     }
 
@@ -729,6 +732,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setMode("running");
       setCurrentSnap(null);
       setResults(null);
+      setLiveSummary(null);
       onResultsReady?.(null);
     const batchInitLog = [{ phase: "INIT", time: 0, message: `Replication batch started  (N=${replications}, base seed: ${runSeed})` }];
     if (chartDataAutoDisabled) {
@@ -3078,11 +3082,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         if (hasDerivableGraph) {
           return (
             <>
-              <Suspense fallback={<VisualView snap={currentSnap} model={model} summary={results?.summary} />}>
+              <Suspense fallback={<VisualView snap={currentSnap} model={model} summary={results?.summary ?? liveSummary} />}>
                 <ExecuteCanvas
                   snap={currentSnap}
                   model={model}
-                  summary={results?.summary}
+                  summary={results?.summary ?? liveSummary}
                   animationEnabled={animationEnabled}
                   kpiSlots={kpiSlots}
                   onKpiSlotChange={handleKpiSlotChange}
