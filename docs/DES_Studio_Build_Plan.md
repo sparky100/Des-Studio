@@ -133,6 +133,7 @@ flowchart LR
 | Results API & LLM export bundle | ⬜ Planned | Sprint 82: read-only `results-api` Edge Function (JWT + share-token auth, 3 routes); `buildLLMBundle()` Markdown serialiser; "LLM Bundle (.md)" in Export… popover. No schema changes. |
 | Wait time accuracy & transparency | ✅ Complete | Sprint 83: RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, per-queue `waitSamplesBreakdown`, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), live metrics align with engine formula. |
 | Engine fidelity — PRNG streams, shifts, purge, starvation | ✅ Complete | Sprint 84: PRNG stream isolation per process (`deriveSubSeed` + `StreamRegistry`), shift-change behavior toggle (delay/preempt/suspend), opt-in purge/run-down period, per-resource starvation duration tracking. 15 new tests. |
+| Sign-in welcome dialog & AI Prompt Pack | ✅ Complete | Sprint 85: sign-in welcome dialog with four option cards (Create a Model, Access the Model Library, Build with AI Tools, Get Help); `signedInThisSession` trigger in App.jsx with `didShowWelcome` ref guard in ModelLibrary; race-condition fix (`setLoading(true)` on SIGNED_IN before `setSession()`); `buildLLMSchemaPromptPack()` bundling `docs/model-schema-for-llm.md` verbatim; ↓ AI Prompt Pack button in Model Library header. |
 
 ### Key Issues and Watchpoints
 
@@ -212,6 +213,7 @@ flowchart LR
 | 1.80 | 2026-05-25 | Sprint 72 planned. Added Performance Optimisation sprint plan and closure scaffold, updated AGENTS sprint tracking, and added roadmap/build-plan entries for predicate-only condition execution and Phase C optimisation. |
 | 1.84 | 2026-06-04 | Sprint 82 planned. Pre-sprint assessment completed for Results API (Option 2) and LLM Export Bundle (Option 3). Sprint plan, API design spec, and AGENTS.md tracking updated. |
 | 1.85 | 2026-06-09 | Sprint 83 completed. Wait time accuracy: RENEGE captures wait via `buildStageRecord()`, in-progress partial waits at 0.5 weight, `waitSamplesBreakdown` with served/reneged/inProgress counts, Little's Law validation gate (`avgWaitByLittle` + `waitDiscrepancy`), BottomPanel live metrics align with engine formula. 10 new tests. User Guide, Engineering Spec, and Product Spec updated. |
+| 1.86 | 2026-06-14 | Sprint 85 completed. Sign-in welcome dialog (four option cards, `signedInThisSession` trigger, race-condition fix) and AI Prompt Pack export (`buildLLMSchemaPromptPack()`, ↓ AI Prompt Pack button in library header). User Guide, Product Spec, and Build Plan updated. |
 
 ---
 
