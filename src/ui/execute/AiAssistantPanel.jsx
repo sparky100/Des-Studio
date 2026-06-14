@@ -121,7 +121,7 @@ function BeforeAfterTable({ goals, baselineStats, afterStats, beforeWaitDist, af
   );
 }
 
-function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult, onSaved, onRefineInDescribe }) {
+function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onApplyPatchedModel, verifyStatus, verifyResult, onSaved, onRefineInDescribe, beforeWaitDist, beforeSummary }) {
   const { C, FONT } = useTheme();
   const change = suggestion.change;
   const AUTOMATABLE = new Set(["entityTypeCount", "queueCapacity", "stateVariable", "bEventDistParam", "cEventDistParam", "shiftPeriodCapacity"]);
@@ -255,9 +255,9 @@ function SuggestionCard({ suggestion, model, aggregateStats, onRunWithPatch, onA
             goals={model?.goals || []}
             baselineStats={verifyResult._baselineStats ?? aggregateStats}
             afterStats={verifyResult.aggregateStats}
-            beforeWaitDist={results?.waitDist}
+            beforeWaitDist={beforeWaitDist}
             afterWaitDist={verifyResult.waitDist}
-            beforeSummary={results?.summary}
+            beforeSummary={beforeSummary}
             afterSummary={verifyResult.summary}
           />
           <div style={{ marginTop: 8, padding: "8px 10px", background: `${C.accent}11`, borderRadius: 4, border: `1px solid ${C.accent}33` }}>
@@ -844,6 +844,8 @@ export const AiAssistantPanel = ({
               verifyResult={verifyResults[s.rank]}
               onSaved={() => setVerifyStatus(prev => ({ ...prev, [s.rank]: "saved" }))}
               onRefineInDescribe={onRefineInDescribe}
+              beforeWaitDist={results?.waitDist}
+              beforeSummary={results?.summary}
             />
           ))}
         </div>
