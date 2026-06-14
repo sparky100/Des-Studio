@@ -1033,6 +1033,20 @@ export function parseSuggestionResponse(text = "") {
     .replace(/([\d"'true|false|null])\s*\}\s*,\s*"goalImpact"\s*:/g, '$1, "goalImpact":')
     .replace(/([\d"'true|false|null])\s*\}\s*,\s*"confidence"\s*:/g, '$1, "confidence":');
 
+  // Recover partial suggestions when the last entry is truncated/malformed — walk
+  // backwards through },  boundaries and close the array at the first valid one.
+  const tryTruncate = (json) => {
+    const sugStart = json.indexOf('"suggestions"');
+    if (sugStart === -1) return json;
+    let cursor = json.lastIndexOf('},');
+    while (cursor > sugStart) {
+      const candidate = json.substring(0, cursor + 1) + '] }';
+      try { JSON.parse(candidate); return candidate; } catch { /* try earlier boundary */ }
+      cursor = json.lastIndexOf('},', cursor - 1);
+    }
+    return json;
+  };
+
   // Normalise a suggestion that has type/target/from/to at the top level (no change wrapper).
   const normaliseSuggestion = (s) => {
     if (s.change) return s;
@@ -1051,7 +1065,8 @@ export function parseSuggestionResponse(text = "") {
         .filter(s => typeof s.rank === "number" && s.change && typeof s.change.type === "string")
     : [];
 
-  for (const candidate of [rawJson, tryRepair(rawJson)]) {
+  const repaired = tryRepair(rawJson);
+  for (const candidate of [rawJson, repaired, tryTruncate(rawJson), tryTruncate(repaired)]) {
     try {
       const parsed = JSON.parse(candidate);
       const analysis = typeof parsed.analysis === "string" ? parsed.analysis : (narrativeOnly || "");

@@ -4,6 +4,7 @@ import {
   buildReportRecommendationsPrompt,
   parseReportRecommendations,
   applySuggestionPatch,
+  parseSuggestionResponse,
 } from '../prompts.js';
 
 const FORBIDDEN_TERMS = ['B-event', 'C-event', 'macro', 'ARRIVE', 'COMPLETE', 'ASSIGN', 'Phase'];
@@ -211,5 +212,31 @@ describe('applySuggestionPatch — cEventDistParam', () => {
     const change = { type: "cEventDistParam", target: "Unknown.mean", from: 5, to: 3 };
     const result = applySuggestionPatch(baseModel, change);
     expect(result.cEvents[0].cSchedules[0].distParams.mean).toBe(5);
+  });
+});
+
+describe('parseSuggestionResponse — truncation recovery', () => {
+  test('recovers 2 valid suggestions when suggestion 3 is malformed mid-object', () => {
+    // Build a JSON string where sug1 and sug2 are valid but sug3's change object has
+    // narrative text injected where from/to should be — the real A&E failure pattern.
+    const sug1 = '{"rank":1,"constraint":"Lab wait","cause":"High util","change":{"type":"entityTypeCount","target":"BloodsLab","from":3,"to":5},"predicted":"Wait halved","goalImpact":"MET","confidence":"high"}';
+    const sug2 = '{"rank":2,"constraint":"Triage util","cause":"Peak demand","change":{"type":"entityTypeCount","target":"TriageNurse","from":4,"to":5},"predicted":"Util drops","goalImpact":"MET","confidence":"high"}';
+    const malformedSug3 = '{"rank":3,"change":{"type":"cEventDistParam","target":"Lab.mode", min; narrative text injected here}';
+    const analysis = "## What Happened\\nBottleneck found.\\n## What to Change\\nAdd servers.";
+    // The outer array and object are intentionally NOT properly closed (mirrors LLM truncation)
+    const raw = `{"analysis":"${analysis}","suggestions":[${sug1},${sug2},${malformedSug3}`;
+    const input = '```json\n' + raw + '\n```';
+
+    const result = parseSuggestionResponse(input);
+    expect(result.suggestions.length).toBe(2);
+    expect(result.suggestions[0].rank).toBe(1);
+    expect(result.suggestions[1].rank).toBe(2);
+    expect(result.analysis).toContain("What Happened");
+  });
+
+  test('returns empty array when fenced JSON is completely garbled', () => {
+    const input = '```json\n{ not: [valid, json at all <<<\n```';
+    const result = parseSuggestionResponse(input);
+    expect(result.suggestions).toEqual([]);
   });
 });
