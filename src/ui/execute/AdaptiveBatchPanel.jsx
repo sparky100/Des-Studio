@@ -783,9 +783,14 @@ export function AdaptiveBatchPanel({
                                 <span style={{ color: C.accent, fontFamily: FONT, fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{idx + 1}.</span>
                                 <span style={{ fontFamily: FONT, fontSize: 12, color: C.text, flex: 1, lineHeight: 1.55 }}>{optText}</span>
                                 {onApplyModel && (!cs || cs.status === 'idle') && phase === "done" && (
-                                  <Btn small variant="ghost" onClick={() => runComparison(idx, optText)} style={{ flexShrink: 0 }}>
-                                    Run Comparison
-                                  </Btn>
+                                  <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                                    <Btn small variant="ghost" onClick={() => { startApply(optText); setExploreTab("analysis"); }}>
+                                      Apply
+                                    </Btn>
+                                    <Btn small variant="ghost" onClick={() => runComparison(idx, optText)}>
+                                      Run Comparison
+                                    </Btn>
+                                  </div>
                                 )}
                               </div>
                               {cs?.status === 'generating' && (
