@@ -678,6 +678,7 @@ export default function App({ onThemeChange }){
         onPasteJsonImport={handlePasteJsonImport}
         tab={libraryTab}
         onTabChange={setLibraryTab}
+        onHelpOpen={() => setHelpOpen(true)}
       />
       {showForkConfirm && modelToFork && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:C.overlay,display:'flex',alignItems:'center',justifyContent:'center',zIndex:Z.modal}}>

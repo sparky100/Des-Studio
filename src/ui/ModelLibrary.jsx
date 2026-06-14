@@ -5,6 +5,9 @@ import { Tag, Avatar, Btn, Field, Empty } from "./shared/components.jsx";
 import { TEMPLATES } from "../engine/templates.js";
 import { validateModel } from "../engine/validation.js";
 import { useTheme } from "./shared/ThemeContext.jsx";
+import { WelcomeDialog } from "./WelcomeDialog.jsx";
+import { buildLLMSchemaPromptPack } from "../llm/bundleExport.js";
+import { downloadTextFile } from "./shared/utils.js";
 
 // --- filter/sort helpers ---
 
@@ -397,15 +400,15 @@ function ModelGrid({
   models, tabKey, filter, onFilterChange, source, emptyIcon, emptyMsg, firstRun,
   onOpenModel, onDeleteModel, onCopyModel, onTagClick,
   currentUserId, profiles,
-  onCreateBlank, onBrowseTemplates,
+  onCreateBlank, onBrowseTemplates, onShowWelcome,
 }) {
   const didAutoOpen = useRef(false);
   useEffect(() => {
     if (firstRun && source.length === 0 && !didAutoOpen.current) {
       didAutoOpen.current = true;
-      onCreateBlank?.();
+      onShowWelcome?.();
     }
-  }, [firstRun, source.length, onCreateBlank]);
+  }, [firstRun, source.length, onShowWelcome]);
 
   if (source.length === 0) {
     return firstRun ? null : <Empty icon={emptyIcon} msg={emptyMsg} />;
@@ -441,10 +444,12 @@ export function ModelLibrary({
   onPasteJsonImport,
   tab, onTabChange,
   modelsLoading,
+  onHelpOpen,
 }) {
   const { C, FONT } = useTheme();
   const setTab = onTabChange;
   const [showNew, setShowNew] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
   const [tmplSearch, setTmplSearch] = useState("");
   const [tmplDomain, setTmplDomain] = useState("All");
   const [showPatternsGuide, setShowPatternsGuide] = useState(false);
@@ -563,7 +568,8 @@ export function ModelLibrary({
           onOpenModel={onOpenModel} onDeleteModel={onDeleteModel} onCopyModel={onCopyModel}
           onTagClick={tag => addTagFilter("my", tag)}
           currentUserId={currentUserId} profiles={profiles}
-          onCreateBlank={() => setShowNew(true)} onBrowseTemplates={() => setTab("templates")} />
+          onCreateBlank={() => setShowNew(true)} onBrowseTemplates={() => setTab("templates")}
+          onShowWelcome={() => setShowWelcome(true)} />
       )}
       {tab === "public" && (
         <ModelGrid
@@ -602,6 +608,18 @@ export function ModelLibrary({
         />
       )}
       {showPatternsGuide && <PatternsGuidePanel onClose={() => setShowPatternsGuide(false)} />}
+      {showWelcome && (
+        <WelcomeDialog
+          onClose={() => setShowWelcome(false)}
+          onCreateModel={() => { setShowWelcome(false); setShowNew(true); }}
+          onOpenLibrary={() => { setShowWelcome(false); setTab("public"); }}
+          onHelp={() => { setShowWelcome(false); onHelpOpen?.(); }}
+          onExportSchema={() => {
+            downloadTextFile(buildLLMSchemaPromptPack(), "simmodlr-ai-prompt-pack.md", "text/markdown");
+            setShowWelcome(false);
+          }}
+        />
+      )}
     </div>
   );
 }

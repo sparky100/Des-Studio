@@ -1,4 +1,35 @@
 import { buildKpis, goalsToPrompt, buildGoalGaps } from './prompts.js';
+import schemaDoc from '../../docs/model-schema-for-llm.md?raw';
+
+// Builds a downloadable AI prompt pack: usage instructions + starter prompt + the full authoritative schema.
+export function buildLLMSchemaPromptPack() {
+  const preamble = [
+    '# simmodlr — AI Prompt Pack',
+    '',
+    '## How to use this document',
+    '',
+    '1. Copy the starter prompt below and paste it into Claude, ChatGPT, or any AI assistant.',
+    '2. Fill in [YOUR SYSTEM DESCRIPTION] — describe what you want to simulate in plain English.',
+    '3. The AI will return a JSON block. Save it as a `.json` file.',
+    '4. In simmodlr, click **+ New Model → Import a file** and select your file.',
+    '',
+    '---',
+    '',
+    '## Starter prompt',
+    '',
+    '```',
+    'I want to simulate [YOUR SYSTEM DESCRIPTION].',
+    '',
+    'Using the simmodlr schema reference below, generate a valid model_json object.',
+    'Return ONLY raw JSON — no prose, no markdown code fence, no explanation.',
+    '```',
+    '',
+    '---',
+    '',
+  ].join('\n');
+
+  return preamble + schemaDoc;
+}
 
 // Builds a self-contained Markdown document for paste-into-LLM analysis.
 // Must NOT call truncateWords — this is a file export, not a proxy call.
