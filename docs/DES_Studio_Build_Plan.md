@@ -2070,6 +2070,31 @@ npm run build
 
 ---
 
+### Sprint 85 — Sign-in Welcome Dialog & AI Prompt Pack ✅
+
+**Goal:** Give every user a clear, friendly starting point on sign-in — regardless of whether they have existing models — and make the LLM schema spec downloadable from the library for external AI-assisted model creation.
+
+**Status:** ✅ Complete — 2026-06-14
+
+**Branch:** `claude/new-user-login-dialog-axgday` — PR #318
+
+**Scope guardrails:**
+- No new DB migrations or `model_json` schema changes
+- Trigger uses auth event state in `App.jsx` — no sessionStorage, no cookies
+- Schema export re-uses existing `docs/model-schema-for-llm.md` verbatim via `?raw` import — no separate schema copy
+- Styling via `tokens.js` exclusively; inline styles matching `NewModelModal` exactly
+
+| ID | Feature | Status | Deliverable |
+|---|---|---|---|
+| F85.1 | Welcome dialog component | ✅ | `src/ui/WelcomeDialog.jsx` — 4-option 2×2 grid: Create a Model (top-left), Access the Model Library (top-right), Build with AI Tools / schema export (bottom-left, accent border), Get Help (bottom-right). Escape and Skip for now close to library. |
+| F85.2 | Sign-in trigger | ✅ | `signedInThisSession` boolean state in `App.jsx`, set on `SIGNED_IN`/`SIGNED_UP` auth events, cleared on `SIGNED_OUT`. Passed to `ModelLibrary` via prop. Dialog fires once after models load (`didShowWelcome` ref guard). Does not fire on page refresh. |
+| F85.3 | Race condition fix | ✅ | `setLoading(true)` added to `onAuthStateChange` on sign-in, preventing a one-render window where `loading=false` and `myModels=[]` incorrectly triggered the old first-run auto-open for users with existing models. |
+| F85.4 | AI Prompt Pack export | ✅ | `buildLLMSchemaPromptPack()` in `src/llm/bundleExport.js` — prepends a how-to preamble and starter prompt to `docs/model-schema-for-llm.md?raw` (verbatim). Downloaded as `simmodlr-ai-prompt-pack.md` via `downloadTextFile()`. |
+| F85.5 | Library header button | ✅ | `↓ AI Prompt Pack` ghost button in `ModelLibrary` header alongside `+ New Model`. Always visible, no sign-in dependency. |
+| F85.6 | ModelLibrary wiring | ✅ | `signedInThisSession` and `onHelpOpen` props added to `ModelLibrary`. Old `ModelGrid` auto-open useEffect removed. Welcome trigger consolidated into `ModelLibrary` body useEffect. |
+
+---
+
 *End of build plan. Update after each sprint.*
 *The most important rule: read the existing file before changing it.*
 *Modelling vocabulary rule: if a requirement cannot be expressed using the current macro set, extend the spec — never add a free-text escape hatch.*

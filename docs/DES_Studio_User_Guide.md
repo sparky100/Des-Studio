@@ -102,9 +102,20 @@ Obtain these values from your Supabase project dashboard.
 
 ## 3. Quick Start
 
-### Step 1 — Log in
+### Step 1 — Log in and choose how to start
 
-Open simmodlr in your browser. Enter your email and password. You land on the **Model Library** — your personal list of saved models.
+Open simmodlr in your browser. Enter your email and password. After signing in, a **Welcome dialog** appears asking how you would like to get started. It presents four options:
+
+| Option | What happens |
+|--------|-------------|
+| **Create a Model** | Opens the New Model dialog where you choose to describe, draw, or define your model. |
+| **Access the Model Library** | Closes the dialog and opens your model library so you can browse your own models, public models, and templates. |
+| **Build with AI Tools** | Downloads the **simmodlr AI Prompt Pack** — the full schema spec with a ready-to-paste prompt you can give to any external AI assistant (Claude, ChatGPT, etc.) to generate a model JSON file, then import it back. |
+| **Get Help** | Opens the AI Help Assistant for a guided introduction to simmodlr. |
+
+Click **Skip for now** (or press **Escape**) to go straight to your Model Library.
+
+> **Note:** This dialog appears once each time you sign in. It does not reappear if you refresh the page.
 
 ### Step 2 — Open a template
 
@@ -132,7 +143,21 @@ You have now completed the core simmodlr loop: build → run → analyse → adj
 
 ## 4. Common Workflows
 
-### 4.0 Browse and filter the library
+### 4.0 Download the AI Prompt Pack
+
+**When to use this.** You want to use an external AI assistant (Claude, ChatGPT, Gemini, etc.) to help you design a model, then import the result into simmodlr.
+
+Click **↓ AI Prompt Pack** in the top-right of the Model Library header (next to **+ New Model**). This downloads `simmodlr-ai-prompt-pack.md` — a Markdown file containing:
+
+1. **How to use it** — step-by-step instructions for pasting into an AI assistant.
+2. **A starter prompt** — copy and fill in `[YOUR SYSTEM DESCRIPTION]`.
+3. **The full schema reference** — the authoritative simmodlr model JSON spec used internally by the AI Generator.
+
+Once the AI produces a JSON response, save it as a `.json` file and import it via **+ New Model → Import a file**.
+
+> **Tip:** The same Prompt Pack is available from the Welcome dialog under **Build with AI Tools** when you first sign in.
+
+### 4.1 Browse and filter the library
 
 **When to use this.** Your model list has grown and you need to locate a specific model, compare a set of related models, or discover models shared publicly by other users.
 
@@ -150,7 +175,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
 **Adding tags to your models.** Tags are set in the model's settings panel inside the model editor. Give models descriptive tags (e.g. `healthcare`, `queueing`, `high-priority`) to make them easy to find later.
 
-### 4.1 Build a model from scratch
+### 4.2 Build a model from scratch
 
 **When to use this.** You know your system well enough to define it element by element.
 
@@ -188,7 +213,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 
 **Visual Designer.** Click **Draw** in the Design toolbar to open the canvas-based Visual Designer and build or rearrange the same model graphically. Use **Pan** mode to move around the diagram. Use **Select** mode, or Shift/Ctrl-click with a mouse, to select more than one node. Once nodes are selected, the toolbar above the canvas shows how many are selected and lets you clear the selection or delete the selected nodes together. Dragging a selected group moves the whole group and saves the updated layout with the model.
 
-### 4.2 Generate a model with AI
+### 4.3 Generate a model with AI
 
 **When to use this.** You have a scenario in mind but do not want to configure every element manually.
 
@@ -208,7 +233,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 - If the result is missing something, use the feedback loop: type what is wrong in the AI panel and click **Refine**. The AI patches the model rather than regenerating from scratch.
 - Generated models pass through the same 38 validation rules as manually built ones. Fix any errors shown in Model Health before running.
 
-### 4.3 Run an experiment and read results
+### 4.4 Run an experiment and read results
 
 **When to use this.** You have a valid model and want statistical results.
 
@@ -245,7 +270,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    - Click **Compare** to compare against a saved historical run.
    - Use the text input to ask specific questions about the results (e.g. "Which queue had the longest wait?").
 
-### 4.4 Compare scenarios with a parametric sweep
+### 4.5 Compare scenarios with a parametric sweep
 
 **When to use this.** You want to know how a KPI changes as you vary one or two parameters (e.g. "How does average wait change as I add servers from 1 to 5?").
 
@@ -259,7 +284,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
 5. Results appear as a line chart (1D) or heat map (2D). Each point shows the mean KPI ± 95% CI.
 6. Use **Goal Feasibility** to draw the target threshold on the chart and find the minimum parameter value that meets the goal.
 
-### 4.5 Share results with stakeholders
+### 4.6 Share results with stakeholders
 
 **When to use this.** You need to present or hand off results to someone who will not run the model themselves.
 
@@ -274,7 +299,7 @@ The Model Library has four tabs — **My Models**, **Templates**, **Public Libra
    - **QR code** — present in a meeting; attendees scan to open the live results on their phones.
    - **Embed widget** — paste an `<iframe>` snippet into an internal wiki or dashboard.
 
-### 4.6 Additional features
+### 4.7 Additional features
 
 **Voice input.** The AI chat dialogs — Help Assistant, Model Assistant, and AI Diagnostics — each include a microphone button. Clicking it activates the browser's Speech Recognition API so you can dictate questions or describe changes verbally instead of typing.
 
@@ -314,7 +339,7 @@ Once sections are defined:
 - The Visual Designer shows a small coloured dot on each node that belongs to a section.
 - Sections are pure metadata: the simulation engine is unchanged and all elements remain part of the same flat model.
 
-### 4.7 Export results for external analysis
+### 4.8 Export results for external analysis
 
 **When to use this.** You want to analyse results in an external tool — paste into an LLM (Claude, ChatGPT, Gemini), load into a Python notebook, consume from an R script, or connect from a BI tool.
 
