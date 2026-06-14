@@ -184,12 +184,12 @@ export function ExperimentControls({
                   aria-label="Simulation seed"
                   type="number"
                   value={seed}
-                  onChange={e => setSeed(parseInt(e.target.value) || 0)}
+                  onChange={e => { const v = parseInt(e.target.value) || 0; setSeed(v); persistExperimentDefaults({ seed: v }); }}
                   style={{ width: 120, background: "transparent", border: `1px solid ${C.border}`,
                     borderRadius: 4, color: C.amber, fontFamily: FONT, fontSize: 12,
                     padding: "6px 8px", outline: "none" }}
                 />
-                <Btn small variant="ghost" onClick={() => setSeed(Math.floor(Math.random() * 1e9))}>Randomise</Btn>
+                <Btn small variant="ghost" onClick={() => { const v = Math.floor(Math.random() * 1e9); setSeed(v); persistExperimentDefaults({ seed: v }); }}>Randomise</Btn>
               </div>
               <div style={helperStyle}>
                 Use the same value to repeat the same random pattern.

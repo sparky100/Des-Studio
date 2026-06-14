@@ -179,7 +179,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [replicationResults, setReplicationResults] = useState([]);
   const [aggregateStats, setAggregateStats] = useState({});
   const [replicationDetailOpen, setReplicationDetailOpen] = useState(false);
-  const [seed, setSeed] = useState(() => Math.floor(mulberry32(Date.now())() * 1e9));
+  const [seed, setSeed] = useState(() => numberDefault(experimentDefaults.seed, Math.floor(mulberry32(Date.now())() * 1e9)));
   const [resolvedSeed, setResolvedSeed] = useState(null);
   const [loadedRunSnapshot, setLoadedRunSnapshot] = useState(null);
   const [warmupPeriod, setWarmupPeriod] = useState(() => numberDefault(experimentDefaults.warmupPeriod, 0));
@@ -345,12 +345,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       warmupPeriod,
       maxSimTime,
       replications,
+      seed,
       terminationMode,
       terminationCondition,
       resultDetailLevel: saveDetailLevel,
       ...patch,
     });
-  }, [model.experimentDefaults, warmupPeriod, maxSimTime, replications, terminationMode, terminationCondition, saveDetailLevel, onExperimentDefaultsChange]);
+  }, [model.experimentDefaults, warmupPeriod, maxSimTime, replications, seed, terminationMode, terminationCondition, saveDetailLevel, onExperimentDefaultsChange]);
 
   const validation = useMemo(() => {
     return validateModel({
