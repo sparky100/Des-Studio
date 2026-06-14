@@ -458,10 +458,10 @@ export function SummaryCardGrid({ results, replicationResults = [], model = {} }
           border: `1px solid ${isCritical ? C.danger + "88" : C.amber + "88"}`,
           borderRadius: 6, padding: "12px 14px", marginTop: 8, marginBottom: 8,
         }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: isCritical ? C.error : C.amber, fontFamily: FONT }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: isCritical ? C.errorLight : C.warnBg, fontFamily: FONT }}>
             {wipLabel}{splitLabel}
           </div>
-          <div style={{ fontSize: 12, color: isCritical ? C.error : C.amber, fontFamily: FONT, lineHeight: 1.5, marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: isCritical ? C.errorLight : C.warnBg, fontFamily: FONT, lineHeight: 1.5, marginTop: 4 }}>
             {isCritical
               ? "Large unfinished backlog — results may be unreliable. Carefully review the model to identify where bottlenecks are forming. Consider increasing max simulation time or enabling the purge period in Run Setup."
               : "Service time may be understated — shorter tasks finish first. Review the model for bottleneck resources."}

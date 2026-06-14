@@ -21,6 +21,15 @@ export const METRIC_LABELS = {
 };
 
 export const fmt = (value, digits = 0) => Number.isFinite(value) ? value.toFixed(digits) : "—";
+
+export const COUNT_METRICS = new Set(["summary.total", "summary.served", "summary.reneged"]);
+
+export const fmtMetric = (metric, value) => {
+  if (!Number.isFinite(value)) return "—";
+  if (metric === "summary.servedRatio") return `${Math.round(value * 100)}%`;
+  if (COUNT_METRICS.has(metric)) return String(Math.round(value));
+  return value.toFixed(1);
+};
 export const makeBatchId = () => {
   const cryptoApi = globalThis.crypto;
   if (typeof cryptoApi?.randomUUID === "function") {

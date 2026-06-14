@@ -28,7 +28,7 @@ import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
 import { qrSvg } from "../share/qr.js";
-import { CI_METRICS, METRIC_LABELS, fmt, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
@@ -2826,9 +2826,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                           {goalMet === false && <span style={{ marginLeft: 5, color: C.red }}>✗</span>}
                         </div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: C.accent, fontFamily: FONT }}>
-                          {metric === "summary.servedRatio"
-                            ? `${Math.round(stat.mean * 100)}%`
-                            : fmt(stat.mean, 1)}
+                          {fmtMetric(metric, stat.mean)}
                         </div>
                         <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, marginTop: 2 }}>
                           ±{fmt(stat.halfWidth, 1)} (95% CI)
@@ -2979,9 +2977,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                       {ciRows.map(({ metric, stat, relPrec, precColor }) => (
                         <tr key={metric} style={{ borderBottom: `1px solid ${C.border}` }}>
                           <td style={{ padding: 8 }}>{METRIC_LABELS[metric]}</td>
-                          <td style={{ padding: 8, color: C.accent }}>{fmt(stat.mean, 1)}</td>
-                          <td style={{ padding: 8 }}>{fmt(stat.lower, 1)}</td>
-                          <td style={{ padding: 8 }}>{fmt(stat.upper, 1)}</td>
+                          <td style={{ padding: 8, color: C.accent }}>{fmtMetric(metric, stat.mean)}</td>
+                          <td style={{ padding: 8 }}>{COUNT_METRICS.has(metric) ? fmt(stat.lower, 0) : fmt(stat.lower, 1)}</td>
+                          <td style={{ padding: 8 }}>{COUNT_METRICS.has(metric) ? fmt(stat.upper, 0) : fmt(stat.upper, 1)}</td>
                           <td style={{ padding: 8, color: C.amber }}>{fmt(stat.halfWidth, 1)}</td>
                           <td style={{ padding: 8 }}>
                             {relPrec != null ? (
