@@ -148,7 +148,7 @@ export function AdaptiveBatchPanel({
   const [collectCharts, setCollectCharts] = useState(true);
   const applyAbortRef = useRef(null);
   const abortRef = useRef(null);
-  const baseSeedRef = useRef(Date.now() % 1_000_000);
+  const baseSeedRef = useRef(experimentConfig.seed ?? (Date.now() % 1_000_000));
   const checkpointResolveRef = useRef(null);
 
   const tierPolicy = RUN_ADMISSION_TIERS[tier] || RUN_ADMISSION_TIERS.free;
