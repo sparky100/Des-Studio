@@ -440,6 +440,7 @@ export const AiAssistantPanel = ({
   const [savedSummary, setSavedSummary] = useState(null);
   const [activeKind, setActiveKind] = useState(null);
   const [parsedSuggestion, setParsedSuggestion] = useState(null);
+  const [retryLabel, setRetryLabel] = useState("");
   const [verifyStatus, setVerifyStatus] = useState({});
   const [verifyResults, setVerifyResults] = useState({});
   const [refineStatus, setRefineStatus] = useState("idle");
@@ -487,7 +488,7 @@ export const AiAssistantPanel = ({
     }
   }, [isStreaming, response, conversationHistory]);
 
-  const runPrompt = useCallback((prompt, kind = null) => {
+  const runPrompt = useCallback((prompt, kind = null, _retryCount = 0) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -498,10 +499,13 @@ export const AiAssistantPanel = ({
     setParsedSuggestion(null);
     setVerifyStatus({});
     setVerifyResults({});
-    setConversationHistory([]);
-    setRefineParsed(null);
-    setRefineStatus("idle");
-    setRefineError("");
+    if (_retryCount === 0) {
+      setConversationHistory([]);
+      setRefineParsed(null);
+      setRefineStatus("idle");
+      setRefineError("");
+      setRetryLabel("");
+    }
 
     let accumulated = "";
     streamNarrative(prompt, {
@@ -513,14 +517,24 @@ export const AiAssistantPanel = ({
       },
       onComplete: () => {
         abortRef.current = null;
-        setStatus("complete");
         if (kind === "suggestion" || kind === "explainResults") {
-          setParsedSuggestion(parseSuggestionResponse(accumulated));
+          const parsed = parseSuggestionResponse(accumulated);
+          if (parsed.suggestions.length === 0 && _retryCount < 1) {
+            setRetryLabel("Response incomplete, retrying…");
+            setTimeout(() => runPrompt(prompt, kind, 1), 400);
+            return;
+          }
+          setRetryLabel("");
+          setParsedSuggestion(parsed);
           setResponse("");
+          setStatus("complete");
+        } else {
+          setStatus("complete");
         }
       },
       onError: err => {
         abortRef.current = null;
+        setRetryLabel("");
         const msg = err?.message || "Analysis unavailable";
         setError(msg);
         setStatus("error");
@@ -814,7 +828,12 @@ export const AiAssistantPanel = ({
   const panelButtonStyle = { width: "100%", justifyContent: "center" };
 
   const renderContent = () => {
-    if (status === "loading") return <TypingIndicator />;
+    if (status === "loading") return (
+      <div>
+        <TypingIndicator />
+        {retryLabel && <div style={{ fontSize: 11, color: C.muted, fontFamily: FONT, padding: "2px 12px" }}>{retryLabel}</div>}
+      </div>
+    );
     if (isStreaming && (activeKind === "suggestion" || activeKind === "explainResults")) {
       return <TypingIndicator />;
     }
@@ -830,7 +849,7 @@ export const AiAssistantPanel = ({
             <MarkdownContent text={analysisText} style={{ marginBottom: 10 }} />
           )}
           {parsedSuggestion.suggestions.length === 0 && (
-            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>No structured suggestions found.</div>
+            <div style={{ color: C.muted, fontFamily: FONT, fontSize: 11 }}>Could not generate structured suggestions — please try again later.</div>
           )}
           {parsedSuggestion.suggestions.map(s => (
             <SuggestionCard
