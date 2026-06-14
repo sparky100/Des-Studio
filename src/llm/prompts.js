@@ -888,9 +888,9 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "6. RANKING: If multiple suggestions, rank by expected impact on the binding constraint and explain the trade-off.",
     "",
     "OUTPUT FORMAT — output ONLY a single JSON block wrapped in ```json ... ``` fences — no other text before or after the fences:",
-    '{ "analysis": "<narrative>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|shiftPeriodCapacity|manual", "target": "<name>", "from": 0, "to": 0 }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "high|moderate|low" } ] }',
+    '{ "analysis": "<narrative>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value vs target — one line, max 60 chars>", "cause": "<mechanism — one sentence>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|shiftPeriodCapacity|manual", "target": "<name>", "from": 0, "to": 0 }, "predicted": "<new KPI range — one sentence>", "goalImpact": "<goal label MET|MISSED — one line>", "confidence": "high|moderate|low" } ] }',
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount    — change a flat server/entity type's numeric count (only for resources WITHOUT shiftWindows). 'from' = exact current count, 'to' = exact new count.",
+    "  entityTypeCount    — flat resource count only. INVALID if shiftWindows is present — use shiftPeriodCapacity instead. 'from' = exact current count, 'to' = exact new count.",
     "  queueCapacity      — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
     "  stateVariable      — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
     "  bEventDistParam    — change a numeric parameter of a bEvent's inter-arrival distribution. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream — read dist and distParams from the model data provided.",
@@ -1008,14 +1008,14 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
 
   const instruction = [
     "CRITICAL: Your ENTIRE response must be a single JSON code block wrapped in ```json ... ``` fences. No text before or after.",
-    '{ "analysis": "## What Happened\\n<2–4 sentences: binding bottleneck, utilisation highlights, queue percentile data>\\n\\n## What to Change\\n<1–3 plain-English recommendations, one sentence each>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|shiftPeriodCapacity|manual", "target": "<name>", "from": 0, "to": 0 }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "high|moderate|low" } ] }',
+    '{ "analysis": "## What Happened\\n<2–4 sentences: binding bottleneck, utilisation highlights, queue percentile data>\\n\\n## What to Change\\n<1–3 plain-English recommendations, one sentence each>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value vs target — one line, max 60 chars>", "cause": "<mechanism — one sentence>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|shiftPeriodCapacity|manual", "target": "<name>", "from": 0, "to": 0 }, "predicted": "<new KPI range — one sentence>", "goalImpact": "<goal label MET|MISSED — one line>", "confidence": "high|moderate|low" } ] }',
     "",
     "The 'analysis' value is a markdown string with exactly two headings (total under 200 words):",
     "  Heading '## What Happened': 2–4 sentences — binding bottleneck, utilisation highlights, queue percentile data." + goalsInstr + warningsInstr + wipInstr,
     "  Heading '## What to Change': 1–3 plain-English recommendations, one sentence each. Each must correspond to a suggestion object in the array.",
     "",
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount     — change a flat server/entity type's numeric count (only for resources WITHOUT shiftWindows).",
+    "  entityTypeCount     — flat resource count only. INVALID if shiftWindows is present — use shiftPeriodCapacity instead.",
     "  queueCapacity       — change a queue's numeric capacity limit.",
     "  stateVariable       — change a state variable's numeric initialValue.",
     "  bEventDistParam     — change a numeric distribution param on a bEvent (single stream). target='EventName.paramKey'.",
@@ -1763,7 +1763,7 @@ export function buildBatchAnalysisPrompt(model, combinedResult, aggregateStats, 
     "### Quick Wins\nIn 2–3 sentences of prose (NO numbered list), describe the most impactful policy or scheduling change achievable without adding resources (e.g. priority rules, routing, warmup period). Do NOT use numbered list items in this section.\n" +
     "### Investment Opportunities\nIn 1–2 sentences of prose (NO numbered list), describe structural improvements requiring additional resources or redesign. Do NOT use numbered list items in this section.\n" +
     "### Automatable Changes\nList up to 3 changes that can be expressed as a single numeric parameter update to the existing model. " +
-    "Allowed types: (a) server/entity-type count — only for resources WITHOUT shiftWindows, (b) a single shift period capacity for a resource that shows shiftWindows — format 'EntityName.<periodTime>' e.g. 'TriageNurse.0' for period at time 0 — cite the period time, current capacity, and proposed capacity from shiftWindows, (c) queue capacity limit, (d) state variable initial value, (e) a numeric distribution parameter on a bEvent or cEvent with a single schedule. " +
+    "Allowed types: (a) server/entity-type count — INVALID for resources with shiftWindows; use shift period capacity instead, (b) a single shift period capacity for a resource that shows shiftWindows — format 'EntityName.<periodTime>' e.g. 'TriageNurse.0' for period at time 0 — cite the period time, current capacity, and proposed capacity from shiftWindows, (c) queue capacity limit, (d) state variable initial value, (e) a numeric distribution parameter on a bEvent or cEvent with a single schedule. " +
     "For each item cite the exact current value from the model data and propose a specific new number — no ranges, no vague directions. " +
     "Format each as a numbered item, e.g. '1. Increase Nurse count from 2 to 3 — expected to reduce avgWait by ~30%' or '2. Reduce Arrivals inter-arrival rate from 0.5 to 0.4'. " +
     "If no such changes are warranted by the data, omit this section entirely.\n" +
@@ -1823,9 +1823,9 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
   const instruction = [
     "Convert this improvement opportunity into a single structured change.",
     "Output one JSON block wrapped in ```json ... ``` fences with this schema:",
-    '{ "analysis": "<one sentence explaining what will change and why>", "suggestions": [ { "rank": 1, "constraint": "<metric=value>", "cause": "<brief cause>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|shiftPeriodCapacity|manual", "target": "<exact name from model>", "from": 0, "to": 0 }, "predicted": "<expected improvement>", "goalImpact": "<MET|MISSED|N/A>", "confidence": "high|moderate|low" } ] }',
+    '{ "analysis": "<one sentence explaining what will change and why>", "suggestions": [ { "rank": 1, "constraint": "<metric=value vs target — one line, max 60 chars>", "cause": "<brief cause — one sentence>", "change": { "type": "entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|shiftPeriodCapacity|manual", "target": "<exact name from model>", "from": 0, "to": 0 }, "predicted": "<expected improvement — one sentence>", "goalImpact": "<MET|MISSED — one line>", "confidence": "high|moderate|low" } ] }',
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount     — change a flat server/entity type's numeric count (only for resources WITHOUT shiftWindows). 'from' = exact current count, 'to' = exact new count.",
+    "  entityTypeCount     — flat resource count only. INVALID if shiftWindows is present — use shiftPeriodCapacity instead. 'from' = exact current count, 'to' = exact new count.",
     "  queueCapacity       — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
     "  stateVariable       — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
     "  bEventDistParam     — change a numeric distribution parameter on a bEvent. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream with dist and distParams visible in the model data.",
