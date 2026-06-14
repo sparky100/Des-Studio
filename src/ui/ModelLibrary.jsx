@@ -614,7 +614,7 @@ export function ModelLibrary({
         <WelcomeDialog
           onClose={() => setShowWelcome(false)}
           onCreateModel={() => { setShowWelcome(false); setShowNew(true); }}
-          onOpenLibrary={() => { setShowWelcome(false); setTab("public"); }}
+          onOpenLibrary={() => { setShowWelcome(false); setTab("my"); }}
           onHelp={() => { setShowWelcome(false); onHelpOpen?.(); }}
           onExportSchema={() => {
             downloadTextFile(buildLLMSchemaPromptPack(), "simmodlr-ai-prompt-pack.md", "text/markdown");
