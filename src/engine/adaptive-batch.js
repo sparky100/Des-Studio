@@ -95,6 +95,7 @@ export async function runAdaptiveBatch(options = {}) {
   const kpiPath = selectKpiPath(model);
 
   const allResults = [];
+  const liveKpiValues = [];
   let totalReps = 0;
   let round = 0;
   const roundHistory = [];
@@ -130,9 +131,22 @@ export async function runAdaptiveBatch(options = {}) {
       collectTimeSeries,
       onTimeSeriesSample,
       pool,
-      onProgress: onProgress
-        ? prog => onProgress({ ...prog, completed: repsBefore + prog.completed, total: tierMax })
-        : undefined,
+      onReplicationComplete: (payload, prog) => {
+        const kpiVal = getPathValue(payload?.result, kpiPath);
+        if (typeof kpiVal === 'number' && Number.isFinite(kpiVal)) {
+          liveKpiValues.push(kpiVal);
+        }
+        if (onProgress) {
+          let liveRelativeHalfWidth = null;
+          if (liveKpiValues.length >= 2) {
+            const liveCI = confidenceInterval95(liveKpiValues);
+            if (liveCI.halfWidth != null && liveCI.mean != null && Math.abs(liveCI.mean) > 0) {
+              liveRelativeHalfWidth = (liveCI.halfWidth / Math.abs(liveCI.mean)) * 100;
+            }
+          }
+          onProgress({ completed: repsBefore + prog.completed, total: tierMax, relativeHalfWidth: liveRelativeHalfWidth });
+        }
+      },
     };
 
     const roundResults = await runReplicationsPromise(runOpts, signal);

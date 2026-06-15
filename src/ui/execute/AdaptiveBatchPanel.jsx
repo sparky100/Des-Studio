@@ -224,7 +224,10 @@ export function AdaptiveBatchPanel({
         collectTimeSeries: collectCharts,
         onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
         signal,
-        onProgress: ({ completed }) => setTotalReps(completed),
+        onProgress: ({ completed, relativeHalfWidth }) => {
+          setTotalReps(completed);
+          if (relativeHalfWidth != null) setCurrentCiPct(+relativeHalfWidth.toFixed(1));
+        },
         onRoundComplete: ({ totalReps: reps, relativeHalfWidth }) => {
           setTotalReps(reps);
           setCurrentCiPct(relativeHalfWidth != null ? +relativeHalfWidth.toFixed(1) : null);
