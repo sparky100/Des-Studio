@@ -4,6 +4,7 @@ import { Btn } from "../shared/components.jsx";
 import { csvEscape, downloadTextFile, slugifyResultName, timestampForFilename } from "../shared/utils.js";
 import { batchMeansCI, buildHistogramFD, computePercentiles, computeSummaryStats, detectOutliers } from "../../engine/statistics.js";
 import { buildResultsViewModel } from "./resultsViewModel.js";
+import { evaluateResultsHealth } from "./healthFlags.js";
 import { useTheme } from "../shared/ThemeContext.jsx";
 import { buildLLMBundle } from "../../llm/bundleExport.js";
 import { buildGoalGaps } from "../../llm/prompts.js";
@@ -1516,6 +1517,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
   });
 
   const chartModel = useMemo(() => buildResultsViewModel(results, model), [results, model]);
+  const healthFlags = useMemo(() => evaluateResultsHealth(results, model), [results, model]);
 
   const handleExportLLMBundle = useCallback(() => {
     const expConfig = results?._experiment_config || {};
@@ -1664,40 +1666,30 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
         </div>
       </div>
 
+      {/* ── Health flags — deterministic signals before AI analysis ────────── */}
+      {healthFlags.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 4 }}>
+          {healthFlags.map((flag, i) => {
+            const isCritical = flag.severity === "critical";
+            const bg    = isCritical ? `${C.red}18`   : `${C.amber}12`;
+            const border = isCritical ? `${C.red}55`   : `${C.amber}44`;
+            const color  = isCritical ? C.red           : C.text;
+            return (
+              <div key={`${flag.code}-${i}`} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 6, padding: "8px 12px", fontFamily: FONT, fontSize: 12, color, lineHeight: 1.5 }}>
+                {flag.message}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* ── 2. Bottleneck section — header + nested collapsible charts ─────── */}
       {(chartModel.hasTimeSeries || hasWaitDistributions || queuePeaks.length > 0) && (
         <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
           <SectionHeader id="bottlenecks" label="Where Are the Bottlenecks?" isOpen={sectionsOpen.bottlenecks} onToggle={toggleSection} />
           <div id="results-section-bottlenecks" style={{ display: sectionsOpen.bottlenecks ? "flex" : "none", flexDirection: "column", gap: 0, paddingTop: 8 }}>
 
-            {/* 1. Wait-time distributions */}
-            {hasWaitDistributions && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                <SectionHeader id="waitDist" label="How much time is spent queueing?" isOpen={sectionsOpen.waitDist} onToggle={toggleSection} />
-                <div id="results-section-waitDist" style={{ display: sectionsOpen.waitDist ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
-                  <ChartSectionShell section={waitSection}>
-                    <div aria-label="Wait-time distribution grid" style={CHART_GRID}>
-                      {waitSection.distributions.map((dist, idx) => {
-                        const color = CHART_COLORS[idx % CHART_COLORS.length];
-                        return (
-                          <ChartCard
-                            key={dist.label}
-                            title={dist.label}
-                            color={color}
-                            sourceLabel={dist.sourceLabel}
-                            dataPreview={<WaitValuesPreview dist={dist} />}
-                          >
-                            <WaitHistogram dist={dist} color={color} />
-                          </ChartCard>
-                        );
-                      })}
-                    </div>
-                  </ChartSectionShell>
-                </div>
-              </div>
-            )}
-
-            {/* 2. Server utilisation charts */}
+            {/* 1. Server utilisation — which resources are saturated? */}
             {chartModel.hasTimeSeries && serverSection?.series.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 <SectionHeader id="serverUtil" label="How busy are resources?" isOpen={sectionsOpen.serverUtil} onToggle={toggleSection} />
@@ -1729,7 +1721,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               </div>
             )}
 
-            {/* 3. Peak queue strip */}
+            {/* 2. Peak queue tiles + queue depth over time — how deep did they get? */}
             {queuePeaks.length > 0 && (
               <div aria-label="Peak queue lengths" style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 10, paddingBottom: 14 }}>
                 <div style={{ fontSize: 9, color: C.muted, fontFamily: FONT, letterSpacing: 1, fontWeight: 700 }}>
@@ -1758,7 +1750,6 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
               </div>
             )}
 
-            {/* 4. Queue depth charts */}
             {chartModel.hasTimeSeries && queueSection?.series.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 <SectionHeader id="queueDepth" label="Queue depth over time" isOpen={sectionsOpen.queueDepth} onToggle={toggleSection} />
@@ -1788,6 +1779,34 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
                 </div>
               </div>
             )}
+
+            {/* 3. Wait-time distributions — what did entities experience? */}
+            {hasWaitDistributions && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <SectionHeader id="waitDist" label="How much time is spent queueing?" isOpen={sectionsOpen.waitDist} onToggle={toggleSection} />
+                <div id="results-section-waitDist" style={{ display: sectionsOpen.waitDist ? "block" : "none", paddingTop: 10, paddingBottom: 14 }}>
+                  <ChartSectionShell section={waitSection}>
+                    <div aria-label="Wait-time distribution grid" style={CHART_GRID}>
+                      {waitSection.distributions.map((dist, idx) => {
+                        const color = CHART_COLORS[idx % CHART_COLORS.length];
+                        return (
+                          <ChartCard
+                            key={dist.label}
+                            title={dist.label}
+                            color={color}
+                            sourceLabel={dist.sourceLabel}
+                            dataPreview={<WaitValuesPreview dist={dist} />}
+                          >
+                            <WaitHistogram dist={dist} color={color} />
+                          </ChartCard>
+                        );
+                      })}
+                    </div>
+                  </ChartSectionShell>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       )}
