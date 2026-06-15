@@ -28,7 +28,7 @@ import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
 import { qrSvg } from "../share/qr.js";
-import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
+import { CI_METRICS, METRIC_LABELS, fmt, fmtMetric, COUNT_METRICS, makeBatchId, makeBatchResult, makeBatchRuntimeMetrics, makeTimeSeriesAccumulator, buildResultsExportPayload, buildResultsCsv, downloadTextFile, makeDefaultRunLabel, makeRunLabel, makeRunPromptPayload, makeSavedRunPromptPayload } from "./executeHelpers.js";
 import { SweepChart, WarmupChart, Sweep2DGrid, CumulativeMeanChart, QueueHistogram, EntitySummaryTable } from "./SweepViews.jsx";
 import { LogViewer } from "./LogViewer.jsx";
 import { checkModel } from "../../simulation/modelChecker.js";
@@ -748,6 +748,8 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setReplicationResults([]);
       setAggregateStats({});
 
+      const tsAccumulator = effectiveCollectTimeSeries ? makeTimeSeriesAccumulator() : null;
+
       runnerRef.current = runReplications({
         model: runModel,
         replications,
@@ -757,6 +759,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         terminationCondition: stopConditionForRun,
         collectTimeSeries: effectiveCollectTimeSeries,
         schedulesMap: activeSchedulesMap,
+        onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
         onProgress: progress => setBatchProgress(progress),
         onReplicationComplete: payload => {
           completedPayloads[payload.replicationIndex] = payload;
@@ -789,7 +792,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             const stats = summarizeReplicationResults(ordered, CI_METRICS);
             const wallClockMs = runStartPerfRef.current == null ? null : Math.max(0, Math.round(nowPerf() - runStartPerfRef.current));
             const batchResult = {
-              ...makeBatchResult(ordered, stats, maxTimeForRun, warmupPeriod),
+              ...makeBatchResult(ordered, stats, maxTimeForRun, warmupPeriod, tsAccumulator?.getResult()),
               runtimeMetrics: makeBatchRuntimeMetrics(ordered, replications, wallClockMs),
               aggregateStats: stats,
             };

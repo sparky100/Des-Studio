@@ -64,7 +64,62 @@ export function makeBatchRuntimeMetrics(replicationPayloads, replications, wallC
   };
 }
 
-export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, warmupPeriod) {
+// Streaming accumulator: processes each replication's time series as it arrives
+// (O(M) per rep) and accumulates sums into TypedArrays, so the raw per-rep
+// series can be freed immediately rather than held until all reps finish.
+export function makeTimeSeriesAccumulator(maxPoints = 500) {
+  let grid = null;
+  let queueSums = null;
+  let typeSums = null;
+  let count = 0;
+
+  function addSeries(ts) {
+    if (!Array.isArray(ts) || ts.length === 0) return;
+    if (!grid) {
+      const times = ts.map(pt => pt.t);
+      grid = times.length > maxPoints
+        ? Array.from({ length: maxPoints }, (_, i) => times[Math.round(i * (times.length - 1) / (maxPoints - 1))])
+        : times.slice();
+      queueSums = {};
+      typeSums = {};
+      const first = ts[0];
+      for (const k of Object.keys(first.byQueue || {}))
+        queueSums[k] = { waiting: new Float64Array(grid.length), total: new Float64Array(grid.length) };
+      for (const k of Object.keys(first.byType || {}))
+        typeSums[k] = { waiting: new Float64Array(grid.length), busy: new Float64Array(grid.length), idle: new Float64Array(grid.length), total: new Float64Array(grid.length) };
+    }
+    let j = 0;
+    for (let gi = 0; gi < grid.length; gi++) {
+      const t = grid[gi];
+      while (j < ts.length - 1 && ts[j + 1].t <= t) j++;
+      const pt = ts[j]?.t <= t ? ts[j] : null;
+      if (!pt) continue;
+      for (const [k, q] of Object.entries(pt.byQueue || {})) {
+        if (queueSums[k]) { queueSums[k].waiting[gi] += q.waiting ?? 0; queueSums[k].total[gi] += q.total ?? 0; }
+      }
+      for (const [k, ty] of Object.entries(pt.byType || {})) {
+        if (typeSums[k]) { typeSums[k].waiting[gi] += ty.waiting ?? 0; typeSums[k].busy[gi] += ty.busy ?? 0; typeSums[k].idle[gi] += ty.idle ?? 0; typeSums[k].total[gi] += ty.total ?? 0; }
+      }
+    }
+    count++;
+  }
+
+  function getResult() {
+    if (!grid || count === 0) return undefined;
+    return grid.map((t, gi) => {
+      const byQueue = {}, byType = {};
+      for (const [k, s] of Object.entries(queueSums))
+        byQueue[k] = { waiting: s.waiting[gi] / count, total: s.total[gi] / count };
+      for (const [k, s] of Object.entries(typeSums))
+        byType[k] = { waiting: s.waiting[gi] / count, busy: s.busy[gi] / count, idle: s.idle[gi] / count, total: s.total[gi] / count };
+      return { t, byQueue, byType };
+    });
+  }
+
+  return { addSeries, getResult };
+}
+
+export function makeBatchResult(replicationPayloads, aggregateStats, maxTime, warmupPeriod, precomputedTimeSeries) {
   const summaries = replicationPayloads.map(payload => payload.result?.summary || {});
   const total = summaries.reduce((sum, summary) => sum + (summary.total || 0), 0);
   const served = summaries.reduce((sum, summary) => sum + (summary.served || 0), 0);
@@ -233,7 +288,7 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
 
   return {
     snap: { clock: finalTime },
-    timeSeries: averageBatchTimeSeries(replicationPayloads),
+    timeSeries: precomputedTimeSeries !== undefined ? precomputedTimeSeries : averageBatchTimeSeries(replicationPayloads),
     waitDist,
     runtimeMetrics: {
       replications: replicationPayloads.length,
