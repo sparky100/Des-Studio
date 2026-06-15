@@ -887,7 +887,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "OUTPUT FORMAT — output ONLY a single JSON block wrapped in ```json ... ``` fences — no other text before or after the fences:",
     '{ "analysis": "<narrative>", "suggestions": [ { "rank": 1, "constraint": "<KPI=value (goal: op target)>", "cause": "<mechanism>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual>", "target": "<name>", "from": <number>, "to": <number> }, "predicted": "<new KPI range>", "goalImpact": "<goal label MET|MISSED>", "confidence": "<high|moderate|low>" } ] }',
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount  — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count.",
+    "  entityTypeCount  — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count. Works for shifted resources too — the engine automatically scales all shift period capacities proportionally.",
     "  queueCapacity    — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
     "  stateVariable    — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
     "  bEventDistParam  — change a numeric parameter of a bEvent's inter-arrival distribution. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream — read dist and distParams from the model data provided.",
@@ -904,7 +904,7 @@ export function buildSuggestionPrompt(model = {}, experimentConfig = {}, results
     "  - Routing or priority rule changes (add priority queuing, bypass logic, conditional routing)",
     "  - Distribution type changes (e.g. switching from Fixed to Exponential)",
     "  - Distribution parameter changes on bEvents with multiple arrival streams",
-    "  - Shift scheduling or staffing pattern adjustments",
+    "  - Shift period timing, time window, or staffing pattern changes (NOT a simple count change — changing only the count of a shifted resource uses entityTypeCount)",
     "  - Balking, reneging, or renege-condition modifications",
     "  - Adding a new entity type, queue, or event that does not yet exist in the model",
     "  - Any structural change that cannot be expressed as a single exact numeric field update.",
@@ -1011,7 +1011,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "  Heading '## What to Change': 1–3 plain-English recommendations, one sentence each. Each must correspond to a suggestion object in the array.",
     "",
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount  — change a server/entity type's numeric count.",
+    "  entityTypeCount  — change a server/entity type's numeric count. Works for shifted resources too — the engine scales shift period capacities proportionally.",
     "  queueCapacity    — change a queue's numeric capacity limit.",
     "  stateVariable    — change a state variable's numeric initialValue.",
     "  bEventDistParam  — change a numeric distribution param on a bEvent (single stream). target='EventName.paramKey'.",
@@ -1021,7 +1021,7 @@ export function buildExplainResultsPrompt(model = {}, experimentConfig = {}, res
     "  2. 'from' MUST be the exact current numeric value — read it from model.entityTypes[n].count, model.queues[n].capacity, or model.stateVariables[n].initialValue. Do not guess.",
     "  3. 'to' MUST be a specific number, not a range, not null.",
     "  If the exact current value cannot be confirmed from the model data, use 'manual'.",
-    "MANUAL type — use for everything else: discipline changes, routing, distribution type changes, structural additions, multi-stream events.",
+    "MANUAL type — use for everything else: discipline changes, routing, distribution type changes, structural additions, multi-stream events, shift period timing or pattern changes.",
     "When in doubt, use 'manual'. A grayed-out button is far better than a comparison that makes no actual change.",
     "Never give vague advice — always name the exact parameter and specific value.",
     "When the model has a failure/repair model, factor availability into capacity calculations.",
@@ -1793,9 +1793,13 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
     "Use type 'manual' ONLY if the change cannot be expressed as a single numeric field update.",
   ].join(" ");
 
-  const entityTypes = (model.entityTypes || []).map(e => ({
-    name: e.name, role: e.role, count: e.count,
-  }));
+  const entityTypes = (model.entityTypes || []).map(e => {
+    const entry = { name: e.name, role: e.role, count: e.count };
+    if (e.role === "server" && Array.isArray(e.shiftSchedule) && e.shiftSchedule.length > 0) {
+      entry.shiftSchedule = `${e.shiftSchedule.length} period(s)`;
+    }
+    return entry;
+  });
   const queues = (model.queues || []).map(q => ({
     name: q.name, capacity: q.capacity ?? null,
   }));
@@ -1824,7 +1828,7 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
     "Output one JSON block wrapped in ```json ... ``` fences with this schema:",
     '{ "analysis": "<one sentence explaining what will change and why>", "suggestions": [ { "rank": 1, "constraint": "<metric=value>", "cause": "<brief cause>", "change": { "type": "<entityTypeCount|queueCapacity|stateVariable|bEventDistParam|cEventDistParam|manual>", "target": "<exact name from model>", "from": <current number or null>, "to": <proposed number or null> }, "predicted": "<expected improvement>", "goalImpact": "<MET|MISSED|N/A>", "confidence": "<high|moderate|low>" } ] }',
     "AUTOMATABLE types — Run Comparison will apply this exact change to the model:",
-    "  entityTypeCount  — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count.",
+    "  entityTypeCount  — change a server/entity type's numeric count. 'from' = exact current count from the model data, 'to' = exact new count. Works for shifted resources too — the engine automatically scales all shift period capacities proportionally.",
     "  queueCapacity    — change a queue's numeric capacity limit. 'from' = exact current cap, 'to' = exact new cap.",
     "  stateVariable    — change a state variable's numeric initialValue. 'from' = exact current value, 'to' = exact new value.",
     "  bEventDistParam  — change a numeric distribution parameter on a bEvent. 'target' = '<bEventName>.<paramKey>' (e.g. 'Arrivals.rate'). Only use when the bEvent has a single arrival stream with dist and distParams visible in the model data.",
@@ -1841,7 +1845,7 @@ export function buildApplyOpportunityPrompt(opportunityText, model = {}, results
     "  - Routing or priority rule changes",
     "  - Distribution type changes (e.g. switching from Fixed to Exponential)",
     "  - Distribution parameter changes on bEvents with multiple arrival streams",
-    "  - Shift scheduling or staffing pattern adjustments",
+    "  - Shift period timing, time window, or staffing pattern changes (NOT a simple count change — changing only the count of a shifted resource uses entityTypeCount)",
     "  - Balking, reneging, or renege-condition modifications",
     "  - Adding a new entity type, queue, or event that does not yet exist in the model",
     "  - Any structural change that cannot be expressed as a single exact numeric field update.",
