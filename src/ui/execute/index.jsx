@@ -193,6 +193,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [executeSection, setExecuteSection] = useState("run");
   const [hideRunReadiness, setHideRunReadiness] = useState(false);
   const [showRunSetup, setShowRunSetup] = useState(false);
+  const [showEstimate, setShowEstimate] = useState(false);
   const [savedRunHistory, setSavedRunHistory] = useState([]);
   const [runHistoryStatus, setRunHistoryStatus] = useState("idle");
   const [runHistoryError, setRunHistoryError] = useState("");
@@ -1554,14 +1555,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         ))}
       </div>
 
-      {executeSection === "run" && (
-        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <span style={{ flex: 1, fontSize: 12, color: C.muted, fontFamily: FONT }}>
-            {replications} rep{replications !== 1 ? "s" : ""} · {terminationMode === "time" ? `${maxSimTime} time units` : "condition stop"} · seed {seed}{warmupPeriod > 0 ? ` · warm-up ${warmupPeriod}` : ""}
-          </span>
-          <Btn small variant="ghost" onClick={() => setShowRunSetup(v => !v)}>{showRunSetup ? "▲ Hide setup" : "⚙ Edit setup"}</Btn>
-        </div>
-      )}
       {executeSection === "run" && showRunSetup && (
         <div style={{ maxWidth: 1120, margin: "0 auto" }}>
           <ExperimentControls
@@ -2069,6 +2062,11 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                   </div>
                 )}
 
+                {sweepMode === "2d" && sweepStatus !== "running" && (
+                  <div style={{ background: `${C.amber}12`, border: `1px solid ${C.amber}44`, borderRadius: 6, padding: "8px 10px", fontSize: 11, color: C.text, fontFamily: FONT, lineHeight: 1.5 }}>
+                    ⚠ 2D sweeps run all grid points sequentially and can take 30–90s for larger grids. Consider a 1D sweep for quicker feedback.
+                  </div>
+                )}
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <Btn variant="primary" onClick={handleRunSweep}
                     disabled={sweepStatus === "running" || hasAdmissionErrors || (sweepMode === "2d" && (!sweepSelectedParam || !sweepSelectedParamB))}>
@@ -2537,6 +2535,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         </div>
         {batchActive && <Btn variant="danger" onClick={cancelBatch} disabled={batchStatus === "cancelling"}>Cancel Batch</Btn>}
         {singleRunActive && <Btn variant="danger" onClick={cancelSingleRun} disabled={singleRunStatus === "cancelling"}>Cancel Run</Btn>}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 11, color: C.muted, fontFamily: FONT, whiteSpace: "nowrap" }}>
+            {replications} rep{replications !== 1 ? "s" : ""} · {terminationMode === "time" ? `${maxSimTime} time units` : "condition stop"} · seed {seed}{warmupPeriod > 0 ? ` · warm-up ${warmupPeriod}` : ""}
+          </span>
+          <Btn small variant="ghost" onClick={() => setShowRunSetup(v => !v)}>{showRunSetup ? "▲ Hide" : "⚙ Edit"}</Btn>
+        </div>
       </div>
       )}
 
@@ -2628,14 +2632,14 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             </div>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>
-                WORKLOAD ESTIMATE
-              </div>
-              <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
-                Conservative preview based on arrival and service means.
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700 }}>WORKLOAD ESTIMATE</div>
+              <button
+                onClick={() => setShowEstimate(v => !v)}
+                style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.muted, fontFamily: FONT, fontSize: 10, padding: "2px 8px", cursor: "pointer" }}
+              >{showEstimate ? "Hide" : "Show"}</button>
             </div>
+            {showEstimate && <div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {[
                 { label: "Planned arrivals", value: formatEstimate(complexityEstimate.plannedArrivals) },
@@ -2683,6 +2687,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 ))}
               </div>
             )}
+            </div>}
           </div>
         </div>
       )}

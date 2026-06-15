@@ -93,7 +93,7 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersion
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: SANS }}>Versions</div>
           <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, marginTop: 2 }}>
-            Milestones you've tagged — {versions.length} saved
+            Milestones you've tagged{versions.length > 0 ? ` — ${versions.length} saved` : ""}
           </div>
         </div>
         {isOwner && (
