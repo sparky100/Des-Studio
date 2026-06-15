@@ -424,7 +424,7 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
     <div aria-label="Model proposal preview" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", padding: 14, borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
         <div>
-          <SH label="Model Proposal" />
+          <SH label={readOnly ? "Model Snapshot" : "Model Proposal"} />
           {!readOnly && (
             <div style={{ color: C.muted, fontFamily: FONT, fontSize: 12, lineHeight: 1.6, marginTop: 4 }}>
               {isNewModel ? "Review the model before saving it to your library." : "Review what will change before applying it to the model."}
