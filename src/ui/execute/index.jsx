@@ -1871,7 +1871,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         </div>
       </div>
       </div>
-      </div>
       )}
 
       {executeSection === "experiments" && (
