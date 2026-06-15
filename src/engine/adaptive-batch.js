@@ -81,6 +81,7 @@ export async function runAdaptiveBatch(options = {}) {
     collectTimeSeries = false,
     onRoundComplete,
     onProgress,
+    onTimeSeriesSample,
     checkpointAt = 100,
     onCheckpoint,
     signal,
@@ -127,6 +128,7 @@ export async function runAdaptiveBatch(options = {}) {
       maxSimTime,
       schedulesMap,
       collectTimeSeries,
+      onTimeSeriesSample,
       pool,
       onProgress: onProgress
         ? prog => onProgress({ ...prog, completed: repsBefore + prog.completed, total: tierMax })

@@ -7,7 +7,7 @@ import { runReplications } from "../../engine/replication-runner.js";
 import { buildBatchAnalysisPrompt, buildApplyOpportunityPrompt, parseSuggestionResponse, applySuggestionPatch } from "../../llm/prompts.js";
 import { streamNarrative, streamModelBuilder, callLLMOnce } from "../../llm/apiClient.js";
 import { buildModelBuilderSystemPrompt, buildModelBuilderUserMessage } from "../../llm/model-builder-prompts.js";
-import { makeBatchResult, CI_METRICS, formatRunTimestamp } from "./executeHelpers.js";
+import { makeBatchResult, CI_METRICS, formatRunTimestamp, makeTimeSeriesAccumulator } from "./executeHelpers.js";
 import { summarizeReplicationResults, compareScenarios } from "../../engine/statistics.js";
 import { RUN_ADMISSION_TIERS, getRunAdmission } from "../../engine/run-admission.js";
 import { RADIUS, Z, SPACE, SHADOW } from "../shared/tokens.js";
@@ -213,6 +213,7 @@ export function AdaptiveBatchPanel({
 
   async function runPipeline(signal) {
     try {
+      const tsAccumulator = collectCharts ? makeTimeSeriesAccumulator() : null;
       const adaptiveResult = await runAdaptiveBatch({
         model,
         tier,
@@ -221,6 +222,7 @@ export function AdaptiveBatchPanel({
         maxSimTime,
         schedulesMap,
         collectTimeSeries: collectCharts,
+        onTimeSeriesSample: tsAccumulator ? ts => tsAccumulator.addSeries(ts) : undefined,
         signal,
         onProgress: ({ completed }) => setTotalReps(completed),
         onRoundComplete: ({ totalReps: reps, relativeHalfWidth }) => {
@@ -239,7 +241,7 @@ export function AdaptiveBatchPanel({
 
       const aggregateStats = summarizeReplicationResults(adaptiveResult.results, CI_METRICS);
       const combinedResult = {
-        ...makeBatchResult(adaptiveResult.results, aggregateStats, maxSimTime, warmupPeriod),
+        ...makeBatchResult(adaptiveResult.results, aggregateStats, maxSimTime, warmupPeriod, tsAccumulator?.getResult()),
         aggregateStats,
       };
       setCombinedBatchResult(combinedResult);

@@ -118,6 +118,7 @@ export function runReplications(options = {}) {
     pool,            // optional createReplicationPool() instance shared across runs
     onProgress,
     onReplicationComplete,
+    onTimeSeriesSample,
     onError,
     onComplete,
     onCancelled,
@@ -206,6 +207,10 @@ export function runReplications(options = {}) {
 
       if (message?.type === WORKER_MESSAGE_TYPES.REPLICATION_COMPLETE) {
         const payload = compactReplicationPayload(message.payload);
+        if (onTimeSeriesSample && payload.result?.timeSeries) {
+          onTimeSeriesSample(payload.result.timeSeries);
+          payload.result.timeSeries = undefined;
+        }
         results[payload.replicationIndex] = payload;
         completed++;
         idleWorkers.push(worker);
