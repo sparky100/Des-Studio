@@ -1097,15 +1097,13 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           )
         )}
         {tab==="overview"&&(
-          renderAuthoringShell(<div style={{maxWidth:920,margin:"0 auto",display:"flex",flexDirection:"column",gap:14}}>
+          renderAuthoringShell(<div style={{maxWidth:760,margin:"0 auto",display:"flex",flexDirection:"column",gap:20}}>
             {canEdit && showStarterGuide && (
               <div style={{background:`${C.accent}0d`,border:`1px solid ${alpha(C.accent,0.3)}`,borderRadius:RADIUS.md,padding:16,display:"flex",flexDirection:"column",gap:12}}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
                   <div>
                     <div style={{fontSize:14,fontWeight:700,color:C.text,fontFamily:FONT,marginBottom:4}}>Get started building your model</div>
-                    <div style={{fontSize:12,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>
-                      Pick the path that feels most natural. You can switch between them at any point.
-                    </div>
+                    <div style={{fontSize:12,color:C.muted,fontFamily:FONT,lineHeight:1.6}}>Pick the path that feels most natural. You can switch between them at any point.</div>
                   </div>
                   <Btn small variant="ghost" onClick={dismissStarterGuide} ariaLabel="Dismiss getting started guide">✕</Btn>
                 </div>
@@ -1125,34 +1123,61 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               </div>
             )}
             {model.parentModelId && (
-              <div style={{background:`${C.accent}0d`,border:`1px solid ${alpha(C.accent,0.25)}`,borderRadius:6,padding:"8px 12px",display:"flex",alignItems:"center",gap:8}}>
-                <span style={{fontSize:11,color:C.accent,fontFamily:FONT}}>
-                  Forked from <strong>{overrides.parentModelName||"another model"}</strong>
+              <div style={{background:`${C.accent}0d`,border:`1px solid ${alpha(C.accent,0.25)}`,borderRadius:6,padding:"8px 14px",display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:12,color:C.accent,fontFamily:"Inter,'Segoe UI',Arial,sans-serif"}}>
+                  Scenario based on <strong>{overrides.parentModelName||"another model"}</strong>
                 </span>
               </div>
             )}
-            <Field label="Name" value={model.name} onChange={canEdit?v=>setField("name",v):null}/>
-            <Field label="Description" value={model.description} onChange={canEdit?v=>setField("description",v):null} multiline rows={8}/>
-            <div style={{display:"flex",justifyContent:"flex-end"}}>
-              <Btn small variant="ghost" onClick={()=>{
-                const html = buildModelDefinitionHtml(model);
-                const win = window.open("","_blank");
-                if(!win) return;
-                win.document.write(html);
-                win.document.close();
-                win.focus();
-              }}>View definition</Btn>
+
+            {/* Name + description as a document-style header */}
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {canEdit
+                ? <input
+                    value={model.name||""}
+                    onChange={e=>setField("name",e.target.value)}
+                    placeholder="Model name"
+                    style={{background:"transparent",border:"none",borderBottom:`2px solid ${C.border}`,borderRadius:0,color:C.text,fontFamily:"Inter,'Segoe UI',Arial,sans-serif",fontSize:22,fontWeight:700,padding:"4px 0",outline:"none",width:"100%"}}
+                    onFocus={e=>e.target.style.borderBottomColor=C.accent}
+                    onBlur={e=>e.target.style.borderBottomColor=C.border}
+                  />
+                : <div style={{fontSize:22,fontWeight:700,color:C.text,fontFamily:"Inter,'Segoe UI',Arial,sans-serif",lineHeight:1.2}}>{model.name}</div>
+              }
+              {canEdit
+                ? <textarea
+                    value={model.description||""}
+                    onChange={e=>setField("description",e.target.value)}
+                    placeholder="Describe what this model represents — context, scope, key assumptions…"
+                    rows={6}
+                    style={{background:"transparent",border:"none",borderBottom:`1px solid ${C.border}`,borderRadius:0,color:C.muted,fontFamily:"Inter,'Segoe UI',Arial,sans-serif",fontSize:14,lineHeight:1.8,padding:"8px 0",outline:"none",width:"100%",resize:"vertical"}}
+                    onFocus={e=>e.target.style.borderBottomColor=C.accent}
+                    onBlur={e=>e.target.style.borderBottomColor=C.border}
+                  />
+                : <div style={{fontSize:14,color:C.muted,fontFamily:"Inter,'Segoe UI',Arial,sans-serif",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{model.description}</div>
+              }
+              <div style={{display:"flex",justifyContent:"flex-end",paddingTop:2}}>
+                <Btn small variant="ghost" onClick={()=>{
+                  const html = buildModelDefinitionHtml(model);
+                  const win = window.open("","_blank");
+                  if(!win) return;
+                  win.document.write(html);
+                  win.document.close();
+                  win.focus();
+                }}>View definition</Btn>
+              </div>
             </div>
+
             {canEdit && overrides.onSaveAsBaseline && (
-              <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+              <div style={{background:C.panel,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.purple||C.accent}`,borderRadius:8,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
                 <div>
-                  <div style={{fontSize:12,fontWeight:700,color:C.text,fontFamily:FONT,marginBottom:2}}>Save as scenario baseline</div>
-                  <div style={{fontSize:11,color:C.muted,fontFamily:FONT,lineHeight:1.5}}>Fork this model under a new name to explore a variant, keeping a link back to this original.</div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text,fontFamily:FONT,marginBottom:4}}>Create a scenario variant</div>
+                  <div style={{fontSize:12,color:C.muted,fontFamily:"Inter,'Segoe UI',Arial,sans-serif",lineHeight:1.6}}>Make a linked copy of this model to explore a "what-if" — e.g. more staff, different routing. Run both and compare results side by side.</div>
                 </div>
-                <Btn small variant="ghost" onClick={()=>{setBaselineName(`Scenario from ${model.name||"this model"}`);setShowBaselineModal(true);}}>Save as scenario baseline</Btn>
+                <Btn small variant="ghost" onClick={()=>{setBaselineName(`Scenario from ${model.name||"this model"}`);setShowBaselineModal(true);}}>Create variant</Btn>
               </div>
             )}
-            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
+
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18}}>
               <GoalsEditor goals={model.goals||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
             </div>
           </div>)
