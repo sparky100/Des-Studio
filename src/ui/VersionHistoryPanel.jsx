@@ -77,10 +77,10 @@ export function VersionHistoryPanel({ model, userId, isOwner, onToast, onVersion
     }
   };
 
-  if (loading) return <div style={{ padding: 24, color: C.muted, fontFamily: FONT, fontSize: 12 }}>Loading versions...</div>;
+  if (loading) return <div style={{ maxWidth: 760, margin: "0 auto", padding: 24, color: C.muted, fontFamily: FONT, fontSize: 12 }}>Loading versions...</div>;
 
   return (
-    <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{ maxWidth: 760, margin: "0 auto", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Versions</div>
