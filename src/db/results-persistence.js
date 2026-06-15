@@ -127,6 +127,11 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
       resultsJson._experiment_config = config.runRecord.experiment_config;
     }
   }
+  // Allow callers (e.g. AdaptiveBatchPanel) to embed _model_snapshot directly
+  // without needing a full runRecord (which requires buildRunRecord + resolvedSeed).
+  if (!resultsJson._model_snapshot && config.modelSnapshot) {
+    resultsJson._model_snapshot = config.modelSnapshot;
+  }
   // Allow callers (e.g. AdaptiveBatchPanel) to embed _experiment_config directly
   // without needing a full runRecord.  This ensures the replication count and run
   // parameters stored in results_json always reflect the actual executed values,

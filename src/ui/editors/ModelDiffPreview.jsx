@@ -91,7 +91,11 @@ function friendlyValue(value) {
         .join(", ");
       return paramText ? `${dist} (${paramText})` : dist;
     }
-    return value.name || value.id || `${Object.keys(value).length} fields`;
+    if (value.name) return value.name;
+    if (value.id) return value.id;
+    const entries = Object.entries(value).filter(([k]) => k !== "id");
+    if (entries.length === 0) return "{}";
+    return entries.map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join(", ");
   }
   if (value === true) return "yes";
   if (value === false) return "no";
@@ -244,7 +248,12 @@ function deriveSimulationSummary(proposedModel = {}) {
   }
 
   // RESOURCES — per server type
-  const resourceLines = serverTypes.map(s => `${s.name}: ${s.count || 1} available`);
+  const resourceLines = serverTypes.map(s => {
+    const hasShift = Array.isArray(s.shiftSchedule) && s.shiftSchedule.length > 0;
+    return hasShift
+      ? `${s.name}: shift schedule (${s.shiftSchedule.length} period${s.shiftSchedule.length === 1 ? "" : "s"})`
+      : `${s.name}: ${s.count || 1} available`;
+  });
 
   // EXPERIMENT SETTINGS
   const duration = experimentDefaults.maxSimTime;
@@ -480,9 +489,10 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
                   <ChangeList title="Added" items={added} color={C.green} renderItem={renderItemSummary} />
                   <ChangeList title="Removed" items={removed} color={C.red} renderItem={renderItemSummary} />
                   <ChangeList title="Modified" items={modified} color={C.amber} renderItem={(item) => <ModifiedSummaryItem item={item} />} />
-                  {!hasChanges && (
+                  {!hasChanges && unchanged.length > 0 && (
                     <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", color: C.muted, fontFamily: FONT, fontSize: 10 }}>
-                      {unchanged.length} item{unchanged.length === 1 ? "" : "s"} unchanged
+                      <span style={{ fontWeight: 600 }}>{unchanged.length} unchanged: </span>
+                      {unchanged.map(item => item.name || item.id || "?").join(", ")}
                     </div>
                   )}
                 </section>

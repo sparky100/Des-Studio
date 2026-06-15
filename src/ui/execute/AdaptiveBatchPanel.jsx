@@ -260,6 +260,7 @@ export function AdaptiveBatchPanel({
             seed: baseSeedRef.current,
             runLabel: `Explore ${formatRunTimestamp()}`,
             aggregateStats,
+            modelSnapshot: JSON.parse(JSON.stringify(model)),
             // Embed the experiment config so _experiment_config is written into
             // results_json and the replication count is never reconstructed from
             // the wrong fallback (e.g. the initial-batch size of 5).
