@@ -53,7 +53,7 @@ export function evaluateResultsHealth(results = {}, model = {}) {
         message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run — large unfinished backlog, results may be unreliable.` });
     } else if (wipPct >= 10) {
       flags.push({ code: "H3", severity: "warning",
-        message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run — completion rate is understated.` });
+        message: `${wipPct}% of arrivals (≈${totalWip} entities${splitNote}) still in system at end of run.` });
     }
   }
 
