@@ -94,7 +94,7 @@ export function runSweep({
 
     try {
       const pointModel = applySweepValue(model, paramConfig, value);
-      const pointSeed = baseSeed + pointIndex * 10000;
+      const pointSeed = baseSeed;
 
       const replicationPayloads = await wrapReplications({
         model: pointModel,
@@ -241,7 +241,7 @@ export function run2DSweep({
         { paramConfig: paramA, value: valueA },
         { paramConfig: paramB, value: valueB },
       ]);
-      const pointSeed = baseSeed + pointIndex * 10000;
+      const pointSeed = baseSeed;
 
       const replicationPayloads = await wrapReplications({
         model: pointModel,
