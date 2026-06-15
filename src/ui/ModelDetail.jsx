@@ -464,6 +464,8 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const [resultsView,setResultsView]=useState("summary");
   const [showExplorePanel,setShowExplorePanel]=useState(false);
   const [aiAction,setAiAction]=useState(null);
+  const [collabQuery,setCollabQuery]=useState("");
+  const [pendingRoles,setPendingRoles]=useState({});
   const [aiSeq,setAiSeq]=useState(0);
   const [describePrompt,setDescribePrompt]=useState("");
   const [selectedResultsRunId,setSelectedResultsRunId]=useState("");
@@ -1602,21 +1604,86 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 <Btn small variant="ghost" onClick={()=>setShowSimPyExport(true)}>Export SimPy</Btn>
               </div>
             </section>
-            <section aria-label="Collaborator access" style={{display:"flex",flexDirection:"column",gap:4}}>
-              <SH label="Collaborators"/>
-              {(overrides.profiles||[]).filter(u=>u.id!==model.owner_id).length===0&&(
-                <div style={{fontSize:11,color:C.muted,fontFamily:FONT}}>No collaborators available.</div>
-              )}
-            {(overrides.profiles||[]).filter(u=>u.id!==model.owner_id).map(u=>(
-              <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
-                <Avatar u={u} size={26}/>
-                <span style={{flex:1,fontSize:12,color:C.text,fontFamily:FONT}}>{u.name}</span>
-                <select value={model.access?.[u.id]||"none"} onChange={e=>{const a={...(model.access||{}),[u.id]:e.target.value};if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(onRefresh);}}
-                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
-                  <option value="none">No access</option><option value="viewer">Viewer</option><option value="editor">Editor</option>
-                </select>
+            <section aria-label="Collaborator access" style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                <div>
+                  <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Collaborators</div>
+                  <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Manage who can view or edit this model</div>
+                </div>
               </div>
-            ))}
+
+              {/* People who already have access */}
+              {(()=>{
+                const withAccess=(overrides.profiles||[]).filter(u=>u.id!==model.owner_id&&(model.access?.[u.id]==="viewer"||model.access?.[u.id]==="editor"));
+                if(withAccess.length===0) return (
+                  <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:"16px 14px",fontSize:12,color:C.muted,fontFamily:SANS,textAlign:"center"}}>
+                    No one else has access yet
+                  </div>
+                );
+                return (
+                  <div style={{display:"flex",flexDirection:"column",gap:0}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.muted,fontFamily:SANS,letterSpacing:1.2,marginBottom:6}}>WITH ACCESS</div>
+                    {withAccess.map(u=>(
+                      <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:`1px solid ${C.border}`}}>
+                        <Avatar u={u} size={28}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:600,color:C.text,fontFamily:SANS}}>{u.full_name||"Unknown"}</div>
+                          {u.initials&&<div style={{fontSize:11,color:C.muted,fontFamily:SANS}}>{u.initials}</div>}
+                        </div>
+                        <select value={model.access?.[u.id]||"viewer"}
+                          onChange={e=>{const a={...(model.access||{}),[u.id]:e.target.value};if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(onRefresh);}}
+                          style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                          <option value="viewer">Viewer</option>
+                          <option value="editor">Editor</option>
+                        </select>
+                        <Btn small variant="ghost" onClick={()=>{const a={...(model.access||{}),[u.id]:"none"};if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(onRefresh);}}>Remove</Btn>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              {/* Search to add people */}
+              {(()=>{
+                const noAccess=(overrides.profiles||[]).filter(u=>u.id!==model.owner_id&&u.id!==overrides.userId&&model.access?.[u.id]!=="viewer"&&model.access?.[u.id]!=="editor");
+                const q=collabQuery.trim().toLowerCase();
+                const filtered=q.length<2?[]:noAccess.filter(u=>(u.full_name||"").toLowerCase().includes(q)||(u.initials||"").toLowerCase().includes(q));
+                return (
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    <div style={{fontSize:10,fontWeight:700,color:C.muted,fontFamily:SANS,letterSpacing:1.2}}>ADD PEOPLE</div>
+                    <input
+                      type="search"
+                      placeholder="Search by name…"
+                      value={collabQuery}
+                      onChange={e=>setCollabQuery(e.target.value)}
+                      style={{width:"100%",padding:"8px 10px",border:`1px solid ${C.border}`,borderRadius:6,fontSize:13,background:C.surface||C.bg,color:C.text,fontFamily:FONT,outline:"none",boxSizing:"border-box"}}
+                    />
+                    {q.length>=2&&filtered.length===0&&(
+                      <div style={{fontSize:12,color:C.muted,fontFamily:SANS,padding:"4px 0"}}>No users found matching "{collabQuery.trim()}"</div>
+                    )}
+                    {filtered.map(u=>(
+                      <div key={u.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:C.panel,border:`1px solid ${C.border}`,borderRadius:6}}>
+                        <Avatar u={u} size={28}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:600,color:C.text,fontFamily:SANS}}>{u.full_name||"Unknown"}</div>
+                        </div>
+                        <select
+                          value={pendingRoles[u.id]||"viewer"}
+                          onChange={e=>setPendingRoles(prev=>({...prev,[u.id]:e.target.value}))}
+                          style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
+                          <option value="viewer">Viewer</option>
+                          <option value="editor">Editor</option>
+                        </select>
+                        <Btn small variant="primary" onClick={()=>{
+                          const role=pendingRoles[u.id]||"viewer";
+                          const a={...(model.access||{}),[u.id]:role};
+                          if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(()=>{setCollabQuery("");onRefresh();});
+                        }}>Add</Btn>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </section>
           </div>
         )}
