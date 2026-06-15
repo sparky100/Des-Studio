@@ -1160,6 +1160,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
               </div>
             </div>
 
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18}}>
+              <GoalsEditor goals={model.goals||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
+            </div>
+
             {canEdit && overrides.onSaveAsBaseline && (
               <div style={{background:C.panel,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.purple||C.accent}`,borderRadius:8,padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
                 <div>
@@ -1179,10 +1183,6 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 onOpenParent={overrides.onOpenParent}
               />
             )}
-
-            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:18}}>
-              <GoalsEditor goals={model.goals||[]} queues={model.queues||[]} entityTypes={model.entityTypes||[]} containerTypes={model.containerTypes||[]} onChange={canEdit?v=>setField("goals",v):()=>{}}/>
-            </div>
           </div>)
         )}
         {tab==="entities"&&(
