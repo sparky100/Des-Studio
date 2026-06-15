@@ -23,7 +23,7 @@ import { DEFAULT_KPI_SLOTS } from "./execute-constants.js";
 import { validateModel } from "../../engine/validation.js";
 import { estimateRunComplexity } from "../../engine/complexity-estimator.js";
 import { getRunAdmission } from "../../engine/run-admission.js";
-import { enumerateSweepableParams, generate2DSweepValues } from "../../engine/sweep-params.js";
+import { enumerateSweepableParams, applySweepValues, generate2DSweepValues } from "../../engine/sweep-params.js";
 import { runSweep, run2DSweep } from "../../engine/sweep-runner.js";
 import { ConditionBuilder } from "../editors/index.jsx";
 import { ScenarioComparisonTable } from "../shared/ScenarioComparisonTable.jsx";
@@ -231,6 +231,9 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   const [expFormSaving, setExpFormSaving] = useState(false);
   const [expandedExpIds, setExpandedExpIds] = useState(new Set());
   const [expFilterText, setExpFilterText] = useState("");
+  // Resolved {paramConfig, value} pairs from the last loaded experiment with overrides.
+  // When non-empty, effectiveModel patches the base model before running/snapshotting.
+  const [activeExpOverrides, setActiveExpOverrides] = useState([]);
   const [reportGenerating, setReportGenerating] = useState(false);
   const [modelCheckerIssues, setModelCheckerIssues] = useState(null);
   const [modelCheckerOpen, setModelCheckerOpen] = useState(false);
@@ -367,6 +370,13 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }, [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications]);
   const hasValidationErrors = validation.errors.length > 0;
 
+  // When an experiment has parameter overrides loaded, apply them on top of the base
+  // model so the engine, snapshot, and narrative all reflect the experiment's values.
+  const effectiveModel = useMemo(() => {
+    if (!activeExpOverrides.length) return model;
+    return applySweepValues(model, activeExpOverrides);
+  }, [model, activeExpOverrides]);
+
   // Build schedulesMap for the selected schedule (ADR-016).
   // Passed to buildEngine via options.schedulesMap so resolveInlineSchedules()
   // can populate bEvent.schedules[].rows[] before the FEL is initialised.
@@ -428,7 +438,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     setLoadedRunSnapshot(null);
     runStartPerfRef.current = nowPerf();
     engineRef.current = buildEngine(
-      model,
+      effectiveModel,
       seed,
       warmupPeriod,
       terminationMode === 'time' ? maxSimTime : null,
@@ -581,7 +591,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       if (modelId) {
         const prepareDurationMs = nowPerf() - prepareStartedAt;
         const stepSeed = runSeedRef.current;
-        const runRecord = buildRunRecord(model, fullResult, {
+        const runRecord = buildRunRecord(effectiveModel, fullResult, {
           maxSimTime: terminationMode === 'time' ? maxSimTime : null,
           warmupPeriod,
           replications: 1,
@@ -609,7 +619,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           );
           if (runId) {
             setLatestRunId(runId);
-            storeRunNarrative(runId, model, fullResult);
+            storeRunNarrative(runId, effectiveModel, fullResult);
             void refreshRunHistory();
             onRunSaved?.(runId);
           }
@@ -622,7 +632,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         }
       }
     }
-  }, [userId, modelId, model, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory, storeRunNarrative]);
+  }, [userId, modelId, model, effectiveModel, effectiveRunLabel, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, currentVersionId, effectiveResultDetailLevel, runAdmission, stopAuto, onRunSaved, onResultsReady, onRunComplete, refreshRunHistory, storeRunNarrative]);
 
   const handleDetectWarmup = useCallback(() => {
     if (!replicationResults || replicationResults.length === 0) {
@@ -683,7 +693,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     // Resolve all dataSources before handing the model to the engine or workers.
     // The resulting runModel has live values baked into distParams and sched.rows
     // so the engine and web workers stay stateless (no registry needed in workers).
-    let runModel = model;
+    let runModel = effectiveModel;
     const liveDataMode = model.experimentDefaults?.liveDataMode;
     if (liveDataMode) {
       setSaveStatus({ state: 'saving', message: '⏳ Fetching live data…' });
@@ -782,7 +792,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             onRunComplete?.({ results: batchResult, replicationResults: ordered, warmupDetection: null, log: logRef.current });
             setAggregateStats(stats);
             const prepareDurationMs = nowPerf() - prepareStartedAt;
-            const batchRunRecord = buildRunRecord(model, batchResult, {
+            const batchRunRecord = buildRunRecord(effectiveModel, batchResult, {
               maxSimTime: maxTimeForRun,
               warmupPeriod,
               replications,
@@ -812,7 +822,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               );
               if (runId) {
                 setLatestRunId(runId);
-                storeRunNarrative(runId, model, batchResult);
+                storeRunNarrative(runId, effectiveModel, batchResult);
                 void refreshRunHistory();
                 onRunSaved?.(runId);
               }
@@ -930,7 +940,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     }
 
     const prepareDurationMs = nowPerf() - prepareStartedAt;
-    const singleRunRecord = buildRunRecord(model, result, {
+    const singleRunRecord = buildRunRecord(effectiveModel, result, {
       maxSimTime: maxTimeForRun,
       warmupPeriod,
       replications: 1,
@@ -959,7 +969,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       );
       if (runId) {
         setLatestRunId(runId);
-        storeRunNarrative(runId, model, result);
+        storeRunNarrative(runId, effectiveModel, result);
         void refreshRunHistory();
         onRunSaved?.(runId);
       }
@@ -970,7 +980,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       setLog(prev => [...prev, { phase: "SAVE", time: result.snap.clock, message: "✅ Local history record completed." }]);
       onRunSaved?.(null);
     }
-  }, [model, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory, storeRunNarrative]);
+  }, [model, effectiveModel, userId, modelId, seed, effectiveRunLabel, hasAdmissionErrors, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, runAdmission, effectiveResultDetailLevel, stopAuto, onRunSaved, onResultsReady, refreshRunHistory, storeRunNarrative]);
 
   const cancelBatch = useCallback(() => {
     if (!runnerRef.current) return;
@@ -1707,6 +1717,19 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
               const loadCfg = () => {
                 setReplications(cfg.replications ?? 1); setSeed(cfg.seed ?? seed); setWarmupPeriod(cfg.warmupPeriod ?? 0);
                 setMaxSimTime(cfg.maxSimTime ?? 500); setTerminationMode(cfg.terminationMode ?? "time"); setTerminationCondition(cfg.terminationCondition ?? null);
+                // Resolve stored override paths to paramConfig objects so effectiveModel
+                // can patch the base model before the run executes or snapshots it.
+                const overrides = cfg.overrides || [];
+                if (overrides.length > 0) {
+                  const params = sweepParams.length > 0 ? sweepParams : enumerateSweepableParams(model);
+                  const resolved = overrides.flatMap(ov => {
+                    const pc = params.find(p => p.path === ov.path);
+                    return pc ? [{ paramConfig: pc, value: ov.value }] : [];
+                  });
+                  setActiveExpOverrides(resolved);
+                } else {
+                  setActiveExpOverrides([]);
+                }
                 setExecuteSection("run");
               };
               const runCfg = () => { loadCfg(); setRunLabel(exp.name); setExecuteSection("run"); };
