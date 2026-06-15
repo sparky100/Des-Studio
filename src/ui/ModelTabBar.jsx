@@ -25,6 +25,7 @@ const IconCEvents   = () => ic(11, 11, <polygon points="13 2 3 14 12 14 11 22 21
 const IconSections  = () => ic(11, 11, <><rect x="3" y="4" width="18" height="5" rx="1"/><rect x="3" y="15" width="18" height="5" rx="1"/><line x1="7" y1="9" x2="7" y2="15"/><line x1="17" y1="9" x2="17" y2="15"/></>);
 const IconSchedules = () => ic(11, 11, <><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>);
 const IconModelData = () => ic(11, 11, <><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></>);
+const IconGoals     = () => ic(11, 11, <><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>);
 
 const SUB_ICONS = {
   entities: <IconEntities />,
@@ -33,6 +34,7 @@ const SUB_ICONS = {
   cevents:  <IconCEvents />,
   sections: <IconSections />,
   schedules:<IconSchedules />,
+  goals:    <IconGoals />,
   state:    <IconModelData />,
 };
 
