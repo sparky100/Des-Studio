@@ -665,7 +665,7 @@ function buildMethodology(model, results, experimentConfig, aggStats = {}, type 
       const lbl = g.label || g.metric;
       return `<li><strong>${esc(lbl)}:</strong> ${esc(g.operator)} ${esc(String(g.target))}</li>`;
     }).join('');
-    parts.push(`<h3>What success looks like</h3><ul style="margin:8px 0 8px 18px;font-size:12px;color:#374151;line-height:1.8">${goalItems}</ul>`);
+    parts.push(`<ul style="margin:8px 0 8px 18px;font-size:12px;color:#374151;line-height:1.8">${goalItems}</ul>`);
   }
 
   if (!parts.length) return '';
@@ -759,43 +759,33 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     });
   }
 
-  // Queue wait-time chart + table
+  // Queue wait-time table (average wait only)
   let waitChartHtml = '', waitTableHtml = '';
   if (queueNames.length) {
-    const metricKeys   = ['mean', 'p50', 'p90', 'p95'];
-    const metricLabels = ['Mean', 'P50', 'P90', 'P95'];
     const groups = queueNames.map(q => ({
       label:  q,
-      values: metricKeys.map(mk => { const v = Number(waitDist[q]?.[mk]); return Number.isFinite(v) ? v : NaN; }),
+      values: [Number(waitDist[q]?.mean)].map(v => Number.isFinite(v) ? v : NaN),
     })).filter(g => g.values.some(v => Number.isFinite(v)));
 
     if (groups.length) {
       waitChartHtml = `<div class="chart-wrap">${groupedBarChart({
         groups,
-        series: metricLabels.map(l => ({ label: l })),
-        title:  `Queue Wait-Time Distribution (${unit})`,
+        series: [{ label: 'Mean wait' }],
+        title:  `Average Queue Wait Time (${unit})`,
       })}</div>`;
     }
 
     const showSvcCol = hasMultiStage && Object.keys(perQueueSvc).length > 0;
     const tableHeaders = showSvcCol
-      ? ['Queue', 'Count', 'Mean wait', 'P50 wait', 'P90 wait', 'P95 wait', 'P99 wait', 'Mean service']
-      : ['Queue', 'Count', 'Mean wait', 'P50', 'P90', 'P95', 'P99'];
+      ? ['Queue', 'Count', 'Mean wait', 'Mean service']
+      : ['Queue', 'Count', 'Mean wait'];
     const tableRows = queueNames.map(q => {
       const w = waitDist[q] || {};
-      const row = [q, fin(w.n, 0), fin(w.mean, 1), fin(w.p50, 1), fin(w.p90, 1), fin(w.p95, 1), fin(w.p99, 1)].map(v => v ?? '—');
+      const row = [q, fin(w.n, 0), fin(w.mean, 1)].map(v => v ?? '—');
       if (showSvcCol) row.push(fin(perQueueSvc[q]?.mean, 1) ?? '—');
       return row;
     });
-    const percentileNote = `<p class="note">
-      <strong>Reading the wait-time columns:</strong>
-      <strong>Mean</strong> = average wait across all arrivals.
-      <strong>P50</strong> (median) = half waited less than this.
-      <strong>P90</strong> = 9 in 10 waited less than this; only 1 in 10 waited longer.
-      <strong>P95</strong> = 19 in 20 waited less than this.
-      All values in ${unit}.
-    </p>`;
-    waitTableHtml = percentileNote + htmlTable(tableHeaders, tableRows);
+    waitTableHtml = htmlTable(tableHeaders, tableRows);
   }
 
   // Resource utilisation chart + table
@@ -820,11 +810,11 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
     <p class="note">How each entity concluded its journey through the model.</p>
     ${htmlTable(
       outcomeHasTimings
-        ? ['Outcome', 'Status', 'Source', 'Count', 'Avg wait', 'Avg time in system']
-        : ['Outcome', 'Status', 'Source', 'Count'],
+        ? ['Outcome', 'Avg wait', 'Avg time in system']
+        : ['Outcome'],
       outcomes.map(row => outcomeHasTimings
-        ? [row.routeLabel, row.status || '—', row.endedBy || '—', formatInt(row.count) || '0', row.avgWait != null ? formatN(row.avgWait) : '—', row.avgSojourn != null ? formatN(row.avgSojourn) : '—']
-        : [row.routeLabel, row.status || '—', row.endedBy || '—', formatInt(row.count) || '0']
+        ? [row.routeLabel, row.avgWait != null ? formatN(row.avgWait) : '—', row.avgSojourn != null ? formatN(row.avgSojourn) : '—']
+        : [row.routeLabel]
       )
     )}`
     : '';
@@ -1142,35 +1132,34 @@ function buildMarkdownReport({ model, results, experimentConfig, runMeta, aggreg
     const mdOutcomeHasTimings = outcomesForMd.some(r => r.avgWait != null || r.avgSojourn != null);
     lines.push(mdTable(
       mdOutcomeHasTimings
-        ? ['Outcome', 'Status', 'Source', 'Count', 'Avg wait', 'Avg time in system']
-        : ['Outcome', 'Status', 'Source', 'Count'],
+        ? ['Outcome', 'Avg wait', 'Avg time in system']
+        : ['Outcome'],
       outcomesForMd.map(row => mdOutcomeHasTimings
-        ? [row.routeLabel, row.status || '—', row.endedBy || '—', formatInt(row.count) || '0', row.avgWait != null ? formatN(row.avgWait) : '—', row.avgSojourn != null ? formatN(row.avgSojourn) : '—']
-        : [row.routeLabel, row.status || '—', row.endedBy || '—', formatInt(row.count) || '0']
+        ? [row.routeLabel, row.avgWait != null ? formatN(row.avgWait) : '—', row.avgSojourn != null ? formatN(row.avgSojourn) : '—']
+        : [row.routeLabel]
       )
     ));
     lines.push('');
   }
 
-  // Queue wait times with per-stage service column in multi-stage models
+  // Queue average wait times
   const waitDist = results.waitDist || {};
   const waitQueueNames = Object.keys(waitDist);
   if (waitQueueNames.length) {
-    lines.push('### Queue Wait-Time Distribution');
+    lines.push('### Queue Wait Times');
     lines.push('');
     const perQueueSvc   = computePerQueueServiceTimes(results);
     const hasMultiStage = waitQueueNames.length > 1 && Object.keys(perQueueSvc).length > 0;
     const qHeaders = hasMultiStage
-      ? [`Queue`, `Mean wait (${unit})`, `P50`, `P90`, `P95`, `P99`, `Mean service (${unit})`]
-      : [`Queue`, `Mean (${unit})`, `P50`, `P90`, `P95`, `P99`];
+      ? [`Queue`, `Mean wait (${unit})`, `Mean service (${unit})`]
+      : [`Queue`, `Mean wait (${unit})`];
     const qRows = waitQueueNames.map(q => {
       const w = waitDist[q] || {};
-      const row = [q, formatN(w.mean) ?? '—', formatN(w.p50) ?? '—', formatN(w.p90) ?? '—', formatN(w.p95) ?? '—', formatN(w.p99) ?? '—'];
+      const row = [q, formatN(w.mean) ?? '—'];
       if (hasMultiStage) row.push(formatN(perQueueSvc[q]?.mean) ?? '—');
       return row;
     });
     lines.push(mdTable(qHeaders, qRows));
-    lines.push('> P90 = 9 in 10 waited less than this. P95 = 19 in 20 waited less than this.');
     lines.push('');
   }
 
