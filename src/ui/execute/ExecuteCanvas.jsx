@@ -851,22 +851,6 @@ export function ExecuteCanvas({
               </button>
             </Panel>
           )}
-          {!snap && !batchActive && (
-            <Panel position="bottom-center">
-              <div style={{
-                background: C.surface,
-                border: `1px solid ${C.border}`,
-                borderRadius: 5,
-                color: C.muted,
-                fontFamily: FONT,
-                fontSize: 11,
-                padding: "5px 14px",
-                pointerEvents: "none",
-              }}>
-                ▶ Run or step the simulation to see live state
-              </div>
-            </Panel>
-          )}
         </ReactFlow>
         <NodeDetailSidebar
           selectedNode={selectedNodeDetail}
