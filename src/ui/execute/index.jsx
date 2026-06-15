@@ -401,7 +401,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
   }), [model, warmupPeriod, maxSimTime, terminationMode, terminationCondition, replications, collectTimeSeries, plan, isAdmin, tierPolicies, validation, complexityEstimate]);
   const hasAdmissionErrors = runAdmission.hardErrors.length > 0;
   const hasAdmissionWarnings = runAdmission.warnings.length > 0;
-  const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : "minimal";
+  const effectiveResultDetailLevel = saveDetailLevel === "full" ? "full" : saveDetailLevel === "minimal" ? "minimal" : "compact";
   const readinessTagColor = hasAdmissionErrors ? C.red : C.green;
   const readinessTagBg = hasAdmissionErrors ? C.errorBg : `${C.green}18`;
   const readinessBorder = hasAdmissionErrors ? C.danger : `${C.green}66`;
@@ -412,29 +412,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
     ? `${runAdmission.hardErrors.length} blocker${runAdmission.hardErrors.length === 1 ? "" : "s"} to resolve before running.`
     : "No blocking issues found for this scenario.";
   const readinessIssues = runAdmission.hardErrors;
-  const complexityColor = complexityEstimate.riskLevel === "too_large"
-    ? C.red
-    : complexityEstimate.riskLevel === "large"
-      ? C.amber
-      : complexityEstimate.riskLevel === "medium"
-        ? C.warnBg
-        : C.green;
-  const COMPLEXITY_LABELS = { small: "Small", medium: "Medium", large: "Large", too_large: "Very Large" };
-  const complexityLabel = COMPLEXITY_LABELS[complexityEstimate.riskLevel] || complexityEstimate.riskLevel;
-
-  // Estimated save payload size (KB) based on complexity and selected detail level.
-  // "full" keeps log + trace + entitySummary + timeSeries + waitDist.values; "minimal" strips them all.
-  const estSaveKB = useMemo(() => {
-    const base = 30; // model snapshot + metadata + summaries
-    const repKB = complexityEstimate.replications * 0.5;
-    if (saveDetailLevel !== "full") return Math.round(base + repKB);
-    const entityKB = (complexityEstimate.totalEstimatedEntities || 0) * 0.15;
-    const logKB   = (complexityEstimate.totalEstimatedEntities || 0) * 0.3;
-    const traceKB = logKB;
-    const waitKB  = Math.max(complexityEstimate.plannedScheduleRows, complexityEstimate.totalEstimatedEntities || 0) * 0.008;
-    return Math.round(base + repKB + entityKB + logKB + traceKB + waitKB);
-  }, [complexityEstimate, saveDetailLevel]);
-  const estSaveLabel = estSaveKB >= 1000 ? `~${(estSaveKB / 1000).toFixed(1)} MB` : `~${estSaveKB} KB`;
 
   const initEngine = useCallback(() => {
     if (hasValidationErrors) return;
@@ -2593,28 +2570,12 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             </div>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <span
-                style={{
-                  background: `${complexityColor}18`,
-                  border: `1px solid ${complexityColor}55`,
-                  borderRadius: 999,
-                  color: complexityColor,
-                  fontFamily: FONT,
-                  fontSize: 11,
-                  fontWeight: 700,
-                  padding: "5px 10px",
-                }}
-              >
-                {complexityLabel}
-              </span>
-              <div>
-                <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>
-                  RUN SIZE ESTIMATE
-                </div>
-                <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
-                  Conservative preview of likely workload before execution.
-                </div>
+            <div>
+              <div style={{ fontSize: 10, color: C.muted, fontFamily: FONT, letterSpacing: 1.2, fontWeight: 700, marginBottom: 2 }}>
+                WORKLOAD ESTIMATE
+              </div>
+              <div style={{ fontSize: 12, color: C.text, fontFamily: FONT }}>
+                Conservative preview based on arrival and service means.
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2625,7 +2586,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
                 { label: "Stage moves", value: formatEstimate(complexityEstimate.estimatedStageTransitions) },
                 { label: "C-event scans", value: formatEstimate(complexityEstimate.estimatedCEventScans) },
                 { label: "Replications", value: formatEstimate(complexityEstimate.replications) },
-                { label: "Est. save", value: estSaveLabel },
               ].map(item => (
                 <div
                   key={item.label}

@@ -2,7 +2,7 @@ import { buildHistogramFD, summarizeEntitySummary } from "../engine/statistics.j
 
 const LARGE_RUN_RISK_LEVELS = new Set(["large", "too_large"]);
 const COMPACT_TIME_SERIES_MAX_POINTS = 200;
-const MINIMAL_TIME_SERIES_MAX_POINTS = 50;   // keep a skeleton for historic charts
+const MINIMAL_TIME_SERIES_MAX_POINTS = 150;
 
 function sampleEvenly(items, maxPoints) {
   if (!Array.isArray(items)) return [];
@@ -216,6 +216,10 @@ export function buildPersistedResultsJson(result = {}, config = {}) {
         };
         trimmedFields.push("timeSeries");
       }
+    }
+    if (resultsJson.waitDist && typeof resultsJson.waitDist === "object") {
+      resultsJson.waitDist = compactifyWaitDist(resultsJson.waitDist);
+      trimmedFields.push("waitDist.values→histogram");
     }
   }
 
