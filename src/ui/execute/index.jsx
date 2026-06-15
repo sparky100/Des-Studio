@@ -2311,7 +2311,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
           </div>
       </div>
       </div>
-      </div>
       )}
 
       {/* ADR-016: Schedule selector — shown when model has more than one schedule */}
