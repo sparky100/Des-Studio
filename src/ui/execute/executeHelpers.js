@@ -320,11 +320,16 @@ function averageBatchTimeSeries(replicationPayloads, maxPoints = 500) {
         reneged: summaries.reduce((s, sm) => s + (sm.waitSamplesBreakdown?.reneged || 0), 0),
         inProgress: summaries.reduce((s, sm) => s + (sm.waitSamplesBreakdown?.inProgress || 0), 0),
       },
-      terminatingState: {
-        waitingAtEnd: summaries.reduce((s, sm) => s + (sm.terminatingState?.waitingAtEnd || 0), 0),
-        servingAtEnd: summaries.reduce((s, sm) => s + (sm.terminatingState?.servingAtEnd || 0), 0),
-        wipPct: total > 0 ? Math.round(((summaries.reduce((s, sm) => s + ((sm.terminatingState?.waitingAtEnd || 0) + (sm.terminatingState?.servingAtEnd || 0)), 0)) / total) * 100) : 0,
-      },
+      terminatingState: (() => {
+        const n = summaries.length || 1;
+        const totalWaiting = summaries.reduce((s, sm) => s + (sm.terminatingState?.waitingAtEnd || 0), 0);
+        const totalServing = summaries.reduce((s, sm) => s + (sm.terminatingState?.servingAtEnd || 0), 0);
+        return {
+          waitingAtEnd: Math.round(totalWaiting / n),
+          servingAtEnd: Math.round(totalServing / n),
+          wipPct: total > 0 ? Math.round(((totalWaiting + totalServing) / total) * 100) : 0,
+        };
+      })(),
     },
   };
 }
