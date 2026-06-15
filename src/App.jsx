@@ -124,6 +124,7 @@ export default function App({ onThemeChange }){
   const [helpOpen,setHelpOpen]=useState(false)
   const [tierPolicies,setTierPolicies]=useState(null)
   const [signedInThisSession,setSignedInThisSession]=useState(false)
+  const welcomeShownRef = useRef(false)
 
   // Dev-only: probe des_models schema on mount to catch drift early.
   useEffect(()=>{
@@ -148,7 +149,7 @@ export default function App({ onThemeChange }){
     })
     const {data:{subscription}}=supabase.auth.onAuthStateChange((event,session)=>{
       if(event==='PASSWORD_RECOVERY'){setIsRecoverySession(true)}
-      if(session && (event==='SIGNED_IN'||event==='SIGNED_UP')){setLoading(true);setSignedInThisSession(true)}
+      if(session && (event==='SIGNED_IN'||event==='SIGNED_UP')){setLoading(true);setSignedInThisSession(true);welcomeShownRef.current=false}
       setSession(session)
       if(!session){setLoading(false);setModels([]);setProfile(null);setIsRecoverySession(false);setSignedInThisSession(false)}
       if(session && (event==='SIGNED_IN'||event==='SIGNED_UP')){
@@ -430,16 +431,12 @@ export default function App({ onThemeChange }){
 
   const handleSaveAsBaseline = useCallback(async (sourceModelId, newName, parentModelId) => {
     if(!uid)return;
-    setLoading(true);setActionError('');
     try{
-      const baseline=await forkModel(sourceModelId,uid,newName,{parentModelId});
+      await forkModel(sourceModelId,uid,newName,{parentModelId});
       await loadData();
-      setOpenModelOptions({ initialTab: undefined, autoRun: false, showStarterGuide: true });
-      setOpenId(baseline.id);
+      // Stay on the parent model so the Scenarios section immediately shows the new child.
     }catch(e){
       setActionError(e.message);
-    }finally{
-      setLoading(false);
     }
   },[uid,loadData]);
 
@@ -659,8 +656,8 @@ export default function App({ onThemeChange }){
       />
       <ModelLibrary
         modelsLoading={loading}
-        signedInThisSession={signedInThisSession}
-        onWelcomeShown={() => setSignedInThisSession(false)}
+        signedInThisSession={signedInThisSession && !welcomeShownRef.current}
+        onWelcomeShown={() => { welcomeShownRef.current = true; setSignedInThisSession(false); }}
         onHelpOpen={() => setHelpOpen(true)}
         myModels={myModels}
         pubModels={pubModels}
