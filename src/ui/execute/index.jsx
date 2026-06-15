@@ -1526,7 +1526,7 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
             small
             variant={executeSection === section.id ? "primary" : "ghost"}
             onClick={() => {
-              if (section.id === "experiments" && !sweepOpen) setSweepParams(enumerateSweepableParams(model));
+              if (section.id === "experiments" && !sweepOpen) { setSweepParams(enumerateSweepableParams(model)); setSweepOpen(true); }
               if (section.id === "run") {
                 setHideRunReadiness(false);
                 if (executeSection !== "run") {
