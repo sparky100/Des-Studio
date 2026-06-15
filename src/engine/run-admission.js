@@ -182,10 +182,19 @@ export function getRunAdmission(model, options = {}) {
     ));
   }
   for (const bottleneck of complexityEstimate.bottlenecks || []) {
-    warnings.push(makeDecisionIssue(
-      "RA12",
-      `${bottleneck.queueName}: ${bottleneck.reason}`
-    ));
+    const pct = bottleneck.utilisationEstimate != null
+      ? `~${Math.round(bottleneck.utilisationEstimate * 100)}%`
+      : null;
+    const resource = Array.isArray(bottleneck.resourceNames) && bottleneck.resourceNames.length > 0
+      ? bottleneck.resourceNames[0]
+      : null;
+    const action = resource
+      ? `consider adding ${resource} capacity or reducing arrivals`
+      : `consider increasing capacity`;
+    const msg = pct
+      ? `${bottleneck.queueName} may queue heavily (${pct} estimated utilisation) — ${action}.`
+      : `${bottleneck.queueName} may fill up — ${action}.`;
+    warnings.push(makeDecisionIssue("RA12", msg));
   }
 
   // Gate time series on the actual cost of snapLite (O(entities) per B-event cycle),
