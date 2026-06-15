@@ -1646,7 +1646,7 @@ export function ResultsWorkspace({ results, model, replicationResults = [], warm
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
         <SectionHeader id="summary" label="Results Summary" isOpen={sectionsOpen.summary} onToggle={toggleSection} />
         <div id="results-section-summary" style={{ display: sectionsOpen.summary ? "block" : "none", paddingTop: 14 }}>
-          <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} />
+          <SummaryCardGrid results={results} replicationResults={replicationResults} model={model} healthFlags={healthFlags} />
         </div>
       </div>
 
