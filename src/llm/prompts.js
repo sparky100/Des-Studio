@@ -620,14 +620,19 @@ export function buildSensitivityPrompt(modelName = DEFAULT_MODEL_NAME, experimen
 
 // ── Goal gap analysis ────────────────────────────────────────────────────────
 
+function resolveWaitDistEntry(waitDist, scopeName, scopeId) {
+  if (!waitDist || typeof waitDist !== "object") return null;
+  if (Array.isArray(waitDist)) return waitDist.find(w => w.queueId === scopeId || w.queue === scopeId || w.label === scopeName) ?? null;
+  return waitDist[scopeName] || waitDist[scopeId] || Object.values(waitDist).find(w => w.queueId === scopeId || w.queue === scopeId) || null;
+}
+
 function resolveScopedGoalValue(metric, scope, aggregateStats = {}, summary = {}) {
   if (scope?.type === "queue") {
     const qId = scope.id;
     if (aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`]?.mean != null) {
       return aggregateStats[`queue.${metric.replace("summary.", "")}.${qId}`].mean;
     }
-    const wd = Array.isArray(summary.waitDist) ? summary.waitDist : [];
-    const q = wd.find(w => w.queueId === qId || w.queue === qId);
+    const q = resolveWaitDistEntry(summary.waitDist, scope.name, qId);
     if (q) {
       if (metric === "summary.avgWait") return q.mean;
       if (metric === "summary.served") return q.n;
@@ -703,16 +708,13 @@ function resolvePercentileValue(operator, summary = {}, scope) {
   const p = parseInt(operator.replace("p", ""), 10);
   if (!p) return null;
   if (scope?.type === "queue") {
-    const qId = scope.id;
-    const wd = Array.isArray(summary.waitDist) ? summary.waitDist : [];
-    const q = wd.find(w => w.queueId === qId || w.queue === qId);
-    if (q) {
-      const key = `p${p}`;
-      return q[key] ?? null;
-    }
+    const q = resolveWaitDistEntry(summary.waitDist, scope.name, scope.id);
+    if (q) return q[`p${p}`] ?? null;
   }
-  const wd = Array.isArray(summary.waitDist) ? summary.waitDist : [];
-  const allValues = wd.flatMap(w => w.values || []);
+  const wdEntries = summary.waitDist && typeof summary.waitDist === "object" && !Array.isArray(summary.waitDist)
+    ? Object.values(summary.waitDist)
+    : Array.isArray(summary.waitDist) ? summary.waitDist : [];
+  const allValues = wdEntries.flatMap(w => w.values || []);
   if (!allValues.length) return null;
   allValues.sort((a, b) => a - b);
   const idx = Math.ceil((p / 100) * allValues.length) - 1;
