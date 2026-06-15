@@ -11,8 +11,17 @@ const SECTION_META = [
   { key: "stateVariables", label: "Model Data" },
 ];
 
+function stableJSON(value) {
+  if (Array.isArray(value)) return '[' + value.map(stableJSON).join(',') + ']';
+  if (value !== null && typeof value === 'object') {
+    const keys = Object.keys(value).sort();
+    return '{' + keys.map(k => JSON.stringify(k) + ':' + stableJSON(value[k])).join(',') + '}';
+  }
+  return JSON.stringify(value);
+}
+
 function itemKey(item = {}) {
-  return item.id || item.name || JSON.stringify(item);
+  return item.id || item.name || stableJSON(item);
 }
 
 function sectionDiff(currentItems = [], proposedItems = []) {
@@ -26,7 +35,7 @@ function sectionDiff(currentItems = [], proposedItems = []) {
   for (const [key, item] of proposed) {
     if (!current.has(key)) {
       added.push(item);
-    } else if (JSON.stringify(current.get(key)) !== JSON.stringify(item)) {
+    } else if (stableJSON(current.get(key)) !== stableJSON(item)) {
       modified.push({ before: current.get(key), after: item });
     } else {
       unchanged.push(item);
@@ -91,11 +100,18 @@ function friendlyValue(value) {
         .join(", ");
       return paramText ? `${dist} (${paramText})` : dist;
     }
+    if (value.operator && Array.isArray(value.clauses)) {
+      return `${value.operator} (${value.clauses.length} clause${value.clauses.length === 1 ? "" : "s"})`;
+    }
     if (value.name) return value.name;
     if (value.id) return value.id;
     const entries = Object.entries(value).filter(([k]) => k !== "id");
     if (entries.length === 0) return "{}";
-    return entries.map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`).join(", ");
+    return entries.map(([k, v]) => {
+      if (Array.isArray(v)) return `${k}: ${v.length} item${v.length === 1 ? "" : "s"}`;
+      if (v !== null && typeof v === "object") return `${k}: {…}`;
+      return `${k}: ${v}`;
+    }).join(", ");
   }
   if (value === true) return "yes";
   if (value === false) return "no";
