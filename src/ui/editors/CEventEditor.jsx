@@ -6,6 +6,8 @@ import { EntityFilterBuilder } from "./EntityFilterBuilder.jsx";
 import { EffectPicker, assignOptions, displayEventName, SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
+const SANS = "Inter,'Segoe UI',Arial,sans-serif";
+
 const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariables=[], queues=[], sections=[], containerTypes=[], errorFilter=null, onClearErrorFilter})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
@@ -80,9 +82,13 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      <SH label="C-Events  (Conditional — evaluated in Phase C)" color={C.cEvent}>
-        <Btn small variant="ghost" onClick={add}>+ Add C-Event</Btn>
-      </SH>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>C-Events</div>
+          <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Conditional events evaluated in Phase C</div>
+        </div>
+        <Btn variant="primary" onClick={add}>+ Add C-Event</Btn>
+      </div>
       <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
       {events.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -107,7 +113,14 @@ const CEventEditor=({events, onChange, bEvents=[], entityTypes=[], stateVariable
         <strong style={{color:C.green}}>B-event scheduling</strong> is defined below in the <em>Schedules</em> section —
         select the B-event, distribution, and whether to carry the matched entity context (customer + server IDs).
       </InfoBox>
-      {events.length===0&&<Empty icon="🔀" msg="No C-events yet."/>}
+      {events.length===0&&(
+        <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:"40px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+          <div style={{fontSize:32,lineHeight:1}}>🔀</div>
+          <div style={{fontSize:14,fontWeight:600,color:C.text,fontFamily:SANS}}>No conditional events yet</div>
+          <div style={{fontSize:13,color:C.muted,fontFamily:SANS,lineHeight:1.6,maxWidth:380}}>Add a C-event to match waiting entities to idle resources whenever a condition is met.</div>
+          <Btn variant="primary" onClick={add}>+ Add C-Event</Btn>
+        </div>
+      )}
       {filtered.length===0&&events.length>0&&(
         <div style={{fontFamily:FONT,fontSize:11,color:C.muted,padding:"8px 0",fontStyle:"italic"}}>No events match "{filterText}"</div>
       )}

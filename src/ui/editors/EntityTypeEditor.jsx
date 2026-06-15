@@ -3,6 +3,8 @@ import { normTypeName } from "../shared/tokens.js";
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty, DistPicker, SectionPanel } from "../shared/components.jsx";
 import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { AttrEditor } from "./AttrEditor.jsx";
+
+const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
 const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,onChange})=>{
@@ -69,7 +71,13 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      <SH label="Entity Types" color={C.server}><Btn small variant="ghost" onClick={add}>+ Add Type</Btn></SH>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Entity Types</div>
+          <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Arriving entities and resource pools</div>
+        </div>
+        <Btn variant="primary" onClick={add}>+ Add Type</Btn>
+      </div>
       <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
       {types.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -92,7 +100,14 @@ const EntityTypeEditor=({types,sections=[],errorFilter=null,onClearErrorFilter,o
         Technical detail: server attributes such as <code>serviceTime=3</code> are available in C-event conditions via <code>attr(Type,attrName)</code>{" "}
         and in schedule delays via <code>server.attrName</code>.
       </InfoBox>
-      {types.length===0&&<Empty icon="👥" msg="No entity types."/>}
+      {types.length===0&&(
+        <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:"40px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+          <div style={{fontSize:32,lineHeight:1}}>👥</div>
+          <div style={{fontSize:14,fontWeight:600,color:C.text,fontFamily:SANS}}>No entity types yet</div>
+          <div style={{fontSize:13,color:C.muted,fontFamily:SANS,lineHeight:1.6,maxWidth:380}}>Add an arriving entity type (customers, patients, calls) or a resource pool (nurses, servers, machines).</div>
+          <Btn variant="primary" onClick={add}>+ Add Type</Btn>
+        </div>
+      )}
       {filtered.length===0&&types.length>0&&(
         <div style={{fontFamily:FONT,fontSize:11,color:C.muted,padding:"8px 0",fontStyle:"italic"}}>No types match{filteredEntityTypeIds?" error filter":filterText&&` "${filterText}"`}</div>
       )}

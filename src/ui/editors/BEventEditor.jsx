@@ -3,6 +3,8 @@ import { Tag, Btn, CommitInput, Field, SH, InfoBox, Empty, DistPicker, SectionPa
 import { displayEventName, queueDisplayName, bEffectOptions, DropField, EffectPicker, SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
 
+const SANS = "Inter,'Segoe UI',Arial,sans-serif";
+
 const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],cEvents=[],sections=[],containerTypes=[],dataSources=[],epoch,timeUnit,namedSchedules=[],focusBEventId=null,onFocusHandled,onGoToSchedule,errorFilter=null,onClearErrorFilter})=>{
   const { C, FONT } = useTheme();
   const [filterText,setFilterText]=useState("");
@@ -61,7 +63,13 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      <SH label="B-Events (Bound)" color={C.bEvent}><Btn small variant="ghost" onClick={add}>+ Add B-Event</Btn></SH>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>B-Events</div>
+          <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Timed events scheduled at specific simulation times</div>
+        </div>
+        <Btn variant="primary" onClick={add}>+ Add B-Event</Btn>
+      </div>
       <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
       {events.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -82,7 +90,14 @@ const BEventEditor=({events,onChange,entityTypes=[],stateVariables=[],queues=[],
         <strong style={{color:C.bEvent}}>Completion</strong> releases the matched resource and either routes the entity onward or marks it complete.{" "}
         Follow-on completion and reneging events are scheduled by another event, so leave them unticked for simulation start.
       </InfoBox>
-      {events.length===0&&<Empty icon="⏰" msg="No timed events yet. Add one to schedule something that happens at a specific time."/>}
+      {events.length===0&&(
+        <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:"40px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+          <div style={{fontSize:32,lineHeight:1}}>⏰</div>
+          <div style={{fontSize:14,fontWeight:600,color:C.text,fontFamily:SANS}}>No timed events yet</div>
+          <div style={{fontSize:13,color:C.muted,fontFamily:SANS,lineHeight:1.6,maxWidth:380}}>Add an arrival or completion event that fires at a scheduled point in simulation time.</div>
+          <Btn variant="primary" onClick={add}>+ Add B-Event</Btn>
+        </div>
+      )}
       {filtered.length===0&&events.length>0&&(
         <div style={{fontFamily:FONT,fontSize:11,color:C.muted,padding:"8px 0",fontStyle:"italic"}}>No events match "{filterText}"</div>
       )}

@@ -1,8 +1,9 @@
 import { useState } from "react";
-;
 import { Tag, Btn, CommitInput, SH, InfoBox, Empty } from "../shared/components.jsx";
 import { SectionFilterTabs, filterBySection } from "./helpers.jsx";
 import { useTheme } from "../shared/ThemeContext.jsx";
+
+const SANS = "Inter,'Segoe UI',Arial,sans-serif";
 
 const disciplineBase = d => {
   if (!d || d.toUpperCase() === 'FIFO') return 'FIFO';
@@ -69,7 +70,13 @@ const QueueEditor = ({queues=[], entityTypes=[], sections=[], errorFilter=null, 
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:10}}>
-      <SH label="Queues" color={C.cEvent}><Btn small variant="ghost" onClick={add}>+ Add Queue</Btn></SH>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Queues</div>
+          <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Named waiting lines for arriving entities</div>
+        </div>
+        <Btn variant="primary" onClick={add}>+ Add Queue</Btn>
+      </div>
       <SectionFilterTabs sections={sections} activeId={activeSectionId} onChange={setActiveSectionId}/>
       {queues.length>1&&(
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -90,7 +97,14 @@ const QueueEditor = ({queues=[], entityTypes=[], sections=[], errorFilter=null, 
         entity-to-queue combinations are offered. Set <em>capacity</em> for bounded queues (blank = unlimited).{' '}
         <strong>Discipline:</strong> FIFO (default), LIFO, or Priority.
       </InfoBox>
-      {queues.length===0&&<Empty icon="Queues" msg="No named queues yet. Add a queue before defining new arrivals."/>}
+      {queues.length===0&&(
+        <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:10,padding:"40px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+          <div style={{fontSize:32,lineHeight:1}}>🚶</div>
+          <div style={{fontSize:14,fontWeight:600,color:C.text,fontFamily:SANS}}>No queues yet</div>
+          <div style={{fontSize:13,color:C.muted,fontFamily:SANS,lineHeight:1.6,maxWidth:380}}>Add a named waiting line — define which entity type it accepts, the discipline (FIFO/LIFO/Priority), and an optional capacity.</div>
+          <Btn variant="primary" onClick={add}>+ Add Queue</Btn>
+        </div>
+      )}
       {filtered.length===0&&queues.length>0&&(
         <div style={{fontFamily:FONT,fontSize:11,color:C.muted,padding:"8px 0",fontStyle:"italic"}}>No queues match{filteredQueueIds?" error filter":filterText&&` "${filterText}"`}</div>
       )}
