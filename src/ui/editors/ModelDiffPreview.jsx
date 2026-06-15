@@ -477,7 +477,7 @@ export function ModelDiffPreview({ currentModel = {}, proposedModel = {}, onAppl
                 { label: "Modified", value: summary.modified, color: summary.modified ? C.amber : C.muted },
                 { label: "Added", value: summary.added, color: summary.added ? C.green : C.muted },
                 { label: "Removed", value: summary.removed, color: summary.removed ? C.red : C.muted },
-              ].map(item => (
+              ].filter(item => item.value > 0).map(item => (
                 <div key={item.label} style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, padding: "9px 10px" }}>
                   <div style={{ color: C.muted, fontFamily: FONT, fontSize: 9, fontWeight: 700, marginBottom: 4, letterSpacing: 1 }}>
                     {item.label}
