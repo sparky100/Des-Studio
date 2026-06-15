@@ -86,7 +86,7 @@ const SectionEditor = ({ sections = [], queues = [], entityTypes = [], bEvents =
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: SANS }}>Sections</div>
           <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, marginTop: 2 }}>
-            {sections.length === 0 ? "No sections yet" : `${sections.length} section${sections.length !== 1 ? "s" : ""}`}
+            {sections.length > 0 ? `${sections.length} section${sections.length !== 1 ? "s" : ""}` : "Group queues, events, and entities into named swimlanes"}
           </div>
         </div>
         <Btn variant="primary" onClick={add}>+ Add Section</Btn>

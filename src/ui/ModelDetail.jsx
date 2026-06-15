@@ -283,7 +283,7 @@ function DataSourcesEditor({ sources, onChange, canEdit }) {
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: SANS }}>Data Sources</div>
           <div style={{ fontSize: 12, color: C.muted, fontFamily: SANS, marginTop: 2 }}>
-            {sources.length === 0 ? "No external data connected" : `${sources.length} source${sources.length !== 1 ? "s" : ""} connected`}
+            {sources.length > 0 ? `${sources.length} source${sources.length !== 1 ? "s" : ""} connected` : "Connect live data feeds to drive arrivals or entity attributes"}
           </div>
         </div>
         {canEdit && <Btn variant="primary" onClick={add}>+ Add source</Btn>}
@@ -1258,47 +1258,42 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
           />
         )}
         {tab==="state"&&renderAuthoringShell(
-          <div style={{maxWidth:920,margin:"0 auto",display:"flex",flexDirection:"column",gap:24}}>
+          <div style={{maxWidth:920,margin:"0 auto",display:"flex",flexDirection:"column",gap:14}}>
             <TabErrors tabId="state" validation={validation}/>
-            {/* Time Configuration */}
-            <div style={{display:"flex",flexDirection:"column",gap:12}}>
-              <div>
-                <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Time Configuration</div>
-                <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Simulation time unit and real-world calendar alignment</div>
+            <div>
+              <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Time Configuration</div>
+              <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Simulation time unit and real-world calendar alignment</div>
+            </div>
+            <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:"16px 18px",display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                <span style={{fontSize:12,fontWeight:600,color:C.muted,fontFamily:FONT}}>Time unit</span>
+                <select
+                  value={model.timeUnit||"minutes"}
+                  onChange={canEdit?(e=>setField("timeUnit",e.target.value)):undefined}
+                  disabled={!canEdit}
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:12,padding:"5px 8px",width:180,outline:"none"}}
+                >
+                  <option value="seconds">Seconds</option>
+                  <option value="minutes">Minutes</option>
+                  <option value="hours">Hours</option>
+                  <option value="days">Days</option>
+                </select>
               </div>
-              <div style={{background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:"16px 18px",display:"flex",flexDirection:"column",gap:14}}>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  <label style={{fontSize:12,fontWeight:600,color:C.text,fontFamily:SANS}}>Time unit</label>
-                  <select
-                    value={model.timeUnit||"minutes"}
-                    onChange={canEdit?(e=>setField("timeUnit",e.target.value)):undefined}
-                    disabled={!canEdit}
-                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:SANS,fontSize:12,padding:"6px 10px",width:180}}
-                  >
-                    <option value="seconds">Seconds</option>
-                    <option value="minutes">Minutes</option>
-                    <option value="hours">Hours</option>
-                    <option value="days">Days</option>
-                  </select>
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  <label style={{fontSize:12,fontWeight:600,color:C.text,fontFamily:SANS}}>Real-world start date and time</label>
-                  <input
-                    type="datetime-local"
-                    value={(model.epoch||"").slice(0,16)}
-                    onChange={canEdit?(e=>setField("epoch", e.target.value ? new Date(e.target.value).toISOString() : "")):undefined}
-                    disabled={!canEdit}
-                    style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:SANS,fontSize:12,padding:"6px 10px",width:240}}
-                  />
-                  <span style={{fontSize:11,color:C.muted,fontFamily:SANS,lineHeight:1.5}}>
-                    Optional — use if simulation time should map to real calendar dates. Required for CSV timestamp import.
-                  </span>
-                </div>
+              <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                <span style={{fontSize:12,fontWeight:600,color:C.muted,fontFamily:FONT}}>Real-world start date/time</span>
+                <input
+                  type="datetime-local"
+                  value={(model.epoch||"").slice(0,16)}
+                  onChange={canEdit?(e=>setField("epoch", e.target.value ? new Date(e.target.value).toISOString() : "")):undefined}
+                  disabled={!canEdit}
+                  style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:model.epoch?C.text:C.muted,fontFamily:FONT,fontSize:12,padding:"5px 8px",width:240,outline:"none"}}
+                />
+                <span style={{fontSize:11,color:C.muted,fontFamily:FONT}}>
+                  Optional. Required for CSV timestamp import and real-time schedule display.
+                </span>
               </div>
             </div>
-            {/* Model Data */}
             <StateVarEditor vars={model.stateVariables||[]} onChange={canEdit?v=>setField("stateVariables",v):()=>{}}/>
-            {/* Data Sources */}
             <DataSourcesEditor sources={model.dataSources||[]} onChange={canEdit?v=>setField("dataSources",v):()=>{}} canEdit={canEdit}/>
           </div>
         )}
@@ -1585,20 +1580,14 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
         {tab==="access"&&isOwner&&(
           <div style={{maxWidth:700,margin:"0 auto",display:"flex",flexDirection:"column",gap:18}}>
             <section aria-label="Sharing settings" style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div>
-                <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Sharing</div>
-                <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Control who can discover this model</div>
-              </div>
+              <SH label="Sharing"/>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                 <Btn variant={model.visibility==="private"?"primary":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"private").then(onRefresh);}} small>🔒 Private</Btn>
                 <Btn variant={model.visibility==="public"?"success":"ghost"} onClick={()=>{if(overrides.onSetVisibility)overrides.onSetVisibility(modelId,"public").then(onRefresh);}} small>🌐 Public</Btn>
               </div>
             </section>
             <section aria-label="Export model" style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div>
-                <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:SANS}}>Export</div>
-                <div style={{fontSize:12,color:C.muted,fontFamily:SANS,marginTop:2}}>Download the model in portable formats</div>
-              </div>
+              <SH label="Export"/>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",background:C.panel,border:`1px solid ${C.border}`,borderRadius:8,padding:12}}>
                 <div>
                   <div style={{fontSize:12,color:C.text,fontFamily:FONT,fontWeight:700,marginBottom:4}}>Model JSON</div>
@@ -1641,12 +1630,12 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                           {u.initials&&<div style={{fontSize:11,color:C.muted,fontFamily:SANS}}>{u.initials}</div>}
                         </div>
                         <select value={model.access?.[u.id]||"viewer"}
-                          onChange={e=>{const a={...(model.access||{}),[u.id]:e.target.value};setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}
+                          onChange={e=>{const a={...(model.access||{}),[u.id]:e.target.value};if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(onRefresh);}}
                           style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:4,color:C.text,fontFamily:FONT,fontSize:11,padding:"4px 8px",outline:"none"}}>
                           <option value="viewer">Viewer</option>
                           <option value="editor">Editor</option>
                         </select>
-                        <Btn small variant="ghost" onClick={()=>{const a={...(model.access||{}),[u.id]:"none"};setModel(m=>({...m,access:a}));overrides.onSetAccess?.(modelId,a);}}>Remove</Btn>
+                        <Btn small variant="ghost" onClick={()=>{const a={...(model.access||{}),[u.id]:"none"};if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(onRefresh);}}>Remove</Btn>
                       </div>
                     ))}
                   </div>
@@ -1687,9 +1676,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                         <Btn small variant="primary" onClick={()=>{
                           const role=pendingRoles[u.id]||"viewer";
                           const a={...(model.access||{}),[u.id]:role};
-                          setModel(m=>({...m,access:a}));
-                          setCollabQuery("");
-                          overrides.onSetAccess?.(modelId,a);
+                          if(overrides.onSetAccess)overrides.onSetAccess(modelId,a).then(()=>{setCollabQuery("");onRefresh();});
                         }}>Add</Btn>
                       </div>
                     ))}

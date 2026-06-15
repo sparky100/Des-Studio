@@ -1529,7 +1529,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {[
           { id: "run", label: "Run" },
-          { id: "setup", label: "Setup" },
           { id: "saved-experiments", label: "Experiments" },
           { id: "experiments", label: "Studies" },
         ].map(section => (
@@ -1555,30 +1554,38 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
         ))}
       </div>
 
-      {executeSection === "setup" && (
+      {executeSection === "run" && (
+        <div style={{ background: C.panel, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ flex: 1, fontSize: 12, color: C.muted, fontFamily: FONT }}>
+            {replications} rep{replications !== 1 ? "s" : ""} · {terminationMode === "time" ? `${maxSimTime} time units` : "condition stop"} · seed {seed}{warmupPeriod > 0 ? ` · warm-up ${warmupPeriod}` : ""}
+          </span>
+          <Btn small variant="ghost" onClick={() => setShowRunSetup(v => !v)}>{showRunSetup ? "▲ Hide setup" : "⚙ Edit setup"}</Btn>
+        </div>
+      )}
+      {executeSection === "run" && showRunSetup && (
         <div style={{ maxWidth: 1120, margin: "0 auto" }}>
-        <ExperimentControls
-          warmupPeriod={warmupPeriod} setWarmupPeriod={setWarmupPeriod}
-          replications={replications} setReplications={setReplications}
-          seed={seed} setSeed={setSeed}
-          runLabel={runLabel} setRunLabel={setRunLabel}
-          terminationMode={terminationMode} setTerminationMode={setTerminationMode}
-          maxSimTime={maxSimTime} setMaxSimTime={setMaxSimTime}
-          terminationCondition={terminationCondition} setTerminationCondition={setTerminationCondition}
-          showRunSetup={showRunSetup} setShowRunSetup={setShowRunSetup}
-          runSetupSummary={runSetupSummary}
-          warmupDetection={warmupDetection} setWarmupDetection={setWarmupDetection}
-          replicationResults={replicationResults}
-          model={model}
-          onDetectWarmup={handleDetectWarmup}
-          persistExperimentDefaults={persistExperimentDefaults}
-          animationEnabled={animationEnabled} setAnimationEnabled={setAnimationEnabled}
-          collectTimeSeries={collectTimeSeries} setCollectTimeSeries={setCollectTimeSeries}
-          purgePeriodEnabled={purgePeriodEnabled} setPurgePeriodEnabled={setPurgePeriodEnabled}
-          saveDetailLevel={saveDetailLevel} setSaveDetailLevel={setSaveDetailLevel}
-          speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}
-          onClose={() => setExecuteSection("run")}
-        />
+          <ExperimentControls
+            warmupPeriod={warmupPeriod} setWarmupPeriod={setWarmupPeriod}
+            replications={replications} setReplications={setReplications}
+            seed={seed} setSeed={setSeed}
+            runLabel={runLabel} setRunLabel={setRunLabel}
+            terminationMode={terminationMode} setTerminationMode={setTerminationMode}
+            maxSimTime={maxSimTime} setMaxSimTime={setMaxSimTime}
+            terminationCondition={terminationCondition} setTerminationCondition={setTerminationCondition}
+            showRunSetup={showRunSetup} setShowRunSetup={setShowRunSetup}
+            runSetupSummary={runSetupSummary}
+            warmupDetection={warmupDetection} setWarmupDetection={setWarmupDetection}
+            replicationResults={replicationResults}
+            model={model}
+            onDetectWarmup={handleDetectWarmup}
+            persistExperimentDefaults={persistExperimentDefaults}
+            animationEnabled={animationEnabled} setAnimationEnabled={setAnimationEnabled}
+            collectTimeSeries={collectTimeSeries} setCollectTimeSeries={setCollectTimeSeries}
+            purgePeriodEnabled={purgePeriodEnabled} setPurgePeriodEnabled={setPurgePeriodEnabled}
+            saveDetailLevel={saveDetailLevel} setSaveDetailLevel={setSaveDetailLevel}
+            speedMultiplier={speedMultiplier} setSpeedMultiplier={setSpeedMultiplier}
+            onClose={() => setShowRunSetup(false)}
+          />
         </div>
       )}
 
@@ -1601,9 +1608,6 @@ const ExecutePanel = ({ model, modelId, userId, plan = "free", isAdmin = false, 
       <div style={{ background: C.cardBg, border: `1px solid ${C.border}`, borderRadius: 8, overflow: "hidden" }}>
 
         {/* Filter row */}
-        <div style={{ padding: "12px 16px", display: "flex", gap: 8, alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
-          <input
-            value={expFilterText}
         <div style={{ padding: "12px 16px", display: "flex", gap: 8, alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
           <input
             value={expFilterText}
