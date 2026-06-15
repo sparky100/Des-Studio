@@ -834,6 +834,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
   const handleResultsReport = useCallback(async (type = 'seniorMgmt') => {
     if (!latestResults || resultsReportGenerating) return;
     setResultsReportGenerating(true);
+    toast.info("Building report…");
     try {
       const row = historyRows.find(r => r.id === selectedResultsRunId);
       let reportModel = model;
@@ -870,8 +871,10 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
       const suffix = type === 'seniorMgmt' ? 'Management' : 'Technical';
       const safeName = `${sanitizeFilename(reportModel.name || 'Model')} — ${sanitizeFilename(meta.runLabel || 'Report')} — ${suffix} Report.html`;
       downloadTextFile(content, safeName, 'text/html');
+      toast.success("Report ready — downloading");
     } catch (err) {
       console.error('Report generation failed:', err);
+      toast.error("Report generation failed");
     } finally {
       setResultsReportGenerating(false);
     }
@@ -1486,6 +1489,7 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                 onCreateReport={async (row) => {
                   if (!hasResultsPayload(row) || resultsReportGenerating) return;
                   setResultsReportGenerating(true);
+                  toast.info("Building report…");
                   try {
                     const results = hydrateResultsFromHistoryRow(row);
                     let reportModel = model;
@@ -1519,8 +1523,11 @@ const ModelDetail=({modelId,modelData,onBack,onRefresh,onLatestVersionChange,ove
                     });
                     const safeName = `${sanitizeFilename(reportModel.name || 'Model')} — ${sanitizeFilename(meta.runLabel || 'Report')} — Management Report.html`;
                     downloadTextFile(content, safeName, 'text/html');
-                  } catch(err) { console.error('Report failed:', err); }
-                  finally { setResultsReportGenerating(false); }
+                    toast.success("Report ready — downloading");
+                  } catch(err) {
+                    console.error('Report failed:', err);
+                    toast.error("Report generation failed");
+                  } finally { setResultsReportGenerating(false); }
                 }}
               />
             )}

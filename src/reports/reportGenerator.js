@@ -767,11 +767,11 @@ function buildResults(model, results, aggStats = {}, type = 'technical') {
 
     const showSvcCol = hasMultiStage && Object.keys(perQueueSvc).length > 0;
     const tableHeaders = showSvcCol
-      ? ['Queue', 'Count', 'Mean wait', 'Mean service']
-      : ['Queue', 'Count', 'Mean wait'];
+      ? ['Queue', 'Mean wait', 'Mean service']
+      : ['Queue', 'Mean wait'];
     const tableRows = queueNames.map(q => {
       const w = waitDist[q] || {};
-      const row = [q, fin(w.n, 0), fin(w.mean, 1)].map(v => v ?? '—');
+      const row = [q, fin(w.mean, 1) ?? '—'];
       if (showSvcCol) row.push(fin(perQueueSvc[q]?.mean, 1) ?? '—');
       return row;
     });
